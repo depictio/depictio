@@ -1,0 +1,5 @@
+mongo_url: "mongodb://localhost:27018/"
+mongo_db: "depictioDB"
+multiqc_directory: "/scratch/tweber/dev/MultiQC_data"
+api_host: http://seneca.embl.de
+api_port: 5501
