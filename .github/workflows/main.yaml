@@ -1,0 +1,63 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    services:
+      mongodb:
+        image: mongo:4.4
+        ports:
+          - 27018/tcp
+        options: >-
+          --health-cmd "mongo --eval 'db.runCommand({ connectionStatus: 1 })'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 3
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Start MongoDB
+        run: docker-compose up -d mongodb
+        env:
+          MONGO_URI: mongodb://localhost:27018
+
+      - name: Wait for MongoDB to be ready
+        run: |
+          timeout 30 bash -c 'until echo "exit" | mongo $MONGO_URI --quiet; do sleep 1; done'
+
+      - name: Seed MongoDB with test data
+        run: |
+          python scripts/seed_mongo.py
+
+      - name: Start FastAPI app
+        run: |
+          uvicorn main:app --host 0.0.0.0 --port 8080 &
+
+      - name: Wait for app to be ready
+        run: |
+          timeout 30 bash -c 'until curl -s -o /dev/null http://localhost:8080/healthcheck; do sleep 1; done'
+
+      - name: Run pytest
+        run: |
+          pytest --cov=. --cov-report=html
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v2
+        with:
+          name: coverage
+          path: htmlcov

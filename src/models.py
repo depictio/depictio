@@ -6,6 +6,7 @@ class MultiQCFile(BaseModel):
     file_path: str
     wf_name: str
     run_name: str
+    sample_name: Optional[str]
     sample_list: List
     metadata: dict
     date_creation: Optional[str]

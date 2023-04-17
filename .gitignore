@@ -163,3 +163,4 @@ depictioDB/
 diagnostic.data/
 journal/
 *.db
+dump.rdb
