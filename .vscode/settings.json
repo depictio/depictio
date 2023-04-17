@@ -1,0 +1,4 @@
+{
+  "python.testing.pytestArgs": ["tests/"],
+  "python.testing.pytestEnabled": true
+}
