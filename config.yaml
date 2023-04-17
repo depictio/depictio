@@ -1,0 +1,10 @@
+mongo_url: "mongodb://localhost:27018/"
+mongo_db: "depictioDB"
+multiqc_directory: "/scratch/tweber/dev/MultiQC_data_ashleys"
+api_host: http://seneca.embl.de
+api_port: 5501
+redis_host: localhost
+redis_port: 6379
+redis_db: 0
+redis_cache_ttl: 300
+user_secret_key: mysecretkey
