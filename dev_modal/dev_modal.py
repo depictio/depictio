@@ -5,58 +5,114 @@ import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output, State
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
-
-# define a modal with clickable options
-modal = dbc.Modal(
-    [
-        dbc.ModalHeader("Add a plot"),
-        dbc.ModalBody(
-            [
-                html.H4("Select a plot type:"),
-                dbc.ListGroup(
-                    [
-                        dbc.ListGroupItem(
-                            "Line Plot",
-                            id="line-plot-option",
-                            action=True,
-                            color="light",
-                            style={"cursor": "pointer"},
-                        ),
-                        dbc.ListGroupItem(
-                            "Bar Plot",
-                            id="bar-plot-option",
-                            action=True,
-                            color="light",
-                            style={"cursor": "pointer"},
-                        ),
-                        dbc.ListGroupItem(
-                            "Scatter Plot",
-                            id="scatter-plot-option",
-                            action=True,
-                            color="light",
-                            style={"cursor": "pointer"},
-                        ),
-                    ],
-                    flush=True,
-                ),
-            ]
-        ),
-        dbc.ModalFooter(
-            dbc.Button("Close", id="modal-close-button", className="ml-auto")
-        ),
-    ],
-    id="modal",
-)
-
-# define the layout
 app.layout = html.Div(
     [
-        dbc.Button("Add a plot", id="add-plot-button", color="primary"),
+        html.H1("Add Plots Dynamically"),
         html.Br(),
+        dbc.Button("Add Plot", id="add-plot-button", color="primary"),
         html.Br(),
         html.Div(id="plot-container"),
-        modal,
-    ]
+        dbc.Modal(
+            [
+                dbc.ModalHeader(html.H3("Select a plot type")),
+                dbc.ModalBody(
+                    [
+                        dbc.Table(
+                            [
+                                html.Thead(
+                                    [
+                                        html.Tr(
+                                            [
+                                                html.Th(html.H5("Plot Type")),
+                                                html.Th(html.H5("Description")),
+                                                html.Th(
+                                                    html.H5(
+                                                        "Property",
+                                                        style={"text-align": "left"},
+                                                    ),
+                                                ),
+                                                html.Th(),
+                                            ]
+                                        )
+                                    ]
+                                ),
+                                html.Tbody(
+                                    [
+                                        html.Tr(
+                                            [
+                                                html.Td("Line plot"),
+                                                html.Td("This is a line plot"),
+                                                html.Td("Line plot property A"),
+                                                dbc.Button(
+                                                    "Select",
+                                                    id="line-plot-option",
+                                                    color="light",
+                                                    style={
+                                                        "cursor": "pointer",
+                                                        "width": "100%",
+                                                    },
+                                                ),
+                                            ],
+                                            id="line-plot-row",
+                                            style={"width": "100%"},
+                                        ),
+                                        html.Tr(
+                                            [
+                                                html.Td("Scatter plot"),
+                                                html.Td("This is a scatter plot"),
+                                                html.Td("Scatter plot property B"),
+                                                dbc.Button(
+                                                    "Select",
+                                                    id="scatter-plot-option",
+                                                    color="light",
+                                                    style={
+                                                        "cursor": "pointer",
+                                                        "width": "100%",
+                                                    },
+                                                ),
+                                            ],
+                                            id="scatter-plot-row",
+                                            style={"width": "100%"},
+                                        ),
+                                        html.Tr(
+                                            [
+                                                html.Td("Bar plot"),
+                                                html.Td("This is a bar plot"),
+                                                html.Td("Bar plot property C"),
+                                                dbc.Button(
+                                                    "Select",
+                                                    id="bar-plot-option",
+                                                    color="light",
+                                                    style={
+                                                        "cursor": "pointer",
+                                                        "width": "100%",
+                                                    },
+                                                ),
+                                            ],
+                                            id="bar-plot-row",
+                                            style={"width": "100%"},
+                                        ),
+                                    ]
+                                ),
+                            ],
+                            bordered=True,
+                            hover=True,
+                            responsive=True,
+                            striped=True,
+                            size="sm",
+                            style={"width": "100%"},
+                        ),
+                    ]
+                ),
+                dbc.ModalFooter(
+                    dbc.Button("Close", id="modal-close-button", color="secondary")
+                ),
+            ],
+            id="modal",
+            centered=True,
+            size="lg",
+        ),
+    ],
 )
 
 
