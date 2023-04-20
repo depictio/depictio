@@ -1,104 +1,75 @@
 import dash
-import dash_html_components as html
+import dash_bootstrap_components as dbc
 import dash_core_components as dcc
-import dash_draggable
-import dash_responsive_grid_layout as drg
-import plotly.graph_objs as go
-import plotly.express as px
-import uuid
+import dash_html_components as html
 from dash.dependencies import Input, Output, State
+import plotly.graph_objs as go
 
-
-app = dash.Dash(__name__)
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 
 app.layout = html.Div(
     [
-        dash_draggable.ResponsiveGridLayout(
-            id="plot-container",
-            className="layout",
-            # layouts=initial_layout,
-            # breakpoints={
-            #     "lg": 1200,
-            #     "md": 996,
-            #     "sm": 768,
-            #     "xs": 480,
-            #     "xxs": 0,
-            # },
-            # cols={
-            #     "lg": 12,
-            #     "md": 10,
-            #     "sm": 6,
-            #     "xs": 4,
-            #     "xxs": 2,
-            # },
-            # rowHeight=30,
-            isDraggable=True,
-            isResizable=True,
-            useCSSTransforms=True,
-            verticalCompact=False,
+        dbc.Row(
+            [
+                dbc.Col(
+                    [
+                        dbc.Input(id="title-input", placeholder="Enter title..."),
+                        dbc.Input(
+                            id="x-axis-label", placeholder="Enter x-axis label..."
+                        ),
+                        dbc.Input(
+                            id="y-axis-label", placeholder="Enter y-axis label..."
+                        ),
+                        html.Button("Save", id="save-button"),
+                    ]
+                ),
+            ]
         ),
-        html.Button("Add Plot", id="add-plot-button"),
-        drg.ResponsiveGridLayout(
-            id="layout-store",
-            cols={i: 4 for i in range(12)},
-            isResizable=True,
-            isDraggable=True,
-            autoSize=True,
-            children=[],
-            layouts={},
+        dbc.Row(
+            [dbc.Col([dcc.Graph(id="scatter-plot", config={"displayModeBar": False})])]
         ),
+        dcc.Store(id="local-storage", storage_type="local"),
     ]
 )
 
 
-def add_plot(existing_children):
-    # Generate random data
-    x = [1, 2, 3]
-    y = [4, 1, 2]
+@app.callback(Output("scatter-plot", "figure"), Input("local-storage", "data"))
+def update_scatter_plot(data):
+    if not data:
+        title = "Scatter Plot"
+        x_label = "X"
+        y_label = "Y"
+    else:
+        title = data["title"]
+        x_label = data["x_label"]
+        y_label = data["y_label"]
 
-    # Create the scatter plot
-    fig = go.Figure(data=go.Scatter(x=x, y=y, mode="markers"))
-
-    new_child = dcc.Graph(
-        id=str(uuid.uuid4()),
-        figure=fig,
-        style={"height": "100%", "width": "100%"},
-        config={"staticPlot": False, "editable": True},
+    figure = go.Figure(
+        data=[go.Scatter(x=[1, 2, 3], y=[4, 1, 2], mode="markers")],
+        layout=go.Layout(
+            title=title,
+            xaxis=dict(title=x_label),
+            yaxis=dict(title=y_label),
+        ),
     )
-    existing_children.append(new_child)
-    new_item = {
-        "i": str(len(existing_children) - 1),
-        "x": 0,
-        "y": float("inf"),
-        "w": 10,
-        "h": 10,
-        "isResizable": True,
-        "isDraggable": True,
-    }
-    return existing_children, new_item
+
+    return figure
 
 
 @app.callback(
-    [
-        Output("plot-container", "children"),
-        Output("layout-store", "layouts"),
-    ],
-    [
-        Input("add-plot-button", "n_clicks"),
-    ],
-    [
-        State("plot-container", "children"),
-        State("layout-store", "layouts"),
-    ],
+    Output("local-storage", "data"),
+    Input("save-button", "n_clicks"),
+    State("title-input", "value"),
+    State("x-axis-label", "value"),
+    State("y-axis-label", "value"),
+    prevent_initial_call=True,
 )
-def add_new_plot(n_clicks, existing_children, existing_layouts):
-    if not existing_children:
-        existing_children = []
-    if not existing_layouts:
-        existing_layouts = {"lg": []}
-    new_children, new_item = add_plot(existing_children)
-    existing_layouts["lg"].append(new_item)
-    return new_children, existing_layouts
+def save_to_local_storage(n_clicks, title, x_label, y_label):
+    return {
+        "title": title or "Scatter Plot",
+        "x_label": x_label or "X",
+        "y_label": y_label or "Y",
+    }
 
 
 if __name__ == "__main__":

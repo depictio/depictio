@@ -12,33 +12,48 @@ import pandas as pd
 import plotly.express as px
 import uuid
 
-default_item_layout = {"w": 4, "h": 4, "x": 0, "y": 0, "i": str(uuid.uuid4())}
 
-if os.path.isfile("layout.json"):
-    print("TOTO")
-    with open("layout.json", "r") as f:
-        initial_layout = json.load(f)
+def load_layout():
+    if os.path.isfile("layout.json"):
+        with open("layout.json", "r") as f:
+            initial_layout = json.load(f)
+    else:
+        initial_layout = dict()
+    return initial_layout
+
+
+def load_children():
+    if os.path.isfile("children.json"):
+        with open("children.json", "r") as c:
+            children = json.load(c)
+    else:
+        children = list()
+    return children
 
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 app.layout = html.Div(
     [
-        dcc.Interval(id="interval-component", interval=1e9, n_intervals=0),
+        # dcc.Interval(id="interval-component", interval=1e9, n_intervals=0),
         html.H1("Add Plots Dynamically"),
         html.Br(),
         dbc.Button("Add Plot", id="add-plot-button", color="primary"),
-        dbc.Button("Save Layout", id="save-button", color="success", n_clicks=0),
-        dcc.Store(id="layout-store"),
+        dbc.Button(
+            "Save Layout and Children",
+            id="save-button",
+            color="success",
+            n_clicks=0,
+        ),
+        dcc.Store(id="layout-store", storage_type="local"),
+        dcc.Store(id="children-store", storage_type="local"),
         html.Br(),
         # html.Div(id="plot-container"),
         dash_draggable.ResponsiveGridLayout(
             # id="drag-1",
             id="plot-container",
             clearSavedLayout=True,
-            layouts=initial_layout,
-            children=[
-                # dcc.Graph(id="scatter-plot", figure={}),
-            ],
+            layouts=load_layout(),
+            children=load_children(),
             margin={"x": 10, "y": 10},
             compactType="vertical",
             preventCollision=True,
@@ -159,20 +174,25 @@ app.layout = html.Div(
 
 #     # Create the scatter plot
 #     fig = px.scatter(x=x, y=y, title="Life expectancy over the years")
-
 #     return fig
 
 
 @app.callback(
-    Output("layout-store", "data"),
+    [Output("layout-store", "data"), Output("children-store", "data")],
     [Input("save-button", "n_clicks")],
-    [State("plot-container", "layouts")],
+    [
+        State("plot-container", "layouts"),
+        State("plot-container", "children"),
+    ],
+    prevent_initial_call=True,
 )
-def save_layout(n_clicks, layout):
+def save_layout_and_children(n_clicks, layout, children):
     if n_clicks > 0:
         with open("layout.json", "w") as f:
             f.write(json.dumps(layout))
-    return layout
+        with open("children.json", "w") as c:
+            c.write(json.dumps(children))
+    return layout, children
 
 
 # define the callback to show/hide the modal
@@ -194,57 +214,55 @@ def toggle_modal(n1, n2, is_open):
         Input("line-plot-option", "n_clicks"),
         Input("bar-plot-option", "n_clicks"),
         Input("scatter-plot-option", "n_clicks"),
+        Input("layout-store", "data"),
+        Input("children-store", "data"),
     ],
     [State("plot-container", "children")],
 )
-def add_plot(line_n_clicks, bar_n_clicks, scatter_n_clicks, existing_children):
+def add_plot(
+    line_n_clicks,
+    bar_n_clicks,
+    scatter_n_clicks,
+    layout_store,
+    children_store,
+    existing_children,
+):
     if not existing_children:
         existing_children = list()
-        layout = {
-            "lg": [
-                {**default_item_layout, "i": str(uuid.uuid4())},
-            ]
-        }
-    else:
-        layout = None
+    #     layout = {
+    #         "lg": [
+    #             {**default_item_layout, "i": str(uuid.uuid4())},
+    #         ]
+    #     }
+    # else:
+    #     layout = None
     ctx = dash.callback_context
     if not ctx.triggered:
         return existing_children
     else:
         button_id = ctx.triggered[0]["prop_id"].split(".")[0]
     if button_id == "line-plot-option":
-        return existing_children + [
-            dcc.Graph(
-                figure={"data": [{"x": [1, 2, 3], "y": [4, 1, 2], "type": "line"}]}
-            )
-        ]
+        fig = px.line(x=[1, 2, 3], y=[4, 1, 2])
     elif button_id == "bar-plot-option":
-        return existing_children + [
-            dcc.Graph(
-                figure={"data": [{"x": [1, 2, 3], "y": [4, 1, 2], "type": "bar"}]}
-            )
-        ]
+        fig = px.bar(x=[1, 2, 3], y=[4, 1, 2])
     elif button_id == "scatter-plot-option":
-        return existing_children + [
-            dcc.Graph(
-                figure={
-                    "data": [
-                        {
-                            "x": [1, 2, 3],
-                            "y": [4, 1, 2],
-                            "type": "scatter",
-                            "mode": "markers",
-                        }
-                    ]
-                }
-            )
-        ]
-
-    if layout is None:
-        layout = dash_draggable.generate_layout(existing_children)
-
+        fig = px.scatter(x=[1, 2, 3], y=[4, 1, 2])
     else:
         return existing_children
+    new_child = dcc.Graph(
+        # id={
+        #     "type": "dynamic-graph",
+        #     # "index": len(existing_children),
+        # },
+        figure=fig,
+        style={"height": "100%", "width": "100%"},
+        config={"staticPlot": False, "editable": True},
+    )
+    existing_children.append(new_child)
+    # if layout is None:
+    #     layout = dash_draggable.generate_layout(existing_children)
+
+    return existing_children
 
 
 if __name__ == "__main__":
