@@ -51,13 +51,13 @@ app.layout = html.Div(
         dash_draggable.ResponsiveGridLayout(
             # id="drag-1",
             id="plot-container",
-            clearSavedLayout=True,
-            layouts=load_layout(),
+            clearSavedLayout=False,
+            # layouts=load_layout(),
             children=load_children(),
-            margin={"x": 10, "y": 10},
-            compactType="vertical",
-            preventCollision=True,
-            useCSSTransforms=True,
+            # margin={"x": 10, "y": 10},
+            # compactType="vertical",
+            # preventCollision=True,
+            # useCSSTransforms=True,
         ),
         dbc.Modal(
             [
