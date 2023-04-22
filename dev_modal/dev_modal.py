@@ -128,51 +128,81 @@ def toggle_modal(n1, n2, is_open):
     return is_open
 
 
-# define the callbacks to add plots based on clicked options
+# @app.callback(
+#     Output("plot-container", "children"),
+#     [
+#         Input("line-plot-option", "n_clicks"),
+#         Input("bar-plot-option", "n_clicks"),
+#         Input("scatter-plot-option", "n_clicks"),
+#     ],
+#     [State("plot-container", "children")],
+# )
+
+
+def create_new_plot(button_id, index):
+    new_plot = dbc.Card(
+        [
+            dbc.CardHeader(
+                html.Button(
+                    "×",
+                    className="close",
+                    id={"type": "plot-close-button", "index": index},
+                ),
+            ),
+            dbc.CardBody(
+                dcc.Graph(
+                    id={"type": "plot", "index": index},
+                    figure={"data": [{"x": [1, 2, 3], "y": [4, 1, 2]}]},
+                )
+            ),
+        ],
+        style={"width": "100%", "margin-bottom": "10px"},
+    )
+
+    if button_id == "line-plot-option":
+        new_plot.children[1].children.figure["data"][0]["type"] = "line"
+    elif button_id == "bar-plot-option":
+        new_plot.children[1].children.figure["data"][0]["type"] = "bar"
+    elif button_id == "scatter-plot-option":
+        new_plot.children[1].children.figure["data"][0]["type"] = "scatter"
+        new_plot.children[1].children.figure["data"][0]["mode"] = "markers"
+
+    return new_plot
+
+
 @app.callback(
     Output("plot-container", "children"),
     [
         Input("line-plot-option", "n_clicks"),
         Input("bar-plot-option", "n_clicks"),
         Input("scatter-plot-option", "n_clicks"),
+        Input(
+            {"type": "plot-close-button", "index": dash.dependencies.ALL}, "n_clicks"
+        ),
     ],
     [State("plot-container", "children")],
+    prevent_initial_call=True,
 )
-def add_plot(line_n_clicks, bar_n_clicks, scatter_n_clicks, existing_children):
+def update_plots(
+    line_n_clicks, bar_n_clicks, scatter_n_clicks, close_clicks, existing_children
+):
     if not existing_children:
         existing_children = list()
     ctx = dash.callback_context
     if not ctx.triggered:
         return existing_children
-    else:
-        button_id = ctx.triggered[0]["prop_id"].split(".")[0]
-    if button_id == "line-plot-option":
-        return existing_children + [
-            dcc.Graph(
-                figure={"data": [{"x": [1, 2, 3], "y": [4, 1, 2], "type": "line"}]}
-            )
-        ]
-    elif button_id == "bar-plot-option":
-        return existing_children + [
-            dcc.Graph(
-                figure={"data": [{"x": [1, 2, 3], "y": [4, 1, 2], "type": "bar"}]}
-            )
-        ]
-    elif button_id == "scatter-plot-option":
-        return existing_children + [
-            dcc.Graph(
-                figure={
-                    "data": [
-                        {
-                            "x": [1, 2, 3],
-                            "y": [4, 1, 2],
-                            "type": "scatter",
-                            "mode": "markers",
-                        }
-                    ]
-                }
-            )
-        ]
+
+    button_id = ctx.triggered[0]["prop_id"].split(".")[0]
+
+    if button_id in ["line-plot-option", "bar-plot-option", "scatter-plot-option"]:
+        new_plot = create_new_plot(button_id, len(existing_children))
+        return existing_children + [new_plot]
+
+    elif "plot-close-button" in button_id:
+        index_to_remove = int(button_id.split("}")[-2].split(":")[-1].strip())
+        existing_children.pop(index_to_remove)
+        return existing_children
+
     else:
         return existing_children
 
