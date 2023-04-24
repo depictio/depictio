@@ -2,7 +2,7 @@ import dash
 import dash
 from dash import dcc
 from dash import html
-from dash.dependencies import Input, Output, State
+from dash.dependencies import Input, Output, State, MATCH, ALL
 import dash_bootstrap_components as dbc
 import dash_draggable
 import json
@@ -200,17 +200,6 @@ app.layout = html.Div(
 )
 
 
-# @app.callback(
-#     Output("plot-container", "children"),
-#     Input("remove-button", "n_clicks"),
-#     prevent_initial_call=True,
-# )
-# def remove_responsive_grid(n_clicks):
-#     if n_clicks is None:
-#         raise dash.exceptions.PreventUpdate
-#     return []
-
-
 @app.callback(
     Output("edit-modal", "is_open"),
     [
@@ -263,7 +252,7 @@ def toggle_modal(n1, n2, is_open):
         Input("line-plot-option", "n_clicks"),
         Input("bar-plot-option", "n_clicks"),
         Input("scatter-plot-option", "n_clicks"),
-        Input("remove-button", "n_clicks"),
+        Input({"type": "remove-button", "index": dash.dependencies.ALL}, "n_clicks"),
         Input("layout-store", "data"),
         Input("children-store", "data"),
     ],
@@ -287,6 +276,9 @@ def add_plot(
     # get the context of the callback
     ctx = dash.callback_context
 
+    from pprint import pprint
+
+    # pprint(existing_children)
     # if the callback is not triggered, return the existing children
     if not ctx.triggered:
         return existing_children
@@ -310,12 +302,27 @@ def add_plot(
         fig = px.scatter(x=[1, 2, 3], y=[4, 1, 2])
 
     # if the remove button was clicked, return an empty list to remove all the plots
-    elif button_id == "remove-button":
-        print(ctx.triggered)
+
+    elif "remove-button" in button_id:
+        # extract the UUID from the button_id
+        try:
+            import ast
+
+            button_id = ast.literal_eval(button_id)
+        except:
+            pass
+        button_uuid = button_id["index"]
+        # find the child div with the corresponding id
+        for child in existing_children:
+            if child["props"]["id"].split("div-")[-1] == button_uuid:
+                existing_children.remove(child)
+        return existing_children
 
     # if none of the above, return the existing children
     else:
         return existing_children
+
+    unique_id = str(uuid.uuid4())
 
     # create a new child div that contains the plot, edit and remove buttons
     new_child = html.Div(
@@ -323,9 +330,8 @@ def add_plot(
             dbc.Button("Edit", id="edit-button"),
             dbc.Button(
                 "Remove",
-                id="remove-button",
+                id={"type": "remove-button", "index": unique_id},
                 color="danger",
-                **{"data-parent-id": f"div-{uuid.uuid4()}"},
             ),
             dcc.Graph(
                 figure=fig,  # use the plotly figure created above
@@ -333,20 +339,24 @@ def add_plot(
                 config={"staticPlot": False, "editable": True},
             ),
         ],
-        id=f"div-{uuid.uuid4()}",
+        id=f"div-{unique_id}",
     )
 
     # append the new child to the existing children list
     existing_children.append(new_child)
 
-    from pprint import pprint
-
-    for child in existing_children[1:]:
-        pprint(child)
-        print(child.id)
-
     # return the updated list of children
     return existing_children
+
+
+# Add a callback to remove a plot when the corresponding remove button is clicked
+@app.callback(
+    Output({"type": "div", "index": MATCH}, "style"),
+    Input({"type": "remove-button", "index": MATCH}, "n_clicks"),
+    prevent_initial_call=True,
+)
+def remove_plot(n_clicks):
+    return {"display": "none"}
 
 
 if __name__ == "__main__":
