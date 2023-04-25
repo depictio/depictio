@@ -38,7 +38,7 @@ def load_children():
         children = [
             html.Div(
                 [
-                    dbc.Button("Edit", id="edit-button"),
+                    # dbc.Button("Edit", id="edit-button"),
                     dbc.Button(
                         id="remove-button",
                         color="danger",
@@ -70,15 +70,18 @@ app.layout = html.Div(
         html.Br(),
         # html.Div(id="plot-container"),
         dash_draggable.ResponsiveGridLayout(
+            # style={"--grid-item-width": "200px", "--grid-item-height": "200px"},
             # id="drag-1",
             id="plot-container",
             clearSavedLayout=False,
             # layouts=load_layout(),
-            children=load_children(),
+            # children=load_children(),
+            children=[],
             # margin={"x": 10, "y": 10},
             # compactType="vertical",
             # preventCollision=True,
             # useCSSTransforms=True,
+            autoSize=True,
         ),
         dbc.Modal(
             [
@@ -172,65 +175,64 @@ app.layout = html.Div(
                         ),
                     ]
                 ),
-                dbc.ModalFooter(
-                    dbc.Button("Close", id="modal-close-button", color="secondary")
-                ),
+                dbc.ModalFooter(dbc.Button("Close", id="modal-close-button", color="secondary")),
             ],
             id="modal",
             centered=True,
             size="lg",
         ),
-        dbc.Modal(
-            [
-                dbc.ModalHeader("Edit Content"),
-                dbc.ModalBody(dcc.Textarea(id="edit-area", style={"width": "100%"})),
-                dbc.ModalFooter(
-                    [
-                        dbc.Button(
-                            "Save",
-                            id="save-button",
-                        ),
-                        dbc.Button("Cancel", id="cancel-button", color="secondary"),
-                    ]
-                ),
-            ],
-            id="edit-modal",
-        ),
+        # dbc.Modal(
+        #     [
+        #         dbc.ModalHeader("Edit Content"),
+        #         dbc.ModalBody(dcc.Textarea(id="edit-area", style={"width": "100%"})),
+        #         dbc.ModalFooter(
+        #             [
+        #                 dbc.Button(
+        #                     "Save",
+        #                     id="edit-save-button",
+        #                 ),
+        #                 dbc.Button("Cancel", id="cancel-button", color="secondary"),
+        #             ]
+        #         ),
+        #     ],
+        #     id="edit-modal",
+        # ),
     ],
 )
 
 
-@app.callback(
-    Output("edit-modal", "is_open"),
-    [
-        Input("edit-button", "n_clicks"),
-        Input("save-button", "n_clicks"),
-        Input("cancel-button", "n_clicks"),
-    ],
-    [State("edit-modal", "is_open")],
-)
-def toggle_modal(n1, n2, n3, is_open):
-    if n1 or n2 or n3:
-        return not is_open
-    return is_open
+# @app.callback(
+#     Output("edit-modal", "is_open"),
+#     [
+#         Input("edit-button", "n_clicks"),
+#         Input("edit-save-button", "n_clicks"),
+#         Input("cancel-button", "n_clicks"),
+#     ],
+#     [State("edit-modal", "is_open")],
+# )
+# def toggle_modal(n1, n2, n3, is_open):
+#     if n1 or n2 or n3:
+#         return not is_open
+#     return is_open
 
 
-@app.callback(
-    [Output("layout-store", "data"), Output("children-store", "data")],
-    [Input("save-button", "n_clicks")],
-    [
-        State("plot-container", "layouts"),
-        State("plot-container", "children"),
-    ],
-    prevent_initial_call=True,
-)
-def save_layout_and_children(n_clicks, layout, children):
-    if n_clicks > 0:
-        with open("layout.json", "w") as f:
-            f.write(json.dumps(layout))
-        with open("children.json", "w") as c:
-            c.write(json.dumps(children))
-    return layout, children
+# @app.callback(
+#     [Output("layout-store", "data"), Output("children-store", "data")],
+#     [Input("save-button", "n_clicks")],
+#     [
+#         State("plot-container", "layouts"),
+#         State("plot-container", "children"),
+#     ],
+#     prevent_initial_call=True,
+# )
+# def save_layout_and_children(n_clicks, layout, children):
+#     print(n_clicks)
+#     if n_clicks > 0:
+#         with open("layout.json", "w") as f:
+#             f.write(json.dumps(layout))
+#         with open("children.json", "w") as c:
+#             c.write(json.dumps(children))
+#     return layout, children
 
 
 # define the callback to show/hide the modal
@@ -256,9 +258,7 @@ def toggle_modal(n1, n2, is_open):
         Input("layout-store", "data"),
         Input("children-store", "data"),
     ],
-    [
-        State("plot-container", "children")
-    ],  # specify the state properties of the callback
+    [State("plot-container", "children")],  # specify the state properties of the callback
 )
 def add_plot(
     line_n_clicks,
@@ -304,6 +304,7 @@ def add_plot(
     # if the remove button was clicked, return an empty list to remove all the plots
 
     elif "remove-button" in button_id:
+        print(ctx.triggered)
         # extract the UUID from the button_id
         try:
             import ast
@@ -340,6 +341,7 @@ def add_plot(
             ),
         ],
         id=f"div-{unique_id}",
+        style={"width": "300px", "height": "300px"},
     )
 
     # append the new child to the existing children list
@@ -349,14 +351,14 @@ def add_plot(
     return existing_children
 
 
-# Add a callback to remove a plot when the corresponding remove button is clicked
-@app.callback(
-    Output({"type": "div", "index": MATCH}, "style"),
-    Input({"type": "remove-button", "index": MATCH}, "n_clicks"),
-    prevent_initial_call=True,
-)
-def remove_plot(n_clicks):
-    return {"display": "none"}
+# # Add a callback to remove a plot when the corresponding remove button is clicked
+# @app.callback(
+#     Output({"type": "div", "index": MATCH}, "style"),
+#     Input({"type": "remove-button", "index": MATCH}, "n_clicks"),
+#     prevent_initial_call=True,
+# )
+# def remove_plot(n_clicks):
+#     return {"display": "none"}
 
 
 if __name__ == "__main__":

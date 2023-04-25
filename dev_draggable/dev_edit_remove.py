@@ -105,11 +105,7 @@ def update_content(n_clicks, new_content_title, current_content):
 
     if n_clicks is None:
         return current_content
-    return (
-        new_content
-        if str(new_content_title)
-        else str(current_content["layout"]["title"]["text"])
-    )
+    return new_content if str(new_content_title) else str(current_content["layout"]["title"]["text"])
 
 
 if __name__ == "__main__":
