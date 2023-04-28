@@ -13,45 +13,80 @@ import plotly.express as px
 import uuid
 
 
-def load_initial_data():
-    # data_file = "data.json"
-
-    # if os.path.exists(data_file):
-    #     with open(data_file, "r") as f:
-    #         data = json.load(f)
-    #         initial_children = data["children"]
-    #         initial_layouts = data["layouts"]
-    # else:
-    unique_id = str(uuid.uuid4())
-    fig = px.bar(x=[1, 2, 3], y=[4, 1, 2])
-
-    initial_children = [
-        html.Div(
-            [
-                dbc.Button("Edit", id={"type": "edit-button", "index": unique_id}),
-                dbc.Button(
-                    "Remove",
-                    id={"type": "remove-button", "index": unique_id},
-                    color="danger",
-                ),
-                dcc.Graph(
-                    figure=fig,  # use the plotly figure created above
-                    style={"height": "100%", "width": "100%"},
-                    config={"staticPlot": False, "editable": True},
-                ),
-            ],
-            id=f"div-{unique_id}",
-            # style={"width": "300px", "height": "300px"},
+def create_figure(fig_type):
+    if fig_type == "Line plot":
+        fig = px.line(
+            df,
+            x="year",
+            y="lifeExp",
+            color="continent",
+            title="Line plot: Life Expectancy over Years",
         )
-    ]
-    initial_layouts = {}
+    elif fig_type == "Bar plot":
+        fig = px.bar(
+            df,
+            x="year",
+            y="pop",
+            color="continent",
+            title="Bar plot: Population over Years",
+        )
+    elif fig_type == "Scatter plot":
+        fig = px.scatter(
+            df,
+            x="gdpPercap",
+            y="lifeExp",
+            color="continent",
+            log_x=True,
+            title="Scatter plot: Life Expectancy vs GDP per Capita",
+        )
+    elif fig_type == "Pie chart":
+        year = df["year"].max()
+        fig = px.pie(
+            df[df["year"] == year],
+            values="pop",
+            names="country",
+            title=f"Pie chart: Population by Country in {year}",
+        )
+    return fig
+
+
+df = pd.read_csv(
+    "https://raw.githubusercontent.com/plotly/datasets/master/gapminderDataFiveYear.csv"
+)
+
+
+plot_types = [
+    {"type": "Line plot", "description": "Line plot of Life Expectancy over Years"},
+    {"type": "Bar plot", "description": "Bar plot of Population over Years"},
+    {
+        "type": "Scatter plot",
+        "description": "Scatter plot of Life Expectancy vs GDP per Capita",
+    },
+    {
+        "type": "Pie chart",
+        "description": f"Pie chart of Population by Country in {df['year'].max()}",
+    },
+]
+
+
+def load_initial_data():
+    data_file = "data.json"
+
+    if os.path.exists(data_file):
+        with open(data_file, "r") as f:
+            data = json.load(f)
+            initial_children = data["children"]
+            initial_layouts = data["layouts"]
+    else:
+        initial_children = []
+        initial_layouts = {}
 
     return initial_children, initial_layouts
 
 
 initial_children, initial_layouts = load_initial_data()
-# print(initial_children)
-# print(initial_layouts)
+print(initial_children)
+print(initial_layouts)
 
 
 app = dash.Dash(
@@ -71,8 +106,8 @@ app.layout = html.Div(
             color="success",
             n_clicks=0,
         ),
-        dcc.Store(id="layout-store", storage_type="local"),
-        dcc.Store(id="children-store", storage_type="local"),
+        dcc.Store(id="layout-store", storage_type="local", data=initial_layouts),
+        dcc.Store(id="children-store", storage_type="local", data=initial_children),
         html.Br(),
         # html.Div(id="plot-container"),
         dash_draggable.ResponsiveGridLayout(
@@ -80,10 +115,11 @@ app.layout = html.Div(
             # id="drag-1",
             id="plot-container",
             clearSavedLayout=True,
-            # layouts=initial_layouts,
             # children=load_children(),
-            children=initial_children,
+            # layouts={},
             # children=[],
+            layouts=initial_layouts,
+            children=initial_children,
             # margin={"x": 10, "y": 10},
             # compactType="vertical",
             # preventCollision=True,
@@ -118,12 +154,11 @@ app.layout = html.Div(
                                     [
                                         html.Tr(
                                             [
-                                                html.Td("Line plot"),
-                                                html.Td("This is a line plot"),
-                                                html.Td("Line plot property A"),
+                                                html.Td(plot["type"]),
+                                                html.Td(plot["description"]),
                                                 dbc.Button(
                                                     "Select",
-                                                    id="line-plot-option",
+                                                    id=f"{plot['type'].lower().replace(' ', '-')}-option",
                                                     color="light",
                                                     style={
                                                         "cursor": "pointer",
@@ -131,45 +166,10 @@ app.layout = html.Div(
                                                     },
                                                 ),
                                             ],
-                                            id="line-plot-row",
+                                            id=f"{plot['type'].lower().replace(' ', '-')}-row",
                                             style={"width": "100%"},
-                                        ),
-                                        html.Tr(
-                                            [
-                                                html.Td("Scatter plot"),
-                                                html.Td("This is a scatter plot"),
-                                                html.Td("Scatter plot property B"),
-                                                dbc.Button(
-                                                    "Select",
-                                                    id="scatter-plot-option",
-                                                    color="light",
-                                                    style={
-                                                        "cursor": "pointer",
-                                                        "width": "100%",
-                                                    },
-                                                ),
-                                            ],
-                                            id="scatter-plot-row",
-                                            style={"width": "100%"},
-                                        ),
-                                        html.Tr(
-                                            [
-                                                html.Td("Bar plot"),
-                                                html.Td("This is a bar plot"),
-                                                html.Td("Bar plot property C"),
-                                                dbc.Button(
-                                                    "Select",
-                                                    id="bar-plot-option",
-                                                    color="light",
-                                                    style={
-                                                        "cursor": "pointer",
-                                                        "width": "100%",
-                                                    },
-                                                ),
-                                            ],
-                                            id="bar-plot-row",
-                                            style={"width": "100%"},
-                                        ),
+                                        )
+                                        for plot in plot_types
                                     ]
                                 ),
                             ],
@@ -219,31 +219,31 @@ app.layout = html.Div(
     ],
     [State("edit-modal", "is_open")],
 )
-def toggle_modal_edit(edit_button_n_clicks, n2, n3, is_open):
+def toggle_modal(edit_button_n_clicks, n2, n3, is_open):
     if any(edit_button_n_clicks) or n2 or n3:
         return not is_open
     return is_open
 
 
-# @app.callback(
-#     [Output("layout-store", "data"), Output("children-store", "data")],
-#     [Input("save-button", "n_clicks")],
-#     [
-#         State("plot-container", "layouts"),
-#         State("plot-container", "children"),
-#     ],
-#     prevent_initial_call=True,
-# )
-# def save_layout_and_children(n_clicks, layout, children):
-#     print(n_clicks)
-#     if n_clicks > 0:
-#         data_file = "data.json"
-#         data = {"children": children, "layouts": layout}
+@app.callback(
+    [Output("layout-store", "data"), Output("children-store", "data")],
+    [Input("save-button", "n_clicks")],
+    [
+        State("plot-container", "layouts"),
+        State("plot-container", "children"),
+    ],
+    prevent_initial_call=True,
+)
+def save_layout_and_children(n_clicks, layout, children):
+    print(n_clicks)
+    if n_clicks > 0:
+        data_file = "data.json"
+        data = {"children": children, "layouts": layout}
 
-#         with open(data_file, "w") as f:
-#             json.dump(data, f)
-#     print(len(children))
-#     return layout, children
+        with open(data_file, "w") as f:
+            json.dump(data, f)
+    print(len(children))
+    return layout, children
 
 
 # define the callback to show/hide the modal
@@ -252,7 +252,7 @@ def toggle_modal_edit(edit_button_n_clicks, n2, n3, is_open):
     [Input("add-plot-button", "n_clicks"), Input("modal-close-button", "n_clicks")],
     [State("modal", "is_open")],
 )
-def toggle_modal_add(n1, n2, is_open):
+def toggle_modal(n1, n2, is_open):
     if n1 or n2:
         return not is_open
     return is_open
@@ -260,11 +260,12 @@ def toggle_modal_add(n1, n2, is_open):
 
 # define the callbacks to add plots based on clicked options
 @app.callback(
-    [Output("plot-container", "children"), Output("layout-store", "data")],
+    Output("plot-container", "children"),  # specify the output property of the callback
     [  # specify the input properties of the callback
-        Input("line-plot-option", "n_clicks"),
-        Input("bar-plot-option", "n_clicks"),
-        Input("scatter-plot-option", "n_clicks"),
+        *[
+            Input(f"{plot['type'].lower().replace(' ', '-')}-option", "n_clicks")
+            for plot in plot_types
+        ],
         Input({"type": "remove-button", "index": dash.dependencies.ALL}, "n_clicks"),
         Input("layout-store", "data"),
         Input("children-store", "data"),
@@ -275,23 +276,31 @@ def toggle_modal_add(n1, n2, is_open):
     ],  # specify the state properties of the callback
 )
 def add_plot(
-    line_n_clicks,
-    bar_n_clicks,
-    scatter_n_clicks,
-    remove_button_n_clicks,
-    layout_store,
-    children_store,
-    existing_layout,
-    existing_children,
+    *input_args,
 ):
+    plot_option_clicks = input_args[:-5]
+    remove_button_n_clicks = input_args[-5]
+    layout_store = input_args[-4]
+    children_store = input_args[-3]
+    existing_layout = input_args[-2]
+    existing_children = input_args[-1]
+
+    print(input_args)
+    print(
+        [
+            "Len : {}".format(len(e)) if type(e) is list or type(e) is dict else e
+            for e in input_args
+        ]
+    )
+
+    print(type(existing_children), len(existing_children))
     # if there are no existing children, initialize the list to an empty list
-    if not existing_children:
+    if not existing_children or isinstance(existing_children, dict):
         existing_children = list()
 
     if children_store:
         existing_children = children_store
     if layout_store:
-        print(layout_store)
         existing_layout = layout_store
 
     # get the context of the callback
@@ -302,7 +311,7 @@ def add_plot(
     # pprint(existing_children)
     # if the callback is not triggered, return the existing children
     if not ctx.triggered:
-        return existing_children, existing_layout
+        return existing_children
     else:
         # get the id of the element that triggered the callback
         button_id = ctx.triggered[0]["prop_id"].split(".")[0]
@@ -310,17 +319,15 @@ def add_plot(
     # print the id of the element that triggered the callback
     print(button_id)
 
-    # if the line-plot option was clicked, create a line plot figure using plotly
-    if button_id == "line-plot-option":
-        fig = px.line(x=[1, 2, 3], y=[4, 1, 2])
+    selected_plot_type = None
+    for plot in plot_types:
+        option_id = f"{plot['type'].lower().replace(' ', '-')}-option"
+        if button_id == option_id:
+            selected_plot_type = plot["type"]
+            break
 
-    # if the bar-plot option was clicked, create a bar plot figure using plotly
-    elif button_id == "bar-plot-option":
-        fig = px.bar(x=[1, 2, 3], y=[4, 1, 2])
-
-    # if the scatter-plot option was clicked, create a scatter plot figure using plotly
-    elif button_id == "scatter-plot-option":
-        fig = px.scatter(x=[1, 2, 3], y=[4, 1, 2])
+    if selected_plot_type:
+        fig = create_figure(selected_plot_type)
 
     # if the remove button was clicked, return an empty list to remove all the plots
 
@@ -338,11 +345,11 @@ def add_plot(
         for child in existing_children:
             if child["props"]["id"].split("div-")[-1] == button_uuid:
                 existing_children.remove(child)
-        return existing_children, existing_layout
+        return existing_children
 
     # if none of the above, return the existing children
     else:
-        return existing_children, existing_layout
+        return existing_children
 
     unique_id = str(uuid.uuid4())
 
@@ -369,18 +376,8 @@ def add_plot(
     existing_children.append(new_child)
 
     # return the updated list of children
-    return existing_children, existing_layout
-
-
-@app.callback(
-    Output("plot-container", "layouts"),
-    [Input("layout-store", "data")],
-)
-def update_layout_on_load(updated_layout):
-    if updated_layout:
-        return updated_layout
-    return {}
+    return existing_children
 
 
 if __name__ == "__main__":
-    app.run_server(debug=True, port=8053)
+    app.run_server(debug=True, port=8052)
