@@ -10,6 +10,7 @@ import time
 import os, json
 import json
 import ast
+import pandas
 
 
 external_stylesheets = [
@@ -69,7 +70,7 @@ AVAILABLE_PLOT_TYPES = {
             "hover_name": "country",
             "log_x": True,
             "size_max": 55,
-            "animation_frame": "year",
+            # "animation_frame": "year",
         },
     },
     "bar-plot": {
@@ -108,7 +109,7 @@ AVAILABLE_PLOT_TYPES = {
         "type": "Box plot",
         "description": "Box plot of Life Expectancy by Continent",
         "property": "Property D",
-        "material-icons": "analytics",
+        "material-icons": "candlestick_chart",
         "function": px.box,
         "kwargs": {
             "x": "continent",
@@ -134,19 +135,61 @@ AVAILABLE_PLOT_TYPES = {
             # "title": "Population by Continent",
         },
     },
+    # "countries-card": {
+    #     "type": "Card",
+    #     "description": "Card description",
+    #     "property": "Property X",
+    #     "material-icons": "score",
+    #     "function": dbc.Card,
+    #     "kwargs": {
+    #         "legend": "Countries number",
+    #         "column": "country",
+    #         "operation": lambda col: col.nunique(),
+    #     },
+    # },
 }
 
 AVAILABLE_PLOT_TYPES = dict(sorted(AVAILABLE_PLOT_TYPES.items()))
 
 
-def create_initial_figure(selected_year, plot_type):
-    filtered_df = df[df.year == selected_year]
-
-    fig = AVAILABLE_PLOT_TYPES[plot_type]["function"](
-        filtered_df, **AVAILABLE_PLOT_TYPES[plot_type]["kwargs"]
+# Add a new function to create a card with a number and a legend
+def create_card(value, legend):
+    return dbc.Card(
+        [
+            html.H2("{value}".format(value=value), className="card-title"),
+            html.P(legend, className="card-text"),
+        ],
+        body=True,
+        color="light",
     )
 
-    fig.update_layout(transition_duration=500)
+
+def process_data_for_card(df, column, operation):
+    value = operation(df[column])
+    return value
+
+
+def create_initial_figure(selected_year, plot_type):
+    filtered_df = df[df.year == selected_year]
+    # filtered_df = df
+    print(plot_type)
+    if AVAILABLE_PLOT_TYPES[plot_type]["type"] is "Card":
+        value = process_data_for_card(
+            filtered_df,
+            AVAILABLE_PLOT_TYPES[plot_type]["kwargs"]["column"],
+            AVAILABLE_PLOT_TYPES[plot_type]["kwargs"]["operation"],
+        )
+        print(value)
+        fig = create_card(
+            value,
+            AVAILABLE_PLOT_TYPES[plot_type]["kwargs"]["legend"],
+        )
+    elif AVAILABLE_PLOT_TYPES[plot_type]["type"] is not "Card":
+        fig = AVAILABLE_PLOT_TYPES[plot_type]["function"](
+            filtered_df, **AVAILABLE_PLOT_TYPES[plot_type]["kwargs"]
+        )
+
+        fig.update_layout(transition_duration=500)
 
     return fig
 
@@ -281,7 +324,7 @@ app.layout = dbc.Container(
             value=init_year,
             marks={str(year): str(year) for year in df["year"].unique()},
             step=None,
-            included=False,
+            included=True,
         ),
         dcc.Interval(
             id="save-slider-value-interval",
