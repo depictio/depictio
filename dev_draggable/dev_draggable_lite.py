@@ -72,4 +72,4 @@ def update_figure(interval):
 
 
 if __name__ == "__main__":
-    app.run_server(debug=True, port=805)
+    app.run_server(debug=True, port=8050)
