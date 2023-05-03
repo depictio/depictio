@@ -3,8 +3,10 @@ from dash import dcc, html
 from dash.dependencies import Input, Output
 import plotly.express as px
 import pandas as pd
+import dash_bootstrap_components as dbc
 
-app = dash.Dash(__name__)
+
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 
 json_data = {
     "BAB3114iTRUE5E81": {
@@ -212,46 +214,109 @@ AVAILABLE_PLOT_TYPES = {
 # Generate dropdown options based on DataFrame columns
 dropdown_options = [{"label": col, "value": col} for col in df.columns]
 
-app.layout = html.Div(
+app.layout = dbc.Container(
     [
-        dcc.Dropdown(
-            id="visualization-type",
-            options=[
-                {"label": v["type"], "value": k}
-                for k, v in AVAILABLE_PLOT_TYPES.items()
+        html.H1(
+            "Prepare your visualization",
+            className="text-center mb-4",
+        ),
+        html.Hr(),
+        dbc.Row(
+            [
+                dbc.Col(html.H2("Visualization type"), width=2),
+                dbc.Col(
+                    dcc.Dropdown(
+                        id="visualization-type",
+                        options=[
+                            {"label": v["type"], "value": k}
+                            for k, v in AVAILABLE_PLOT_TYPES.items()
+                        ],
+                        value="scatter-plot",
+                    ),
+                    width=4,
+                ),
             ],
-            value="scatter-plot",
+            # className="mt-3",
+            justify="center",
         ),
-        dcc.Dropdown(
-            id="x-axis",
-            options=dropdown_options,
-            value=df.columns[0],
-            placeholder="x-axis",
+        html.Hr(),
+        dbc.Row(
+            [
+                dbc.Col(html.H3("X-axis"), width=1),
+                dbc.Col(
+                    dcc.Dropdown(
+                        id="x-axis",
+                        options=dropdown_options,
+                        value="gdpPercap",
+                    ),
+                    width=2,
+                ),
+                dbc.Col(html.H3("Y-axis"), width=1),
+                dbc.Col(
+                    dcc.Dropdown(
+                        id="y-axis",
+                        options=dropdown_options,
+                        value="lifeExp",
+                    ),
+                    width=2,
+                ),
+                dbc.Col(html.H3("Color"), width=1),
+                dbc.Col(
+                    dcc.Dropdown(
+                        id="color",
+                        options=dropdown_options,
+                        value=None,
+                    ),
+                    width=2,
+                ),
+            ],
+            className="text-center mt-3",
+            justify="center",
         ),
-        dcc.Dropdown(
-            id="y-axis",
-            options=dropdown_options,
-            value=df.columns[1],
-            placeholder="y-axis",
+        dbc.Row(
+            [
+                dbc.Col(html.H3("Hover data"), width=1),
+                dbc.Col(
+                    dcc.Dropdown(
+                        id="hover_name",
+                        options=dropdown_options,
+                        value=None,
+                    ),
+                    width=2,
+                ),
+                dbc.Col(html.H3("Symbol"), width=1),
+                dbc.Col(
+                    dcc.Dropdown(
+                        id="symbol",
+                        options=dropdown_options,
+                        value=None,
+                    ),
+                    width=2,
+                ),
+                dbc.Col(html.H3("Size"), width=1),
+                dbc.Col(
+                    dcc.Dropdown(
+                        id="size",
+                        options=dropdown_options,
+                        value=None,
+                    ),
+                    width=2,
+                ),
+            ],
+            className="text-center mt-3",
+            justify="center",
         ),
-        dcc.Dropdown(
-            id="color", options=dropdown_options, value=None, placeholder="color"
+        html.Hr(),
+        dbc.Row(
+            [
+                dbc.Col(
+                    dcc.Graph(id="graph-container", config={"editable": True}),
+                ),
+            ],
+            className="mt-3",
         ),
-        dcc.Dropdown(
-            id="hover_name",
-            options=dropdown_options,
-            # multi=True,
-            value=None,
-            placeholder="hover_name",
-        ),
-        dcc.Dropdown(
-            id="symbol", options=dropdown_options, value=None, placeholder="symbol"
-        ),
-        dcc.Dropdown(
-            id="size", options=dropdown_options, value=None, placeholder="size"
-        ),
-        dcc.Graph(id="graph-container", config={"editable": True}),
-    ]
+    ],
+    fluid=True,
 )
 
 
