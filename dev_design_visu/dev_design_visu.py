@@ -1,10 +1,13 @@
-import dash
 from dash import dcc, html
-from dash.dependencies import Input, Output
-import plotly.express as px
-import pandas as pd
+from dash.dependencies import Input, Output, State
+import ast
+import dash
 import dash_bootstrap_components as dbc
-
+import json
+import os, json
+import pandas as pd
+import plotly.express as px
+import time
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 
@@ -214,8 +217,28 @@ AVAILABLE_PLOT_TYPES = {
 # Generate dropdown options based on DataFrame columns
 dropdown_options = [{"label": col, "value": col} for col in df.columns]
 
+
+def load_data():
+    if os.path.exists("data_prepare.json"):
+        with open("data_prepare.json", "r") as file:
+            data = json.load(file)
+        return data
+    return None
+
+
+data = load_data()
+
+init_children = data["stored_children_data"] if data else list()
+
+
 app.layout = dbc.Container(
     [
+        # dcc.Store(id="stored-xaxis", storage_type="session", data=init_children),
+        dcc.Interval(
+            id="interval",
+            interval=2000,  # Save slider value every 1 second
+            n_intervals=0,
+        ),
         html.H1(
             "Prepare your visualization",
             className="text-center mb-4",
@@ -309,6 +332,52 @@ app.layout = dbc.Container(
         html.Hr(),
         dbc.Row(
             [
+                dbc.Modal(
+                    [
+                        dbc.ModalHeader(
+                            html.H1(
+                                "Success!",
+                                className="text-success",
+                            )
+                        ),
+                        dbc.ModalBody(
+                            html.H5(
+                                "Your amazing dashboard was successfully saved!",
+                                className="text-success",
+                            ),
+                            style={"background-color": "#F0FFF0"},
+                        ),
+                        dbc.ModalFooter(
+                            dbc.Button(
+                                "Close",
+                                id="success-modal-close",
+                                className="ml-auto",
+                                color="success",
+                            )
+                        ),
+                    ],
+                    id="success-modal",
+                    centered=True,
+                ),
+                dbc.Button(
+                    "Save",
+                    id="save-button",
+                    color="success",
+                    style={
+                        "margin-left": "10px",
+                        "font-size": "22px",
+                        "cursor": "pointer",
+                        "width": "10%",
+                    },
+                    size="lg",
+                    n_clicks=0,
+                ),
+            ],
+            justify="center",
+        ),
+        html.Hr(),
+        dbc.Row(
+            [
                 dbc.Col(
                     dcc.Graph(id="graph-container", config={"editable": True}),
                 ),
@@ -318,6 +387,130 @@ app.layout = dbc.Container(
     ],
     fluid=True,
 )
+
+
+dropdown_elements = [
+    "x-axis",
+    # "y-axis",
+    # "color",
+    # "hover_name",
+    # "symbol",
+    # "size",
+]
+
+
+def generate_callback(element_id):
+    @app.callback(
+        Output(f"stored-{element_id}", "data"),
+        Input("interval", "n_intervals"),
+        State(element_id, "value"),
+    )
+    def save_value(n_intervals, value):
+        if n_intervals == 0:
+            raise dash.exceptions.PreventUpdate
+        return value
+
+    @app.callback(
+        Output(element_id, "value"),
+        Input(f"stored-{element_id}", "data"),
+    )
+    def update_value(data):
+        if data is None:
+            raise dash.exceptions.PreventUpdate
+        return data
+
+    return save_value, update_value
+
+
+for element_id in dropdown_elements:
+    # Create dcc.Store for each dropdown element
+    app.layout.children.insert(
+        0, dcc.Store(id=f"stored-{element_id}", storage_type="session", data="")
+    )
+
+    # Register the save and update callbacks for each element
+    save_value_callback, update_value_callback = generate_callback(element_id)
+    app.callback_map[f"{element_id}.value"] = update_value_callback
+    app.callback_map[f"stored-{element_id}.data"] = save_value_callback
+
+
+# @app.callback(
+#     Output("stored-xaxis", "data"),
+#     Input("interval", "n_intervals"),
+#     State("x-axis", "value"),
+# )
+# def save_slider_value(n_intervals, value):
+#     if n_intervals == 0:
+#         raise dash.exceptions.PreventUpdate
+#     return value
+
+
+# @app.callback(
+#     Output("x-axis", "value"),
+#     Input("stored-xaxis", "data"),
+# )
+# def update_slider_value(data):
+#     if data is None:
+#         raise dash.exceptions.PreventUpdate
+#     return data
+
+
+# @app.callback(
+#     Output("save-button", "n_clicks"),
+#     Input("save-button", "n_clicks"),
+#     State("stored-xaxis", "data"),
+#     State("x-axis", "value"),
+# )
+# def save_data(
+#     n_clicks,
+#     stored_children_data,
+#     x_axis_value,
+# ):
+#     # print(dash.callback_context.triggered[0]["prop_id"].split(".")[0], n_clicks)
+#     if n_clicks > 0:
+#         data = {
+#             "stored_children_data": stored_children_data,
+#         }
+#         with open("data_prepare.json", "w") as file:
+#             json.dump(data, file)
+#         return n_clicks
+#     return n_clicks
+
+
+@app.callback(
+    Output("save-button", "n_clicks"),
+    Input("save-button", "n_clicks"),
+    # State("stored-xaxis", "data"),
+    # State("x-axis", "value"),
+    [State(f"stored-{element}", "data") for element in dropdown_elements]
+    + [State(element, "value") for element in dropdown_elements],
+)
+def save_data(
+    n_clicks,
+    stored_xaxis_data,
+    # x_axis_value,
+    *element_data,
+):
+    if n_clicks > 0:
+        print(element_data)
+        # Store values of dropdown elements in a dictionary
+        element_values = {}
+        for i, element_id in enumerate(dropdown_elements):
+            stored_data = element_data[i]
+            value = element_data[i + len(dropdown_elements)]
+            element_values[element_id] = {
+                "stored_data": stored_data,
+                "value": value,
+            }
+
+        print(element_values)
+
+        with open("data_prepare.json", "w") as file:
+            json.dump(element_values, file)
+
+        return n_clicks
+
+    return n_clicks
 
 
 @app.callback(
