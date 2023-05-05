@@ -125,7 +125,8 @@ json_data = {
 }
 
 df = pd.read_csv(
-    "https://raw.githubusercontent.com/plotly/datasets/master/gapminderDataFiveYear.csv"
+    # "https://raw.githubusercontent.com/plotly/datasets/master/gapminderDataFiveYear.csv"
+    "https://raw.githubusercontent.com/plotly/datasets/master/titanic.csv"
 )
 
 AVAILABLE_PLOT_TYPES = {
@@ -210,12 +211,87 @@ AVAILABLE_PLOT_TYPES = {
     },
 }
 
+import inspect
+
+plotly_vizu_list = [px.scatter, px.line, px.bar, px.histogram, px.box]
+
+plotly_vizu_dict = {}
+for vizu_func in plotly_vizu_list:
+    plotly_vizu_dict[vizu_func.__name__] = vizu_func
+
+
+common_params = set.intersection(
+    *[set(inspect.signature(func).parameters.keys()) for func in plotly_vizu_list]
+)
+common_param_names = [p for p in list(common_params)]
+common_param_names.sort(
+    key=lambda x: list(inspect.signature(plotly_vizu_list[0]).parameters).index(x)
+)
+
+specific_params = {}
+
+for vizu_func in plotly_vizu_list:
+    func_params = inspect.signature(vizu_func).parameters
+    param_names = list(func_params.keys())
+
+    common_params_tmp = (
+        common_params.intersection(func_params.keys())
+        if common_params
+        else set(func_params.keys())
+    )
+
+    specific_params[vizu_func] = [p for p in param_names if p not in common_params_tmp]
+
+print("Common parameters:", common_param_names)
+for vizu_func, params in specific_params.items():
+    print(f"Specific parameters for {vizu_func.__name__}: {params}")
+
+
 # Create a DataFrame from the JSON data for plotting
 # df = pd.DataFrame.from_dict(json_data, orient="index")
 # print(df)
 
 # Generate dropdown options based on DataFrame columns
 dropdown_options = [{"label": col, "value": col} for col in df.columns]
+
+
+dropdown_elements = [
+    "x-axis",
+    "y-axis",
+    "color",
+]
+
+
+import inspect
+
+# Define the available visualizations
+plotly_vizu_list = [px.scatter, px.line, px.bar, px.histogram, px.box]
+
+common_params = set.intersection(
+    *[set(inspect.signature(func).parameters.keys()) for func in plotly_vizu_list]
+)
+common_param_names = [p for p in list(common_params)]
+common_param_names.sort(
+    key=lambda x: list(inspect.signature(plotly_vizu_list[0]).parameters).index(x)
+)
+
+specific_params = {}
+
+for vizu_func in plotly_vizu_list:
+    func_params = inspect.signature(vizu_func).parameters
+    param_names = list(func_params.keys())
+
+    common_params_tmp = (
+        common_params.intersection(func_params.keys())
+        if common_params
+        else set(func_params.keys())
+    )
+
+    specific_params[vizu_func.__name__] = [
+        p for p in param_names if p not in common_params_tmp
+    ]
+
+print(specific_params)
 
 
 def load_data():
@@ -226,14 +302,13 @@ def load_data():
     return None
 
 
-data = load_data()
+# data = load_data()
 
-init_children = data["stored_children_data"] if data else list()
+init_children = list()
 
 
 app.layout = dbc.Container(
     [
-        # dcc.Store(id="stored-xaxis", storage_type="session", data=init_children),
         dcc.Interval(
             id="interval",
             interval=2000,  # Save slider value every 1 second
@@ -251,152 +326,140 @@ app.layout = dbc.Container(
                     dcc.Dropdown(
                         id="visualization-type",
                         options=[
-                            {"label": v["type"], "value": k}
-                            for k, v in AVAILABLE_PLOT_TYPES.items()
+                            {"label": func.__name__, "value": func.__name__}
+                            for func in plotly_vizu_list
                         ],
-                        value="scatter-plot",
+                        value=plotly_vizu_list[0].__name__,
                     ),
                     width=4,
                 ),
-            ],
-            # className="mt-3",
-            justify="center",
-        ),
-        html.Hr(),
-        dbc.Row(
-            [
-                dbc.Col(html.H3("X-axis"), width=1),
-                dbc.Col(
-                    dcc.Dropdown(
-                        id="x-axis",
-                        options=dropdown_options,
-                        value="gdpPercap",
-                    ),
-                    width=2,
-                ),
-                dbc.Col(html.H3("Y-axis"), width=1),
-                dbc.Col(
-                    dcc.Dropdown(
-                        id="y-axis",
-                        options=dropdown_options,
-                        value="lifeExp",
-                    ),
-                    width=2,
-                ),
-                dbc.Col(html.H3("Color"), width=1),
-                dbc.Col(
-                    dcc.Dropdown(
-                        id="color",
-                        options=dropdown_options,
-                        value=None,
-                    ),
-                    width=2,
-                ),
-            ],
-            className="text-center mt-3",
-            justify="center",
-        ),
-        dbc.Row(
-            [
-                dbc.Col(html.H3("Hover data"), width=1),
-                dbc.Col(
-                    dcc.Dropdown(
-                        id="hover_name",
-                        options=dropdown_options,
-                        value=None,
-                    ),
-                    width=2,
-                ),
-                dbc.Col(html.H3("Symbol"), width=1),
-                dbc.Col(
-                    dcc.Dropdown(
-                        id="symbol",
-                        options=dropdown_options,
-                        value=None,
-                    ),
-                    width=2,
-                ),
-                dbc.Col(html.H3("Size"), width=1),
-                dbc.Col(
-                    dcc.Dropdown(
-                        id="size",
-                        options=dropdown_options,
-                        value=None,
-                    ),
-                    width=2,
-                ),
-            ],
-            className="text-center mt-3",
-            justify="center",
-        ),
-        html.Hr(),
-        dbc.Row(
-            [
-                dbc.Modal(
+                html.Hr(),
+                dbc.Row(
                     [
-                        dbc.ModalHeader(
-                            html.H1(
-                                "Success!",
-                                className="text-success",
-                            )
-                        ),
-                        dbc.ModalBody(
-                            html.H5(
-                                "Your amazing dashboard was successfully saved!",
-                                className="text-success",
+                        dbc.Col(html.H3("X-axis"), width=1),
+                        dbc.Col(
+                            dcc.Dropdown(
+                                id="x-axis",
+                                options=dropdown_options,
+                                value=list(df.columns)[0],
                             ),
-                            style={"background-color": "#F0FFF0"},
+                            width=2,
                         ),
-                        dbc.ModalFooter(
-                            dbc.Button(
-                                "Close",
-                                id="success-modal-close",
-                                className="ml-auto",
-                                color="success",
-                            )
+                        dbc.Col(html.H3("Y-axis"), width=1),
+                        dbc.Col(
+                            dcc.Dropdown(
+                                id="y-axis",
+                                options=dropdown_options,
+                                value=list(df.columns)[1],
+                            ),
+                            width=2,
+                        ),
+                        dbc.Col(html.H3("color"), width=1),
+                        dbc.Col(
+                            dcc.Dropdown(
+                                id="color",
+                                options=dropdown_options,
+                                # value=list(df.columns)[2],
+                                value=list(df.columns)[2],
+                            ),
+                            width=2,
                         ),
                     ],
-                    id="success-modal",
-                    centered=True,
+                    justify="center",
                 ),
-                dbc.Button(
-                    "Save",
-                    id="save-button",
-                    color="success",
-                    style={
-                        "margin-left": "10px",
-                        "font-size": "22px",
-                        "cursor": "pointer",
-                        "width": "10%",
-                    },
-                    size="lg",
-                    n_clicks=0,
+                html.Hr(),
+                dbc.Col(
+                    [
+                        dbc.Button(
+                            "Edit",
+                            id="edit-button",
+                            color="primary",
+                            size="lg",
+                            style={"font-size": "22px"},
+                        ),
+                        dbc.Modal(
+                            [
+                                dbc.ModalHeader(
+                                    html.H1(
+                                        "Success!",
+                                        className="text-success",
+                                    )
+                                ),
+                                dbc.ModalBody(
+                                    html.H5(
+                                        "Your amazing dashboard was successfully saved!",
+                                        className="text-success",
+                                    ),
+                                    style={"background-color": "#F0FFF0"},
+                                ),
+                                dbc.ModalFooter(
+                                    dbc.Button(
+                                        "Close",
+                                        id="modal-close-button",
+                                        className="ml-auto",
+                                        color="success",
+                                    )
+                                ),
+                            ],
+                            id="success-modal",
+                            centered=True,
+                        ),
+                        dbc.Button(
+                            "Save",
+                            id="save-button",
+                            color="success",
+                            style={"margin-left": "10px", "font-size": "22px"},
+                            size="lg",
+                            n_clicks=0,
+                        ),
+                    ],
+                    className="d-flex justify-content-center align-items-center",
+                ),
+                html.Hr(),
+                dbc.Row(
+                    [
+                        dbc.Col(
+                            dcc.Graph(id="graph-container", config={"editable": True}),
+                        ),
+                    ],
+                    className="mt-3",
                 ),
             ],
+            className="text-center mt-3",
             justify="center",
         ),
         html.Hr(),
         dbc.Row(
             [
-                dbc.Col(
-                    dcc.Graph(id="graph-container", config={"editable": True}),
+                dbc.Offcanvas(
+                    [
+                        html.Div(id="specific-params-container"),
+                    ],
+                    id="modal",
+                    title="Edit Menu",
+                    scrollable=True,
+                    # size="xl",
+                    backdrop=False,
                 ),
             ],
-            className="mt-3",
+            justify="center",
         ),
+        html.Hr(),
     ],
     fluid=True,
 )
 
 
-dropdown_elements = [
-    "x-axis",
-    # "y-axis",
-    # "color",
-    # "hover_name",
-    # "symbol",
-    # "size",
-]
+# define the callback to show/hide the modal
+@app.callback(
+    Output("modal", "is_open"),
+    [Input("edit-button", "n_clicks"), Input("modal-close-button", "n_clicks")],
+    [State("modal", "is_open")],
+)
+def toggle_modal(n1, n2, is_open):
+    if n1 or n2:
+        return not is_open
+    return is_open
 
 
 def generate_callback(element_id):
@@ -423,6 +486,7 @@ def generate_callback(element_id):
 
 
 for element_id in dropdown_elements:
+    # print(element_id)
     # Create dcc.Store for each dropdown element
     app.layout.children.insert(
         0, dcc.Store(id=f"stored-{element_id}", storage_type="session", data="")
@@ -430,77 +494,88 @@ for element_id in dropdown_elements:
 
     # Register the save and update callbacks for each element
     save_value_callback, update_value_callback = generate_callback(element_id)
-    app.callback_map[f"{element_id}.value"] = update_value_callback
-    app.callback_map[f"stored-{element_id}.data"] = save_value_callback
+    # print(save_value_callback)
+    # print(update_value_callback)
+app.layout.children.insert(
+    0,
+    dcc.Store(id=f"stored-visualization-type", storage_type="session", data="scatter"),
+)
+save_value_callback, update_value_callback = generate_callback("visualization-type")
 
-
-# @app.callback(
-#     Output("stored-xaxis", "data"),
-#     Input("interval", "n_intervals"),
-#     State("x-axis", "value"),
+# app.layout.children.insert(
+#     0,
+#     dcc.Store(id=f"stored-accordion", storage_type="session"),
 # )
-# def save_slider_value(n_intervals, value):
-#     if n_intervals == 0:
-#         raise dash.exceptions.PreventUpdate
-#     return value
+# save_value_callback, update_value_callback = generate_callback("accordion")
 
 
-# @app.callback(
-#     Output("x-axis", "value"),
-#     Input("stored-xaxis", "data"),
-# )
-# def update_slider_value(data):
-#     if data is None:
-#         raise dash.exceptions.PreventUpdate
-#     return data
-
-
-# @app.callback(
-#     Output("save-button", "n_clicks"),
-#     Input("save-button", "n_clicks"),
-#     State("stored-xaxis", "data"),
-#     State("x-axis", "value"),
-# )
-# def save_data(
-#     n_clicks,
-#     stored_children_data,
-#     x_axis_value,
-# ):
-#     # print(dash.callback_context.triggered[0]["prop_id"].split(".")[0], n_clicks)
-#     if n_clicks > 0:
-#         data = {
-#             "stored_children_data": stored_children_data,
-#         }
-#         with open("data_prepare.json", "w") as file:
-#             json.dump(data, file)
-#         return n_clicks
-#     return n_clicks
+# Define the callback to update the specific parameters dropdowns
+@app.callback(
+    Output("specific-params-container", "children"),
+    Input("visualization-type", "value"),
+)
+def update_specific_params(value):
+    if value is not None:
+        specific_params_options = [
+            {"label": param_name, "value": param_name}
+            for param_name in specific_params[value]
+        ]
+        specific_params_dropdowns = [
+            dbc.AccordionItem(
+                [
+                    dbc.Row(
+                        [
+                            dcc.Dropdown(
+                                id=f"{value}-{param_name}",
+                                options=list(df.columns),
+                                value=None,
+                            ),
+                        ]
+                    ),
+                ],
+                className="my-2",
+                title=param_name,
+            )
+            for param_name in specific_params[value]
+        ]
+        return [html.H5(f"{value.capitalize()} specific parameters")] + [
+            dbc.Accordion(
+                specific_params_dropdowns,
+                flush=True,
+                always_open=True,
+                persistence_type="session",
+                id="accordion",
+            ),
+            # dcc.Store(id="accordion-state"),
+        ]
+    else:
+        return html.Div()
 
 
 @app.callback(
     Output("save-button", "n_clicks"),
     Input("save-button", "n_clicks"),
-    # State("stored-xaxis", "data"),
-    # State("x-axis", "value"),
     [State(f"stored-{element}", "data") for element in dropdown_elements]
     + [State(element, "value") for element in dropdown_elements],
 )
 def save_data(
     n_clicks,
-    stored_xaxis_data,
-    # x_axis_value,
     *element_data,
 ):
     if n_clicks > 0:
-        print(element_data)
+        print("\n")
+
+        # print(element_data)
         # Store values of dropdown elements in a dictionary
         element_values = {}
         for i, element_id in enumerate(dropdown_elements):
-            stored_data = element_data[i]
-            value = element_data[i + len(dropdown_elements)]
+            print(i, element_id)
+            stored_data = element_data[i + 1]
+            print(stored_data)
+            # value = element_data[i + len(dropdown_elements)]
             element_values[element_id] = {
                 "stored_data": stored_data,
-                "value": value,
+                # "value": value,
             }
 
         print(element_values)
@@ -520,29 +595,18 @@ def save_data(
         Input("x-axis", "value"),
         Input("y-axis", "value"),
         Input("color", "value"),
-        Input("hover_name", "value"),
-        Input("symbol", "value"),
-        Input("size", "value"),
     ],
 )
-def update_graph(visualization_type, x_axis, y_axis, color, hover_name, symbol, size):
+def update_graph(visualization_type, x_axis, y_axis, color):
+    print(visualization_type)
     # Process inputs and generate the appropriate graph
-    plot_type = AVAILABLE_PLOT_TYPES[visualization_type]
-    plot_func = plot_type["function"]
+    plot_func = plotly_vizu_dict[visualization_type]
     plot_kwargs = {}
 
     plot_kwargs["x"] = x_axis
     plot_kwargs["y"] = y_axis
-    print(size)
     if color:
         plot_kwargs["color"] = color
-    if hover_name:
-        plot_kwargs["hover_name"] = hover_name
-    if symbol:
-        plot_kwargs["symbol"] = symbol
-    if size:
-        print(size)
-        plot_kwargs["size"] = size
 
     figure = plot_func(data_frame=df, **plot_kwargs)
     return figure
