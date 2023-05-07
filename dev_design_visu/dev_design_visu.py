@@ -256,8 +256,8 @@ dropdown_options = [{"label": col, "value": col} for col in df.columns]
 
 
 dropdown_elements = [
-    "x-axis",
-    "y-axis",
+    "x",
+    "y",
     "color",
 ]
 
@@ -339,7 +339,7 @@ app.layout = dbc.Container(
                         dbc.Col(html.H3("X-axis"), width=1),
                         dbc.Col(
                             dcc.Dropdown(
-                                id="x-axis",
+                                id="x",
                                 options=dropdown_options,
                                 value=list(df.columns)[0],
                             ),
@@ -348,7 +348,7 @@ app.layout = dbc.Container(
                         dbc.Col(html.H3("Y-axis"), width=1),
                         dbc.Col(
                             dcc.Dropdown(
-                                id="y-axis",
+                                id="y",
                                 options=dropdown_options,
                                 value=list(df.columns)[1],
                             ),
@@ -538,7 +538,47 @@ def update_specific_params(value):
             )
             for param_name in specific_params[value]
         ]
-        return [html.H5(f"{value.capitalize()} specific parameters")] + [
+        secondary_common_params = [
+            e for e in list(common_param_names[1:]) if e not in dropdown_elements
+        ]
+        secondary_common_params_options = [
+            {"label": e, "value": e} for e in secondary_common_params
+        ]
+        secondary_common_params_dropdowns = [
+            dbc.AccordionItem(
+                [
+                    dbc.Row(
+                        [
+                            dcc.Dropdown(
+                                id=f"{value}-{e}",
+                                options=list(df.columns),
+                                value=None,
+                            ),
+                        ]
+                    ),
+                ],
+                className="my-2",
+                title=e,
+            )
+            for e in secondary_common_params
+        ]
+
+        # print(list(common_param_names))
+        # print(dropdown_elements)
+        # print([e for e in list(common_param_names[1:]) if e not in dropdown_elements])
+        secondary_common_params_layout = [html.H5("Common parameters")] + [
+            dbc.Accordion(
+                secondary_common_params_dropdowns,
+                flush=True,
+                always_open=True,
+                persistence_type="session",
+                id="accordion-sec-common",
+            ),
+            # dcc.Store(id="accordion-state"),
+        ]
+        dynamic_specific_params_layout = [
+            html.H5(f"{value.capitalize()} specific parameters")
+        ] + [
             dbc.Accordion(
                 specific_params_dropdowns,
                 flush=True,
@@ -548,6 +588,9 @@ def update_specific_params(value):
             ),
             # dcc.Store(id="accordion-state"),
         ]
+        print(secondary_common_params_layout + dynamic_specific_params_layout)
+
+        return secondary_common_params_layout + dynamic_specific_params_layout
     else:
         return html.Div()
 
@@ -592,8 +635,8 @@ def save_data(
     Output("graph-container", "figure"),
     [
         Input("visualization-type", "value"),
-        Input("x-axis", "value"),
-        Input("y-axis", "value"),
+        Input("x", "value"),
+        Input("y", "value"),
         Input("color", "value"),
     ],
 )
