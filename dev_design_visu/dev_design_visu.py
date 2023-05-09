@@ -311,7 +311,7 @@ app.layout = dbc.Container(
     [
         dcc.Interval(
             id="interval",
-            interval=2000,  # Save slider value every 1 second
+            interval=10000,  # Save slider value every 1 second
             n_intervals=0,
         ),
         html.H1(
@@ -431,6 +431,7 @@ app.layout = dbc.Container(
         html.Hr(),
         dbc.Row(
             [
+                dcc.Store("offcanvas-state-store", storage_type="session"),
                 dbc.Offcanvas(
                     [
                         html.Div(id="specific-params-container"),
@@ -511,10 +512,16 @@ save_value_callback, update_value_callback = generate_callback("visualization-ty
 
 # Define the callback to update the specific parameters dropdowns
 @app.callback(
-    Output("specific-params-container", "children"),
-    Input("visualization-type", "value"),
+    [
+        Output("specific-params-container", "children"),
+        Output("offcanvas-state-store", "data"),
+    ],
+    [Input("visualization-type", "value"), Input("interval", "n_intervals")],
+    [State("offcanvas-state-store", "data")],
 )
-def update_specific_params(value):
+def update_specific_params(value, n_intervals, offcanvas_states):
+    print("\t", value)
+    print(specific_params[value])
     if value is not None:
         specific_params_options = [
             {"label": param_name, "value": param_name}
@@ -590,9 +597,12 @@ def update_specific_params(value):
         ]
         print(secondary_common_params_layout + dynamic_specific_params_layout)
 
-        return secondary_common_params_layout + dynamic_specific_params_layout
+        return (
+            secondary_common_params_layout + dynamic_specific_params_layout,
+            secondary_common_params_layout + dynamic_specific_params_layout,
+        )
     else:
-        return html.Div()
+        return html.Div(), html.Div()
 
 
 @app.callback(
