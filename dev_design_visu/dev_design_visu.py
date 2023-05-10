@@ -9,211 +9,25 @@ import pandas as pd
 import plotly.express as px
 import time
 
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
-
-json_data = {
-    "BAB3114iTRUE5E81": {
-        "raw_total_sequences": 452566,
-        "filtered_sequences": 0,
-        "sequences": 452566,
-        "is_sorted": 1,
-        "1st_fragments": 226283,
-        "last_fragments": 226283,
-        "reads_mapped": 444492,
-        "cell_type": "neuron",
-        "organism": "mouse",
-    },
-    "GHT5763uSILV3R19": {
-        "raw_total_sequences": 315980,
-        "filtered_sequences": 1000,
-        "sequences": 314980,
-        "is_sorted": 0,
-        "1st_fragments": 157490,
-        "last_fragments": 157490,
-        "reads_mapped": 305872,
-        "cell_type": "astrocyte",
-        "organism": "rat",
-    },
-    "JKL9182rGOLD2B57": {
-        "raw_total_sequences": 568201,
-        "filtered_sequences": 3000,
-        "sequences": 565201,
-        "is_sorted": 1,
-        "1st_fragments": 282600,
-        "last_fragments": 282601,
-        "reads_mapped": 550897,
-        "cell_type": "microglia",
-        "organism": "human",
-    },
-    "QWE1234rBLUE9X01": {
-        "raw_total_sequences": 375000,
-        "filtered_sequences": 2500,
-        "sequences": 372500,
-        "is_sorted": 0,
-        "1st_fragments": 186250,
-        "last_fragments": 186250,
-        "reads_mapped": 365000,
-        "cell_type": "endothelial",
-        "organism": "zebrafish",
-    },
-    "ASD5678eGREEN2M03": {
-        "raw_total_sequences": 480000,
-        "filtered_sequences": 8000,
-        "sequences": 472000,
-        "is_sorted": 1,
-        "1st_fragments": 236000,
-        "last_fragments": 236000,
-        "reads_mapped": 455000,
-        "cell_type": "oligodendrocyte",
-        "organism": "chicken",
-    },
-    "ZXC9012tORANGE4H05": {
-        "raw_total_sequences": 520000,
-        "filtered_sequences": 20000,
-        "sequences": 500000,
-        "is_sorted": 0,
-        "1st_fragments": 250000,
-        "last_fragments": 250000,
-        "reads_mapped": 485000,
-        "cell_type": "fibroblast",
-        "organism": "cow",
-    },
-    "TYU1357yYELLOW5L07": {
-        "raw_total_sequences": 410000,
-        "filtered_sequences": 10000,
-        "sequences": 400000,
-        "is_sorted": 1,
-        "1st_fragments": 200000,
-        "last_fragments": 200000,
-        "reads_mapped": 390000,
-        "cell_type": "keratinocyte",
-        "organism": "dog",
-    },
-    "GHJ2468uRED6N09": {
-        "raw_total_sequences": 600000,
-        "filtered_sequences": 30000,
-        "sequences": 570000,
-        "is_sorted": 0,
-        "1st_fragments": 285000,
-        "last_fragments": 285000,
-        "reads_mapped": 540000,
-        "cell_type": "hepatocyte",
-        "organism": "frog",
-    },
-    "BNM3579iINDIGO7Y11": {
-        "raw_total_sequences": 330000,
-        "filtered_sequences": 1500,
-        "sequences": 328500,
-        "is_sorted": 1,
-        "1st_fragments": 164250,
-        "last_fragments": 164250,
-        "reads_mapped": 320000,
-        "cell_type": "cardiomyocyte",
-        "organism": "monkey",
-    },
-    "POI4680oVIOLET8U13": {
-        "raw_total_sequences": 450000,
-        "filtered_sequences": 5000,
-        "sequences": 445000,
-        "is_sorted": 0,
-        "1st_fragments": 222500,
-        "last_fragments": 222500,
-        "reads_mapped": 430000,
-        "cell_type": "lymphocyte",
-        "organism": "horse",
-    },
-}
+app = dash.Dash(
+    __name__,
+    external_stylesheets=[dbc.themes.BOOTSTRAP, "custom.css"],
+    # prevent_initial_callbacks=True,
+    suppress_callback_exceptions=True,
+)
 
 df = pd.read_csv(
     # "https://raw.githubusercontent.com/plotly/datasets/master/gapminderDataFiveYear.csv"
     "https://raw.githubusercontent.com/plotly/datasets/master/titanic.csv"
 )
 
-AVAILABLE_PLOT_TYPES = {
-    "scatter-plot": {
-        "type": "Scatter plot",
-        "description": "Scatter plot of GDP per Capita vs. Life Expectancy",
-        "property": "Property A",
-        "material-icons": "scatter_plot",
-        "function": px.scatter,
-        "kwargs": {
-            "x": "gdpPercap",
-            "y": "lifeExp",
-            "size": "pop",
-            "color": "continent",
-            "hover_name": "country",
-            "log_x": True,
-            "size_max": 55,
-            # "animation_frame": "year",
-        },
-    },
-    "bar-plot": {
-        "type": "Bar plot",
-        "description": "Bar plot of Total GDP per Year",
-        "property": "Property B",
-        "material-icons": "bar_chart",
-        "function": px.bar,
-        "kwargs": {
-            "x": "year",
-            "y": "gdpPercap",
-            "color": "continent",
-            "hover_name": "country",
-            "facet_col": "continent",
-            "facet_col_wrap": 3,
-            "height": 700,
-        },
-    },
-    "line-plot": {
-        "type": "Line plot",
-        "description": "Line plot of GDP per Capita over Time",
-        "property": "Property C",
-        "material-icons": "show_chart",
-        "function": px.line,
-        "kwargs": {
-            "x": "year",
-            "y": "gdpPercap",
-            "color": "continent",
-            "hover_name": "country",
-            "line_group": "country",
-            "line_shape": "spline",
-            "render_mode": "svg",
-        },
-    },
-    "box-plot": {
-        "type": "Box plot",
-        "description": "Box plot of Life Expectancy by Continent",
-        "property": "Property D",
-        "material-icons": "candlestick_chart",
-        "function": px.box,
-        "kwargs": {
-            "x": "continent",
-            "y": "lifeExp",
-            "color": "continent",
-            "hover_name": "country",
-            "points": "all",
-            "notched": True,
-        },
-    },
-    "pie-chart": {
-        "type": "Pie chart",
-        "description": "Pie chart of Population by Continent",
-        "property": "Property E",
-        "material-icons": "pie_chart",
-        "function": px.pie,
-        "kwargs": {
-            "names": "continent",
-            "values": "pop",
-            "hover_name": "continent",
-            "hole": 0.4,
-            # "animation_frame": "year",
-            # "title": "Population by Continent",
-        },
-    },
-}
 
 import inspect
 
 plotly_vizu_list = [px.scatter, px.line, px.bar, px.histogram, px.box]
+
+visualization_types = [func.__name__ for func in plotly_vizu_list]
+
 
 plotly_vizu_dict = {}
 for vizu_func in plotly_vizu_list:
@@ -227,6 +41,7 @@ common_param_names = [p for p in list(common_params)]
 common_param_names.sort(
     key=lambda x: list(inspect.signature(plotly_vizu_list[0]).parameters).index(x)
 )
+
 
 specific_params = {}
 
@@ -293,6 +108,49 @@ for vizu_func in plotly_vizu_list:
 
 print(specific_params)
 
+secondary_common_params = [
+    e for e in list(common_param_names[1:]) if e not in dropdown_elements
+]
+
+
+param_info = {}
+
+
+def extract_info_from_docstring(docstring):
+    lines = docstring.split("\n")
+    # print(lines)
+    parameters_section = False
+    result = {}
+
+    for line in lines:
+        # print(line)
+        if line.startswith("Parameters"):
+            parameters_section = True
+            continue
+        if parameters_section:
+            # if line.startswith("----------"):
+            #     break
+            if line.startswith("    ") is False:
+                # print(line.split(': '))
+                line_processed = line.split(": ")
+                # print(line_processed)
+                if len(line_processed) == 2:
+                    parameter, type = line_processed[0], line_processed[1]
+                    result[parameter] = {"type": type, "description": list()}
+                else:
+                    continue
+
+            elif line.startswith("    ") is True:
+                # result[-1] += " " + line.strip()
+                # print(line.strip())
+                result[parameter]["description"].append(line.strip())
+
+    return result
+
+
+for func in plotly_vizu_list:
+    param_info[func.__name__] = extract_info_from_docstring(func.__doc__)
+
 
 def load_data():
     if os.path.exists("data_prepare.json"):
@@ -311,7 +169,7 @@ app.layout = dbc.Container(
     [
         dcc.Interval(
             id="interval",
-            interval=10000,  # Save slider value every 1 second
+            interval=2000,  # Save slider value every 1 second
             n_intervals=0,
         ),
         html.H1(
@@ -503,12 +361,6 @@ app.layout.children.insert(
 )
 save_value_callback, update_value_callback = generate_callback("visualization-type")
 
-# app.layout.children.insert(
-#     0,
-#     dcc.Store(id=f"stored-accordion", storage_type="session"),
-# )
-# save_value_callback, update_value_callback = generate_callback("accordion")
-
 
 # Define the callback to update the specific parameters dropdowns
 @app.callback(
@@ -520,8 +372,8 @@ save_value_callback, update_value_callback = generate_callback("visualization-ty
     [State("offcanvas-state-store", "data")],
 )
 def update_specific_params(value, n_intervals, offcanvas_states):
-    print("\t", value)
-    print(specific_params[value])
+    # print("\t", value)
+    # print(specific_params[value])
     if value is not None:
         specific_params_options = [
             {"label": param_name, "value": param_name}
@@ -536,18 +388,26 @@ def update_specific_params(value, n_intervals, offcanvas_states):
                                 id=f"{value}-{param_name}",
                                 options=list(df.columns),
                                 value=None,
+                                persistence=True,
                             ),
-                        ]
-                    ),
+                            dbc.Tooltip(
+                                f"{' '.join(param_info[value][param_name]['description'])}",
+                                target=f"{value}-{param_name}",
+                                placement="right",
+                                # delay={"hide": 50000},
+                                autohide=False,
+                            ),
+                        ],
+                    )
                 ],
-                className="my-2",
+                # className="bg-warning text-dark",
                 title=param_name,
             )
             for param_name in specific_params[value]
         ]
-        secondary_common_params = [
-            e for e in list(common_param_names[1:]) if e not in dropdown_elements
-        ]
+        # secondary_common_params = [
+        #     e for e in list(common_param_names[1:]) if e not in dropdown_elements
+        # ]
         secondary_common_params_options = [
             {"label": e, "value": e} for e in secondary_common_params
         ]
@@ -557,9 +417,11 @@ def update_specific_params(value, n_intervals, offcanvas_states):
                     dbc.Row(
                         [
                             dcc.Dropdown(
-                                id=f"{value}-{e}",
+                                # id=f"{value}-{e}",
+                                id=f"{e}",
                                 options=list(df.columns),
                                 value=None,
+                                persistence=True,
                             ),
                         ]
                     ),
@@ -579,7 +441,9 @@ def update_specific_params(value, n_intervals, offcanvas_states):
                 flush=True,
                 always_open=True,
                 persistence_type="session",
+                persistence=True,
                 id="accordion-sec-common",
+                style={"backgroundColor": "#ffc107", "color": "black"},
             ),
             # dcc.Store(id="accordion-state"),
         ]
@@ -591,11 +455,12 @@ def update_specific_params(value, n_intervals, offcanvas_states):
                 flush=True,
                 always_open=True,
                 persistence_type="session",
+                persistence=True,
                 id="accordion",
             ),
             # dcc.Store(id="accordion-state"),
         ]
-        print(secondary_common_params_layout + dynamic_specific_params_layout)
+        # print(secondary_common_params_layout + dynamic_specific_params_layout)
 
         return (
             secondary_common_params_layout + dynamic_specific_params_layout,
@@ -622,9 +487,9 @@ def save_data(
         # Store values of dropdown elements in a dictionary
         element_values = {}
         for i, element_id in enumerate(dropdown_elements):
-            print(i, element_id)
+            # print(i, element_id)
             stored_data = element_data[i + 1]
-            print(stored_data)
+            # print(stored_data)
             # value = element_data[i + len(dropdown_elements)]
             element_values[element_id] = {
                 "stored_data": stored_data,
@@ -641,6 +506,15 @@ def save_data(
     return n_clicks
 
 
+def generate_dropdown_ids(value):
+    specific_param_ids = [
+        f"{value}-{param_name}" for param_name in specific_params[value]
+    ]
+    secondary_param_ids = [f"{value}-{e}" for e in secondary_common_params]
+
+    return secondary_param_ids + specific_param_ids
+
+
 @app.callback(
     Output("graph-container", "figure"),
     [
@@ -648,10 +522,18 @@ def save_data(
         Input("x", "value"),
         Input("y", "value"),
         Input("color", "value"),
+        Input("specific-params-container", "children"),
     ],
 )
-def update_graph(visualization_type, x_axis, y_axis, color):
-    print(visualization_type)
+def update_graph(visualization_type, x_axis, y_axis, color, *children_values):
+    d = {
+        e["props"]["children"][0]["props"]["children"][0]["props"]["id"].replace(
+            f"{visualization_type}-", ""
+        ): e["props"]["children"][0]["props"]["children"][0]["props"]["value"]
+        for e in children_values[0][1]["props"]["children"]
+        if e["props"]["children"][0]["props"]["children"][0]["props"]["value"]
+    }
+
     # Process inputs and generate the appropriate graph
     plot_func = plotly_vizu_dict[visualization_type]
     plot_kwargs = {}
@@ -660,6 +542,8 @@ def update_graph(visualization_type, x_axis, y_axis, color):
     plot_kwargs["y"] = y_axis
     if color:
         plot_kwargs["color"] = color
+
+    plot_kwargs = {**plot_kwargs, **d}
 
     figure = plot_func(data_frame=df, **plot_kwargs)
     return figure
