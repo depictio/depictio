@@ -17,8 +17,8 @@ app = dash.Dash(
 )
 
 df = pd.read_csv(
-    # "https://raw.githubusercontent.com/plotly/datasets/master/gapminderDataFiveYear.csv"
-    "https://raw.githubusercontent.com/plotly/datasets/master/titanic.csv"
+    "https://raw.githubusercontent.com/plotly/datasets/master/gapminderDataFiveYear.csv"
+    # "https://raw.githubusercontent.com/plotly/datasets/master/titanic.csv"
 )
 
 
@@ -148,8 +148,53 @@ def extract_info_from_docstring(docstring):
     return result
 
 
+import re
+from pprint import pprint
+
+
+def process_json_from_docstring(data):
+    for key, value in data.items():
+        # Get the type associated with the field
+        field_type = value.get("type")
+        # field_type = value.get('type')
+        description = " ".join(value.get("description"))
+
+        # Check if there are any options available for the field
+        options = []
+        # for description in value.get('description', []):
+        if "One of" in description:
+            # The options are usually listed after 'One of'
+            option_str = description.split("One of")[-1].split(".")[0]
+
+            options = list(set(re.findall("`'(.*?)'`", option_str)))
+        elif "one of" in data[key]["type"]:
+            option_str = data[key]["type"].split("one of")[-1]
+            options = list(set(re.findall("`'(.*?)'`", option_str)))
+
+        if options:
+            data[key]["options"] = options
+
+        if "Series or array-like" in field_type:
+            data[key]["processed_type"] = "column"
+        else:
+            data[key]["processed_type"] = data[key]["type"].split(" ")[0].split(",")[0]
+    return data
+
+
 for func in plotly_vizu_list:
     param_info[func.__name__] = extract_info_from_docstring(func.__doc__)
+    param_info[func.__name__] = process_json_from_docstring(param_info[func.__name__])
+# pprint(param_info)
+
+allowed_types = ["str", "int", "float", "boolean", "column"]
+plotly_bootstrap_mapping = {
+    "str": dbc.Input,
+    "int": dbc.Input,
+    "float": dbc.Input,
+    "boolean": dbc.Checklist,
+    "column": dcc.Dropdown
+    # "float" : dbc.Input(type="number"), "boolean", "column"
+}
 
 
 def load_data():
@@ -169,7 +214,7 @@ app.layout = dbc.Container(
     [
         dcc.Interval(
             id="interval",
-            interval=2000,  # Save slider value every 1 second
+            interval=5000,  # Save slider value every 1 second
             n_intervals=0,
         ),
         html.H1(
@@ -379,58 +424,121 @@ def update_specific_params(value, n_intervals, offcanvas_states):
             {"label": param_name, "value": param_name}
             for param_name in specific_params[value]
         ]
-        specific_params_dropdowns = [
-            dbc.AccordionItem(
-                [
-                    dbc.Row(
-                        [
-                            dcc.Dropdown(
-                                id=f"{value}-{param_name}",
-                                options=list(df.columns),
-                                value=None,
-                                persistence=True,
-                            ),
-                            dbc.Tooltip(
-                                f"{' '.join(param_info[value][param_name]['description'])}",
-                                target=f"{value}-{param_name}",
-                                placement="right",
-                                # delay={"hide": 50000},
-                                autohide=False,
-                            ),
-                        ],
-                    )
-                ],
-                # className="bg-warning text-dark",
-                title=param_name,
-            )
-            for param_name in specific_params[value]
-        ]
-        # secondary_common_params = [
-        #     e for e in list(common_param_names[1:]) if e not in dropdown_elements
+
+        # specific_params_dropdowns = [
+        #     dbc.AccordionItem(
+        #         [
+        #             dbc.Row(
+        #                 [
+        #                     dcc.Dropdown(
+        #                         id=f"{value}-{param_name}",
+        #                         options=list(df.columns),
+        #                         value=None,
+        #                         persistence=True,
+        #                     ),
+        #                     dbc.Tooltip(
+        #                         f"{' '.join(param_info[value][param_name]['description'])}",
+        #                         target=f"{value}-{param_name}",
+        #                         placement="right",
+        #                         # delay={"hide": 50000},
+        #                         autohide=False,
+        #                     ),
+        #                 ],
+        #             )
+        #         ],
+        #         # className="bg-warning text-dark",
+        #         title=param_name,
+        #     )
+        #     for param_name in specific_params[value]
         # ]
-        secondary_common_params_options = [
-            {"label": e, "value": e} for e in secondary_common_params
-        ]
-        secondary_common_params_dropdowns = [
-            dbc.AccordionItem(
-                [
-                    dbc.Row(
-                        [
-                            dcc.Dropdown(
-                                # id=f"{value}-{e}",
-                                id=f"{e}",
-                                options=list(df.columns),
-                                value=None,
-                                persistence=True,
-                            ),
-                        ]
-                    ),
-                ],
-                className="my-2",
-                title=e,
-            )
-            for e in secondary_common_params
-        ]
+
+        specific_params_dropdowns = list()
+        print(secondary_common_params)
+        for e in specific_params[value]:
+            processed_type_tmp = param_info[value][e]["processed_type"]
+            allowed_types = ["str", "int", "float", "column"]
+            if processed_type_tmp in allowed_types:
+                input_fct = plotly_bootstrap_mapping[processed_type_tmp]
+                print(e, input_fct(), processed_type_tmp)
+                tmp_options = dict()
+
+                if processed_type_tmp == "column":
+                    tmp_options = {
+                        "options": list(df.columns),
+                        "value": None,
+                        "persistence": True,
+                        "id": f"{e}",
+                    }
+                if processed_type_tmp == "str":
+                    tmp_options = {
+                        "placeholder": e,
+                        "type": "text",
+                        "persistence": True,
+                        # "persistence_type": "session",
+                        "id": f"{e}",
+                        "value": None,
+                    }
+                if processed_type_tmp in ["int", "float"]:
+                    tmp_options = {
+                        "placeholder": e,
+                        "type": "number",
+                        "persistence": True,
+                        "id": f"{e}",
+                        "value": None,
+                    }
+                input_fct_with_params = input_fct(**tmp_options)
+                accordion_item = dbc.AccordionItem(
+                    [dbc.Row(input_fct_with_params)],
+                    className="my-2",
+                    title=e,
+                )
+                specific_params_dropdowns.append(accordion_item)
+
+        # specific_params_dropdowns = [
+        #     {"label": e, "value": e} for e in specific_params[value]
+        # ]
+
+        secondary_common_params_dropdowns = list()
+        print(secondary_common_params)
+        for e in secondary_common_params:
+            processed_type_tmp = param_info[value][e]["processed_type"]
+            allowed_types = ["str", "int", "float", "column"]
+            if processed_type_tmp in allowed_types:
+                input_fct = plotly_bootstrap_mapping[processed_type_tmp]
+                print(e, input_fct(), processed_type_tmp)
+                tmp_options = dict()
+
+                if processed_type_tmp == "column":
+                    tmp_options = {
+                        "options": list(df.columns),
+                        "value": None,
+                        "persistence": True,
+                        "id": f"{e}",
+                    }
+                if processed_type_tmp == "str":
+                    tmp_options = {
+                        "placeholder": e,
+                        "type": "text",
+                        "persistence": True,
+                        # "persistence_type": "session",
+                        "id": f"{e}",
+                        "value": None,
+                    }
+                if processed_type_tmp in ["int", "float"]:
+                    tmp_options = {
+                        "placeholder": e,
+                        "type": "number",
+                        "persistence": True,
+                        "id": f"{e}",
+                        "value": None,
+                    }
+                input_fct_with_params = input_fct(**tmp_options)
+                accordion_item = dbc.AccordionItem(
+                    [dbc.Row(input_fct_with_params)],
+                    className="my-2",
+                    title=e,
+                )
+                secondary_common_params_dropdowns.append(accordion_item)
 
         # print(list(common_param_names))
         # print(dropdown_elements)
@@ -443,7 +551,7 @@ def update_specific_params(value, n_intervals, offcanvas_states):
                 persistence_type="session",
                 persistence=True,
                 id="accordion-sec-common",
-                style={"backgroundColor": "#ffc107", "color": "black"},
+                # style={"headerColor": "#ffc107", "color": "red"},
             ),
             # dcc.Store(id="accordion-state"),
         ]
@@ -473,37 +581,51 @@ def update_specific_params(value, n_intervals, offcanvas_states):
 @app.callback(
     Output("save-button", "n_clicks"),
     Input("save-button", "n_clicks"),
-    [State(f"stored-{element}", "data") for element in dropdown_elements]
-    + [State(element, "value") for element in dropdown_elements],
+    State("graph-container", "figure")
+    # [State(f"stored-{element}", "data") for element in dropdown_elements]
+    # + [State(element, "value") for element in dropdown_elements],
 )
 def save_data(
     n_clicks,
-    *element_data,
+    figure,
 ):
     if n_clicks > 0:
         print("\n")
+        print(figure)
+        import hashlib
 
-        # print(element_data)
-        # Store values of dropdown elements in a dictionary
-        element_values = {}
-        for i, element_id in enumerate(dropdown_elements):
-            # print(i, element_id)
-            stored_data = element_data[i + 1]
-            # print(stored_data)
-            # value = element_data[i + len(dropdown_elements)]
-            element_values[element_id] = {
-                "stored_data": stored_data,
-                # "value": value,
-            }
+        # print(hashlib.md5(json.dumps(figure).encode("utf-8")))
+        figure_hash = hashlib.md5(json.dumps(figure).encode("utf-8")).hexdigest()
+        print(os.getcwd())
+        if f"{figure_hash}.json" not in os.listdir("data"):
+            with open(f"data/{figure_hash}.json", "w") as file:
+                json.dump(figure, file)
+            print(f"Figure saved with hash {figure_hash}")
 
-        print(element_values)
+        else:
+            print(f"Figure with hash {figure_hash} already exists")
 
-        with open("data_prepare.json", "w") as file:
-            json.dump(element_values, file)
+    #     # print(element_data)
+    #     # Store values of dropdown elements in a dictionary
+    #     element_values = {}
+    #     for i, element_id in enumerate(dropdown_elements):
+    #         # print(i, element_id)
+    #         stored_data = element_data[i + 1]
+    #         # print(stored_data)
+    #         # value = element_data[i + len(dropdown_elements)]
+    #         element_values[element_id] = {
+    #             "stored_data": stored_data,
+    #             # "value": value,
+    #         }
 
-        return n_clicks
+    #     print(element_values)
 
-    return n_clicks
+    #     with open("data_prepare.json", "w") as file:
+    #         json.dump(element_values, file)
+
+    #     return n_clicks
+
+    # return n_clicks
 
 
 def generate_dropdown_ids(value):
@@ -526,13 +648,46 @@ def generate_dropdown_ids(value):
     ],
 )
 def update_graph(visualization_type, x_axis, y_axis, color, *children_values):
-    d = {
-        e["props"]["children"][0]["props"]["children"][0]["props"]["id"].replace(
-            f"{visualization_type}-", ""
-        ): e["props"]["children"][0]["props"]["children"][0]["props"]["value"]
-        for e in children_values[0][1]["props"]["children"]
-        if e["props"]["children"][0]["props"]["children"][0]["props"]["value"]
-    }
+    # DROPDOWN
+    # print(
+    #     children_values[0][1]["props"]["children"][0]["props"]["children"][0]["props"][
+    #         "children"
+    #     ]["props"]["id"]
+    # )
+
+    print(children_values[0][3])
+    d = dict()
+    for child in children_values[0][1]["props"]["children"]:
+        print(child)
+        d[
+            child["props"]["children"][0]["props"]["children"]["props"]["id"].replace(
+                f"{visualization_type}-", ""
+            )
+        ] = child["props"]["children"][0]["props"]["children"]["props"]["value"]
+    for child in children_values[0][3]["props"]["children"]:
+        print(
+            child,
+            child["props"]["children"][0]["props"]["children"]["props"]["id"].replace(
+                f"{visualization_type}-", ""
+            ),
+            child["props"]["children"][0]["props"]["children"]["props"]["value"],
+        )
+        d[
+            child["props"]["children"][0]["props"]["children"]["props"]["id"].replace(
+                f"{visualization_type}-", ""
+            )
+        ] = child["props"]["children"][0]["props"]["children"]["props"]["value"]
+        # print(child["props"]["children"][0]["props"]["children"]["props"]["value"])
+
+    # d = {
+    #     e["props"]["children"][0]["props"]["children"][0]["props"]["id"].replace(
+    #         f"{visualization_type}-", ""
+    #     ): e["props"]["children"][0]["props"]["children"][0]["props"]["value"]
+    #     for e in children_values[0][1]["props"]["children"]
+    #     if e["props"]["children"][0]["props"]["children"][0]["props"]["value"]
+    # }
+    print(d)
+    # d = {}
 
     # Process inputs and generate the appropriate graph
     plot_func = plotly_vizu_dict[visualization_type]
