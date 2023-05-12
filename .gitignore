@@ -164,3 +164,7 @@ diagnostic.data/
 journal/
 *.db
 dump.rdb
+data/
+.DS_Store
+data_prepare.json
+data.json
