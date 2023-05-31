@@ -214,7 +214,7 @@ app.layout = dbc.Container(
     [
         dcc.Interval(
             id="interval",
-            interval=5000,  # Save slider value every 1 second
+            interval=2000,  # Save slider value every 1 second
             n_intervals=0,
         ),
         html.H1(
@@ -332,6 +332,7 @@ app.layout = dbc.Container(
             justify="center",
         ),
         html.Hr(),
+        html.Tr(),
         dbc.Row(
             [
                 dcc.Store("offcanvas-state-store", storage_type="session"),
@@ -348,7 +349,7 @@ app.layout = dbc.Container(
             ],
             justify="center",
         ),
-        html.Hr(),
+        # html.Hr(),
     ],
     fluid=True,
 )
