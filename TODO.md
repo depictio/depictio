@@ -7,6 +7,13 @@
   * YAML config 
     * Parsing based on CLI/YAML files/pattern provided (no module)
   * Watcher
+    * mimetype
+    * typing
+    * pandas
+    * File types
+      * Tab based
+      * Genome browser based
+      * JSON
   * Check what techno/methods are available
 
 * Others to check:
