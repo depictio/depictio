@@ -1,5 +1,6 @@
 * Idea = universal pivot table / dataframe aggregation
   * Use case: DADA2 Flora / Ashleys labels
+  * Examples: pygwalker
 * Idea = genome browser
   * Use case: strand seq
   
