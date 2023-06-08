@@ -1,6 +1,11 @@
 * Idea = universal pivot table / dataframe aggregation
   * Use case: DADA2 Flora / Ashleys labels
   * Examples: pygwalker
+  * Pygwalker:
+    * Table: 
+      * Ideas: type, quant/ordinal/temporal/nominal, dimension/measure 
+    * Vizu: nice but not easily integrable
+  * Focus on own plotly solution 
 * Idea = genome browser
   * Use case: strand seq
   
@@ -20,3 +25,9 @@
 * Others to check:
   * Graph 
   * Image 
+  
+
+# Draft
+
+## Modules
+
