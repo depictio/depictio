@@ -5,11 +5,10 @@
     * Table: 
       * Ideas: type, quant/ordinal/temporal/nominal, dimension/measure 
     * Vizu: nice but not easily integrable
-<<<<<<< HEAD
   * Focus on own plotly solution 
-=======
   * Ag grid
->>>>>>> 5de6854 (Ag grid, pygwalker tests)
+  * Requirement: people need to come with standardised format 
+  * Second upstream platform to preprocess & reformat tables?
 * Idea = genome browser
   * Use case: strand seq
   
