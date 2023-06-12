@@ -265,36 +265,6 @@ app.layout = dbc.Container(
 )
 
 
-# def get_dataframe_for_option(option):
-#     """
-#     Returns a DataFrame based on the selected option.
-
-#     Parameters:
-#     option (str): The selected option.
-
-#     Returns:
-#     DataFrame: The DataFrame for the selected option.
-#     """
-
-#     # Map options to data sources
-#     # This is just an example, replace with your actual data sources
-#     option_to_data_source = {
-#         "mosaicatcher counts statistics": "dev_design_visu/data/mosaicatcher_counts_statistics.csv",
-#         "ashleys predictions": "dev_design_visu/data/ashleys_predictions.csv",
-#         "Read Mean Quality": "dev_design_visu/data/read_mean_quality.csv",
-#         "Read GC Content": "dev_design_visu/data/read_gc_content.csv",
-#     }
-
-#     # Get the data source for the selected option
-#     data_source = option_to_data_source[option]
-
-#     # Read the data into a DataFrame
-#     # This assumes the data source is a CSV file, adjust as needed for your actual data sources
-#     df = pd.read_csv(data_source)
-
-#     return df
-
-
 # Define a callback to update the options when the workflow selection changes
 @app.callback(
     Output("wf-option-selector", "options"), Input("workflow-selector", "value")
@@ -305,10 +275,12 @@ def update_options(workflow):
 
 
 # Define a callback to update your df when the option selection changes
-@app.callback(Output("stored-df", "data"), Input("wf-option-selector", "value"))
-def update_df(option):
-    data_source_url = option_to_data_source[option]
-    return read_df(data_source_url)
+# @app.callback(
+#     Output("stored-selected-dataframe", "data"), Input("wf-option-selector", "value")
+# )
+# def update_df(option):
+#     data_source_url = option_to_data_source[option]
+#     return read_df(data_source_url)
 
 
 # define the callback to show/hide the modal
@@ -361,11 +333,21 @@ app.layout.children.insert(
     0,
     dcc.Store(id=f"stored-visualization-type", storage_type="session", data="scatter"),
 )
+app.layout.children.insert(
+    0,
+    dcc.Store(id=f"stored-workflow-selector", storage_type="session", data="scatter"),
+)
+# app.layout.children.insert(
+#     0,
+#     dcc.Store(id=f"stored-selected-dataframe", storage_type="session"),
+# )
 # app.layout.children.insert(
 #     0,
 #     dcc.Store(id=f"stored-df", storage_type="session", data=df),
 # )
 save_value_callback, update_value_callback = generate_callback("visualization-type")
+save_value_callback, update_value_callback = generate_callback("workflow-selector")
+# save_value_callback, update_value_callback = generate_callback("selected-dataframe")
 
 
 # Define the callback to update the specific parameters dropdowns
@@ -611,7 +593,7 @@ def generate_dropdown_ids(value):
     ],
 )
 def update_graph(
-    workflow, wf_option, visualization_type, x_axis, y_axis, color, *children_values
+    wf, wf_option, visualization_type, x_axis, y_axis, color, *children_values
 ):
     # DROPDOWN
     # print(
@@ -666,7 +648,9 @@ def update_graph(
     plot_kwargs = {**plot_kwargs, **d}
 
     figure = plot_func(
-        data_frame=read_df(option_to_data_source[wf_option]), **plot_kwargs
+        # data_frame=df, **plot_kwargs,
+        data_frame=read_df(option_to_data_source[wf_option]),
+        **plot_kwargs,
     )
     return figure
 
