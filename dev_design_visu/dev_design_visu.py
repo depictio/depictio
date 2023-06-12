@@ -31,6 +31,12 @@ workflow_options = {
     "nf-core-ampliseq": ["Read Mean Quality", "Read GC Content"],
 }
 
+
+def read_df(data_source_url):
+    df = pd.read_csv(data_source_url)
+    return df.to_dict()
+
+
 # Define your data sources
 option_to_data_source = {
     "mosaicatcher counts statistics": "dev_design_visu/data/mosaicatcher_counts_statistics.csv",
@@ -39,10 +45,7 @@ option_to_data_source = {
     "Read GC Content": "dev_design_visu/data/read_gc_content.csv",
 }
 
-
-def read_df(data_source_url):
-    df = pd.read_csv(data_source_url)
-    return df
+dataframes_dict = {k: read_df(v) for k, v in option_to_data_source.items()}
 
 
 # Load data from CSV file into pandas DataFrame
@@ -50,7 +53,8 @@ def read_df(data_source_url):
 #     "https://raw.githubusercontent.com/plotly/datasets/master/gapminderDataFiveYear.csv"
 # )
 print(option_to_data_source)
-df = read_df(list(option_to_data_source.values())[0])
+print(dataframes_dict)
+df = pd.DataFrame(list(dataframes_dict.values())[0])
 print(df)
 
 # Define the list of Plotly visualizations
@@ -85,6 +89,9 @@ secondary_common_params = [
     e for e in common_params_names[1:] if e not in dropdown_elements
 ]
 
+print("TOTO")
+print(dataframes_dict)
+print("TOTO")
 
 app.layout = dbc.Container(
     [
@@ -93,6 +100,12 @@ app.layout = dbc.Container(
             interval=2000,  # Save slider value every 1 second
             n_intervals=0,
         ),
+        dcc.Store(
+            id="dataframe-store",
+            storage_type="session",
+            data=dataframes_dict,
+        ),
+        dcc.Store(id="selections-store", storage_type="session", data={}),
         html.H1(
             "Prepare your visualization",
             className="text-center mb-4",
@@ -265,6 +278,73 @@ app.layout = dbc.Container(
 )
 
 
+# @app.callback(
+#     Output("dataframe-store", "data"),
+#     Input("wf-option-selector", "value"),
+# )
+# def update_data(df_name):
+#     print(df_name)
+#     return dataframes_dict[df_name]
+
+
+# @app.callback(
+#     [
+#         Output("x", "value"),
+#         Output("y", "value"),
+#         Output("color", "value"),
+#         Output("selections-store", "data"),
+#     ],
+#     [
+#         State("dataframe-store", "data"),
+#         Input("wf-option-selector", "value"),
+#         Input("x", "value"),
+#         Input("y", "value"),
+#         Input("color", "value"),
+#     ],
+#     [State("selections-store", "data")],
+# )
+# def update_dropdown_values_and_save_selections(
+#     df_data, df_name, x, y, color, selections_dict
+# ):
+#     print("TOTO")
+#     print(df_data)
+#     print("TOTO")
+
+#     ctx = dash.callback_context
+#     df = pd.DataFrame(df_data)
+
+#     if ctx.triggered and ctx.triggered[0]["prop_id"] == "wf-option-selector.value":
+#         # If the dataframe has changed, update x, y, color values based on the saved selections or defaults
+#         selections = selections_dict.get(df_name)
+#         if selections:
+#             x, y, color = selections["x"], selections["y"], selections["color"]
+#         else:
+#             x, y = df.columns[0], df.columns[1]
+#             color = df.columns[2] if len(df.columns) > 2 else None
+#             selections_dict[df_name] = {"x": x, "y": y, "color": color}
+#     elif ctx.triggered and ctx.triggered[0]["prop_id"] in [
+#         "x.value",
+#         "y.value",
+#         "color-dropdown.value",
+#     ]:
+#         # If dropdown value has changed, save the current selection
+#         selections_dict[df_name] = {"x": x, "y": y, "color": color}
+#     elif not ctx.triggered:
+#         # This part runs when the page is refreshed
+#         selections = selections_dict.get(df_name)
+#         if selections and all(
+#             column in df.columns
+#             for column in [selections["x"], selections["y"], selections.get("color")]
+#         ):
+#             x, y, color = selections["x"], selections["y"], selections["color"]
+#         else:
+#             x, y = df.columns[0], df.columns[1]
+#             color = df.columns[2] if len(df.columns) > 2 else None
+#             selections_dict[df_name] = {"x": x, "y": y, "color": color}
+
+#     return x, y, color, selections_dict
+
+
 # Define a callback to update the options when the workflow selection changes
 @app.callback(
     Output("wf-option-selector", "options"), Input("workflow-selector", "value")
@@ -281,6 +361,51 @@ def update_options(workflow):
 # def update_df(option):
 #     data_source_url = option_to_data_source[option]
 #     return read_df(data_source_url)
+
+
+@app.callback(
+    [
+        Output("x", "options"),
+        Output("y", "options"),
+        Output("color", "options"),
+        Output("x", "value"),
+        Output("y", "value"),
+        Output("color", "value"),
+    ],
+    [Input("wf-option-selector", "value")],
+    [State("dataframe-store", "data"), State("selections-store", "data")],
+)
+def update_dropdown_values(df_name, df_data, selections_dict):
+    df = pd.DataFrame(df_data[df_name])
+    df_columns = [{"label": col, "value": col} for col in df.columns]
+
+    if df_name in selections_dict:
+        x, y, color = (
+            selections_dict[df_name]["x"],
+            selections_dict[df_name]["y"],
+            selections_dict[df_name]["color"],
+        )
+    else:
+        x, y = df.columns[0], df.columns[1]
+        color = df.columns[2] if len(df.columns) > 2 else None
+        selections_dict[df_name] = {"x": x, "y": y, "color": color}
+
+    return df_columns, df_columns, df_columns, x, y, color
+
+
+@app.callback(
+    Output("selections-store", "data"),
+    [
+        Input("x", "value"),
+        Input("y", "value"),
+        Input("color", "value"),
+    ],
+    [State("wf-option-selector", "value"), State("selections-store", "data")],
+)
+def update_selections_store(x, y, color, df_name, selections_dict):
+    if x is not None and y is not None:
+        selections_dict[df_name] = {"x": x, "y": y, "color": color}
+    return selections_dict
 
 
 # define the callback to show/hide the modal
@@ -318,25 +443,25 @@ def generate_callback(element_id):
     return save_value, update_value
 
 
-for element_id in dropdown_elements:
-    # print(element_id)
-    # Create dcc.Store for each dropdown element
-    app.layout.children.insert(
-        0, dcc.Store(id=f"stored-{element_id}", storage_type="session", data="")
-    )
+# for element_id in dropdown_elements:
+#     # print(element_id)
+#     # Create dcc.Store for each dropdown element
+#     app.layout.children.insert(
+#         0, dcc.Store(id=f"stored-{element_id}", storage_type="session", data="")
+#     )
 
-    # Register the save and update callbacks for each element
-    save_value_callback, update_value_callback = generate_callback(element_id)
-    # print(save_value_callback)
-    # print(update_value_callback)
+#     # Register the save and update callbacks for each element
+#     save_value_callback, update_value_callback = generate_callback(element_id)
+# print(save_value_callback)
+# print(update_value_callback)
 app.layout.children.insert(
     0,
     dcc.Store(id=f"stored-visualization-type", storage_type="session", data="scatter"),
 )
-app.layout.children.insert(
-    0,
-    dcc.Store(id=f"stored-workflow-selector", storage_type="session", data="scatter"),
-)
+# app.layout.children.insert(
+#     0,
+#     dcc.Store(id=f"stored-workflow-selector", storage_type="session", data="scatter"),
+# )
 # app.layout.children.insert(
 #     0,
 #     dcc.Store(id=f"stored-selected-dataframe", storage_type="session"),
@@ -346,7 +471,7 @@ app.layout.children.insert(
 #     dcc.Store(id=f"stored-df", storage_type="session", data=df),
 # )
 save_value_callback, update_value_callback = generate_callback("visualization-type")
-save_value_callback, update_value_callback = generate_callback("workflow-selector")
+# save_value_callback, update_value_callback = generate_callback("workflow-selector")
 # save_value_callback, update_value_callback = generate_callback("selected-dataframe")
 
 
@@ -396,13 +521,13 @@ def update_specific_params(value, n_intervals, offcanvas_states):
         # ]
 
         specific_params_dropdowns = list()
-        print(secondary_common_params)
+        # print(secondary_common_params)
         for e in specific_params[value]:
             processed_type_tmp = param_info[value][e]["processed_type"]
             allowed_types = ["str", "int", "float", "column"]
             if processed_type_tmp in allowed_types:
                 input_fct = plotly_bootstrap_mapping[processed_type_tmp]
-                print(e, input_fct(), processed_type_tmp)
+                # print(e, input_fct(), processed_type_tmp)
                 tmp_options = dict()
 
                 if processed_type_tmp == "column":
@@ -442,13 +567,13 @@ def update_specific_params(value, n_intervals, offcanvas_states):
         # ]
 
         secondary_common_params_dropdowns = list()
-        print(secondary_common_params)
+        # print(secondary_common_params)
         for e in secondary_common_params:
             processed_type_tmp = param_info[value][e]["processed_type"]
             allowed_types = ["str", "int", "float", "column"]
             if processed_type_tmp in allowed_types:
                 input_fct = plotly_bootstrap_mapping[processed_type_tmp]
-                print(e, input_fct(), processed_type_tmp)
+                # print(e, input_fct(), processed_type_tmp)
                 tmp_options = dict()
 
                 if processed_type_tmp == "column":
@@ -583,8 +708,8 @@ def generate_dropdown_ids(value):
 @app.callback(
     Output("graph-container", "figure"),
     [
-        Input("workflow-selector", "value"),
         Input("wf-option-selector", "value"),
+        Input("dataframe-store", "data"),
         Input("visualization-type", "value"),
         Input("x", "value"),
         Input("y", "value"),
@@ -593,8 +718,10 @@ def generate_dropdown_ids(value):
     ],
 )
 def update_graph(
-    wf, wf_option, visualization_type, x_axis, y_axis, color, *children_values
+    wf_option, df_data, visualization_type, x_axis, y_axis, color, *children_values
 ):
+    print(wf_option)
+    print(df_data)
     # DROPDOWN
     # print(
     #     children_values[0][1]["props"]["children"][0]["props"]["children"][0]["props"][
@@ -602,23 +729,23 @@ def update_graph(
     #     ]["props"]["id"]
     # )
 
-    print(children_values[0][3])
+    # print(children_values[0][3])
     d = dict()
     for child in children_values[0][1]["props"]["children"]:
-        print(child)
+        # print(child)
         d[
             child["props"]["children"][0]["props"]["children"]["props"]["id"].replace(
                 f"{visualization_type}-", ""
             )
         ] = child["props"]["children"][0]["props"]["children"]["props"]["value"]
     for child in children_values[0][3]["props"]["children"]:
-        print(
-            child,
-            child["props"]["children"][0]["props"]["children"]["props"]["id"].replace(
-                f"{visualization_type}-", ""
-            ),
-            child["props"]["children"][0]["props"]["children"]["props"]["value"],
-        )
+        # print(
+        #     child,
+        #     child["props"]["children"][0]["props"]["children"]["props"]["id"].replace(
+        #         f"{visualization_type}-", ""
+        #     ),
+        #     child["props"]["children"][0]["props"]["children"]["props"]["value"],
+        # )
         d[
             child["props"]["children"][0]["props"]["children"]["props"]["id"].replace(
                 f"{visualization_type}-", ""
@@ -633,12 +760,14 @@ def update_graph(
     #     for e in children_values[0][1]["props"]["children"]
     #     if e["props"]["children"][0]["props"]["children"][0]["props"]["value"]
     # }
-    print(d)
+    # print(d)
     # d = {}
 
     # Process inputs and generate the appropriate graph
     plot_func = plotly_vizu_dict[visualization_type]
     plot_kwargs = {}
+    print(x_axis, y_axis, color)
+    print(df_data)
 
     plot_kwargs["x"] = x_axis
     plot_kwargs["y"] = y_axis
@@ -646,10 +775,14 @@ def update_graph(
         plot_kwargs["color"] = color
 
     plot_kwargs = {**plot_kwargs, **d}
+    print(df_data)
+    print(pd.DataFrame(df_data[wf_option]))
+    # print(pd.DataFrame(df_data))
 
     figure = plot_func(
-        # data_frame=df, **plot_kwargs,
-        data_frame=read_df(option_to_data_source[wf_option]),
+        # data_frame=df,
+        # **plot_kwargs,
+        data_frame=pd.DataFrame(df_data[wf_option]),
         **plot_kwargs,
     )
     return figure
