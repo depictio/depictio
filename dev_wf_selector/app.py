@@ -10,21 +10,12 @@ df1 = pd.read_csv("https://raw.githubusercontent.com/plotly/datasets/master/iris
 df2 = pd.read_csv("https://raw.githubusercontent.com/plotly/datasets/master/mtcars.csv")
 dataframes = {"Iris": df1, "Mtcars": df2}
 
-initial_selections = {
-    df_name: {
-        "x": df.columns[0],
-        "y": df.columns[1],
-        "color": df.columns[2] if len(df.columns) > 2 else None,
-    }
-    for df_name, df in dataframes.items()
-}
-print(initial_selections)
-
 app.layout = html.Div(
     [
         dcc.Store(
             id="dataframe-store",
             storage_type="session",
+            data={"Iris": df1.to_dict(), "Mtcars": df2.to_dict()},
         ),
         dcc.Store(id="selections-store", storage_type="session", data={}),
         dcc.Dropdown(
@@ -32,90 +23,59 @@ app.layout = html.Div(
             options=[
                 {"label": df_name, "value": df_name} for df_name in dataframes.keys()
             ],
-            value=list(dataframes.keys())[0],
+            value="Iris",
         ),
-        dcc.Dropdown(id="x-dropdown", value=df1.columns[0]),
-        dcc.Dropdown(id="y-dropdown", value=df1.columns[1]),
-        dcc.Dropdown(
-            id="color-dropdown", value=df1.columns[2] if len(df1.columns) > 2 else None
-        ),
+        dcc.Dropdown(id="x-dropdown"),
+        dcc.Dropdown(id="y-dropdown"),
+        dcc.Dropdown(id="color-dropdown"),
         dcc.Graph(id="graph"),
     ]
 )
 
 
 @app.callback(
-    Output("dataframe-store", "data"),
-    Input("dataframe-dropdown", "value"),
-)
-def update_data(df_name):
-    return dataframes[df_name].to_dict()
-
-
-@app.callback(
-    Output("x-dropdown", "options"),
-    Output("y-dropdown", "options"),
-    Output("color-dropdown", "options"),
-    Input("dataframe-store", "data"),
-)
-def update_dropdown_options(df_data):
-    df = pd.DataFrame(df_data)
-    options = [{"label": col, "value": col} for col in df.columns]
-    return options, options, options
-
-
-@app.callback(
     [
+        Output("x-dropdown", "options"),
+        Output("y-dropdown", "options"),
+        Output("color-dropdown", "options"),
         Output("x-dropdown", "value"),
         Output("y-dropdown", "value"),
         Output("color-dropdown", "value"),
-        Output("selections-store", "data"),
     ],
+    [Input("dataframe-dropdown", "value")],
+    [State("dataframe-store", "data"), State("selections-store", "data")],
+)
+def update_dropdown_values(df_name, df_data, selections_dict):
+    df = pd.DataFrame(df_data[df_name])
+    df_columns = [{"label": col, "value": col} for col in df.columns]
+
+    if df_name in selections_dict:
+        x, y, color = (
+            selections_dict[df_name]["x"],
+            selections_dict[df_name]["y"],
+            selections_dict[df_name]["color"],
+        )
+    else:
+        x, y = df.columns[0], df.columns[1]
+        color = df.columns[2] if len(df.columns) > 2 else None
+        selections_dict[df_name] = {"x": x, "y": y, "color": color}
+
+    return df_columns, df_columns, df_columns, x, y, color
+
+
+@app.callback(
+    Output("selections-store", "data"),
     [
-        Input("dataframe-store", "data"),
-        Input("dataframe-dropdown", "value"),
         Input("x-dropdown", "value"),
         Input("y-dropdown", "value"),
         Input("color-dropdown", "value"),
     ],
-    [State("selections-store", "data")],
+    [State("dataframe-dropdown", "value"), State("selections-store", "data")],
 )
-def update_dropdown_values_and_save_selections(
-    df_data, df_name, x, y, color, selections_dict
-):
-    ctx = dash.callback_context
-    df = pd.DataFrame(df_data)
-
-    if ctx.triggered and ctx.triggered[0]["prop_id"] == "dataframe-dropdown.value":
-        # If the dataframe has changed, update x, y, color values based on the saved selections or defaults
-        selections = selections_dict.get(df_name)
-        if selections:
-            x, y, color = selections["x"], selections["y"], selections["color"]
-        else:
-            x, y = df.columns[0], df.columns[1]
-            color = df.columns[2] if len(df.columns) > 2 else None
-            selections_dict[df_name] = {"x": x, "y": y, "color": color}
-    elif ctx.triggered and ctx.triggered[0]["prop_id"] in [
-        "x-dropdown.value",
-        "y-dropdown.value",
-        "color-dropdown.value",
-    ]:
-        # If dropdown value has changed, save the current selection
+def update_selections_store(x, y, color, df_name, selections_dict):
+    if x is not None and y is not None:
         selections_dict[df_name] = {"x": x, "y": y, "color": color}
-    elif not ctx.triggered:
-        # This part runs when the page is refreshed
-        selections = selections_dict.get(df_name)
-        if selections and all(
-            column in df.columns
-            for column in [selections["x"], selections["y"], selections.get("color")]
-        ):
-            x, y, color = selections["x"], selections["y"], selections["color"]
-        else:
-            x, y = df.columns[0], df.columns[1]
-            color = df.columns[2] if len(df.columns) > 2 else None
-            selections_dict[df_name] = {"x": x, "y": y, "color": color}
-
-    return x, y, color, selections_dict
+    return selections_dict
 
 
 @app.callback(
@@ -125,11 +85,12 @@ def update_dropdown_values_and_save_selections(
         Input("y-dropdown", "value"),
         Input("color-dropdown", "value"),
         Input("dataframe-store", "data"),
+        Input("dataframe-dropdown", "value"),
     ],
 )
-def update_figure(x, y, color, df_data):
+def update_figure(x, y, color, df_data, df_name):
     if x and y and df_data:
-        df = pd.DataFrame(df_data)
+        df = pd.DataFrame(df_data[df_name])
         return px.scatter(df, x=x, y=y, color=color if color else None)
     else:
         return {}
