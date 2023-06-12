@@ -13,6 +13,7 @@ from utils import (
     get_param_info,
     get_dropdown_options,
 )
+import os, sys
 
 # Set up Dash app with Bootstrap CSS and additional CSS file
 app = dash.Dash(
@@ -33,13 +34,32 @@ workflow_options = {
 
 
 def read_df(data_source_url):
-    df = pd.read_csv(data_source_url)
+    _, file_extension = os.path.splitext(data_source_url)
+
+    if file_extension == ".csv":
+        df = pd.read_csv(data_source_url)
+    elif file_extension == ".tsv":
+        df = pd.read_csv(data_source_url, sep="\t")
+    elif file_extension in [".xls", ".xlsx"]:
+        df = pd.read_excel(data_source_url)
+    elif file_extension == ".json":
+        df = pd.read_json(data_source_url)
+    elif file_extension == ".parquet":
+        df = pd.read_parquet(data_source_url)
+        # print(df.to_dict())
+        # exit()
+    elif file_extension == ".feather":
+        df = pd.read_feather(data_source_url)
+    else:
+        raise ValueError(f"Unsupported file extension: {file_extension}")
+
     return df.to_dict()
 
 
 # Define your data sources
 option_to_data_source = {
-    "mosaicatcher counts statistics": "dev_design_visu/data/mosaicatcher_counts_statistics.csv",
+    "mosaicatcher counts statistics": "dataframe.parquet",
+    # "mosaicatcher counts statistics": "dev_design_visu/data/mosaicatcher_counts_statistics.csv",
     "ashleys predictions": "dev_design_visu/data/ashleys_predictions.csv",
     "Read Mean Quality": "dev_design_visu/data/read_mean_quality.csv",
     "Read GC Content": "dev_design_visu/data/read_gc_content.csv",
@@ -52,10 +72,13 @@ dataframes_dict = {k: read_df(v) for k, v in option_to_data_source.items()}
 # df = pd.read_csv(
 #     "https://raw.githubusercontent.com/plotly/datasets/master/gapminderDataFiveYear.csv"
 # )
-print(option_to_data_source)
-print(dataframes_dict)
+# print(option_to_data_source)
+# print(dataframes_dict)
+# print(len(list(dataframes_dict.values())))
+# print(list(dataframes_dict.values())[0])
+# exit()
 df = pd.DataFrame(list(dataframes_dict.values())[0])
-print(df)
+# print(df)
 
 # Define the list of Plotly visualizations
 plotly_vizu_list = [px.scatter, px.line, px.bar, px.histogram, px.box]
@@ -89,9 +112,9 @@ secondary_common_params = [
     e for e in common_params_names[1:] if e not in dropdown_elements
 ]
 
-print("TOTO")
-print(dataframes_dict)
-print("TOTO")
+# print("TOTO")
+# print(dataframes_dict)
+# print("TOTO")
 
 app.layout = dbc.Container(
     [
@@ -102,7 +125,7 @@ app.layout = dbc.Container(
         ),
         dcc.Store(
             id="dataframe-store",
-            storage_type="session",
+            storage_type="memory",
             data=dataframes_dict,
         ),
         dcc.Store(id="selections-store", storage_type="session", data={}),
@@ -721,7 +744,7 @@ def update_graph(
     wf_option, df_data, visualization_type, x_axis, y_axis, color, *children_values
 ):
     print(wf_option)
-    print(df_data)
+    # print(df_data)
     # DROPDOWN
     # print(
     #     children_values[0][1]["props"]["children"][0]["props"]["children"][0]["props"][
@@ -767,7 +790,7 @@ def update_graph(
     plot_func = plotly_vizu_dict[visualization_type]
     plot_kwargs = {}
     print(x_axis, y_axis, color)
-    print(df_data)
+    # print(df_data)
 
     plot_kwargs["x"] = x_axis
     plot_kwargs["y"] = y_axis
@@ -775,8 +798,8 @@ def update_graph(
         plot_kwargs["color"] = color
 
     plot_kwargs = {**plot_kwargs, **d}
-    print(df_data)
-    print(pd.DataFrame(df_data[wf_option]))
+    # print(df_data)
+    # print(pd.DataFrame(df_data[wf_option]))
     # print(pd.DataFrame(df_data))
 
     figure = plot_func(

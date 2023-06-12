@@ -168,3 +168,9 @@ data/
 .DS_Store
 data_prepare.json
 data.json
+
+# Dev
+*.parquet
+*.gz
+*.csv
+*.tsv
