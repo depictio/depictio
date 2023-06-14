@@ -60,6 +60,17 @@ def find_files_in_directory(directory, file_regex, directory_regex):
 
 def read_file(file_path, file_format, compression, skip_rows):
     """Read file using pandas."""
+    # Split the file path
+    parts = file_path.split("/")
+
+    # Assign parts to variables
+    # Here I'm assuming the structure based on your examples, adjust as needed
+    run = parts[-4]
+    sample = parts[-3]
+    # cell = parts[-2]
+    cell = None
+    dict_metadata = {"run": run, "sample": sample, "cell": cell}
+
     if file_format == "csv":
         df = pd.read_csv(file_path, compression=compression, skiprows=skip_rows)
     elif file_format == "tsv":
@@ -72,7 +83,15 @@ def read_file(file_path, file_format, compression, skip_rows):
         print(f"Unsupported file format: {file_format}")
         return None
 
-    df["file"] = file_path  # Add a column with the file name
+    # Add the file path parts as new columns
+    # df["run"] = run
+    # df["sample"] = sample
+    # df['cell'] = cell
+    df["file"] = file_path
+    for e in ["run", "sample", "cell"]:
+        if e:
+            if e not in list(df.columns):
+                df[e] = dict_metadata[e]
 
     return df
 
@@ -84,9 +103,11 @@ def main():
     for file in matching_files:
         print(f"Reading file: {file}")
         df = read_file(file, FILE_FORMAT, COMPRESSION, SKIP_ROWS)
-        df_all = pd.concat([df_all, df])  # Add new data to the dataframe
+        df_all = pd.concat([df_all, df]).reset_index(
+            drop=True
+        )  # Add new data to the dataframe
 
-    df_all.to_parquet(PARQUET_FILE, compression="gzip")
+    df_all.to_parquet(PARQUET_FILE)
 
 
 if __name__ == "__main__":
