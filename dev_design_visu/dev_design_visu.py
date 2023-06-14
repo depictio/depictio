@@ -53,7 +53,7 @@ def read_df(data_source_url):
     else:
         raise ValueError(f"Unsupported file extension: {file_extension}")
 
-    return df.to_dict()
+    return df.reset_index(drop=True).to_dict()
 
 
 # Define your data sources
@@ -681,14 +681,14 @@ def save_data(
     figure,
 ):
     if n_clicks > 0:
-        print("\n")
-        print(figure)
-        import hashlib
+        # print("\n")
+        # print(figure)
+        import hashlib, json
 
         # print(hashlib.md5(json.dumps(figure).encode("utf-8")))
         figure_hash = hashlib.md5(json.dumps(figure).encode("utf-8")).hexdigest()
         print(os.getcwd())
-        if f"{figure_hash}.json" not in os.listdir("data"):
+        if f"{figure_hash}.json" not in os.listdir("dev_design_visu/data"):
             with open(f"dev_design_visu/data/{figure_hash}.json", "w") as file:
                 json.dump(figure, file)
             print(f"Figure saved with hash {figure_hash}")
@@ -799,7 +799,7 @@ def update_graph(
 
     plot_kwargs = {**plot_kwargs, **d}
     # print(df_data)
-    # print(pd.DataFrame(df_data[wf_option]))
+    print(pd.DataFrame(df_data[wf_option]))
     # print(pd.DataFrame(df_data))
 
     figure = plot_func(
