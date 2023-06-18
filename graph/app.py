@@ -88,7 +88,7 @@ for source_node in nodes:
 cyto_graph = cyto.Cytoscape(
     id="cytoscape-graph",
     layout={"name": "cola"},
-    style={"width": "100vw", "height": "50vh"},
+    style={"width": "100vw", "height": "70vh"},
     elements=nodes + edges,
     responsive=True,
 )
