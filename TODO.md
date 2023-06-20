@@ -1,4 +1,9 @@
 * Pages #TODO
+  * Dataset listing
+  * Pivot table + customise file
+  * Dashboard
+* Ideas
+  * Where to set templates?
 * Idea = universal pivot table / dataframe aggregation
   * Use case: DADA2 Flora / Ashleys labels
   * Examples: pygwalker
