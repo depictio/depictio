@@ -1,7 +1,9 @@
 * Pages #TODO
+  * Landing page
   * Dataset listing
   * Pivot table + customise file
   * Dashboard
+  * Genome browsing
 * Ideas
   * Where to set templates?
 * Idea = universal pivot table / dataframe aggregation
