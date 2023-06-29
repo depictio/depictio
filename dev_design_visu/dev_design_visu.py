@@ -58,8 +58,8 @@ def read_df(data_source_url):
 
 # Define your data sources
 option_to_data_source = {
-    "mosaicatcher counts statistics": "dataframe.parquet",
-    # "mosaicatcher counts statistics": "dev_design_visu/data/mosaicatcher_counts_statistics.csv",
+    # "mosaicatcher counts statistics": "dataframe.parquet",
+    "mosaicatcher counts statistics": "dev_design_visu/data/mosaicatcher_counts_statistics.csv",
     "ashleys predictions": "dev_design_visu/data/ashleys_predictions.csv",
     "Read Mean Quality": "dev_design_visu/data/read_mean_quality.csv",
     "Read GC Content": "dev_design_visu/data/read_gc_content.csv",
@@ -230,21 +230,24 @@ app.layout = dbc.Container(
                             [
                                 dbc.ModalHeader(
                                     html.H1(
-                                        "Success!",
                                         className="text-success",
+                                        id="success-modal-header",
                                     )
                                 ),
                                 dbc.ModalBody(
                                     html.H5(
-                                        "Your amazing dashboard was successfully saved!",
+                                        # "Your amazing dashboard was successfully saved!",
+                                        id="success-modal-body",
                                         className="text-success",
                                     ),
+                                    id="success-H5",
                                     style={"background-color": "#F0FFF0"},
                                 ),
                                 dbc.ModalFooter(
                                     dbc.Button(
                                         "Close",
-                                        id="modal-close-button",
+                                        id="success-modal-close",
+                                        # id="modal-close-button",
                                         className="ml-auto",
                                         color="success",
                                     )
@@ -434,13 +437,78 @@ def update_selections_store(x, y, color, df_name, selections_dict):
 # define the callback to show/hide the modal
 @app.callback(
     Output("modal", "is_open"),
-    [Input("edit-button", "n_clicks"), Input("modal-close-button", "n_clicks")],
+    [Input("edit-button", "n_clicks")],
     [State("modal", "is_open")],
 )
-def toggle_modal(n1, n2, is_open):
-    if n1 or n2:
+def toggle_modal(n1, is_open):
+    print(n1, is_open)
+    if n1:
         return not is_open
     return is_open
+
+
+@app.callback(
+    Output("success-modal", "is_open"),
+    [
+        Input("save-button", "n_clicks"),
+        Input("success-modal-close", "n_clicks"),
+    ],
+    [State("success-modal", "is_open")],
+)
+def toggle_success_modal(n_save, n_close, is_open):
+    print(n_save, n_close, is_open)
+    ctx = dash.callback_context
+
+    if not ctx.triggered:
+        raise dash.exceptions.PreventUpdate
+
+    trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
+    # print(trigger_id, n_save, n_close)
+
+    print(trigger_id)
+    if trigger_id == "save-button":
+        if n_save is None or n_save == 0:
+            raise dash.exceptions.PreventUpdate
+        else:
+            return True
+
+    elif trigger_id == "success-modal-close":
+        if n_close is None or n_close == 0:
+            raise dash.exceptions.PreventUpdate
+        else:
+            return False
+
+    return is_open
+
+
+@app.callback(
+    [
+        Output("success-modal-header", "className"),
+        Output("success-H5", "style"),
+        Output("success-modal-body", "className"),
+    ],
+    Input("success-modal-body", "children"),
+)
+def update_modal_style(success_message):
+    if "Figure saved" in success_message:
+        return "text-success", {"background-color": "#F0FFF0"}, "text-success"
+        
+    elif "already" in success_message:
+        return "text-warning", {"background-color": "#FFF5EE"}, "text-warning"
+    else:
+        return dash.no_update, dash.no_update
+
+@app.callback(
+    Output("success-modal-header", "children"),
+    Input("success-modal-body", "children"),
+)
+def update_modal_header(success_message):
+    if "Figure saved" in success_message:
+        return "Figure Saved!"
+    elif "already exists" in success_message:
+        return "Figure Already Exists!"
+    else:
+        return dash.no_update
 
 
 def generate_callback(element_id):
@@ -670,7 +738,7 @@ def update_specific_params(value, n_intervals, offcanvas_states):
 
 
 @app.callback(
-    Output("save-button", "n_clicks"),
+    [Output("save-button", "n_clicks"), Output("success-modal-body", "children")],
     Input("save-button", "n_clicks"),
     State("graph-container", "figure")
     # [State(f"stored-{element}", "data") for element in dropdown_elements]
@@ -691,32 +759,16 @@ def save_data(
         if f"{figure_hash}.json" not in os.listdir("dev_design_visu/data"):
             with open(f"dev_design_visu/data/{figure_hash}.json", "w") as file:
                 json.dump(figure, file)
-            print(f"Figure saved with hash {figure_hash}")
+            message = f"Figure saved with hash {figure_hash}"
+            print(message)
+            return n_clicks, message
 
         else:
-            print(f"Figure with hash {figure_hash} already exists")
-
-    #     # print(element_data)
-    #     # Store values of dropdown elements in a dictionary
-    #     element_values = {}
-    #     for i, element_id in enumerate(dropdown_elements):
-    #         # print(i, element_id)
-    #         stored_data = element_data[i + 1]
-    #         # print(stored_data)
-    #         # value = element_data[i + len(dropdown_elements)]
-    #         element_values[element_id] = {
-    #             "stored_data": stored_data,
-    #             # "value": value,
-    #         }
-
-    #     print(element_values)
-
-    #     with open("data_prepare.json", "w") as file:
-    #         json.dump(element_values, file)
-
-    #     return n_clicks
-
-    # return n_clicks
+            message = f"Figure with hash {figure_hash} already exists"
+            print(message)
+            return n_clicks, message
+    else:
+        return n_clicks, dash.no_update
 
 
 def generate_dropdown_ids(value):
@@ -743,7 +795,7 @@ def generate_dropdown_ids(value):
 def update_graph(
     wf_option, df_data, visualization_type, x_axis, y_axis, color, *children_values
 ):
-    print(wf_option)
+    # print(wf_option)
     # print(df_data)
     # DROPDOWN
     # print(
@@ -789,7 +841,7 @@ def update_graph(
     # Process inputs and generate the appropriate graph
     plot_func = plotly_vizu_dict[visualization_type]
     plot_kwargs = {}
-    print(x_axis, y_axis, color)
+    # print(x_axis, y_axis, color)
     # print(df_data)
 
     plot_kwargs["x"] = x_axis
@@ -799,7 +851,7 @@ def update_graph(
 
     plot_kwargs = {**plot_kwargs, **d}
     # print(df_data)
-    print(pd.DataFrame(df_data[wf_option]))
+    # print(pd.DataFrame(df_data[wf_option]))
     # print(pd.DataFrame(df_data))
 
     figure = plot_func(
