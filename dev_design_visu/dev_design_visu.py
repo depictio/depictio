@@ -860,6 +860,8 @@ def update_graph(
         data_frame=pd.DataFrame(df_data[wf_option]),
         **plot_kwargs,
     )
+    figure.update_layout(uirevision=1)
+
     return figure
 
 
