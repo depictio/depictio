@@ -59,10 +59,14 @@ def read_df(data_source_url):
 # Define your data sources
 option_to_data_source = {
     # "mosaicatcher counts statistics": "dataframe.parquet",
-    "mosaicatcher counts statistics": "dev_design_visu/data/mosaicatcher_counts_statistics.csv",
-    "ashleys predictions": "dev_design_visu/data/ashleys_predictions.csv",
-    "Read Mean Quality": "dev_design_visu/data/read_mean_quality.csv",
-    "Read GC Content": "dev_design_visu/data/read_gc_content.csv",
+    # "mosaicatcher counts statistics": "dev_design_visu/data/mosaicatcher_counts_statistics.csv",
+    "mosaicatcher counts statistics": "https://raw.githubusercontent.com/plotly/datasets/master/Antibiotics.csv",
+    # "ashleys predictions": "dev_design_visu/data/ashleys_predictions.csv",
+    "ashleys predictions": "https://raw.githubusercontent.com/plotly/datasets/master/gapminderDataFiveYear.csv",
+    # "Read Mean Quality": "dev_design_visu/data/read_mean_quality.csv",
+    "Read Mean Quality": "https://raw.githubusercontent.com/plotly/datasets/master/beers.csv",
+    # "Read GC Content": "dev_design_visu/data/read_gc_content.csv",
+    "Read GC Content": "https://raw.githubusercontent.com/plotly/datasets/master/diabetes.csv",
 }
 
 dataframes_dict = {k: read_df(v) for k, v in option_to_data_source.items()}
