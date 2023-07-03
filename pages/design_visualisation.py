@@ -6,26 +6,35 @@ import dash_bootstrap_components as dbc
 import pandas as pd
 import plotly.express as px
 import inspect
-from utils import (
+
+import os, sys
+# sys.path.append("dev")
+from pages.utils import (
     load_data,
     get_common_params,
     get_specific_params,
     get_param_info,
     get_dropdown_options,
 )
-import os, sys
+
+# from dev import utils 
+# TO REGISTER THE PAGE INTO THE MAIN APP.PY
+# app = dash.Dash(__name__)
+dash.register_page(__name__, path="/design-visualisation")
+
 
 # Set up Dash app with Bootstrap CSS and additional CSS file
-app = dash.Dash(
-    __name__,
-    external_stylesheets=[dbc.themes.BOOTSTRAP, "custom.css"],
-    suppress_callback_exceptions=True,
-)
+# app = dash.Dash(
+#     __name__,
+#     external_stylesheets=[dbc.themes.BOOTSTRAP, "custom.css"],
+#     suppress_callback_exceptions=True,
+# )
 
-
+# TODO: replace with FASTAPI
 # Create list of workflows
 workflows = ["ashleys-qc-pipeline", "nf-core-ampliseq"]
 
+# TODO: replace with FASTAPI
 # Create dictionary mapping workflows to their options
 workflow_options = {
     "ashleys-qc-pipeline": ["mosaicatcher counts statistics", "ashleys predictions"],
@@ -33,6 +42,7 @@ workflow_options = {
 }
 
 
+# TODO: utils
 def read_df(data_source_url):
     _, file_extension = os.path.splitext(data_source_url)
 
@@ -56,6 +66,7 @@ def read_df(data_source_url):
     return df.reset_index(drop=True).to_dict()
 
 
+# TODO: replace with FASTAPI
 # Define your data sources
 option_to_data_source = {
     # "mosaicatcher counts statistics": "dataframe.parquet",
@@ -72,17 +83,10 @@ option_to_data_source = {
 dataframes_dict = {k: read_df(v) for k, v in option_to_data_source.items()}
 
 
-# Load data from CSV file into pandas DataFrame
-# df = pd.read_csv(
-#     "https://raw.githubusercontent.com/plotly/datasets/master/gapminderDataFiveYear.csv"
-# )
-# print(option_to_data_source)
-# print(dataframes_dict)
-# print(len(list(dataframes_dict.values())))
-# print(list(dataframes_dict.values())[0])
-# exit()
 df = pd.DataFrame(list(dataframes_dict.values())[0])
-# print(df)
+
+
+# TODO: utils / config
 
 # Define the list of Plotly visualizations
 plotly_vizu_list = [px.scatter, px.line, px.bar, px.histogram, px.box]
@@ -116,11 +120,8 @@ secondary_common_params = [
     e for e in common_params_names[1:] if e not in dropdown_elements
 ]
 
-# print("TOTO")
-# print(dataframes_dict)
-# print("TOTO")
 
-app.layout = dbc.Container(
+layout = dbc.Container(
     [
         dcc.Interval(
             id="interval",
@@ -212,7 +213,6 @@ app.layout = dbc.Container(
                             dcc.Dropdown(
                                 id="color",
                                 options=dropdown_options,
-                                # value=list(df.columns)[2],
                                 value=list(df.columns)[2],
                             ),
                             width=2,
@@ -302,81 +302,13 @@ app.layout = dbc.Container(
             ],
             justify="center",
         ),
-        # html.Hr(),
     ],
-    fluid=True,
+    fluid=False,
 )
 
 
-# @app.callback(
-#     Output("dataframe-store", "data"),
-#     Input("wf-option-selector", "value"),
-# )
-# def update_data(df_name):
-#     print(df_name)
-#     return dataframes_dict[df_name]
-
-
-# @app.callback(
-#     [
-#         Output("x", "value"),
-#         Output("y", "value"),
-#         Output("color", "value"),
-#         Output("selections-store", "data"),
-#     ],
-#     [
-#         State("dataframe-store", "data"),
-#         Input("wf-option-selector", "value"),
-#         Input("x", "value"),
-#         Input("y", "value"),
-#         Input("color", "value"),
-#     ],
-#     [State("selections-store", "data")],
-# )
-# def update_dropdown_values_and_save_selections(
-#     df_data, df_name, x, y, color, selections_dict
-# ):
-#     print("TOTO")
-#     print(df_data)
-#     print("TOTO")
-
-#     ctx = dash.callback_context
-#     df = pd.DataFrame(df_data)
-
-#     if ctx.triggered and ctx.triggered[0]["prop_id"] == "wf-option-selector.value":
-#         # If the dataframe has changed, update x, y, color values based on the saved selections or defaults
-#         selections = selections_dict.get(df_name)
-#         if selections:
-#             x, y, color = selections["x"], selections["y"], selections["color"]
-#         else:
-#             x, y = df.columns[0], df.columns[1]
-#             color = df.columns[2] if len(df.columns) > 2 else None
-#             selections_dict[df_name] = {"x": x, "y": y, "color": color}
-#     elif ctx.triggered and ctx.triggered[0]["prop_id"] in [
-#         "x.value",
-#         "y.value",
-#         "color-dropdown.value",
-#     ]:
-#         # If dropdown value has changed, save the current selection
-#         selections_dict[df_name] = {"x": x, "y": y, "color": color}
-#     elif not ctx.triggered:
-#         # This part runs when the page is refreshed
-#         selections = selections_dict.get(df_name)
-#         if selections and all(
-#             column in df.columns
-#             for column in [selections["x"], selections["y"], selections.get("color")]
-#         ):
-#             x, y, color = selections["x"], selections["y"], selections["color"]
-#         else:
-#             x, y = df.columns[0], df.columns[1]
-#             color = df.columns[2] if len(df.columns) > 2 else None
-#             selections_dict[df_name] = {"x": x, "y": y, "color": color}
-
-#     return x, y, color, selections_dict
-
-
 # Define a callback to update the options when the workflow selection changes
-@app.callback(
+@dash.callback(
     Output("wf-option-selector", "options"), Input("workflow-selector", "value")
 )
 def update_options(workflow):
@@ -384,16 +316,7 @@ def update_options(workflow):
     return [{"label": option, "value": option} for option in options]
 
 
-# Define a callback to update your df when the option selection changes
-# @app.callback(
-#     Output("stored-selected-dataframe", "data"), Input("wf-option-selector", "value")
-# )
-# def update_df(option):
-#     data_source_url = option_to_data_source[option]
-#     return read_df(data_source_url)
-
-
-@app.callback(
+@dash.callback(
     [
         Output("x", "options"),
         Output("y", "options"),
@@ -423,7 +346,7 @@ def update_dropdown_values(df_name, df_data, selections_dict):
     return df_columns, df_columns, df_columns, x, y, color
 
 
-@app.callback(
+@dash.callback(
     Output("selections-store", "data"),
     [
         Input("x", "value"),
@@ -439,7 +362,7 @@ def update_selections_store(x, y, color, df_name, selections_dict):
 
 
 # define the callback to show/hide the modal
-@app.callback(
+@dash.callback(
     Output("modal", "is_open"),
     [Input("edit-button", "n_clicks")],
     [State("modal", "is_open")],
@@ -451,7 +374,7 @@ def toggle_modal(n1, is_open):
     return is_open
 
 
-@app.callback(
+@dash.callback(
     Output("success-modal", "is_open"),
     [
         Input("save-button", "n_clicks"),
@@ -485,7 +408,7 @@ def toggle_success_modal(n_save, n_close, is_open):
     return is_open
 
 
-@app.callback(
+@dash.callback(
     [
         Output("success-modal-header", "className"),
         Output("success-H5", "style"),
@@ -496,13 +419,14 @@ def toggle_success_modal(n_save, n_close, is_open):
 def update_modal_style(success_message):
     if "Figure saved" in success_message:
         return "text-success", {"background-color": "#F0FFF0"}, "text-success"
-        
+
     elif "already" in success_message:
         return "text-warning", {"background-color": "#FFF5EE"}, "text-warning"
     else:
         return dash.no_update, dash.no_update
 
-@app.callback(
+
+@dash.callback(
     Output("success-modal-header", "children"),
     Input("success-modal-body", "children"),
 )
@@ -516,7 +440,7 @@ def update_modal_header(success_message):
 
 
 def generate_callback(element_id):
-    @app.callback(
+    @dash.callback(
         Output(f"stored-{element_id}", "data"),
         Input("interval", "n_intervals"),
         State(element_id, "value"),
@@ -526,7 +450,7 @@ def generate_callback(element_id):
             raise dash.exceptions.PreventUpdate
         return value
 
-    @app.callback(
+    @dash.callback(
         Output(element_id, "value"),
         Input(f"stored-{element_id}", "data"),
     )
@@ -538,40 +462,16 @@ def generate_callback(element_id):
     return save_value, update_value
 
 
-# for element_id in dropdown_elements:
-#     # print(element_id)
-#     # Create dcc.Store for each dropdown element
-#     app.layout.children.insert(
-#         0, dcc.Store(id=f"stored-{element_id}", storage_type="session", data="")
-#     )
-
-#     # Register the save and update callbacks for each element
-#     save_value_callback, update_value_callback = generate_callback(element_id)
-# print(save_value_callback)
-# print(update_value_callback)
-app.layout.children.insert(
+layout.children.insert(
     0,
     dcc.Store(id=f"stored-visualization-type", storage_type="session", data="scatter"),
 )
-# app.layout.children.insert(
-#     0,
-#     dcc.Store(id=f"stored-workflow-selector", storage_type="session", data="scatter"),
-# )
-# app.layout.children.insert(
-#     0,
-#     dcc.Store(id=f"stored-selected-dataframe", storage_type="session"),
-# )
-# app.layout.children.insert(
-#     0,
-#     dcc.Store(id=f"stored-df", storage_type="session", data=df),
-# )
+
 save_value_callback, update_value_callback = generate_callback("visualization-type")
-# save_value_callback, update_value_callback = generate_callback("workflow-selector")
-# save_value_callback, update_value_callback = generate_callback("selected-dataframe")
 
 
 # Define the callback to update the specific parameters dropdowns
-@app.callback(
+@dash.callback(
     [
         Output("specific-params-container", "children"),
         Output("offcanvas-state-store", "data"),
@@ -580,43 +480,13 @@ save_value_callback, update_value_callback = generate_callback("visualization-ty
     [State("offcanvas-state-store", "data")],
 )
 def update_specific_params(value, n_intervals, offcanvas_states):
-    # print("\t", value)
-    # print(specific_params[value])
     if value is not None:
         specific_params_options = [
             {"label": param_name, "value": param_name}
             for param_name in specific_params[value]
         ]
 
-        # specific_params_dropdowns = [
-        #     dbc.AccordionItem(
-        #         [
-        #             dbc.Row(
-        #                 [
-        #                     dcc.Dropdown(
-        #                         id=f"{value}-{param_name}",
-        #                         options=list(df.columns),
-        #                         value=None,
-        #                         persistence=True,
-        #                     ),
-        #                     dbc.Tooltip(
-        #                         f"{' '.join(param_info[value][param_name]['description'])}",
-        #                         target=f"{value}-{param_name}",
-        #                         placement="right",
-        #                         # delay={"hide": 50000},
-        #                         autohide=False,
-        #                     ),
-        #                 ],
-        #             )
-        #         ],
-        #         # className="bg-warning text-dark",
-        #         title=param_name,
-        #     )
-        #     for param_name in specific_params[value]
-        # ]
-
         specific_params_dropdowns = list()
-        # print(secondary_common_params)
         for e in specific_params[value]:
             processed_type_tmp = param_info[value][e]["processed_type"]
             allowed_types = ["str", "int", "float", "column"]
@@ -637,7 +507,6 @@ def update_specific_params(value, n_intervals, offcanvas_states):
                         "placeholder": e,
                         "type": "text",
                         "persistence": True,
-                        # "persistence_type": "session",
                         "id": f"{e}",
                         "value": None,
                     }
@@ -657,18 +526,12 @@ def update_specific_params(value, n_intervals, offcanvas_states):
                 )
                 specific_params_dropdowns.append(accordion_item)
 
-        # specific_params_dropdowns = [
-        #     {"label": e, "value": e} for e in specific_params[value]
-        # ]
-
         secondary_common_params_dropdowns = list()
-        # print(secondary_common_params)
         for e in secondary_common_params:
             processed_type_tmp = param_info[value][e]["processed_type"]
             allowed_types = ["str", "int", "float", "column"]
             if processed_type_tmp in allowed_types:
                 input_fct = plotly_bootstrap_mapping[processed_type_tmp]
-                # print(e, input_fct(), processed_type_tmp)
                 tmp_options = dict()
 
                 if processed_type_tmp == "column":
@@ -683,7 +546,6 @@ def update_specific_params(value, n_intervals, offcanvas_states):
                         "placeholder": e,
                         "type": "text",
                         "persistence": True,
-                        # "persistence_type": "session",
                         "id": f"{e}",
                         "value": None,
                     }
@@ -703,9 +565,6 @@ def update_specific_params(value, n_intervals, offcanvas_states):
                 )
                 secondary_common_params_dropdowns.append(accordion_item)
 
-        # print(list(common_param_names))
-        # print(dropdown_elements)
-        # print([e for e in list(common_param_names[1:]) if e not in dropdown_elements])
         secondary_common_params_layout = [html.H5("Common parameters")] + [
             dbc.Accordion(
                 secondary_common_params_dropdowns,
@@ -714,9 +573,7 @@ def update_specific_params(value, n_intervals, offcanvas_states):
                 persistence_type="session",
                 persistence=True,
                 id="accordion-sec-common",
-                # style={"headerColor": "#ffc107", "color": "red"},
             ),
-            # dcc.Store(id="accordion-state"),
         ]
         dynamic_specific_params_layout = [
             html.H5(f"{value.capitalize()} specific parameters")
@@ -729,9 +586,7 @@ def update_specific_params(value, n_intervals, offcanvas_states):
                 persistence=True,
                 id="accordion",
             ),
-            # dcc.Store(id="accordion-state"),
         ]
-        # print(secondary_common_params_layout + dynamic_specific_params_layout)
 
         return (
             secondary_common_params_layout + dynamic_specific_params_layout,
@@ -741,23 +596,18 @@ def update_specific_params(value, n_intervals, offcanvas_states):
         return html.Div(), html.Div()
 
 
-@app.callback(
+@dash.callback(
     [Output("save-button", "n_clicks"), Output("success-modal-body", "children")],
     Input("save-button", "n_clicks"),
-    State("graph-container", "figure")
-    # [State(f"stored-{element}", "data") for element in dropdown_elements]
-    # + [State(element, "value") for element in dropdown_elements],
+    State("graph-container", "figure"),
 )
 def save_data(
     n_clicks,
     figure,
 ):
-    if n_clicks > 0:
-        # print("\n")
-        # print(figure)
+    if n_clicks:
         import hashlib, json
 
-        # print(hashlib.md5(json.dumps(figure).encode("utf-8")))
         figure_hash = hashlib.md5(json.dumps(figure).encode("utf-8")).hexdigest()
         print(os.getcwd())
         if f"{figure_hash}.json" not in os.listdir("dev_design_visu/data"):
@@ -784,7 +634,7 @@ def generate_dropdown_ids(value):
     return secondary_param_ids + specific_param_ids
 
 
-@app.callback(
+@dash.callback(
     Output("graph-container", "figure"),
     [
         Input("wf-option-selector", "value"),
@@ -799,16 +649,6 @@ def generate_dropdown_ids(value):
 def update_graph(
     wf_option, df_data, visualization_type, x_axis, y_axis, color, *children_values
 ):
-    # print(wf_option)
-    # print(df_data)
-    # DROPDOWN
-    # print(
-    #     children_values[0][1]["props"]["children"][0]["props"]["children"][0]["props"][
-    #         "children"
-    #     ]["props"]["id"]
-    # )
-
-    # print(children_values[0][3])
     d = dict()
     for child in children_values[0][1]["props"]["children"]:
         # print(child)
@@ -818,35 +658,15 @@ def update_graph(
             )
         ] = child["props"]["children"][0]["props"]["children"]["props"]["value"]
     for child in children_values[0][3]["props"]["children"]:
-        # print(
-        #     child,
-        #     child["props"]["children"][0]["props"]["children"]["props"]["id"].replace(
-        #         f"{visualization_type}-", ""
-        #     ),
-        #     child["props"]["children"][0]["props"]["children"]["props"]["value"],
-        # )
         d[
             child["props"]["children"][0]["props"]["children"]["props"]["id"].replace(
                 f"{visualization_type}-", ""
             )
         ] = child["props"]["children"][0]["props"]["children"]["props"]["value"]
-        # print(child["props"]["children"][0]["props"]["children"]["props"]["value"])
-
-    # d = {
-    #     e["props"]["children"][0]["props"]["children"][0]["props"]["id"].replace(
-    #         f"{visualization_type}-", ""
-    #     ): e["props"]["children"][0]["props"]["children"][0]["props"]["value"]
-    #     for e in children_values[0][1]["props"]["children"]
-    #     if e["props"]["children"][0]["props"]["children"][0]["props"]["value"]
-    # }
-    # print(d)
-    # d = {}
 
     # Process inputs and generate the appropriate graph
     plot_func = plotly_vizu_dict[visualization_type]
     plot_kwargs = {}
-    # print(x_axis, y_axis, color)
-    # print(df_data)
 
     plot_kwargs["x"] = x_axis
     plot_kwargs["y"] = y_axis
@@ -854,13 +674,8 @@ def update_graph(
         plot_kwargs["color"] = color
 
     plot_kwargs = {**plot_kwargs, **d}
-    # print(df_data)
-    # print(pd.DataFrame(df_data[wf_option]))
-    # print(pd.DataFrame(df_data))
 
     figure = plot_func(
-        # data_frame=df,
-        # **plot_kwargs,
         data_frame=pd.DataFrame(df_data[wf_option]),
         **plot_kwargs,
     )
@@ -869,5 +684,5 @@ def update_graph(
     return figure
 
 
-if __name__ == "__main__":
-    app.run_server(debug=True, port=8051)
+# if __name__ == "__main__":
+#     app.run_server(debug=True, port=8051)
