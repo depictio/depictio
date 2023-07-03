@@ -1,95 +1,109 @@
-import dash
+from dash import Dash, html, dcc, Input, Output, dash_table
+from pathlib import Path
+import datetime
+import os, sys
+import pandas as pd
+import plotly.express as px
+import scipy
 import dash_bootstrap_components as dbc
-from dash import dcc
-from dash import html
-from dash.dependencies import Input, Output
-import requests
+import dash
 
-# Define the URL of the API endpoint
-API_URL = "http://seneca.embl.de:5501"
 
-# Make a request to the API endpoint
-# wf_response = requests.get(f"{API_URL}/workflows")
-# wf_response.raise_for_status()
+# Start the app, use_pages allows to retrieve what's present in the pages/ folder in order
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.BOOTSTRAP,     {
+        "href": "https://fonts.googleapis.com/icon?family=Material+Icons",
+        "rel": "stylesheet",
+    },], use_pages=True)
+server = app.server
 
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+app.index_string = """
+<!DOCTYPE html>
+<html>
+    <head>
+        {%metas%}
+        <title>{%title%}</title>
+        {%favicon%}
+        {%css%}
+        <!-- Add the following link -->
+        <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@400;700&display=swap" rel="stylesheet">
+    </head>
+    <body>
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+    </body>
+</html>
+"""
 
-d = {"mosaicatcher-pipeline": ["A", "B"], "snakemake-dna-varlociraptor": ["C", "D"]}
+# the style arguments for the sidebar. We use position:fixed and a fixed width
+SIDEBAR_STYLE = {
+    "position": "fixed",
+    "top": 0,
+    "left": 0,
+    "bottom": 0,
+    "width": "16rem",
+    "padding": "2rem 1rem",
+    "background-color": "#f8f9fa",
+}
 
-# Define the layout of the app
-app.layout = dbc.Container(
+# the styles for the main content position it to the right of the sidebar and
+# add some padding.
+CONTENT_STYLE = {
+    "margin-left": "18rem",
+    "margin-right": "2rem",
+    "padding": "2rem 1rem",
+}
+
+sidebar = html.Div(
     [
-        dbc.Row(
+        html.P("Navigation", className="lead"),
+        dbc.Nav(
             [
-                dbc.Col(
-                    dbc.Card(
-                        dbc.CardBody(
-                            [
-                                html.H4("Select a workflow", className="card-title"),
-                                dcc.Dropdown(
-                                    list(d.keys()),
-                                    list(d.keys())[0],
-                                    id="wf-dropdown",
-                                    style={"fontSize": 12, "font-family": "sans-serif"},
-                                    multi=False,
-                                ),
-                            ]
-                        ),
-                        color="light",
-                        inverse=False,
-                    ),
-                    md=4,
-                ),
-                dbc.Col(
-                    dbc.Card(
-                        dbc.CardBody(
-                            [
-                                html.H4("Runs number", className="card-title"),
-                                html.P("", id="runs-number"),
-                            ]
-                        ),
-                        color="light",
-                        inverse=False,
-                    ),
-                    md=4,
-                ),
-            ]
+                dbc.NavLink("Dash home page", href="/", active="exact"),
+                dbc.NavLink("Design visualisation", href="/design-visualisation", active="exact"),
+                dbc.NavLink("Dashboard", href="/dashboard", active="exact"),
+            ],
+            vertical=True,
+            pills=True,
         ),
+
+    ],
+    style=SIDEBAR_STYLE,
+)
+
+print([dcc.Link(f"{page['name']} - {page['path']}", href=page["relative_path"]) for page in dash.page_registry.values()])
+content = dbc.Container([html.Div(id="page-content", style=CONTENT_STYLE)], fluid=False)
+
+
+@app.callback(Output("page-content", "children"), [Input("url", "pathname")])
+def render_page_content(pathname):
+    if pathname == "/":
+        return html.Div()
+    elif pathname == "/design-visualisation":
+        return html.Div()
+    elif pathname == "/dashboard":
+        return html.Div()
+
+    # If the user tries to reach a different page, return a 404 message
+    # return html.Div(
+    #     [
+    #         html.H1("404: Not found", className="text-danger"),
+    #         html.Hr(),
+    #         html.P(f"The pathname {pathname} was not recognised..."),
+    #     ],
+    #     className="p-3 bg-light rounded-3",
+    # )
+
+
+app.layout = html.Div(
+    [
+        html.Div([dcc.Location(id="url"), sidebar, content]),
+        dash.page_container,
     ]
 )
 
-
-@dash.callback(Output("wf-dropdown", "value"), Input("wf-dropdown", "options"))
-def set_wf_options(value):
-    return value
-
-
-# # Define a callback function that populates the dropdown
-# @app.callback(Output("workflow-dropdown", "options"))
-# def populate_dropdown():
-#     # Make a request to the API endpoint to get the list of available workflows
-#     response = requests.get(f"{API_URL}/workflows")
-#     response.raise_for_status()
-
-#     # Parse the response and create a list of options for the dropdown
-
-#     return response.json()
-
-
-# Define a callback function that updates the "Runs number" card
-@app.callback(Output("runs-number", "data"), [Input("wf-dropdown", "value")])
-def update_runs_number(workflow_name):
-    if not workflow_name:
-        return ""
-
-    # Make a request to the API endpoint to get the number of runs for the selected workflow
-    # response = requests.get(f"{API_URL}/runs/{workflow_name}")
-    # response.raise_for_status()
-    # runs = response.json()[workflow_name]
-
-    # return f"{len(runs)} runs"
-    return len(d[workflow_name])
-
-
 if __name__ == "__main__":
-    app.run_server(debug=True, host="seneca.embl.de", port=5000)
+    app.run_server(debug=True)
