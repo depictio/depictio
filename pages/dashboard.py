@@ -215,31 +215,7 @@ init_year = data["stored_year_data"] if data else df["year"].min()
 
 layout = dbc.Container(
     [
-        dbc.Row(
-            [
-                dbc.Col(
-                    [
-                        html.H1(
-                            [
-                                html.I(
-                                    className="material-icons mr-2",
-                                    children="insert_chart_outlined",
-                                    style={"margin-left": "10px", "font-size": "32px"},
-                                ),
-                                "Depictio",
-                            ],
-                            className="text-center mb-4",
-                            style={
-                                "font-family": "Roboto Slab, serif",
-                                "font-weight": "700",
-                                "font-size": "48px",
-                            },
-                        ),
-                        html.Hr(),
-                    ]
-                ),
-            ]
-        ),
+        
         dbc.Row(
             [
                 dbc.Col(

@@ -2,6 +2,8 @@ import dash
 from dash.dependencies import Input, Output, State
 from dash import html, dcc
 import dash_bootstrap_components as dbc
+from pages.login.server import app, server
+
 import plotly.express as px
 import pandas as pd
 import dash_draggable
@@ -11,6 +13,42 @@ import os, json
 import json
 import ast
 import pandas
+from flask_login import logout_user, current_user
+
+@app.callback(Output("user-name", "children"), [Input("page-content", "children")])
+def cur_user(input1):
+    if current_user.is_authenticated:
+        return html.Div("Current user: " + current_user.username)
+        # 'User authenticated' return username in get_id()
+    else:
+        return ""
+
+
+@app.callback(Output("logout", "children"), [Input("page-content", "children")])
+def user_logout(input1):
+    if current_user.is_authenticated:
+        return html.A("Logout", href="/logout")
+    else:
+        return ""
+
+
+header = html.Div(
+    className="header",
+    children=html.Div(
+        className="container-width",
+        style={"height": "100%"},
+        children=[
+            html.Img(src="assets/dash-logo-stripe.svg", className="logo"),
+            html.Div(
+                className="links",
+                children=[
+                    html.Div(id="user-name", className="link"),
+                    html.Div(id="logout", className="link"),
+                ],
+            ),
+        ],
+    ),
+)
 
 
 # TO REGISTER THE PAGE INTO THE MAIN APP.PY
@@ -44,6 +82,8 @@ layout = dbc.Container(
                 ),
             ]
         ),
+        header,
+        dcc.Location(id="url", refresh=False),
     ],
     fluid=False,
 )

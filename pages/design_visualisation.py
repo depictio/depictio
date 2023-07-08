@@ -20,7 +20,7 @@ from pages.utils import (
 # from dev import utils 
 # TO REGISTER THE PAGE INTO THE MAIN APP.PY
 # app = dash.Dash(__name__)
-dash.register_page(__name__, path="/design-visualisation")
+dash.register_page(__name__, path="/design-visualisation", title="Design Visualisation")
 
 
 # Set up Dash app with Bootstrap CSS and additional CSS file
