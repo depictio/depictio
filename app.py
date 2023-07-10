@@ -61,6 +61,7 @@ CONTENT_STYLE = {
     "padding": "2rem 1rem",
 }
 
+
 sidebar = html.Div(
     [
         html.P("Navigation", className="lead"),
