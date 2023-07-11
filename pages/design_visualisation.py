@@ -141,7 +141,7 @@ layout = dbc.Container(
         html.Hr(),
         dbc.Row(
             [
-                dbc.Col(html.H2("Select your workflow"), width=2),
+                dbc.Col(html.H5("Select your workflow"), width=2),
                 dbc.Col(
                     dcc.Dropdown(
                         id="workflow-selector",
@@ -157,7 +157,7 @@ layout = dbc.Container(
         ),
         dbc.Row(
             [
-                dbc.Col(html.H2("Select an option"), width=2),
+                dbc.Col(html.H5("Select an option"), width=2),
                 dbc.Col(
                     dcc.Dropdown(
                         id="wf-option-selector",
@@ -175,7 +175,7 @@ layout = dbc.Container(
         html.Hr(),
         dbc.Row(
             [
-                dbc.Col(html.H2("Visualization type"), width=2),
+                dbc.Col(html.H5("Visualization type"), width=2),
                 dbc.Col(
                     dcc.Dropdown(
                         id="visualization-type",
@@ -190,7 +190,7 @@ layout = dbc.Container(
                 html.Hr(),
                 dbc.Row(
                     [
-                        dbc.Col(html.H3("X-axis"), width=1),
+                        dbc.Col(html.H6("X-axis"), width=1),
                         dbc.Col(
                             dcc.Dropdown(
                                 id="x",
@@ -199,7 +199,7 @@ layout = dbc.Container(
                             ),
                             width=2,
                         ),
-                        dbc.Col(html.H3("Y-axis"), width=1),
+                        dbc.Col(html.H6("Y-axis"), width=1),
                         dbc.Col(
                             dcc.Dropdown(
                                 id="y",
@@ -208,7 +208,7 @@ layout = dbc.Container(
                             ),
                             width=2,
                         ),
-                        dbc.Col(html.H3("color"), width=1),
+                        dbc.Col(html.H6("Color group"), width=1),
                         dbc.Col(
                             dcc.Dropdown(
                                 id="color",

@@ -1,0 +1,33 @@
+body,
+.mantine-Header-root {
+    background-color: f2f4f6 !important;
+}
+
+.mantine-Navbar-root {
+    background-color: 1f2937 !important;
+}
+
+.mantine-Anchor-root {
+    color: fff !important;
+}
+
+.nav-list-items {
+    padding: 1rem;
+    color: fff !important;
+    text-decoration: none;
+    list-style: none;
+}
+
+.nav-list-items:hover {
+    color: f2f4f6 !important;
+    background-color: 374151 !important;
+}
+
+.mantine-Navbar-root a:-webkit-any-link {
+    text-decoration: none;
+    color: f2f4f6 !important;
+}
+
+.mantine-Navbar-root ::marker {
+    display: none;
+}
