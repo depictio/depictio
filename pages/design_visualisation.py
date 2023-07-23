@@ -6,16 +6,69 @@ import dash_bootstrap_components as dbc
 import pandas as pd
 import plotly.express as px
 import inspect
-
+from dash import dcc, html
+from dash.dependencies import Input, Output, State
+import dash
+import dash_bootstrap_components as dbc
+import pandas as pd
+import plotly.express as px
+import inspect
+import re
 import os, sys
 # sys.path.append("dev")
-from pages.utils import (
-    load_data,
-    get_common_params,
-    get_specific_params,
-    get_param_info,
-    get_dropdown_options,
-)
+# from pages.utils import (
+#     load_data,
+#     get_common_params,
+#     get_specific_params,
+#     get_param_info,
+#     get_dropdown_options,
+# )
+
+
+def get_common_params(plotly_vizu_list):
+    common_params = set.intersection(
+        *[set(inspect.signature(func).parameters.keys()) for func in plotly_vizu_list]
+    )
+    common_param_names = [p for p in list(common_params)]
+    common_param_names.sort(
+        key=lambda x: list(inspect.signature(plotly_vizu_list[0]).parameters).index(x)
+    )
+    return common_params, common_param_names
+
+
+def get_specific_params(plotly_vizu_list, common_params):
+    specific_params = {}
+    for vizu_func in plotly_vizu_list:
+        func_params = inspect.signature(vizu_func).parameters
+        param_names = list(func_params.keys())
+        common_params_tmp = (
+            common_params.intersection(func_params.keys())
+            if common_params
+            else set(func_params.keys())
+        )
+        specific_params[vizu_func.__name__] = [
+            p for p in param_names if p not in common_params_tmp
+        ]
+    return specific_params
+
+
+
+def get_param_info(plotly_vizu_list):
+    # Code for extract_info_from_docstring and process_json_from_docstring...
+    # ...
+    param_info = {}
+    for func in plotly_vizu_list:
+        param_info[func.__name__] = extract_info_from_docstring(func.__doc__)
+        param_info[func.__name__] = process_json_from_docstring(
+            param_info[func.__name__]
+        )
+    return param_info
+
+
+def get_dropdown_options(df):
+    dropdown_options = [{"label": col, "value": col} for col in df.columns]
+    return dropdown_options
+
 
 # from dev import utils 
 # TO REGISTER THE PAGE INTO THE MAIN APP.PY
