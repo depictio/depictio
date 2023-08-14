@@ -174,3 +174,5 @@ data.json
 *.gz
 *.csv
 *.tsv
+dev/jbrowse_dev/assets/multiqc/
+dev/jbrowse_dev/assets/
