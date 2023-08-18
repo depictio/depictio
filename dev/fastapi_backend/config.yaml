@@ -1,0 +1,29 @@
+workflows:
+  snakemake--mosaicatcher-pipeline:
+    location: "/Users/tweber/Gits/depictio/wf_data/snakemake--mosaicatcher-pipeline"
+    files:
+      mosaicatcher_stats:
+        regex: ".*.info_raw"
+        format: "TSV"
+        pandas_kwargs:
+          skiprows: 13
+        keep_columns:
+          - "sample"
+          - "cell"
+          - "mapped"
+          - "dupl"
+          - "pass1"
+          - "good"
+      ashleys_labels:
+        regex: ".*labels.tsv"
+        format: "TSV"
+
+  nf-core--ampliseq:
+    location: "/Users/tweber/Gits/depictio/wf_data/nf-core--ampliseq"
+    files:
+      dada2_ASV_table:
+        regex: ".*ASV.tsv.gz"
+        format: "TSV"
+        pandas_kwargs:
+          sep: "\t"
+          compression: "gzip"

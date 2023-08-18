@@ -176,3 +176,5 @@ data.json
 *.tsv
 dev/jbrowse_dev/assets/multiqc/
 dev/jbrowse_dev/assets/
+
+wf_data/
