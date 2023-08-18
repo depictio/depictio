@@ -1,10 +1,33 @@
-mongo_url: "mongodb://localhost:27018/"
-mongo_db: "depictioDB"
-multiqc_directory: "/scratch/tweber/dev/MultiQC_data_ashleys"
-api_host: http://seneca.embl.de
-api_port: 5501
-redis_host: localhost
-redis_port: 6379
-redis_db: 0
-redis_cache_ttl: 300
-user_secret_key: mysecretkey
+# Data location
+data:
+  data_folder : "/Users/tweber/Gits/belvedere/data"
+  json_data_backup : "data.json"
+  rabbitmq:
+    exchange: status_exchange
+    queue: my_queue
+    routing_key: latest_status
+
+depictio:
+  host: http://localhost
+  port: 8050
+
+fastapi_server:
+  host: http://localhost
+  port: 8060
+
+mongodb:
+  host: localhost
+  port: 27017
+  database: depictioDB
+  collection: depictioCollection
+
+
+redis_cache:
+  host: localhost
+  port: 6379
+  db: 0
+  cache_ttl: 300
+  user_secret_key: mysecretkey
+
+
+
