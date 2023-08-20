@@ -3,6 +3,8 @@ from fastapi import FastAPI, HTTPException, Depends
 
 app = FastAPI()
 
+
+
 REDIS_URL = "redis://localhost:6379"
 CACHE_TTL = 300  # Time to live in seconds
 
