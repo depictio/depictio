@@ -1,33 +1,41 @@
-import aioredis
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, Response
+import redis
+import uvicorn
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
+# Assuming you have some kind of settings or configuration in place
+# If you don't, just replace settings.redis_host, etc., with the actual values.
+redis_client = redis.Redis(host="localhost", port=6379, db=0)
 
 
-REDIS_URL = "redis://localhost:6379"
-CACHE_TTL = 300  # Time to live in seconds
+@app.get("/assets/{filename:path}")
+async def get_asset(filename: str):
+    print(filename)
+    # Assuming filename is unique
+    cached_content = redis_client.get(filename)
+    # print(cached_content)
 
-async def get_cache():
-    redis = await aioredis.create_redis_pool(REDIS_URL)
-    try:
-        yield redis
-    finally:
-        redis.close()
-        await redis.wait_closed()
+    if cached_content:
+        print("CACHED")
+        return Response(content=cached_content, media_type="application/octet-stream")
 
-@app.get("/file/{file_name}")
-async def get_file(file_name: str, cache: aioredis.Redis = Depends(get_cache)):
-    cached_file = await cache.get(file_name)
-    if cached_file:
-        return cached_file
-    
-    # If file is not in cache, load it from its source (e.g., from disk)
-    # and then store it in cache for subsequent requests.
-    try:
-        with open(file_name, "rb") as f:
-            data = f.read()
-        await cache.setex(file_name, CACHE_TTL, data)
-        return data
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="File not found")
+    # If not in cache, load it from disk (this is just a basic idea)
+    with open(f"assets/{filename}", "rb") as file:
+        print("NOT CACHED")
+
+        content = file.read()
+        # Store in Redis
+        redis_client.set(filename, content)
+        return Response(content=content, media_type="application/octet-stream")
+
+
+# redis_host: localhost
+# redis_port: 6379
+# redis_db: 0
+# redis_cache_ttl: 300
+# user_secret_key: mysecretkey
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="localhost", port=8090)

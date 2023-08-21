@@ -4,10 +4,6 @@ from dash import Dash, html, dcc, Input, Output, dash_table
 import dash_bootstrap_components as dbc
 
 
-
-
-
-
 # print(dash_jbrowse.__version__)
 app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 # dash.register_page(__name__)
@@ -132,19 +128,37 @@ my_tracks_counts = [
         "category": ["Run X", "Sample Y - Counts", "TEST Z"],
         "adapter": {
             "type": "MultiWiggleAdapter",
+            #     "layout": [
+            #     {
+            #         "name": "Watson",
+            #         "type": "BigWigAdapter",
+            #         "bigWigLocation": {
+            #             "uri": f"http://localhost:8090/assets/Counts_BW/{e}-W.bigWig",
+            #         },
+            #         "color": "rgb(244, 164, 96)",
+            #     },
+            #     {
+            #         "name": "Crick",
+            #         "type": "BigWigAdapter",
+            #         "bigWigLocation": {
+            #             "uri": f"http://localhost:8090/assets/Counts_BW/{e}-C.bigWig",
+            #         },
+            #         "color": "rgb(102, 139, 139)",
+            #     },
+            # ],
             "subadapters": [
                 {
                     "name": "Watson",
                     "type": "BigWigAdapter",
                     "bigWigLocation": {
-                        "uri": dash.get_asset_url("Counts_BW/{}-W.bigWig".format(e)),
+                        "uri": f"http://localhost:8090/assets/Counts_BW/{e}-W.bigWig",
                     },
                 },
                 {
                     "name": "Crick",
                     "type": "BigWigAdapter",
                     "bigWigLocation": {
-                        "uri": dash.get_asset_url("Counts_BW/{}-C.bigWig".format(e)),
+                        "uri": f"http://localhost:8090/assets/Counts_BW/{e}-C.bigWig",
                     },
                 },
             ],
@@ -168,49 +182,8 @@ my_tracks_sv = [
 ]
 
 my_tracks += my_tracks_counts
-# my_tracks += my_tracks_sv
 
 tracks_session = []
-# tracks_session = [
-#     {
-#         "type": "FeatureTrack",
-#         "configuration": "ncbi_refseq_109_hg38",
-#         "trackShowDescriptions": False,
-#         "displays": [
-#             {
-#                 "type": "LinearBasicDisplay",
-#                 "configuration": "ncbi_refseq_109_hg38-LinearBasicDisplay",
-#             },
-#         ],
-#     },
-#     {
-#         "type": "QuantitativeTrack",
-#         "configuration": "gccontent_hg38",
-#         "displays": [
-#             {
-#                 "id": "lTY7_5KzL6",
-#                 "type": "LinearWiggleDisplay",
-#                 "height": 100,
-#                 "selectedRendering": "",
-#                 "rendererTypeNameState": "xyplot",
-#                 "displayCrossHatches": True,
-#                 "layout": [
-#                     {
-#                         "name": "Watson",
-#                         "type": "GCContentAdapter",
-#                         "color": "red",
-#                     },
-#                 ],
-#             },
-#         ],
-#     },
-#     {
-#         "type": "VariantTrack",
-#         "configuration": "clinvar.vcf.gz-1675786941544-sessionTrack",
-#         "displays": [{"type": "LinearVariantDisplay", "displayId": "clinvar.vcf.gz-1675786941544-sessionTrack-LinearVariantDisplay"}],
-#     },
-# ]
-
 
 
 @dash.callback(
@@ -240,9 +213,7 @@ def set_sample_value(value):
                             "name": "Watson",
                             "type": "BigWigAdapter",
                             "bigWigLocation": {
-                                "uri": dash.get_asset_url(
-                                    "Counts_BW/{}-W.bigWig".format(e)
-                                ),
+                                "uri": f"http://localhost:8090/assets/Counts_BW/{e}-W.bigWig",
                             },
                             "color": "rgb(244, 164, 96)",
                         },
@@ -250,9 +221,7 @@ def set_sample_value(value):
                             "name": "Crick",
                             "type": "BigWigAdapter",
                             "bigWigLocation": {
-                                "uri": dash.get_asset_url("Counts_BW/{}-C.bigWig").format(
-                                    e
-                                ),
+                                "uri": f"http://localhost:8090/assets/Counts_BW/{e}-C.bigWig",
                             },
                             "color": "rgb(102, 139, 139)",
                         },
@@ -260,9 +229,9 @@ def set_sample_value(value):
                 },
             ],
         }
-        for e in sorted(listdir_counts) if e in value
+        for e in sorted(listdir_counts)
+        if e in value
     ]
-
 
     my_default_session = {
         "name": "My session",
@@ -270,26 +239,11 @@ def set_sample_value(value):
             "id": "linearGenomeView",
             "type": "LinearGenomeView",
             "tracks": tracks_session_counts,
-            # "defaultTracks": tracks_session_counts,
-            # {
-            #     "type": "AlignmentsTrack",
-            #     "configuration": "bm510x04_pe20301.bam.htg-1675787802366-sessionTrack",
-            #     "displays": [
-            #         {
-            #             "type": "LinearAlignmentsDisplay",
-            #             "displayId": "bm510x04_pe20301.bam.htg-1675787802366-sessionTrack-LinearAlignmentsDisplay",
-            #         },
-            #         {"type": "LinearPileupDisplay", "displayId": "bm510x04_pe20301.bam.htg-1675787802366-sessionTrack-LinearPileupDisplay"},
-            #         {
-            #             "type": "LinearSNPCoverageDisplay",
-            #             "displayId": "bm510x04_pe20301.bam.htg-1675787802366-sessionTrack-LinearSNPCoverageDisplay",
-            #         },
-            #     ],
-            # },
         },
     }
 
     return my_default_session
+
 
 tracks_session_svs = [
     {
@@ -314,10 +268,6 @@ tracks_session_svs = [
 # tracks_session += tracks_session_counts
 # tracks_session += tracks_session_svs
 # print(tracks_session)
-
-
-
-
 
 
 my_aggregate_text_search_adapters = [
@@ -397,15 +347,6 @@ app.layout = dbc.Container(
         ),
     ]
 )
-
-
-
-
-
-# @dash.callback(Output("dd-output-container", "children"), Input("sample-dropdown-jbrowse", "value"))
-# def update_output(sample):
-#     # print(sample)
-#     return html.H4(f"You have selected {sample}", className="card-title")
 
 
 if __name__ == "__main__":
