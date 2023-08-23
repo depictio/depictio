@@ -1,0 +1,38 @@
+workflows:
+  - workflow_id: snakemake/mosaicatcher-pipeline
+    workflow_description: "TOTO"
+    parent_runs_location: "/Users/tweber/Gits/depictio/wf_data/snakemake--mosaicatcher-pipeline"
+    data_collections:
+      mosaicatcher_stats:
+        description: "TOTO_mosaicatcher_stats"
+        config:
+          regex: ".*.info_raw"
+          format: "TSV"
+          pandas_kwargs:
+            skiprows: 13
+            sep: "\t"
+          keep_columns:
+            - "sample"
+            - "cell"
+            - "mapped"
+            - "dupl"
+            - "pass1"
+            - "good"
+      ashleys_labels:
+        description: "TOTO_ashleys_labels"
+        config:
+          regex: "labels.tsv"
+          format: "TSV"
+          pandas_kwargs:
+            sep: "\t"
+
+  # nf-core--ampliseq:
+  #   description: "TATA"
+  #   location: "/Users/tweber/Gits/depictio/wf_data/nf-core--ampliseq"
+  #   datacollections:
+  #     dada2_ASV_table:
+  #       regex: ".*ASV.tsv.gz"
+  #       format: "TSV"
+  #       pandas_kwargs:
+  #         sep: "\t"
+  #         compression: "gzip"
