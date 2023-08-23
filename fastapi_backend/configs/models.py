@@ -9,6 +9,7 @@ import re
 
 import yaml
 
+
 class DirectoryPath(str):
     @classmethod
     def __get_validators__(cls):
@@ -23,6 +24,7 @@ class DirectoryPath(str):
             raise ValueError(f"'{value}' is not a directory.")
         return value
 
+
 class ObjectIdStr(str):
     @classmethod
     def __get_validators__(cls):
@@ -32,7 +34,8 @@ class ObjectIdStr(str):
     def validate(cls, value: str) -> str:
         if not ObjectId.is_valid(value):
             raise ValueError(f"'{value}' is not a valid ObjectId.")
-        return str(value)  
+        return str(value)
+
 
 def validate_datetime(value):
     try:
@@ -42,7 +45,7 @@ def validate_datetime(value):
 
 
 class File(BaseModel):
-    location: FilePath
+    file_location: FilePath
     filename: str
     creation_time: datetime
     modification_time: datetime
@@ -62,7 +65,7 @@ class File(BaseModel):
         except ValueError:
             raise ValueError("Invalid datetime format")
 
-    @validator("location")
+    @validator("file_location")
     def validate_location(cls, value):
         if not os.path.exists(value):
             raise ValueError(f"The file '{value}' does not exist.")
@@ -103,9 +106,13 @@ class DataCollectionConfig(BaseModel):
 
 
 class DataCollection(BaseModel):
-    data_collection_id: Optional[str]
+    data_collection_id: str = None
     description: str = None  # Optional description
     config: DataCollectionConfig
+
+    # @validator("data_collection_id", pre=True, always=True)
+    # def extract_data_collection_id(cls, value):
+    #     return value.split("/")[-1]
 
     @validator("description", pre=True, always=True)
     def sanitize_description(cls, value):
@@ -115,24 +122,24 @@ class DataCollection(BaseModel):
 
 
 class WorkflowConfig(BaseModel):
-    workflow_id: Optional[str]
-    description: str
-    location: str
+    # workflow_id: Optional[str]
+    parent_runs_location: str
     workflow_version: Optional[str]
     config: Optional[Dict]
+    runs_regex: Optional[str]
 
-    @validator("description", pre=True, always=True)
-    def sanitize_description(cls, value):
-        # Strip any HTML tags and attributes
-        sanitized = bleach.clean(value, tags=[], attributes={}, strip=True)
-        # Ensure it's not overly long
-        max_length = 500
-        return sanitized[:max_length]
+
+    @validator("runs_regex")
+    def validate_regex(cls, v):
+        try:
+            re.compile(v)
+            return v
+        except re.error:
+            raise ValueError("Invalid regex pattern")
 
 
 class WorkflowRun(BaseModel):
     run_id: Optional[str]
-    workflow_name: Optional[str]
     files: List[File] = []
     workflow_config: WorkflowConfig
     run_location: DirectoryPath
@@ -158,10 +165,11 @@ class WorkflowRun(BaseModel):
         if not isinstance(value, WorkflowConfig):
             raise ValueError("workflow_config must be a WorkflowConfig")
         return value
-    
+
     @validator("execution_time", pre=True, always=True)
     def validate_execution_time(cls, value):
         return validate_datetime(value)
+
 
 class WorkflowSystem(BaseModel):
     workflow_language: str
@@ -176,7 +184,7 @@ class WorkflowSystem(BaseModel):
             "toil",
             "cwltool",
             "arvados",
-            "streamflow"
+            "streamflow",
         ]
         if value not in allowed_values:
             raise ValueError(f"workflow_engine must be one of {allowed_values}")
@@ -197,24 +205,22 @@ class WorkflowSystem(BaseModel):
         return value
 
 
-
 class Workflow(BaseModel):
     workflow_name: str = None
     workflow_engine: str = None
     workflow_id: str
     # workflow_engine: WorkflowSystem
     workflow_description: str
-    parent_runs_location: str
     data_collections: Optional[Dict[str, DataCollection]]
     runs: Optional[Dict[str, WorkflowRun]]
-
+    workflow_config: Optional[WorkflowConfig]
 
     @root_validator(pre=True)
     def set_workflow_name(cls, values):
-        workflow_engine = values.get('workflow_id').split('/')[0]
-        workflow_name = values.get('workflow_id').split('/')[1]
-        values['workflow_name'] = f"{workflow_name}"
-        values['workflow_engine'] = f"{workflow_engine}"
+        workflow_engine = values.get("workflow_id").split("/")[0]
+        workflow_name = values.get("workflow_id").split("/")[1]
+        values["workflow_name"] = f"{workflow_name}"
+        values["workflow_engine"] = f"{workflow_engine}"
         return values
 
     @validator("workflow_description", pre=True, always=True)
