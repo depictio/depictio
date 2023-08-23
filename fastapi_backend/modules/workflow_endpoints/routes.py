@@ -24,15 +24,17 @@ async def get_workflows():
     if not workflows_cursor:
         raise HTTPException(status_code=404, detail="No workflows found.")
 
-    return workflows_list
+    return workflows_cursor
 
 
 @workflows_endpoint_router.post("/create_workflow")
 async def create_workflow(
     workflow: Workflow,
 ):
+    workflows_collection.drop()
+    
     expected_dir_name = f"{workflow.workflow_engine}--{workflow.workflow_name}"
-    actual_dir_name = os.path.basename(workflow.parent_runs_location)
+    actual_dir_name = os.path.basename(workflow.workflow_config.parent_runs_location)
 
     if actual_dir_name != expected_dir_name:
         raise HTTPException(
@@ -49,5 +51,8 @@ async def create_workflow(
             detail=f"Workflow with name '{workflow.workflow_id}' already exists.",
         )
 
-    result = workflows_collection.insert_one(dict(workflow))
-    return {"workflow_id": str(result.inserted_id)}
+    wf_dict = workflow.dict() if hasattr(workflow, "dict") else vars(workflow)
+    print(wf_dict)
+    # result = workflows_collection.insert_one(wf_dict)
+
+    # return {"workflow_id": str(result.inserted_id)}

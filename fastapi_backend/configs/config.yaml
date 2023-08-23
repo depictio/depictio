@@ -1,7 +1,9 @@
 workflows:
   - workflow_id: snakemake/mosaicatcher-pipeline
     workflow_description: "TOTO"
-    parent_runs_location: "/Users/tweber/Gits/depictio/wf_data/snakemake--mosaicatcher-pipeline"
+    workflow_config:
+      parent_runs_location: "/Users/tweber/Gits/depictio/wf_data/snakemake--mosaicatcher-pipeline"
+      runs_regex: ".*"
     data_collections:
       mosaicatcher_stats:
         description: "TOTO_mosaicatcher_stats"
