@@ -1,5 +1,8 @@
 from datetime import datetime
+import hashlib
+from pathlib import PosixPath
 import sys
+
 sys.path.append("/Users/tweber/Gits/depictio")
 
 import os
@@ -7,7 +10,15 @@ import re
 from typing import Dict, Type, List, Tuple, Optional, Any
 from pydantic import BaseModel, ValidationError
 import yaml
-from fastapi_backend.configs.models import DataCollection, File, Workflow, DataCollectionConfig, WorkflowConfig, RootConfig, WorkflowRun
+from fastapi_backend.configs.models import (
+    DataCollection,
+    File,
+    Workflow,
+    DataCollectionConfig,
+    WorkflowConfig,
+    RootConfig,
+    WorkflowRun,
+)
 
 
 def get_config(filename: str):
@@ -50,8 +61,10 @@ def populate_file_models(workflow: Workflow) -> List[DataCollection]:
             data_collection_id=datacollection_id,
             description=metadata.description,
             config=metadata.config,
+            workflow_id=workflow.workflow_id,
         )
-        print(datacollection_instance)
+        # datacollection_instance.config.data_collection_id = datacollection_id
+        # datacollection_instance.config.workflow_id = workflow.workflow_id
         datacollections_models.append(datacollection_instance)
 
     return datacollections_models
@@ -65,15 +78,20 @@ def validate_worfklow(workflow: Workflow, config: RootConfig) -> dict:
     # print(workflow_config)
 
     datacollection_models = populate_file_models(workflow)
-    
-    # Create a dictionary of validated datacollections with datacollection_id as the key
-    validated_datacollections = {datacollection.data_collection_id: datacollection for datacollection in datacollection_models}
 
-    print(validated_datacollections)    
+    # Create a dictionary of validated datacollections with datacollection_id as the key
+    validated_datacollections = {
+        datacollection.data_collection_id: datacollection
+        for datacollection in datacollection_models
+    }
+
+    # print(validated_datacollections)
     # Update the workflow's files attribute in the main config
     workflow.data_collections = validated_datacollections
-    
+    workflow.runs = {}
+
     return workflow
+
 
 def validate_all_workflows(config: RootConfig) -> RootConfig:
     """
@@ -81,10 +99,20 @@ def validate_all_workflows(config: RootConfig) -> RootConfig:
     """
     for workflow in config.workflows:
         validate_worfklow(workflow, config)
-    
+
     return config
 
-def scan_files(run_location: str, data_collection: DataCollection) -> List[File]:
+
+def calculate_file_hash(file_path: str) -> str:
+    """Calculate a unique hash for a file based on its content."""
+    # Implementation of hashing function
+    with open(file_path, "rb") as f:
+        return hashlib.md5(f.read()).hexdigest()
+
+
+def scan_files(
+    run_location: str, run_id: str, data_collection: DataCollection
+) -> List[File]:
     """
     Scan the files for a given workflow.
     """
@@ -110,42 +138,56 @@ def scan_files(run_location: str, data_collection: DataCollection) -> List[File]
                 modification_time_dt = datetime.fromtimestamp(modification_time_float)
 
                 # Convert the datetime objects to ISO formatted strings
-                creation_time_iso = creation_time_dt.isoformat()
-                modification_time_iso = modification_time_dt.isoformat()
+                creation_time_iso = creation_time_dt.strftime("%Y-%m-%d %H:%M:%S")
+                modification_time_iso = modification_time_dt.strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
 
                 data_collection_id = data_collection.data_collection_id
-                    
+
                 file_instance = File(
                     filename=filename,
                     file_location=file_location,
                     creation_time=creation_time_iso,
                     modification_time=modification_time_iso,
-                    data_collection_id=data_collection_id
+                    data_collection_id=data_collection_id,
+                    file_hash=calculate_file_hash(file_location),
+                    run_id=run_id,
                 )
-                print(file_instance)
+                # print(file_instance)
                 file_list.append(file_instance)
     return file_list
 
 
-def scan_runs(parent_runs_location, workflow_config: WorkflowConfig, data_collection: DataCollection) -> List[WorkflowRun]:
+def scan_runs(
+    parent_runs_location,
+    workflow_config: WorkflowConfig,
+    data_collection: DataCollection,
+) -> List[WorkflowRun]:
     """
     Scan the runs for a given workflow.
     """
-    # Get the workflow's parent_runs_location
 
     if not os.path.exists(parent_runs_location):
         raise ValueError(f"The directory '{parent_runs_location}' does not exist.")
     if not os.path.isdir(parent_runs_location):
         raise ValueError(f"'{parent_runs_location}' is not a directory.")
-    
+
+    runs = list()
+
     for run in os.listdir(parent_runs_location):
         if re.match(workflow_config.runs_regex, run):
-            print(run)
+            # print(run)
             run_location = os.path.join(parent_runs_location, run)
-            print(run_location)
-            files = scan_files(run_location, data_collection)
-            print(files)
-            execution_time = datetime.fromtimestamp(os.path.getctime(run_location)).isoformat()
+            # print(run_location)
+            files = scan_files(
+                run_location=run_location, run_id=run, data_collection=data_collection
+            )
+            # print(files)
+            execution_time = datetime.fromtimestamp(
+                os.path.getctime(run_location)
+            ).strftime("%Y-%m-%d %H:%M:%S")
+            # print(execution_time)
 
             # Create a WorkflowRun instance
             workflow_run = WorkflowRun(
@@ -154,10 +196,55 @@ def scan_runs(parent_runs_location, workflow_config: WorkflowConfig, data_collec
                 workflow_config=workflow_config,
                 run_location=run_location,
                 execution_time=execution_time,
-                execution_profile=None
+                execution_profile=None,
             )
-            print(workflow_run)
+            # print(workflow_run)
+            runs.append(workflow_run)
+    # print("\n\n")
+    return runs
 
-            # print(os.l
 
-    
+def populate_database(
+    config_path: str, workflow_id: str, data_collection_id: str
+) -> List[WorkflowRun]:
+    """
+    Populate the database with files for a given workflow.
+    """
+    config_data = get_config(config_path)
+    config = validate_config(config_data, RootConfig)
+    validated_config = validate_all_workflows(config)
+
+    config_dict = {f"{e.workflow_id}": e for e in validated_config.workflows}
+
+    if workflow_id not in config_dict:
+        raise ValueError(f"Workflow '{workflow_id}' not found in the config file.")
+
+    if workflow_id is None:
+        raise ValueError("Please provide a workflow name.")
+
+    workflow = config_dict[workflow_id]
+    workflow.runs = {}
+    data_collection = workflow.data_collections[data_collection_id]
+
+    runs_and_content = scan_runs(
+        parent_runs_location=workflow.workflow_config.parent_runs_location,
+        workflow_config=workflow.workflow_config,
+        data_collection=data_collection,
+    )
+
+    return runs_and_content
+
+
+def serialize_for_mongo(data):
+    if hasattr(data, "dict"):
+        data = data.dict()
+    if isinstance(data, dict):
+        return {k: serialize_for_mongo(v) for k, v in data.items()}
+    elif isinstance(data, list):
+        return [serialize_for_mongo(v) for v in data]
+    elif isinstance(data, PosixPath):
+        return str(data)
+    elif isinstance(data, datetime):
+        return data  # MongoDB natively supports datetime
+    else:
+        return data

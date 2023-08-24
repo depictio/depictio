@@ -3,6 +3,8 @@ mongo_db: "depictioDB"
 collections: 
   data_collection: "data_collection"
   workflow_collection: "workflow_collection"
+  runs_collection: "runs_collection"
+  files_collection: "files_collection"
 
 redis_host: localhost
 redis_port: 6379

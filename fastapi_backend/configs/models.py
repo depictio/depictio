@@ -50,18 +50,22 @@ class File(BaseModel):
     creation_time: datetime
     modification_time: datetime
     data_collection_id: str
+    file_hash: Optional[str] = None
+    run_id: Optional[str] = None
 
     @validator("creation_time", pre=True, always=True)
     def validate_creation_time(cls, value):
         try:
-            return datetime.fromisoformat(value)
+            dt = datetime.fromisoformat(value)
+            return dt.strftime('%Y-%m-%d %H:%M:%S')
         except ValueError:
             raise ValueError("Invalid datetime format")
 
     @validator("modification_time", pre=True, always=True)
     def validate_modification_time(cls, value):
         try:
-            return datetime.fromisoformat(value)
+            dt = datetime.fromisoformat(value)
+            return dt.strftime('%Y-%m-%d %H:%M:%S')
         except ValueError:
             raise ValueError("Invalid datetime format")
 
@@ -74,6 +78,15 @@ class File(BaseModel):
         if not os.access(value, os.R_OK):
             raise ValueError(f"'{value}' is not readable.")
         return value
+    
+    @validator("file_hash")
+    def validate_file_hash(cls, value):
+        if value is not None:
+            if not isinstance(value, str):
+                raise ValueError("file_hash must be a string")
+        return value
+
+    
 
 
 class DataCollectionConfig(BaseModel):
@@ -106,9 +119,11 @@ class DataCollectionConfig(BaseModel):
 
 
 class DataCollection(BaseModel):
-    data_collection_id: str = None
+    data_collection_id: Optional[str]
     description: str = None  # Optional description
     config: DataCollectionConfig
+    workflow_id: Optional[str]
+    gridfs_id: Optional[str] = None
 
     # @validator("data_collection_id", pre=True, always=True)
     # def extract_data_collection_id(cls, value):
@@ -137,6 +152,21 @@ class WorkflowConfig(BaseModel):
         except re.error:
             raise ValueError("Invalid regex pattern")
 
+
+class PyObjectId(ObjectId):
+    @classmethod
+    def __get_validators__(cls) -> 'CallableGenerator':
+        yield cls.validate
+
+    @classmethod
+    def validate(cls, v: Any) -> ObjectId:
+        if not isinstance(v, ObjectId):
+            raise TypeError('ObjectId required')
+        return v
+
+    @classmethod
+    def __modify_schema__(cls, field_schema: Dict[str, Any]) -> None:
+        field_schema.update(type="string")
 
 class WorkflowRun(BaseModel):
     run_id: Optional[str]
@@ -214,6 +244,16 @@ class Workflow(BaseModel):
     data_collections: Optional[Dict[str, DataCollection]]
     runs: Optional[Dict[str, WorkflowRun]]
     workflow_config: Optional[WorkflowConfig]
+    data_collection_ids: Optional[List[str]] = []
+
+
+    @root_validator(pre=True)
+    def populate_data_collection_ids(cls, values):
+        workflow_id = values.get("workflow_id")
+        data_collections = values.get("data_collections", {})
+        for collection in data_collections.values():
+            collection["workflow_id"] = workflow_id
+        return values
 
     @root_validator(pre=True)
     def set_workflow_name(cls, values):
@@ -251,9 +291,20 @@ class RootConfig(BaseModel):
 ########
 
 
+
+class GridFSFileInfo(BaseModel):
+    filename: str
+    file_id: str
+    length: int
+
+########
+
+
 class Collections(BaseModel):
     data_collection: str
     workflow_collection: str
+    runs_collection: str
+    files_collection: str
 
 
 class Settings(BaseModel):

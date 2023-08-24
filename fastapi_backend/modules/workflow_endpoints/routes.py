@@ -11,8 +11,10 @@ from configs.models import Workflow
 
 workflows_endpoint_router = APIRouter()
 
-data_collection = db[settings.collections.data_collection]
+data_collections_collection = db[settings.collections.data_collection]
 workflows_collection = db[settings.collections.workflow_collection]
+runs_collection = db[settings.collections.runs_collection]
+files_collection = db[settings.collections.files_collection]
 
 
 @workflows_endpoint_router.get("/get_workflows", response_model=List[Workflow])
@@ -20,6 +22,10 @@ async def get_workflows():
     # workflows_collection.drop()
 
     workflows_cursor = list(workflows_collection.find())
+    for workflow in workflows_cursor:
+        workflow["data_collection_ids"] = [
+            str(oid) for oid in workflow["data_collection_ids"]
+        ]
 
     if not workflows_cursor:
         raise HTTPException(status_code=404, detail="No workflows found.")
@@ -32,15 +38,9 @@ async def create_workflow(
     workflow: Workflow,
 ):
     workflows_collection.drop()
-    
-    expected_dir_name = f"{workflow.workflow_engine}--{workflow.workflow_name}"
-    actual_dir_name = os.path.basename(workflow.workflow_config.parent_runs_location)
-
-    if actual_dir_name != expected_dir_name:
-        raise HTTPException(
-            status_code=400,
-            detail=f"The directory name '{actual_dir_name}' does not match the expected format '{expected_dir_name}'",
-        )
+    data_collections_collection.drop()
+    runs_collection.drop()
+    files_collection.drop()
 
     existing_workflow = workflows_collection.find_one(
         {"workflow_id": workflow.workflow_id}
@@ -51,8 +51,25 @@ async def create_workflow(
             detail=f"Workflow with name '{workflow.workflow_id}' already exists.",
         )
 
-    wf_dict = workflow.dict() if hasattr(workflow, "dict") else vars(workflow)
-    print(wf_dict)
-    # result = workflows_collection.insert_one(wf_dict)
+    # Extract and insert data_collections first to get their unique ids
+    data_collection_ids = []
+    for key, data_collection in workflow.data_collections.items():
+        # Extract and insert config first to get its unique id
+        data_collection_dict = (
+            data_collection.dict()
+            if hasattr(data_collection, "dict")
+            else vars(data_collection)
+        )
 
-    # return {"workflow_id": str(result.inserted_id)}
+        data_collection_id = data_collections_collection.insert_one(
+            data_collection_dict
+        ).inserted_id
+        data_collection_ids.append(data_collection_dict["data_collection_id"])
+
+    # Now, insert the workflow, linking to the data_collection ids
+    workflow_data = workflow.dict(exclude={"data_collections"})
+    workflow_data["data_collection_ids"] = data_collection_ids
+
+    result = workflows_collection.insert_one(workflow_data)
+
+    return {"workflow_bid": str(result.inserted_id)}
