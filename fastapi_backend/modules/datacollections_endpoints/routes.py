@@ -5,11 +5,13 @@ import json
 import os
 from pathlib import PosixPath
 import re
+from bson import ObjectId
 from fastapi import HTTPException
 from fastapi import APIRouter
 from typing import List
 
 import pandas as pd
+import numpy as np
 from pydantic import BaseModel
 
 from configs.config import settings
@@ -20,7 +22,12 @@ from db import db, grid_fs
 # from modules.workflow_endpoints.models import Workflow
 from configs.models import Workflow, File, DataCollection
 from fastapi_backend.configs.models import GridFSFileInfo
-from fastapi_backend.utils import scan_runs, serialize_for_mongo
+from fastapi_backend.utils import (
+    numpy_to_python,
+    scan_runs,
+    serialize_for_mongo,
+    agg_functions,
+)
 
 
 datacollections_endpoint_router = APIRouter()
@@ -101,6 +108,7 @@ async def aggregate_workflow_data(data_collection: DataCollection):
                 file,
                 **config["pandas_kwargs"],
             )
+            df["depictio_run_id"] = file_info["run_id"]
             data_frames.append(df)
 
     # Aggregate data
@@ -112,22 +120,60 @@ async def aggregate_workflow_data(data_collection: DataCollection):
     output.seek(0)  # Rewind to the start
 
     # Using a naming convention for directories in GridFS
-    filename_structure = (
-        f"aggregates/{data_collection.workflow_id}/{data_collection.data_collection_id}.pkl"
-    )
+    filename_structure = f"aggregates/{data_collection.workflow_id}/{data_collection.data_collection_id}.pkl"
     file_id = grid_fs.put(output, filename=filename_structure)
+
+    results = collections.defaultdict(dict)
+
+    # For each column in the DataFrame
+    for column in aggregated_df.columns:
+        # Identify the column data type
+        col_type = str(aggregated_df[column].dtype)
+        results[column]["type"] = col_type
+
+        # Check if the type exists in the agg_functions dict
+        if col_type in agg_functions:
+            methods = agg_functions[col_type]["card_methods"]
+
+            # Initialize an empty dictionary to store results
+
+            # For each method in the card_methods
+            for method_name, method_info in methods.items():
+                print(column, method_name)
+                pandas_method = method_info["pandas"]
+
+                # Check if the method is callable or a string
+                if callable(pandas_method):
+                    result = pandas_method(aggregated_df[column])
+                elif isinstance(pandas_method, str):
+                    result = getattr(aggregated_df[column], pandas_method)()
+                else:
+                    continue  # Skip if method is not available
+
+                result = result.values if isinstance(result, np.ndarray) else result
+                if method_name == "mode" and isinstance(result.values, np.ndarray):
+                    result = result[0]
+                results[column][str(method_name)] = numpy_to_python(result)
 
     # Update the data_collection_config with the GridFS file_id
     data_collections_collection.update_one(
         {"data_collection_id": data_collection.data_collection_id},
-        {"$set": {"gridfs_file_id": str(file_id)}},
+        {
+            "$set": {
+                "gridfs_file_id": str(file_id),
+                "columns_specs": serialize_for_mongo(results),
+                "columns_list": aggregated_df.columns.tolist(),
+            },
+        },
+    )
+    data_collections_collection.create_index(
+        [("data_collection_id", 1), ("workflow_id", 1)]
     )
 
     return {
         "message": "Data successfully aggregated and saved",
         "file_id": str(file_id),
     }
-
 
 
 @datacollections_endpoint_router.get("/files", response_model=List[GridFSFileInfo])
@@ -162,3 +208,26 @@ async def delete_all_files():
         return {"message": "All files deleted."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting files: {e}")
+
+
+@datacollections_endpoint_router.get(
+    "/get_aggregated_file_id/{workflow_engine}/{workflow_name}/{data_collection_id}"
+)
+async def get_files(workflow_engine: str, workflow_name: str, data_collection_id: str):
+    """
+    Fetch an aggregated datacollection from GridFS.
+    """
+    document = data_collections_collection.find_one(
+        {
+            "data_collection_id": data_collection_id,
+            "workflow_id": f"{workflow_engine}/{workflow_name}",
+        }
+    )
+    print(document.keys())
+
+    # # Fetch all files from GridFS
+    # associated_file = grid_fs.get(ObjectId(document["gridfs_file_id"]))
+    # print(associated_file)
+    # # df = pd.read_parquet(associated_file).to_dict()
+    # return associated_file
+    return {"gridfs_file_id": document["gridfs_file_id"]}
