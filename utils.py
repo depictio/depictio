@@ -1,9 +1,21 @@
+import collections
+from io import BytesIO
+import sys
+
+sys.path.append("/Users/tweber/Gits/depictio")
+
+from fastapi_backend.db import grid_fs, redis_cache
+from fastapi_backend.configs.config import settings
+from CLI_client.cli import list_workflows
+import httpx
+from bson import ObjectId
 from dash import html, dcc, Input, Output, State, ALL, MATCH
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import inspect
 import numpy as np
 import os, json
+import pandas as pd
 import plotly.express as px
 import re
 
@@ -179,7 +191,6 @@ AVAILABLE_PLOT_TYPES = {
 }
 
 
-
 agg_functions = {
     "int64": {
         "title": "Integer",
@@ -259,11 +270,11 @@ agg_functions = {
                 "numpy": None,
                 "description": "Kurtosis of non-NA values",
             },
-            "cumulative_sum": {
-                "pandas": "cumsum",
-                "numpy": "cumsum",
-                "description": "Cumulative sum of non-NA values",
-            },
+            # "cumulative_sum": {
+            #     "pandas": "cumsum",
+            #     "numpy": "cumsum",
+            #     "description": "Cumulative sum of non-NA values",
+            # },
         },
     },
     "float64": {
@@ -344,11 +355,11 @@ agg_functions = {
                 "numpy": None,
                 "description": "Kurtosis of non-NA values",
             },
-            "cumulative_sum": {
-                "pandas": "cumsum",
-                "numpy": "cumsum",
-                "description": "Cumulative sum of non-NA values",
-            },
+            # "cumulative_sum": {
+            #     "pandas": "cumsum",
+            #     "numpy": "cumsum",
+            #     "description": "Cumulative sum of non-NA values",
+            # },
         },
     },
     "bool": {
@@ -492,7 +503,6 @@ agg_functions = {
 }
 
 
-
 # Add a new function to create a card with a number and a legend
 def create_card(value, legend):
     return dbc.Card(
@@ -570,8 +580,6 @@ def create_input_component(df, dict_data, input_component_id):
             ),
         ]
     )
-
-
 
 
 def get_common_params(plotly_vizu_list):
@@ -723,7 +731,7 @@ def create_initial_figure(df, plot_type, input_id=None, filter=dict(), id=None):
         filtered_df = df
     # filtered_df = df
     # print(plot_type)
-    if AVAILABLE_PLOT_TYPES[plot_type]["type"] is "Card":
+    if AVAILABLE_PLOT_TYPES[plot_type]["type"] == "Card":
         value = process_data_for_card(
             filtered_df,
             AVAILABLE_PLOT_TYPES[plot_type]["column"],
@@ -734,7 +742,7 @@ def create_initial_figure(df, plot_type, input_id=None, filter=dict(), id=None):
             value,
             AVAILABLE_PLOT_TYPES[plot_type]["description"],
         )
-    elif AVAILABLE_PLOT_TYPES[plot_type]["type"] is "Input":
+    elif AVAILABLE_PLOT_TYPES[plot_type]["type"] == "Input":
         fig = create_input_component(
             df,
             AVAILABLE_PLOT_TYPES[plot_type],
@@ -760,6 +768,92 @@ def load_data():
     return None
 
 
+def load_gridfs_file(workflow_id: str, data_collection_id: str, cols: list = None):
+    API_BASE_URL = "http://localhost:8058"
+    print(workflow_id, data_collection_id)
+
+    if workflow_id is None or data_collection_id is None:
+        response = httpx.get(f"{API_BASE_URL}/workflows/get_workflows")
+        print(response)
+        if response.status_code == 200:
+            workflow_id = response.json()[0]["workflow_id"]
+            data_collection_id = response.json()[0]["data_collection_ids"][0]
+            print(response.json())
+
+        else:
+            print("No workflows found")
+            return None
+
+    print(workflow_id)
+
+    workflow_engine = workflow_id.split("/")[0]
+    workflow_name = workflow_id.split("/")[1]
+
+    print(workflow_engine, workflow_name)
+    print(data_collection_id)
+
+    response = httpx.get(
+        f"{API_BASE_URL}/datacollections/get_aggregated_file_id/{workflow_engine}/{workflow_name}/{data_collection_id}"
+    )
+    print(response)
+
+    if response.status_code == 200:
+        file_id = response.json()["gridfs_file_id"]
+
+        # Get the file from GridFS
+
+        # Check if present in redis cache otherwise load and save to redis
+
+        if redis_cache.exists(file_id):
+            print("Loading from redis cache")
+            # Convert the binary data to a BytesIO stream
+            data_stream = BytesIO(redis_cache.get(file_id))
+            if not cols:
+                df = pd.read_parquet(data_stream)
+            else:
+                df = pd.read_parquet(data_stream, columns=cols)
+        
+        else:
+            print("Loading from gridfs")
+            associated_file = grid_fs.get(ObjectId(file_id))
+            if not cols:
+                df = pd.read_parquet(associated_file)
+            else:
+                df = pd.read_parquet(associated_file, columns=cols)
+            redis_cache.set(file_id, df.to_parquet())
+        
+          
+        return df
+    
+
+
+def list_workflows_for_dropdown():
+    workflows = [wf["workflow_id"] for wf in list_workflows()]
+    workflows_dict_for_dropdown = [{"label": wf, "value": wf} for wf in workflows]
+    print(workflows_dict_for_dropdown)
+    return workflows_dict_for_dropdown
+
+
+def list_data_collections_for_dropdown(workflow_id: str = None):
+    if workflow_id is None:
+        return []
+    else:
+        for wf in list_workflows():
+            print(wf["workflow_id"])
+            print(wf)
+            print(wf["data_collection_ids"])
+        data_collections = [
+            dc
+            for wf in list_workflows()
+            for dc in wf["data_collection_ids"]
+            if wf["workflow_id"] == workflow_id
+        ]
+        print(data_collections)
+        data_collections_dict_for_dropdown = [
+            {"label": dc, "value": dc} for dc in data_collections
+        ]
+        print(data_collections_dict_for_dropdown)
+        return data_collections_dict_for_dropdown
 
 
 # TODO: utils / config

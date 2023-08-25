@@ -44,13 +44,31 @@ from utils import (
 
 from utils import agg_functions
 
-from utils import create_initial_figure, load_data
+from utils import (
+    create_initial_figure,
+    load_data,
+    load_gridfs_file,
+    list_workflows_for_dropdown,
+    list_data_collections_for_dropdown,
+)
 
 # Data
 
-df = pd.read_csv(
-    "https://raw.githubusercontent.com/plotly/datasets/master/gapminderDataFiveYear.csv"
-)
+
+def return_gridfs_df(workflow_id: str = None, data_collection_id: str = None):
+    df = load_gridfs_file(workflow_id, data_collection_id)
+    # print(df)
+    return df
+
+
+df = return_gridfs_df()
+print(df)
+print(list_workflows_for_dropdown())
+print(list_data_collections_for_dropdown())
+
+# df = pd.read_csv(
+#     "https://raw.githubusercontent.com/plotly/datasets/master/gapminderDataFiveYear.csv"
+# )
 # print(df)
 
 
@@ -704,6 +722,30 @@ def update_figure(*args):
 
 
 @app.callback(
+    Output({"type": "workflow-selection-label", "index": MATCH}, "value"),
+    Input({"type": "workflow-selection-label", "index": MATCH}, "data"),
+    prevent_initial_call=True,
+)
+def set_wf_value(options):
+    if not options:
+        raise dash.exceptions.PreventUpdate
+    return options[0]["value"] if options else None
+
+
+@app.callback(
+    Output({"type": "datacollection-selection-label", "index": MATCH}, "data"),
+    Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
+    prevent_initial_call=True,
+)
+def set_datacollection_options(selected_workflow):
+    if not selected_workflow:
+        raise dash.exceptions.PreventUpdate
+
+    tmp_data = list_data_collections_for_dropdown(selected_workflow)
+    return tmp_data
+
+
+@app.callback(
     Output({"type": "modal-body", "index": MATCH}, "children"),
     [Input({"type": "btn-option", "index": MATCH, "value": ALL}, "n_clicks")],
     [
@@ -724,7 +766,8 @@ def update_modal(n_clicks, ids):
         if n > 0:
             if id["value"] == "Figure":
                 # plot_func = plotly_vizu_dict[visualization_type]
-                plot_kwargs = dict(x="lifeExp", y="pop", color="continent")
+                # plot_kwargs = dict(x="lifeExp", y="pop", color="continent")
+                print(df.columns)
                 # plot_kwargs = dict(
                 #     x=df.columns[0], y=df.columns[1], color=df.columns[2]
                 # )
@@ -748,9 +791,14 @@ def update_modal(n_clicks, ids):
                                                 icon="flat-color-icons:workflow"
                                             ),
                                             "Workflow selection",
-                                        ]
+                                        ],
                                     ),
-                                    data=["Test1", "Test2"],
+                                    data=list_workflows_for_dropdown(),
+                                
+                                    id={
+                                        "type": "workflow-selection-label",
+                                        "index": id["index"],
+                                    },
                                 )
                             ),
                             dbc.Col(
@@ -759,9 +807,12 @@ def update_modal(n_clicks, ids):
                                         [
                                             DashIconify(icon="bxs:data"),
                                             "Data collection selection",
-                                        ]
+                                        ],
                                     ),
-                                    data=["Test3", "Test4"],
+                                    id={
+                                        "type": "datacollection-selection-label",
+                                        "index": id["index"],
+                                    },
                                 )
                             ),
                         ],
@@ -846,7 +897,7 @@ def update_modal(n_clicks, ids):
                     ),
                     dcc.Store(
                         id={"type": "dict_kwargs", "index": id["index"]},
-                        data=plot_kwargs,
+                        data={},
                         storage_type="memory",
                     ),
                 ]
@@ -1320,9 +1371,13 @@ def update_button(n_clicks, children, btn_id):
     box_type = [sub_e for e in children for sub_e in list(find_ids_recursive(e))][0][
         "type"
     ]
+    print(box_type)
     # print(children)
     # print(box_type)
     # print(f"Found ids: {all_ids}")
+
+    if box_type == "workflow-selection-label":
+        raise dash.exceptions.PreventUpdate
 
     div_index = 0 if box_type == "segmented-control-visu-graph" else 2
     if box_type:
@@ -2095,7 +2150,6 @@ def update_draggable_children(
             print("\n\n")
             print(child)
             print("\n\n")
-
 
             # print(len(child))
             # print(child["props"]["id"])
