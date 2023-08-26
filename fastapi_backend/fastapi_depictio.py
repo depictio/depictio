@@ -113,6 +113,7 @@ def calculate_file_hash(file_path: str) -> str:
         return hashlib.md5(f.read()).hexdigest()
 
 
+
 def process_file_content(file_path: str, matched_file_config: FileConfig) -> dict:
     """
     Load the file using pandas and process it according to the configuration.
