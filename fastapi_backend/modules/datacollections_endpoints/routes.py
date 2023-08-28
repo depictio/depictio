@@ -81,6 +81,8 @@ async def scan_data_collection(workflow: Workflow, data_collection: DataCollecti
 
 @datacollections_endpoint_router.post("/aggregate_workflow_data")
 async def aggregate_workflow_data(data_collection: DataCollection):
+    # data_collections_collection.drop()
+
     print(data_collection)
     # Retrieve configuration based on workflow_data_collection_id
     data_collection_config = data_collections_collection.find_one(
@@ -108,7 +110,9 @@ async def aggregate_workflow_data(data_collection: DataCollection):
                 file,
                 **config["pandas_kwargs"],
             )
+            raw_cols = df.columns.tolist()
             df["depictio_run_id"] = file_info["run_id"]
+            df = df[["depictio_run_id"] + raw_cols]
             data_frames.append(df)
 
     # Aggregate data
@@ -161,8 +165,8 @@ async def aggregate_workflow_data(data_collection: DataCollection):
         {
             "$set": {
                 "gridfs_file_id": str(file_id),
-                "columns_specs": serialize_for_mongo(results),
                 "columns_list": aggregated_df.columns.tolist(),
+                "columns_specs": serialize_for_mongo(results),
             },
         },
     )
@@ -231,3 +235,24 @@ async def get_files(workflow_engine: str, workflow_name: str, data_collection_id
     # # df = pd.read_parquet(associated_file).to_dict()
     # return associated_file
     return {"gridfs_file_id": document["gridfs_file_id"]}
+
+
+@datacollections_endpoint_router.get(
+    "/get_columns/{workflow_engine}/{workflow_name}/{data_collection_id}"
+)
+async def get_files(workflow_engine: str, workflow_name: str, data_collection_id: str):
+    """
+    Fetch columns list and specs from data collection
+    """
+    document = data_collections_collection.find_one(
+        {
+            "data_collection_id": data_collection_id,
+            "workflow_id": f"{workflow_engine}/{workflow_name}",
+        }
+    )
+    print(document.keys())
+
+    return {
+        "columns_list": document["columns_list"],
+        "columns_specs": document["columns_specs"],
+    }

@@ -19,6 +19,8 @@ import pandas as pd
 import plotly.express as px
 import re
 
+API_BASE_URL = "http://localhost:8058"
+
 
 AVAILABLE_PLOT_TYPES = {
     "scatter-plot": {
@@ -769,7 +771,6 @@ def load_data():
 
 
 def load_gridfs_file(workflow_id: str, data_collection_id: str, cols: list = None):
-    API_BASE_URL = "http://localhost:8058"
     print(workflow_id, data_collection_id)
 
     if workflow_id is None or data_collection_id is None:
@@ -812,7 +813,7 @@ def load_gridfs_file(workflow_id: str, data_collection_id: str, cols: list = Non
                 df = pd.read_parquet(data_stream)
             else:
                 df = pd.read_parquet(data_stream, columns=cols)
-        
+
         else:
             print("Loading from gridfs")
             associated_file = grid_fs.get(ObjectId(file_id))
@@ -821,10 +822,29 @@ def load_gridfs_file(workflow_id: str, data_collection_id: str, cols: list = Non
             else:
                 df = pd.read_parquet(associated_file, columns=cols)
             redis_cache.set(file_id, df.to_parquet())
-        
-          
+
         return df
-    
+
+
+def get_columns_from_data_collection(
+    workflow_id: str,
+    data_collection_id: str,
+):
+    print(workflow_id, data_collection_id)
+
+    if workflow_id is None or data_collection_id is None:
+        workflow_engine = workflow_id.split("/")[0]
+        workflow_name = workflow_id.split("/")[1]
+        response = httpx.get(
+            f"{API_BASE_URL}/datacollections/get_columns/{workflow_engine}/{workflow_name}/{data_collection_id}"
+        )
+        print(response)
+        if response.status_code == 200:
+            json = response.json()
+            return json
+        else:
+            print("No workflows found")
+            return None
 
 
 def list_workflows_for_dropdown():
