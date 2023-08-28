@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  mongo:
+    image: mongo:latest
+    command: --dbpath /data/depictioDB --port 27018
+    ports:
+      - "27018:27018"
+    volumes:
+      - /Users/tweber/Gits/depictio/depictioDB:/data/depictioDB
+
+  redis:
+    image: redis:latest
+    command: redis-server
+    ports:
+      - "6379:6379"
+
+  redis-cli-monitor:
+    image: redis:latest
+    command: redis-cli -h redis monitor
+    depends_on:
+      - redis
+
+  # depictio_frontend:
+  #   build:
+  #     context: .
+  #     dockerfile: docker-images/Dockerfile_depictio_frontend.dockerfile
+  #   ports:
+  #     - "5080:5080" # Assuming frontend runs on 5080. Adjust if needed.
+
+  # depictio_backend:
+  #   build:
+  #     context: .
+  #     dockerfile: docker-images/Dockerfile_depictio_backend.dockerfile
+  #   ports:
+  #     - "8058:8058"
+  #   depends_on:
+  #     - mongo
+  #     - redis
+
