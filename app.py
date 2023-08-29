@@ -28,6 +28,7 @@ from utils import (
     process_json_from_docstring,
     get_param_info,
 )
+
 from utils import (
     plotly_vizu_list,
     plotly_vizu_dict,
@@ -50,6 +51,7 @@ from utils import (
     load_gridfs_file,
     list_workflows_for_dropdown,
     list_data_collections_for_dropdown,
+    get_columns_from_data_collection,
 )
 
 # Data
@@ -62,9 +64,6 @@ def return_gridfs_df(workflow_id: str = None, data_collection_id: str = None):
 
 
 df = return_gridfs_df()
-print(df)
-print(list_workflows_for_dropdown())
-print(list_data_collections_for_dropdown())
 
 # df = pd.read_csv(
 #     "https://raw.githubusercontent.com/plotly/datasets/master/gapminderDataFiveYear.csv"
@@ -76,7 +75,12 @@ backend_components = html.Div(
     [
         dcc.Interval(
             id="interval",
-            interval=2000,  # Save input value every 1 second
+            interval=5000,  # Save input value every 1 second
+            n_intervals=0,
+        ),
+        dcc.Interval(
+            id="interval_long",
+            interval=50000,  # Save input value every 1 second
             n_intervals=0,
         ),
         # dcc.Store(id="stored-year", storage_type="memory", data=init_year),
@@ -306,15 +310,34 @@ def close_modal(n_clicks):
     [
         Input({"type": "edit-button", "index": MATCH}, "n_clicks"),
         Input({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
+        Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
+        Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+        
     ],
     [State({"type": "edit-button", "index": MATCH}, "id")],
-    # prevent_initial_call=True,
+    prevent_initial_call=True,
 )
-def update_specific_params(n_clicks, visu_type, edit_button_id):
+def update_specific_params(
+    n_clicks,
+    visu_type,
+    workflow,
+    data_collection,
+    edit_button_id,
+):
     # print("update_specific_params")
     # print(app._callback_list)
 
     # print(n_clicks, edit_button_id)
+    print("\n\n\n")
+    print("update_specific_params")
+    print(n_clicks, visu_type, edit_button_id, workflow, data_collection)
+
+    columns_json = get_columns_from_data_collection(workflow, data_collection)
+    print(columns_json)
+
+    columns = columns_json["columns_list"]
+    print(columns)
+    print("\n\n\n")
 
     value = visu_type.lower()
     # value = "scatter"
@@ -334,7 +357,8 @@ def update_specific_params(n_clicks, visu_type, edit_button_id):
 
                 if processed_type_tmp == "column":
                     tmp_options = {
-                        "options": list(df.columns),
+                        "options": columns,
+                        # "options": list(df.columns),
                         "value": None,
                         "persistence": True,
                         "id": {
@@ -385,7 +409,8 @@ def update_specific_params(n_clicks, visu_type, edit_button_id):
 
                 if processed_type_tmp == "column":
                     tmp_options = {
-                        "options": list(df.columns),
+                        "options": columns,
+                        # "options": list(df.columns),
                         "value": None,
                         "persistence": True,
                         "style": {"width": "100%"},
@@ -558,7 +583,7 @@ def toggle_collapse(n, is_open):
     Output({"type": "dict_kwargs", "index": MATCH}, "value"),
     [
         Input({"type": "collapse", "index": MATCH}, "children"),
-        Input("interval", "n_intervals"),
+        # Input("interval", "n_intervals"),
     ],
     [State({"type": "dict_kwargs", "index": MATCH}, "data")],
     # prevent_initial_call=True,
@@ -690,17 +715,24 @@ def get_values_to_generate_kwargs(*args):
     [
         Input({"type": "dict_kwargs", "index": MATCH}, "value"),
         Input({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
+        Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
+        Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
         [
             Input({"type": f"tmp-{e}", "index": MATCH}, "children")
             for e in secondary_common_params_lite
         ],
-        Input("interval", "n_intervals"),
+        # Input("interval", "n_intervals"),
     ],
     # prevent_initial_call=True,
 )
 def update_figure(*args):
     dict_kwargs = args[0]
+
     visu_type = args[1]
+    workflow = args[2]
+    data_collection = args[3]
+    print(args)
+
     # print("update figure")
     # print(dict_kwargs)
     # print(visu_type)
@@ -708,6 +740,7 @@ def update_figure(*args):
 
     # print(dict_kwargs)
     dict_kwargs = {k: v for k, v in dict_kwargs.items() if v is not None}
+    df = return_gridfs_df(workflow, data_collection)
     # print(dict_kwargs)
     if dict_kwargs:
         figure = plotly_vizu_dict[visu_type.lower()](df, **dict_kwargs)
@@ -722,27 +755,42 @@ def update_figure(*args):
 
 
 @app.callback(
+    Output({"type": "workflow-selection-label", "index": MATCH}, "data"),
     Output({"type": "workflow-selection-label", "index": MATCH}, "value"),
-    Input({"type": "workflow-selection-label", "index": MATCH}, "data"),
-    prevent_initial_call=True,
+    [
+        Input("interval_long", "n_intervals")
+    ],  # or whatever triggers the workflow dropdown to update
+    # prevent_initial_call=True,
 )
-def set_wf_value(options):
-    if not options:
-        raise dash.exceptions.PreventUpdate
-    return options[0]["value"] if options else None
+def set_workflow_options(n_intervals):
+    tmp_data = list_workflows_for_dropdown()
+
+    # Return the data and the first value if the data is not empty
+    if tmp_data:
+        return tmp_data, tmp_data[0]["value"]
+    else:
+        return dash.no_update, dash.no_update
 
 
 @app.callback(
     Output({"type": "datacollection-selection-label", "index": MATCH}, "data"),
+    Output({"type": "datacollection-selection-label", "index": MATCH}, "value"),
     Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
-    prevent_initial_call=True,
+    # prevent_initial_call=True,
 )
 def set_datacollection_options(selected_workflow):
     if not selected_workflow:
         raise dash.exceptions.PreventUpdate
 
     tmp_data = list_data_collections_for_dropdown(selected_workflow)
-    return tmp_data
+    print("set_datacollection_options")
+    print(tmp_data)
+
+    # Return the data and the first value if the data is not empty
+    if tmp_data:
+        return tmp_data, tmp_data[0]["value"]
+    else:
+        raise dash.exceptions.PreventUpdate
 
 
 @app.callback(
@@ -758,8 +806,6 @@ def update_modal(n_clicks, ids):
     # print(n_clicks, ids)
     # print("\n")
 
-    import plotly.graph_objects as go
-
     # visualization_type = "scatter"
     for n, id in zip(n_clicks, ids):
         # print(n, id)
@@ -767,18 +813,19 @@ def update_modal(n_clicks, ids):
             if id["value"] == "Figure":
                 # plot_func = plotly_vizu_dict[visualization_type]
                 # plot_kwargs = dict(x="lifeExp", y="pop", color="continent")
-                print(df.columns)
+                # print(df.columns)
                 # plot_kwargs = dict(
                 #     x=df.columns[0], y=df.columns[1], color=df.columns[2]
                 # )
-                # plot_kwargs = dict()
-
-                figure = go.Figure()
+                plot_kwargs = dict()
 
                 # figure = plot_func(
                 #     df,
                 #     **plot_kwargs,
                 # )
+
+                wfs_list = list_workflows_for_dropdown()
+                print(wfs_list)
 
                 return [
                     dbc.Row(
@@ -793,8 +840,8 @@ def update_modal(n_clicks, ids):
                                             "Workflow selection",
                                         ],
                                     ),
-                                    data=list_workflows_for_dropdown(),
-                                
+                                    # data=wfs_list,
+                                    # value=wfs_list[0]["value"],
                                     id={
                                         "type": "workflow-selection-label",
                                         "index": id["index"],

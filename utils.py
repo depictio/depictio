@@ -830,17 +830,22 @@ def get_columns_from_data_collection(
     workflow_id: str,
     data_collection_id: str,
 ):
+    print("get_columns_from_data_collection")
     print(workflow_id, data_collection_id)
 
-    if workflow_id is None or data_collection_id is None:
+    if workflow_id is not None and data_collection_id is not None:
+        print("OK")
+        print(workflow_id, data_collection_id)
         workflow_engine = workflow_id.split("/")[0]
         workflow_name = workflow_id.split("/")[1]
+        print(workflow_engine, workflow_name)
         response = httpx.get(
             f"{API_BASE_URL}/datacollections/get_columns/{workflow_engine}/{workflow_name}/{data_collection_id}"
         )
         print(response)
         if response.status_code == 200:
             json = response.json()
+            print(json)
             return json
         else:
             print("No workflows found")
@@ -858,21 +863,15 @@ def list_data_collections_for_dropdown(workflow_id: str = None):
     if workflow_id is None:
         return []
     else:
-        for wf in list_workflows():
-            print(wf["workflow_id"])
-            print(wf)
-            print(wf["data_collection_ids"])
         data_collections = [
             dc
             for wf in list_workflows()
             for dc in wf["data_collection_ids"]
             if wf["workflow_id"] == workflow_id
         ]
-        print(data_collections)
         data_collections_dict_for_dropdown = [
             {"label": dc, "value": dc} for dc in data_collections
         ]
-        print(data_collections_dict_for_dropdown)
         return data_collections_dict_for_dropdown
 
 
