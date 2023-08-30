@@ -9,8 +9,8 @@ import pymongo
 import redis
 from pydantic import ValidationError
 import yaml
-from pydantic_models import Workflow, FileConfig, WorkflowConfig
-import pydantic_models
+from depictio.fastapi_backend.pydantic_models import Workflow, FileConfig, WorkflowConfig
+import depictio.fastapi_backend.pydantic_models
 from gridfs import GridFS
 import hashlib
 import uvicorn

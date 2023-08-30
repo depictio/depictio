@@ -21,31 +21,18 @@ app = dash.Dash(
 )
 
 
-from utils import (
-    get_common_params,
-    get_specific_params,
-    extract_info_from_docstring,
-    process_json_from_docstring,
-    get_param_info,
-)
 
-from utils import (
-    plotly_vizu_list,
+from depictio.dash_frontend.utils import (
     plotly_vizu_dict,
-    common_params,
-    common_params_names,
     specific_params,
     param_info,
     base_elements,
-    allowed_types,
     plotly_bootstrap_mapping,
     secondary_common_params,
     secondary_common_params_lite,
 )
 
-from utils import agg_functions
-
-from utils import (
+from depictio.dash_frontend.utils import (
     create_initial_figure,
     load_data,
     load_gridfs_file,
@@ -146,15 +133,15 @@ app.layout = dbc.Container(
 )
 
 
-@app.callback(
-    Output("collapse", "is_open"),
-    [Input("collapse-button", "n_clicks")],
-    [State("collapse", "is_open")],
-)
-def toggle_collapse(n, is_open):
-    if n:
-        return not is_open
-    return is_open
+# @app.callback(
+#     Output("collapse", "is_open"),
+#     [Input("collapse-button", "n_clicks")],
+#     [State("collapse", "is_open")],
+# )
+# def toggle_collapse(n, is_open):
+#     if n:
+#         return not is_open
+#     return is_open
 
 
 @app.callback(
@@ -168,629 +155,496 @@ def close_modal(n_clicks):
     return True
 
 
-# @app.callback(
-#     [Output("draggable", "children"), Output("draggable", "layouts")],
-#     [Input("add-button", "n_clicks")],
-#     [State("draggable", "children"), State("draggable", "layouts")],
+
+# # Define the callback to update the specific parameters dropdowns
+# @dash.callback(
+#     [
+#         Output({"type": "collapse", "index": MATCH}, "children"),
+#     ],
+#     [
+#         Input({"type": "edit-button", "index": MATCH}, "n_clicks"),
+#         Input({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
+#         Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
+#         Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+        
+#     ],
+#     [State({"type": "edit-button", "index": MATCH}, "id")],
 #     prevent_initial_call=True,
 # )
-# def add_new_div(n, children, layouts):
-
-#     print("add_new_div")
+# def update_specific_params(
+#     n_clicks,
+#     visu_type,
+#     workflow,
+#     data_collection,
+#     edit_button_id,
+# ):
+#     # print("update_specific_params")
 #     # print(app._callback_list)
 
-#     print("index: {}".format(n))
-#     new_plot_id = f"graph-{n}"
-#     print(new_plot_id)
+#     # print(n_clicks, edit_button_id)
+#     print("\n\n\n")
+#     print("update_specific_params")
+#     print(n_clicks, visu_type, edit_button_id, workflow, data_collection)
 
-#     new_element = html.Div(
-#         [
-#             html.Div(id={"type": "add-content", "index": n}),
-#             dbc.Modal(
-#                 id={"type": "modal", "index": n},
-#                 children=[
-#                     dbc.ModalHeader(html.H5("Design your new dashboard component")),
-#                     dbc.ModalBody(
-#                         [
-#                             dbc.Row(
-#                                 [
-#                                     dbc.Col(
-#                                         dmc.Button(
-#                                             "Figure",
-#                                             id={
-#                                                 "type": "btn-option",
-#                                                 "index": n,
-#                                                 "value": "Figure",
-#                                             },
-#                                             n_clicks=0,
-#                                             style={
-#                                                 "display": "inline-block",
-#                                                 "width": "250px",
-#                                                 "height": "100px",
-#                                             },
-#                                             size="xl",
-#                                             color="grape",
-#                                             leftIcon=DashIconify(icon="mdi:graph-box"),
-#                                         )
-#                                     ),
-#                                     dbc.Col(
-#                                         dmc.Button(
-#                                             "Card",
-#                                             id={
-#                                                 "type": "btn-option",
-#                                                 "index": n,
-#                                                 "value": "Card",
-#                                             },
-#                                             n_clicks=0,
-#                                             style={
-#                                                 "display": "inline-block",
-#                                                 "width": "250px",
-#                                                 "height": "100px",
-#                                             },
-#                                             size="xl",
-#                                             color="violet",
-#                                             leftIcon=DashIconify(
-#                                                 icon="formkit:number", color="white"
-#                                             ),
-#                                         )
-#                                     ),
-#                                     dbc.Col(
-#                                         dmc.Button(
-#                                             "Interactive",
-#                                             id={
-#                                                 "type": "btn-option",
-#                                                 "index": n,
-#                                                 "value": "Interactive",
-#                                             },
-#                                             n_clicks=0,
-#                                             style={
-#                                                 "display": "inline-block",
-#                                                 "width": "250px",
-#                                                 "height": "100px",
-#                                             },
-#                                             size="xl",
-#                                             color="indigo",
-#                                             leftIcon=DashIconify(
-#                                                 icon="bx:slider-alt", color="white"
-#                                             ),
-#                                         )
-#                                     ),
-#                                 ]
-#                             ),
-#                         ],
-#                         id={"type": "modal-body", "index": n},
-#                         style={
-#                             "display": "flex",
-#                             "justify-content": "center",
-#                             "align-items": "center",
-#                             "flex-direction": "column",
-#                             "height": "100%",
-#                             "width": "100%",
+#     columns_json = get_columns_from_data_collection(workflow, data_collection)
+#     print(columns_json)
+
+#     columns = columns_json["columns_list"]
+#     print(columns)
+#     print("\n\n\n")
+
+#     value = visu_type.lower()
+#     # value = "scatter"
+#     if value is not None:
+#         specific_params_options = [
+#             {"label": param_name, "value": param_name}
+#             for param_name in specific_params[value]
+#         ]
+
+#         specific_params_dropdowns = list()
+#         for e in specific_params[value]:
+#             processed_type_tmp = param_info[value][e]["processed_type"]
+#             allowed_types = ["str", "int", "float", "column"]
+#             if processed_type_tmp in allowed_types:
+#                 input_fct = plotly_bootstrap_mapping[processed_type_tmp]
+#                 tmp_options = dict()
+
+#                 if processed_type_tmp == "column":
+#                     tmp_options = {
+#                         "options": columns,
+#                         # "options": list(df.columns),
+#                         "value": None,
+#                         "persistence": True,
+#                         "id": {
+#                             "type": f"tmp-{e}",
+#                             "index": edit_button_id["index"],
 #                         },
-#                     ),
-#                 ],
-#                 is_open=True,
-#                 size="xl",
-#                 backdrop=False,
-#                 style={
-#                     "height": "100%",
-#                     "width": "100%",
-#                     # "display": "flex",
-#                     # "flex-direction": "column",
-#                     # "flex-grow": "0",
-#                 },
-#             ),
+#                     }
+#                 if processed_type_tmp == "str":
+#                     tmp_options = {
+#                         "placeholder": e,
+#                         "type": "text",
+#                         "persistence": True,
+#                         "id": {
+#                             "type": f"tmp-{e}",
+#                             "index": edit_button_id["index"],
+#                         },
+#                         "value": None,
+#                     }
+#                 if processed_type_tmp in ["int", "float"]:
+#                     tmp_options = {
+#                         "placeholder": e,
+#                         "type": "number",
+#                         "persistence": True,
+#                         "id": {
+#                             "type": f"tmp-{e}",
+#                             "index": edit_button_id["index"],
+#                         },
+#                         "value": None,
+#                     }
+#                 input_fct_with_params = input_fct(**tmp_options)
+#                 accordion_item = dbc.AccordionItem(
+#                     [dbc.Row(input_fct_with_params)],
+#                     className="my-2",
+#                     title=e,
+#                 )
+#                 specific_params_dropdowns.append(accordion_item)
+
+#         secondary_common_params_dropdowns = list()
+#         primary_common_params_dropdowns = list()
+#         for e in secondary_common_params:
+#             # print(e)
+#             processed_type_tmp = param_info[value][e]["processed_type"]
+#             # allowed_types = ["str", "int", "float", "column", "list"]
+#             allowed_types = ["str", "int", "float", "column"]
+#             if processed_type_tmp in allowed_types:
+#                 input_fct = plotly_bootstrap_mapping[processed_type_tmp]
+#                 tmp_options = dict()
+
+#                 if processed_type_tmp == "column":
+#                     tmp_options = {
+#                         "options": columns,
+#                         # "options": list(df.columns),
+#                         "value": None,
+#                         "persistence": True,
+#                         "style": {"width": "100%"},
+#                         "id": {
+#                             "type": f"tmp-{e}",
+#                             "index": edit_button_id["index"],
+#                         },
+#                     }
+#                 if processed_type_tmp == "str":
+#                     tmp_options = {
+#                         "placeholder": e,
+#                         "type": "text",
+#                         "persistence": True,
+#                         "id": {
+#                             "type": f"tmp-{e}",
+#                             "index": edit_button_id["index"],
+#                         },
+#                         "value": None,
+#                     }
+#                 if processed_type_tmp in ["int", "float"]:
+#                     tmp_options = {
+#                         "placeholder": e,
+#                         "type": "number",
+#                         "persistence": True,
+#                         "id": {
+#                             "type": f"tmp-{e}",
+#                             "index": edit_button_id["index"],
+#                         },
+#                         "value": None,
+#                     }
+
+#                 # if processed_type_tmp is "list":
+#                 #     tmp_options = {
+#                 #         # "options": list(df.columns),
+#                 #         # "value": None,
+#                 #         "persistence": True,
+#                 #         "id": {
+#                 #             "type": f"tmp-{e}",
+#                 #             "index": edit_button_id["index"],
+#                 #         },
+#                 #     }
+
+#                 input_fct_with_params = input_fct(**tmp_options)
+
+#                 # input_fct_with_params = dmc.Tooltip(
+#                 #     children=[input_fct(**tmp_options)], label="TEST"
+#                 # )
+#                 accordion_item = dbc.AccordionItem(
+#                     [dbc.Row(input_fct_with_params, style={"width": "100%"})],
+#                     className="my-2",
+#                     title=e,
+#                 )
+#                 if e not in base_elements:
+#                     secondary_common_params_dropdowns.append(accordion_item)
+#                 else:
+#                     primary_common_params_dropdowns.append(accordion_item)
+
+#         # print(secondary_common_params_dropdowns)
+
+#         primary_common_params_layout = [
+#             dbc.Accordion(
+#                 dbc.AccordionItem(
+#                     [
+#                         dbc.Accordion(
+#                             primary_common_params_dropdowns,
+#                             flush=True,
+#                             always_open=True,
+#                             persistence_type="session",
+#                             persistence=True,
+#                             id="accordion-sec-common",
+#                         ),
+#                     ],
+#                     title="Base parameters",
+#                 ),
+#                 start_collapsed=True,
+#             )
+#         ]
+
+#         secondary_common_params_layout = [
+#             dbc.Accordion(
+#                 dbc.AccordionItem(
+#                     [
+#                         dbc.Accordion(
+#                             secondary_common_params_dropdowns,
+#                             flush=True,
+#                             always_open=True,
+#                             persistence_type="session",
+#                             persistence=True,
+#                             id="accordion-sec-common",
+#                         ),
+#                     ],
+#                     title="Generic parameters",
+#                 ),
+#                 start_collapsed=True,
+#             )
+#         ]
+#         dynamic_specific_params_layout = [
+#             dbc.Accordion(
+#                 dbc.AccordionItem(
+#                     [
+#                         dbc.Accordion(
+#                             specific_params_dropdowns,
+#                             flush=True,
+#                             always_open=True,
+#                             persistence_type="session",
+#                             persistence=True,
+#                             id="accordion",
+#                         ),
+#                     ],
+#                     title=f"{value.capitalize()} specific parameters",
+#                 ),
+#                 start_collapsed=True,
+#             )
+#         ]
+#         return [
+#             primary_common_params_layout
+#             + secondary_common_params_layout
+#             + dynamic_specific_params_layout
+#         ]
+#     else:
+#         return html.Div()
+
+
+# def generate_dropdown_ids(value):
+#     specific_param_ids = [
+#         f"{value}-{param_name}" for param_name in specific_params[value]
+#     ]
+#     secondary_param_ids = [f"{value}-{e}" for e in secondary_common_params]
+
+#     return secondary_param_ids + specific_param_ids
+
+
+# @app.callback(
+#     Output(
+#         {
+#             "type": "collapse",
+#             "index": MATCH,
+#         },
+#         "is_open",
+#     ),
+#     [
+#         Input(
+#             {
+#                 "type": "edit-button",
+#                 "index": MATCH,
+#             },
+#             "n_clicks",
+#         )
+#     ],
+#     [
+#         State(
+#             {
+#                 "type": "collapse",
+#                 "index": MATCH,
+#             },
+#             "is_open",
+#         )
+#     ],
+#     prevent_initial_call=True,
+# )
+# def toggle_collapse(n, is_open):
+#     # print(n, is_open, n % 2 == 0)
+#     if n % 2 == 0:
+#         return False
+#     else:
+#         return True
+
+
+# @app.callback(
+#     Output({"type": "dict_kwargs", "index": MATCH}, "value"),
+#     [
+#         Input({"type": "collapse", "index": MATCH}, "children"),
+#         # Input("interval", "n_intervals"),
+#     ],
+#     [State({"type": "dict_kwargs", "index": MATCH}, "data")],
+#     # prevent_initial_call=True,
+# )
+# def get_values_to_generate_kwargs(*args):
+#     # print("get_values_to_generate_kwargs")
+#     # print(args)
+#     # print("\n")
+
+#     children = args[0]
+#     # print(children)
+#     # visu_type = args[1]
+#     # print(children)
+#     existing_kwargs = args[-1]
+
+#     accordion_primary_common_params_args = dict()
+#     accordion_secondary_common_params_args = dict()
+#     specific_params_args = dict()
+#     # print(existing_kwargs)
+#     # print(children)
+
+#     # l[0]["props"]["children"]["props"]["children"][0]["props"]["children"][0]
+
+#     if children:
+#         # accordion_secondary_common_params = children[0]["props"]["children"]["props"]["children"]
+#         accordion_primary_common_params = children[0]["props"]["children"]["props"][
+#             "children"
+#         ][0]["props"]["children"]
+
+#         # accordion_secondary_common_params = children[1]["props"]["children"]
+#         if accordion_primary_common_params:
+#             # print("TOTO")
+#             accordion_primary_common_params = [
+#                 param["props"]["children"][0]["props"]["children"]
+#                 for param in accordion_primary_common_params
+#             ]
+
+#             accordion_primary_common_params_args = {
+#                 elem["props"]["id"]["type"].replace("tmp-", ""): elem["props"]["value"]
+#                 for elem in accordion_primary_common_params
+#             }
+
+#             # print(accordion_primary_common_params_args)
+#             # print(accordion_primary_common_params)
+
+#             # print(accordion_secondary_common_params)
+#             # return accordion_secondary_common_params_args
+#         accordion_secondary_common_params = children[1]["props"]["children"]["props"][
+#             "children"
+#         ][0]["props"]["children"]
+
+#         # accordion_secondary_common_params = children[1]["props"]["children"]
+#         if accordion_secondary_common_params:
+#             # print("TOTO")
+#             accordion_secondary_common_params = [
+#                 param["props"]["children"][0]["props"]["children"]
+#                 for param in accordion_secondary_common_params
+#             ]
+
+#             accordion_secondary_common_params_args = {
+#                 elem["props"]["id"]["type"].replace("tmp-", ""): elem["props"]["value"]
+#                 for elem in accordion_secondary_common_params
+#             }
+#             # print(accordion_secondary_common_params_args)
+#             # if not {
+#             #     k: v
+#             #     for k, v in accordion_secondary_common_params_args.items()
+#             #     if v is not None
+#             # }:
+#             #     accordion_secondary_common_params_args = {
+#             #         **accordion_secondary_common_params_args,
+#             #         **existing_kwargs,
+#             #     }
+#             # print(accordion_secondary_common_params_args)
+#             # print(accordion_secondary_common_params)
+#             # return accordion_secondary_common_params_args
+#         specific_params = children[2]["props"]["children"]["props"]["children"][0][
+#             "props"
+#         ]["children"]
+
+#         # accordion_secondary_common_params = children[1]["props"]["children"]
+#         if specific_params:
+#             # print("specific_params")
+#             specific_params = [
+#                 param["props"]["children"][0]["props"]["children"]
+#                 for param in specific_params
+#             ]
+
+#             specific_params_args = {
+#                 elem["props"]["id"]["type"].replace("tmp-", ""): elem["props"]["value"]
+#                 for elem in specific_params
+#             }
+#             # print(specific_params_args)
+
+#         return_dict = dict(
+#             **specific_params_args,
+#             **accordion_secondary_common_params_args,
+#             **accordion_primary_common_params_args,
+#         )
+#         return_dict = {k: v for k, v in return_dict.items() if v is not None}
+
+#         if not return_dict:
+#             return_dict = {
+#                 **return_dict,
+#                 **existing_kwargs,
+#             }
+#             # print("BLANK DICT, ROLLBACK TO EXISTING KWARGS")
+#             # print(return_dict)
+
+#         if return_dict:
+#             # print("RETURNING DICT")
+#             # print(return_dict)
+#             # print(accordion_secondary_common_params)
+#             return return_dict
+#         else:
+#             # print("EXISTING KWARGS")
+#             return existing_kwargs
+
+#         # else:
+#         #     return existing_kwargs
+#     else:
+#         return existing_kwargs
+
+#         # accordion_specific_params = args[0][3]
+
+
+# @app.callback(
+#     Output({"type": "graph", "index": MATCH}, "figure"),
+#     [
+#         Input({"type": "dict_kwargs", "index": MATCH}, "value"),
+#         Input({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
+#         Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
+#         Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+#         [
+#             Input({"type": f"tmp-{e}", "index": MATCH}, "children")
+#             for e in secondary_common_params_lite
 #         ],
-#         id=new_plot_id,
-#     )
+#         # Input("interval", "n_intervals"),
+#     ],
+#     # prevent_initial_call=True,
+# )
+# def update_figure(*args):
+#     dict_kwargs = args[0]
 
-#     children.append(new_element)
-#     new_layout_item = {
-#         "i": f"{new_plot_id}",
-#         "x": 10 * ((len(children) + 1) % 2),
-#         "y": n * 10,
-#         "w": 6,
-#         "h": 5,
-#     }
+#     visu_type = args[1]
+#     workflow = args[2]
+#     data_collection = args[3]
+#     print(args)
 
-#     # Update the layouts property for both 'lg' and 'sm' sizes
-#     updated_layouts = {}
-#     for size in ["lg", "sm"]:
-#         if size not in layouts:
-#             layouts[size] = []
-#         updated_layouts[size] = layouts[size] + [new_layout_item]
-#     return children, updated_layouts
+#     # print("update figure")
+#     # print(dict_kwargs)
+#     # print(visu_type)
+#     # # print(app._callback_list)
 
+#     # print(dict_kwargs)
+#     dict_kwargs = {k: v for k, v in dict_kwargs.items() if v is not None}
+#     df = return_gridfs_df(workflow, data_collection)
+#     # print(dict_kwargs)
+#     if dict_kwargs:
+#         figure = plotly_vizu_dict[visu_type.lower()](df, **dict_kwargs)
+#         # figure = px.scatter(df, **dict_kwargs)
+#         # print(figure)
+#         # figure.update_layout(uirevision=1)
 
-# Define the callback to update the specific parameters dropdowns
-@dash.callback(
-    [
-        Output({"type": "collapse", "index": MATCH}, "children"),
-    ],
-    [
-        Input({"type": "edit-button", "index": MATCH}, "n_clicks"),
-        Input({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
-        Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
-        Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
-        
-    ],
-    [State({"type": "edit-button", "index": MATCH}, "id")],
-    prevent_initial_call=True,
-)
-def update_specific_params(
-    n_clicks,
-    visu_type,
-    workflow,
-    data_collection,
-    edit_button_id,
-):
-    # print("update_specific_params")
-    # print(app._callback_list)
+#         return figure
+#     # print("\n")
 
-    # print(n_clicks, edit_button_id)
-    print("\n\n\n")
-    print("update_specific_params")
-    print(n_clicks, visu_type, edit_button_id, workflow, data_collection)
-
-    columns_json = get_columns_from_data_collection(workflow, data_collection)
-    print(columns_json)
-
-    columns = columns_json["columns_list"]
-    print(columns)
-    print("\n\n\n")
-
-    value = visu_type.lower()
-    # value = "scatter"
-    if value is not None:
-        specific_params_options = [
-            {"label": param_name, "value": param_name}
-            for param_name in specific_params[value]
-        ]
-
-        specific_params_dropdowns = list()
-        for e in specific_params[value]:
-            processed_type_tmp = param_info[value][e]["processed_type"]
-            allowed_types = ["str", "int", "float", "column"]
-            if processed_type_tmp in allowed_types:
-                input_fct = plotly_bootstrap_mapping[processed_type_tmp]
-                tmp_options = dict()
-
-                if processed_type_tmp == "column":
-                    tmp_options = {
-                        "options": columns,
-                        # "options": list(df.columns),
-                        "value": None,
-                        "persistence": True,
-                        "id": {
-                            "type": f"tmp-{e}",
-                            "index": edit_button_id["index"],
-                        },
-                    }
-                if processed_type_tmp == "str":
-                    tmp_options = {
-                        "placeholder": e,
-                        "type": "text",
-                        "persistence": True,
-                        "id": {
-                            "type": f"tmp-{e}",
-                            "index": edit_button_id["index"],
-                        },
-                        "value": None,
-                    }
-                if processed_type_tmp in ["int", "float"]:
-                    tmp_options = {
-                        "placeholder": e,
-                        "type": "number",
-                        "persistence": True,
-                        "id": {
-                            "type": f"tmp-{e}",
-                            "index": edit_button_id["index"],
-                        },
-                        "value": None,
-                    }
-                input_fct_with_params = input_fct(**tmp_options)
-                accordion_item = dbc.AccordionItem(
-                    [dbc.Row(input_fct_with_params)],
-                    className="my-2",
-                    title=e,
-                )
-                specific_params_dropdowns.append(accordion_item)
-
-        secondary_common_params_dropdowns = list()
-        primary_common_params_dropdowns = list()
-        for e in secondary_common_params:
-            # print(e)
-            processed_type_tmp = param_info[value][e]["processed_type"]
-            # allowed_types = ["str", "int", "float", "column", "list"]
-            allowed_types = ["str", "int", "float", "column"]
-            if processed_type_tmp in allowed_types:
-                input_fct = plotly_bootstrap_mapping[processed_type_tmp]
-                tmp_options = dict()
-
-                if processed_type_tmp == "column":
-                    tmp_options = {
-                        "options": columns,
-                        # "options": list(df.columns),
-                        "value": None,
-                        "persistence": True,
-                        "style": {"width": "100%"},
-                        "id": {
-                            "type": f"tmp-{e}",
-                            "index": edit_button_id["index"],
-                        },
-                    }
-                if processed_type_tmp == "str":
-                    tmp_options = {
-                        "placeholder": e,
-                        "type": "text",
-                        "persistence": True,
-                        "id": {
-                            "type": f"tmp-{e}",
-                            "index": edit_button_id["index"],
-                        },
-                        "value": None,
-                    }
-                if processed_type_tmp in ["int", "float"]:
-                    tmp_options = {
-                        "placeholder": e,
-                        "type": "number",
-                        "persistence": True,
-                        "id": {
-                            "type": f"tmp-{e}",
-                            "index": edit_button_id["index"],
-                        },
-                        "value": None,
-                    }
-
-                # if processed_type_tmp is "list":
-                #     tmp_options = {
-                #         # "options": list(df.columns),
-                #         # "value": None,
-                #         "persistence": True,
-                #         "id": {
-                #             "type": f"tmp-{e}",
-                #             "index": edit_button_id["index"],
-                #         },
-                #     }
-
-                input_fct_with_params = input_fct(**tmp_options)
-
-                # input_fct_with_params = dmc.Tooltip(
-                #     children=[input_fct(**tmp_options)], label="TEST"
-                # )
-                accordion_item = dbc.AccordionItem(
-                    [dbc.Row(input_fct_with_params, style={"width": "100%"})],
-                    className="my-2",
-                    title=e,
-                )
-                if e not in base_elements:
-                    secondary_common_params_dropdowns.append(accordion_item)
-                else:
-                    primary_common_params_dropdowns.append(accordion_item)
-
-        # print(secondary_common_params_dropdowns)
-
-        primary_common_params_layout = [
-            dbc.Accordion(
-                dbc.AccordionItem(
-                    [
-                        dbc.Accordion(
-                            primary_common_params_dropdowns,
-                            flush=True,
-                            always_open=True,
-                            persistence_type="session",
-                            persistence=True,
-                            id="accordion-sec-common",
-                        ),
-                    ],
-                    title="Base parameters",
-                ),
-                start_collapsed=True,
-            )
-        ]
-
-        secondary_common_params_layout = [
-            dbc.Accordion(
-                dbc.AccordionItem(
-                    [
-                        dbc.Accordion(
-                            secondary_common_params_dropdowns,
-                            flush=True,
-                            always_open=True,
-                            persistence_type="session",
-                            persistence=True,
-                            id="accordion-sec-common",
-                        ),
-                    ],
-                    title="Generic parameters",
-                ),
-                start_collapsed=True,
-            )
-        ]
-        dynamic_specific_params_layout = [
-            dbc.Accordion(
-                dbc.AccordionItem(
-                    [
-                        dbc.Accordion(
-                            specific_params_dropdowns,
-                            flush=True,
-                            always_open=True,
-                            persistence_type="session",
-                            persistence=True,
-                            id="accordion",
-                        ),
-                    ],
-                    title=f"{value.capitalize()} specific parameters",
-                ),
-                start_collapsed=True,
-            )
-        ]
-        return [
-            primary_common_params_layout
-            + secondary_common_params_layout
-            + dynamic_specific_params_layout
-        ]
-    else:
-        return html.Div()
+#     # accordion_specific_params = args[0][3]
 
 
-def generate_dropdown_ids(value):
-    specific_param_ids = [
-        f"{value}-{param_name}" for param_name in specific_params[value]
-    ]
-    secondary_param_ids = [f"{value}-{e}" for e in secondary_common_params]
+# @app.callback(
+#     Output({"type": "workflow-selection-label", "index": MATCH}, "data"),
+#     Output({"type": "workflow-selection-label", "index": MATCH}, "value"),
+#     [
+#         Input("interval_long", "n_intervals")
+#     ],  # or whatever triggers the workflow dropdown to update
+#     # prevent_initial_call=True,
+# )
+# def set_workflow_options(n_intervals):
+#     tmp_data = list_workflows_for_dropdown()
 
-    return secondary_param_ids + specific_param_ids
-
-
-@app.callback(
-    Output(
-        {
-            "type": "collapse",
-            "index": MATCH,
-        },
-        "is_open",
-    ),
-    [
-        Input(
-            {
-                "type": "edit-button",
-                "index": MATCH,
-            },
-            "n_clicks",
-        )
-    ],
-    [
-        State(
-            {
-                "type": "collapse",
-                "index": MATCH,
-            },
-            "is_open",
-        )
-    ],
-    prevent_initial_call=True,
-)
-def toggle_collapse(n, is_open):
-    # print(n, is_open, n % 2 == 0)
-    if n % 2 == 0:
-        return False
-    else:
-        return True
+#     # Return the data and the first value if the data is not empty
+#     if tmp_data:
+#         return tmp_data, tmp_data[0]["value"]
+#     else:
+#         return dash.no_update, dash.no_update
 
 
-@app.callback(
-    Output({"type": "dict_kwargs", "index": MATCH}, "value"),
-    [
-        Input({"type": "collapse", "index": MATCH}, "children"),
-        # Input("interval", "n_intervals"),
-    ],
-    [State({"type": "dict_kwargs", "index": MATCH}, "data")],
-    # prevent_initial_call=True,
-)
-def get_values_to_generate_kwargs(*args):
-    # print("get_values_to_generate_kwargs")
-    # print(args)
-    # print("\n")
+# @app.callback(
+#     Output({"type": "datacollection-selection-label", "index": MATCH}, "data"),
+#     Output({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+#     Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
+#     # prevent_initial_call=True,
+# )
+# def set_datacollection_options(selected_workflow):
+#     if not selected_workflow:
+#         raise dash.exceptions.PreventUpdate
 
-    children = args[0]
-    # print(children)
-    # visu_type = args[1]
-    # print(children)
-    existing_kwargs = args[-1]
+#     tmp_data = list_data_collections_for_dropdown(selected_workflow)
+#     print("set_datacollection_options")
+#     print(tmp_data)
 
-    accordion_primary_common_params_args = dict()
-    accordion_secondary_common_params_args = dict()
-    specific_params_args = dict()
-    # print(existing_kwargs)
-    # print(children)
-
-    # l[0]["props"]["children"]["props"]["children"][0]["props"]["children"][0]
-
-    if children:
-        # accordion_secondary_common_params = children[0]["props"]["children"]["props"]["children"]
-        accordion_primary_common_params = children[0]["props"]["children"]["props"][
-            "children"
-        ][0]["props"]["children"]
-
-        # accordion_secondary_common_params = children[1]["props"]["children"]
-        if accordion_primary_common_params:
-            # print("TOTO")
-            accordion_primary_common_params = [
-                param["props"]["children"][0]["props"]["children"]
-                for param in accordion_primary_common_params
-            ]
-
-            accordion_primary_common_params_args = {
-                elem["props"]["id"]["type"].replace("tmp-", ""): elem["props"]["value"]
-                for elem in accordion_primary_common_params
-            }
-
-            # print(accordion_primary_common_params_args)
-            # print(accordion_primary_common_params)
-
-            # print(accordion_secondary_common_params)
-            # return accordion_secondary_common_params_args
-        accordion_secondary_common_params = children[1]["props"]["children"]["props"][
-            "children"
-        ][0]["props"]["children"]
-
-        # accordion_secondary_common_params = children[1]["props"]["children"]
-        if accordion_secondary_common_params:
-            # print("TOTO")
-            accordion_secondary_common_params = [
-                param["props"]["children"][0]["props"]["children"]
-                for param in accordion_secondary_common_params
-            ]
-
-            accordion_secondary_common_params_args = {
-                elem["props"]["id"]["type"].replace("tmp-", ""): elem["props"]["value"]
-                for elem in accordion_secondary_common_params
-            }
-            # print(accordion_secondary_common_params_args)
-            # if not {
-            #     k: v
-            #     for k, v in accordion_secondary_common_params_args.items()
-            #     if v is not None
-            # }:
-            #     accordion_secondary_common_params_args = {
-            #         **accordion_secondary_common_params_args,
-            #         **existing_kwargs,
-            #     }
-            # print(accordion_secondary_common_params_args)
-            # print(accordion_secondary_common_params)
-            # return accordion_secondary_common_params_args
-        specific_params = children[2]["props"]["children"]["props"]["children"][0][
-            "props"
-        ]["children"]
-
-        # accordion_secondary_common_params = children[1]["props"]["children"]
-        if specific_params:
-            # print("specific_params")
-            specific_params = [
-                param["props"]["children"][0]["props"]["children"]
-                for param in specific_params
-            ]
-
-            specific_params_args = {
-                elem["props"]["id"]["type"].replace("tmp-", ""): elem["props"]["value"]
-                for elem in specific_params
-            }
-            # print(specific_params_args)
-
-        return_dict = dict(
-            **specific_params_args,
-            **accordion_secondary_common_params_args,
-            **accordion_primary_common_params_args,
-        )
-        return_dict = {k: v for k, v in return_dict.items() if v is not None}
-
-        if not return_dict:
-            return_dict = {
-                **return_dict,
-                **existing_kwargs,
-            }
-            # print("BLANK DICT, ROLLBACK TO EXISTING KWARGS")
-            # print(return_dict)
-
-        if return_dict:
-            # print("RETURNING DICT")
-            # print(return_dict)
-            # print(accordion_secondary_common_params)
-            return return_dict
-        else:
-            # print("EXISTING KWARGS")
-            return existing_kwargs
-
-        # else:
-        #     return existing_kwargs
-    else:
-        return existing_kwargs
-
-        # accordion_specific_params = args[0][3]
-
-
-@app.callback(
-    Output({"type": "graph", "index": MATCH}, "figure"),
-    [
-        Input({"type": "dict_kwargs", "index": MATCH}, "value"),
-        Input({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
-        Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
-        Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
-        [
-            Input({"type": f"tmp-{e}", "index": MATCH}, "children")
-            for e in secondary_common_params_lite
-        ],
-        # Input("interval", "n_intervals"),
-    ],
-    # prevent_initial_call=True,
-)
-def update_figure(*args):
-    dict_kwargs = args[0]
-
-    visu_type = args[1]
-    workflow = args[2]
-    data_collection = args[3]
-    print(args)
-
-    # print("update figure")
-    # print(dict_kwargs)
-    # print(visu_type)
-    # # print(app._callback_list)
-
-    # print(dict_kwargs)
-    dict_kwargs = {k: v for k, v in dict_kwargs.items() if v is not None}
-    df = return_gridfs_df(workflow, data_collection)
-    # print(dict_kwargs)
-    if dict_kwargs:
-        figure = plotly_vizu_dict[visu_type.lower()](df, **dict_kwargs)
-        # figure = px.scatter(df, **dict_kwargs)
-        # print(figure)
-        # figure.update_layout(uirevision=1)
-
-        return figure
-    # print("\n")
-
-    # accordion_specific_params = args[0][3]
-
-
-@app.callback(
-    Output({"type": "workflow-selection-label", "index": MATCH}, "data"),
-    Output({"type": "workflow-selection-label", "index": MATCH}, "value"),
-    [
-        Input("interval_long", "n_intervals")
-    ],  # or whatever triggers the workflow dropdown to update
-    # prevent_initial_call=True,
-)
-def set_workflow_options(n_intervals):
-    tmp_data = list_workflows_for_dropdown()
-
-    # Return the data and the first value if the data is not empty
-    if tmp_data:
-        return tmp_data, tmp_data[0]["value"]
-    else:
-        return dash.no_update, dash.no_update
-
-
-@app.callback(
-    Output({"type": "datacollection-selection-label", "index": MATCH}, "data"),
-    Output({"type": "datacollection-selection-label", "index": MATCH}, "value"),
-    Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
-    # prevent_initial_call=True,
-)
-def set_datacollection_options(selected_workflow):
-    if not selected_workflow:
-        raise dash.exceptions.PreventUpdate
-
-    tmp_data = list_data_collections_for_dropdown(selected_workflow)
-    print("set_datacollection_options")
-    print(tmp_data)
-
-    # Return the data and the first value if the data is not empty
-    if tmp_data:
-        return tmp_data, tmp_data[0]["value"]
-    else:
-        raise dash.exceptions.PreventUpdate
+#     # Return the data and the first value if the data is not empty
+#     if tmp_data:
+#         return tmp_data, tmp_data[0]["value"]
+#     else:
+#         raise dash.exceptions.PreventUpdate
 
 
 @app.callback(
@@ -1169,364 +1023,285 @@ def update_modal(n_clicks, ids):
     return []
 
 
-# Callback to update aggregation dropdown options based on the selected column
-@app.callback(
-    Output({"type": "input-dropdown-method", "index": MATCH}, "data"),
-    Input({"type": "input-dropdown-column", "index": MATCH}, "value"),
-    prevent_initial_call=True,
-)
-def update_aggregation_options(column_value):
-    if column_value is None:
-        return []
+# # Callback to update aggregation dropdown options based on the selected column
+# @app.callback(
+#     Output({"type": "input-dropdown-method", "index": MATCH}, "data"),
+#     Input({"type": "input-dropdown-column", "index": MATCH}, "value"),
+#     prevent_initial_call=True,
+# )
+# def update_aggregation_options(column_value):
+#     if column_value is None:
+#         return []
 
-    # Get the type of the selected column
-    column_type = df[column_value].dtype
-    # print(column_value, column_type, type(column_type))
+#     # Get the type of the selected column
+#     column_type = df[column_value].dtype
+#     # print(column_value, column_type, type(column_type))
 
-    if column_type in ["object", "category"]:
-        nb_unique = df[column_value].nunique()
-    else:
-        nb_unique = 0
+#     if column_type in ["object", "category"]:
+#         nb_unique = df[column_value].nunique()
+#     else:
+#         nb_unique = 0
 
-    # Get the aggregation functions available for the selected column type
-    agg_functions_tmp_methods = agg_functions[str(column_type)]["input_methods"]
-    # print(agg_functions_tmp_methods)
+#     # Get the aggregation functions available for the selected column type
+#     agg_functions_tmp_methods = agg_functions[str(column_type)]["input_methods"]
+#     # print(agg_functions_tmp_methods)
 
-    # Create a list of options for the dropdown
-    options = [{"label": k, "value": k} for k in agg_functions_tmp_methods.keys()]
-    # print(options)
+#     # Create a list of options for the dropdown
+#     options = [{"label": k, "value": k} for k in agg_functions_tmp_methods.keys()]
+#     # print(options)
 
-    if nb_unique > 5:
-        options = [e for e in options if e["label"] != "SegmentedControl"]
+#     if nb_unique > 5:
+#         options = [e for e in options if e["label"] != "SegmentedControl"]
 
-    return options
-
-
-# Callback to reset aggregation dropdown value based on the selected column
-@app.callback(
-    Output({"type": "input-dropdown-method", "index": MATCH}, "value"),
-    Input({"type": "input-dropdown-column", "index": MATCH}, "value"),
-    prevent_initial_call=True,
-)
-def reset_aggregation_value(column_value):
-    return None
+#     return options
 
 
-# Callback to update card body based on the selected column and aggregation
-@app.callback(
-    Output({"type": "input-body", "index": MATCH}, "children"),
-    [
-        Input({"type": "input-title", "index": MATCH}, "value"),
-        Input({"type": "input-dropdown-column", "index": MATCH}, "value"),
-        Input({"type": "input-dropdown-method", "index": MATCH}, "value"),
-        # Input("interval", "n_intervals"),
-    ],
-    prevent_initial_call=True,
-)
-def update_card_body(input_value, column_value, aggregation_value):
-    if input_value is None or column_value is None or aggregation_value is None:
-        return []
-
-    # Get the type of the selected column
-    column_type = str(df[column_value].dtype)
-
-    # Get the pandas function for the selected aggregation
-    func_name = agg_functions[column_type]["input_methods"][aggregation_value][
-        "component"
-    ]
-    # print(func_name)
-
-    # if callable(func_name):
-    #     # If the function is a lambda function
-    #     v = func_name(df[column_value])
-    # else:
-    #     # If the function is a pandas function
-    #     v = getattr(df[column_value], func_name)()
-    #     print(v, type(v))
-    #     if type(v) is pd.core.series.Series and func_name != "mode":
-    #         v = v.iloc[0]
-    #     elif type(v) is pd.core.series.Series and func_name == "mode":
-    #         if v.shape[0] == df[column_value].nunique():
-    #             v = "All values are represented equally"
-    #         else:
-    #             v = v.iloc[0]
-
-    # if type(v) is np.float64:
-    #     v = round(v, 2)
-    # v = "{:,.2f}".format(round(v, 2))
-    # v = "{:,.2f}".format(round(v, 2)).replace(",", " ")
-
-    card_title = html.H5(f"{input_value}")
-
-    if aggregation_value in ["Select", "MultiSelect", "SegmentedControl"]:
-        data = df[column_value].unique()
-
-        new_card_body = [card_title, func_name(data=data)]
-        # print(new_card_body)
-
-        return new_card_body
-    elif aggregation_value in ["TextInput"]:
-        new_card_body = [
-            card_title,
-            func_name(placeholder="Your selected value"),
-        ]
-        # print(new_card_body)
-
-        return new_card_body
-
-    elif aggregation_value in ["Slider", "RangeSlider"]:
-        min_value = df[column_value].min()
-        max_value = df[column_value].max()
-        kwargs = dict()
-        if aggregation_value == "Slider":
-            marks = dict()
-            if df[column_value].nunique() < 30:
-                marks = {str(elem): str(elem) for elem in df[column_value].unique()}
-            step = None
-            included = False
-            kwargs = dict(marks=marks, step=step, included=included)
-
-        new_card_body = [card_title, func_name(min=min_value, max=max_value, **kwargs)]
-        # print(new_card_body)
-        return new_card_body
+# # Callback to reset aggregation dropdown value based on the selected column
+# @app.callback(
+#     Output({"type": "input-dropdown-method", "index": MATCH}, "value"),
+#     Input({"type": "input-dropdown-column", "index": MATCH}, "value"),
+#     prevent_initial_call=True,
+# )
+# def reset_aggregation_value(column_value):
+#     return None
 
 
-# Callback to update aggregation dropdown options based on the selected column
-@app.callback(
-    Output({"type": "card-dropdown-aggregation", "index": MATCH}, "data"),
-    Input({"type": "card-dropdown-column", "index": MATCH}, "value"),
-    prevent_initial_call=True,
-)
-def update_aggregation_options(column_value):
-    if column_value is None:
-        return []
+# # Callback to update card body based on the selected column and aggregation
+# @app.callback(
+#     Output({"type": "input-body", "index": MATCH}, "children"),
+#     [
+#         Input({"type": "input-title", "index": MATCH}, "value"),
+#         Input({"type": "input-dropdown-column", "index": MATCH}, "value"),
+#         Input({"type": "input-dropdown-method", "index": MATCH}, "value"),
+#         # Input("interval", "n_intervals"),
+#     ],
+#     prevent_initial_call=True,
+# )
+# def update_card_body(input_value, column_value, aggregation_value):
+#     if input_value is None or column_value is None or aggregation_value is None:
+#         return []
 
-    # Get the type of the selected column
-    column_type = df[column_value].dtype
-    # print(column_value, column_type, type(column_type))
+#     # Get the type of the selected column
+#     column_type = str(df[column_value].dtype)
 
-    # Get the aggregation functions available for the selected column type
-    agg_functions_tmp_methods = agg_functions[str(column_type)]["card_methods"]
-    # print(agg_functions_tmp_methods)
+#     # Get the pandas function for the selected aggregation
+#     func_name = agg_functions[column_type]["input_methods"][aggregation_value][
+#         "component"
+#     ]
+#     # print(func_name)
 
-    # Create a list of options for the dropdown
-    options = [{"label": k, "value": k} for k in agg_functions_tmp_methods.keys()]
-    # print(options)
+#     # if callable(func_name):
+#     #     # If the function is a lambda function
+#     #     v = func_name(df[column_value])
+#     # else:
+#     #     # If the function is a pandas function
+#     #     v = getattr(df[column_value], func_name)()
+#     #     print(v, type(v))
+#     #     if type(v) is pd.core.series.Series and func_name != "mode":
+#     #         v = v.iloc[0]
+#     #     elif type(v) is pd.core.series.Series and func_name == "mode":
+#     #         if v.shape[0] == df[column_value].nunique():
+#     #             v = "All values are represented equally"
+#     #         else:
+#     #             v = v.iloc[0]
 
-    return options
+#     # if type(v) is np.float64:
+#     #     v = round(v, 2)
+#     # v = "{:,.2f}".format(round(v, 2))
+#     # v = "{:,.2f}".format(round(v, 2)).replace(",", " ")
 
+#     card_title = html.H5(f"{input_value}")
 
-# Callback to reset aggregation dropdown value based on the selected column
-@app.callback(
-    Output({"type": "card-dropdown-aggregation", "index": MATCH}, "value"),
-    Input({"type": "card-dropdown-column", "index": MATCH}, "value"),
-    prevent_initial_call=True,
-)
-def reset_aggregation_value(column_value):
-    return None
+#     if aggregation_value in ["Select", "MultiSelect", "SegmentedControl"]:
+#         data = df[column_value].unique()
 
+#         new_card_body = [card_title, func_name(data=data)]
+#         # print(new_card_body)
 
-# Callback to update card body based on the selected column and aggregation
-@app.callback(
-    Output({"type": "card-body", "index": MATCH}, "children"),
-    [
-        Input({"type": "card-input", "index": MATCH}, "value"),
-        Input({"type": "card-dropdown-column", "index": MATCH}, "value"),
-        Input({"type": "card-dropdown-aggregation", "index": MATCH}, "value"),
-        # Input("interval", "n_intervals"),
-    ],
-    prevent_initial_call=True,
-)
-def update_card_body(input_value, column_value, aggregation_value):
-    if input_value is None or column_value is None or aggregation_value is None:
-        return []
+#         return new_card_body
+#     elif aggregation_value in ["TextInput"]:
+#         new_card_body = [
+#             card_title,
+#             func_name(placeholder="Your selected value"),
+#         ]
+#         # print(new_card_body)
 
-    # Get the type of the selected column
-    column_type = str(df[column_value].dtype)
+#         return new_card_body
 
-    # Get the pandas function for the selected aggregation
-    func_name = agg_functions[column_type]["card_methods"][aggregation_value]["pandas"]
+#     elif aggregation_value in ["Slider", "RangeSlider"]:
+#         min_value = df[column_value].min()
+#         max_value = df[column_value].max()
+#         kwargs = dict()
+#         if aggregation_value == "Slider":
+#             marks = dict()
+#             if df[column_value].nunique() < 30:
+#                 marks = {str(elem): str(elem) for elem in df[column_value].unique()}
+#             step = None
+#             included = False
+#             kwargs = dict(marks=marks, step=step, included=included)
 
-    if callable(func_name):
-        # If the function is a lambda function
-        v = func_name(df[column_value])
-    else:
-        # If the function is a pandas function
-        v = getattr(df[column_value], func_name)()
-        # print(v, type(v))
-        if type(v) is pd.core.series.Series and func_name != "mode":
-            v = v.iloc[0]
-        elif type(v) is pd.core.series.Series and func_name == "mode":
-            if v.shape[0] == df[column_value].nunique():
-                v = "All values are represented equally"
-            else:
-                v = v.iloc[0]
-
-    if type(v) is np.float64:
-        v = round(v, 2)
-        # v = "{:,.2f}".format(round(v, 2))
-        # v = "{:,.2f}".format(round(v, 2)).replace(",", " ")
-
-    new_card_body = [html.H5(f"{input_value}"), html.P(f"{v}")]
-
-    return new_card_body
+#         new_card_body = [card_title, func_name(min=min_value, max=max_value, **kwargs)]
+#         # print(new_card_body)
+#         return new_card_body
 
 
-def find_ids_recursive(dash_component):
-    """
-    Recursively search for ids in the properties of a Dash component.
-    :param dash_component: The Dash component to search in
-    :return: A list of all ids found
-    """
-    if isinstance(dash_component, dict) and "props" in dash_component:
-        # print(f"Inspecting {dash_component.get('type')}")
-        if "id" in dash_component["props"]:
-            id = dash_component["props"]["id"]
-            # print(f"Found id: {id}")
-            yield id
-        if "children" in dash_component["props"]:
-            children = dash_component["props"]["children"]
-            if isinstance(children, list):
-                for child in children:
-                    yield from find_ids_recursive(child)
-            elif isinstance(children, dict):
-                yield from find_ids_recursive(children)
 
 
-@app.callback(
-    Output({"type": "add-content", "index": MATCH}, "children"),
-    [
-        Input({"type": "btn-done", "index": MATCH}, "n_clicks"),
-    ],
-    [
-        State({"type": "modal-body", "index": MATCH}, "children"),
-        State({"type": "btn-done", "index": MATCH}, "id"),
-    ],
-    # prevent_initial_call=True,
-)
-def update_button(n_clicks, children, btn_id):
-    # print("update_button")
-    # children = [children[4]]
-    # print(children)
+# def find_ids_recursive(dash_component):
+#     """
+#     Recursively search for ids in the properties of a Dash component.
+#     :param dash_component: The Dash component to search in
+#     :return: A list of all ids found
+#     """
+#     if isinstance(dash_component, dict) and "props" in dash_component:
+#         # print(f"Inspecting {dash_component.get('type')}")
+#         if "id" in dash_component["props"]:
+#             id = dash_component["props"]["id"]
+#             # print(f"Found id: {id}")
+#             yield id
+#         if "children" in dash_component["props"]:
+#             children = dash_component["props"]["children"]
+#             if isinstance(children, list):
+#                 for child in children:
+#                     yield from find_ids_recursive(child)
+#             elif isinstance(children, dict):
+#                 yield from find_ids_recursive(children)
 
-    btn_index = btn_id["index"]
-    # print(n_clicks, btn_id)
-    # print([sub_e for e in children for sub_e in list(find_ids_recursive(e))])
-    # print("\n")
 
-    # print(f"Inspecting children:")
-    box_type = [sub_e for e in children for sub_e in list(find_ids_recursive(e))][0][
-        "type"
-    ]
-    print(box_type)
-    # print(children)
-    # print(box_type)
-    # print(f"Found ids: {all_ids}")
+# @app.callback(
+#     Output({"type": "add-content", "index": MATCH}, "children"),
+#     [
+#         Input({"type": "btn-done", "index": MATCH}, "n_clicks"),
+#     ],
+#     [
+#         State({"type": "modal-body", "index": MATCH}, "children"),
+#         State({"type": "btn-done", "index": MATCH}, "id"),
+#     ],
+#     # prevent_initial_call=True,
+# )
+# def update_button(n_clicks, children, btn_id):
+#     # print("update_button")
+#     # children = [children[4]]
+#     # print(children)
 
-    if box_type == "workflow-selection-label":
-        raise dash.exceptions.PreventUpdate
+#     btn_index = btn_id["index"]
+#     # print(n_clicks, btn_id)
+#     # print([sub_e for e in children for sub_e in list(find_ids_recursive(e))])
+#     # print("\n")
 
-    div_index = 0 if box_type == "segmented-control-visu-graph" else 2
-    if box_type:
-        if box_type == "segmented-control-visu-graph":
-            children = [children[4]]
-            child = children[div_index]["props"]["children"][0]["props"][
-                "children"
-            ]  # Figure
-            child["props"]["id"]["type"] = (
-                "updated-" + child["props"]["id"]["type"]
-            )  # Figure
+#     # print(f"Inspecting children:")
+#     box_type = [sub_e for e in children for sub_e in list(find_ids_recursive(e))][0][
+#         "type"
+#     ]
+#     print(box_type)
+#     # print(children)
+#     # print(box_type)
+#     # print(f"Found ids: {all_ids}")
 
-            # print(child)
-            # print("OK")
-        elif box_type == "card":
-            # print(children)
-            child = children[div_index]["props"]["children"][1]["props"]["children"][
-                1
-            ]  # Card
-            # print(child)
-            child["props"]["children"]["props"]["id"]["type"] = (
-                "updated-" + child["props"]["children"]["props"]["id"]["type"]
-            )  # Figure
-        elif box_type == "input":
-            # print(children)
-            child = children[div_index]["props"]["children"][1]["props"]["children"][
-                1
-            ]  # Card
-            # print(child)
-            child["props"]["children"]["props"]["id"]["type"] = (
-                "updated-" + child["props"]["children"]["props"]["id"]["type"]
-            )  # Figure
-        # elif box_type == "input":
-        #     child = children[0]["props"]["children"][1]["props"]["children"] # Card
-        #     print(child)
-        #     child["props"]["children"]["props"]["id"]["type"] = "updated-" + child["props"]["children"]["props"]["id"]["type"] # Figure
+#     if box_type == "workflow-selection-label":
+#         raise dash.exceptions.PreventUpdate
 
-        # edit_button = dbc.Button(
-        #     "Edit",
-        #     id={
-        #         "type": "edit-button",
-        #         "index": f"edit-{btn_id}",
-        #     },
-        #     color="secondary",
-        #     style={"margin-left": "10px"},
-        #     # size="lg",
-        # )
+#     div_index = 0 if box_type == "segmented-control-visu-graph" else 2
+#     if box_type:
+#         if box_type == "segmented-control-visu-graph":
+#             children = [children[4]]
+#             child = children[div_index]["props"]["children"][0]["props"][
+#                 "children"
+#             ]  # Figure
+#             child["props"]["id"]["type"] = (
+#                 "updated-" + child["props"]["id"]["type"]
+#             )  # Figure
 
-        edit_button = dmc.Button(
-            "Edit",
-            id={
-                "type": "edit-button",
-                "index": f"edit-{btn_index}",
-            },
-            color="gray",
-            variant="filled",
-            leftIcon=DashIconify(icon="basil:edit-solid", color="white"),
-        )
+#             # print(child)
+#             # print("OK")
+#         elif box_type == "card":
+#             # print(children)
+#             child = children[div_index]["props"]["children"][1]["props"]["children"][
+#                 1
+#             ]  # Card
+#             # print(child)
+#             child["props"]["children"]["props"]["id"]["type"] = (
+#                 "updated-" + child["props"]["children"]["props"]["id"]["type"]
+#             )  # Figure
+#         elif box_type == "input":
+#             # print(children)
+#             child = children[div_index]["props"]["children"][1]["props"]["children"][
+#                 1
+#             ]  # Card
+#             # print(child)
+#             child["props"]["children"]["props"]["id"]["type"] = (
+#                 "updated-" + child["props"]["children"]["props"]["id"]["type"]
+#             )  # Figure
+#         # elif box_type == "input":
+#         #     child = children[0]["props"]["children"][1]["props"]["children"] # Card
+#         #     print(child)
+#         #     child["props"]["children"]["props"]["id"]["type"] = "updated-" + child["props"]["children"]["props"]["id"]["type"] # Figure
 
-        remove_button = dmc.Button(
-            "Remove",
-            id={"type": "remove-button", "index": f"remove-{btn_index}"},
-            color="red",
-            variant="filled",
-            leftIcon=DashIconify(icon="jam:trash", color="white"),
-        )
+#         # edit_button = dbc.Button(
+#         #     "Edit",
+#         #     id={
+#         #         "type": "edit-button",
+#         #         "index": f"edit-{btn_id}",
+#         #     },
+#         #     color="secondary",
+#         #     style={"margin-left": "10px"},
+#         #     # size="lg",
+#         # )
 
-        new_draggable_child = html.Div(
-            [
-                remove_button,
-                edit_button,
-                child,
-            ],
-            id=f"draggable-{btn_index}",
-        )
+#         edit_button = dmc.Button(
+#             "Edit",
+#             id={
+#                 "type": "edit-button",
+#                 "index": f"edit-{btn_index}",
+#             },
+#             color="gray",
+#             variant="filled",
+#             leftIcon=DashIconify(icon="basil:edit-solid", color="white"),
+#         )
 
-        return new_draggable_child
+#         remove_button = dmc.Button(
+#             "Remove",
+#             id={"type": "remove-button", "index": f"remove-{btn_index}"},
+#             color="red",
+#             variant="filled",
+#             leftIcon=DashIconify(icon="jam:trash", color="white"),
+#         )
 
-    else:
-        return html.Div()
+#         new_draggable_child = html.Div(
+#             [
+#                 remove_button,
+#                 edit_button,
+#                 child,
+#             ],
+#             id=f"draggable-{btn_index}",
+#         )
 
-    # print("\nEND")
+#         return new_draggable_child
 
-    # if n_clicks > 0:
-    #     # print(children)
-    #     # figure = children[0]["props"]["children"][0]["props"]["children"]["props"]["figure"]
-    #     # print(children)
-    #     # print(list(child["props"].keys()))
-    #     # print(child_id)
-    #     # child = children[0]["props"]["children"][0]["props"]["children"]["props"]["children"]
-    #     # print(child)
-    #     # if child["props"]["type"] is not "Card":
-    #     # else:
-    #     #     child["props"]["children"]["type"] = (
-    #     #         "updated-" + child["props"]["id"]["type"]
-    #     #     )
+#     else:
+#         return html.Div()
 
-    #     # print(child)
-    #     # # print(figure)
-    #     # return dcc.Graph(
-    #     #     figure=figure, id={"type": "graph", "index": btn_id["index"]}
-    #     # )
+#     # print("\nEND")
+
+#     # if n_clicks > 0:
+#     #     # print(children)
+#     #     # figure = children[0]["props"]["children"][0]["props"]["children"]["props"]["figure"]
+#     #     # print(children)
+#     #     # print(list(child["props"].keys()))
+#     #     # print(child_id)
+#     #     # child = children[0]["props"]["children"][0]["props"]["children"]["props"]["children"]
+#     #     # print(child)
+#     #     # if child["props"]["type"] is not "Card":
+#     #     # else:
+#     #     #     child["props"]["children"]["type"] = (
+#     #     #         "updated-" + child["props"]["id"]["type"]
+#     #     #     )
+
+#     #     # print(child)
+#     #     # # print(figure)
+#     #     # return dcc.Graph(
+#     #     #     figure=figure, id={"type": "graph", "index": btn_id["index"]}
+#     #     # )
 
 
 # Add a callback to update the isDraggable property

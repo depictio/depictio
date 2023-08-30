@@ -9,8 +9,8 @@ import yaml
 from pydantic import BaseModel, ValidationError
 from typing import List, Dict, Any
 
-from fastapi_backend.configs.models import Workflow, RootConfig
-from fastapi_backend.utils import get_config, validate_all_workflows, validate_config
+from depictio.fastapi_backend.configs.models import Workflow, RootConfig
+from depictio.fastapi_backend.utils import get_config, validate_all_workflows, validate_config
 
 app = typer.Typer()
 

@@ -1,0 +1,15 @@
+name: depictio_backend
+channels:
+  - conda-forge
+dependencies:
+  - python
+  - fastapi
+  - uvicorn
+  - pydantic
+  - numpy
+  - pandas
+  - pymongo
+  - redis-py
+  - bleach
+  - fastparquet
+  - bson
