@@ -1,19 +1,16 @@
 from datetime import datetime
 import hashlib
 from pathlib import PosixPath
-import sys
 import dash_mantine_components as dmc
 from dash import dcc
 import numpy as np
-
-sys.path.append("/Users/tweber/Gits/depictio")
 
 import os
 import re
 from typing import Dict, Type, List, Tuple, Optional, Any
 from pydantic import BaseModel, ValidationError
 import yaml
-from fastapi_backend.configs.models import (
+from depictio.fastapi_backend.configs.models import (
     DataCollection,
     File,
     Workflow,

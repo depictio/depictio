@@ -1,6 +1,3 @@
-import sys
-
-sys.path.append("/Users/tweber/Gits/depictio")
 
 import uvicorn
 from main import app

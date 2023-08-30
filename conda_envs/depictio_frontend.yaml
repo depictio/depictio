@@ -1,0 +1,25 @@
+name: depictio_frontend
+channels:
+  - plotly
+  - conda-forge
+dependencies:
+  - python
+  - pymongo
+  - redis-py
+  - dash
+  - httpx
+  - bson
+  - dash-bootstrap-components
+  - dash-mantine-components
+  - numpy
+  - pandas
+  - plotly_express
+  - pyyaml
+  - pip:
+    - dash-mantine-components==0.12.1
+    - dash-jbrowse==1.2.0
+    - dash-iconify==0.1.2
+    - dash-extensions==1.0.1
+    - dash-draggable==0.1.2
+    - dash-auth==2.0.0
+    - dash-ag-grid==2.2.0

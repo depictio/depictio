@@ -20,9 +20,9 @@ from db import db, grid_fs
 
 # from modules.datacollections_endpoints.models import File
 # from modules.workflow_endpoints.models import Workflow
-from configs.models import Workflow, File, DataCollection
-from fastapi_backend.configs.models import GridFSFileInfo
-from fastapi_backend.utils import (
+from depictio.fastapi_backend.configs.models import Workflow, File, DataCollection
+from depictio.fastapi_backend.configs.models import GridFSFileInfo
+from depictio.fastapi_backend.utils import (
     numpy_to_python,
     scan_runs,
     serialize_for_mongo,
