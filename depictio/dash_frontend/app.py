@@ -563,6 +563,8 @@ def update_step_2(workflow_selection, data_collection_selection):
         return html.Div()
 
 
+
+
 @app.callback(
     Output({"type": "output-stepper-step-3", "index": MATCH}, "children"),
     Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
