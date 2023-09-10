@@ -33,8 +33,23 @@ workflows:
   #   location: "/Users/tweber/Gits/depictio/wf_data/nf-core--ampliseq"
   #   datacollections:
   #     dada2_ASV_table:
-  #       regex: ".*ASV.tsv.gz"
-  #       format: "TSV"
-  #       pandas_kwargs:
-  #         sep: "\t"
-  #         compression: "gzip"
+        # description: "TOTO_ashleys_labels"
+        # config:
+        #   regex: "*.ASV.gz"
+        #   format: "TSV"
+        #   pandas_kwargs:
+        #     sep: "\t"
+        #     compression: "gzip"
+  #     bam_files:
+        # description: "TATA_bam_files"
+        # config:
+        #   regex: "*.sort.mdup.bam"
+        #   format: "BAM"
+        #   jbrowse_params:
+        #     ## category
+        #     ## assemblyNames
+        #     ## name_regex: ""
+        #     ## trackId: ""
+
+
+        #     compression: "gzip"
