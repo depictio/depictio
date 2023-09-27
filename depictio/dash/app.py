@@ -51,11 +51,11 @@ app = dash.Dash(
     suppress_callback_exceptions=True,
 )
 
-from depictio.dash_frontend.modules.card_component.frontend import (
+from depictio.dash.modules.card_component.frontend import (
     design_card,
     register_callbacks_card_component,
 )
-from depictio.dash_frontend.modules.figure_component.frontend import (
+from depictio.dash.modules.figure_component.frontend import (
     design_figure,
     register_callbacks_figure_component,
 )
@@ -74,7 +74,7 @@ register_callbacks_figure_component(app)
 #     secondary_common_params_lite,
 # )
 
-from depictio.dash_frontend.utils import (
+from depictio.dash.utils import (
     # create_initial_figure,
     # load_data,
     load_gridfs_file,
@@ -84,7 +84,7 @@ from depictio.dash_frontend.utils import (
 )
 
 # from depictio.dash_frontend.modules.card_component.utils import card_design_modal
-from depictio.dash_frontend.modules.card_component.utils import agg_functions
+from depictio.dash.modules.card_component.utils import agg_functions
 
 # Data
 
@@ -563,26 +563,35 @@ def update_step_2(workflow_selection, data_collection_selection):
         return html.Div()
 
 
-
 @app.callback(
     Output({"type": "output-stepper-step-3", "index": MATCH}, "children"),
+    Output({"type": "store-btn-option", "index": MATCH, "value": ALL}, "data"),
     Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
     Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
     Input({"type": "btn-option", "index": MATCH, "value": ALL}, "n_clicks"),
+    Input({"type": "store-btn-option", "index": MATCH, "value": ALL}, "data"),
     prevent_initial_call=True,
 )
-def update_step_2(workflow_selection, data_collection_selection, btn_component):
+def update_step_2(workflow_selection, data_collection_selection, btn_component, store_btn_component):
     if (
         workflow_selection is not None
         and data_collection_selection is not None
         and btn_component is not None
     ):
-        return "Step 3: Workflow selection: {}, Data collection selection: {}, Button component: {}".format(
-            workflow_selection, data_collection_selection, btn_component
-        )
+        print("update_step_2")
+        # retrieve value in btn_component that is higher than the previous value in store_btn_component at the same index
+        btn_index = [i for i, (x, y) in enumerate(zip(btn_component, store_btn_component)) if x > y]
+        if btn_index:
+            components_list = ["Figure", "Card", "Interactive"]
+            component_selected = components_list[btn_index[0]]
+            return "Step 3:\nWorkflow selection: {}\nData collection selection: {}\nButton component: {}\nStore button component: {}\nComponent selected: {}".format(
+                workflow_selection, data_collection_selection, btn_component, store_btn_component, component_selected
+            ), btn_component
+        else:
+            raise dash.exceptions.PreventUpdate
 
     else:
-        return html.Div()
+        return html.Div(), []
 
 
 @app.callback(
@@ -783,6 +792,33 @@ def update_draggable_children(
 
         stepper_buttons = dbc.Row(
             [
+                dcc.Store(
+                    id={
+                        "type": "store-btn-option",
+                        "index": n,
+                        "value": "Figure",
+                    },
+                    data=0,
+                    storage_type="memory",
+                ),
+                dcc.Store(
+                    id={
+                        "type": "store-btn-option",
+                        "index": n,
+                        "value": "Card",
+                    },
+                    data=0,
+                    storage_type="memory",
+                ),
+                dcc.Store(
+                    id={
+                        "type": "store-btn-option",
+                        "index": n,
+                        "value": "Interactive",
+                    },
+                    data=0,
+                    storage_type="memory",
+                ),
                 html.Hr(),
                 dbc.Col(
                     dmc.Button(

@@ -14,7 +14,7 @@ import ast
 
 
 # Depictio imports
-from depictio.dash_frontend.modules.figure_component.utils import (
+from depictio.dash.modules.figure_component.utils import (
     specific_params,
     param_info,
     plotly_bootstrap_mapping,
@@ -23,7 +23,7 @@ from depictio.dash_frontend.modules.figure_component.utils import (
     secondary_common_params_lite,
     plotly_vizu_dict,
 )
-from depictio.dash_frontend.utils import (
+from depictio.dash.utils import (
     get_columns_from_data_collection,
     load_gridfs_file,
 )

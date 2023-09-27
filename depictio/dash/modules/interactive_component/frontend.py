@@ -14,10 +14,10 @@ import ast
 
 
 # Depictio imports
-from depictio.dash_frontend.modules.interactive_component.utils import (
+from depictio.dash.modules.interactive_component.utils import (
     agg_functions,
 )
-from depictio.dash_frontend.utils import (
+from depictio.dash.utils import (
     get_columns_from_data_collection,
     load_gridfs_file,
 )

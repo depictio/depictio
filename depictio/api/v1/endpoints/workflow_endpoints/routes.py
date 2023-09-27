@@ -3,9 +3,9 @@ from fastapi import HTTPException
 from fastapi import APIRouter
 from typing import List
 
-from depictio.fastapi_backend.configs.config import settings
-from depictio.fastapi_backend.db import db
-from depictio.fastapi_backend.configs.models import Workflow
+from depictio.api.v1.configs.config import settings
+from depictio.api.v1.db import db
+from depictio.api.v1.configs.models import Workflow
 
 # from modules.workflow_endpoints.models import Workflow
 
