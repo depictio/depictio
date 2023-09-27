@@ -1,7 +1,7 @@
 import pymongo
 import redis
 from gridfs import GridFS
-from depictio.fastapi_backend.configs.config import settings
+from depictio.api.v1.configs.config import settings
 
 client = pymongo.MongoClient(settings.mongo_url)
 db = client[settings.mongo_db]

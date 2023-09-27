@@ -14,15 +14,15 @@ import pandas as pd
 import numpy as np
 from pydantic import BaseModel
 
-from configs.config import settings
-from db import db, grid_fs
+from depictio.api.v1.configs.config import settings
+from depictio.api.v1.db import db, grid_fs
 
 
 # from modules.datacollections_endpoints.models import File
 # from modules.workflow_endpoints.models import Workflow
-from depictio.fastapi_backend.configs.models import Workflow, File, DataCollection
-from depictio.fastapi_backend.configs.models import GridFSFileInfo
-from depictio.fastapi_backend.utils import (
+from depictio.api.v1.configs.models import Workflow, File, DataCollection
+from depictio.api.v1.configs.models import GridFSFileInfo
+from depictio.api.v1.utils import (
     numpy_to_python,
     scan_runs,
     serialize_for_mongo,

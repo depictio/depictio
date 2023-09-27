@@ -10,7 +10,7 @@ import re
 from typing import Dict, Type, List, Tuple, Optional, Any
 from pydantic import BaseModel, ValidationError
 import yaml
-from depictio.fastapi_backend.configs.models import (
+from depictio.api.v1.configs.models import (
     DataCollection,
     File,
     Workflow,

@@ -9,8 +9,8 @@ import yaml
 from pydantic import BaseModel, ValidationError
 from typing import List, Dict, Any
 
-from depictio.fastapi_backend.configs.models import Workflow, RootConfig
-from depictio.fastapi_backend.utils import get_config, validate_all_workflows, validate_config
+from depictio.api.v1.configs.models import Workflow, RootConfig
+from depictio.api.v1.utils import get_config, validate_all_workflows, validate_config
 
 app = typer.Typer()
 
@@ -47,7 +47,7 @@ def create_workflow(
     config_dict_wf = config_dict[workflow_id].dict()
 
     response = httpx.post(
-        f"{API_BASE_URL}/workflows/create_workflow",
+        f"{API_BASE_URL}/api/v1/workflows/create_workflow",
         json=config_dict_wf,
     )
 
@@ -62,7 +62,7 @@ def list_workflows():
     """
     List all workflows.
     """
-    workflows = httpx.get(f"{API_BASE_URL}/workflows/get_workflows")
+    workflows = httpx.get(f"{API_BASE_URL}/api/v1/workflows/get_workflows")
     workflows_json = workflows.json()
     pretty_workflows = json.dumps(workflows_json, indent=4)
     typer.echo(pretty_workflows)
@@ -126,7 +126,7 @@ def scan_data_collections(
         }
         print("\n\n")
         print(data_payload["data_collection"])
-        response = httpx.post(f"{API_BASE_URL}/datacollections/scan", json=data_payload)
+        response = httpx.post(f"{API_BASE_URL}/api/v1/datacollections/scan", json=data_payload)
         print(response)
         print(response.text)
         print(response.status_code)
@@ -191,7 +191,7 @@ def aggregate_workflow_data_collections(
         print(data_payload["description"])
 
         response = httpx.post(
-            f"{API_BASE_URL}/datacollections/aggregate_workflow_data", json=data_payload
+            f"{API_BASE_URL}/api/v1/datacollections/aggregate_workflow_data", json=data_payload
         )
         print(response)
         print(response.text)
@@ -262,7 +262,7 @@ def get_aggregated_file(
         data_payload = data_collection.dict()
 
         response = httpx.get(
-            f"{API_BASE_URL}/datacollections/get_aggregated_file", params=data_payload
+            f"{API_BASE_URL}/api/v1/datacollections/get_aggregated_file", params=data_payload
         )
         print(response)
         print(response.text)

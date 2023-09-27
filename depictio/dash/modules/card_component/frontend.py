@@ -14,10 +14,10 @@ import ast
 
 
 # Depictio imports
-from depictio.dash_frontend.modules.card_component.utils import (
+from depictio.dash.modules.card_component.utils import (
     agg_functions,
 )
-from depictio.dash_frontend.utils import get_columns_from_data_collection
+from depictio.dash.utils import get_columns_from_data_collection
 
 # from depictio.dash_frontend.app import app, df
 

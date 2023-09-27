@@ -4,8 +4,8 @@ import sys
 
 sys.path.append("/Users/tweber/Gits/depictio")
 
-from depictio.fastapi_backend.db import grid_fs, redis_cache
-from depictio.fastapi_backend.configs.config import settings
+from depictio.api.v1.db import grid_fs, redis_cache
+from depictio.api.v1.configs.config import settings
 from CLI_client.cli import list_workflows
 import httpx
 from bson import ObjectId
@@ -675,7 +675,7 @@ def load_gridfs_file(workflow_id: str, data_collection_id: str, cols: list = Non
     print(workflow_id, data_collection_id)
 
     if workflow_id is None or data_collection_id is None:
-        response = httpx.get(f"{API_BASE_URL}/workflows/get_workflows")
+        response = httpx.get(f"{API_BASE_URL}/api/v1/workflows/get_workflows")
         print(response)
         if response.status_code == 200:
             workflow_id = response.json()[0]["workflow_id"]
@@ -695,7 +695,7 @@ def load_gridfs_file(workflow_id: str, data_collection_id: str, cols: list = Non
     print(data_collection_id)
 
     response = httpx.get(
-        f"{API_BASE_URL}/datacollections/get_aggregated_file_id/{workflow_engine}/{workflow_name}/{data_collection_id}"
+        f"{API_BASE_URL}/api/v1/datacollections/get_aggregated_file_id/{workflow_engine}/{workflow_name}/{data_collection_id}"
     )
     print(response)
 
@@ -741,7 +741,7 @@ def get_columns_from_data_collection(
         workflow_name = workflow_id.split("/")[1]
         print(workflow_engine, workflow_name)
         response = httpx.get(
-            f"{API_BASE_URL}/datacollections/get_columns/{workflow_engine}/{workflow_name}/{data_collection_id}"
+            f"{API_BASE_URL}/api/v1/datacollections/get_columns/{workflow_engine}/{workflow_name}/{data_collection_id}"
         )
         print(response)
         if response.status_code == 200:
