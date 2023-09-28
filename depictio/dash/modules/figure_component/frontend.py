@@ -452,7 +452,7 @@ def register_callbacks_figure_component(app):
             ],
             # Input("interval", "n_intervals"),
         ],
-        # prevent_initial_call=True,
+        prevent_initial_call=True,
     )
     def update_figure(*args):
         dict_kwargs = args[0]
@@ -485,43 +485,7 @@ def register_callbacks_figure_component(app):
 
 def design_figure(id, wfs_list):
     figure_row = [
-        dbc.Row(
-            [
-                dbc.Col(
-                    dmc.Select(
-                        label=html.H4(
-                            [
-                                DashIconify(icon="flat-color-icons:workflow"),
-                                "Workflow selection",
-                            ],
-                        ),
-                        # data=wfs_list,
-                        # value=wfs_list[0]["value"],
-                        id={
-                            "type": "workflow-selection-label",
-                            "index": id["index"],
-                        },
-                    )
-                ),
-                dbc.Col(
-                    dmc.Select(
-                        label=html.H4(
-                            [
-                                DashIconify(icon="bxs:data"),
-                                "Data collection selection",
-                            ],
-                        ),
-                        id={
-                            "type": "datacollection-selection-label",
-                            "index": id["index"],
-                        },
-                    )
-                ),
-            ],
-            style={"width": "80%"},
-        ),
-        html.Br(),
-        # html.Hr(),
+        
         dbc.Row(
             [
                 html.H5("Select your visualisation type"),
@@ -583,13 +547,6 @@ def design_figure(id, wfs_list):
                     style={"align": "center"},
                 ),
             ]
-        ),
-        html.Br(),
-        dmc.Button(
-            "Done",
-            id={"type": "btn-done", "index": id["index"]},
-            n_clicks=0,
-            style={"display": "block"},
         ),
         dcc.Store(
             id={"type": "dict_kwargs", "index": id["index"]},

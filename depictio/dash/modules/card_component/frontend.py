@@ -1,16 +1,7 @@
 # Import necessary libraries
-import numpy as np
 from dash import html, dcc, Input, Output, State, ALL, MATCH
-import dash
 import dash_bootstrap_components as dbc
-import dash_draggable
 import dash_mantine_components as dmc
-import inspect
-import pandas as pd
-import plotly.express as px
-import re
-from dash_iconify import DashIconify
-import ast
 
 
 # Depictio imports
@@ -41,10 +32,9 @@ def register_callbacks_card_component(app):
 
         cols_json = get_columns_from_data_collection(wf_id, dc_id)
 
-
         if column_value is None:
             return []
-        
+
         # Get the type of the selected column
         column_type = cols_json["columns_specs"][column_value]["type"]
         # print(column_value, column_type, type(column_type))
@@ -119,7 +109,7 @@ def register_callbacks_card_component(app):
         #         else:
         #             v = v.iloc[0]
 
-        try: 
+        try:
             v = round(float(v), 2)
         except:
             pass
@@ -133,119 +123,76 @@ def register_callbacks_card_component(app):
 
 
 def design_card(id, df):
-    # df = pd.DataFrame()
     row = [
-        dbc.Row(
-            [
-                dbc.Col(
-                    dmc.Select(
-                        label=html.H4(
-                            [
-                                DashIconify(icon="flat-color-icons:workflow"),
-                                "Workflow selection",
-                            ],
-                        ),
-                        # data=wfs_list,
-                        # value=wfs_list[0]["value"],
-                        id={
-                            "type": "workflow-selection-label",
-                            "index": id["index"],
-                        },
-                    )
-                ),
-                dbc.Col(
-                    dmc.Select(
-                        label=html.H4(
-                            [
-                                DashIconify(icon="bxs:data"),
-                                "Data collection selection",
-                            ],
-                        ),
-                        id={
-                            "type": "datacollection-selection-label",
-                            "index": id["index"],
-                        },
-                    )
-                ),
-            ],
-            style={"width": "80%"},
-        ),
-        html.Br(),
-        dbc.Row(
-            [
-                dbc.Col(
-                    [
-                        html.H5("Card edit menu"),
-                        dbc.Card(
-                            dbc.CardBody(
-                                [
-                                    dmc.TextInput(
-                                        label="Card title",
-                                        id={
-                                            "type": "card-input",
-                                            "index": id["index"],
-                                        },
-                                    ),
-                                    dmc.Select(
-                                        label="Select your column",
-                                        id={
-                                            "type": "card-dropdown-column",
-                                            "index": id["index"],
-                                        },
-                                        data=[
-                                            {"label": e, "value": e} for e in df.columns
-                                        ],
-                                        value=None,
-                                    ),
-                                    dmc.Select(
-                                        label="Select your aggregation method",
-                                        id={
-                                            "type": "card-dropdown-aggregation",
-                                            "index": id["index"],
-                                        },
-                                        value=None,
-                                    ),
-                                    html.Div(
-                                        id={
-                                            # "type": "debug-print",
-                                            "index": id["index"],
-                                        },
-                                    ),
-                                ],
-                            ),
-                            id={
-                                "type": "card",
-                                "index": id["index"],
-                            },
-                            style={"width": "100%"},
-                        ),
-                    ],
-                    width="auto",
-                ),
-                dbc.Col(
-                    [
-                        html.H5("Resulting card"),
-                        dbc.Card(
-                            dbc.CardBody(
+        dmc.Center(
+            dbc.Row(
+                [
+                    dbc.Col(
+                        [
+                            html.H5("Card edit menu"),
+                            dbc.Card(
+                                dbc.CardBody(
+                                    [
+                                        dmc.TextInput(
+                                            label="Card title",
+                                            id={
+                                                "type": "card-input",
+                                                "index": id["index"],
+                                            },
+                                        ),
+                                        dmc.Select(
+                                            label="Select your column",
+                                            id={
+                                                "type": "card-dropdown-column",
+                                                "index": id["index"],
+                                            },
+                                            data=[
+                                                {"label": e, "value": e}
+                                                for e in df.columns
+                                            ],
+                                            value=None,
+                                        ),
+                                        dmc.Select(
+                                            label="Select your aggregation method",
+                                            id={
+                                                "type": "card-dropdown-aggregation",
+                                                "index": id["index"],
+                                            },
+                                            value=None,
+                                        ),
+                                        html.Div(
+                                            id={
+                                                # "type": "debug-print",
+                                                "index": id["index"],
+                                            },
+                                        ),
+                                    ],
+                                ),
                                 id={
-                                    "type": "card-body",
+                                    "type": "card",
                                     "index": id["index"],
-                                }
+                                },
+                                style={"width": "100%"},
                             ),
-                            style={"width": "100%"},
-                        ),
-                    ],
-                    width="auto",
-                ),
-            ]
-        ),
-        html.Hr(),
-        dbc.Row(
-            dmc.Button(
-                "Done",
-                id={"type": "btn-done", "index": id["index"]},
-                n_clicks=0,
-                style={"display": "block"},
+                        ],
+                        width="auto",
+                    ),
+                    dbc.Col(
+                        [
+                            html.H5("Resulting card"),
+                            dbc.Card(
+                                dbc.CardBody(
+                                    id={
+                                        "type": "card-body",
+                                        "index": id["index"],
+                                    }
+                                ),
+                                style={"width": "100%"},
+                            ),
+                        ],
+                        width="auto",
+                    ),
+                ]
             )
         ),
     ]

@@ -49,11 +49,16 @@ app = dash.Dash(
         },
     ],
     suppress_callback_exceptions=True,
+    title="Depictio",
 )
 
 from depictio.dash.modules.card_component.frontend import (
     design_card,
     register_callbacks_card_component,
+)
+from depictio.dash.modules.interactive_component.frontend import (
+    design_interactive,
+    register_callbacks_interactive_component,
 )
 from depictio.dash.modules.figure_component.frontend import (
     design_figure,
@@ -61,6 +66,7 @@ from depictio.dash.modules.figure_component.frontend import (
 )
 
 register_callbacks_card_component(app)
+register_callbacks_interactive_component(app)
 register_callbacks_figure_component(app)
 
 
@@ -89,10 +95,10 @@ from depictio.dash.modules.card_component.utils import agg_functions
 # Data
 
 
-# def return_gridfs_df(workflow_id: str = None, data_collection_id: str = None):
-#     df = load_gridfs_file(workflow_id, data_collection_id)
-#     # print(df)
-#     return df
+def return_gridfs_df(workflow_id: str = None, data_collection_id: str = None):
+    df = load_gridfs_file(workflow_id, data_collection_id)
+    # print(df)
+    return df
 
 # df = return_gridfs_df()
 
@@ -492,7 +498,7 @@ def update(back, next_, workflow_selection, data_selection, btn_component, curre
 
         else:
             step = step + 1 if step < max_step else step
-            return step, True
+            return step, False
 
 
 @app.callback(
@@ -541,20 +547,14 @@ def update_button_style(figure_clicks, card_clicks, interactive_clicks):
 )
 def update_step_2(workflow_selection, data_collection_selection):
     if workflow_selection is not None and data_collection_selection is not None:
-        df = pd.read_csv(
-            "https://raw.githubusercontent.com/plotly/datasets/master/wind_dataset.csv"
-        )
 
-        columnDefs = [
-            {"field": "direction"},
-            {"field": "strength"},
-            {"field": "frequency"},
-        ]
+        df = return_gridfs_df(workflow_selection, data_collection_selection)
+        columnDefs = [{"field": c} for c in list(df.columns)]
 
         title = dmc.Title("Data previsualization", order=3, align="left", weight=500)
         grid = dag.AgGrid(
             id="get-started-example-basic",
-            rowData=df.to_dict("records"),
+            rowData=df.head(50).to_dict("records"),
             columnDefs=columnDefs,
         )
         layout = [title, html.Hr(), grid]
@@ -570,9 +570,16 @@ def update_step_2(workflow_selection, data_collection_selection):
     Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
     Input({"type": "btn-option", "index": MATCH, "value": ALL}, "n_clicks"),
     Input({"type": "store-btn-option", "index": MATCH, "value": ALL}, "data"),
+    State({"type": "btn-option", "index": MATCH, "value": ALL}, "id"),
     prevent_initial_call=True,
 )
-def update_step_2(workflow_selection, data_collection_selection, btn_component, store_btn_component):
+def update_step_2(
+    workflow_selection,
+    data_collection_selection,
+    btn_component,
+    store_btn_component,
+    ids,
+):
     if (
         workflow_selection is not None
         and data_collection_selection is not None
@@ -580,13 +587,27 @@ def update_step_2(workflow_selection, data_collection_selection, btn_component, 
     ):
         print("update_step_2")
         # retrieve value in btn_component that is higher than the previous value in store_btn_component at the same index
-        btn_index = [i for i, (x, y) in enumerate(zip(btn_component, store_btn_component)) if x > y]
+        btn_index = [
+            i
+            for i, (x, y) in enumerate(zip(btn_component, store_btn_component))
+            if x > y
+        ]
         if btn_index:
+
+            df = return_gridfs_df(workflow_selection, data_collection_selection)
+
             components_list = ["Figure", "Card", "Interactive"]
             component_selected = components_list[btn_index[0]]
-            return "Step 3:\nWorkflow selection: {}\nData collection selection: {}\nButton component: {}\nStore button component: {}\nComponent selected: {}".format(
-                workflow_selection, data_collection_selection, btn_component, store_btn_component, component_selected
-            ), btn_component
+            id = ids[btn_index[0]]
+            if component_selected == "Figure":
+                return design_figure(id, df), btn_component
+            elif component_selected == "Card":
+                return design_card(id, df), btn_component
+            elif component_selected == "Interactive":
+                return design_interactive(id, df), btn_component
+
+
+
         else:
             raise dash.exceptions.PreventUpdate
 
@@ -862,7 +883,7 @@ def update_draggable_children(
                 ),
                 dbc.Col(
                     dmc.Button(
-                        "Interaction",
+                        "Interactive",
                         id={
                             "type": "btn-option",
                             "index": n,
