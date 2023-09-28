@@ -32,53 +32,53 @@ agg_functions = {
                 "description": "Two values slider",
             },
         },
-        "bool": {
-            "title": "Boolean",
-            "description": "Boolean values",
-            "input_methods": {
-                "Checkbox": {
-                    "component": dmc.Checkbox,
-                    "description": "Checkbox",
-                },
-                "Switch": {
-                    "component": dmc.Switch,
-                    "description": "Switch",
-                },
+    },
+    "bool": {
+        "title": "Boolean",
+        "description": "Boolean values",
+        "input_methods": {
+            "Checkbox": {
+                "component": dmc.Checkbox,
+                "description": "Checkbox",
+            },
+            "Switch": {
+                "component": dmc.Switch,
+                "description": "Switch",
             },
         },
-        "datetime": {
-            "title": "Datetime",
-            "description": "Date and time values",
-        },
-        "timedelta": {
-            "title": "Timedelta",
-            "description": "Differences between two datetimes",
-        },
-        "category": {
-            "title": "Category",
-            "description": "Finite list of text values",
-        },
-        "object": {
-            "title": "Object",
-            "input_methods": {
-                "TextInput": {
-                    "component": dmc.TextInput,
-                    "description": "Text input box",
-                },
-                "Select": {
-                    "component": dmc.Select,
-                    "description": "Select",
-                },
-                "MultiSelect": {
-                    "component": dmc.MultiSelect,
-                    "description": "MultiSelect",
-                },
-                "SegmentedControl": {
-                    "component": dmc.SegmentedControl,
-                    "description": "SegmentedControl",
-                },
+    },
+    "datetime": {
+        "title": "Datetime",
+        "description": "Date and time values",
+    },
+    "timedelta": {
+        "title": "Timedelta",
+        "description": "Differences between two datetimes",
+    },
+    "category": {
+        "title": "Category",
+        "description": "Finite list of text values",
+    },
+    "object": {
+        "title": "Object",
+        "input_methods": {
+            "TextInput": {
+                "component": dmc.TextInput,
+                "description": "Text input box",
             },
-            "description": "Text or mixed numeric or non-numeric values",
+            "Select": {
+                "component": dmc.Select,
+                "description": "Select",
+            },
+            "MultiSelect": {
+                "component": dmc.MultiSelect,
+                "description": "MultiSelect",
+            },
+            "SegmentedControl": {
+                "component": dmc.SegmentedControl,
+                "description": "SegmentedControl",
+            },
         },
+        "description": "Text or mixed numeric or non-numeric values",
     },
 }

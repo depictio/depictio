@@ -1,16 +1,8 @@
 # Import necessary libraries
-import numpy as np
 from dash import html, dcc, Input, Output, State, ALL, MATCH
-import dash
 import dash_bootstrap_components as dbc
-import dash_draggable
 import dash_mantine_components as dmc
-import inspect
 import pandas as pd
-import plotly.express as px
-import re
-from dash_iconify import DashIconify
-import ast
 
 
 # Depictio imports
@@ -36,6 +28,7 @@ def register_callbacks_interactive_component(app):
     )
     def update_aggregation_options(column_value, wf_id, dc_id):
         cols_json = get_columns_from_data_collection(wf_id, dc_id)
+        print(cols_json)
 
         if column_value is None:
             return []
@@ -96,6 +89,7 @@ def register_callbacks_interactive_component(app):
         ):
             return []
 
+        df = load_gridfs_file(wf_id, dc_id)
         cols_json = get_columns_from_data_collection(wf_id, dc_id)
 
         # Get the type of the selected column
@@ -132,8 +126,8 @@ def register_callbacks_interactive_component(app):
 
         # TODO: solve this in a better way
         if aggregation_value in ["Select", "MultiSelect", "SegmentedControl"]:
-            data = cols_json["columns_specs"][column_value]["unique"]
-            # data = df[column_value].unique()
+            # data = cols_json["columns_specs"][column_value]["unique"]
+            data = df[column_value].unique()
 
             new_card_body = [card_title, func_name(data=data)]
             # print(new_card_body)
@@ -159,14 +153,16 @@ def register_callbacks_interactive_component(app):
                 marks = dict()
 
                 # TODO: solve this in a better way
-                if cols_json["columns_specs"][column_value]["nunique"] < 50:
-                    # if df[column_value].nunique() < 30:
+                # if cols_json["columns_specs"][column_value]["nunique"] < 50:
+                if df[column_value].nunique() < 30:
+                    marks = {str(elem): str(elem) for elem in df[column_value].unique()}
+                else:
+                    bins = pd.cut(df[column_value], bins=10, precision=2)
 
                     marks = {
                         str(elem): str(elem)
-                        for elem in cols_json["columns_specs"][column_value]["unique"]
+                        for elem in bins.value_counts().index.categories.values
                     }
-                    # marks = {str(elem): str(elem) for elem in df[column_value].unique()}
                 step = None
                 included = False
                 kwargs = dict(marks=marks, step=step, included=included)
@@ -181,109 +177,69 @@ def register_callbacks_interactive_component(app):
 
 def design_interactive(id, df):
     interactive_row = [
-        dbc.Row(
-            [
-                dbc.Col(
-                    dmc.Select(
-                        label=html.H4(
-                            [
-                                DashIconify(icon="flat-color-icons:workflow"),
-                                "Workflow selection",
-                            ],
-                        ),
-                        # data=wfs_list,
-                        # value=wfs_list[0]["value"],
-                        id={
-                            "type": "workflow-selection-label",
-                            "index": id["index"],
-                        },
-                    )
-                ),
-                dbc.Col(
-                    dmc.Select(
-                        label=html.H4(
-                            [
-                                DashIconify(icon="bxs:data"),
-                                "Data collection selection",
-                            ],
-                        ),
-                        id={
-                            "type": "datacollection-selection-label",
-                            "index": id["index"],
-                        },
-                    )
-                ),
-            ],
-            style={"width": "80%"},
-        ),
-        html.Br(),
-        dbc.Row(
-            [
-                dbc.Col(
-                    [
-                        html.H5("Card edit menu"),
-                        dbc.Card(
-                            dbc.CardBody(
-                                [
-                                    dmc.TextInput(
-                                        label="Card title",
-                                        id={
-                                            "type": "input-title",
-                                            "index": id["index"],
-                                        },
-                                    ),
-                                    dmc.Select(
-                                        label="Select your column",
-                                        id={
-                                            "type": "input-dropdown-column",
-                                            "index": id["index"],
-                                        },
-                                        data=,
-                                        value=None,
-                                    ),
-                                    dmc.Select(
-                                        label="Select your interactive component",
-                                        id={
-                                            "type": "input-dropdown-method",
-                                            "index": id["index"],
-                                        },
-                                        value=None,
-                                    ),
-                                ],
-                            ),
-                            id={
-                                "type": "input",
-                                "index": id["index"],
-                            },
-                        ),
-                    ],
-                    width="auto",
-                ),
-                dbc.Col(
-                    [
-                        html.H5("Resulting card"),
-                        dbc.Card(
-                            dbc.CardBody(
+        dmc.Center(
+            dbc.Row(
+                [
+                    dbc.Col(
+                        [
+                            html.H5("Card edit menu"),
+                            dbc.Card(
+                                dbc.CardBody(
+                                    [
+                                        dmc.TextInput(
+                                            label="Interactive component title",
+                                            id={
+                                                "type": "input-title",
+                                                "index": id["index"],
+                                            },
+                                        ),
+                                        dmc.Select(
+                                            label="Select your column",
+                                            id={
+                                                "type": "input-dropdown-column",
+                                                "index": id["index"],
+                                            },
+                                            data=[
+                                                {"label": e, "value": e}
+                                                for e in df.columns
+                                            ],
+                                            value=None,
+                                        ),
+                                        dmc.Select(
+                                            label="Select your interactive component",
+                                            id={
+                                                "type": "input-dropdown-method",
+                                                "index": id["index"],
+                                            },
+                                            value=None,
+                                        ),
+                                    ],
+                                ),
                                 id={
-                                    "type": "input-body",
+                                    "type": "input",
                                     "index": id["index"],
                                 },
-                                style={"width": "100%"},
                             ),
-                            style={"width": "600px"},
-                        ),
-                    ],
-                    width="auto",
-                ),
-            ]
-        ),
-        html.Hr(),
-        dbc.Row(
-            dmc.Button(
-                "Done",
-                id={"type": "btn-done", "index": id["index"]},
-                n_clicks=0,
-                style={"display": "block"},
+                        ],
+                        width="auto",
+                    ),
+                    dbc.Col(
+                        [
+                            html.H5("Resulting interactive component"),
+                            dbc.Card(
+                                dbc.CardBody(
+                                    id={
+                                        "type": "input-body",
+                                        "index": id["index"],
+                                    },
+                                    style={"width": "100%"},
+                                ),
+                                style={"width": "600px"},
+                            ),
+                        ],
+                        width="auto",
+                    ),
+                ]
             )
         ),
     ]
