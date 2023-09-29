@@ -100,6 +100,7 @@ def return_gridfs_df(workflow_id: str = None, data_collection_id: str = None):
     # print(df)
     return df
 
+
 # df = return_gridfs_df()
 
 df = load_gridfs_file(workflow_id=None, data_collection_id=None)
@@ -310,6 +311,32 @@ def set_datacollection_options(selected_workflow):
 #                 yield from find_ids_recursive(children)
 
 
+@app.callback(
+    Output({"type": "add-content", "index": MATCH}, "children"),
+    [
+        Input({"type": "btn-done", "index": MATCH}, "n_clicks"),
+    ],
+    [
+        State({"type": "modal-body", "index": MATCH}, "children"),
+        State({"type": "btn-done", "index": MATCH}, "id"),
+        State({"type": "graph", "index": MATCH}, "figure"),
+    ],
+    prevent_initial_call=True,
+)
+def update_button(n_clicks, children, btn_id, graph):
+    print("update_button")
+    # children = [children[4]]
+    print(len(children))
+
+    btn_index = btn_id['index']  # Extracting index from btn_id dict
+
+    new_draggable_child = html.Div(
+        [dcc.Graph(figure=graph)],
+        id={"type": f"draggable-{btn_index}", "index": btn_index},
+    )
+
+    return new_draggable_child
+
 # @app.callback(
 #     Output({"type": "add-content", "index": MATCH}, "children"),
 #     [
@@ -318,13 +345,14 @@ def set_datacollection_options(selected_workflow):
 #     [
 #         State({"type": "modal-body", "index": MATCH}, "children"),
 #         State({"type": "btn-done", "index": MATCH}, "id"),
+#         State({"type": "graph", "index": MATCH}, "figure"),
 #     ],
-#     # prevent_initial_call=True,
+#     prevent_initial_call=True,
 # )
-# def update_button(n_clicks, children, btn_id):
-#     # print("update_button")
+# def update_button(n_clicks, children, btn_id, graph):
+#     print("update_button")
 #     # children = [children[4]]
-#     # print(children)
+#     print(len(children))
 
 #     btn_index = btn_id["index"]
 #     # print(n_clicks, btn_id)
@@ -332,118 +360,114 @@ def set_datacollection_options(selected_workflow):
 #     # print("\n")
 
 #     # print(f"Inspecting children:")
-#     box_type = [sub_e for e in children for sub_e in list(find_ids_recursive(e))][0][
-#         "type"
-#     ]
-#     print(box_type)
+#     # box_type = [sub_e for e in children for sub_e in list(find_ids_recursive(e))][0][
+#     #     "type"
+#     # ]
+#     # print(box_type)
 #     # print(children)
 #     # print(box_type)
 #     # print(f"Found ids: {all_ids}")
 
-#     if box_type == "workflow-selection-label":
-#         raise dash.exceptions.PreventUpdate
+#     # if box_type == "workflow-selection-label":
+#     #     raise dash.exceptions.PreventUpdate
 
-#     div_index = 0 if box_type == "segmented-control-visu-graph" else 2
-#     if box_type:
-#         if box_type == "segmented-control-visu-graph":
-#             children = [children[4]]
-#             child = children[div_index]["props"]["children"][0]["props"][
-#                 "children"
-#             ]  # Figure
-#             child["props"]["id"]["type"] = (
-#                 "updated-" + child["props"]["id"]["type"]
-#             )  # Figure
+#     # div_index = 0 if box_type == "segmented-control-visu-graph" else 2
+#     # if box_type:
+#     #     if box_type == "segmented-control-visu-graph":
+#     #         children = [children[4]]
+#     #         child = children[div_index]["props"]["children"][0]["props"][
+#     #             "children"
+#     #         ]  # Figure
+#     #         child["props"]["id"]["type"] = (
+#     #             "updated-" + child["props"]["id"]["type"]
+#     #         )  # Figure
 
-#             # print(child)
-#             # print("OK")
-#         elif box_type == "card":
-#             # print(children)
-#             child = children[div_index]["props"]["children"][1]["props"]["children"][
-#                 1
-#             ]  # Card
-#             # print(child)
-#             child["props"]["children"]["props"]["id"]["type"] = (
-#                 "updated-" + child["props"]["children"]["props"]["id"]["type"]
-#             )  # Figure
-#         elif box_type == "input":
-#             # print(children)
-#             child = children[div_index]["props"]["children"][1]["props"]["children"][
-#                 1
-#             ]  # Card
-#             # print(child)
-#             child["props"]["children"]["props"]["id"]["type"] = (
-#                 "updated-" + child["props"]["children"]["props"]["id"]["type"]
-#             )  # Figure
-#         # elif box_type == "input":
-#         #     child = children[0]["props"]["children"][1]["props"]["children"] # Card
-#         #     print(child)
-#         #     child["props"]["children"]["props"]["id"]["type"] = "updated-" + child["props"]["children"]["props"]["id"]["type"] # Figure
+#     #         # print(child)
+#     #         # print("OK")
+#     #     elif box_type == "card":
+#     #         # print(children)
+#     #         child = children[div_index]["props"]["children"][1]["props"]["children"][
+#     #             1
+#     #         ]  # Card
+#     #         # print(child)
+#     #         child["props"]["children"]["props"]["id"]["type"] = (
+#     #             "updated-" + child["props"]["children"]["props"]["id"]["type"]
+#     #         )  # Figure
+#     #     elif box_type == "input":
+#     #         # print(children)
+#     #         child = children[div_index]["props"]["children"][1]["props"]["children"][
+#     #             1
+#     #         ]  # Card
+#     #         # print(child)
+#     #         child["props"]["children"]["props"]["id"]["type"] = (
+#     #             "updated-" + child["props"]["children"]["props"]["id"]["type"]
+#     #         )  # Figure
+#     #     # elif box_type == "input":
+#     #     #     child = children[0]["props"]["children"][1]["props"]["children"] # Card
+#     #     #     print(child)
+#     #     #     child["props"]["children"]["props"]["id"]["type"] = "updated-" + child["props"]["children"]["props"]["id"]["type"] # Figure
 
-#         # edit_button = dbc.Button(
-#         #     "Edit",
-#         #     id={
-#         #         "type": "edit-button",
-#         #         "index": f"edit-{btn_id}",
-#         #     },
-#         #     color="secondary",
-#         #     style={"margin-left": "10px"},
-#         #     # size="lg",
-#         # )
-
-#         edit_button = dmc.Button(
-#             "Edit",
-#             id={
-#                 "type": "edit-button",
-#                 "index": f"edit-{btn_index}",
-#             },
-#             color="gray",
-#             variant="filled",
-#             leftIcon=DashIconify(icon="basil:edit-solid", color="white"),
-#         )
-
-#         remove_button = dmc.Button(
-#             "Remove",
-#             id={"type": "remove-button", "index": f"remove-{btn_index}"},
-#             color="red",
-#             variant="filled",
-#             leftIcon=DashIconify(icon="jam:trash", color="white"),
-#         )
-
-#         new_draggable_child = html.Div(
-#             [
-#                 remove_button,
-#                 edit_button,
-#                 child,
-#             ],
-#             id=f"draggable-{btn_index}",
-#         )
-
-#         return new_draggable_child
-
-#     else:
-#         return html.Div()
-
-#     # print("\nEND")
-
-#     # if n_clicks > 0:
-#     #     # print(children)
-#     #     # figure = children[0]["props"]["children"][0]["props"]["children"]["props"]["figure"]
-#     #     # print(children)
-#     #     # print(list(child["props"].keys()))
-#     #     # print(child_id)
-#     #     # child = children[0]["props"]["children"][0]["props"]["children"]["props"]["children"]
-#     #     # print(child)
-#     #     # if child["props"]["type"] is not "Card":
-#     #     # else:
-#     #     #     child["props"]["children"]["type"] = (
-#     #     #         "updated-" + child["props"]["id"]["type"]
-#     #     #     )
-
-#     #     # print(child)
-#     #     # # print(figure)
-#     #     # return dcc.Graph(
-#     #     #     figure=figure, id={"type": "graph", "index": btn_id["index"]}
+#     #     # edit_button = dbc.Button(
+#     #     #     "Edit",
+#     #     #     id={
+#     #     #         "type": "edit-button",
+#     #     #         "index": f"edit-{btn_id}",
+#     #     #     },
+#     #     #     color="secondary",
+#     #     #     style={"margin-left": "10px"},
+#     #     #     # size="lg",
 #     #     # )
+
+#     edit_button = dmc.Button(
+#         "Edit",
+#         id={
+#             "type": "edit-button",
+#             "index": f"edit-{btn_index}",
+#         },
+#         color="gray",
+#         variant="filled",
+#         leftIcon=DashIconify(icon="basil:edit-solid", color="white"),
+#     )
+
+#     remove_button = dmc.Button(
+#         "Remove",
+#         id={"type": "remove-button", "index": f"remove-{btn_index}"},
+#         color="red",
+#         variant="filled",
+#         leftIcon=DashIconify(icon="jam:trash", color="white"),
+#     )
+
+#     new_draggable_child = html.Div(
+#         [remove_button, edit_button, dcc.Graph(graph)],
+#         id=f"draggable-{btn_index}",
+#     )
+
+#     return new_draggable_child
+
+    # else:
+    #     return html.Div()
+
+    # print("\nEND")
+
+    # if n_clicks > 0:
+    #     # print(children)
+    #     # figure = children[0]["props"]["children"][0]["props"]["children"]["props"]["figure"]
+    #     # print(children)
+    #     # print(list(child["props"].keys()))
+    #     # print(child_id)
+    #     # child = children[0]["props"]["children"][0]["props"]["children"]["props"]["children"]
+    #     # print(child)
+    #     # if child["props"]["type"] is not "Card":
+    #     # else:
+    #     #     child["props"]["children"]["type"] = (
+    #     #         "updated-" + child["props"]["id"]["type"]
+    #     #     )
+
+    #     # print(child)
+    #     # # print(figure)
+    #     # return dcc.Graph(
+    #     #     figure=figure, id={"type": "graph", "index": btn_id["index"]}
+    #     # )
 
 
 # Add a callback to update the isDraggable property
@@ -547,7 +571,6 @@ def update_button_style(figure_clicks, card_clicks, interactive_clicks):
 )
 def update_step_2(workflow_selection, data_collection_selection):
     if workflow_selection is not None and data_collection_selection is not None:
-
         df = return_gridfs_df(workflow_selection, data_collection_selection)
         columnDefs = [{"field": c} for c in list(df.columns)]
 
@@ -571,7 +594,7 @@ def update_step_2(workflow_selection, data_collection_selection):
     Input({"type": "btn-option", "index": MATCH, "value": ALL}, "n_clicks"),
     Input({"type": "store-btn-option", "index": MATCH, "value": ALL}, "data"),
     State({"type": "btn-option", "index": MATCH, "value": ALL}, "id"),
-    prevent_initial_call=True,
+    # prevent_initial_call=True,
 )
 def update_step_2(
     workflow_selection,
@@ -593,7 +616,6 @@ def update_step_2(
             if x > y
         ]
         if btn_index:
-
             df = return_gridfs_df(workflow_selection, data_collection_selection)
 
             components_list = ["Figure", "Card", "Interactive"]
@@ -606,13 +628,11 @@ def update_step_2(
             elif component_selected == "Interactive":
                 return design_interactive(id, df), btn_component
 
-
-
         else:
             raise dash.exceptions.PreventUpdate
 
     else:
-        return html.Div(), []
+        raise dash.exceptions.PreventUpdate
 
 
 @app.callback(
