@@ -36,15 +36,17 @@ def register_callbacks_figure_component(app):
             Output({"type": "collapse", "index": MATCH}, "children"),
         ],
         [
+            Input({"type": "refresh-button", "index": MATCH}, "n_clicks"),
             Input({"type": "edit-button", "index": MATCH}, "n_clicks"),
             Input({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
             Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
             Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
         ],
         [State({"type": "edit-button", "index": MATCH}, "id")],
-        prevent_initial_call=True,
+        # prevent_initial_call=True,
     )
     def update_specific_params(
+        n_clicks_refresh,
         n_clicks,
         visu_type,
         workflow,
@@ -205,9 +207,9 @@ def register_callbacks_figure_component(app):
                                 primary_common_params_dropdowns,
                                 flush=True,
                                 always_open=True,
-                                persistence_type="session",
+                                persistence_type="memory",
                                 persistence=True,
-                                id="accordion-sec-common",
+                                id="accordion-pri-common",
                             ),
                         ],
                         title="Base parameters",
@@ -224,7 +226,7 @@ def register_callbacks_figure_component(app):
                                 secondary_common_params_dropdowns,
                                 flush=True,
                                 always_open=True,
-                                persistence_type="session",
+                                persistence_type="memory",
                                 persistence=True,
                                 id="accordion-sec-common",
                             ),
@@ -242,7 +244,7 @@ def register_callbacks_figure_component(app):
                                 specific_params_dropdowns,
                                 flush=True,
                                 always_open=True,
-                                persistence_type="session",
+                                persistence_type="memory",
                                 persistence=True,
                                 id="accordion",
                             ),
@@ -294,7 +296,7 @@ def register_callbacks_figure_component(app):
                 "is_open",
             )
         ],
-        prevent_initial_call=True,
+        # prevent_initial_call=True,
     )
     def toggle_collapse(n, is_open):
         # print(n, is_open, n % 2 == 0)
@@ -446,15 +448,18 @@ def register_callbacks_figure_component(app):
             Input({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
             Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
             Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
-            [
-                Input({"type": f"tmp-{e}", "index": MATCH}, "children")
-                for e in secondary_common_params_lite
-            ],
+            # Input({"type": "tmp-x", "index": MATCH}, "value"),
+            # [
+            #     Input({"type": f"tmp-{e}", "index": MATCH}, "children")
+            #     for e in secondary_common_params_lite
+            # ],
             # Input("interval", "n_intervals"),
         ],
-        prevent_initial_call=True,
+        # prevent_initial_call=True,
     )
     def update_figure(*args):
+        print("\n\n\n")
+        print("update_figure")
         dict_kwargs = args[0]
 
         visu_type = args[1]
@@ -470,12 +475,14 @@ def register_callbacks_figure_component(app):
         # print(dict_kwargs)
         dict_kwargs = {k: v for k, v in dict_kwargs.items() if v is not None}
         df = load_gridfs_file(workflow, data_collection)
+        print("\n\n\n")
         # print(dict_kwargs)
         if dict_kwargs:
             figure = plotly_vizu_dict[visu_type.lower()](df, **dict_kwargs)
             # figure = px.scatter(df, **dict_kwargs)
             # print(figure)
             # figure.update_layout(uirevision=1)
+            print("TOTO")
 
             return figure
         # print("\n")
@@ -485,7 +492,6 @@ def register_callbacks_figure_component(app):
 
 def design_figure(id, wfs_list):
     figure_row = [
-        
         dbc.Row(
             [
                 html.H5("Select your visualisation type"),
@@ -499,7 +505,7 @@ def design_figure(id, wfs_list):
                         "index": id["index"],
                     },
                     persistence=True,
-                    persistence_type="session",
+                    persistence_type="memory",
                     value=[e.capitalize() for e in sorted(plotly_vizu_dict.keys())][-1],
                 ),
             ],
@@ -522,15 +528,34 @@ def design_figure(id, wfs_list):
                         html.Br(),
                         html.Div(
                             children=[
-                                dmc.Button(
-                                    "Edit figure",
-                                    id={
-                                        "type": "edit-button",
-                                        "index": id["index"],
-                                    },
-                                    n_clicks=0,
-                                    # size="lg",
-                                    style={"align": "center"},
+                                dbc.Row(
+                                    children=[
+                                        dbc.Col(
+                                            dmc.Button(
+                                                "Edit figure",
+                                                id={
+                                                    "type": "edit-button",
+                                                    "index": id["index"],
+                                                },
+                                                n_clicks=0,
+                                                # size="lg",
+                                                style={"align": "center"},
+                                            )
+                                        ),
+                                        dbc.Col(
+                                            dmc.ActionIcon(
+                                                DashIconify(
+                                                    icon="mdi:refresh", width=0
+                                                ),
+                                                id={
+                                                    "type": "refresh-button",
+                                                    "index": id["index"],
+                                                },                                                size="lg",
+                                                style={"align": "center"},
+                                                n_clicks=0,
+                                            )
+                                        ),
+                                    ]
                                 ),
                                 html.Hr(),
                                 dbc.Collapse(

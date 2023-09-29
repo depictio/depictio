@@ -135,6 +135,9 @@ plotly_vizu_dict = {vizu_func.__name__: vizu_func for vizu_func in plotly_vizu_l
 
 # Get common and specific parameters for the visualizations
 common_params, common_params_names = get_common_params(plotly_vizu_list)
+print("\n")
+print("common_params", common_params)
+print("\n")
 specific_params = get_specific_params(plotly_vizu_list, common_params)
 
 # print(common_params)
