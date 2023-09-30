@@ -328,7 +328,7 @@ def update_button(n_clicks, children, btn_id, graph):
     # children = [children[4]]
     print(len(children))
 
-    btn_index = btn_id['index']  # Extracting index from btn_id dict
+    btn_index = btn_id["index"]  # Extracting index from btn_id dict
 
     new_draggable_child = html.Div(
         [dcc.Graph(figure=graph)],
@@ -336,6 +336,7 @@ def update_button(n_clicks, children, btn_id, graph):
     )
 
     return new_draggable_child
+
 
 # @app.callback(
 #     Output({"type": "add-content", "index": MATCH}, "children"),
@@ -444,30 +445,30 @@ def update_button(n_clicks, children, btn_id, graph):
 
 #     return new_draggable_child
 
-    # else:
-    #     return html.Div()
+# else:
+#     return html.Div()
 
-    # print("\nEND")
+# print("\nEND")
 
-    # if n_clicks > 0:
-    #     # print(children)
-    #     # figure = children[0]["props"]["children"][0]["props"]["children"]["props"]["figure"]
-    #     # print(children)
-    #     # print(list(child["props"].keys()))
-    #     # print(child_id)
-    #     # child = children[0]["props"]["children"][0]["props"]["children"]["props"]["children"]
-    #     # print(child)
-    #     # if child["props"]["type"] is not "Card":
-    #     # else:
-    #     #     child["props"]["children"]["type"] = (
-    #     #         "updated-" + child["props"]["id"]["type"]
-    #     #     )
+# if n_clicks > 0:
+#     # print(children)
+#     # figure = children[0]["props"]["children"][0]["props"]["children"]["props"]["figure"]
+#     # print(children)
+#     # print(list(child["props"].keys()))
+#     # print(child_id)
+#     # child = children[0]["props"]["children"][0]["props"]["children"]["props"]["children"]
+#     # print(child)
+#     # if child["props"]["type"] is not "Card":
+#     # else:
+#     #     child["props"]["children"]["type"] = (
+#     #         "updated-" + child["props"]["id"]["type"]
+#     #     )
 
-    #     # print(child)
-    #     # # print(figure)
-    #     # return dcc.Graph(
-    #     #     figure=figure, id={"type": "graph", "index": btn_id["index"]}
-    #     # )
+#     # print(child)
+#     # # print(figure)
+#     # return dcc.Graph(
+#     #     figure=figure, id={"type": "graph", "index": btn_id["index"]}
+#     # )
 
 
 # Add a callback to update the isDraggable property
