@@ -588,6 +588,8 @@ def update_step_2(workflow_selection, data_collection_selection):
 
 
 
+
+
 @app.callback(
     Output({"type": "output-stepper-step-3", "index": MATCH}, "children"),
     Output({"type": "store-btn-option", "index": MATCH, "value": ALL}, "data"),
