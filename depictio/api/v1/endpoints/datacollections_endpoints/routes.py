@@ -79,6 +79,8 @@ async def scan_data_collection(workflow: Workflow, data_collection: DataCollecti
         return {"Warning: runs_and_content is not a list of dictionaries."}
 
 
+
+
 @datacollections_endpoint_router.post("/aggregate_workflow_data")
 async def aggregate_workflow_data(data_collection: DataCollection):
     # data_collections_collection.drop()
