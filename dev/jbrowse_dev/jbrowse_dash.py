@@ -2,7 +2,8 @@ import dash
 import dash_jbrowse
 from dash import Dash, html, dcc, Input, Output, dash_table
 import dash_bootstrap_components as dbc
-
+import sys, os
+from pprint import pprint
 
 # print(dash_jbrowse.__version__)
 app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
@@ -37,95 +38,38 @@ my_assembly = {
     },
 }
 
-my_tracks = [
-    {
-        "type": "FeatureTrack",
-        "trackId": "ncbi_refseq_109_hg38",
-        "name": "NCBI RefSeq (GFF3Tabix)",
-        "assemblyNames": ["GRCh38"],
-        "category": ["Annotation"],
-        "adapter": {
-            "type": "Gff3TabixAdapter",
-            "gffGzLocation": {
-                "uri": "https://s3.amazonaws.com/jbrowse.org/genomes/GRCh38/ncbi_refseq/GCA_000001405.15_GRCh38_full_analysis_set.refseq_annotation.sorted.gff.gz",
-            },
-            "index": {
-                "location": {
-                    "uri": "https://s3.amazonaws.com/jbrowse.org/genomes/GRCh38/ncbi_refseq/GCA_000001405.15_GRCh38_full_analysis_set.refseq_annotation.sorted.gff.gz.tbi",
-                },
-            },
-        },
-    },
-    {
-        "type": "QuantitativeTrack",
-        "trackId": "gccontent_hg38",
-        "name": "GCContent",
-        "assemblyNames": ["GRCh38"],
-        "adapter": {
-            "type": "GCContentAdapter",
-            "sequenceAdapter": {
-                "type": "BgzipFastaAdapter",
-                "fastaLocation": {
-                    "uri": "https://jbrowse.org/genomes/GRCh38/fasta/GRCh38.fa.gz",
-                    "locationType": "UriLocation",
-                    "baseUri": "https://jbrowse.org/code/jb2/v2.3.4/test_data/config_demo.json",
-                },
-                "faiLocation": {
-                    "uri": "https://jbrowse.org/genomes/GRCh38/fasta/GRCh38.fa.gz.fai",
-                    "locationType": "UriLocation",
-                    "baseUri": "https://jbrowse.org/code/jb2/v2.3.4/test_data/config_demo.json",
-                },
-                "gziLocation": {
-                    "uri": "https://jbrowse.org/genomes/GRCh38/fasta/GRCh38.fa.gz.gzi",
-                    "locationType": "UriLocation",
-                    "baseUri": "https://jbrowse.org/code/jb2/v2.3.4/test_data/config_demo.json",
-                },
-            },
-        },
-    },
-    {
-        "type": "VariantTrack",
-        "trackId": "clinvar.vcf.gz-1675786941544-sessionTrack",
-        "name": "clinvar.vcf.gz",
-        "assemblyNames": ["GRCh38"],
-        "adapter": {
-            "type": "VcfTabixAdapter",
-            "vcfGzLocation": {
-                "locationType": "UriLocation",
-                "uri": "https://ftp.ncbi.nlm.nih.gov/pub/clinvar/vcf_GRCh38/clinvar.vcf.gz",
-            },
-            "index": {
-                "location": {
-                    "locationType": "UriLocation",
-                    "uri": "https://ftp.ncbi.nlm.nih.gov/pub/clinvar/vcf_GRCh38/clinvar.vcf.gz.tbi",
-                }
-            },
-        },
-    },
-]
+import os
+from collections import defaultdict
 
-import sys, os
-from pprint import pprint
+# Base directory
+base_dir = "assets/Counts_BW"
 
-listdir_counts = sorted(
-    set(
-        [
-            e.replace("-W.bigWig", "")
-            for e in os.listdir("assets/Counts_BW")
-            if e.endswith("-W.bigWig")
+# Using defaultdict
+runs_samples_dict = defaultdict(list)
+
+# Loop through each directory (i.e., each Run_X, Run_Y, etc.)
+for run_dir in os.listdir(base_dir):
+    # Check if it's a directory
+    if os.path.isdir(os.path.join(base_dir, run_dir)):
+        # Get the list of all bigWig files that end with "-W.bigWig" under this directory
+        samples = [
+            file.replace("-W.bigWig", "")
+            for file in os.listdir(os.path.join(base_dir, run_dir))
+            if file.endswith("-W.bigWig")
         ]
-    )
-)[:10]
+        # Sort and store
+        runs_samples_dict[run_dir] = sorted(samples)
 
-pprint(listdir_counts)
 
-my_tracks_counts = [
+pprint(runs_samples_dict)
+
+my_tracks = [
     {
         "type": "MultiQuantitativeTrack",
         "trackId": "multiwiggle_{cell}-sessionTrack".format(cell=e),
         "name": e,
         "assemblyNames": ["GRCh38"],
-        "category": ["Run X", "Sample Y - Counts", "TEST Z"],
+        "category": [f"{r}", f"{e}"],
         "adapter": {
             "type": "MultiWiggleAdapter",
             #     "layout": [
@@ -151,37 +95,23 @@ my_tracks_counts = [
                     "name": "Watson",
                     "type": "BigWigAdapter",
                     "bigWigLocation": {
-                        "uri": f"http://localhost:8090/assets/Counts_BW/{e}-W.bigWig",
+                        "uri": f"http://localhost:8090/assets/Counts_BW/{r}/{e}-W.bigWig",
                     },
                 },
                 {
                     "name": "Crick",
                     "type": "BigWigAdapter",
                     "bigWigLocation": {
-                        "uri": f"http://localhost:8090/assets/Counts_BW/{e}-C.bigWig",
+                        "uri": f"http://localhost:8090/assets/Counts_BW/{r}/{e}-C.bigWig",
                     },
                 },
             ],
         },
     }
-    for e in sorted(listdir_counts)
+    for r in runs_samples_dict.keys()
+    for e in sorted(runs_samples_dict[r])
 ]
 
-my_tracks_sv = [
-    {
-        "type": "FeatureTrack",
-        "trackId": "test_sv.bed-sessionTrack",
-        "name": "test_sv.bed",
-        "assemblyNames": ["GRCh38"],
-        "adapter": {
-            "type": "BedAdapter",
-            "bedLocation": {"uri": dash.get_asset_url("test_sv.bed")},
-        },
-    }
-    for e in sorted(listdir_counts)[:1]
-]
-
-my_tracks += my_tracks_counts
 
 tracks_session = []
 
@@ -196,6 +126,7 @@ def set_sample_value(value):
     print(value)
 
     tracks_session_counts = [
+        # e
         {
             "type": "MultiQuantitativeTrack",
             "configuration": "multiwiggle_{cell}-sessionTrack".format(cell=e),
@@ -213,7 +144,7 @@ def set_sample_value(value):
                             "name": "Watson",
                             "type": "BigWigAdapter",
                             "bigWigLocation": {
-                                "uri": f"http://localhost:8090/assets/Counts_BW/{e}-W.bigWig",
+                                "uri": f"http://localhost:8090/assets/Counts_BW/{r}/{e}-W.bigWig",
                             },
                             "color": "rgb(244, 164, 96)",
                         },
@@ -221,7 +152,7 @@ def set_sample_value(value):
                             "name": "Crick",
                             "type": "BigWigAdapter",
                             "bigWigLocation": {
-                                "uri": f"http://localhost:8090/assets/Counts_BW/{e}-C.bigWig",
+                                "uri": f"http://localhost:8090/assets/Counts_BW/{r}/{e}-C.bigWig",
                             },
                             "color": "rgb(102, 139, 139)",
                         },
@@ -229,9 +160,12 @@ def set_sample_value(value):
                 },
             ],
         }
-        for e in sorted(listdir_counts)
-        if e in value
+        for r in runs_samples_dict.keys()
+        for e in sorted(runs_samples_dict[r])
+        if value and e in value
     ]
+    print("tracks_session_counts")
+    print(tracks_session_counts)
 
     my_default_session = {
         "name": "My session",
@@ -313,6 +247,27 @@ my_theme = {
         },
     },
 }
+
+@app.callback(
+    Output("sample-dropdown-jbrowse", "options"),
+    Output("sample-dropdown-jbrowse", "value"),
+    Input("run-dropdown-jbrowse", "value"),
+)
+def update_sample_dropdown(selected_runs):
+    if selected_runs:
+        # Since multi=True, selected_runs will be a list of runs. We gather all samples from all selected runs.
+        samples = []
+        for run in selected_runs:
+            samples.extend(runs_samples_dict.get(run, []))
+
+        # Deduplicate the samples list
+        samples = list(set(samples))
+
+        return [{"label": sample, "value": sample} for sample in samples], samples
+    else:
+        return [], []
+
+
 # app.layout = html.Div(
 app.layout = dbc.Container(
     [
@@ -320,14 +275,38 @@ app.layout = dbc.Container(
             "JBrowse2 genome viewer", style={"margin-top": 5}, className="display-4"
         ),
         html.Hr(),
-        html.H2("Sample selection:", className="card-title"),
-        dcc.Dropdown(
-            # sorted(df_datatable["sample"].unique().tolist()),
-            value=sorted(listdir_counts)[0],
-            options=listdir_counts,
-            id="sample-dropdown-jbrowse",
-            style={"fontSize": 18, "font-family": "sans-serif"},
-            multi=True,
+        dbc.Row(
+            [
+                dbc.Col(
+                    [
+                        html.H2("Run selection:", className="card-title"),
+                        dcc.Dropdown(
+                            # sorted(df_datatable["sample"].unique().tolist()),
+                            # value=sorted(runs_samples_dict.values)[0],
+                            options=[
+                                {"label": run, "value": run}
+                                for run in sorted(runs_samples_dict.keys())
+                            ],
+                            id="run-dropdown-jbrowse",
+                            style={"fontSize": 18, "font-family": "sans-serif"},
+                            multi=True,
+                        ),
+                    ]
+                ),
+                dbc.Col(
+                    [
+                        html.H2("Sample selection:", className="card-title"),
+                        dcc.Dropdown(
+                            # sorted(df_datatable["sample"].unique().tolist()),
+                            # value=sorted(listdir_counts)[0],
+                            # options=list(runs_samples_dict.keys()),
+                            id="sample-dropdown-jbrowse",
+                            style={"fontSize": 18, "font-family": "sans-serif"},
+                            multi=True,
+                        ),
+                    ]
+                ),
+            ]
         ),
         html.Br(),
         # html.Div(id="dd-output-container"),
