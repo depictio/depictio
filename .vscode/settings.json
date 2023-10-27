@@ -3,5 +3,6 @@
     "tests/"
   ],
   "python.testing.pytestEnabled": true,
-  "cmake.configureOnOpen": false
+  "cmake.configureOnOpen": false,
+  "restructuredtext.preview.docutils.disabled": true
 }

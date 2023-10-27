@@ -65,8 +65,8 @@ def register_callbacks_card_component(app):
             Input({"type": "card-input", "index": MATCH}, "value"),
             Input({"type": "card-dropdown-column", "index": MATCH}, "value"),
             Input({"type": "card-dropdown-aggregation", "index": MATCH}, "value"),
-            Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
-            Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+            State({"type": "workflow-selection-label", "index": MATCH}, "value"),
+            State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
             # Input("interval", "n_intervals"),
         ],
         prevent_initial_call=True,
@@ -180,14 +180,20 @@ def design_card(id, df):
                     dbc.Col(
                         [
                             html.H5("Resulting card"),
-                            dbc.Card(
-                                dbc.CardBody(
-                                    id={
-                                        "type": "card-body",
-                                        "index": id["index"],
-                                    }
+                            html.Div(
+                                dbc.Card(
+                                    dbc.CardBody(
+                                        id={
+                                            "type": "card-body",
+                                            "index": id["index"],
+                                        }
+                                    ),
+                                    style={"width": "100%"},
                                 ),
-                                style={"width": "100%"},
+                                id={
+                                    "type": "test-container",
+                                    "index": id["index"],
+                                },
                             ),
                         ],
                         width="auto",

@@ -208,7 +208,7 @@ def close_modal(n_clicks):
 
 @app.callback(
     Output({"type": "workflow-selection-label", "index": MATCH}, "data"),
-    # Output({"type": "workflow-selection-label", "index": MATCH}, "value"),
+    Output({"type": "workflow-selection-label", "index": MATCH}, "value"),
     [
         Input("interval_long", "n_intervals")
     ],  # or whatever triggers the workflow dropdown to update
@@ -216,10 +216,13 @@ def close_modal(n_clicks):
 )
 def set_workflow_options(n_intervals):
     tmp_data = list_workflows_for_dropdown()
+    print("set_workflow_options")
+
+    print(tmp_data)
 
     # Return the data and the first value if the data is not empty
     if tmp_data:
-        return tmp_data
+        return tmp_data, tmp_data[0]["value"]
     else:
         return dash.no_update
 
@@ -317,25 +320,27 @@ def set_datacollection_options(selected_workflow):
         Input({"type": "btn-done", "index": MATCH}, "n_clicks"),
     ],
     [
-        State({"type": "modal-body", "index": MATCH}, "children"),
+        State({"type": "test-container", "index": MATCH}, "children"),
         State({"type": "btn-done", "index": MATCH}, "id"),
-        State({"type": "graph", "index": MATCH}, "figure"),
+        # State({"type": "graph", "index": MATCH}, "figure"),
     ],
     prevent_initial_call=True,
 )
-def update_button(n_clicks, children, btn_id, graph):
+def update_button(n_clicks, children, btn_id):
     print("update_button")
     # children = [children[4]]
     print(len(children))
+    print(children)
 
-    btn_index = btn_id['index']  # Extracting index from btn_id dict
+    btn_index = btn_id["index"]  # Extracting index from btn_id dict
 
-    new_draggable_child = html.Div(
-        [dcc.Graph(figure=graph)],
-        id={"type": f"draggable-{btn_index}", "index": btn_index},
-    )
+    # new_draggable_child = html.Div(
+    #     [dcc.Graph(figure=graph)],
+    #     id={"type": f"draggable-{btn_index}", "index": btn_index},
+    # )
 
-    return new_draggable_child
+    return children
+
 
 # @app.callback(
 #     Output({"type": "add-content", "index": MATCH}, "children"),
@@ -444,30 +449,30 @@ def update_button(n_clicks, children, btn_id, graph):
 
 #     return new_draggable_child
 
-    # else:
-    #     return html.Div()
+# else:
+#     return html.Div()
 
-    # print("\nEND")
+# print("\nEND")
 
-    # if n_clicks > 0:
-    #     # print(children)
-    #     # figure = children[0]["props"]["children"][0]["props"]["children"]["props"]["figure"]
-    #     # print(children)
-    #     # print(list(child["props"].keys()))
-    #     # print(child_id)
-    #     # child = children[0]["props"]["children"][0]["props"]["children"]["props"]["children"]
-    #     # print(child)
-    #     # if child["props"]["type"] is not "Card":
-    #     # else:
-    #     #     child["props"]["children"]["type"] = (
-    #     #         "updated-" + child["props"]["id"]["type"]
-    #     #     )
+# if n_clicks > 0:
+#     # print(children)
+#     # figure = children[0]["props"]["children"][0]["props"]["children"]["props"]["figure"]
+#     # print(children)
+#     # print(list(child["props"].keys()))
+#     # print(child_id)
+#     # child = children[0]["props"]["children"][0]["props"]["children"]["props"]["children"]
+#     # print(child)
+#     # if child["props"]["type"] is not "Card":
+#     # else:
+#     #     child["props"]["children"]["type"] = (
+#     #         "updated-" + child["props"]["id"]["type"]
+#     #     )
 
-    #     # print(child)
-    #     # # print(figure)
-    #     # return dcc.Graph(
-    #     #     figure=figure, id={"type": "graph", "index": btn_id["index"]}
-    #     # )
+#     # print(child)
+#     # # print(figure)
+#     # return dcc.Graph(
+#     #     figure=figure, id={"type": "graph", "index": btn_id["index"]}
+#     # )
 
 
 # Add a callback to update the isDraggable property
@@ -586,10 +591,6 @@ def update_step_2(workflow_selection, data_collection_selection):
         return html.Div()
 
 
-
-
-
-
 @app.callback(
     Output({"type": "output-stepper-step-3", "index": MATCH}, "children"),
     Output({"type": "store-btn-option", "index": MATCH, "value": ALL}, "data"),
@@ -695,15 +696,7 @@ def update_draggable_children(
     triggered_input = ctx.triggered[0]["prop_id"].split(".")[0]
     print(triggered_input)
     print(f"REMOVE BUTTON ARGS {args[-10]}")
-    print("\n")
-    print("\n")
-    print("\n")
-    print("\n")
-    print("\n")
-    print("\n")
-    print("\n")
-    print("\n")
-    print("\n")
+  
     stored_layout_data = args[-8]
     stored_children_data = args[-7]
     new_layouts = args[-6]
@@ -770,6 +763,19 @@ def update_draggable_children(
 
         # print("index: {}".format(n))
         new_plot_id = f"graph-{n}"
+
+        print("add-button")
+        print(n)
+        print(new_plot_id)
+        print("\n")
+        print("\n")
+        print("\n")
+        print("\n")
+        print("\n")
+        print("\n")
+        print("\n")
+        print("\n")
+        print("\n")
         # print(new_plot_id)
 
         stepper_dropdowns = html.Div(
