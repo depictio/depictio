@@ -1,4 +1,5 @@
 # Import necessary libraries
+import collections
 import numpy as np
 from dash import html, dcc, Input, Output, State, ALL, MATCH
 import dash
@@ -39,8 +40,8 @@ def register_callbacks_figure_component(app):
             Input({"type": "refresh-button", "index": MATCH}, "n_clicks"),
             Input({"type": "edit-button", "index": MATCH}, "n_clicks"),
             Input({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
-            Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
-            Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+            State({"type": "workflow-selection-label", "index": MATCH}, "value"),
+            State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
         ],
         [State({"type": "edit-button", "index": MATCH}, "id")],
         # prevent_initial_call=True,
@@ -446,8 +447,8 @@ def register_callbacks_figure_component(app):
         [
             Input({"type": "dict_kwargs", "index": MATCH}, "value"),
             Input({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
-            Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
-            Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+            State({"type": "workflow-selection-label", "index": MATCH}, "value"),
+            State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
             # Input({"type": "tmp-x", "index": MATCH}, "value"),
             # [
             #     Input({"type": f"tmp-{e}", "index": MATCH}, "children")
@@ -466,6 +467,13 @@ def register_callbacks_figure_component(app):
         workflow = args[2]
         data_collection = args[3]
         print(args)
+
+        columns_json = get_columns_from_data_collection(workflow, data_collection)
+        print(columns_json)
+
+        columns_specs_reformatted = collections.defaultdict(list)
+        {columns_specs_reformatted[v["type"]].append(k) for k,v in columns_json["columns_specs"].values()}
+        print(columns_specs_reformatted)
 
         # print("update figure")
         # print(dict_kwargs)
@@ -515,10 +523,13 @@ def design_figure(id, wfs_list):
         dbc.Row(
             [
                 dbc.Col(
-                    dcc.Graph(
-                        # figure=figure,
-                        id={"type": "graph", "index": id["index"]},
-                        config={"editable": True},
+                    html.Div(
+                        dcc.Graph(
+                            # figure=figure,
+                            id={"type": "graph", "index": id["index"]},
+                            config={"editable": True},
+                        ),
+                        id={"type": "test-container", "index": id["index"]},
                     ),
                     width="auto",
                 ),
@@ -550,7 +561,8 @@ def design_figure(id, wfs_list):
                                                 id={
                                                     "type": "refresh-button",
                                                     "index": id["index"],
-                                                },                                                size="lg",
+                                                },
+                                                size="lg",
                                                 style={"align": "center"},
                                                 n_clicks=0,
                                             )

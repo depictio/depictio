@@ -73,8 +73,8 @@ def register_callbacks_interactive_component(app):
             Input({"type": "input-title", "index": MATCH}, "value"),
             Input({"type": "input-dropdown-column", "index": MATCH}, "value"),
             Input({"type": "input-dropdown-method", "index": MATCH}, "value"),
-            Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
-            Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+            State({"type": "workflow-selection-label", "index": MATCH}, "value"),
+            State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
             # Input("interval", "n_intervals"),
         ],
         prevent_initial_call=True,
@@ -226,15 +226,21 @@ def design_interactive(id, df):
                     dbc.Col(
                         [
                             html.H5("Resulting interactive component"),
-                            dbc.Card(
-                                dbc.CardBody(
-                                    id={
-                                        "type": "input-body",
-                                        "index": id["index"],
-                                    },
-                                    style={"width": "100%"},
+                            html.Div(
+                                dbc.Card(
+                                    dbc.CardBody(
+                                        id={
+                                            "type": "input-body",
+                                            "index": id["index"],
+                                        },
+                                        style={"width": "100%"},
+                                    ),
+                                    style={"width": "600px"},
                                 ),
-                                style={"width": "600px"},
+                                id={
+                                    "type": "test-container",
+                                    "index": id["index"],
+                                },
                             ),
                         ],
                         width="auto",
