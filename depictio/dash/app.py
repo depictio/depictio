@@ -173,6 +173,36 @@ def close_modal(n_clicks):
         return False
     return True
 
+def enable_box_edit_mode(box, btn_index, switch_state=True):
+    edit_button = dbc.Button(
+        "Edit",
+        id={
+            "type": "edit-box-button",
+            "index": f"{btn_index}",
+        },
+        color="secondary",
+        style={"margin-left": "12px"},
+        # size="lg",
+    )
+    remove_button = dbc.Button(
+        "Remove",
+        id={"type": "remove-box-button", "index": f"{btn_index}"},
+        color="danger",
+    )
+    if switch_state:
+        box_components_list = [edit_button, remove_button, box]
+    else:
+        box_components_list = [box]
+
+    new_draggable_child = html.Div(
+        box_components_list,
+        id={"type": f"draggable-{btn_index}", "index": btn_index},
+    )
+
+    return new_draggable_child
+
+
+
 
 @app.callback(
     Output({"type": "add-content", "index": MATCH}, "children"),
@@ -182,11 +212,12 @@ def close_modal(n_clicks):
     [
         State({"type": "test-container", "index": MATCH}, "children"),
         State({"type": "btn-done", "index": MATCH}, "id"),
+        State("stored-edit-dashboard-mode-button", "data"),
         # State({"type": "graph", "index": MATCH}, "figure"),
     ],
     prevent_initial_call=True,
 )
-def update_button(n_clicks, children, btn_id):
+def update_button(n_clicks, children, btn_id, switch_state):
     print("update_button")
     # children = [children[4]]
     print(len(children))
@@ -195,12 +226,12 @@ def update_button(n_clicks, children, btn_id):
 
     btn_index = btn_id["index"]  # Extracting index from btn_id dict
 
-    # new_draggable_child = html.Div(
-    #     [dcc.Graph(figure=graph)],
-    #     id={"type": f"draggable-{btn_index}", "index": btn_index},
-    # )
+    switch_state_bool = True if len(switch_state) > 0 else False
 
-    return children
+
+    new_draggable_child = enable_box_edit_mode(children, btn_index, switch_state_bool)
+
+    return new_draggable_child
 
 
 # Add a callback to update the isDraggable property
@@ -386,7 +417,7 @@ def update_step_2(
     [
         Input("add-button", "n_clicks"),
         Input("edit-dashboard-mode-button", "value"),
-        Input({"type": "remove-button", "index": dash.dependencies.ALL}, "n_clicks"),
+        Input({"type": "remove-box-button", "index": dash.dependencies.ALL}, "n_clicks"),
         Input({"type": "input-component", "index": dash.dependencies.ALL}, "value"),
         # Input("time-input", "value"),
         Input("stored-layout", "data"),
@@ -482,7 +513,7 @@ def update_draggable_children(
         # Retrieve index of the button that was clicked - this is the number of the plot
 
         n = ctx.triggered[0]["value"]
-        new_plot_id = f"graph-{n}"
+        new_plot_id = f"{n}"
 
         stepper_dropdowns = create_stepper_dropdowns(n)
         stepper_buttons = create_stepper_buttons(n)
@@ -698,11 +729,12 @@ def update_draggable_children(
         print(triggered_input, type(triggered_input))
         # print(current_draggable_children)
         input_id = ast.literal_eval(triggered_input)["index"]
-        # print(input_id)
+        print(input_id)
 
         # new_filter_dict = filter_dict
         # print(new_filter_dict)
         for child in current_draggable_children:
+            print(child)
             # print("-".join(child["props"]["id"].split("-")[1:]))
             # print("-".join(input_id.split("-")[1:]))
             if "-".join(child["props"]["id"].split("-")[1:]) == "-".join(
