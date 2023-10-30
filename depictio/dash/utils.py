@@ -735,18 +735,18 @@ def get_columns_from_data_collection(
     print(workflow_id, data_collection_id)
 
     if workflow_id is not None and data_collection_id is not None:
-        print("OK")
-        print(workflow_id, data_collection_id)
+        # print("OK")
+        # print(workflow_id, data_collection_id)
         workflow_engine = workflow_id.split("/")[0]
         workflow_name = workflow_id.split("/")[1]
-        print(workflow_engine, workflow_name)
+        # print(workflow_engine, workflow_name)
         response = httpx.get(
             f"{API_BASE_URL}/api/v1/datacollections/get_columns/{workflow_engine}/{workflow_name}/{data_collection_id}"
         )
-        print(response)
+        # print(response)
         if response.status_code == 200:
             json = response.json()
-            print(json)
+            # print(json)
             return json
         else:
             print("No workflows found")
