@@ -331,6 +331,7 @@ def update_button(n_clicks, children, btn_id):
     # children = [children[4]]
     print(len(children))
     print(children)
+    children["props"]["id"]["type"] = "updated-" + children["props"]["id"]["type"]
 
     btn_index = btn_id["index"]  # Extracting index from btn_id dict
 

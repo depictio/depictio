@@ -236,6 +236,10 @@ def design_interactive(id, df):
                                         style={"width": "100%"},
                                     ),
                                     style={"width": "600px"},
+                                    id={
+                                        "type": "card",
+                                        "index": id["index"],
+                                    },
                                 ),
                                 id={
                                     "type": "test-container",

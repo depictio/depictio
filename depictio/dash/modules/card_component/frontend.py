@@ -189,6 +189,10 @@ def design_card(id, df):
                                         }
                                     ),
                                     style={"width": "100%"},
+                                    id={
+                                        "type": "interactive",
+                                        "index": id["index"],
+                                    },
                                 ),
                                 id={
                                     "type": "test-container",
