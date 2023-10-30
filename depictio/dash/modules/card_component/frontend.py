@@ -2,13 +2,20 @@
 from dash import html, dcc, Input, Output, State, ALL, MATCH
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
+from dash_iconify import DashIconify
 
 
 # Depictio imports
 from depictio.dash.modules.card_component.utils import (
     agg_functions,
 )
-from depictio.dash.utils import get_columns_from_data_collection
+from depictio.dash.utils import (
+    SELECTED_STYLE,
+    UNSELECTED_STYLE,
+    list_data_collections_for_dropdown,
+    list_workflows_for_dropdown,
+    get_columns_from_data_collection,
+)
 
 # from depictio.dash_frontend.app import app, df
 
@@ -207,3 +214,42 @@ def design_card(id, df):
         ),
     ]
     return row
+
+
+def create_stepper_card_button(n):
+    """
+    Create the stepper card button
+
+    Args:
+        n (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
+
+    button = dbc.Col(
+        dmc.Button(
+            "Card",
+            id={
+                "type": "btn-option",
+                "index": n,
+                "value": "Card",
+            },
+            n_clicks=0,
+            style=UNSELECTED_STYLE,
+            size="xl",
+            color="violet",
+            leftIcon=DashIconify(icon="formkit:number", color="white"),
+        )
+    )
+    store = dcc.Store(
+        id={
+            "type": "store-btn-option",
+            "index": n,
+            "value": "Card",
+        },
+        data=0,
+        storage_type="memory",
+    )
+
+    return button, store

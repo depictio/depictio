@@ -3,6 +3,7 @@ from dash import html, dcc, Input, Output, State, ALL, MATCH
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import pandas as pd
+from dash_iconify import DashIconify
 
 
 # Depictio imports
@@ -10,6 +11,10 @@ from depictio.dash.modules.interactive_component.utils import (
     agg_functions,
 )
 from depictio.dash.utils import (
+    SELECTED_STYLE,
+    UNSELECTED_STYLE,
+    list_data_collections_for_dropdown,
+    list_workflows_for_dropdown,
     get_columns_from_data_collection,
     load_gridfs_file,
 )
@@ -254,3 +259,47 @@ def design_interactive(id, df):
         ),
     ]
     return interactive_row
+
+
+def create_stepper_interactive_button(n):
+    """
+    Create the stepper interactive button
+
+    Args:
+        n (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
+
+    button = dbc.Col(
+        dmc.Button(
+            "Interactive",
+            id={
+                "type": "btn-option",
+                "index": n,
+                "value": "Interactive",
+            },
+            n_clicks=0,
+            # style={
+            #     "display": "inline-block",
+            #     "width": "250px",
+            #     "height": "100px",
+            # },
+            style=UNSELECTED_STYLE,
+            size="xl",
+            color="indigo",
+            leftIcon=DashIconify(icon="bx:slider-alt", color="white"),
+        )
+    )
+    store = dcc.Store(
+        id={
+            "type": "store-btn-option",
+            "index": n,
+            "value": "Interactive",
+        },
+        data=0,
+        storage_type="memory",
+    )
+
+    return button, store

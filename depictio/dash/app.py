@@ -23,21 +23,6 @@ min_step = 0
 max_step = 3
 active = 0
 
-SELECTED_STYLE = {
-    "display": "inline-block",
-    "width": "250px",
-    "height": "100px",
-    "border": "3px solid",
-    "opacity": 1,
-}
-
-UNSELECTED_STYLE = {
-    "display": "inline-block",
-    "width": "250px",
-    "height": "100px",
-    "opacity": 0.65,
-}
-
 
 app = dash.Dash(
     __name__,
@@ -65,20 +50,15 @@ from depictio.dash.modules.figure_component.frontend import (
     register_callbacks_figure_component,
 )
 
+from depictio.dash.layouts.stepper import (
+    register_callbacks_stepper,
+)
+
 register_callbacks_card_component(app)
 register_callbacks_interactive_component(app)
 register_callbacks_figure_component(app)
+register_callbacks_stepper(app)
 
-
-# from depictio.dash_frontend.utils import (
-#     plotly_vizu_dict,
-#     specific_params,
-#     param_info,
-#     base_elements,
-#     plotly_bootstrap_mapping,
-#     secondary_common_params,
-#     secondary_common_params_lite,
-# )
 
 from depictio.dash.utils import (
     # create_initial_figure,
@@ -87,10 +67,9 @@ from depictio.dash.utils import (
     list_workflows_for_dropdown,
     list_data_collections_for_dropdown,
     get_columns_from_data_collection,
+    SELECTED_STYLE,
+    UNSELECTED_STYLE,
 )
-
-# from depictio.dash_frontend.modules.card_component.utils import card_design_modal
-from depictio.dash.modules.card_component.utils import agg_functions
 
 # Data
 
@@ -184,17 +163,6 @@ app.layout = dbc.Container(
 )
 
 
-# @app.callback(
-#     Output("collapse", "is_open"),
-#     [Input("collapse-button", "n_clicks")],
-#     [State("collapse", "is_open")],
-# )
-# def toggle_collapse(n, is_open):
-#     if n:
-#         return not is_open
-#     return is_open
-
-
 @app.callback(
     Output({"type": "modal", "index": MATCH}, "is_open"),
     [Input({"type": "btn-done", "index": MATCH}, "n_clicks")],
@@ -204,114 +172,6 @@ def close_modal(n_clicks):
     if n_clicks > 0:
         return False
     return True
-
-
-@app.callback(
-    Output({"type": "workflow-selection-label", "index": MATCH}, "data"),
-    Output({"type": "workflow-selection-label", "index": MATCH}, "value"),
-    [
-        Input("interval_long", "n_intervals")
-    ],  # or whatever triggers the workflow dropdown to update
-    # prevent_initial_call=True,
-)
-def set_workflow_options(n_intervals):
-    tmp_data = list_workflows_for_dropdown()
-    print("set_workflow_options")
-
-    print(tmp_data)
-
-    # Return the data and the first value if the data is not empty
-    if tmp_data:
-        return tmp_data, tmp_data[0]["value"]
-    else:
-        return dash.no_update
-
-
-@app.callback(
-    Output({"type": "datacollection-selection-label", "index": MATCH}, "data"),
-    Output({"type": "datacollection-selection-label", "index": MATCH}, "value"),
-    Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
-    # prevent_initial_call=True,
-)
-def set_datacollection_options(selected_workflow):
-    if not selected_workflow:
-        raise dash.exceptions.PreventUpdate
-
-    tmp_data = list_data_collections_for_dropdown(selected_workflow)
-    print("set_datacollection_options")
-    print(tmp_data)
-
-    # Return the data and the first value if the data is not empty
-    if tmp_data:
-        return tmp_data, tmp_data[0]["value"]
-    else:
-        raise dash.exceptions.PreventUpdate
-
-
-# @app.callback(
-#     Output({"type": "modal-body", "index": MATCH}, "children"),
-#     [Input({"type": "btn-option", "index": MATCH, "value": ALL}, "n_clicks")],
-#     [
-#         State({"type": "btn-option", "index": MATCH, "value": ALL}, "id"),
-#     ],
-#     prevent_initial_call=True,
-# )
-# def update_modal(n_clicks, ids):
-#     # print("update_modal")
-#     # print(n_clicks, ids)
-#     # print("\n")
-
-#     # visualization_type = "scatter"
-#     for n, id in zip(n_clicks, ids):
-#         # print(n, id)
-#         if n > 0:
-#             if id["value"] == "Figure":
-#                 # plot_func = plotly_vizu_dict[visualization_type]
-#                 # plot_kwargs = dict(x="lifeExp", y="pop", color="continent")
-#                 # print(df.columns)
-#                 # plot_kwargs = dict(
-#                 #     x=df.columns[0], y=df.columns[1], color=df.columns[2]
-#                 # )
-#                 plot_kwargs = dict()
-
-#                 # figure = plot_func(
-#                 #     df,
-#                 #     **plot_kwargs,
-#                 # )
-
-#                 wfs_list = list_workflows_for_dropdown()
-#                 print(wfs_list)
-
-#                 return design_figure(id, wfs_list)
-#             elif id["value"] == "Card":
-#                 print("Card")
-#                 print(n, id)
-#                 return design_card(id, df)
-#             elif id["value"] == "Interactive":
-#                 # print("Interactive")
-#                 return design_interactive(id, df)
-#     return []
-
-
-# def find_ids_recursive(dash_component):
-#     """
-#     Recursively search for ids in the properties of a Dash component.
-#     :param dash_component: The Dash component to search in
-#     :return: A list of all ids found
-#     """
-#     if isinstance(dash_component, dict) and "props" in dash_component:
-#         # print(f"Inspecting {dash_component.get('type')}")
-#         if "id" in dash_component["props"]:
-#             id = dash_component["props"]["id"]
-#             # print(f"Found id: {id}")
-#             yield id
-#         if "children" in dash_component["props"]:
-#             children = dash_component["props"]["children"]
-#             if isinstance(children, list):
-#                 for child in children:
-#                     yield from find_ids_recursive(child)
-#             elif isinstance(children, dict):
-#                 yield from find_ids_recursive(children)
 
 
 @app.callback(
@@ -341,139 +201,6 @@ def update_button(n_clicks, children, btn_id):
     # )
 
     return children
-
-
-# @app.callback(
-#     Output({"type": "add-content", "index": MATCH}, "children"),
-#     [
-#         Input({"type": "btn-done", "index": MATCH}, "n_clicks"),
-#     ],
-#     [
-#         State({"type": "modal-body", "index": MATCH}, "children"),
-#         State({"type": "btn-done", "index": MATCH}, "id"),
-#         State({"type": "graph", "index": MATCH}, "figure"),
-#     ],
-#     prevent_initial_call=True,
-# )
-# def update_button(n_clicks, children, btn_id, graph):
-#     print("update_button")
-#     # children = [children[4]]
-#     print(len(children))
-
-#     btn_index = btn_id["index"]
-#     # print(n_clicks, btn_id)
-#     # print([sub_e for e in children for sub_e in list(find_ids_recursive(e))])
-#     # print("\n")
-
-#     # print(f"Inspecting children:")
-#     # box_type = [sub_e for e in children for sub_e in list(find_ids_recursive(e))][0][
-#     #     "type"
-#     # ]
-#     # print(box_type)
-#     # print(children)
-#     # print(box_type)
-#     # print(f"Found ids: {all_ids}")
-
-#     # if box_type == "workflow-selection-label":
-#     #     raise dash.exceptions.PreventUpdate
-
-#     # div_index = 0 if box_type == "segmented-control-visu-graph" else 2
-#     # if box_type:
-#     #     if box_type == "segmented-control-visu-graph":
-#     #         children = [children[4]]
-#     #         child = children[div_index]["props"]["children"][0]["props"][
-#     #             "children"
-#     #         ]  # Figure
-#     #         child["props"]["id"]["type"] = (
-#     #             "updated-" + child["props"]["id"]["type"]
-#     #         )  # Figure
-
-#     #         # print(child)
-#     #         # print("OK")
-#     #     elif box_type == "card":
-#     #         # print(children)
-#     #         child = children[div_index]["props"]["children"][1]["props"]["children"][
-#     #             1
-#     #         ]  # Card
-#     #         # print(child)
-#     #         child["props"]["children"]["props"]["id"]["type"] = (
-#     #             "updated-" + child["props"]["children"]["props"]["id"]["type"]
-#     #         )  # Figure
-#     #     elif box_type == "input":
-#     #         # print(children)
-#     #         child = children[div_index]["props"]["children"][1]["props"]["children"][
-#     #             1
-#     #         ]  # Card
-#     #         # print(child)
-#     #         child["props"]["children"]["props"]["id"]["type"] = (
-#     #             "updated-" + child["props"]["children"]["props"]["id"]["type"]
-#     #         )  # Figure
-#     #     # elif box_type == "input":
-#     #     #     child = children[0]["props"]["children"][1]["props"]["children"] # Card
-#     #     #     print(child)
-#     #     #     child["props"]["children"]["props"]["id"]["type"] = "updated-" + child["props"]["children"]["props"]["id"]["type"] # Figure
-
-#     #     # edit_button = dbc.Button(
-#     #     #     "Edit",
-#     #     #     id={
-#     #     #         "type": "edit-button",
-#     #     #         "index": f"edit-{btn_id}",
-#     #     #     },
-#     #     #     color="secondary",
-#     #     #     style={"margin-left": "10px"},
-#     #     #     # size="lg",
-#     #     # )
-
-#     edit_button = dmc.Button(
-#         "Edit",
-#         id={
-#             "type": "edit-button",
-#             "index": f"edit-{btn_index}",
-#         },
-#         color="gray",
-#         variant="filled",
-#         leftIcon=DashIconify(icon="basil:edit-solid", color="white"),
-#     )
-
-#     remove_button = dmc.Button(
-#         "Remove",
-#         id={"type": "remove-button", "index": f"remove-{btn_index}"},
-#         color="red",
-#         variant="filled",
-#         leftIcon=DashIconify(icon="jam:trash", color="white"),
-#     )
-
-#     new_draggable_child = html.Div(
-#         [remove_button, edit_button, dcc.Graph(graph)],
-#         id=f"draggable-{btn_index}",
-#     )
-
-#     return new_draggable_child
-
-# else:
-#     return html.Div()
-
-# print("\nEND")
-
-# if n_clicks > 0:
-#     # print(children)
-#     # figure = children[0]["props"]["children"][0]["props"]["children"]["props"]["figure"]
-#     # print(children)
-#     # print(list(child["props"].keys()))
-#     # print(child_id)
-#     # child = children[0]["props"]["children"][0]["props"]["children"]["props"]["children"]
-#     # print(child)
-#     # if child["props"]["type"] is not "Card":
-#     # else:
-#     #     child["props"]["children"]["type"] = (
-#     #         "updated-" + child["props"]["id"]["type"]
-#     #     )
-
-#     # print(child)
-#     # # print(figure)
-#     # return dcc.Graph(
-#     #     figure=figure, id={"type": "graph", "index": btn_id["index"]}
-#     # )
 
 
 # Add a callback to update the isDraggable property
@@ -531,6 +258,7 @@ def update(back, next_, workflow_selection, data_selection, btn_component, curre
             return step, False
 
 
+# TODO: optimise to match the modular architecture
 @app.callback(
     [
         Output({"type": "btn-option", "index": MATCH, "value": "Figure"}, "style"),
@@ -592,6 +320,7 @@ def update_step_2(workflow_selection, data_collection_selection):
         return html.Div()
 
 
+# TODO: optimise to match the modular architecture
 @app.callback(
     Output({"type": "output-stepper-step-3", "index": MATCH}, "children"),
     Output({"type": "store-btn-option", "index": MATCH, "value": ALL}, "data"),
@@ -677,19 +406,6 @@ def update_draggable_children(
     # n_clicks, selected_year, current_draggable_children, current_layouts, stored_figures
     *args,
 ):
-    # for arg in [*args]:
-    #     print("\n")
-    #     print(arg)
-    # print("______________________")
-    print("\n")
-    print("\n")
-    print("\n")
-    print("\n")
-    print("\n")
-    print("\n")
-    print("\n")
-    print("\n")
-    print("\n")
     ctx = dash.callback_context
     ctx_triggered = ctx.triggered
     print(f"CTX triggered: {ctx.triggered}")
@@ -697,7 +413,7 @@ def update_draggable_children(
     triggered_input = ctx.triggered[0]["prop_id"].split(".")[0]
     print(triggered_input)
     print(f"REMOVE BUTTON ARGS {args[-10]}")
-  
+
     stored_layout_data = args[-8]
     stored_children_data = args[-7]
     new_layouts = args[-6]
@@ -717,398 +433,66 @@ def update_draggable_children(
     # print(f"Switch state: {switch_state}")
     # print(f"Switch state value: {stored_edit_dashboard}")
 
-    filter_dict = {}
+    ######################################################################
+    # filter_dict = {}
+    # # Enumerate through all the children
+    # for j, child in enumerate(current_draggable_children):
+    #     # print(f"TOTO-{j}")
+    #     # print(child["props"]["id"])
+    #     # print(child["props"]["children"][switch_state_index]["props"])
 
-    # Enumerate through all the children
-    for j, child in enumerate(current_draggable_children):
-        # print(f"TOTO-{j}")
-        # print(child["props"]["id"])
-        # print(child["props"]["children"][switch_state_index]["props"])
+    #     # Filter out those children that are not input components
+    #     if (
+    #         "-input" in child["props"]["id"]
+    #         and "value"
+    #         in child["props"]["children"][switch_state_index]["props"]["children"][-1][
+    #             "props"
+    #         ]
+    #     ):
+    #         # Extract the id and the value of the input component
+    #         # print(f"TATA-{j}")
 
-        # Filter out those children that are not input components
-        if (
-            "-input" in child["props"]["id"]
-            and "value"
-            in child["props"]["children"][switch_state_index]["props"]["children"][-1][
-                "props"
-            ]
-        ):
-            # Extract the id and the value of the input component
-            # print(f"TATA-{j}")
+    #         id_components = child["props"]["children"][switch_state_index]["props"][
+    #             "children"
+    #         ][-1]["props"]["id"]["index"].split("-")[2:]
+    #         value = child["props"]["children"][switch_state_index]["props"]["children"][
+    #             -1
+    #         ]["props"]["value"]
 
-            id_components = child["props"]["children"][switch_state_index]["props"][
-                "children"
-            ][-1]["props"]["id"]["index"].split("-")[2:]
-            value = child["props"]["children"][switch_state_index]["props"]["children"][
-                -1
-            ]["props"]["value"]
+    #         # Construct the key for the dictionary
+    #         key = "-".join(id_components)
 
-            # Construct the key for the dictionary
-            key = "-".join(id_components)
-
-            # Add the key-value pair to the dictionary
-            filter_dict[key] = value
+    #         # Add the key-value pair to the dictionary
+    #         filter_dict[key] = value
+    ######################################################################
 
     # if current_draggable_children is None:
     #     current_draggable_children = []
     # if current_layouts is None:
     #     current_layouts = dict()
 
-    if "add-button" in triggered_input:
-        # print(ctx.triggered[0])
-        # print(ctx.triggered[0]["value"])
-        n = ctx.triggered[0]["value"]
-        # print("add_new_div")
-        # print(n)
-        # print(app._callback_list)
+    from depictio.dash.layouts.stepper import (
+        create_stepper_dropdowns,
+        create_stepper_buttons,
+        create_stepper_output,
+    )
 
-        # print("index: {}".format(n))
+    # Add a new box to the dashboard
+    if "add-button" in triggered_input:
+        # Retrieve index of the button that was clicked - this is the number of the plot
+
+        n = ctx.triggered[0]["value"]
         new_plot_id = f"graph-{n}"
 
-        print("add-button")
-        print(n)
-        print(new_plot_id)
-        print("\n")
-        print("\n")
-        print("\n")
-        print("\n")
-        print("\n")
-        print("\n")
-        print("\n")
-        print("\n")
-        print("\n")
-        # print(new_plot_id)
-
-        stepper_dropdowns = html.Div(
-            [
-                html.Hr(),
-                dbc.Row(
-                    [
-                        dbc.Col(
-                            dmc.Select(
-                                id={"type": "workflow-selection-label", "index": n},
-                                label=html.H4(
-                                    [
-                                        DashIconify(icon="flat-color-icons:workflow"),
-                                        "Workflow selection",
-                                    ]
-                                ),
-                                data=["Test1", "Test2"],
-                                style={
-                                    "height": "100%",
-                                    "display": "inline-block",
-                                    "width": "100%",
-                                    # "display": "flex",
-                                    # "flex-direction": "column",
-                                    # "flex-grow": "0",
-                                },
-                            )
-                        ),
-                        dbc.Col(
-                            dmc.Select(
-                                id={
-                                    "type": "datacollection-selection-label",
-                                    "index": n,
-                                },
-                                label=html.H4(
-                                    [
-                                        DashIconify(icon="bxs:data"),
-                                        "Data collection selection",
-                                    ]
-                                ),
-                                data=["Test3", "Test4"],
-                                style={
-                                    "height": "100%",
-                                    "width": "100%",
-                                    "display": "inline-block",
-                                    # "display": "flex",
-                                    # "flex-direction": "column",
-                                    # "flex-grow": "0",
-                                },
-                            )
-                        ),
-                    ],
-                    # style={"width": "80%"},
-                ),
-                html.Hr(),
-                dbc.Row(html.Div(id={"type": "dropdown-output", "index": n})),
-            ],
-            style={
-                "height": "100%",
-                "width": "822px",
-                # "display": "flex",
-                # "flex-direction": "column",
-                # "flex-grow": "0",
-            },
+        stepper_dropdowns = create_stepper_dropdowns(n)
+        stepper_buttons = create_stepper_buttons(n)
+        stepper_output = create_stepper_output(
+            n, active, new_plot_id, stepper_dropdowns, stepper_buttons
         )
 
-        stepper_buttons = dbc.Row(
-            [
-                dcc.Store(
-                    id={
-                        "type": "store-btn-option",
-                        "index": n,
-                        "value": "Figure",
-                    },
-                    data=0,
-                    storage_type="memory",
-                ),
-                dcc.Store(
-                    id={
-                        "type": "store-btn-option",
-                        "index": n,
-                        "value": "Card",
-                    },
-                    data=0,
-                    storage_type="memory",
-                ),
-                dcc.Store(
-                    id={
-                        "type": "store-btn-option",
-                        "index": n,
-                        "value": "Interactive",
-                    },
-                    data=0,
-                    storage_type="memory",
-                ),
-                html.Hr(),
-                dbc.Col(
-                    dmc.Button(
-                        "Figure",
-                        id={
-                            "type": "btn-option",
-                            "index": n,
-                            "value": "Figure",
-                        },
-                        n_clicks=0,
-                        # style={
-                        #     "display": "inline-block",
-                        #     "width": "250px",
-                        #     "height": "100px",
-                        # },
-                        style=UNSELECTED_STYLE,
-                        size="xl",
-                        color="grape",
-                        leftIcon=DashIconify(icon="mdi:graph-box"),
-                    )
-                ),
-                dbc.Col(
-                    dmc.Button(
-                        "Card",
-                        id={
-                            "type": "btn-option",
-                            "index": n,
-                            "value": "Card",
-                        },
-                        n_clicks=0,
-                        # style={
-                        #     "display": "inline-block",
-                        #     "width": "250px",
-                        #     "height": "100px",
-                        # },
-                        style=UNSELECTED_STYLE,
-                        size="xl",
-                        color="violet",
-                        leftIcon=DashIconify(icon="formkit:number", color="white"),
-                    )
-                ),
-                dbc.Col(
-                    dmc.Button(
-                        "Interactive",
-                        id={
-                            "type": "btn-option",
-                            "index": n,
-                            "value": "Interactive",
-                        },
-                        n_clicks=0,
-                        # style={
-                        #     "display": "inline-block",
-                        #     "width": "250px",
-                        #     "height": "100px",
-                        # },
-                        style=UNSELECTED_STYLE,
-                        size="xl",
-                        color="indigo",
-                        leftIcon=DashIconify(icon="bx:slider-alt", color="white"),
-                    )
-                ),
-            ]
-        )
+        current_draggable_children.append(stepper_output)
 
-        new_element = html.Div(
-            [
-                html.Div(id={"type": "add-content", "index": n}),
-                dbc.Modal(
-                    id={"type": "modal", "index": n},
-                    children=[
-                        dbc.ModalHeader(html.H5("Design your new dashboard component")),
-                        dbc.ModalBody(
-                            [
-                                dmc.Stepper(
-                                    id={"type": "stepper-basic-usage", "index": n},
-                                    active=active,
-                                    # color="green",
-                                    breakpoint="sm",
-                                    children=[
-                                        dmc.StepperStep(
-                                            label="Data selection",
-                                            description="Select your workflow and data collection",
-                                            children=stepper_dropdowns,
-                                            id={"type": "stepper-step-1", "index": n},
-                                        ),
-                                        dmc.StepperStep(
-                                            label="Component selection",
-                                            description="Select your component type",
-                                            children=stepper_buttons,
-                                            id={"type": "stepper-step-2", "index": n},
-                                        ),
-                                        dmc.StepperStep(
-                                            label="Design your component",
-                                            description="Customize your component as you wish",
-                                            children=html.Div(
-                                                id={
-                                                    "type": "output-stepper-step-3",
-                                                    "index": n,
-                                                }
-                                            ),
-                                            id={"type": "stepper-step-3", "index": n},
-                                        ),
-                                        dmc.StepperCompleted(
-                                            children=[
-                                                dmc.Center(
-                                                    [
-                                                        dmc.Button(
-                                                            "Add to dashboard",
-                                                            id={
-                                                                "type": "btn-done",
-                                                                "index": n,
-                                                            },
-                                                            n_clicks=0,
-                                                            size="xl",
-                                                            color="grape",
-                                                            style={
-                                                                "display": "block",
-                                                                "align": "center",
-                                                                "height": "100px",
-                                                            },
-                                                        ),
-                                                    ]
-                                                ),
-                                            ],
-                                        ),
-                                    ],
-                                ),
-                                dmc.Group(
-                                    position="center",
-                                    mt="xl",
-                                    children=[
-                                        dmc.Button(
-                                            "Back",
-                                            id={"type": "back-basic-usage", "index": n},
-                                            variant="default",
-                                        ),
-                                        dmc.Button(
-                                            "Next step",
-                                            id={"type": "next-basic-usage", "index": n},
-                                            disabled=True,
-                                        ),
-                                    ],
-                                ),
-                                # dbc.Row(
-                                #     [
-                                #         dbc.Col(
-                                #             dmc.Button(
-                                #                 "Figure",
-                                #                 id={
-                                #                     "type": "btn-option",
-                                #                     "index": n,
-                                #                     "value": "Figure",
-                                #                 },
-                                #                 n_clicks=0,
-                                #                 style={
-                                #                     "display": "inline-block",
-                                #                     "width": "250px",
-                                #                     "height": "100px",
-                                #                 },
-                                #                 size="xl",
-                                #                 color="grape",
-                                #                 leftIcon=DashIconify(
-                                #                     icon="mdi:graph-box"
-                                #                 ),
-                                #             )
-                                #         ),
-                                #         dbc.Col(
-                                #             dmc.Button(
-                                #                 "Card",
-                                #                 id={
-                                #                     "type": "btn-option",
-                                #                     "index": n,
-                                #                     "value": "Card",
-                                #                 },
-                                #                 n_clicks=0,
-                                #                 style={
-                                #                     "display": "inline-block",
-                                #                     "width": "250px",
-                                #                     "height": "100px",
-                                #                 },
-                                #                 size="xl",
-                                #                 color="violet",
-                                #                 leftIcon=DashIconify(
-                                #                     icon="formkit:number", color="white"
-                                #                 ),
-                                #             )
-                                #         ),
-                                #         dbc.Col(
-                                #             dmc.Button(
-                                #                 "Interaction",
-                                #                 id={
-                                #                     "type": "btn-option",
-                                #                     "index": n,
-                                #                     "value": "Interactive",
-                                #                 },
-                                #                 n_clicks=0,
-                                #                 style={
-                                #                     "display": "inline-block",
-                                #                     "width": "250px",
-                                #                     "height": "100px",
-                                #                 },
-                                #                 size="xl",
-                                #                 color="indigo",
-                                #                 leftIcon=DashIconify(
-                                #                     icon="bx:slider-alt", color="white"
-                                #                 ),
-                                #             )
-                                #         ),
-                                #     ]
-                                # ),
-                            ],
-                            id={"type": "modal-body", "index": n},
-                            style={
-                                "display": "flex",
-                                "justify-content": "center",
-                                "align-items": "center",
-                                "flex-direction": "column",
-                                "height": "100%",
-                                "width": "100%",
-                            },
-                        ),
-                    ],
-                    is_open=True,
-                    size="xl",
-                    backdrop=False,
-                    style={
-                        "height": "100%",
-                        "width": "100%",
-                        # "display": "flex",
-                        # "flex-direction": "column",
-                        # "flex-grow": "0",
-                    },
-                ),
-            ],
-            id=new_plot_id,
-        )
-
-        current_draggable_children.append(new_element)
+        # Define the default size and position for the new plot
         new_layout_item = {
             "i": f"{new_plot_id}",
             "x": 10 * ((len(current_draggable_children) + 1) % 2),
