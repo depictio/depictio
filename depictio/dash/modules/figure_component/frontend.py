@@ -12,7 +12,13 @@ import plotly.express as px
 import re
 from dash_iconify import DashIconify
 import ast
-
+from depictio.dash.utils import (
+    SELECTED_STYLE,
+    UNSELECTED_STYLE,
+    list_data_collections_for_dropdown,
+    list_workflows_for_dropdown,
+    get_columns_from_data_collection,
+)
 
 # Depictio imports
 from depictio.dash.modules.figure_component.utils import (
@@ -473,26 +479,27 @@ def register_callbacks_figure_component(app):
         print(columns_json["columns_specs"])
 
         columns_specs_reformatted = collections.defaultdict(list)
-        {columns_specs_reformatted[v["type"]].append(k) for k,v in columns_json["columns_specs"].items()}
+        {
+            columns_specs_reformatted[v["type"]].append(k)
+            for k, v in columns_json["columns_specs"].items()
+        }
         print(columns_specs_reformatted)
-        
-                
+
         x_col, color_col, y_col = None, None, None
 
-        if columns_specs_reformatted['object']:
-            x_col = columns_specs_reformatted['object'][0]
-            color_col = columns_specs_reformatted['object'][0]
-            
-        if columns_specs_reformatted['int64']:
-            y_col = columns_specs_reformatted['int64'][0]
-        elif columns_specs_reformatted['float64']:
-            y_col = columns_specs_reformatted['float64'][0]
+        if columns_specs_reformatted["object"]:
+            x_col = columns_specs_reformatted["object"][0]
+            color_col = columns_specs_reformatted["object"][0]
+
+        if columns_specs_reformatted["int64"]:
+            y_col = columns_specs_reformatted["int64"][0]
+        elif columns_specs_reformatted["float64"]:
+            y_col = columns_specs_reformatted["float64"][0]
 
         # if dict_kwargs is empty, fill it with default values
         if not dict_kwargs:
             dict_kwargs = {"x": x_col, "y": y_col, "color": color_col}
             print(dict_kwargs)
-
 
         # print("update figure")
         # print(dict_kwargs)
@@ -611,3 +618,46 @@ def design_figure(id, wfs_list):
         ),
     ]
     return figure_row
+
+
+def create_stepper_figure_button(n):
+    """
+    Create the stepper figure button
+
+    Args:
+        n (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
+
+    button = dbc.Col(
+        dmc.Button(
+            "Figure",
+            id={
+                "type": "btn-option",
+                "index": n,
+                "value": "Figure",
+            },
+            n_clicks=0,
+            # style={
+            #     "display": "inline-block",
+            #     "width": "250px",
+            #     "height": "100px",
+            # },
+            style=UNSELECTED_STYLE,
+            size="xl",
+            color="grape",
+            leftIcon=DashIconify(icon="mdi:graph-box"),
+        )
+    )
+    store = dcc.Store(
+        id={
+            "type": "store-btn-option",
+            "index": n,
+            "value": "Figure",
+        },
+        data=0,
+        storage_type="memory",
+    )
+    return button, store
