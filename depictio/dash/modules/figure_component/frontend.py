@@ -58,16 +58,16 @@ def register_callbacks_figure_component(app):
         # print(app._callback_list)
 
         # print(n_clicks, edit_button_id)
-        print("\n\n\n")
-        print("update_specific_params")
-        print(n_clicks, visu_type, edit_button_id, workflow, data_collection)
+        # print("\n\n\n")
+        # print("update_specific_params")
+        # print(n_clicks, visu_type, edit_button_id, workflow, data_collection)
 
         columns_json = get_columns_from_data_collection(workflow, data_collection)
-        print(columns_json)
+        # print(columns_json)
 
         columns = columns_json["columns_list"]
-        print(columns)
-        print("\n\n\n")
+        # print(columns)
+        # print("\n\n\n")
 
         value = visu_type.lower()
         # value = "scatter"
@@ -469,11 +469,30 @@ def register_callbacks_figure_component(app):
         print(args)
 
         columns_json = get_columns_from_data_collection(workflow, data_collection)
-        print(columns_json)
+        # print(columns_json, type(columns_json))
+        print(columns_json["columns_specs"])
 
         columns_specs_reformatted = collections.defaultdict(list)
-        {columns_specs_reformatted[v["type"]].append(k) for k,v in columns_json["columns_specs"].values()}
+        {columns_specs_reformatted[v["type"]].append(k) for k,v in columns_json["columns_specs"].items()}
         print(columns_specs_reformatted)
+        
+                
+        x_col, color_col, y_col = None, None, None
+
+        if columns_specs_reformatted['object']:
+            x_col = columns_specs_reformatted['object'][0]
+            color_col = columns_specs_reformatted['object'][0]
+            
+        if columns_specs_reformatted['int64']:
+            y_col = columns_specs_reformatted['int64'][0]
+        elif columns_specs_reformatted['float64']:
+            y_col = columns_specs_reformatted['float64'][0]
+
+        # if dict_kwargs is empty, fill it with default values
+        if not dict_kwargs:
+            dict_kwargs = {"x": x_col, "y": y_col, "color": color_col}
+            print(dict_kwargs)
+
 
         # print("update figure")
         # print(dict_kwargs)
