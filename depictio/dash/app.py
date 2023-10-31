@@ -36,6 +36,8 @@ app = dash.Dash(
     suppress_callback_exceptions=True,
     title="Depictio",
 )
+application = app.server
+
 
 from depictio.dash.modules.card_component.frontend import (
     design_card,
@@ -173,7 +175,9 @@ def close_modal(n_clicks):
         return False
     return True
 
-def enable_box_edit_mode(box, btn_index, switch_state=True):
+
+def enable_box_edit_mode(box, switch_state=True):
+    btn_index = box["props"]["id"]["index"]
     edit_button = dbc.Button(
         "Edit",
         id={
@@ -202,6 +206,117 @@ def enable_box_edit_mode(box, btn_index, switch_state=True):
     return new_draggable_child
 
 
+def enable_box_edit_mode_dev(sub_child, switch_state=True):
+    # print("enable_box_edit_mode_dev")
+    # print(switch_state)
+
+    # Extract the required substructure based on the depth analysis
+    box = sub_child["props"]["children"]
+    # print(box)
+
+    # Check if the children attribute is a list
+    if isinstance(box["props"]["children"], list):
+        # print("List")
+
+        # Identify if edit and remove buttons are present
+        edit_button_exists = any(
+            child.get("props", {}).get("id", {}).get("type") == "edit-box-button"
+            for child in box["props"]["children"]
+        )
+        remove_button_exists = any(
+            child.get("props", {}).get("id", {}).get("type") == "remove-box-button"
+            for child in box["props"]["children"]
+        )
+
+        # print(switch_state, edit_button_exists, remove_button_exists)
+
+        # If switch_state is true and buttons are not yet added, add them
+        if switch_state and not (edit_button_exists and remove_button_exists):
+            # Assuming that the ID for box is structured like: {'type': '...', 'index': 1}
+            btn_index = box["props"]["id"]["index"]
+
+            edit_button = dbc.Button(
+                "Edit",
+                id={
+                    "type": "edit-box-button",
+                    "index": f"{btn_index}",
+                },
+                color="secondary",
+                style={"margin-left": "12px"},
+            )
+            remove_button = dbc.Button(
+                "Remove",
+                id={"type": "remove-box-button", "index": f"{btn_index}"},
+                color="danger",
+            )
+
+            # Place buttons at the beginning of the children list
+            box["props"]["children"] = [edit_button, remove_button] + box["props"][
+                "children"
+            ]
+
+        # If switch_state is false and buttons are present, remove them
+        elif not switch_state and edit_button_exists and remove_button_exists:
+            # print("Removing buttons")
+            # Assuming the last element is the main content box
+            # print(analyze_structure(box))
+            # print(box)
+            content_box = box["props"]["children"][-1]
+            # print(content_box)
+            box["props"]["children"] = [content_box]
+            # print(box)
+
+    sub_child["props"]["children"] = box
+    # print(sub_child)
+    # Return the modified sub_child structure
+    return sub_child
+
+
+def analyze_structure(struct, depth=0):
+    """
+    Recursively analyze a nested plotly dash structure.
+
+    Args:
+    - struct: The nested structure.
+    - depth: Current depth in the structure. Default is 0 (top level).
+    """
+
+    if isinstance(struct, list):
+        print("  " * depth + f"Depth {depth} Type: List with {len(struct)} elements")
+        for idx, child in enumerate(struct):
+            print(
+                "  " * depth
+                + f"Element {idx} ID: {child.get('props', {}).get('id', None)}"
+            )
+            analyze_structure(child, depth=depth + 1)
+        return
+
+    # Base case: if the struct is not a dictionary, we stop the recursion
+    if not isinstance(struct, dict):
+        return
+
+    # Extracting id if available
+
+    id_value = struct.get("props", {}).get("id", None)
+    children = struct.get("props", {}).get("children", None)
+
+    # Printing the id value
+    print("  " * depth + f"Depth {depth} ID: {id_value}")
+
+    if isinstance(children, dict):
+        print("  " * depth + f"Depth {depth} Type: Dict")
+        # Recursive call
+        analyze_structure(children, depth=depth + 1)
+
+    elif isinstance(children, list):
+        print("  " * depth + f"Depth {depth} Type: List with {len(children)} elements")
+        for idx, child in enumerate(children):
+            print(
+                "  " * depth
+                + f"Element {idx} ID: {child.get('props', {}).get('id', None)}"
+            )
+            # Recursive call
+            analyze_structure(child, depth=depth + 1)
 
 
 @app.callback(
@@ -218,18 +333,18 @@ def enable_box_edit_mode(box, btn_index, switch_state=True):
     prevent_initial_call=True,
 )
 def update_button(n_clicks, children, btn_id, switch_state):
-    print("update_button")
+    # print("update_button")
     # children = [children[4]]
-    print(len(children))
-    print(children)
+    # print(len(children))
+    # print(children)
     children["props"]["id"]["type"] = "updated-" + children["props"]["id"]["type"]
 
     btn_index = btn_id["index"]  # Extracting index from btn_id dict
 
     switch_state_bool = True if len(switch_state) > 0 else False
 
-
-    new_draggable_child = enable_box_edit_mode(children, btn_index, switch_state_bool)
+    new_draggable_child = enable_box_edit_mode(children, switch_state_bool)
+    # new_draggable_child = enable_box_edit_mode(children, btn_index, switch_state_bool)
 
     return new_draggable_child
 
@@ -417,7 +532,9 @@ def update_step_2(
     [
         Input("add-button", "n_clicks"),
         Input("edit-dashboard-mode-button", "value"),
-        Input({"type": "remove-box-button", "index": dash.dependencies.ALL}, "n_clicks"),
+        Input(
+            {"type": "remove-box-button", "index": dash.dependencies.ALL}, "n_clicks"
+        ),
         Input({"type": "input-component", "index": dash.dependencies.ALL}, "value"),
         # Input("time-input", "value"),
         Input("stored-layout", "data"),
@@ -454,6 +571,14 @@ def update_draggable_children(
     # selected_year = args[-6]
 
     current_draggable_children = args[-5]
+    # print("\n\n\n")
+    # print("\n\n\n")
+    # print("\n\n\n")
+    # print("current_draggable_children")
+    # print(current_draggable_children)
+    # print("\n\n\n")
+    # print("\n\n\n")
+    # print("\n\n\n")
     current_layouts = args[-4]
     stored_layout = args[-3]
     stored_figures = args[-2]
@@ -520,6 +645,14 @@ def update_draggable_children(
         stepper_output = create_stepper_output(
             n, active, new_plot_id, stepper_dropdowns, stepper_buttons
         )
+        # print("\n\n\n")
+        # print("\n\n\n")
+        # print("\n\n\n")
+        # print("stepper_output")
+        # print(stepper_output)
+        # print("\n\n\n")
+        # print("\n\n\n")
+        # print("\n\n\n")
 
         current_draggable_children.append(stepper_output)
 
@@ -726,21 +859,42 @@ def update_draggable_children(
 
     elif "remove-" in triggered_input and [e for e in args[-10] if e]:
         print("\nREMOVE")
-        print(triggered_input, type(triggered_input))
-        # print(current_draggable_children)
-        input_id = ast.literal_eval(triggered_input)["index"]
-        print(input_id)
+        print("Triggered Input:", triggered_input)
 
-        # new_filter_dict = filter_dict
-        # print(new_filter_dict)
-        for child in current_draggable_children:
-            print(child)
-            # print("-".join(child["props"]["id"].split("-")[1:]))
-            # print("-".join(input_id.split("-")[1:]))
-            if "-".join(child["props"]["id"].split("-")[1:]) == "-".join(
-                input_id.split("-")[1:]
-            ):
-                current_draggable_children.remove(child)
+        input_id_dict = ast.literal_eval(triggered_input)
+        input_id = input_id_dict["index"]
+        print("Input ID:", input_id)
+
+        # Use list comprehension to filter
+        current_draggable_children = [
+            child
+            for child in current_draggable_children
+            if child["props"]["id"] != input_id
+        ]
+
+        # elif "remove-" in triggered_input and [e for e in args[-10] if e]:
+        #     print("\nREMOVE")
+        #     print(triggered_input, type(triggered_input))
+        #     # print(current_draggable_children)
+        #     input_id = ast.literal_eval(triggered_input)["index"]
+        #     print(input_id)
+
+        #     # new_filter_dict = filter_dict
+        #     # print(new_filter_dict)
+
+        #     # Use a list comprehension to filter out the child with the matching ID
+        #     current_draggable_children = [
+        #         child for child in current_draggable_children
+        #         if "-".join(child["props"]["id"].split("-")[1:]) != "-".join(input_id.split("-")[1:])
+        #     ]
+        # for child in current_draggable_children:
+        #     print(child)
+        #     # print("-".join(child["props"]["id"].split("-")[1:]))
+        #     # print("-".join(input_id.split("-")[1:]))
+        #     if "-".join(child["props"]["id"].split("-")[1:]) == "-".join(
+        #         input_id.split("-")[1:]
+        #     ):
+        #         current_draggable_children.remove(child)
         #         input_id = "-".join(input_id.split("-")[2:])
 
         #         # Remove the corresponding entry from filter dictionary
@@ -932,97 +1086,156 @@ def update_draggable_children(
         # print(stored_edit_dashboard)
         # print(current_draggable_children)
         # assuming the switch state is added as the first argument in args
+        print("\n\n\n")
         updated_draggable_children = []
-        # print(len(current_draggable_children))
-        for child in current_draggable_children:
-            print("\n\n")
-            print(child)
-            print("\n\n")
+        print(
+            current_draggable_children,
+            len(current_draggable_children),
+            type(current_draggable_children),
+        )
+        analyze_structure(current_draggable_children)
+        # print(current_draggable_children[0]["props"]["children"])
+        # print(len(current_draggable_children[0]["props"]["children"]))
+        # print(
+        #     current_draggable_children[0]["props"]["children"][:-1],
+        #     type(current_draggable_children[0]["props"]["children"][:-1]),
+        #     len(current_draggable_children[0]["props"]["children"][:-1]),
+        # )
+        for j, child in enumerate(current_draggable_children):
+            for i, sub_child in enumerate(child["props"]["children"]):
+                if i != (len(child["props"]["children"]) - 1):
+                    print("\n\n")
+                    print("sub_child")
+                    print(sub_child)
+                    print("\n\n")
+                    print("\n\n")
+                    print("\n\n")
+                    print("\n\n")
+                    print("\n\n")
+                    analyze_structure(sub_child)
+                    print(sub_child)
+                    print(switch_state)
+                    try:
+                        updated_sub_child = enable_box_edit_mode_dev(
+                            sub_child, switch_state
+                        )
+                    except Exception as e:
+                        print(f"Error when calling enable_box_edit_mode_dev: {e}")
+                    # print(updated_sub_child)
+                    print("\n\n")
+                    child["props"]["children"][i] = updated_sub_child
+                else:
+                    child["props"]["children"][i] = sub_child
+            updated_draggable_children.append(child)
+            # if j != (len(current_draggable_children)-1):
+        #         print("\n\n")
+        #         print("updated_child")
 
-            # print(len(child))
-            # print(child["props"]["id"])
-            # print(len(child["props"]["children"]))
-            # graph = child["props"]["children"][0]["props"]["children"][
-            #     -2
-            # ]  # Assuming graph is always the last child
-            #     graph = child["props"]["children"][0]["props"]["children"][0]["props"]["children"]
-            #     print(child["props"]["children"])
-            if switch_state:  # If switch is 'on', add the remove button
-                # if "graph" in child["props"]["id"]:
-                graph = child["props"]["children"][0]
-                # print(graph["props"]["id"])
+        #         print(child)
 
-                edit_button = dmc.Button(
-                    "Edit",
-                    id={
-                        "type": "edit-button",
-                        "index": child["props"]["id"],
-                    },
-                    color="gray",
-                    variant="filled",
-                    leftIcon=DashIconify(icon="basil:edit-solid", color="white"),
-                )
+        #         print("\n\n")
+        #         print("\n\n")
+        #         print("\n\n")
+        #         print("\n\n")
+        #         print("\n\n")
+        #         analyze_structure(child)
 
-                remove_button = dmc.Button(
-                    "Remove",
-                    id={"type": "remove-button", "index": child["props"]["id"]},
-                    color="red",
-                    variant="filled",
-                    leftIcon=DashIconify(icon="jam:trash", color="white"),
-                )
+        #         print(child)
+        #         print(switch_state)
+        #         try:
+        # updated_child = enable_box_edit_mode_dev(child, switch_state)
+        #         except Exception as e:
+        #             print(f"Error when calling enable_box_edit_mode_dev: {e}")
+        #         # print(updated_child)
+        #         print("\n\n")
 
-                updated_child = html.Div(
-                    [
-                        remove_button,
-                        edit_button,
-                        graph,
-                    ],
-                    id=child["props"]["id"],
-                )
+        # print(len(child))
+        # print(child["props"]["id"])
+        # print(len(child["props"]["children"]))
+        # graph = child["props"]["children"][0]["props"]["children"][
+        #     -2
+        # ]  # Assuming graph is always the last child
+        #     graph = child["props"]["children"][0]["props"]["children"][0]["props"]["children"]
+        #     print(child["props"]["children"])
+        # if switch_state:  # If switch is 'on', add the remove button
+        #     # if "graph" in child["props"]["id"]:
+        #     graph = child["props"]["children"][0]
+        #     # print(graph["props"]["id"])
 
-                # remove_button = dbc.Button(
-                #     "Remove",
-                #     id={
-                #         "type": "remove-button",
-                #         "index": child["props"]["id"],
-                #     },
-                #     color="danger",
-                # )
-                # edit_button = dbc.Button(
-                #     "Edit",
-                #     id={
-                #         "type": "edit-button",
-                #         "index": child["props"]["id"],
-                #     },
-                #     color="secondary",
-                #     style={"margin-left": "10px"},
-                # )
+        #     edit_button = dmc.Button(
+        #         "Edit",
+        #         id={
+        #             "type": "edit-button",
+        #             "index": child["props"]["id"],
+        #         },
+        #         color="gray",
+        #         variant="filled",
+        #         leftIcon=DashIconify(icon="basil:edit-solid", color="white"),
+        #     )
 
-                # updated_child = html.Div(
-                #     [remove_button, edit_button, graph],
-                #     id=child["props"]["id"],
-                # )
-            elif (
-                switch_state is False and stored_edit_dashboard["count"] == 0
-            ):  # If switch is 'off', remove the button
-                graph = child["props"]["children"][0]["props"]["children"]["props"][
-                    "children"
-                ][2]
-                # print(graph["props"]["id"])
+        #     remove_button = dmc.Button(
+        #         "Remove",
+        #         id={"type": "remove-button", "index": child["props"]["id"]},
+        #         color="red",
+        #         variant="filled",
+        #         leftIcon=DashIconify(icon="jam:trash", color="white"),
+        #     )
 
-                updated_child = html.Div(
-                    [graph],
-                    id=child["props"]["id"],
-                )
-            else:
-                graph = child["props"]["children"][-1]
-                # print(child["props"]["id"])
+        #     updated_child = html.Div(
+        #         [
+        #             remove_button,
+        #             edit_button,
+        #             graph,
+        #         ],
+        #         id=child["props"]["id"],
+        #     )
 
-                updated_child = html.Div(
-                    [graph],
-                    id=child["props"]["id"],
-                )
-        updated_draggable_children.append(updated_child)
+        #     # remove_button = dbc.Button(
+        #     #     "Remove",
+        #     #     id={
+        #     #         "type": "remove-button",
+        #     #         "index": child["props"]["id"],
+        #     #     },
+        #     #     color="danger",
+        #     # )
+        #     # edit_button = dbc.Button(
+        #     #     "Edit",
+        #     #     id={
+        #     #         "type": "edit-button",
+        #     #         "index": child["props"]["id"],
+        #     #     },
+        #     #     color="secondary",
+        #     #     style={"margin-left": "10px"},
+        #     # )
+
+        #     # updated_child = html.Div(
+        #     #     [remove_button, edit_button, graph],
+        #     #     id=child["props"]["id"],
+        #     # )
+        # elif (
+        #     switch_state is False and stored_edit_dashboard["count"] == 0
+        # ):  # If switch is 'off', remove the button
+        #     graph = child["props"]["children"][0]["props"]["children"]["props"][
+        #         "children"
+        #     ][2]
+        #     # print(graph["props"]["id"])
+
+        #     updated_child = html.Div(
+        #         [graph],
+        #         id=child["props"]["id"],
+        #     )
+        # else:
+        #     graph = child["props"]["children"][-1]
+        #     # print(child["props"]["id"])
+
+        #     updated_child = html.Div(
+        #         [graph],
+        #         id=child["props"]["id"],
+        #     )
+        # updated_draggable_children.append(updated_child)
+        # else:
+        #     updated_draggable_children.append(child)
+        # updated_draggable_children.append(child)
 
         return (
             updated_draggable_children,
