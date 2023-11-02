@@ -52,6 +52,10 @@ from depictio.dash.modules.figure_component.frontend import (
     design_figure,
     register_callbacks_figure_component,
 )
+from depictio.dash.modules.jbrowse_component.frontend import (
+    design_jbrowse,
+    # register_callbacks_figure_component,
+)
 
 from depictio.dash.layouts.stepper import (
     register_callbacks_stepper,
@@ -598,7 +602,7 @@ def update_step_2(
         if btn_index:
             df = return_gridfs_df(workflow_selection, data_collection_selection)
 
-            components_list = ["Figure", "Card", "Interactive"]
+            components_list = ["Figure", "Card", "Interactive", "Genome browser"]
             component_selected = components_list[btn_index[0]]
             id = ids[btn_index[0]]
             if component_selected == "Figure":
@@ -607,6 +611,8 @@ def update_step_2(
                 return design_card(id, df), btn_component
             elif component_selected == "Interactive":
                 return design_interactive(id, df), btn_component
+            elif component_selected == "Genome browser":
+                return design_jbrowse(id), btn_component
 
         else:
             raise dash.exceptions.PreventUpdate

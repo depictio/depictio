@@ -12,7 +12,12 @@ from depictio.dash.utils import (
 )
 from depictio.dash.modules.figure_component.frontend import create_stepper_figure_button
 from depictio.dash.modules.card_component.frontend import create_stepper_card_button
-from depictio.dash.modules.interactive_component.frontend import create_stepper_interactive_button
+from depictio.dash.modules.interactive_component.frontend import (
+    create_stepper_interactive_button,
+)
+from depictio.dash.modules.jbrowse_component.frontend import (
+    create_stepper_jbrowse_button,
+)
 
 
 def register_callbacks_stepper(app):
@@ -168,22 +173,42 @@ def create_stepper_buttons(n):
     # IMPORTANT: TO BE UPDATED FOR EACH NEW COMPONENT
     figure_stepper_button, figure_stepper_button_store = create_stepper_figure_button(n)
     card_stepper_button, card_stepper_button_store = create_stepper_card_button(n)
-    interactive_stepper_button, interactive_stepper_button_store = create_stepper_interactive_button(n)
+    (
+        interactive_stepper_button,
+        interactive_stepper_button_store,
+    ) = create_stepper_interactive_button(n)
+    (
+        jbrowse_stepper_button,
+        jbrowse_stepper_button_store,
+    ) = create_stepper_jbrowse_button(n)
 
     store_list = [
         figure_stepper_button_store,
         card_stepper_button_store,
         interactive_stepper_button_store,
+        jbrowse_stepper_button_store,
     ]
-    
-    buttons_list = [
+
+    standard_components = [
         figure_stepper_button,
         card_stepper_button,
-        interactive_stepper_button
+        interactive_stepper_button,
     ]
+
+    special_components = [jbrowse_stepper_button]
+
+    buttons_list = [
+        html.H5("Standard components", style={"margin-top": "20px"}),
+        html.Hr(),
+        dmc.Center(dbc.Row(standard_components)),
+        html.Br(),
+        html.H5("Special components", style={"margin-top": "20px"}),
+        html.Hr(),
+        dmc.Center(dbc.Row(special_components)),
+    ]
+
     print(store_list + buttons_list)
 
-    
     stepper_buttons = dbc.Row(store_list + buttons_list)
     print(stepper_buttons)
     return stepper_buttons
