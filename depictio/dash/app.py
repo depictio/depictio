@@ -296,7 +296,7 @@ def enable_box_edit_mode(box, switch_state=True):
         color="danger",
     )
     if switch_state:
-        box_components_list = [edit_button, remove_button, box]
+        box_components_list = [remove_button, edit_button, box]
     else:
         box_components_list = [box]
 
@@ -353,7 +353,7 @@ def enable_box_edit_mode_dev(sub_child, switch_state=True):
             )
 
             # Place buttons at the beginning of the children list
-            box["props"]["children"] = [edit_button, remove_button] + box["props"][
+            box["props"]["children"] = [remove_button, edit_button] + box["props"][
                 "children"
             ]
 
@@ -1112,11 +1112,13 @@ def update_draggable_children(
 
     elif triggered_input == "draggable":
         return (
-            current_draggable_children,
+            dash.no_update,
+            # current_draggable_children,
             new_layouts,
             # selected_year,
             new_layouts,
-            current_draggable_children,
+            dash.no_update,
+            # current_draggable_children,
             stored_edit_dashboard
             # selected_year,
         )
