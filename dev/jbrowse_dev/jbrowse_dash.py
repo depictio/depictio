@@ -63,141 +63,179 @@ for run_dir in os.listdir(base_dir):
 
 pprint(runs_samples_dict)
 
+# my_tracks = [
+#     {
+#         "type": "MultiQuantitativeTrack",
+#         "trackId": "multiwiggle_{cell}-sessionTrack".format(cell=e),
+#         "name": e,
+#         "assemblyNames": ["GRCh38"],
+#         "category": [f"{r}", f"{e}"],
+#         "adapter": {
+#             "type": "MultiWiggleAdapter",
+#             #     "layout": [
+#             #     {
+#             #         "name": "Watson",
+#             #         "type": "BigWigAdapter",
+#             #         "bigWigLocation": {
+#             #             "uri": f"http://localhost:8090/assets/Counts_BW/{e}-W.bigWig",
+#             #         },
+#             #         "color": "rgb(244, 164, 96)",
+#             #     },
+#             #     {
+#             #         "name": "Crick",
+#             #         "type": "BigWigAdapter",
+#             #         "bigWigLocation": {
+#             #             "uri": f"http://localhost:8090/assets/Counts_BW/{e}-C.bigWig",
+#             #         },
+#             #         "color": "rgb(102, 139, 139)",
+#             #     },
+#             # ],
+#             "subadapters": [
+#                 {
+#                     "name": "Watson",
+#                     "type": "BigWigAdapter",
+#                     "bigWigLocation": {
+#                         "uri": f"http://localhost:8090/assets/Counts_BW/{r}/{e}-W.bigWig",
+#                     },
+#                 },
+#                 {
+#                     "name": "Crick",
+#                     "type": "BigWigAdapter",
+#                     "bigWigLocation": {
+#                         "uri": f"http://localhost:8090/assets/Counts_BW/{r}/{e}-C.bigWig",
+#                     },
+#                 },
+#             ],
+#         },
+#     }
+#     for r in runs_samples_dict.keys()
+#     for e in sorted(runs_samples_dict[r])
+# ]
+
 my_tracks = [
     {
-        "type": "MultiQuantitativeTrack",
-        "trackId": "multiwiggle_{cell}-sessionTrack".format(cell=e),
-        "name": e,
+        "type": "FeatureTrack",
+        "trackId": "ncbi_refseq_109_hg38",
+        "name": "NCBI RefSeq (GFF3Tabix)",
         "assemblyNames": ["GRCh38"],
-        "category": [f"{r}", f"{e}"],
+        "category": ["Annotation"],
+        "height": 70,
         "adapter": {
-            "type": "MultiWiggleAdapter",
-            #     "layout": [
-            #     {
-            #         "name": "Watson",
-            #         "type": "BigWigAdapter",
-            #         "bigWigLocation": {
-            #             "uri": f"http://localhost:8090/assets/Counts_BW/{e}-W.bigWig",
-            #         },
-            #         "color": "rgb(244, 164, 96)",
-            #     },
-            #     {
-            #         "name": "Crick",
-            #         "type": "BigWigAdapter",
-            #         "bigWigLocation": {
-            #             "uri": f"http://localhost:8090/assets/Counts_BW/{e}-C.bigWig",
-            #         },
-            #         "color": "rgb(102, 139, 139)",
-            #     },
-            # ],
-            "subadapters": [
-                {
-                    "name": "Watson",
-                    "type": "BigWigAdapter",
-                    "bigWigLocation": {
-                        "uri": f"http://localhost:8090/assets/Counts_BW/{r}/{e}-W.bigWig",
-                    },
-                },
-                {
-                    "name": "Crick",
-                    "type": "BigWigAdapter",
-                    "bigWigLocation": {
-                        "uri": f"http://localhost:8090/assets/Counts_BW/{r}/{e}-C.bigWig",
-                    },
-                },
-            ],
+            "type": "Gff3TabixAdapter",
+            "gffGzLocation": {
+                "uri": "https://s3.amazonaws.com/jbrowse.org/genomes/GRCh38/ncbi_refseq/GCA_000001405.15_GRCh38_full_analysis_set.refseq_annotation.sorted.gff.gz"
+            },
+            "index": {
+                "location": {
+                    "uri": "https://s3.amazonaws.com/jbrowse.org/genomes/GRCh38/ncbi_refseq/GCA_000001405.15_GRCh38_full_analysis_set.refseq_annotation.sorted.gff.gz.tbi"
+                }
+            },
         },
     }
-    for r in runs_samples_dict.keys()
-    for e in sorted(runs_samples_dict[r])
 ]
 
 
 tracks_session = []
 
 
+from dash import State
+
 @dash.callback(
-    Output("lgv-hg38", "defaultSession"),
-    Input("sample-dropdown-jbrowse", "value"),
+    Output("dev-log", "children"),
+    Input("interval-component", "n_intervals"),
+    State("lgv-hg38", "defaultSession"),
 )
-def set_sample_value(value):
-    # print(value)
-    # print(df_datatable.loc[df_datatable["sample"].isin(value)].sort_values(["run", "sample"])["sample"].unique().tolist())
-    print(value)
-
-    tracks_session_counts = [
-        # e
-        {
-            "type": "MultiQuantitativeTrack",
-            "configuration": "multiwiggle_{cell}-sessionTrack".format(cell=e),
-            "displays": [
-                {
-                    "id": "lTY7_5KzL5",
-                    "type": "MultiLinearWiggleDisplay",
-                    "height": 70,
-                    "selectedRendering": "",
-                    "rendererTypeNameState": "xyplot",
-                    "autoscale": "global",
-                    "displayCrossHatches": True,
-                    "layout": [
-                        {
-                            "name": "Watson",
-                            "type": "BigWigAdapter",
-                            "bigWigLocation": {
-                                "uri": f"http://localhost:8090/assets/Counts_BW/{r}/{e}-W.bigWig",
-                            },
-                            "color": "rgb(244, 164, 96)",
-                        },
-                        {
-                            "name": "Crick",
-                            "type": "BigWigAdapter",
-                            "bigWigLocation": {
-                                "uri": f"http://localhost:8090/assets/Counts_BW/{r}/{e}-C.bigWig",
-                            },
-                            "color": "rgb(102, 139, 139)",
-                        },
-                    ],
-                },
-            ],
-        }
-        for r in runs_samples_dict.keys()
-        for e in sorted(runs_samples_dict[r])
-        if value and e in value
-    ]
-    print("tracks_session_counts")
-    print(tracks_session_counts)
-
-    my_default_session = {
-        "name": "My session",
-        "view": {
-            "id": "linearGenomeView",
-            "type": "LinearGenomeView",
-            "tracks": tracks_session_counts,
-        },
-    }
-
-    return my_default_session
+def update_output(n, param):
+    print("update_output")
+    print(n)
+    print(param)
+    return f"{param}."
 
 
-tracks_session_svs = [
-    {
-        "type": "FeatureTrack",
-        "configuration": "test_sv.bed-sessionTrack",
-        "displays": [
-            {
-                "displayId": "test_sv.bed-sessionTrack-LinearBasicDisplay",
-                "type": "LinearBasicDisplay",
-                "height": 30,
-                "trackShowDescriptions": False,
-                "trackDisplayMode": "collapse",
-                "renderer": {
-                    "type": "SvgFeatureRenderer",
-                    "color1": "black",
-                },
-            },
-        ],
-    },
-]
+
+
+# @dash.callback(
+#     Output("lgv-hg38", "defaultSession"),
+#     Input("sample-dropdown-jbrowse", "value"),
+# )
+# def set_sample_value(value):
+#     # print(value)
+#     # print(df_datatable.loc[df_datatable["sample"].isin(value)].sort_values(["run", "sample"])["sample"].unique().tolist())
+#     print(value)
+
+#     tracks_session_counts = [
+#         # e
+#         {
+#             "type": "MultiQuantitativeTrack",
+#             "configuration": "multiwiggle_{cell}-sessionTrack".format(cell=e),
+#             "displays": [
+#                 {
+#                     "id": "lTY7_5KzL5",
+#                     "type": "MultiLinearWiggleDisplay",
+#                     "height": 70,
+#                     "selectedRendering": "",
+#                     "rendererTypeNameState": "xyplot",
+#                     "autoscale": "global",
+#                     "displayCrossHatches": True,
+#                     "layout": [
+#                         {
+#                             "name": "Watson",
+#                             "type": "BigWigAdapter",
+#                             "bigWigLocation": {
+#                                 "uri": f"http://localhost:8090/assets/Counts_BW/{r}/{e}-W.bigWig",
+#                             },
+#                             "color": "rgb(244, 164, 96)",
+#                         },
+#                         {
+#                             "name": "Crick",
+#                             "type": "BigWigAdapter",
+#                             "bigWigLocation": {
+#                                 "uri": f"http://localhost:8090/assets/Counts_BW/{r}/{e}-C.bigWig",
+#                             },
+#                             "color": "rgb(102, 139, 139)",
+#                         },
+#                     ],
+#                 },
+#             ],
+#         }
+#         for r in runs_samples_dict.keys()
+#         for e in sorted(runs_samples_dict[r])
+#         if value and e in value
+#     ]
+#     print("tracks_session_counts")
+#     print(tracks_session_counts)
+
+#     my_default_session = {
+#         "name": "My session",
+#         "view": {
+#             "id": "linearGenomeView",
+#             "type": "LinearGenomeView",
+#             "tracks": tracks_session_counts,
+#         },
+#     }
+
+#     return my_default_session
+
+
+# tracks_session_svs = [
+#     {
+#         "type": "FeatureTrack",
+#         "configuration": "test_sv.bed-sessionTrack",
+#         "displays": [
+#             {
+#                 "displayId": "test_sv.bed-sessionTrack-LinearBasicDisplay",
+#                 "type": "LinearBasicDisplay",
+#                 "height": 30,
+#                 "trackShowDescriptions": False,
+#                 "trackDisplayMode": "collapse",
+#                 "renderer": {
+#                     "type": "SvgFeatureRenderer",
+#                     "color1": "black",
+#                 },
+#             },
+#         ],
+#     },
+# ]
 
 # tracks_session += tracks_session_counts
 # tracks_session += tracks_session_svs
@@ -248,24 +286,34 @@ my_theme = {
     },
 }
 
-@app.callback(
-    Output("sample-dropdown-jbrowse", "options"),
-    Output("sample-dropdown-jbrowse", "value"),
-    Input("run-dropdown-jbrowse", "value"),
-)
-def update_sample_dropdown(selected_runs):
-    if selected_runs:
-        # Since multi=True, selected_runs will be a list of runs. We gather all samples from all selected runs.
-        samples = []
-        for run in selected_runs:
-            samples.extend(runs_samples_dict.get(run, []))
+# @app.callback(
+#     Output("sample-dropdown-jbrowse", "options"),
+#     Output("sample-dropdown-jbrowse", "value"),
+#     Input("run-dropdown-jbrowse", "value"),
+# )
+# def update_sample_dropdown(selected_runs):
+#     if selected_runs:
+#         # Since multi=True, selected_runs will be a list of runs. We gather all samples from all selected runs.
+#         samples = []
+#         for run in selected_runs:
+#             samples.extend(runs_samples_dict.get(run, []))
 
-        # Deduplicate the samples list
-        samples = list(set(samples))
+#         # Deduplicate the samples list
+#         samples = list(set(samples))
 
-        return [{"label": sample, "value": sample} for sample in samples], samples
-    else:
-        return [], []
+#         return [{"label": sample, "value": sample} for sample in samples], samples
+#     else:
+#         return [], []
+
+
+my_default_session = {
+    "name": "My session",
+    "view": {
+        "id": "linearGenomeView",
+        "type": "LinearGenomeView",
+        # "tracks": my_tracks,
+    },
+}
 
 
 # app.layout = html.Div(
@@ -275,39 +323,39 @@ app.layout = dbc.Container(
             "JBrowse2 genome viewer", style={"margin-top": 5}, className="display-4"
         ),
         html.Hr(),
-        dbc.Row(
-            [
-                dbc.Col(
-                    [
-                        html.H2("Run selection:", className="card-title"),
-                        dcc.Dropdown(
-                            # sorted(df_datatable["sample"].unique().tolist()),
-                            # value=sorted(runs_samples_dict.values)[0],
-                            options=[
-                                {"label": run, "value": run}
-                                for run in sorted(runs_samples_dict.keys())
-                            ],
-                            id="run-dropdown-jbrowse",
-                            style={"fontSize": 18, "font-family": "sans-serif"},
-                            multi=True,
-                        ),
-                    ]
-                ),
-                dbc.Col(
-                    [
-                        html.H2("Sample selection:", className="card-title"),
-                        dcc.Dropdown(
-                            # sorted(df_datatable["sample"].unique().tolist()),
-                            # value=sorted(listdir_counts)[0],
-                            # options=list(runs_samples_dict.keys()),
-                            id="sample-dropdown-jbrowse",
-                            style={"fontSize": 18, "font-family": "sans-serif"},
-                            multi=True,
-                        ),
-                    ]
-                ),
-            ]
-        ),
+        # dbc.Row(
+        #     [
+        #         dbc.Col(
+        #             [
+        #                 html.H2("Run selection:", className="card-title"),
+        #                 dcc.Dropdown(
+        #                     # sorted(df_datatable["sample"].unique().tolist()),
+        #                     # value=sorted(runs_samples_dict.values)[0],
+        #                     options=[
+        #                         {"label": run, "value": run}
+        #                         for run in sorted(runs_samples_dict.keys())
+        #                     ],
+        #                     id="run-dropdown-jbrowse",
+        #                     style={"fontSize": 18, "font-family": "sans-serif"},
+        #                     multi=True,
+        #                 ),
+        #             ]
+        #         ),
+        #         dbc.Col(
+        #             [
+        #                 html.H2("Sample selection:", className="card-title"),
+        #                 dcc.Dropdown(
+        #                     # sorted(df_datatable["sample"].unique().tolist()),
+        #                     # value=sorted(listdir_counts)[0],
+        #                     # options=list(runs_samples_dict.keys()),
+        #                     id="sample-dropdown-jbrowse",
+        #                     style={"fontSize": 18, "font-family": "sans-serif"},
+        #                     multi=True,
+        #                 ),
+        #             ]
+        #         ),
+        #     ]
+        # ),
         html.Br(),
         # html.Div(id="dd-output-container"),
         html.Div(
@@ -316,7 +364,7 @@ app.layout = dbc.Container(
                     id="lgv-hg38",
                     assembly=my_assembly,
                     tracks=my_tracks,
-                    # defaultSession=my_default_session,
+                    defaultSession=my_default_session,
                     location=my_location,
                     aggregateTextSearchAdapters=my_aggregate_text_search_adapters,
                     configuration=my_theme,
@@ -324,6 +372,8 @@ app.layout = dbc.Container(
             ],
             id="test",
         ),
+        dcc.Interval("interval-component", interval=2000, n_intervals=0),
+        html.Div(id="dev-log"),
     ]
 )
 
