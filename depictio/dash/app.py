@@ -18,6 +18,7 @@ import re
 from dash_iconify import DashIconify
 import ast
 import dash_ag_grid as dag
+import json
 
 min_step = 0
 max_step = 3
@@ -110,6 +111,34 @@ backend_components = html.Div(
     ]
 )
 
+modal_save_button = dbc.Modal(
+    [
+        dbc.ModalHeader(
+            html.H1(
+                "Success!",
+                className="text-success",
+            )
+        ),
+        dbc.ModalBody(
+            html.H5(
+                "Your amazing dashboard was successfully saved!",
+                className="text-success",
+            ),
+            style={"background-color": "#F0FFF0"},
+        ),
+        dbc.ModalFooter(
+            dbc.Button(
+                "Close",
+                id="success-modal-close",
+                className="ml-auto",
+                color="success",
+            )
+        ),
+    ],
+    id="success-modal-dashboard",
+    centered=True,
+)
+
 header = html.Div(
     [
         html.H1("Depictio"),
@@ -120,6 +149,17 @@ header = html.Div(
             radius="xl",
             variant="gradient",
             n_clicks=0,
+        ),
+        modal_save_button,
+        dmc.Button(
+            "Save",
+            id="save-button-dashboard",
+            size="lg",
+            radius="xl",
+            variant="gradient",
+            gradient={"from": "teal", "to": "lime", "deg": 105},
+            n_clicks=0,
+            style={"margin-left": "5px"},
         ),
         dbc.Checklist(
             id="edit-dashboard-mode-button",
@@ -174,6 +214,64 @@ def close_modal(n_clicks):
     if n_clicks > 0:
         return False
     return True
+
+
+@app.callback(
+    Output("success-modal-dashboard", "is_open"),
+    [
+        Input("save-button-dashboard", "n_clicks"),
+        Input("success-modal-close", "n_clicks"),
+    ],
+    [State("success-modal-dashboard", "is_open")],
+)
+def toggle_success_modal_dashboard(n_save, n_close, is_open):
+    ctx = dash.callback_context
+
+    if not ctx.triggered:
+        raise dash.exceptions.PreventUpdate
+
+    trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
+    # print(trigger_id, n_save, n_close)
+
+    if trigger_id == "save-button-dashboard":
+        if n_save is None or n_save == 0:
+            raise dash.exceptions.PreventUpdate
+        else:
+            return True
+
+    elif trigger_id == "success-modal-close":
+        if n_close is None or n_close == 0:
+            raise dash.exceptions.PreventUpdate
+        else:
+            return False
+
+    return is_open
+
+
+@app.callback(
+    Output("save-button-dashboard", "n_clicks"),
+    Input("save-button-dashboard", "n_clicks"),
+    State("stored-layout", "data"),
+    State("stored-children", "data"),
+    # State("stored-year", "data"),
+)
+def save_data_dashboard(
+    n_clicks,
+    stored_layout_data,
+    stored_children_data,
+    # stored_year_data,
+):
+    # print(dash.callback_context.triggered[0]["prop_id"].split(".")[0], n_clicks)
+    if n_clicks > 0:
+        data = {
+            "stored_layout_data": stored_layout_data,
+            "stored_children_data": stored_children_data,
+            # "stored_year_data": stored_year_data,
+        }
+        with open("data.json", "w") as file:
+            json.dump(data, file)
+        return n_clicks
+    return n_clicks
 
 
 def enable_box_edit_mode(box, switch_state=True):
@@ -355,6 +453,7 @@ def update_button(n_clicks, children, btn_id, switch_state):
         Output("draggable", "isDraggable"),
         Output("draggable", "isResizable"),
         Output("add-button", "disabled"),
+        Output("save-button-dashboard", "disabled"),
     ],
     [Input("edit-dashboard-mode-button", "value")],
 )
@@ -362,9 +461,9 @@ def freeze_layout(value):
     # switch based on button's value
     switch_state = True if len(value) > 0 else False
     if switch_state is False:
-        return False, False, True
+        return False, False, True, True
     else:
-        return True, True, False
+        return True, True, False, False
 
 
 @app.callback(
