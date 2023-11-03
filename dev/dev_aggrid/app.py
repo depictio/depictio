@@ -1,47 +1,46 @@
 import dash_ag_grid as dag
 from dash import Dash, html, dcc
-import pandas as pd
-
-data = {
-    "ticker": ["AAPL", "MSFT", "AMZN", "GOOGL"],
-    "company": ["Apple", "Microsoft", "Amazon", "Alphabet"],
-    "quantity": [75, 40, 100, 50],
-}
-df = pd.DataFrame(data)
-
-columnDefs = [
-    {
-        "headerName": "Stock Ticker",
-        "field": "ticker",
-        # stockLink function is defined in the dashAgGridComponentFunctions.js in assets folder
-        "cellRenderer": "StockLink",
-    },
-    {
-        "headerName": "Company",
-        "field": "company",
-    },
-    {
-        "headerName": "Shares",
-        "field": "quantity",
-        "editable": True,
-    },
-]
-
-
-grid = dag.AgGrid(
-    columnDefs=columnDefs,
-    rowData=df.to_dict("records"),
-    columnSize="sizeToFit",
-    defaultColDef={"editable": False},
-)
-
 
 app = Dash(__name__)
 
+
+columnDefs = [
+    {
+        "field": "country",
+        "editable": False,
+    },
+    {
+        "headerName": "Select Editor",
+        "field": "city",
+        "cellEditor": "agSelectCellEditor",
+        "cellEditorParams": {"function": "dynamicOptions(params)"},
+    },
+
+]
+
+rowData = [
+    {"country": "United States", "city": "Boston"},
+    {"country": "Canada", "city": "Montreal"},
+    {"country": "Canada", "city": "Vancouver"},
+]
+
+
 app.layout = html.Div(
-    [dcc.Markdown("Adding links with cellRenderer"), grid],
+    [
+        dcc.Markdown(
+            "This grid has dynamic options for city based on the country.  Try editing the cities."
+        ),
+        dag.AgGrid(
+            id="cell-editor-grid-2",
+            columnDefs=columnDefs,
+            rowData=rowData,
+            columnSize="sizeToFit",
+            defaultColDef={"editable": True},
+        ),
+    ],
     style={"margin": 20},
 )
 
+
 if __name__ == "__main__":
-    app.run_server(debug=True, port=9050)
+    app.run(debug=False)
