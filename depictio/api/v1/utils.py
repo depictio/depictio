@@ -13,6 +13,8 @@ import yaml
 from depictio.api.v1.configs.models import (
     DataCollection,
     File,
+    Permission,
+    User,
     Workflow,
     DataCollectionConfig,
     WorkflowConfig,
@@ -41,6 +43,8 @@ def validate_config(config: Dict, pydantic_model: Type[BaseModel]) -> BaseModel:
     """
     Load and validate the YAML configuration
     """
+    print(config)
+    print(pydantic_model)
     if not isinstance(config, dict):
         raise ValueError("Invalid config. Must be a dictionary.")
     try:
@@ -70,7 +74,7 @@ def populate_file_models(workflow: Workflow) -> List[DataCollection]:
     return datacollections_models
 
 
-def validate_worfklow(workflow: Workflow, config: RootConfig) -> dict:
+def validate_worfklow(workflow: Workflow, config: RootConfig, user: User) -> dict:
     """
     Validate the workflow.
     """
@@ -90,15 +94,19 @@ def validate_worfklow(workflow: Workflow, config: RootConfig) -> dict:
     workflow.data_collections = validated_datacollections
     workflow.runs = {}
 
+    # Create the permissions using the decoded user
+    permissions = Permission(owners={user})
+    workflow.permissions = permissions
+    
     return workflow
 
 
-def validate_all_workflows(config: RootConfig) -> RootConfig:
+def validate_all_workflows(config: RootConfig, user: User) -> RootConfig:
     """
     Validate all workflows in the config.
     """
     for workflow in config.workflows:
-        validate_worfklow(workflow, config)
+        validate_worfklow(workflow, config, user)
 
     return config
 

@@ -178,4 +178,8 @@ dev/jbrowse_dev/assets/multiqc/
 dev/jbrowse_dev/assets/
 
 wf_data/
-    
+
+.env
+
+ldap_config/
+ldap_db/
