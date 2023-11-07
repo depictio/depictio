@@ -108,7 +108,9 @@ def list_workflows():
     List all workflows.
     """
     workflows = httpx.get(f"{API_BASE_URL}/api/v1/workflows/get_workflows")
+    print(workflows)
     workflows_json = workflows.json()
+    print(workflows_json)
     pretty_workflows = json.dumps(workflows_json, indent=4)
     typer.echo(pretty_workflows)
     return workflows_json
@@ -296,7 +298,7 @@ def aggregate_workflow_data_collections(
 
         response = httpx.post(
             f"{API_BASE_URL}/api/v1/datacollections/aggregate_workflow_data",
-            json=data_payload,
+            json=data_payload_json,
             headers=headers,
         )
         print(response)

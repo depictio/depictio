@@ -16,20 +16,36 @@ data_collections_collection = db[settings.collections.data_collection]
 workflows_collection = db[settings.collections.workflow_collection]
 runs_collection = db[settings.collections.runs_collection]
 files_collection = db[settings.collections.files_collection]
+fschunks_collection = db["fs.chunks"]
+fsfiles_collection = db["fs.files"]
 
 
 @workflows_endpoint_router.get("/get_workflows", response_model=List[Workflow])
-async def get_workflows():
+async def get_workflows(current_user: str = Depends(get_current_user)    ):
     # workflows_collection.drop()
 
     workflows_cursor = list(workflows_collection.find())
+    print(workflows_cursor)
+
+    # Optionally convert the ObjectId's to strings if necessary
     for workflow in workflows_cursor:
-        workflow["data_collection_ids"] = [
-            str(oid) for oid in workflow["data_collection_ids"]
+        workflow["id"] = str(workflow["_id"])
+        workflow["permissions"]["owners"] = [
+            {key: str(value) if key == "user_id" else value for key, value in owner.items()}
+            for owner in workflow["permissions"]["owners"]
         ]
 
     if not workflows_cursor:
-        raise HTTPException(status_code=404, detail="No workflows found.")
+        raise HTTPException(status_code=404, detail="No workflows found for the current user.")
+
+
+    # for workflow in workflows_cursor:
+    #     workflow["data_collection_ids"] = [
+    #         str(oid) for oid in workflow["data_collection_ids"]
+    #     ]
+
+    # if not workflows_cursor:
+    #     raise HTTPException(status_code=404, detail="No workflows found.")
 
     return workflows_cursor
 
@@ -46,6 +62,8 @@ async def create_workflow(
     data_collections_collection.drop()
     runs_collection.drop()
     files_collection.drop()
+    fschunks_collection.drop()
+    fsfiles_collection.drop()
 
     existing_workflow = workflows_collection.find_one(
         {"workflow_id": workflow.workflow_id}

@@ -2,7 +2,8 @@ workflows:
   - workflow_id: snakemake/mosaicatcher-pipeline
     workflow_description: "Strand-Seq SV calling framework"
     workflow_config:
-      parent_runs_location: "/Users/tweber/Gits/depictio/wf_data/snakemake--mosaicatcher-pipeline"
+      parent_runs_location: "/Users/tweber/Data/mosaicatcher-pipeline"
+      # parent_runs_location: "/Users/tweber/Gits/depictio/wf_data/snakemake--mosaicatcher-pipeline"
       runs_regex: ".*"
     data_collections:
       mosaicatcher_stats:
