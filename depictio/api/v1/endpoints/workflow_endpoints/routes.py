@@ -37,6 +37,9 @@ async def get_workflows():
 async def create_workflow(
     workflow: Workflow,
 ):
+    print("\n\n\n")
+    print(workflow)
+
     workflows_collection.drop()
     data_collections_collection.drop()
     runs_collection.drop()
