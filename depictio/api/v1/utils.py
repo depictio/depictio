@@ -1,9 +1,10 @@
 from datetime import datetime
 import hashlib
-from pathlib import PosixPath
+from pathlib import Path, PosixPath
 import dash_mantine_components as dmc
 from dash import dcc
 import numpy as np
+from jose import jwt, JWTError
 
 import os
 import re
@@ -21,6 +22,51 @@ from depictio.api.v1.configs.models import (
     RootConfig,
     WorkflowRun,
 )
+
+
+
+public_key_path = "/Users/tweber/Gits/depictio/dev/token/public_key.pem"
+token_path = "/Users/tweber/Gits/depictio/dev/token/token.txt"
+
+
+def decode_token(
+    token: Optional[str] = None,
+    token_path: Optional[str] = None,
+    public_key_path: str = public_key_path,
+) -> User:
+    # Determine the source of the token
+    if token is None:
+        if token_path is None:
+            # Default token path
+            token_path = os.path.join(Path.home(), ".depictio", "config")
+        # Read the token from a file
+        try:
+            with open(token_path, "r") as f:
+                token = f.read().strip()
+        except IOError as e:
+            raise IOError(f"Unable to read token file: {e}")
+
+    # Read the public key
+    try:
+        with open(public_key_path, "rb") as f:
+            public_key = f.read()
+    except IOError as e:
+        raise IOError(f"Unable to read public key file: {e}")
+
+    # Verify and decode the JWT
+    try:
+        decoded = jwt.decode(token, public_key, algorithms=["RS256"])
+    except JWTError as e:
+        raise JWTError(f"Token verification failed: {e}")
+
+    # Instantiate a User object from the decoded token
+    try:
+        user = User(**decoded)
+        return user
+    except ValidationError as e:
+        raise ValidationError(f"Decoded token is not valid for the User model: {e}")
+
+
 
 
 def get_config(filename: str):

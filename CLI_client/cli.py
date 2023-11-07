@@ -2,8 +2,6 @@ import os
 from pathlib import Path
 import sys
 
-sys.path.append("/Users/tweber/Gits/depictio")
-
 import json
 import httpx
 import typer
@@ -12,54 +10,24 @@ from pydantic import BaseModel, ValidationError
 from typing import List, Dict, Any, Optional
 from jose import JWTError, jwt  # Use python-jose to decode JWT tokens
 
-from depictio.api.v1.configs.models import Permission, User, Workflow, RootConfig, CustomJSONEncoder
-from depictio.api.v1.utils import get_config, validate_all_workflows, validate_config
+from depictio.api.v1.configs.models import (
+    Permission,
+    User,
+    Workflow,
+    RootConfig,
+    CustomJSONEncoder,
+)
+from depictio.api.v1.utils import (
+    decode_token,
+    public_key_path,
+    get_config,
+    validate_all_workflows,
+    validate_config,
+)
 
 app = typer.Typer()
 
 API_BASE_URL = "http://localhost:8058"  # replace with your FastAPI server URL
-
-
-public_key_path = "dev/token/public_key.pem"
-token_path = "dev/token/token.txt"
-
-
-def decode_token(
-    token: Optional[str] = None,
-    token_path: Optional[str] = None,
-    public_key_path: str = public_key_path,
-) -> User:
-    # Determine the source of the token
-    if token is None:
-        if token_path is None:
-            # Default token path
-            token_path = os.path.join(Path.home(), ".depictio", "config")
-        # Read the token from a file
-        try:
-            with open(token_path, "r") as f:
-                token = f.read().strip()
-        except IOError as e:
-            raise IOError(f"Unable to read token file: {e}")
-
-    # Read the public key
-    try:
-        with open(public_key_path, "rb") as f:
-            public_key = f.read()
-    except IOError as e:
-        raise IOError(f"Unable to read public key file: {e}")
-
-    # Verify and decode the JWT
-    try:
-        decoded = jwt.decode(token, public_key, algorithms=["RS256"])
-    except JWTError as e:
-        raise JWTError(f"Token verification failed: {e}")
-
-    # Instantiate a User object from the decoded token
-    try:
-        user = User(**decoded)
-        return user
-    except ValidationError as e:
-        raise ValidationError(f"Decoded token is not valid for the User model: {e}")
 
 
 @app.command()
@@ -93,6 +61,9 @@ def create_workflow(
         typer.echo("Invalid token or unable to decode user information.")
         raise typer.Exit(code=1)
 
+    # Set permissions with the user as both owner and viewer
+    headers = {"Authorization": f"Bearer {token}"}  # Token is now mandatory
+
     # Get the config data (assuming get_config returns a dictionary)
     config_data = get_config(config_path)
 
@@ -109,20 +80,20 @@ def create_workflow(
     # Prepare the workflow data
     workflow_data = config_dict[workflow_id]
 
+    print("PREPOST")
+
     # workflow_data_dict = workflow_data.dict()
     workflow_data_dict = json.loads(
-        json.dumps(workflow_data.dict(by_alias=True, exclude_none=True), cls=CustomJSONEncoder)
+        json.dumps(
+            workflow_data.dict(by_alias=True, exclude_none=True), cls=CustomJSONEncoder
+        )
     )
     print(workflow_data_dict)
 
-
-
-    # Set permissions with the user as both owner and viewer
-    headers = {"Authorization": f"Bearer {token}"}  # Token is now mandatory
-
-
     response = httpx.post(
-        f"{API_BASE_URL}/api/v1/workflows/create_workflow", json=workflow_data_dict, headers=headers
+        f"{API_BASE_URL}/api/v1/workflows/create_workflow",
+        json=workflow_data_dict,
+        headers=headers,
     )
 
     if response.status_code == 200:
@@ -158,15 +129,34 @@ def scan_data_collections(
         "--data_collection_id",
         help="Optionally specify a data collection to be scanned alone",
     ),
+    token: str = typer.Option(
+        None,  # Default to None (not specified)
+        "--token",
+        help="Optionally specify a token to be used for authentication",
+    ),
 ):
     """
     Scan files for a given workflow.
     """
 
+    if not token:
+        typer.echo("A valid token must be provided for authentication.")
+        raise typer.Exit(code=1)
+
+    user = decode_token(
+        token, public_key_path
+    )  # Decode the token to get the user information
+    if not user:
+        typer.echo("Invalid token or unable to decode user information.")
+        raise typer.Exit(code=1)
+
+    # Set permissions with the user as both owner and viewer
+    headers = {"Authorization": f"Bearer {token}"}  # Token is now mandatory
+
     config_data = get_config(config_path)
     # print(config_data)
     config = validate_config(config_data, RootConfig)
-    validated_config = validate_all_workflows(config)
+    validated_config = validate_all_workflows(config, user=user)
 
     # print(validated_config)
 
@@ -193,15 +183,27 @@ def scan_data_collections(
     else:
         data_collections_to_process = list(workflow.data_collections.values())
 
+    # Assuming workflow and data_collection are Pydantic models and have .dict() method
     for data_collection in data_collections_to_process:
         data_payload = {
-            "workflow": workflow.dict(),
-            "data_collection": data_collection.dict(),
+            "workflow": workflow.dict(by_alias=True, exclude_none=True),
+            "data_collection": data_collection.dict(by_alias=True, exclude_none=True),
         }
+
+        # Convert the payload to JSON using the custom encoder
+        print(data_payload, type(data_payload))
+        data_payload_json = json.loads(json.dumps(data_payload, cls=CustomJSONEncoder))
+        print(data_payload_json, type(data_payload_json))
+
+        # workflow_data_dict = workflow_data.dict()
+
         print("\n\n")
-        print(data_payload["data_collection"])
+        print(data_payload_json)
+        # print(data_payload["data_collection"])
         response = httpx.post(
-            f"{API_BASE_URL}/api/v1/datacollections/scan", json=data_payload
+            f"{API_BASE_URL}/api/v1/datacollections/scan",
+            json=data_payload_json,
+            headers=headers,
         )
         print(response)
         print(response.text)
@@ -230,14 +232,33 @@ def aggregate_workflow_data_collections(
         "--data_collection_id",
         help="Optionally specify a data collection to be aggregated alone",
     ),
+    token: str = typer.Option(
+        None,  # Default to None (not specified)
+        "--token",
+        help="Optionally specify a token to be used for authentication",
+    ),
 ):
     """
     Aggregate data files for a given workflow.
     """
 
+    if not token:
+        typer.echo("A valid token must be provided for authentication.")
+        raise typer.Exit(code=1)
+
+    user = decode_token(
+        token, public_key_path
+    )  # Decode the token to get the user information
+    if not user:
+        typer.echo("Invalid token or unable to decode user information.")
+        raise typer.Exit(code=1)
+
+    # Set permissions with the user as both owner and viewer
+    headers = {"Authorization": f"Bearer {token}"}  # Token is now mandatory
+
     config_data = get_config(config_path)
     config = validate_config(config_data, RootConfig)
-    validated_config = validate_all_workflows(config)
+    validated_config = validate_all_workflows(config, user=user)
 
     config_dict = {f"{e.workflow_id}": e for e in validated_config.workflows}
 
@@ -262,13 +283,21 @@ def aggregate_workflow_data_collections(
     else:
         data_collections_to_process = list(workflow.data_collections.values())
 
+
+    # Assuming workflow and data_collection are Pydantic models and have .dict() method
     for data_collection in data_collections_to_process:
-        data_payload = data_collection.dict()
-        print(data_payload["description"])
+        data_payload = data_collection.dict(by_alias=True, exclude_none=True)
+
+        # Convert the payload to JSON using the custom encoder
+        print(data_payload, type(data_payload))
+        data_payload_json = json.loads(json.dumps(data_payload, cls=CustomJSONEncoder))
+        print(data_payload_json, type(data_payload_json))
+
 
         response = httpx.post(
             f"{API_BASE_URL}/api/v1/datacollections/aggregate_workflow_data",
             json=data_payload,
+            headers=headers,
         )
         print(response)
         print(response.text)

@@ -1,11 +1,12 @@
 import os
-from fastapi import HTTPException
-from fastapi import APIRouter
+from fastapi import HTTPException, Depends, APIRouter
 from typing import List
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.db import db
 from depictio.api.v1.configs.models import Workflow
+from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user
+
 
 # from modules.workflow_endpoints.models import Workflow
 
@@ -36,6 +37,7 @@ async def get_workflows():
 @workflows_endpoint_router.post("/create_workflow")
 async def create_workflow(
     workflow: Workflow,
+    current_user: str = Depends(get_current_user)    
 ):
     print("\n\n\n")
     print(workflow)

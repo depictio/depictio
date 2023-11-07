@@ -6,8 +6,7 @@ import os
 from pathlib import PosixPath
 import re
 from bson import ObjectId
-from fastapi import HTTPException
-from fastapi import APIRouter
+from fastapi import HTTPException, Depends, APIRouter
 from typing import List
 
 import pandas as pd
@@ -16,6 +15,7 @@ from pydantic import BaseModel
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.db import db, grid_fs
+from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user
 
 
 # from modules.datacollections_endpoints.models import File
@@ -39,7 +39,7 @@ files_collection = db[settings.collections.files_collection]
 
 
 @datacollections_endpoint_router.post("/scan")
-async def scan_data_collection(workflow: Workflow, data_collection: DataCollection):
+async def scan_data_collection(workflow: Workflow, data_collection: DataCollection, current_user: str = Depends(get_current_user)):
     print(data_collection)
 
     # print(mongo_models)
@@ -79,11 +79,8 @@ async def scan_data_collection(workflow: Workflow, data_collection: DataCollecti
         return {"Warning: runs_and_content is not a list of dictionaries."}
 
 
-
-
-
 @datacollections_endpoint_router.post("/aggregate_workflow_data")
-async def aggregate_workflow_data(data_collection: DataCollection):
+async def aggregate_workflow_data(data_collection: DataCollection, current_user: str = Depends(get_current_user)):
     # data_collections_collection.drop()
 
     print(data_collection)
