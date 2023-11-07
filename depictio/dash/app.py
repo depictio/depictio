@@ -555,15 +555,31 @@ def update_button_style(figure_clicks, card_clicks, interactive_clicks):
 def update_step_2(workflow_selection, data_collection_selection):
     if workflow_selection is not None and data_collection_selection is not None:
         df = return_gridfs_df(workflow_selection, data_collection_selection)
-        columnDefs = [{"field": c} for c in list(df.columns)]
+        cols = get_columns_from_data_collection(
+            workflow_selection, data_collection_selection
+        )
+        cols_type = [cols["columns_specs"][c]["type"] for c in cols["columns_list"]]
+        columnDefs = [
+            {"field": c, "headerTooltip": f"Column type: {e}"}
+            for (c, e) in zip(list(df.columns), list(cols_type))
+        ]
+        print(columnDefs)
 
-        title = dmc.Title("Data previsualization", order=3, align="left", weight=500)
+        run_nb = cols["columns_specs"]["depictio_run_id"]["nunique"]
+        run_nb_title = dmc.Title(
+            f"Run Nb : {run_nb}", order=3, align="left", weight=500
+        )
+
+        data_previz_title = dmc.Title(
+            "Data previsualization", order=3, align="left", weight=500
+        )
         grid = dag.AgGrid(
             id="get-started-example-basic",
-            rowData=df.head(50).to_dict("records"),
+            rowData=df.head(20).to_dict("records"),
             columnDefs=columnDefs,
+            dashGridOptions={"tooltipShowDelay": 500},
         )
-        layout = [title, html.Hr(), grid]
+        layout = [run_nb_title, html.Hr(), data_previz_title, html.Hr(), grid]
         return layout
     else:
         return html.Div()

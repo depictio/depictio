@@ -54,6 +54,10 @@ def decode_token(
         raise IOError(f"Unable to read public key file: {e}")
 
     # Verify and decode the JWT
+    print("\n\n\n")
+    print("decode_token")
+    print(token)
+
     try:
         decoded = jwt.decode(token, public_key, algorithms=["RS256"])
     except JWTError as e:

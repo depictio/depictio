@@ -71,7 +71,7 @@ class User(BaseModel):
 
 
 class Group(BaseModel):
-    group_id: PyObjectId
+    user_id: PyObjectId = Field(default_factory=PyObjectId)
     name: str
     members: Set[User]  # Set of User objects instead of ObjectId
 
@@ -281,11 +281,12 @@ class DataCollectionConfig(BaseModel):
 
 
 class DataCollection(BaseModel):
+    _id: Optional[PyObjectId] = Field(default_factory=PyObjectId)
     data_collection_id: Optional[str]
     description: str = None  # Optional description
     config: DataCollectionConfig
     workflow_id: Optional[str]
-    gridfs_id: Optional[str] = None
+    gridfs_file_id: Optional[str] = Field(alias='gridfsId', default=None)  # If the field is named differently in MongoDB
 
     # @validator("data_collection_id", pre=True, always=True)
     # def extract_data_collection_id(cls, value):
@@ -382,6 +383,7 @@ class WorkflowSystem(BaseModel):
 
 
 class Workflow(BaseModel):
+    _id: Optional[PyObjectId] = Field(default_factory=PyObjectId)
     workflow_name: str = None
     workflow_engine: str = None
     workflow_id: str
@@ -394,6 +396,21 @@ class Workflow(BaseModel):
     permissions: Optional[
         Permission
     ]  # Add this field to capture ownership and viewing permissions
+
+
+    class Config:
+        allow_population_by_field_name = True
+        json_encoders = {
+            ObjectId: str  # Convert ObjectId instances to strings in JSON output
+        }
+
+    # Example usage
+    @classmethod
+    def from_mongo(cls, data: dict):
+        # Convert the _id from ObjectId to str
+        data['id'] = str(data['_id'])
+        del data['_id']  # Optional: remove the original _id if not needed
+        return cls(**data)
 
     @root_validator(pre=True)
     def populate_data_collection_ids(cls, values):
@@ -453,6 +470,18 @@ class GridFSFileInfo(BaseModel):
     filename: str
     file_id: str
     length: int
+
+
+class GridFSAggregatedFile(BaseModel):
+    id: PyObjectId = Field(alias='_id')
+    filename: str
+    chunkSize: int
+    length: int
+    uploadDate: datetime = Field(alias='uploadDate')
+
+    class Config:
+        json_encoders = {ObjectId: str}
+        allow_population_by_field_name = True
 
 
 ########

@@ -18,11 +18,11 @@ from depictio.api.v1.db import db, grid_fs
 from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user
 
 
-# from modules.datacollections_endpoints.models import File
-# from modules.workflow_endpoints.models import Workflow
 from depictio.api.v1.configs.models import Workflow, File, DataCollection
 from depictio.api.v1.configs.models import GridFSFileInfo
 from depictio.api.v1.utils import (
+    decode_token,
+    public_key_path,
     numpy_to_python,
     scan_runs,
     serialize_for_mongo,
@@ -39,8 +39,30 @@ files_collection = db[settings.collections.files_collection]
 
 
 @datacollections_endpoint_router.post("/scan")
-async def scan_data_collection(workflow: Workflow, data_collection: DataCollection, current_user: str = Depends(get_current_user)):
+async def scan_data_collection(
+    workflow: Workflow,
+    data_collection: DataCollection,
+    token: str = Depends(get_current_user),
+):
     print(data_collection)
+
+    # Attempt to retrieve the workflow from the database using the workflow_id
+    workflow = workflows_collection.find_one({"workflow_id": workflow.workflow_id})
+    if not workflow:
+        raise HTTPException(status_code=404, detail="Workflow not found.")
+
+    # Convert the workflow document to a Workflow model instance, assuming you have a function for this
+    workflow_model = Workflow(**workflow)
+
+    user = decode_token(token, public_key_path)
+
+    # Now check if the current user is listed as an owner in the workflow permissions
+    if not any(
+        owner.user_id == user.id for owner in workflow_model.permissions.owners
+    ):
+        raise HTTPException(
+            status_code=403, detail="User is not the owner of the workflow"
+        )
 
     # print(mongo_models)
 
@@ -80,7 +102,9 @@ async def scan_data_collection(workflow: Workflow, data_collection: DataCollecti
 
 
 @datacollections_endpoint_router.post("/aggregate_workflow_data")
-async def aggregate_workflow_data(data_collection: DataCollection, current_user: str = Depends(get_current_user)):
+async def aggregate_workflow_data(
+    data_collection: DataCollection, current_user: str = Depends(get_current_user)
+):
     # data_collections_collection.drop()
 
     print(data_collection)
@@ -227,7 +251,7 @@ async def get_files(workflow_engine: str, workflow_name: str, data_collection_id
             "workflow_id": f"{workflow_engine}/{workflow_name}",
         }
     )
-    print(document.keys())
+    print(document)
 
     # # Fetch all files from GridFS
     # associated_file = grid_fs.get(ObjectId(document["gridfs_file_id"]))

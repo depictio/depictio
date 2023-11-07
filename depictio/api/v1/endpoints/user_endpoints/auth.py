@@ -13,7 +13,7 @@ with open('/Users/tweber/Gits/depictio/dev/token/public_key.pem', 'rb') as f:
     PUBLIC_KEY = f.read()
 
 ALGORITHM = "RS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = 360
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
