@@ -12,7 +12,7 @@ from pydantic import BaseModel, ValidationError
 from typing import List, Dict, Any, Optional
 from jose import JWTError, jwt  # Use python-jose to decode JWT tokens
 
-from depictio.api.v1.configs.models import Permission, User, Workflow, RootConfig
+from depictio.api.v1.configs.models import Permission, User, Workflow, RootConfig, CustomJSONEncoder
 from depictio.api.v1.utils import get_config, validate_all_workflows, validate_config
 
 app = typer.Typer()
@@ -97,7 +97,7 @@ def create_workflow(
     config_data = get_config(config_path)
 
     config = validate_config(config_data, RootConfig)
- 
+
     validated_config = validate_all_workflows(config, user=user)
 
     config_dict = {f"{e.workflow_id}": e for e in validated_config.workflows}
@@ -109,13 +109,20 @@ def create_workflow(
     # Prepare the workflow data
     workflow_data = config_dict[workflow_id]
 
-    workflow_data_dict = workflow_data.dict()
+    # workflow_data_dict = workflow_data.dict()
+    workflow_data_dict = json.loads(
+        json.dumps(workflow_data.dict(by_alias=True, exclude_none=True), cls=CustomJSONEncoder)
+    )
+    print(workflow_data_dict)
+
+
 
     # Set permissions with the user as both owner and viewer
     headers = {"Authorization": f"Bearer {token}"}  # Token is now mandatory
 
+
     response = httpx.post(
-        f"{API_BASE_URL}/api/v1/workflows", json=workflow_data_dict, headers=headers
+        f"{API_BASE_URL}/api/v1/workflows/create_workflow", json=workflow_data_dict, headers=headers
     )
 
     if response.status_code == 200:

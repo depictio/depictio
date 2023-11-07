@@ -4,7 +4,7 @@ from jose import jwt, JWTError
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 
-from depictio.api.v1.configs.models import TokenData
+from depictio.api.v1.configs.models import TokenData, Token
 
 auth_endpoint_router = APIRouter()
 

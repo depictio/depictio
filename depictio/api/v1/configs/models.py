@@ -4,21 +4,29 @@ from pathlib import Path
 from typing import Type, Dict, List, Tuple, Optional, Any, Set
 import bleach
 from bson import ObjectId
-from pydantic import BaseModel, EmailStr, Field, FilePath, ValidationError, validator, root_validator
+from pydantic import (
+    BaseModel,
+    EmailStr,
+    Field,
+    FilePath,
+    ValidationError,
+    validator,
+    root_validator,
+)
 import re
 
-import yaml
-
-
-
+import yaml, json
 
 
 class Token(BaseModel):
     access_token: str
     token_type: str
 
+
 class TokenData(BaseModel):
     username: str | None = None
+
+
 class PyObjectId(ObjectId):
     @classmethod
     def __get_validators__(cls):
@@ -27,12 +35,20 @@ class PyObjectId(ObjectId):
     @classmethod
     def validate(cls, v):
         if not ObjectId.is_valid(v):
-            raise ValueError('Invalid ObjectId')
+            raise ValueError("Invalid ObjectId")
         return ObjectId(v)
 
     @classmethod
     def __modify_schema__(cls, field_schema):
-        field_schema.update(type='string')
+        field_schema.update(type="string")
+
+
+# Custom JSON encoder
+class CustomJSONEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, PyObjectId):
+            return str(obj)
+        return super().default(obj)
 
 class User(BaseModel):
     user_id: PyObjectId = Field(default_factory=PyObjectId)
@@ -41,9 +57,7 @@ class User(BaseModel):
 
     class Config:
         arbitrary_types_allowed = True
-        json_encoders = {
-            ObjectId: str
-        }
+        json_encoders = {ObjectId: str}
 
     def __hash__(self):
         # Hash based on the unique user_id
@@ -56,90 +70,109 @@ class User(BaseModel):
         return False
 
 
-
 class Group(BaseModel):
     group_id: PyObjectId
     name: str
     members: Set[User]  # Set of User objects instead of ObjectId
 
-    @validator('members', each_item=True, pre=True)
+    @validator("members", each_item=True, pre=True)
     def ensure_unique_users(cls, user):
         if not isinstance(user, User):
-            raise ValueError(f"Each member must be an instance of User, got {type(user)}")
+            raise ValueError(
+                f"Each member must be an instance of User, got {type(user)}"
+            )
         return user
 
     # This function ensures there are no duplicate users in the group
     @root_validator(pre=True)
     def ensure_unique_member_ids(cls, values):
-        members = values.get('members', [])
+        members = values.get("members", [])
         unique_members = {member.user_id: member for member in members}.values()
-        return {'members': set(unique_members)}
+        return {"members": set(unique_members)}
 
     # This function validates that each user_id in the members is unique
     @root_validator
     def check_user_ids_are_unique(cls, values):
         seen = set()
-        members = values.get('members', [])
+        members = values.get("members", [])
         for member in members:
             if member.user_id in seen:
-                raise ValueError('Duplicate user_id found in group members.')
+                raise ValueError("Duplicate user_id found in group members.")
             seen.add(member.user_id)
-        return values    
+        return values
 
 
 class Permission(BaseModel):
-    owners: Set[User]
-    viewers: Optional[Set[User]] = set()  # Set default to empty set
+    owners: List[User]
+    viewers: Optional[List[User]] = set()  # Set default to empty set
 
-    # Overriding the dict method to handle unhashable types
     def dict(self, **kwargs):
-        owners_dict = {owner.username: owner.dict(**kwargs) for owner in self.owners}
-        viewers_dict = {viewer.username: viewer.dict(**kwargs) for viewer in self.viewers}
-        return {'owners': owners_dict, 'viewers': viewers_dict}
+        # Before converting to list, let's print the owners and viewers
+        print("Converting to dict - Owners and Viewers as objects:")
+        print("Owners:", self.owners)
+        print("Viewers:", self.viewers)
 
+        # Generate list of owner and viewer dictionaries
+        owners_list = [owner.dict(**kwargs) for owner in self.owners]
+        viewers_list = [viewer.dict(**kwargs) for viewer in self.viewers]
+
+        print("Converting to dict - Owners and Viewers as lists of dicts:")
+        print("Owners Dict List:", owners_list)
+        print("Viewers Dict List:", viewers_list)
+
+        return {"owners": owners_list, "viewers": viewers_list}
+
+
+    @validator("owners", "viewers", pre=True, each_item=True)
+    def convert_dict_to_user(cls, v):
+        if isinstance(v, dict):
+            return User(**v)  # Assuming `User` is a Pydantic model and can be instantiated like this
+        elif not isinstance(v, User):
+            raise ValueError("Permissions should be assigned to User instances.")
+        return v
 
     @root_validator(pre=True)
     def validate_permissions(cls, values):
-        owners = values.get('owners', set())
-        viewers = values.get('viewers', set())
+        print("Inside validate_permissions - Raw input values:")
+        print(values)
 
+        owners = values.get("owners", set())
+        viewers = values.get("viewers", set())
+
+        print("Inside validate_permissions - Parsed owners and viewers:")
+        print("Owners:", owners)
+        print("Viewers:", viewers)
+
+        # Check if owners and viewers are sets and contain only User instances
         if not owners:
-            raise ValueError('At least one owner is required.')
+            raise ValueError("At least one owner is required.")
 
-        if not isinstance(owners, set) or any(not isinstance(owner, User) for owner in owners):
-            raise ValueError('All owners must be User instances.')
+        # if not isinstance(owners, set) or any(not isinstance(owner, User) for owner in owners):
+        #     raise ValueError("All owners must be User instances.")
 
-        if viewers and (not isinstance(viewers, set) or any(not isinstance(viewer, User) for viewer in viewers)):
-            raise ValueError('All viewers must be User instances if provided.')
-
-        # Ensuring owners and viewers do not overlap could also be done here if needed
-        # ...
+        # if viewers and (not isinstance(viewers, set) or any(not isinstance(viewer, User) for viewer in viewers)):
+        #     raise ValueError("All viewers must be User instances if provided.")
 
         return values
-
-    @validator('owners', 'viewers', each_item=True, pre=True)
-    def ensure_valid_users(cls, user):
-        if not isinstance(user, User):
-            raise ValueError(f"Permissions should be assigned to User instances, got {type(user)}")
-        return user
 
 
     # Here we ensure that there are no duplicate users across owners and viewers
     @root_validator
     def ensure_owners_and_viewers_are_unique(cls, values):
-        owners = values.get('owners', set())
-        viewers = values.get('viewers', set())
+        owners = values.get("owners", set())
+        viewers = values.get("viewers", set())
         owner_ids = {owner.user_id for owner in owners}
         viewer_ids = {viewer.user_id for viewer in viewers}
 
         # Check if there is any intersection between owners and viewers
         if not owner_ids.isdisjoint(viewer_ids):
-            raise ValueError('A User cannot be both an owner and a viewer.')
+            raise ValueError("A User cannot be both an owner and a viewer.")
 
         # You would add additional checks here to ensure all users exist in your database
         # If you're pulling from a real database, this would be the place to query it and validate
 
         return values
+
 
 class DirectoryPath(str):
     @classmethod
@@ -188,7 +221,7 @@ class File(BaseModel):
     def validate_creation_time(cls, value):
         try:
             dt = datetime.fromisoformat(value)
-            return dt.strftime('%Y-%m-%d %H:%M:%S')
+            return dt.strftime("%Y-%m-%d %H:%M:%S")
         except ValueError:
             raise ValueError("Invalid datetime format")
 
@@ -196,7 +229,7 @@ class File(BaseModel):
     def validate_modification_time(cls, value):
         try:
             dt = datetime.fromisoformat(value)
-            return dt.strftime('%Y-%m-%d %H:%M:%S')
+            return dt.strftime("%Y-%m-%d %H:%M:%S")
         except ValueError:
             raise ValueError("Invalid datetime format")
 
@@ -209,15 +242,13 @@ class File(BaseModel):
         if not os.access(value, os.R_OK):
             raise ValueError(f"'{value}' is not readable.")
         return value
-    
+
     @validator("file_hash")
     def validate_file_hash(cls, value):
         if value is not None:
             if not isinstance(value, str):
                 raise ValueError("file_hash must be a string")
         return value
-
-    
 
 
 class DataCollectionConfig(BaseModel):
@@ -273,7 +304,6 @@ class WorkflowConfig(BaseModel):
     workflow_version: Optional[str]
     config: Optional[Dict]
     runs_regex: Optional[str]
-
 
     @validator("runs_regex")
     def validate_regex(cls, v):
@@ -361,8 +391,9 @@ class Workflow(BaseModel):
     runs: Optional[Dict[str, WorkflowRun]]
     workflow_config: Optional[WorkflowConfig]
     data_collection_ids: Optional[List[str]] = []
-    permissions: Optional[Permission]  # Add this field to capture ownership and viewing permissions
-
+    permissions: Optional[
+        Permission
+    ]  # Add this field to capture ownership and viewing permissions
 
     @root_validator(pre=True)
     def populate_data_collection_ids(cls, values):
@@ -400,16 +431,16 @@ class Workflow(BaseModel):
             raise ValueError("runs must be a dictionary")
         return value
 
-
-    @validator('permissions', always=True)
+    @validator("permissions", always=True)
     def set_default_permissions(cls, value, values):
         if not value:
             # Here we initialize the owners to include the creator by default.
             # This assumes that `creator_id` or a similar field exists in the `Workflow` model.
-            workflow_creator = values.get('creator_id')
+            workflow_creator = values.get("creator_id")
             if workflow_creator:
                 return Permission(owners={workflow_creator}, viewers=set())
         return value
+
 
 class RootConfig(BaseModel):
     workflows: List[Workflow]
@@ -418,11 +449,11 @@ class RootConfig(BaseModel):
 ########
 
 
-
 class GridFSFileInfo(BaseModel):
     filename: str
     file_id: str
     length: int
+
 
 ########
 
