@@ -4,6 +4,8 @@ from pathlib import Path
 from typing import Type, Dict, List, Tuple, Optional, Any, Set
 import bleach
 from bson import ObjectId
+import re
+import yaml, json
 from pydantic import (
     BaseModel,
     EmailStr,
@@ -13,42 +15,35 @@ from pydantic import (
     validator,
     root_validator,
 )
-import re
 
-import yaml, json
+from depictio.api.v1.models.base import DirectoryPath, PyObjectId
+
+##################
+# Authentication #
+##################
 
 
 class Token(BaseModel):
     access_token: str
     token_type: str
+    expires_in: Optional[int] = None
+    scope: Optional[str] = None
+    user_id: PyObjectId
+
+    class Config:
+        arbitrary_types_allowed = True
+        json_encoders = {ObjectId: str}
 
 
 class TokenData(BaseModel):
-    username: str | None = None
+    user_id: PyObjectId
+    exp: Optional[int] = None
 
 
-class PyObjectId(ObjectId):
-    @classmethod
-    def __get_validators__(cls):
-        yield cls.validate
+###################
+# User management #
+###################
 
-    @classmethod
-    def validate(cls, v):
-        if not ObjectId.is_valid(v):
-            raise ValueError("Invalid ObjectId")
-        return ObjectId(v)
-
-    @classmethod
-    def __modify_schema__(cls, field_schema):
-        field_schema.update(type="string")
-
-
-# Custom JSON encoder
-class CustomJSONEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, PyObjectId):
-            return str(obj)
-        return super().default(obj)
 
 class User(BaseModel):
     user_id: PyObjectId = Field(default_factory=PyObjectId)
@@ -56,8 +51,7 @@ class User(BaseModel):
     email: EmailStr
 
     class Config:
-        arbitrary_types_allowed = True
-        json_encoders = {ObjectId: str}
+        json_encoders = {ObjectId: lambda v: str(v)}
 
     def __hash__(self):
         # Hash based on the unique user_id
@@ -122,11 +116,12 @@ class Permission(BaseModel):
 
         return {"owners": owners_list, "viewers": viewers_list}
 
-
     @validator("owners", "viewers", pre=True, each_item=True)
     def convert_dict_to_user(cls, v):
         if isinstance(v, dict):
-            return User(**v)  # Assuming `User` is a Pydantic model and can be instantiated like this
+            return User(
+                **v
+            )  # Assuming `User` is a Pydantic model and can be instantiated like this
         elif not isinstance(v, User):
             raise ValueError("Permissions should be assigned to User instances.")
         return v
@@ -155,7 +150,6 @@ class Permission(BaseModel):
 
         return values
 
-
     # Here we ensure that there are no duplicate users across owners and viewers
     @root_validator
     def ensure_owners_and_viewers_are_unique(cls, values):
@@ -174,31 +168,9 @@ class Permission(BaseModel):
         return values
 
 
-class DirectoryPath(str):
-    @classmethod
-    def __get_validators__(cls):
-        yield cls.validate
-
-    @classmethod
-    def validate(cls, value: str) -> str:
-        path = Path(value)
-        if not path.exists():
-            raise ValueError(f"The directory '{value}' does not exist.")
-        if not path.is_dir():
-            raise ValueError(f"'{value}' is not a directory.")
-        return value
-
-
-class ObjectIdStr(str):
-    @classmethod
-    def __get_validators__(cls):
-        yield cls.validate
-
-    @classmethod
-    def validate(cls, value: str) -> str:
-        if not ObjectId.is_valid(value):
-            raise ValueError(f"'{value}' is not a valid ObjectId.")
-        return str(value)
+###################
+# File management #
+###################
 
 
 def validate_datetime(value):
@@ -251,6 +223,11 @@ class File(BaseModel):
         return value
 
 
+###################
+# Data Collection #
+###################
+
+
 class DataCollectionConfig(BaseModel):
     regex: str
     format: str
@@ -286,11 +263,19 @@ class DataCollection(BaseModel):
     description: str = None  # Optional description
     config: DataCollectionConfig
     workflow_id: Optional[str]
-    gridfs_file_id: Optional[str] = Field(alias='gridfsId', default=None)  # If the field is named differently in MongoDB
+    gridfs_file_id: Optional[str] = Field(
+        alias="gridfsId", default=None
+    )  # If the field is named differently in MongoDB
 
     # @validator("data_collection_id", pre=True, always=True)
     # def extract_data_collection_id(cls, value):
     #     return value.split("/")[-1]
+
+    class Config:
+        allow_population_by_field_name = True
+        json_encoders = {
+            ObjectId: str  # Convert ObjectId instances to strings in JSON output
+        }
 
     @validator("description", pre=True, always=True)
     def sanitize_description(cls, value):
@@ -299,8 +284,14 @@ class DataCollection(BaseModel):
         return sanitized
 
 
+###################
+# Workflows #
+###################
+
+
 class WorkflowConfig(BaseModel):
     # workflow_id: Optional[str]
+    _id: Optional[PyObjectId] = Field(default_factory=PyObjectId)
     parent_runs_location: str
     workflow_version: Optional[str]
     config: Optional[Dict]
@@ -383,7 +374,7 @@ class WorkflowSystem(BaseModel):
 
 
 class Workflow(BaseModel):
-    _id: Optional[PyObjectId] = Field(default_factory=PyObjectId)
+    _id: PyObjectId = Field(default_factory=PyObjectId, alias='_id')
     workflow_name: str = None
     workflow_engine: str = None
     workflow_id: str
@@ -397,7 +388,6 @@ class Workflow(BaseModel):
         Permission
     ]  # Add this field to capture ownership and viewing permissions
 
-
     class Config:
         allow_population_by_field_name = True
         json_encoders = {
@@ -408,8 +398,8 @@ class Workflow(BaseModel):
     @classmethod
     def from_mongo(cls, data: dict):
         # Convert the _id from ObjectId to str
-        data['id'] = str(data['_id'])
-        del data['_id']  # Optional: remove the original _id if not needed
+        data["id"] = str(data["_id"])
+        del data["_id"]  # Optional: remove the original _id if not needed
         return cls(**data)
 
     @root_validator(pre=True)
@@ -463,7 +453,9 @@ class RootConfig(BaseModel):
     workflows: List[Workflow]
 
 
-########
+###################
+# GridFS #
+###################
 
 
 class GridFSFileInfo(BaseModel):
@@ -473,11 +465,11 @@ class GridFSFileInfo(BaseModel):
 
 
 class GridFSAggregatedFile(BaseModel):
-    id: PyObjectId = Field(alias='_id')
+    id: PyObjectId = Field(alias="_id")
     filename: str
     chunkSize: int
     length: int
-    uploadDate: datetime = Field(alias='uploadDate')
+    uploadDate: datetime = Field(alias="uploadDate")
 
     class Config:
         json_encoders = {ObjectId: str}

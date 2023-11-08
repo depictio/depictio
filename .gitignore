@@ -183,3 +183,5 @@ wf_data/
 
 ldap_config/
 ldap_db/
+dev/token/private_key.pem
+dev/token/public_key.pem

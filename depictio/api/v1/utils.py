@@ -11,7 +11,7 @@ import re
 from typing import Dict, Type, List, Tuple, Optional, Any
 from pydantic import BaseModel, ValidationError
 import yaml
-from depictio.api.v1.configs.models import (
+from depictio.api.v1.models.pydantic_models import (
     DataCollection,
     File,
     Permission,
@@ -24,53 +24,19 @@ from depictio.api.v1.configs.models import (
 )
 
 
-
-public_key_path = "/Users/tweber/Gits/depictio/dev/token/public_key.pem"
-token_path = "/Users/tweber/Gits/depictio/dev/token/token.txt"
-
-
-def decode_token(
-    token: Optional[str] = None,
-    token_path: Optional[str] = None,
-    public_key_path: str = public_key_path,
-) -> User:
-    # Determine the source of the token
-    if token is None:
-        if token_path is None:
-            # Default token path
-            token_path = os.path.join(Path.home(), ".depictio", "config")
-        # Read the token from a file
-        try:
-            with open(token_path, "r") as f:
-                token = f.read().strip()
-        except IOError as e:
-            raise IOError(f"Unable to read token file: {e}")
-
-    # Read the public key
+def return_user_from_id(token: str) -> dict:
     try:
-        with open(public_key_path, "rb") as f:
-            public_key = f.read()
-    except IOError as e:
-        raise IOError(f"Unable to read public key file: {e}")
-
-    # Verify and decode the JWT
-    print("\n\n\n")
-    print("decode_token")
-    print(token)
-
-    try:
-        decoded = jwt.decode(token, public_key, algorithms=["RS256"])
-    except JWTError as e:
-        raise JWTError(f"Token verification failed: {e}")
-
-    # Instantiate a User object from the decoded token
-    try:
-        user = User(**decoded)
+        payload = jwt.decode(token, PUBLIC_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("sub")
+        if user_id is None:
+            typer.echo("Token is invalid or expired.")
+            raise typer.Exit(code=1)
+        # Fetch user from the database or wherever it is stored
+        user = fetch_user_by_id(user_id)
         return user
-    except ValidationError as e:
-        raise ValidationError(f"Decoded token is not valid for the User model: {e}")
-
-
+    except JWTError as e:
+        typer.echo(f"Token verification failed: {e}")
+        raise typer.Exit(code=1)
 
 
 def get_config(filename: str):

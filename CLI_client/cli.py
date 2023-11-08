@@ -3,6 +3,7 @@ from pathlib import Path
 import sys
 
 import json
+from bson import ObjectId
 import httpx
 import typer
 import yaml
@@ -10,16 +11,21 @@ from pydantic import BaseModel, ValidationError
 from typing import List, Dict, Any, Optional
 from jose import JWTError, jwt  # Use python-jose to decode JWT tokens
 
-from depictio.api.v1.configs.models import (
+from depictio.api.v1.models.pydantic_models import (
     Permission,
     User,
     Workflow,
     RootConfig,
-    CustomJSONEncoder,
+)
+
+from depictio.api.v1.models.base import CustomJSONEncoder, convert_objectid_to_str
+
+from depictio.api.v1.endpoints.user_endpoints.auth import (
+    ALGORITHM,
+    PUBLIC_KEY,
+    fetch_user_from_id,
 )
 from depictio.api.v1.utils import (
-    decode_token,
-    public_key_path,
     get_config,
     validate_all_workflows,
     validate_config,
@@ -28,6 +34,21 @@ from depictio.api.v1.utils import (
 app = typer.Typer()
 
 API_BASE_URL = "http://localhost:8058"  # replace with your FastAPI server URL
+
+
+def return_user_from_token(token: str) -> dict:
+    try:
+        payload = jwt.decode(token, PUBLIC_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("sub")
+        if user_id is None:
+            typer.echo("Token is invalid or expired.")
+            raise typer.Exit(code=1)
+        # Fetch user from the database or wherever it is stored
+        user = fetch_user_from_id(user_id)
+        return user
+    except JWTError as e:
+        typer.echo(f"Token verification failed: {e}")
+        raise typer.Exit(code=1)
 
 
 @app.command()
@@ -54,9 +75,7 @@ def create_workflow(
         typer.echo("A valid token must be provided for authentication.")
         raise typer.Exit(code=1)
 
-    user = decode_token(
-        token, public_key_path
-    )  # Decode the token to get the user information
+    user = return_user_from_token(token)  # Decode the token to get the user information
     if not user:
         typer.echo("Invalid token or unable to decode user information.")
         raise typer.Exit(code=1)
@@ -66,8 +85,10 @@ def create_workflow(
 
     # Get the config data (assuming get_config returns a dictionary)
     config_data = get_config(config_path)
+    print(config_data)
 
     config = validate_config(config_data, RootConfig)
+    print(config)
 
     validated_config = validate_all_workflows(config, user=user)
 
@@ -81,13 +102,17 @@ def create_workflow(
     workflow_data = config_dict[workflow_id]
 
     print("PREPOST")
+    print(workflow_data)
 
     # workflow_data_dict = workflow_data.dict()
-    workflow_data_dict = json.loads(
-        json.dumps(
-            workflow_data.dict(by_alias=True, exclude_none=True), cls=CustomJSONEncoder
-        )
-    )
+    # workflow_data_dict = json.loads(
+    #     json.dumps(
+    #         workflow_data.dict(by_alias=True, exclude_none=True), cls=CustomJSONEncoder
+    #     )
+    # )
+    workflow_data_raw = workflow_data.dict(by_alias=True, exclude_none=True)
+    workflow_data_dict = convert_objectid_to_str(workflow_data_raw)
+
     print(workflow_data_dict)
 
     response = httpx.post(
@@ -145,9 +170,7 @@ def scan_data_collections(
         typer.echo("A valid token must be provided for authentication.")
         raise typer.Exit(code=1)
 
-    user = decode_token(
-        token, public_key_path
-    )  # Decode the token to get the user information
+    user = return_user_from_token(token)  # Decode the token to get the user information
     if not user:
         typer.echo("Invalid token or unable to decode user information.")
         raise typer.Exit(code=1)
@@ -194,7 +217,9 @@ def scan_data_collections(
 
         # Convert the payload to JSON using the custom encoder
         print(data_payload, type(data_payload))
-        data_payload_json = json.loads(json.dumps(data_payload, cls=CustomJSONEncoder))
+
+        data_payload_json = convert_objectid_to_str(data_payload)
+
         print(data_payload_json, type(data_payload_json))
 
         # workflow_data_dict = workflow_data.dict()
@@ -248,9 +273,7 @@ def aggregate_workflow_data_collections(
         typer.echo("A valid token must be provided for authentication.")
         raise typer.Exit(code=1)
 
-    user = decode_token(
-        token, public_key_path
-    )  # Decode the token to get the user information
+    user = return_user_from_token(token)  # Decode the token to get the user information
     if not user:
         typer.echo("Invalid token or unable to decode user information.")
         raise typer.Exit(code=1)
@@ -285,7 +308,6 @@ def aggregate_workflow_data_collections(
     else:
         data_collections_to_process = list(workflow.data_collections.values())
 
-
     # Assuming workflow and data_collection are Pydantic models and have .dict() method
     for data_collection in data_collections_to_process:
         data_payload = data_collection.dict(by_alias=True, exclude_none=True)
@@ -294,7 +316,6 @@ def aggregate_workflow_data_collections(
         print(data_payload, type(data_payload))
         data_payload_json = json.loads(json.dumps(data_payload, cls=CustomJSONEncoder))
         print(data_payload_json, type(data_payload_json))
-
 
         response = httpx.post(
             f"{API_BASE_URL}/api/v1/datacollections/aggregate_workflow_data",

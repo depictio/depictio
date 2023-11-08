@@ -1,7 +1,7 @@
 from pydantic import BaseModel, ValidationError, validator
 import yaml
 
-from depictio.api.v1.configs.models import (
+from depictio.api.v1.models.pydantic_models import (
     RootConfig,
     Settings,
     # WorkflowConfig,
