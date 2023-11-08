@@ -18,11 +18,11 @@ from depictio.api.v1.db import db, grid_fs
 from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user
 
 
-from depictio.api.v1.configs.models import Workflow, File, DataCollection
-from depictio.api.v1.configs.models import GridFSFileInfo
+from depictio.api.v1.models.pydantic_models import Workflow, File, DataCollection
+from depictio.api.v1.models.pydantic_models import GridFSFileInfo
 from depictio.api.v1.utils import (
-    decode_token,
-    public_key_path,
+    # decode_token,
+    # public_key_path,
     numpy_to_python,
     scan_runs,
     serialize_for_mongo,
@@ -42,38 +42,37 @@ files_collection = db[settings.collections.files_collection]
 async def scan_data_collection(
     workflow: Workflow,
     data_collection: DataCollection,
-    token: str = Depends(get_current_user),
+    current_user: str = Depends(get_current_user),
 ):
     print(data_collection)
 
-    # Attempt to retrieve the workflow from the database using the workflow_id
-    workflow = workflows_collection.find_one({"workflow_id": workflow.workflow_id})
-    if not workflow:
-        raise HTTPException(status_code=404, detail="Workflow not found.")
+    user_id = current_user.user_id  # This should be the ObjectId
 
-    # Convert the workflow document to a Workflow model instance, assuming you have a function for this
-    workflow_model = Workflow(**workflow)
+    # Find data_collections where workflow_id and data_collection_id match and where current_user is either an owner or a viewer of the workflow
+    
+    query = {
+        "workflow_id": workflow.workflow_id,
+        "$or": [
+            {"permissions.owners.user_id": user_id},
+            {"permissions.viewers.user_id": user_id},
+        ],
+    }
 
-    user = decode_token(token, public_key_path)
+    data_collections_cursor = workflows_collection.find(query)
+    print([doc for doc in data_collections_cursor])
+    # exit()
 
-    # Now check if the current user is listed as an owner in the workflow permissions
-    if not any(
-        owner.user_id == user.id for owner in workflow_model.permissions.owners
-    ):
+    if not data_collections_cursor:
         raise HTTPException(
-            status_code=403, detail="User is not the owner of the workflow"
+            status_code=404, detail="No data collections found for the current user."
         )
 
-    # print(mongo_models)
-
-    # runs_collection.drop()
-    # files_collection.drop()
-
+    # Retrieve the workflow_config from the workflow
     location = workflow.workflow_config.parent_runs_location
 
+    # Scan the runs and retrieve the files
     runs_and_content = scan_runs(location, workflow.workflow_config, data_collection)
     runs_and_content = serialize_for_mongo(runs_and_content)
-    # print
 
     if isinstance(runs_and_content, list) and all(
         isinstance(item, dict) for item in runs_and_content
@@ -96,7 +95,9 @@ async def scan_data_collection(
 
         # return_dict = json.dumps(return_dict, indent=4)
 
-        return {"message": f"Files successfully scanned and created: {return_dict}"}
+        return {
+            "message": f"Files successfully scanned and created for data_collection: {data_collection.data_collection_id} of workflow: {workflow.workflow_id}"
+        }
     else:
         return {"Warning: runs_and_content is not a list of dictionaries."}
 
