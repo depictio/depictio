@@ -149,10 +149,10 @@ class WorkflowORM(BaseModel):
     workflow_name: str
     workflow_engine: str
     workflow_description: str
-    data_collections_ids: Optional[List[PyObjectId]]
+    data_collections_ids: List[PyObjectId]
     runs_ids: Optional[List[PyObjectId]]
-    workflow_config: Optional[PyObjectId]
-    permissions: Optional[List[PyObjectId]]
+    workflow_config: PyObjectId
+    permissions: PyObjectId
 
     class Config:
         allow_population_by_field_name = True
