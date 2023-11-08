@@ -40,6 +40,7 @@ class CustomJSONEncoder(json.JSONEncoder):
 class PyObjectId(ObjectId):
     @classmethod
     def __get_validators__(cls):
+        print("Validator called")  # Debug print
         yield cls.validate
 
     @classmethod
