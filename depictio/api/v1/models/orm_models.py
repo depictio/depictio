@@ -25,7 +25,7 @@ from depictio.api.v1.models.base import DirectoryPath, PyObjectId
 
 
 class UserORM(BaseModel):
-    _id: Optional[PyObjectId] = Field(default_factory=PyObjectId)
+    id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
     username: str
     email: EmailStr
 
@@ -36,7 +36,7 @@ class UserORM(BaseModel):
 
 
 class PermissionORM(BaseModel):
-    _id: Optional[PyObjectId] = Field(default_factory=PyObjectId)
+    id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
     owners: List[PyObjectId]
     viewers: Optional[List[PyObjectId]] = set()  # Set default to empty set
 
@@ -52,7 +52,7 @@ class PermissionORM(BaseModel):
 
 
 class FileORM(BaseModel):
-    _id: Optional[PyObjectId] = Field(default_factory=PyObjectId)
+    id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
     file_location: FilePath
     filename: str
     creation_time: datetime
@@ -75,7 +75,7 @@ class FileORM(BaseModel):
 
 
 class DataCollectionConfigORM(BaseModel):
-    _id: Optional[PyObjectId] = Field(default_factory=PyObjectId)
+    id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
     regex: str
     format: str
     pandas_kwargs: Optional[Dict[str, Any]] = {}
@@ -90,7 +90,7 @@ class DataCollectionConfigORM(BaseModel):
 
 
 class DataCollectionORM(BaseModel):
-    _id: Optional[PyObjectId] = Field(default_factory=PyObjectId)
+    id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
     data_collection_id: str
     description: str = None  # Optional description
     config: PyObjectId
@@ -111,7 +111,7 @@ class DataCollectionORM(BaseModel):
 
 
 class WorkflowConfigORM(BaseModel):
-    _id: Optional[PyObjectId] = Field(default_factory=PyObjectId)
+    id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
     workflow_id: PyObjectId
     parent_runs_location: str
     workflow_version: Optional[str]
@@ -127,7 +127,7 @@ class WorkflowConfigORM(BaseModel):
 
 
 class WorkflowRunORM(BaseModel):
-    _id: Optional[PyObjectId] = Field(default_factory=PyObjectId)
+    id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
     run_id: str
     files: List[PyObjectId] = []
     workflow_config: PyObjectId
@@ -144,7 +144,7 @@ class WorkflowRunORM(BaseModel):
 
 
 class WorkflowORM(BaseModel):
-    _id: Optional[PyObjectId] = Field(default_factory=PyObjectId)
+    id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
     workflow_id: str
     workflow_name: str
     workflow_engine: str

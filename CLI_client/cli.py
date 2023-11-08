@@ -7,7 +7,7 @@ from bson import ObjectId
 import httpx
 import typer
 import yaml
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 from typing import List, Dict, Any, Optional
 from jose import JWTError, jwt  # Use python-jose to decode JWT tokens
 
@@ -18,7 +18,11 @@ from depictio.api.v1.models.pydantic_models import (
     RootConfig,
 )
 
-from depictio.api.v1.models.base import CustomJSONEncoder, convert_objectid_to_str
+from depictio.api.v1.models.base import (
+    CustomJSONEncoder,
+    PyObjectId,
+    convert_objectid_to_str,
+)
 
 from depictio.api.v1.endpoints.user_endpoints.auth import (
     ALGORITHM,
@@ -85,10 +89,8 @@ def create_workflow(
 
     # Get the config data (assuming get_config returns a dictionary)
     config_data = get_config(config_path)
-    print(config_data)
 
     config = validate_config(config_data, RootConfig)
-    print(config)
 
     validated_config = validate_all_workflows(config, user=user)
 
@@ -101,19 +103,11 @@ def create_workflow(
     # Prepare the workflow data
     workflow_data = config_dict[workflow_id]
 
-    print("PREPOST")
-    print(workflow_data)
 
-    # workflow_data_dict = workflow_data.dict()
-    # workflow_data_dict = json.loads(
-    #     json.dumps(
-    #         workflow_data.dict(by_alias=True, exclude_none=True), cls=CustomJSONEncoder
-    #     )
-    # )
     workflow_data_raw = workflow_data.dict(by_alias=True, exclude_none=True)
     workflow_data_dict = convert_objectid_to_str(workflow_data_raw)
 
-    print(workflow_data_dict)
+
 
     response = httpx.post(
         f"{API_BASE_URL}/api/v1/workflows/create_workflow",

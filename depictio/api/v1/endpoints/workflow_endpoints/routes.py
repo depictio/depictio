@@ -60,8 +60,6 @@ async def get_workflows(current_user: str = Depends(get_current_user)):
 async def create_workflow(
     workflow: Workflow, current_user: str = Depends(get_current_user)
 ):
-    print("\n\n\n")
-    print(workflow)
 
     workflows_collection.drop()
     data_collections_collection.drop()
@@ -69,9 +67,9 @@ async def create_workflow(
     files_collection.drop()
     fschunks_collection.drop()
     fsfiles_collection.drop()
-
-    print(workflow)
-    print(workflow._id)
+    permissions_collection.drop()
+    workflow_config_collection.drop()
+    
 
     # First, handle the workflow config and get its ID
     workflow_config_orm = WorkflowConfigORM(
@@ -79,7 +77,7 @@ async def create_workflow(
         workflow_version=workflow.workflow_config.workflow_version,
         config=workflow.workflow_config.config,
         runs_regex=workflow.workflow_config.runs_regex,
-        workflow_id=workflow._id,
+        workflow_id=workflow.id,
     )
     workflow_config_id = workflow_config_collection.insert_one(
         workflow_config_orm.dict(by_alias=True)

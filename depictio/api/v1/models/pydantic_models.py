@@ -258,7 +258,7 @@ class DataCollectionConfig(BaseModel):
 
 
 class DataCollection(BaseModel):
-    _id: Optional[PyObjectId] = Field(default_factory=PyObjectId)
+    id: Optional[PyObjectId] = Field(default_factory=PyObjectId)
     data_collection_id: Optional[str]
     description: str = None  # Optional description
     config: DataCollectionConfig
@@ -291,7 +291,7 @@ class DataCollection(BaseModel):
 
 class WorkflowConfig(BaseModel):
     # workflow_id: Optional[str]
-    _id: Optional[PyObjectId] = Field(default_factory=PyObjectId)
+    id: Optional[PyObjectId] = Field(default_factory=PyObjectId)
     parent_runs_location: str
     workflow_version: Optional[str]
     config: Optional[Dict]
@@ -374,7 +374,7 @@ class WorkflowSystem(BaseModel):
 
 
 class Workflow(BaseModel):
-    _id: PyObjectId = Field(default_factory=PyObjectId, alias='_id')
+    id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
     workflow_name: str = None
     workflow_engine: str = None
     workflow_id: str
@@ -394,13 +394,21 @@ class Workflow(BaseModel):
             ObjectId: str  # Convert ObjectId instances to strings in JSON output
         }
 
+    @root_validator(pre=True)
+    def set_workflow_id(cls, values):
+        workflow_engine = values.get("workflow_engine")
+        workflow_name = values.get("workflow_name")
+        if workflow_engine and workflow_name:
+            values["workflow_id"] = f"{workflow_engine}/{workflow_name}"
+        return values
+
     # Example usage
-    @classmethod
-    def from_mongo(cls, data: dict):
-        # Convert the _id from ObjectId to str
-        data["id"] = str(data["_id"])
-        del data["_id"]  # Optional: remove the original _id if not needed
-        return cls(**data)
+    # @classmethod
+    # def from_mongo(cls, data: dict):
+    #     # Convert the _id from ObjectId to str
+    #     data["id"] = str(data["_id"])
+    #     del data["_id"]  # Optional: remove the original _id if not needed
+    #     return cls(**data)
 
     @root_validator(pre=True)
     def populate_data_collection_ids(cls, values):
@@ -410,13 +418,13 @@ class Workflow(BaseModel):
             collection["workflow_id"] = workflow_id
         return values
 
-    @root_validator(pre=True)
-    def set_workflow_name(cls, values):
-        workflow_engine = values.get("workflow_id").split("/")[0]
-        workflow_name = values.get("workflow_id").split("/")[1]
-        values["workflow_name"] = f"{workflow_name}"
-        values["workflow_engine"] = f"{workflow_engine}"
-        return values
+    # @root_validator(pre=True)
+    # def set_workflow_name(cls, values):
+    #     workflow_engine = values.get("workflow_id").split("/")[0]
+    #     workflow_name = values.get("workflow_id").split("/")[1]
+    #     values["workflow_name"] = f"{workflow_name}"
+    #     values["workflow_engine"] = f"{workflow_engine}"
+    #     return values
 
     @validator("workflow_description", pre=True, always=True)
     def sanitize_description(cls, value):
