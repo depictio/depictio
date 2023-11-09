@@ -60,6 +60,8 @@ async def scan_data_collection(
 
     data_collections_cursor = workflows_collection.find(query)
     print([doc for doc in data_collections_cursor])
+
+    # retrieve all 
     # exit()
 
     if not data_collections_cursor:
