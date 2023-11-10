@@ -292,10 +292,26 @@ class DataCollection(BaseModel):
 class WorkflowConfig(BaseModel):
     # workflow_id: Optional[str]
     id: Optional[PyObjectId] = Field(default_factory=PyObjectId)
-    parent_runs_location: str
+    parent_runs_location:  List[DirectoryPath]
     workflow_version: Optional[str]
     config: Optional[Dict]
     runs_regex: Optional[str]
+
+    # Update below to allow for multiple run locations and check that they exist
+    @validator("parent_runs_location")
+    def validate_run_location(cls, value):
+        if not isinstance(value, list):
+            raise ValueError("run_location must be a list")
+        for location in value:
+            if not os.path.exists(location):
+                raise ValueError(f"The directory '{location}' does not exist.")
+            if not os.path.isdir(location):
+                raise ValueError(f"'{location}' is not a directory.")
+            if not os.access(location, os.R_OK):
+                raise ValueError(f"'{location}' is not readable.")
+        return value
+    
+   
 
     @validator("runs_regex")
     def validate_regex(cls, v):
@@ -304,23 +320,23 @@ class WorkflowConfig(BaseModel):
             return v
         except re.error:
             raise ValueError("Invalid regex pattern")
+    # Generate version validator - if no version specified, set to 1.0.0
+    @validator("workflow_version", pre=True, always=True)
+    def set_version(cls, value):
+        if value is None:
+            return "1.0.0"
+        return value
 
 
 class WorkflowRun(BaseModel):
     run_id: Optional[str]
     files: List[File] = []
     workflow_config: WorkflowConfig
-    run_location: DirectoryPath
+    run_location: List[DirectoryPath]
     execution_time: datetime
     execution_profile: Optional[Dict]
 
-    @validator("run_location", pre=True, always=True)
-    def validate_location_name(cls, value, values):
-        if not os.path.exists(value):
-            raise ValueError(f"The directory '{value}' does not exist.")
-        if not os.path.isdir(value):
-            raise ValueError(f"'{value}' is not a directory.")
-        return value
+
 
     @validator("files")
     def validate_files(cls, value):
@@ -383,7 +399,7 @@ class Workflow(BaseModel):
     data_collections: Optional[Dict[str, DataCollection]]
     runs: Optional[Dict[str, WorkflowRun]]
     workflow_config: Optional[WorkflowConfig]
-    data_collection_ids: Optional[List[str]] = []
+    # data_collection_ids: Optional[List[str]] = []
     permissions: Optional[
         Permission
     ]  # Add this field to capture ownership and viewing permissions
@@ -393,6 +409,7 @@ class Workflow(BaseModel):
         json_encoders = {
             ObjectId: str  # Convert ObjectId instances to strings in JSON output
         }
+
 
     @root_validator(pre=True)
     def set_workflow_id(cls, values):

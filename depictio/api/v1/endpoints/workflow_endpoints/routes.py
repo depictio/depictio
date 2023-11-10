@@ -181,23 +181,23 @@ async def create_workflow(
         )
 
     # Extract and insert data_collections first to get their unique ids
-    data_collection_ids = []
-    for key, data_collection in workflow.data_collections.items():
-        # Extract and insert config first to get its unique id
-        data_collection_dict = (
-            data_collection.dict()
-            if hasattr(data_collection, "dict")
-            else vars(data_collection)
-        )
+    # data_collection_ids = []
+    # for key, data_collection in workflow.data_collections.items():
+    #     # Extract and insert config first to get its unique id
+    #     data_collection_dict = (
+    #         data_collection.dict()
+    #         if hasattr(data_collection, "dict")
+    #         else vars(data_collection)
+    #     )
 
-        data_collection_id = data_collections_collection.insert_one(
-            data_collection_dict
-        ).inserted_id
-        data_collection_ids.append(data_collection_dict["data_collection_id"])
+    #     data_collection_id = data_collections_collection.insert_one(
+    #         data_collection_dict
+    #     ).inserted_id
+    #     data_collection_ids.append(data_collection_dict["data_collection_id"])
 
     # Now, insert the workflow, linking to the data_collection ids
-    workflow_data = workflow.dict(exclude={"data_collections"})
-    workflow_data["data_collection_ids"] = data_collection_ids
+    workflow_data = workflow.dict()
+    # workflow_data["data_collection_ids"] = data_collection_ids
 
     result = workflows_collection.insert_one(workflow_data)
 
