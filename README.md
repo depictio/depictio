@@ -16,6 +16,46 @@ Depictio is an innovative web-based platform currently under development, aimed 
 
 Depictio is currently in the development phase and is not yet available for general use. The platform is being built with an emphasis on versatility and adaptability to various biological research needs.
 
+## Current setup
+
+
+Clone the repo:
+
+```
+git clone https://github.com/weber8thomas/depictio.git
+```
+
+Create the conda environments (for the frontend and the FastAPI instance):
+
+```
+mamba env create -f conda_envs/depictio_backend.yaml
+mamba env create -f conda_envs/depictio_frontend.yaml
+```
+
+
+
+For database and redis cache:
+
+```
+docker-compose up -d
+```
+
+Export PYTHONPATH (temporary) and run the API instance
+
+```
+export PYTHONPATH=$PYTHONPATH:DEPICTIO_LOCATION
+python depictio/api/run.py
+```
+
+Export PYTHONPATH (temporary) and run the frontend instance
+
+```
+export PYTHONPATH=$PYTHONPATH:DEPICTIO_LOCATION
+python depictio/dash/app.py
+```
+
+
+
 ## Biological Use-Cases
 
 Depictio is currently being developed with two primary workflows employed as use-cases :
