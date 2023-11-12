@@ -34,6 +34,8 @@ mamba env create -f conda_envs/depictio_frontend.yaml
 
 
 
+
+
 For database and redis cache:
 
 ```
