@@ -62,8 +62,8 @@ def create_workflow(
         "--config_path",
         help="Path to the YAML configuration file",
     ),
-    workflow_id: str = typer.Option(
-        ..., "--workflow_id", help="Workflow name to be created"
+    workflow_tag: str = typer.Option(
+        ..., "--workflow_tag", help="Workflow name to be created"
     ),
     token: str = typer.Option(
         None,  # Default to None (not specified)
@@ -94,14 +94,14 @@ def create_workflow(
 
     validated_config = validate_all_workflows(config, user=user)
 
-    config_dict = {f"{e.workflow_id}": e for e in validated_config.workflows}
+    config_dict = {f"{e.workflow_tag}": e for e in validated_config.workflows}
 
-    if workflow_id not in config_dict:
-        typer.echo(f"Workflow '{workflow_id}' not found in the config file.")
+    if workflow_tag not in config_dict:
+        typer.echo(f"Workflow '{workflow_tag}' not found in the config file.")
         raise typer.Exit(code=1)
 
     # Prepare the workflow data
-    workflow_data = config_dict[workflow_id]
+    workflow_data = config_dict[workflow_tag]
 
 
     workflow_data_raw = workflow_data.dict(by_alias=True, exclude_none=True)

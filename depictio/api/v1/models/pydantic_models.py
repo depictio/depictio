@@ -393,7 +393,7 @@ class Workflow(BaseModel):
     id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
     workflow_name: str = None
     workflow_engine: str = None
-    workflow_id: str
+    workflow_tag: str
     # workflow_engine: WorkflowSystem
     workflow_description: str
     data_collections: Optional[Dict[str, DataCollection]]
@@ -412,11 +412,11 @@ class Workflow(BaseModel):
 
 
     @root_validator(pre=True)
-    def set_workflow_id(cls, values):
+    def set_workflow_tag(cls, values):
         workflow_engine = values.get("workflow_engine")
         workflow_name = values.get("workflow_name")
         if workflow_engine and workflow_name:
-            values["workflow_id"] = f"{workflow_engine}/{workflow_name}"
+            values["workflow_tag"] = f"{workflow_engine}/{workflow_name}"
         return values
 
     # Example usage
@@ -429,10 +429,10 @@ class Workflow(BaseModel):
 
     @root_validator(pre=True)
     def populate_data_collection_ids(cls, values):
-        workflow_id = values.get("workflow_id")
+        workflow_id = values.get("values")
         data_collections = values.get("data_collections", {})
         for collection in data_collections.values():
-            collection["workflow_id"] = workflow_id
+            collection["values"] = workflow_id
         return values
 
     # @root_validator(pre=True)
