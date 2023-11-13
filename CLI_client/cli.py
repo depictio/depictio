@@ -91,21 +91,28 @@ def create_workflow(
     config_data = get_config(config_path)
 
     config = validate_config(config_data, RootConfig)
+    print(config)
+    print([w.workflow_tag for w in config.workflows])
 
-    validated_config = validate_all_workflows(config, user=user)
+    # validated_config = validate_all_workflows(config, user=user)
+    # print(validated_config)
 
-    config_dict = {f"{e.workflow_tag}": e for e in validated_config.workflows}
+    # config_dict = {f"{e.workflow_tag}": e for e in validated_config.workflows}
 
-    if workflow_tag not in config_dict:
+    if workflow_tag not in [w.workflow_tag for w in config.workflows]:
         typer.echo(f"Workflow '{workflow_tag}' not found in the config file.")
         raise typer.Exit(code=1)
 
-    # Prepare the workflow data
-    workflow_data = config_dict[workflow_tag]
+    if workflow_tag:
+        workflow_data = [w for w in config.workflows if w.workflow_tag == workflow_tag][0]
+    else:
+        workflow_data = config.workflows
 
 
     workflow_data_raw = workflow_data.dict(by_alias=True, exclude_none=True)
+    print(workflow_data_raw)
     workflow_data_dict = convert_objectid_to_str(workflow_data_raw)
+    print(workflow_data_dict)
 
 
 
@@ -177,61 +184,61 @@ def scan_data_collections(
     config_data = get_config(config_path)
     # print(config_data)
     config = validate_config(config_data, RootConfig)
-    validated_config = validate_all_workflows(config, user=user)
+    assert isinstance(config, RootConfig)
 
-    # print(validated_config)
+    # validated_config = validate_all_workflows(config, user=user)
 
-    config_dict = {f"{e.workflow_id}": e for e in validated_config.workflows}
 
-    if workflow_id not in config_dict:
-        raise ValueError(f"Workflow '{workflow_id}' not found in the config file.")
+    # config_dict = {f"{e.id}": e for e in validated_config.workflows}
 
-    if workflow_id is None:
-        raise ValueError("Please provide a workflow id.")
+    # if workflow_id not in config_dict:
+    #     raise ValueError(f"Workflow '{workflow_id}' not found in the config file.")
 
-    workflow = config_dict[workflow_id]
+    # if workflow_id is None:
+    #     raise ValueError("Please provide a workflow id.")
+
+    # workflow = config_dict[workflow_id]
 
     # If a specific data_collection_id is given, use that, otherwise default to all data_collections
-    data_collections_to_process = []
-    if data_collection_id:
-        if data_collection_id not in workflow.data_collections:
-            raise ValueError(
-                f"Data collection '{data_collection_id}' not found for the given workflow."
-            )
-        data_collections_to_process.append(
-            workflow.data_collections[data_collection_id]
-        )
-    else:
-        data_collections_to_process = list(workflow.data_collections.values())
+    # data_collections_to_process = []
+    # if data_collection_id:
+    #     if data_collection_id not in workflow.data_collections:
+    #         raise ValueError(
+    #             f"Data collection '{data_collection_id}' not found for the given workflow."
+    #         )
+    #     data_collections_to_process.append(
+    #         workflow.data_collections[data_collection_id]
+    #     )
+    # else:
+    #     data_collections_to_process = list(workflow.data_collections.values())
 
     # Assuming workflow and data_collection are Pydantic models and have .dict() method
-    for data_collection in data_collections_to_process:
-        data_payload = {
-            "workflow": workflow.dict(by_alias=True, exclude_none=True),
-            "data_collection": data_collection.dict(by_alias=True, exclude_none=True),
-        }
+    # data_payload = {
+    #     "workflow_id": workflow_id,
+    #     "data_collection_id": data_collection_id,
+    # }
 
-        # Convert the payload to JSON using the custom encoder
-        print(data_payload, type(data_payload))
+    # Convert the payload to JSON using the custom encoder
+    # print(data_payload, type(data_payload))
 
-        data_payload_json = convert_objectid_to_str(data_payload)
+    # data_payload_json = convert_objectid_to_str(data_payload)
 
-        print(data_payload_json, type(data_payload_json))
+    # print(data_payload_json, type(data_payload_json))
 
-        # workflow_data_dict = workflow_data.dict()
+    # workflow_data_dict = workflow_data.dict()
 
-        print("\n\n")
-        print(data_payload_json)
-        # print(data_payload["data_collection"])
-        response = httpx.post(
-            f"{API_BASE_URL}/api/v1/datacollections/scan",
-            json=data_payload_json,
-            headers=headers,
-        )
-        print(response)
-        print(response.text)
-        print(response.status_code)
-        print("\n\n")
+    print("\n\n")
+    # print(data_payload_json)
+    # print(data_payload["data_collection"])
+    response = httpx.post(
+        f"{API_BASE_URL}/api/v1/datacollections/scan/{workflow_id}/{data_collection_id}",
+        # json=data_payload_json,
+        headers=headers,
+    )
+    print(response)
+    print(response.text)
+    print(response.status_code)
+    print("\n\n")
     # if response.status_code == 200:
     #     typer.echo("Files successfully scanned!")
     # else:
