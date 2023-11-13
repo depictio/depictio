@@ -81,7 +81,7 @@ def populate_file_models(workflow: Workflow) -> List[DataCollection]:
             data_collection_id=datacollection_id,
             description=metadata.description,
             config=metadata.config,
-            workflow_id=workflow.workflow_id,
+            workflow_tag=workflow.workflow_tag,
         )
         # datacollection_instance.config.data_collection_id = datacollection_id
         # datacollection_instance.config.workflow_id = workflow.workflow_id
