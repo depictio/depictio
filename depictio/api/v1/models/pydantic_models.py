@@ -325,7 +325,7 @@ class WorkflowRun(BaseModel):
     run_id: Optional[str]
     files: List[File] = []
     workflow_config: WorkflowConfig
-    run_location: List[DirectoryPath]
+    run_location: DirectoryPath
     execution_time: datetime
     execution_profile: Optional[Dict]
 
