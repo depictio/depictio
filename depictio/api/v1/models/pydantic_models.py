@@ -389,11 +389,9 @@ class Workflow(MongoModel):
     workflow_description: str
     data_collections: List[DataCollection]
     runs: Optional[Dict[str, WorkflowRun]]
-    workflow_config: Optional[WorkflowConfig]
+    workflow_config: WorkflowConfig
     # data_collection_ids: Optional[List[str]] = []
-    permissions: Optional[
-        Permission
-    ]  # Add this field to capture ownership and viewing permissions
+    permissions: Optional[Permission]
 
     @validator("id", pre=True, always=True)
     def validate_id(cls, id):

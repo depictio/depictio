@@ -89,24 +89,24 @@ def create_workflow(
 
     # Get the config data (assuming get_config returns a dictionary)
     config_data = get_config(config_path)
+    print(config_data)
 
     config = validate_config(config_data, RootConfig)
-    print(config)
     print([w.workflow_tag for w in config.workflows])
 
-    # validated_config = validate_all_workflows(config, user=user)
-    # print(validated_config)
+    validated_config = validate_all_workflows(config, user=user)
+    print(validated_config)
 
     # config_dict = {f"{e.workflow_tag}": e for e in validated_config.workflows}
 
-    if workflow_tag not in [w.workflow_tag for w in config.workflows]:
+    if workflow_tag not in [w.workflow_tag for w in validated_config.workflows]:
         typer.echo(f"Workflow '{workflow_tag}' not found in the config file.")
         raise typer.Exit(code=1)
 
     if workflow_tag:
-        workflow_data = [w for w in config.workflows if w.workflow_tag == workflow_tag][0]
+        workflow_data = [w for w in validated_config.workflows if w.workflow_tag == workflow_tag][0]
     else:
-        workflow_data = config.workflows
+        workflow_data = validated_config.workflows
 
 
     workflow_data_raw = workflow_data.dict(by_alias=True, exclude_none=True)

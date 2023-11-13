@@ -114,6 +114,7 @@ def validate_worfklow(workflow: Workflow, config: RootConfig, user: User) -> dic
     # Create the permissions using the decoded user
     permissions = Permission(owners={user})
     workflow.permissions = permissions
+    print(workflow)
     
     return workflow
 
