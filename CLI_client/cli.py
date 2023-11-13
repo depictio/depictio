@@ -62,8 +62,8 @@ def create_workflow(
         "--config_path",
         help="Path to the YAML configuration file",
     ),
-    workflow_tag: str = typer.Option(
-        ..., "--workflow_tag", help="Workflow name to be created"
+    workflow_tag: Optional[str] = typer.Option(
+        None, "--workflow_tag", help="Workflow name to be created"
     ),
     token: str = typer.Option(
         None,  # Default to None (not specified)
@@ -74,6 +74,7 @@ def create_workflow(
     """
     Create a new workflow from a given YAML configuration file.
     """
+    assert workflow_tag is not None
 
     if not token:
         typer.echo("A valid token must be provided for authentication.")
@@ -89,13 +90,10 @@ def create_workflow(
 
     # Get the config data (assuming get_config returns a dictionary)
     config_data = get_config(config_path)
-    print(config_data)
 
     config = validate_config(config_data, RootConfig)
-    print([w.workflow_tag for w in config.workflows])
 
     validated_config = validate_all_workflows(config, user=user)
-    print(validated_config)
 
     # config_dict = {f"{e.workflow_tag}": e for e in validated_config.workflows}
 
@@ -103,16 +101,12 @@ def create_workflow(
         typer.echo(f"Workflow '{workflow_tag}' not found in the config file.")
         raise typer.Exit(code=1)
 
-    if workflow_tag:
-        workflow_data = [w for w in validated_config.workflows if w.workflow_tag == workflow_tag][0]
-    else:
-        workflow_data = validated_config.workflows
+    
+    workflow_data = [w for w in validated_config.workflows if w.workflow_tag == workflow_tag][0]
 
 
     workflow_data_raw = workflow_data.dict(by_alias=True, exclude_none=True)
-    print(workflow_data_raw)
     workflow_data_dict = convert_objectid_to_str(workflow_data_raw)
-    print(workflow_data_dict)
 
 
 
@@ -145,7 +139,7 @@ def list_workflows():
 
 
 @app.command()
-def scan_data_collections(
+def scan_data_collection(
     config_path: str = typer.Option(
         ...,
         "--config_path",
@@ -185,6 +179,7 @@ def scan_data_collections(
     # print(config_data)
     config = validate_config(config_data, RootConfig)
     assert isinstance(config, RootConfig)
+    print(config)
 
     # validated_config = validate_all_workflows(config, user=user)
 

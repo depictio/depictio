@@ -38,32 +38,29 @@ runs_collection = db[settings.collections.runs_collection]
 files_collection = db[settings.collections.files_collection]
 
 
-@datacollections_endpoint_router.post("/scan/{workflow_tag}/{data_collection_tag}")
+@datacollections_endpoint_router.post("/scan/{workflow_id}/{data_collection_id}")
 async def scan_data_collection(
-    workflow_tag: str,
-    data_collection_tag: str,
+    workflow_id: str,
+    data_collection_id: str,
     current_user: str = Depends(get_current_user),
 ):
-    # workflow_id = ObjectId(workflow_id)
-    # data_collection_id = ObjectId(data_collection_id)
-    # user_id = ObjectId(current_user.user_id)  # This should be the ObjectId
-    # assert isinstance(workflow_id, ObjectId)
-    # assert isinstance(data_collection_id, ObjectId)
-    # assert isinstance(user_id, ObjectId)
-
-    user_id = current_user.user_id  # This should be the ObjectId
-
-    # Find data_collections where workflow_id and data_collection_id match and where current_user is either an owner or a viewer of the workflow
+    workflow_oid = ObjectId(workflow_id)
+    data_collection_oid = ObjectId(data_collection_id)
+    user_oid = ObjectId(current_user.user_id)  # This should be the ObjectId
+    assert isinstance(workflow_oid, ObjectId)
+    assert isinstance(data_collection_oid, ObjectId)
+    assert isinstance(user_oid, ObjectId)
 
     # Construct the query
     query = {
-        "workflow_tag": workflow_tag,
-        "permissions.owners.user_id": user_id,
-        f"data_collections.{data_collection_tag}": {"$exists": True}
+        "_id": workflow_oid,
+        "permissions.owners.user_id": user_oid,
+        "data_collections._id": data_collection_oid
     }
     print(query)
 
     workflow_cursor = workflows_collection.find_one(query)
+    print(workflow_cursor)
 
     if not workflow_cursor:
         raise HTTPException(
@@ -73,7 +70,9 @@ async def scan_data_collection(
 
     workflow = Workflow.from_mongo(workflow_cursor)
     # retrieve data collection from workflow where data_collection_id matches
-    data_collection = DataCollection(workflow.data_collections[data_collection_id])
+    data_collection = [dc for dc in workflow.data_collections if dc.id == data_collection_oid][0]
+    print(workflow)
+    print(data_collection)
 
     # Retrieve the workflow_config from the workflow
     locations = workflow.workflow_config.parent_runs_location
@@ -81,32 +80,34 @@ async def scan_data_collection(
     print(locations)
 
     # Scan the runs and retrieve the files
-    runs_and_content = scan_runs(locations, workflow.workflow_config, data_collection)
-    runs_and_content = serialize_for_mongo(runs_and_content)
+    for location in locations:
+        print(location)
+        runs_and_content = scan_runs(location, workflow.workflow_config, data_collection)
+        runs_and_content = serialize_for_mongo(runs_and_content)
 
-    if isinstance(runs_and_content, list) and all(
-        isinstance(item, dict) for item in runs_and_content
-    ):
-        return_dict = {workflow.workflow_id: collections.defaultdict(list)}
-        for run in runs_and_content:
-            files = run.pop("files", [])
+        if isinstance(runs_and_content, list) and all(
+            isinstance(item, dict) for item in runs_and_content
+        ):
+            return_dict = {workflow.id: collections.defaultdict(list)}
+            for run in runs_and_content:
+                files = run.pop("files", [])
 
-            # Insert the run into runs_collection and retrieve its id
-            inserted_run = runs_collection.insert_one(run)
-            # run_id = inserted_run.inserted_id
+                # Insert the run into runs_collection and retrieve its id
+                inserted_run = runs_collection.insert_one(run)
+                # run_id = inserted_run.inserted_id
 
-            # Add run_id to each file before inserting
-            for file in files:
-                file["run_id"] = run.get("run_id")
-                files_collection.insert_one(file)
-                return_dict[workflow.workflow_id][run.get("run_id")].append(
-                    file.get("file_location")
-                )
+                # Add run_id to each file before inserting
+                for file in files:
+                    file["run_id"] = run.get("run_id")
+                    files_collection.insert_one(file)
+                    return_dict[workflow.id][run.get("run_id")].append(
+                        file.get("file_location")
+                    )
 
         # return_dict = json.dumps(return_dict, indent=4)
 
         return {
-            "message": f"Files successfully scanned and created for data_collection: {data_collection.data_collection_id} of workflow: {workflow.workflow_id}"
+            "message": f"Files successfully scanned and created for data_collection: {data_collection.id} of workflow: {workflow.id}"
         }
     else:
         return {"Warning: runs_and_content is not a list of dictionaries."}

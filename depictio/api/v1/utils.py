@@ -59,8 +59,6 @@ def validate_config(config: Dict, pydantic_model: Type[BaseModel]) -> BaseModel:
     """
     Load and validate the YAML configuration
     """
-    print(config)
-    print(pydantic_model)
     if not isinstance(config, dict):
         raise ValueError("Invalid config. Must be a dictionary.")
     try:
@@ -114,7 +112,6 @@ def validate_worfklow(workflow: Workflow, config: RootConfig, user: User) -> dic
     # Create the permissions using the decoded user
     permissions = Permission(owners={user})
     workflow.permissions = permissions
-    print(workflow)
     
     return workflow
 
@@ -169,7 +166,7 @@ def scan_files(
                     "%Y-%m-%d %H:%M:%S"
                 )
 
-                data_collection_id = data_collection.data_collection_id
+                data_collection_id = str(data_collection.id)
 
                 file_instance = File(
                     filename=filename,
@@ -214,6 +211,8 @@ def scan_runs(
                 os.path.getctime(run_location)
             ).strftime("%Y-%m-%d %H:%M:%S")
             # print(execution_time)
+
+            print(run_location)
 
             # Create a WorkflowRun instance
             workflow_run = WorkflowRun(

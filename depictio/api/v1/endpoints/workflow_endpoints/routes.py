@@ -70,8 +70,8 @@ async def create_workflow(
     res = workflows_collection.insert_one(workflow.mongo())
     assert res.inserted_id == workflow.id
 
-    found = workflows_collection.find_one({"_id": res.inserted_id})
-    return Workflow.from_mongo(found)
+    # found = workflows_collection.find_one({"_id": res.inserted_id})
+    return str(res.inserted_id)
 
 
 @workflows_endpoint_router.get("/get_workflows")
@@ -90,10 +90,8 @@ async def get_workflows(current_user: str = Depends(get_current_user)):
 
     # Retrieve the workflows & convert them to Workflow objects to validate the model
     workflows_cursor = [Workflow(**w) for w in list(workflows_collection.find(query))]
-    print(workflows_cursor)
 
     workflows = convert_objectid_to_str(list(workflows_cursor))
-    print(workflows)
 
     if not workflows:
         raise HTTPException(
