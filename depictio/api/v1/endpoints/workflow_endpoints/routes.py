@@ -90,8 +90,10 @@ async def get_workflows(current_user: str = Depends(get_current_user)):
 
     # Retrieve the workflows & convert them to Workflow objects to validate the model
     workflows_cursor = [Workflow(**w) for w in list(workflows_collection.find(query))]
+    print(workflows_cursor)
 
     workflows = convert_objectid_to_str(list(workflows_cursor))
+    print(workflows)
 
     if not workflows:
         raise HTTPException(
