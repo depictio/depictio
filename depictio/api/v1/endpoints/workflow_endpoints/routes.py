@@ -1,4 +1,5 @@
 import os
+from bson import ObjectId
 from fastapi import HTTPException, Depends, APIRouter
 from typing import List
 
@@ -65,14 +66,12 @@ async def create_workflow(
             detail=f"Workflow with name '{workflow.workflow_tag}' already exists.",
         )
 
-    # Now, insert the workflow, linking to the data_collection ids
-    workflow_data = workflow.dict()
-    print(workflow_data)
-    # workflow_data["data_collection_ids"] = data_collection_ids
+    assert isinstance(workflow.id, ObjectId)
+    res = workflows_collection.insert_one(workflow.mongo())
+    assert res.inserted_id == workflow.id
 
-    result = workflows_collection.insert_one(workflow_data)
-
-    return {"workflow_bid": str(result.inserted_id)}
+    found = workflows_collection.find_one({"_id": res.inserted_id})
+    return Workflow.from_mongo(found)
 
 
 @workflows_endpoint_router.get("/get_workflows")
@@ -133,22 +132,36 @@ async def update_workflow(
 @workflows_endpoint_router.delete("/delete_workflow/{id}")
 async def delete_workflow(id: str, current_user: str = Depends(get_current_user)):
     # Find the workflow by ID
-    existing_workflow = workflows_collection.find_one({"id": id})
-    workflow_tag = existing_workflow["workflow_tag"]
+    id = ObjectId(id)
+    assert isinstance(id, ObjectId)
+    existing_workflow = workflows_collection.find_one({"_id": id})
+
+    print(existing_workflow)
 
     if not existing_workflow:
         raise HTTPException(
             status_code=404, detail=f"Workflow with ID '{id}' does not exist."
         )
 
+    workflow_tag = existing_workflow["workflow_tag"]
+
     # Ensure that the current user is authorized to update the workflow
     user_id = current_user.user_id
-    if user_id not in existing_workflow["permissions"]["owners"]:
+    print(
+        user_id,
+        type(user_id),
+        existing_workflow["permissions"]["owners"],
+        [u["user_id"] for u in existing_workflow["permissions"]["owners"]],
+    )
+    if user_id not in [
+        u["user_id"] for u in existing_workflow["permissions"]["owners"]
+    ]:
         raise HTTPException(
             status_code=403,
-            detail=f"User with ID '{user_id}' is not authorized to update workflow with ID '{id}'",
+            detail=f"User with ID '{user_id}' is not authorized to delete workflow with ID '{id}'",
         )
     # Delete the workflow
-    workflows_collection.delete_one({"id": id})
+    workflows_collection.delete_one({"_id": id})
+    assert workflows_collection.find_one({"_id": id}) is None
 
-    return {"message": f"Workflow {workflow_tag} with ID '{id}'  deleted successfully"}
+    return {"message": f"Workflow {workflow_tag} with ID '{id}' deleted successfully"}

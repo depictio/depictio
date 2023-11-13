@@ -38,42 +38,50 @@ runs_collection = db[settings.collections.runs_collection]
 files_collection = db[settings.collections.files_collection]
 
 
-@datacollections_endpoint_router.post("/scan")
+@datacollections_endpoint_router.post("/scan/{workflow_tag}/{data_collection_tag}")
 async def scan_data_collection(
-    workflow: Workflow,
-    data_collection: DataCollection,
+    workflow_tag: str,
+    data_collection_tag: str,
     current_user: str = Depends(get_current_user),
 ):
-    print(data_collection)
+    # workflow_id = ObjectId(workflow_id)
+    # data_collection_id = ObjectId(data_collection_id)
+    # user_id = ObjectId(current_user.user_id)  # This should be the ObjectId
+    # assert isinstance(workflow_id, ObjectId)
+    # assert isinstance(data_collection_id, ObjectId)
+    # assert isinstance(user_id, ObjectId)
 
     user_id = current_user.user_id  # This should be the ObjectId
 
     # Find data_collections where workflow_id and data_collection_id match and where current_user is either an owner or a viewer of the workflow
-    
+
+    # Construct the query
     query = {
-        "workflow_id": workflow.workflow_id,
-        "$or": [
-            {"permissions.owners.user_id": user_id},
-            {"permissions.viewers.user_id": user_id},
-        ],
+        "workflow_tag": workflow_tag,
+        "permissions.owners.user_id": user_id,
+        f"data_collections.{data_collection_tag}": {"$exists": True}
     }
+    print(query)
 
-    data_collections_cursor = workflows_collection.find(query)
-    print([doc for doc in data_collections_cursor])
+    workflow_cursor = workflows_collection.find_one(query)
 
-    # retrieve all 
-    # exit()
-
-    if not data_collections_cursor:
+    if not workflow_cursor:
         raise HTTPException(
-            status_code=404, detail="No data collections found for the current user."
+            status_code=404,
+            detail=f"No workflows with id {workflow_id} found for the current user.",
         )
 
+    workflow = Workflow.from_mongo(workflow_cursor)
+    # retrieve data collection from workflow where data_collection_id matches
+    data_collection = DataCollection(workflow.data_collections[data_collection_id])
+
     # Retrieve the workflow_config from the workflow
-    location = workflow.workflow_config.parent_runs_location
+    locations = workflow.workflow_config.parent_runs_location
+
+    print(locations)
 
     # Scan the runs and retrieve the files
-    runs_and_content = scan_runs(location, workflow.workflow_config, data_collection)
+    runs_and_content = scan_runs(locations, workflow.workflow_config, data_collection)
     runs_and_content = serialize_for_mongo(runs_and_content)
 
     if isinstance(runs_and_content, list) and all(

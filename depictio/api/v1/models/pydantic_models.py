@@ -16,7 +16,7 @@ from pydantic import (
     root_validator,
 )
 
-from depictio.api.v1.models.base import DirectoryPath, PyObjectId
+from depictio.api.v1.models.base import DirectoryPath, MongoModel, PyObjectId
 
 ##################
 # Authentication #
@@ -102,17 +102,17 @@ class Permission(BaseModel):
 
     def dict(self, **kwargs):
         # Before converting to list, let's print the owners and viewers
-        print("Converting to dict - Owners and Viewers as objects:")
-        print("Owners:", self.owners)
-        print("Viewers:", self.viewers)
+        # print("Converting to dict - Owners and Viewers as objects:")
+        # print("Owners:", self.owners)
+        # print("Viewers:", self.viewers)
 
         # Generate list of owner and viewer dictionaries
         owners_list = [owner.dict(**kwargs) for owner in self.owners]
         viewers_list = [viewer.dict(**kwargs) for viewer in self.viewers]
 
-        print("Converting to dict - Owners and Viewers as lists of dicts:")
-        print("Owners Dict List:", owners_list)
-        print("Viewers Dict List:", viewers_list)
+        # print("Converting to dict - Owners and Viewers as lists of dicts:")
+        # print("Owners Dict List:", owners_list)
+        # print("Viewers Dict List:", viewers_list)
 
         return {"owners": owners_list, "viewers": viewers_list}
 
@@ -128,15 +128,15 @@ class Permission(BaseModel):
 
     @root_validator(pre=True)
     def validate_permissions(cls, values):
-        print("Inside validate_permissions - Raw input values:")
-        print(values)
+        # print("Inside validate_permissions - Raw input values:")
+        # print(values)
 
         owners = values.get("owners", set())
         viewers = values.get("viewers", set())
 
-        print("Inside validate_permissions - Parsed owners and viewers:")
-        print("Owners:", owners)
-        print("Viewers:", viewers)
+        # print("Inside validate_permissions - Parsed owners and viewers:")
+        # print("Owners:", owners)
+        # print("Viewers:", viewers)
 
         # Check if owners and viewers are sets and contain only User instances
         if not owners:
@@ -257,12 +257,12 @@ class DataCollectionConfig(BaseModel):
         return v
 
 
-class DataCollection(BaseModel):
-    id: Optional[PyObjectId] = Field(default_factory=PyObjectId)
-    data_collection_id: Optional[str]
+class DataCollection(MongoModel):
+    id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
+    data_collection_tag: str
     description: str = None  # Optional description
     config: DataCollectionConfig
-    workflow_id: Optional[str]
+    # workflow_id: Optional[str]
     gridfs_file_id: Optional[str] = Field(
         alias="gridfsId", default=None
     )  # If the field is named differently in MongoDB
@@ -270,12 +270,6 @@ class DataCollection(BaseModel):
     # @validator("data_collection_id", pre=True, always=True)
     # def extract_data_collection_id(cls, value):
     #     return value.split("/")[-1]
-
-    class Config:
-        allow_population_by_field_name = True
-        json_encoders = {
-            ObjectId: str  # Convert ObjectId instances to strings in JSON output
-        }
 
     @validator("description", pre=True, always=True)
     def sanitize_description(cls, value):
@@ -289,10 +283,10 @@ class DataCollection(BaseModel):
 ###################
 
 
-class WorkflowConfig(BaseModel):
+class WorkflowConfig(MongoModel):
     # workflow_id: Optional[str]
-    id: Optional[PyObjectId] = Field(default_factory=PyObjectId)
-    parent_runs_location:  List[DirectoryPath]
+    id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
+    parent_runs_location: List[DirectoryPath]
     workflow_version: Optional[str]
     config: Optional[Dict]
     runs_regex: Optional[str]
@@ -310,8 +304,6 @@ class WorkflowConfig(BaseModel):
             if not os.access(location, os.R_OK):
                 raise ValueError(f"'{location}' is not readable.")
         return value
-    
-   
 
     @validator("runs_regex")
     def validate_regex(cls, v):
@@ -320,6 +312,7 @@ class WorkflowConfig(BaseModel):
             return v
         except re.error:
             raise ValueError("Invalid regex pattern")
+
     # Generate version validator - if no version specified, set to 1.0.0
     @validator("workflow_version", pre=True, always=True)
     def set_version(cls, value):
@@ -335,8 +328,6 @@ class WorkflowRun(BaseModel):
     run_location: List[DirectoryPath]
     execution_time: datetime
     execution_profile: Optional[Dict]
-
-
 
     @validator("files")
     def validate_files(cls, value):
@@ -389,14 +380,14 @@ class WorkflowSystem(BaseModel):
         return value
 
 
-class Workflow(BaseModel):
+class Workflow(MongoModel):
     id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
     workflow_name: str = None
     workflow_engine: str = None
     workflow_tag: str
     # workflow_engine: WorkflowSystem
     workflow_description: str
-    data_collections: Optional[Dict[str, DataCollection]]
+    data_collections: List[DataCollection]
     runs: Optional[Dict[str, WorkflowRun]]
     workflow_config: Optional[WorkflowConfig]
     # data_collection_ids: Optional[List[str]] = []
@@ -404,12 +395,11 @@ class Workflow(BaseModel):
         Permission
     ]  # Add this field to capture ownership and viewing permissions
 
-    class Config:
-        allow_population_by_field_name = True
-        json_encoders = {
-            ObjectId: str  # Convert ObjectId instances to strings in JSON output
-        }
-
+    @validator("id", pre=True, always=True)
+    def validate_id(cls, id):
+        if not id:
+            raise ValueError("id is required")
+        return id
 
     @root_validator(pre=True)
     def set_workflow_tag(cls, values):
@@ -419,21 +409,13 @@ class Workflow(BaseModel):
             values["workflow_tag"] = f"{workflow_engine}/{workflow_name}"
         return values
 
-    # Example usage
-    # @classmethod
-    # def from_mongo(cls, data: dict):
-    #     # Convert the _id from ObjectId to str
-    #     data["id"] = str(data["_id"])
-    #     del data["_id"]  # Optional: remove the original _id if not needed
-    #     return cls(**data)
-
-    @root_validator(pre=True)
-    def populate_data_collection_ids(cls, values):
-        workflow_id = values.get("values")
-        data_collections = values.get("data_collections", {})
-        for collection in data_collections.values():
-            collection["values"] = workflow_id
-        return values
+    # @root_validator(pre=True)
+    # def populate_data_collection_ids(cls, values):
+    #     workflow_id = values.get("values")
+    #     data_collections = values.get("data_collections", {})
+    #     for collection in data_collections.values():
+    #         collection["values"] = workflow_id
+    #     return values
 
     # @root_validator(pre=True)
     # def set_workflow_name(cls, values):
@@ -453,8 +435,8 @@ class Workflow(BaseModel):
 
     @validator("data_collections")
     def validate_data_collections(cls, value):
-        if not isinstance(value, dict):
-            raise ValueError("data_collections must be a dictionary")
+        if not isinstance(value, list):
+            raise ValueError("data_collections must be a list")
         return value
 
     @validator("runs")
