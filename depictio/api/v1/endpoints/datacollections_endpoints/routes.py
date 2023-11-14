@@ -145,7 +145,7 @@ async def aggregate_data(
 ):
     # data_collections_collection.drop()
 
-    files_collection
+
 
     workflow_oid = ObjectId(workflow_id)
     data_collection_oid = ObjectId(data_collection_id)
@@ -320,11 +320,45 @@ async def aggregate_data(
     }
 
 
-@datacollections_endpoint_router.get("/files", response_model=List[GridFSFileInfo])
-async def list_files():
+@datacollections_endpoint_router.get("/files/{workflow_id}/{data_collection_id}")
+# @datacollections_endpoint_router.get("/files/{workflow_id}/{data_collection_id}", response_model=List[GridFSFileInfo])
+async def list_files(
+    workflow_id: str,
+    data_collection_id: str,
+    current_user: str = Depends(get_current_user),
+):
     """
-    Fetch all files from GridFS.
+    Fetch all files registered from a Data Collection registered into a workflow.
     """
+
+    workflow_oid = ObjectId(workflow_id)
+    data_collection_oid = ObjectId(data_collection_id)
+    user_oid = ObjectId(current_user.user_id)  # This should be the ObjectId
+    assert isinstance(workflow_oid, ObjectId)
+    assert isinstance(data_collection_oid, ObjectId)
+    assert isinstance(user_oid, ObjectId)
+
+    # Construct the query
+    query = {
+        "_id": workflow_oid,
+        "permissions.owners.user_id": user_oid,
+        "data_collections._id": data_collection_oid,
+    }
+    print(query)
+    if not workflows_collection.find_one(query):
+        raise HTTPException(
+            status_code=404,
+            detail=f"No workflows with id {workflow_oid} found for the current user.",
+        )
+    
+    query_files = {
+        "data_collection._id": data_collection_oid,
+    }
+    print(query_files)
+    files = list(files_collection.find(query_files))
+    print(files)
+    exit()
+
     try:
         file_list = list(grid_fs.find())
         result = [
