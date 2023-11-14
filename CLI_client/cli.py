@@ -241,7 +241,7 @@ def scan_data_collection(
 
 
 @app.command()
-def aggregate_workflow_data_collections(
+def aggregate_data(
     config_path: str = typer.Option(
         ...,
         "--config_path",
@@ -280,59 +280,65 @@ def aggregate_workflow_data_collections(
     headers = {"Authorization": f"Bearer {token}"}  # Token is now mandatory
 
     config_data = get_config(config_path)
+    # print(config_data)
     config = validate_config(config_data, RootConfig)
-    validated_config = validate_all_workflows(config, user=user)
+    assert isinstance(config, RootConfig)
+    print(config)
 
-    config_dict = {f"{e.workflow_id}": e for e in validated_config.workflows}
+    # config_data = get_config(config_path)
+    # config = validate_config(config_data, RootConfig)
+    # validated_config = validate_all_workflows(config, user=user)
 
-    if workflow_id not in config_dict:
-        raise ValueError(f"Workflow '{workflow_id}' not found in the config file.")
+    # config_dict = {f"{e.workflow_id}": e for e in validated_config.workflows}
 
-    if workflow_id is None:
-        raise ValueError("Please provide a workflow id.")
+    # if workflow_id not in config_dict:
+    #     raise ValueError(f"Workflow '{workflow_id}' not found in the config file.")
 
-    workflow = config_dict[workflow_id]
+    # if workflow_id is None:
+    #     raise ValueError("Please provide a workflow id.")
 
-    # If a specific data_collection_id is given, use that, otherwise default to all data_collections
-    data_collections_to_process = []
-    if data_collection_id:
-        if data_collection_id not in workflow.data_collections:
-            raise ValueError(
-                f"Data collection '{data_collection_id}' not found for the given workflow."
-            )
-        data_collections_to_process.append(
-            workflow.data_collections[data_collection_id]
-        )
-    else:
-        data_collections_to_process = list(workflow.data_collections.values())
+    # workflow = config_dict[workflow_id]
+
+    # # If a specific data_collection_id is given, use that, otherwise default to all data_collections
+    # data_collections_to_process = []
+    # if data_collection_id:
+    #     if data_collection_id not in workflow.data_collections:
+    #         raise ValueError(
+    #             f"Data collection '{data_collection_id}' not found for the given workflow."
+    #         )
+    #     data_collections_to_process.append(
+    #         workflow.data_collections[data_collection_id]
+    #     )
+    # else:
+    #     data_collections_to_process = list(workflow.data_collections.values())
 
     # Assuming workflow and data_collection are Pydantic models and have .dict() method
-    for data_collection in data_collections_to_process:
-        data_payload = data_collection.dict(by_alias=True, exclude_none=True)
+    # for data_collection in data_collections_to_process:
+    # data_payload = data_collection.dict(by_alias=True, exclude_none=True)
 
-        # Convert the payload to JSON using the custom encoder
-        print(data_payload, type(data_payload))
-        data_payload_json = json.loads(json.dumps(data_payload, cls=CustomJSONEncoder))
-        print(data_payload_json, type(data_payload_json))
+    # Convert the payload to JSON using the custom encoder
+    # print(data_payload, type(data_payload))
+    # data_payload_json = json.loads(json.dumps(data_payload, cls=CustomJSONEncoder))
+    # print(data_payload_json, type(data_payload_json))
 
-        response = httpx.post(
-            f"{API_BASE_URL}/api/v1/datacollections/aggregate_workflow_data",
-            json=data_payload_json,
-            headers=headers,
-        )
-        print(response)
-        print(response.text)
-        print(response.status_code)
-        print("\n\n")
+    response = httpx.post(
+        f"{API_BASE_URL}/api/v1/datacollections/aggregate_data/{workflow_id}/{data_collection_id}",
+        # json=data_payload_json,
+        headers=headers,
+    )
+    print(response)
+    print(response.text)
+    print(response.status_code)
+    print("\n\n")
 
-        # if response.status_code == 200:
-        #     typer.echo(
-        #         f"Data successfully aggregated for data collection {data_collection.data_collection_id}!"
-        #     )
-        # else:
-        #     typer.echo(
-        #         f"Error for data collection {data_collection.data_collection_id}: {response.text}"
-        #     )
+    # if response.status_code == 200:
+    #     typer.echo(
+    #         f"Data successfully aggregated for data collection {data_collection.data_collection_id}!"
+    #     )
+    # else:
+    #     typer.echo(
+    #         f"Error for data collection {data_collection.data_collection_id}: {response.text}"
+    #     )
 
 
 @app.command()

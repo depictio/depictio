@@ -83,6 +83,11 @@ class MongoModel(BaseModel):
         # Mongo uses `_id` as default key. We should stick to that as well.
         if '_id' not in parsed and 'id' in parsed:
             parsed['_id'] = parsed.pop('id')
+        
+        # Convert PosixPath to str
+        for key, value in parsed.items():
+            if isinstance(value, Path):
+                parsed[key] = str(value)
 
         return parsed
 

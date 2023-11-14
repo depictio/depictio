@@ -152,6 +152,20 @@ def scan_files(
         for file in files:
             if re.match(data_collection.config.regex, file):
                 file_location = os.path.join(root, file)
+                
+                # if os.path.exists(file_location + ".md5"):
+                #     hash_file = file_location + ".md5"
+                #     with open(hash_file, "r") as f:
+                #         file_hash = f.read()
+                #         # print(file_hash)
+                #         # print(calculate_file_hash(file_location))
+                #         if file_hash == calculate_file_hash(file_location):
+                #             continue
+                #         else:
+                #             with open(hash_file, "w") as f:
+                #                 f.write(calculate_file_hash(file_location))
+
+
                 filename = file
                 creation_time_float = os.path.getctime(file_location)
                 modification_time_float = os.path.getmtime(file_location)
@@ -166,15 +180,14 @@ def scan_files(
                     "%Y-%m-%d %H:%M:%S"
                 )
 
-                data_collection_id = str(data_collection.id)
+                # data_collection_id = str(data_collection.id)
 
                 file_instance = File(
                     filename=filename,
                     file_location=file_location,
                     creation_time=creation_time_iso,
                     modification_time=modification_time_iso,
-                    data_collection_id=data_collection_id,
-                    file_hash=calculate_file_hash(file_location),
+                    data_collection=data_collection,
                     run_id=run_id,
                 )
                 # print(file_instance)
@@ -209,14 +222,14 @@ def scan_runs(
             # print(files)
             execution_time = datetime.fromtimestamp(
                 os.path.getctime(run_location)
-            ).strftime("%Y-%m-%d %H:%M:%S")
+            )
             # print(execution_time)
 
             print(run_location)
 
             # Create a WorkflowRun instance
             workflow_run = WorkflowRun(
-                run_id=run,
+                run_tag=run,
                 files=files,
                 workflow_config=workflow_config,
                 run_location=run_location,
@@ -558,6 +571,45 @@ agg_functions = {
         },
     },
     "object": {
+        "title": "Object",
+        "input_methods": {
+            "TextInput": {
+                "component": dmc.TextInput,
+                "description": "Text input box",
+            },
+            "Select": {
+                "component": dmc.Select,
+                "description": "Select",
+            },
+            "MultiSelect": {
+                "component": dmc.MultiSelect,
+                "description": "MultiSelect",
+            },
+            "SegmentedControl": {
+                "component": dmc.SegmentedControl,
+                "description": "SegmentedControl",
+            },
+        },
+        "description": "Text or mixed numeric or non-numeric values",
+        "card_methods": {
+            "count": {
+                "pandas": "count",
+                "numpy": "count_nonzero",
+                "description": "Counts the number of non-NA cells",
+            },
+            "mode": {
+                "pandas": "mode",
+                "numpy": None,
+                "description": "Most common value",
+            },
+            "nunique": {
+                "pandas": "nunique",
+                "numpy": None,
+                "description": "Number of distinct elements",
+            },
+        },
+    },
+    "utf8": {
         "title": "Object",
         "input_methods": {
             "TextInput": {

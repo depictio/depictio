@@ -6,10 +6,12 @@ import os
 from pathlib import PosixPath
 import re
 from bson import ObjectId
+from deltalake import DeltaTable
 from fastapi import HTTPException, Depends, APIRouter
 from typing import List
 
 import pandas as pd
+import polars as pl
 import numpy as np
 from pydantic import BaseModel
 
@@ -18,7 +20,15 @@ from depictio.api.v1.db import db, grid_fs
 from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user
 
 
-from depictio.api.v1.models.pydantic_models import Workflow, File, DataCollection
+from depictio.api.v1.models.pydantic_models import (
+    Aggregation,
+    DeltaTableAggregated,
+    User,
+    Workflow,
+    File,
+    DataCollection,
+    WorkflowRun,
+)
 from depictio.api.v1.models.pydantic_models import GridFSFileInfo
 from depictio.api.v1.utils import (
     # decode_token,
@@ -36,6 +46,7 @@ data_collections_collection = db[settings.collections.data_collection]
 workflows_collection = db[settings.collections.workflow_collection]
 runs_collection = db[settings.collections.runs_collection]
 files_collection = db[settings.collections.files_collection]
+users_collection = db["users"]
 
 
 @datacollections_endpoint_router.post("/scan/{workflow_id}/{data_collection_id}")
@@ -44,6 +55,9 @@ async def scan_data_collection(
     data_collection_id: str,
     current_user: str = Depends(get_current_user),
 ):
+    runs_collection.drop()
+    files_collection.drop()
+
     workflow_oid = ObjectId(workflow_id)
     data_collection_oid = ObjectId(data_collection_id)
     user_oid = ObjectId(current_user.user_id)  # This should be the ObjectId
@@ -55,7 +69,7 @@ async def scan_data_collection(
     query = {
         "_id": workflow_oid,
         "permissions.owners.user_id": user_oid,
-        "data_collections._id": data_collection_oid
+        "data_collections._id": data_collection_oid,
     }
     print(query)
 
@@ -70,7 +84,9 @@ async def scan_data_collection(
 
     workflow = Workflow.from_mongo(workflow_cursor)
     # retrieve data collection from workflow where data_collection_id matches
-    data_collection = [dc for dc in workflow.data_collections if dc.id == data_collection_oid][0]
+    data_collection = [
+        dc for dc in workflow.data_collections if dc.id == data_collection_oid
+    ][0]
     print(workflow)
     print(data_collection)
 
@@ -82,7 +98,9 @@ async def scan_data_collection(
     # Scan the runs and retrieve the files
     for location in locations:
         print(location)
-        runs_and_content = scan_runs(location, workflow.workflow_config, data_collection)
+        runs_and_content = scan_runs(
+            location, workflow.workflow_config, data_collection
+        )
         runs_and_content = serialize_for_mongo(runs_and_content)
 
         if isinstance(runs_and_content, list) and all(
@@ -92,17 +110,20 @@ async def scan_data_collection(
             for run in runs_and_content:
                 files = run.pop("files", [])
 
+                run = WorkflowRun(**run)
+
                 # Insert the run into runs_collection and retrieve its id
-                inserted_run = runs_collection.insert_one(run)
+                inserted_run = runs_collection.insert_one(run.mongo())
                 # run_id = inserted_run.inserted_id
 
                 # Add run_id to each file before inserting
                 for file in files:
-                    file["run_id"] = run.get("run_id")
-                    files_collection.insert_one(file)
-                    return_dict[workflow.id][run.get("run_id")].append(
-                        file.get("file_location")
-                    )
+                    file = File(**file)
+                    # file["run_id"] = run.get("run_id")
+                    files_collection.insert_one(file.mongo())
+                    # return_dict[workflow.id][run.get("run_id")].append(
+                    #     file.get("file_location")
+                    # )
 
         # return_dict = json.dumps(return_dict, indent=4)
 
@@ -113,55 +134,138 @@ async def scan_data_collection(
         return {"Warning: runs_and_content is not a list of dictionaries."}
 
 
-@datacollections_endpoint_router.post("/aggregate_workflow_data")
-async def aggregate_workflow_data(
-    data_collection: DataCollection, current_user: str = Depends(get_current_user)
+@datacollections_endpoint_router.post(
+    "/aggregate_data/{workflow_id}/{data_collection_id}"
+)
+async def aggregate_data(
+    # data_collection: DataCollection,
+    workflow_id: str,
+    data_collection_id: str,
+    current_user: str = Depends(get_current_user),
 ):
     # data_collections_collection.drop()
 
-    print(data_collection)
-    # Retrieve configuration based on workflow_data_collection_id
-    data_collection_config = data_collections_collection.find_one(
-        {"data_collection_id": data_collection.data_collection_id}
-    )
-    print(data_collection_config)
+    files_collection
 
-    if not data_collection_config:
-        raise HTTPException(status_code=404, detail="Data Collection not found")
+    workflow_oid = ObjectId(workflow_id)
+    data_collection_oid = ObjectId(data_collection_id)
+    user_oid = ObjectId(current_user.user_id)  # This should be the ObjectId
+    assert isinstance(workflow_oid, ObjectId)
+    assert isinstance(data_collection_oid, ObjectId)
+    assert isinstance(user_oid, ObjectId)
+
+    # Construct the query
+    query = {
+        "_id": workflow_oid,
+        "permissions.owners.user_id": user_oid,
+        "data_collections._id": data_collection_oid,
+    }
+    print(query)
+
+    workflow_cursor = workflows_collection.find_one(query)
+    print(workflow_cursor)
+
+    if not workflow_cursor:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No workflows with id {workflow_oid} found for the current user.",
+        )
+
+    data_collection_config = [
+        dc
+        for dc in workflow_cursor["data_collections"]
+        if dc["_id"] == data_collection_oid
+    ][0]["config"]
 
     # Using the config, find relevant files
-    files = files_collection.find(
-        {"data_collection_id": data_collection.data_collection_id}
+    files = list(files_collection.find({"data_collection._id": data_collection_oid}))
+    print(files)
+    assert isinstance(files, list)
+    assert len(files) > 0
+    files = [File.from_mongo(file) for file in files]
+
+    # Define the path to your Delta table
+    delta_table_path = f"/Users/tweber/Gits/depictio/data/delta_lake/{user_oid}/{workflow_oid}/{data_collection_oid}"
+    print(delta_table_path)
+    # os.remove(delta_table_path)
+    user = User.from_mongo(users_collection.find_one({"_id": user_oid}))
+    # fix this below
+    deltaTable = DeltaTableAggregated(
+        delta_table_location=delta_table_path,
+        aggregation=[
+            Aggregation(
+                aggregation_time=datetime.now(),
+                aggregation_by=user,
+                aggregation_version=1,
+            )
+        ],
     )
 
     data_frames = []
 
     for file_info in files:
-        file_path = file_info["file_location"]
+        print(file_info)
+        # if file_info.aggregated == True:
+        #     continue  # Skip already processed files
 
-        # Read the file using pandas and the given config
-        with open(file_path, "r") as file:
-            config = data_collection_config["config"]
-            df = pd.read_csv(
-                file,
-                **config["pandas_kwargs"],
-            )
-            raw_cols = df.columns.tolist()
-            df["depictio_run_id"] = file_info["run_id"]
-            df = df[["depictio_run_id"] + raw_cols]
-            data_frames.append(df)
+        file_path = file_info.file_location
+        df = pl.read_csv(
+            file_path,
+            **data_collection_config["polars_kwargs"],
+        )
+        print(df)
+        raw_cols = df.columns
+        df = df.with_columns(pl.lit(file_info.run_id).alias("depictio_run_id"))
+        df = df.select(["depictio_run_id"] + raw_cols)
+        data_frames.append(df)
+
+        # Update the file_info in MongoDB to mark it as processed
+        files_collection.update_one(
+            {"_id": ObjectId(file_info.id)},
+            {
+                "$set": {
+                    "aggregated": True,
+                    "data_collection.deltaTable": deltaTable.mongo(),
+                }
+            },
+        )
+        print("Updated file_info in MongoDB")
+        print("\n")
 
     # Aggregate data
-    aggregated_df = pd.concat(data_frames, axis=0, ignore_index=True)
+    if data_frames:
+        aggregated_df = pl.concat(data_frames)
+        print(aggregated_df)
+        # Write aggregated dataframe to Delta Lake
+        aggregated_df.write_delta(delta_table_path)
 
-    # Convert aggregated dataframe to bytes and save to GridFS
-    output = BytesIO()
-    aggregated_df.to_parquet(output)
-    output.seek(0)  # Rewind to the start
+    # data_frames = []
 
-    # Using a naming convention for directories in GridFS
-    filename_structure = f"aggregates/{data_collection.workflow_id}/{data_collection.data_collection_id}.pkl"
-    file_id = grid_fs.put(output, filename=filename_structure)
+    # for file_info in files:
+    #     file_path = file_info["file_location"]
+
+    #     # Read the file using pandas and the given config
+    #     with open(file_path, "r") as file:
+    #         df = pd.read_csv(
+    #             file,
+    #             **data_collection_config["pandas_kwargs"],
+    #         )
+    #         raw_cols = df.columns.tolist()
+    #         df["depictio_run_id"] = file_info["run_id"]
+    #         df = df[["depictio_run_id"] + raw_cols]
+    #         data_frames.append(df)
+
+    # # Aggregate data
+    # aggregated_df = pd.concat(data_frames, axis=0, ignore_index=True)
+
+    # # Convert aggregated dataframe to bytes and save to GridFS
+    # output = BytesIO()
+    # aggregated_df.to_parquet(output)
+    # output.seek(0)  # Rewind to the start
+
+    # # Using a naming convention for directories in GridFS
+    # filename_structure = f"aggregates/{data_collection.workflow_id}/{data_collection.data_collection_id}.pkl"
+    # file_id = grid_fs.put(output, filename=filename_structure)
 
     results = collections.defaultdict(dict)
 
@@ -169,7 +273,7 @@ async def aggregate_workflow_data(
     for column in aggregated_df.columns:
         # Identify the column data type
         col_type = str(aggregated_df[column].dtype)
-        results[column]["type"] = col_type
+        results[column]["type"] = col_type.lower()
 
         # Check if the type exists in the agg_functions dict
         if col_type in agg_functions:
@@ -196,23 +300,23 @@ async def aggregate_workflow_data(
                 results[column][str(method_name)] = numpy_to_python(result)
 
     # Update the data_collection_config with the GridFS file_id
-    data_collections_collection.update_one(
-        {"data_collection_id": data_collection.data_collection_id},
+    workflows_collection.update_one(
+        {"_id": workflow_oid},
         {
             "$set": {
-                "gridfs_file_id": str(file_id),
-                "columns_list": aggregated_df.columns.tolist(),
-                "columns_specs": serialize_for_mongo(results),
-            },
+                "data_collections.$[elem].deltaTable": deltaTable.mongo(),
+                "data_collections.$[elem].columns_list": aggregated_df.columns,
+                "data_collections.$[elem].columns_specs": serialize_for_mongo(results),
+            }
         },
+        array_filters=[{"elem._id": data_collection_oid}]
     )
-    data_collections_collection.create_index(
-        [("data_collection_id", 1), ("workflow_id", 1)]
-    )
+    # data_collections_collection.create_index(
+    #     [("data_collection_id", 1), ("workflow_id", 1)]
+    # )
 
     return {
-        "message": "Data successfully aggregated and saved",
-        "file_id": str(file_id),
+        "message": f"Data successfully aggregated and saved for data_collection: {data_collection_id} of workflow: {workflow_id}, aggregation id: {deltaTable.id}",
     }
 
 
