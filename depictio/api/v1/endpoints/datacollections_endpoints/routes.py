@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.db import db, grid_fs
 from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user
+from depictio.api.v1.models.base import convert_objectid_to_str
 
 
 from depictio.api.v1.models.pydantic_models import (
@@ -354,11 +355,8 @@ async def list_files(
     query_files = {
         "data_collection._id": data_collection_oid,
     }
-    print(query_files)
     files = list(files_collection.find(query_files))
-    print(files)
-    exit()
-
+    return convert_objectid_to_str(files)
     try:
         file_list = list(grid_fs.find())
         result = [

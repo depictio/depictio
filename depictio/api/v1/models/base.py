@@ -25,6 +25,8 @@ def convert_objectid_to_str(item):
         return [convert_objectid_to_str(elem) for elem in item]
     elif isinstance(item, ObjectId):
         return str(item)
+    elif isinstance(item, datetime):
+        return item.strftime("%Y-%m-%d %H:%M:%S")
     else:
         return item
 
