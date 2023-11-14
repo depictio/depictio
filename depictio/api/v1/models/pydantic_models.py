@@ -45,7 +45,7 @@ class TokenData(BaseModel):
 ###################
 
 
-class User(BaseModel):
+class User(MongoModel):
     user_id: PyObjectId = Field(default_factory=PyObjectId)
     username: str
     email: EmailStr
@@ -168,9 +168,122 @@ class Permission(BaseModel):
         return values
 
 
+
+
+
+###################
+# Data Collection #
+###################
+
+
+class Aggregation(MongoModel):    
+    aggregation_time: datetime
+    aggregation_by: User
+    aggregation_version: int = 1
+
+    @validator("aggregation_time", pre=True, always=True)
+    def validate_creation_time(cls, value):
+        if type(value) is not datetime:
+            try:
+                dt = datetime.fromisoformat(value)
+                return dt.strftime("%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                raise ValueError("Invalid datetime format")
+        else:
+            return value.strftime("%Y-%m-%d %H:%M:%S")
+
+    @validator("aggregation_version")
+    def validate_version(cls, value):
+        if not isinstance(value, int):
+            raise ValueError("version must be an integer")
+        return value
+
+
+class DeltaTableAggregated(MongoModel):
+    id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
+    delta_table_location: Path
+    aggregation: List[Aggregation] = []
+
+    @validator("aggregation")
+    def validate_aggregation(cls, value):
+        if not isinstance(value, list):
+            raise ValueError("aggregation must be a list")
+        if len(value) > 0:
+            for aggregation in value:
+                if not isinstance(aggregation, Aggregation):
+                    raise ValueError("aggregation Aggregation be a list of FilesAggregation")
+        elif len(value) == 0:
+            raise ValueError("No aggregation found")
+        return value
+
+
+
+class DataCollectionConfig(BaseModel):
+    regex: str
+    format: str
+    polars_kwargs: Optional[Dict[str, Any]] = {}
+    keep_columns: Optional[List[str]] = []
+
+    # validate the format
+    @validator("format")
+    def validate_format(cls, v):
+        allowed_values = ["csv", "tsv", "parquet", "feather", "xls", "xlsx"]
+        if v.lower() not in allowed_values:
+            raise ValueError(f"format must be one of {allowed_values}")
+        return v
+
+    @validator("regex")
+    def validate_regex(cls, v):
+        try:
+            re.compile(v)
+            return v
+        except re.error:
+            raise ValueError("Invalid regex pattern")
+
+    # TODO : check that the columns to keep are in the dataframe
+    @validator("keep_columns")
+    def validate_keep_fields(cls, v):
+        if v is not None:
+            if not isinstance(v, list):
+                raise ValueError("keep_columns must be a list")
+        return v
+
+    # TODO: check polars different arguments
+    @validator("polars_kwargs")
+    def validate_pandas_kwargs(cls, v):
+        if v is not None:
+            if not isinstance(v, dict):
+                raise ValueError("polars_kwargs must be a dictionary")
+        return v
+
+
+class DataCollection(MongoModel):
+    id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
+    data_collection_tag: str
+    description: str = None  # Optional description
+    config: DataCollectionConfig
+    # workflow_id: Optional[str]
+    # gridfs_file_id: Optional[str] = Field(
+    #     alias="gridfsId", default=None
+    # )  # If the field is named differently in MongoDB
+    deltaTable: Optional[DeltaTableAggregated] = None
+
+    # @validator("data_collection_id", pre=True, always=True)
+    # def extract_data_collection_id(cls, value):
+    #     return value.split("/")[-1]
+
+    @validator("description", pre=True, always=True)
+    def sanitize_description(cls, value):
+        # Strip any HTML tags and attributes
+        sanitized = bleach.clean(value, tags=[], attributes={}, strip=True)
+        return sanitized
+
+
 ###################
 # File management #
 ###################
+
+# class DeltaLake(BaseModel):
 
 
 def validate_datetime(value):
@@ -180,30 +293,39 @@ def validate_datetime(value):
         raise ValueError("Invalid datetime format")
 
 
-class File(BaseModel):
+
+class File(MongoModel):
+    id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
     file_location: FilePath
     filename: str
     creation_time: datetime
     modification_time: datetime
-    data_collection_id: str
+    data_collection: DataCollection
     file_hash: Optional[str] = None
     run_id: Optional[str] = None
+    aggregated: Optional[bool] = False
 
     @validator("creation_time", pre=True, always=True)
     def validate_creation_time(cls, value):
-        try:
-            dt = datetime.fromisoformat(value)
-            return dt.strftime("%Y-%m-%d %H:%M:%S")
-        except ValueError:
-            raise ValueError("Invalid datetime format")
+        if type(value) is not datetime:
+            try:
+                dt = datetime.fromisoformat(value)
+                return dt.strftime("%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                raise ValueError("Invalid datetime format")
+        else:
+            return value.strftime("%Y-%m-%d %H:%M:%S")
 
     @validator("modification_time", pre=True, always=True)
     def validate_modification_time(cls, value):
-        try:
-            dt = datetime.fromisoformat(value)
-            return dt.strftime("%Y-%m-%d %H:%M:%S")
-        except ValueError:
-            raise ValueError("Invalid datetime format")
+        if type(value) is not datetime:
+            try:
+                dt = datetime.fromisoformat(value)
+                return dt.strftime("%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                raise ValueError("Invalid datetime format")
+        else:
+            return value.strftime("%Y-%m-%d %H:%M:%S")
 
     @validator("file_location")
     def validate_location(cls, value):
@@ -221,61 +343,6 @@ class File(BaseModel):
             if not isinstance(value, str):
                 raise ValueError("file_hash must be a string")
         return value
-
-
-###################
-# Data Collection #
-###################
-
-
-class DataCollectionConfig(BaseModel):
-    regex: str
-    format: str
-    pandas_kwargs: Optional[Dict[str, Any]] = {}
-    keep_fields: Optional[List[str]] = []
-
-    @validator("regex")
-    def validate_regex(cls, v):
-        try:
-            re.compile(v)
-            return v
-        except re.error:
-            raise ValueError("Invalid regex pattern")
-
-    @validator("keep_fields")
-    def validate_keep_fields(cls, v):
-        if v is not None:
-            if not isinstance(v, list):
-                raise ValueError("keep_fields must be a list")
-        return v
-
-    @validator("pandas_kwargs")
-    def validate_pandas_kwargs(cls, v):
-        if v is not None:
-            if not isinstance(v, dict):
-                raise ValueError("pandas_kwargs must be a dictionary")
-        return v
-
-
-class DataCollection(MongoModel):
-    id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
-    data_collection_tag: str
-    description: str = None  # Optional description
-    config: DataCollectionConfig
-    # workflow_id: Optional[str]
-    gridfs_file_id: Optional[str] = Field(
-        alias="gridfsId", default=None
-    )  # If the field is named differently in MongoDB
-
-    # @validator("data_collection_id", pre=True, always=True)
-    # def extract_data_collection_id(cls, value):
-    #     return value.split("/")[-1]
-
-    @validator("description", pre=True, always=True)
-    def sanitize_description(cls, value):
-        # Strip any HTML tags and attributes
-        sanitized = bleach.clean(value, tags=[], attributes={}, strip=True)
-        return sanitized
 
 
 ###################
@@ -321,8 +388,9 @@ class WorkflowConfig(MongoModel):
         return value
 
 
-class WorkflowRun(BaseModel):
-    run_id: Optional[str]
+class WorkflowRun(MongoModel):
+    id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
+    run_tag: str
     files: List[File] = []
     workflow_config: WorkflowConfig
     run_location: DirectoryPath
@@ -342,8 +410,15 @@ class WorkflowRun(BaseModel):
         return value
 
     @validator("execution_time", pre=True, always=True)
-    def validate_execution_time(cls, value):
-        return validate_datetime(value)
+    def validate_creation_time(cls, value):
+        if type(value) is not datetime:
+            try:
+                dt = datetime.fromisoformat(value)
+                return dt.strftime("%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                raise ValueError("Invalid datetime format")
+        else:
+            return value.strftime("%Y-%m-%d %H:%M:%S")
 
 
 class WorkflowSystem(BaseModel):

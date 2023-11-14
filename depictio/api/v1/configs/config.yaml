@@ -13,9 +13,9 @@ workflows:
         config:
           regex: ".*.info_raw"
           format: "TSV"
-          pandas_kwargs:
-            skiprows: 13
-            sep: "\t"
+          polars_kwargs:
+            skip_rows: 13
+            separator: "\t"
           keep_columns:
             - "sample"
             - "cell"
@@ -28,8 +28,8 @@ workflows:
         config:
           regex: "labels.tsv"
           format: "TSV"
-          pandas_kwargs:
-            sep: "\t"
+          polars_kwargs:
+            separator: "\t"
 
 
   # nf-core--ampliseq:
