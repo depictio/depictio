@@ -40,6 +40,34 @@ data_collection_config_collection = db["data_collection_config"]
 users_collection = db["users"]
 
 
+
+@workflows_endpoint_router.get("/get_workflows")
+# @workflows_endpoint_router.get("/get_workflows", response_model=List[Workflow])
+async def get_workflows(current_user: str = Depends(get_current_user)):
+    # Assuming the 'current_user' now holds a 'user_id' as an ObjectId after being parsed in 'get_current_user'
+    user_id = current_user.user_id  # This should be the ObjectId
+
+    # Find workflows where current_user is either an owner or a viewer
+    query = {
+        "$or": [
+            {"permissions.owners.user_id": user_id},
+            {"permissions.viewers.user_id": user_id},
+        ]
+    }
+
+    # Retrieve the workflows & convert them to Workflow objects to validate the model
+    workflows_cursor = [Workflow(**w) for w in list(workflows_collection.find(query))]
+
+    workflows = convert_objectid_to_str(list(workflows_cursor))
+
+    if not workflows:
+        raise HTTPException(
+            status_code=404, detail="No workflows found for the current user."
+        )
+
+    return workflows
+
+
 @workflows_endpoint_router.post("/create_workflow")
 async def create_workflow(
     workflow: Workflow, current_user: str = Depends(get_current_user)
@@ -74,44 +102,17 @@ async def create_workflow(
     return str(res.inserted_id)
 
 
-@workflows_endpoint_router.get("/get_workflows")
-# @workflows_endpoint_router.get("/get_workflows", response_model=List[Workflow])
-async def get_workflows(current_user: str = Depends(get_current_user)):
-    # Assuming the 'current_user' now holds a 'user_id' as an ObjectId after being parsed in 'get_current_user'
-    user_id = current_user.user_id  # This should be the ObjectId
-
-    # Find workflows where current_user is either an owner or a viewer
-    query = {
-        "$or": [
-            {"permissions.owners.user_id": user_id},
-            {"permissions.viewers.user_id": user_id},
-        ]
-    }
-
-    # Retrieve the workflows & convert them to Workflow objects to validate the model
-    workflows_cursor = [Workflow(**w) for w in list(workflows_collection.find(query))]
-
-    workflows = convert_objectid_to_str(list(workflows_cursor))
-
-    if not workflows:
-        raise HTTPException(
-            status_code=404, detail="No workflows found for the current user."
-        )
-
-    return workflows
-
-
-@workflows_endpoint_router.put("/update_workflow/{id}")
+@workflows_endpoint_router.put("/update_workflow/{workflow_id}")
 async def update_workflow(
-    id: str, updated_workflow: Workflow, current_user: str = Depends(get_current_user)
+    workflow_id: str, updated_workflow: Workflow, current_user: str = Depends(get_current_user)
 ):
     # Find the workflow by ID
-    existing_workflow = workflows_collection.find_one({"id": id})
+    existing_workflow = workflows_collection.find_one({"id": workflow_id})
     workflow_tag = existing_workflow["workflow_tag"]
 
     if not existing_workflow:
         raise HTTPException(
-            status_code=404, detail=f"Workflow with ID '{id}' does not exist."
+            status_code=404, detail=f"Workflow with ID '{workflow_id}' does not exist."
         )
 
     # Ensure that the current user is authorized to update the workflow
@@ -129,18 +130,18 @@ async def update_workflow(
     return {"message": f"Workflow {workflow_tag} with ID '{id}' updated successfully"}
 
 
-@workflows_endpoint_router.delete("/delete_workflow/{id}")
-async def delete_workflow(id: str, current_user: str = Depends(get_current_user)):
+@workflows_endpoint_router.delete("/delete_workflow/{workflow_id}")
+async def delete_workflow(workflow_id: str, current_user: str = Depends(get_current_user)):
     # Find the workflow by ID
     id = ObjectId(id)
     assert isinstance(id, ObjectId)
-    existing_workflow = workflows_collection.find_one({"_id": id})
+    existing_workflow = workflows_collection.find_one({"_id": workflow_id})
 
     print(existing_workflow)
 
     if not existing_workflow:
         raise HTTPException(
-            status_code=404, detail=f"Workflow with ID '{id}' does not exist."
+            status_code=404, detail=f"Workflow with ID '{workflow_id}' does not exist."
         )
 
     workflow_tag = existing_workflow["workflow_tag"]
@@ -158,7 +159,7 @@ async def delete_workflow(id: str, current_user: str = Depends(get_current_user)
     ]:
         raise HTTPException(
             status_code=403,
-            detail=f"User with ID '{user_id}' is not authorized to delete workflow with ID '{id}'",
+            detail=f"User with ID '{user_id}' is not authorized to delete workflow with ID '{workflow_id}'",
         )
     # Delete the workflow
     workflows_collection.delete_one({"_id": id})
