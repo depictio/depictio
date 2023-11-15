@@ -48,3 +48,87 @@ workflows_collection = db[settings.collections.workflow_collection]
 runs_collection = db[settings.collections.runs_collection]
 files_collection = db[settings.collections.files_collection]
 users_collection = db["users"]
+
+
+
+
+@deltatables_endpoint_router.get("/get_deltatable/{workflow_id}/{data_collection_id}")
+# @datacollections_endpoint_router.get("/files/{workflow_id}/{data_collection_id}", response_model=List[GridFSFileInfo])
+async def list_registered_files(
+    workflow_id: str,
+    data_collection_id: str,
+    current_user: str = Depends(get_current_user),
+):
+    """
+    Fetch all files registered from a Data Collection registered into a workflow.
+    """
+
+    workflow_oid = ObjectId(workflow_id)
+    data_collection_oid = ObjectId(data_collection_id)
+    user_oid = ObjectId(current_user.user_id)  # This should be the ObjectId
+    assert isinstance(workflow_oid, ObjectId)
+    assert isinstance(data_collection_oid, ObjectId)
+    assert isinstance(user_oid, ObjectId)
+
+    # Construct the query
+    query = {
+        "_id": workflow_oid,
+        "permissions.owners.user_id": user_oid,
+        "data_collections._id": data_collection_oid,
+    }
+    print(query)
+    if not workflows_collection.find_one(query):
+        raise HTTPException(
+            status_code=404,
+            detail=f"No workflows with id {workflow_oid} found for the current user.",
+        )
+    
+    query_files = {
+        "data_collection._id": data_collection_oid,
+    }
+    files = list(files_collection.find(query_files))
+    return convert_objectid_to_str(files)
+
+@deltatables_endpoint_router.delete("/delete_deltatable/{workflow_id}/{data_collection_id}")
+async def delete_files(
+    workflow_id: str,
+    data_collection_id: str,
+    current_user: str = Depends(get_current_user),
+
+):
+    """
+    Delete all files from GridFS.
+    """
+
+    workflow_oid = ObjectId(workflow_id)
+    data_collection_oid = ObjectId(data_collection_id)
+    user_oid = ObjectId(current_user.user_id)  # This should be the ObjectId
+    assert isinstance(workflow_oid, ObjectId)
+    assert isinstance(data_collection_oid, ObjectId)
+    assert isinstance(user_oid, ObjectId)
+    # Construct the query
+    query = {
+        "_id": workflow_oid,
+        "permissions.owners.user_id": user_oid,
+        "data_collections._id": data_collection_oid,
+    }
+    print(query)
+    if not workflows_collection.find_one(query):
+        raise HTTPException(
+            status_code=404,
+            detail=f"No workflows with id {workflow_oid} found for the current user.",
+        )
+    
+    # Query to find files associated with the data collection
+    query_files = {"data_collection_id": data_collection_oid}
+    
+    # Batch delete the files
+    delete_result = files_collection.delete_many(query_files)
+
+    # Optionally, update the workflow document to reflect the deletion
+    workflows_collection.update_one(
+        {"_id": workflow_oid},
+        {"$pull": {"data_collections": {"_id": data_collection_oid}}}
+    )
+    
+    return {"message": f"Deleted {delete_result.deleted_count} files successfully"}
