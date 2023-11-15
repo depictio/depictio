@@ -17,7 +17,9 @@ from pydantic import BaseModel
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.db import db, grid_fs
+from depictio.api.v1.endpoints.files_endpoints.routes import delete_files
 from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user
+from depictio.api.v1.endpoints.validators import validate_workflow_and_collection
 from depictio.api.v1.models.base import convert_objectid_to_str
 
 
@@ -50,6 +52,66 @@ files_collection = db[settings.collections.files_collection]
 users_collection = db["users"]
 
 
+@datacollections_endpoint_router.get("/specs/{workflow_id}/{data_collection_id}")
+# @workflows_endpoint_router.get("/get_workflows", response_model=List[Workflow])
+async def specs(
+    workflow_id: str,
+    data_collection_id: str,
+    current_user: str = Depends(get_current_user),
+):
+    # Assuming the 'current_user' now holds a 'user_id' as an ObjectId after being parsed in 'get_current_user'
+    # workflow_oid = ObjectId(workflow_id)
+    # data_collection_oid = ObjectId(data_collection_id)
+    # user_oid = ObjectId(current_user.user_id)  # This should be the ObjectId
+    # assert isinstance(workflow_oid, ObjectId)
+    # assert isinstance(data_collection_oid, ObjectId)
+    # assert isinstance(user_oid, ObjectId)
+
+    # # Construct the query
+    # query = {
+    #     "_id": workflow_oid,
+    #     "permissions.owners.user_id": user_oid,
+    #     "data_collections._id": data_collection_oid,
+    # }
+    # print(query)
+
+    # workflow_cursor = workflows_collection.find_one(query)
+    # print(workflow_cursor)
+
+    # if not workflow_cursor:
+    #     raise HTTPException(
+    #         status_code=404,
+    #         detail=f"No workflows with id {workflow_id} found for the current user.",
+    #     )
+
+    # workflow = Workflow.from_mongo(workflow_cursor)
+    # print(workflow)
+    # # retrieve data collection from workflow where data_collection_id matches
+    # data_collection = [
+    #     dc for dc in workflow.data_collections if dc.id == data_collection_oid
+    # ][0]
+
+    # Use the utility function to validate and retrieve necessary info
+    (
+        workflow_oid,
+        data_collection_oid,
+        workflow,
+        data_collection,
+        user_oid,
+    ) = validate_workflow_and_collection(
+        workflow_id, data_collection_id, current_user.user_id, workflows_collection
+    )
+
+    data_collection = convert_objectid_to_str(data_collection)
+
+    if not data_collection:
+        raise HTTPException(
+            status_code=404, detail="No workflows found for the current user."
+        )
+
+    return data_collection
+
+
 @datacollections_endpoint_router.post("/scan/{workflow_id}/{data_collection_id}")
 async def scan_data_collection(
     workflow_id: str,
@@ -59,37 +121,48 @@ async def scan_data_collection(
     runs_collection.drop()
     files_collection.drop()
 
-    workflow_oid = ObjectId(workflow_id)
-    data_collection_oid = ObjectId(data_collection_id)
-    user_oid = ObjectId(current_user.user_id)  # This should be the ObjectId
-    assert isinstance(workflow_oid, ObjectId)
-    assert isinstance(data_collection_oid, ObjectId)
-    assert isinstance(user_oid, ObjectId)
+    # workflow_oid = ObjectId(workflow_id)
+    # data_collection_oid = ObjectId(data_collection_id)
+    # user_oid = ObjectId(current_user.user_id)  # This should be the ObjectId
+    # assert isinstance(workflow_oid, ObjectId)
+    # assert isinstance(data_collection_oid, ObjectId)
+    # assert isinstance(user_oid, ObjectId)
 
-    # Construct the query
-    query = {
-        "_id": workflow_oid,
-        "permissions.owners.user_id": user_oid,
-        "data_collections._id": data_collection_oid,
-    }
-    print(query)
+    # # Construct the query
+    # query = {
+    #     "_id": workflow_oid,
+    #     "permissions.owners.user_id": user_oid,
+    #     "data_collections._id": data_collection_oid,
+    # }
+    # print(query)
 
-    workflow_cursor = workflows_collection.find_one(query)
-    print(workflow_cursor)
+    # workflow_cursor = workflows_collection.find_one(query)
+    # print(workflow_cursor)
 
-    if not workflow_cursor:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No workflows with id {workflow_id} found for the current user.",
-        )
+    # if not workflow_cursor:
+    #     raise HTTPException(
+    #         status_code=404,
+    #         detail=f"No workflows with id {workflow_id} found for the current user.",
+    #     )
 
-    workflow = Workflow.from_mongo(workflow_cursor)
-    # retrieve data collection from workflow where data_collection_id matches
-    data_collection = [
-        dc for dc in workflow.data_collections if dc.id == data_collection_oid
-    ][0]
-    print(workflow)
-    print(data_collection)
+    # workflow = Workflow.from_mongo(workflow_cursor)
+    # # retrieve data collection from workflow where data_collection_id matches
+    # data_collection = [
+    #     dc for dc in workflow.data_collections if dc.id == data_collection_oid
+    # ][0]
+    # print(workflow)
+    # print(data_collection)
+
+    # Use the utility function to validate and retrieve necessary info
+    (
+        workflow_oid,
+        data_collection_oid,
+        workflow,
+        data_collection,
+        user_oid,
+    ) = validate_workflow_and_collection(
+        workflow_id, data_collection_id, current_user.user_id, workflows_collection
+    )
 
     # Retrieve the workflow_config from the workflow
     locations = workflow.workflow_config.parent_runs_location
@@ -146,37 +219,18 @@ async def aggregate_data(
 ):
     # data_collections_collection.drop()
 
+    # Use the utility function to validate and retrieve necessary info
+    (
+        workflow_oid,
+        data_collection_oid,
+        workflow,
+        data_collection,
+        user_oid,
+    ) = validate_workflow_and_collection(
+        workflow_id, data_collection_id, current_user.user_id, workflows_collection
+    )
 
-
-    workflow_oid = ObjectId(workflow_id)
-    data_collection_oid = ObjectId(data_collection_id)
-    user_oid = ObjectId(current_user.user_id)  # This should be the ObjectId
-    assert isinstance(workflow_oid, ObjectId)
-    assert isinstance(data_collection_oid, ObjectId)
-    assert isinstance(user_oid, ObjectId)
-
-    # Construct the query
-    query = {
-        "_id": workflow_oid,
-        "permissions.owners.user_id": user_oid,
-        "data_collections._id": data_collection_oid,
-    }
-    print(query)
-
-    workflow_cursor = workflows_collection.find_one(query)
-    print(workflow_cursor)
-
-    if not workflow_cursor:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No workflows with id {workflow_oid} found for the current user.",
-        )
-
-    data_collection_config = [
-        dc
-        for dc in workflow_cursor["data_collections"]
-        if dc["_id"] == data_collection_oid
-    ][0]["config"]
+    data_collection_config = data_collection["config"]
 
     # Using the config, find relevant files
     files = list(files_collection.find({"data_collection._id": data_collection_oid}))
@@ -310,7 +364,7 @@ async def aggregate_data(
                 "data_collections.$[elem].columns_specs": serialize_for_mongo(results),
             }
         },
-        array_filters=[{"elem._id": data_collection_oid}]
+        array_filters=[{"elem._id": data_collection_oid}],
     )
     # data_collections_collection.create_index(
     #     [("data_collection_id", 1), ("workflow_id", 1)]
@@ -321,110 +375,127 @@ async def aggregate_data(
     }
 
 
-@datacollections_endpoint_router.get("/files/{workflow_id}/{data_collection_id}")
-# @datacollections_endpoint_router.get("/files/{workflow_id}/{data_collection_id}", response_model=List[GridFSFileInfo])
-async def list_files(
+@datacollections_endpoint_router.delete(
+    "/delete_datacollection/{workflow_id}/{data_collection_id}"
+)
+async def delete_datacollection(
     workflow_id: str,
     data_collection_id: str,
     current_user: str = Depends(get_current_user),
 ):
-    """
-    Fetch all files registered from a Data Collection registered into a workflow.
-    """
+    # workflow_oid = ObjectId(workflow_id)
+    # data_collection_oid = ObjectId(data_collection_id)
+    # user_oid = ObjectId(current_user.user_id)  # This should be the ObjectId
+    # assert isinstance(workflow_oid, ObjectId)
+    # assert isinstance(data_collection_oid, ObjectId)
+    # assert isinstance(user_oid, ObjectId)
 
-    workflow_oid = ObjectId(workflow_id)
-    data_collection_oid = ObjectId(data_collection_id)
-    user_oid = ObjectId(current_user.user_id)  # This should be the ObjectId
-    assert isinstance(workflow_oid, ObjectId)
-    assert isinstance(data_collection_oid, ObjectId)
-    assert isinstance(user_oid, ObjectId)
+    # # Construct the query
+    # query = {
+    #     "_id": workflow_oid,
+    #     "permissions.owners.user_id": user_oid,
+    #     "data_collections._id": data_collection_oid,
+    # }
+    # print(query)
 
-    # Construct the query
-    query = {
-        "_id": workflow_oid,
-        "permissions.owners.user_id": user_oid,
-        "data_collections._id": data_collection_oid,
-    }
-    print(query)
-    if not workflows_collection.find_one(query):
-        raise HTTPException(
-            status_code=404,
-            detail=f"No workflows with id {workflow_oid} found for the current user.",
-        )
-    
-    query_files = {
-        "data_collection._id": data_collection_oid,
-    }
-    files = list(files_collection.find(query_files))
-    return convert_objectid_to_str(files)
-    try:
-        file_list = list(grid_fs.find())
-        result = [
-            {"filename": file.filename, "file_id": str(file._id), "length": file.length}
-            for file in file_list
-        ]
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching files: {e}")
+    # workflow_cursor = workflows_collection.find_one(query)
+    # print(workflow_cursor)
 
+    # if not workflow_cursor:
+    #     raise HTTPException(
+    #         status_code=404,
+    #         detail=f"No workflows with id {workflow_oid} found for the current user.",
+    #     )
 
-@datacollections_endpoint_router.get("/delete_all_files")
-async def delete_all_files():
-    """
-    Delete all files from GridFS.
-    """
-    try:
-        # Fetch all files from GridFS
-        file_list = list(grid_fs.find())
+    # data_collection = [
+    #     dc
+    #     for dc in workflow_cursor["data_collections"]
+    #     if dc["_id"] == data_collection_oid
+    # ][0]
 
-        # Remove each file
-        for file in file_list:
-            grid_fs.delete(file._id)
-
-        return {"message": "All files deleted."}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error deleting files: {e}")
-
-
-@datacollections_endpoint_router.get(
-    "/get_aggregated_file_id/{workflow_engine}/{workflow_name}/{data_collection_id}"
-)
-async def get_files(workflow_engine: str, workflow_name: str, data_collection_id: str):
-    """
-    Fetch an aggregated datacollection from GridFS.
-    """
-    document = data_collections_collection.find_one(
-        {
-            "data_collection_id": data_collection_id,
-            "workflow_id": f"{workflow_engine}/{workflow_name}",
-        }
+    # Use the utility function to validate and retrieve necessary info
+    (
+        workflow_oid,
+        data_collection_oid,
+        workflow,
+        data_collection,
+        user_oid,
+    ) = validate_workflow_and_collection(
+        workflow_id, data_collection_id, current_user.user_id, workflows_collection
     )
-    print(document)
 
-    # # Fetch all files from GridFS
-    # associated_file = grid_fs.get(ObjectId(document["gridfs_file_id"]))
-    # print(associated_file)
-    # # df = pd.read_parquet(associated_file).to_dict()
-    # return associated_file
-    return {"gridfs_file_id": document["gridfs_file_id"]}
-
-
-@datacollections_endpoint_router.get(
-    "/get_columns/{workflow_engine}/{workflow_name}/{data_collection_id}"
-)
-async def get_files(workflow_engine: str, workflow_name: str, data_collection_id: str):
-    """
-    Fetch columns list and specs from data collection
-    """
-    document = data_collections_collection.find_one(
-        {
-            "data_collection_id": data_collection_id,
-            "workflow_id": f"{workflow_engine}/{workflow_name}",
-        }
+    # delete the data collection from the workflow
+    workflows_collection.update_one(
+        {"_id": workflow_oid},
+        {"$pull": {"data_collections": data_collection}},
     )
-    print(document.keys())
+    delete_files_message = await delete_files(
+        workflow_id, data_collection_id, current_user
+    )
 
-    return {
-        "columns_list": document["columns_list"],
-        "columns_specs": document["columns_specs"],
-    }
+    # delete corresponding files from files_collection
+
+    # # Ensure that the current user is authorized to update the workflow
+    # user_id = current_user.user_id
+    # print(
+    #     user_id,
+    #     type(user_id),
+    #     existing_workflow["permissions"]["owners"],
+    #     [u["user_id"] for u in existing_workflow["permissions"]["owners"]],
+    # )
+    # if user_id not in [
+    #     u["user_id"] for u in existing_workflow["permissions"]["owners"]
+    # ]:
+    #     raise HTTPException(
+    #         status_code=403,
+    #         detail=f"User with ID '{user_id}' is not authorized to delete workflow with ID '{workflow_id}'",
+    #     )
+    # # Delete the workflow
+    # workflows_collection.delete_one({"_id": id})
+    # assert workflows_collection.find_one({"_id": id}) is None
+
+    # return {"message": f"Workflow {workflow_tag} with ID '{id}' deleted successfully"}
+
+
+# @datacollections_endpoint_router.get(
+#     "/get_aggregated_file_id/{workflow_engine}/{workflow_name}/{data_collection_id}"
+# )
+# async def get_files(workflow_engine: str, workflow_name: str, data_collection_id: str):
+#     """
+#     Fetch an aggregated datacollection from GridFS.
+#     """
+#     document = data_collections_collection.find_one(
+#         {
+#             "data_collection_id": data_collection_id,
+#             "workflow_id": f"{workflow_engine}/{workflow_name}",
+#         }
+#     )
+#     print(document)
+
+#     # # Fetch all files from GridFS
+#     # associated_file = grid_fs.get(ObjectId(document["gridfs_file_id"]))
+#     # print(associated_file)
+#     # # df = pd.read_parquet(associated_file).to_dict()
+#     # return associated_file
+#     return {"gridfs_file_id": document["gridfs_file_id"]}
+
+
+# @datacollections_endpoint_router.get(
+#     "/get_columns/{workflow_engine}/{workflow_name}/{data_collection_id}"
+# )
+# async def get_files(workflow_engine: str, workflow_name: str, data_collection_id: str):
+#     """
+#     Fetch columns list and specs from data collection
+#     """
+#     document = data_collections_collection.find_one(
+#         {
+#             "data_collection_id": data_collection_id,
+#             "workflow_id": f"{workflow_engine}/{workflow_name}",
+#         }
+#     )
+#     print(document.keys())
+
+#     return {
+#         "columns_list": document["columns_list"],
+#         "columns_specs": document["columns_specs"],
+#     }

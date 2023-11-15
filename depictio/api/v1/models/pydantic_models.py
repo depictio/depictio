@@ -257,6 +257,28 @@ class DataCollectionConfig(BaseModel):
         return v
 
 
+class DataCollectionColumn(MongoModel):
+    column_name: str
+    column_type: str
+    column_description: Optional[str] = None  # Optional description
+
+    @validator("column_type")
+    def validate_column_type(cls, v):
+        allowed_values = [
+            "string",
+            "object"
+            "int64",
+            "float64",
+            "bool",
+            "date",
+            "datetime",
+            "time",
+            "category",
+        ]
+        if v.lower() not in allowed_values:
+            raise ValueError(f"column_type must be one of {allowed_values}")
+        return v
+
 class DataCollection(MongoModel):
     id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
     data_collection_tag: str
@@ -267,7 +289,8 @@ class DataCollection(MongoModel):
     #     alias="gridfsId", default=None
     # )  # If the field is named differently in MongoDB
     deltaTable: Optional[DeltaTableAggregated] = None
-
+    columns: Optional[List[DataCollectionColumn]] = []
+    
     # @validator("data_collection_id", pre=True, always=True)
     # def extract_data_collection_id(cls, value):
     #     return value.split("/")[-1]

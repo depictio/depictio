@@ -380,11 +380,57 @@ def list_files_for_data_collection(
     headers = {"Authorization": f"Bearer {token}"}  # Token is now mandatory
 
     response = httpx.get(
-        f"{API_BASE_URL}/api/v1/datacollections/files/{workflow_id}/{data_collection_id}",
+        f"{API_BASE_URL}/api/v1/datacollections/list_registered_files/{workflow_id}/{data_collection_id}",
         # json=data_payload_json,
         headers=headers,
     )
-    print(response.json())
+    print(json.dumps(response.json(), indent=4))
+
+
+@app.command()
+def delete_files_for_data_collection(
+    config_path: str = typer.Option(
+        ...,
+        "--config_path",
+        help="Path to the YAML configuration file",
+    ),
+    workflow_id: str = typer.Option(
+        ...,
+        "--workflow_id",
+        help="Workflow name to aggregate data for",
+    ),
+    data_collection_id: str = typer.Option(
+        None,  # Default to None (not specified)
+        "--data_collection_id",
+        help="Optionally specify a data collection to be aggregated alone",
+    ),
+    token: str = typer.Option(
+        None,  # Default to None (not specified)
+        "--token",
+        help="Optionally specify a token to be used for authentication",
+    ),
+):
+    """
+    List files registered for a data collection related to a workflow.
+    """
+
+    if not token:
+        typer.echo("A valid token must be provided for authentication.")
+        raise typer.Exit(code=1)
+
+    user = return_user_from_token(token)  # Decode the token to get the user information
+    if not user:
+        typer.echo("Invalid token or unable to decode user information.")
+        raise typer.Exit(code=1)
+
+    headers = {"Authorization": f"Bearer {token}"}  # Token is now mandatory
+
+    response = httpx.get(
+        f"{API_BASE_URL}/api/v1/datacollections/list_registered_files/{workflow_id}/{data_collection_id}",
+        # json=data_payload_json,
+        headers=headers,
+    )
+    print(json.dumps(response.json(), indent=4))
 
 @app.command()
 def get_aggregated_file(
