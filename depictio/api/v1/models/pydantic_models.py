@@ -1,7 +1,7 @@
 from datetime import datetime
 import os
 from pathlib import Path
-from typing import Type, Dict, List, Tuple, Optional, Any, Set
+from typing import Type, Dict, List, Tuple, Optional, Any, Set, Union
 import bleach
 from bson import ObjectId
 import re
@@ -198,6 +198,19 @@ class Aggregation(MongoModel):
             raise ValueError("version must be an integer")
         return value
 
+class FilterCondition(BaseModel):
+    above: Optional[Union[int, float, str]] = None
+    equal: Optional[Union[int, float, str]] = None
+    under: Optional[Union[int, float, str]] = None
+
+
+class DeltaTableQuery(MongoModel):
+    columns: List[str]
+    filters: Dict[str, FilterCondition]
+    sort: Optional[List[str]] = []
+    limit: Optional[int] = None
+    offset: Optional[int] = None
+
 
 class DeltaTableAggregated(MongoModel):
     id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
@@ -289,7 +302,7 @@ class DataCollection(MongoModel):
     #     alias="gridfsId", default=None
     # )  # If the field is named differently in MongoDB
     deltaTable: Optional[DeltaTableAggregated] = None
-    columns: Optional[List[DataCollectionColumn]] = []
+    columns: Optional[List[DataCollectionColumn]] = None
     
     # @validator("data_collection_id", pre=True, always=True)
     # def extract_data_collection_id(cls, value):
@@ -324,7 +337,7 @@ class File(MongoModel):
     creation_time: datetime
     modification_time: datetime
     data_collection: DataCollection
-    file_hash: Optional[str] = None
+    # file_hash: Optional[str] = None
     run_id: Optional[str] = None
     aggregated: Optional[bool] = False
 
@@ -360,12 +373,12 @@ class File(MongoModel):
             raise ValueError(f"'{value}' is not readable.")
         return value
 
-    @validator("file_hash")
-    def validate_file_hash(cls, value):
-        if value is not None:
-            if not isinstance(value, str):
-                raise ValueError("file_hash must be a string")
-        return value
+    # @validator("file_hash")
+    # def validate_file_hash(cls, value):
+    #     if value is not None:
+    #         if not isinstance(value, str):
+    #             raise ValueError("file_hash must be a string")
+    #     return value
 
 
 ###################
@@ -486,7 +499,7 @@ class Workflow(MongoModel):
     # workflow_engine: WorkflowSystem
     workflow_description: str
     data_collections: List[DataCollection]
-    runs: Optional[Dict[str, WorkflowRun]]
+    runs: Optional[Dict[str, WorkflowRun]] = dict()
     workflow_config: WorkflowConfig
     # data_collection_ids: Optional[List[str]] = []
     permissions: Optional[Permission]

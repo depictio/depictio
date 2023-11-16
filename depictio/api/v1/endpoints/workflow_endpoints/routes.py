@@ -5,6 +5,11 @@ from typing import List
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.db import db
+from depictio.api.v1.endpoints.datacollections_endpoints.routes import (
+    delete_datacollection,
+)
+from depictio.api.v1.endpoints.deltatables_endpoints.routes import delete_deltatable
+from depictio.api.v1.endpoints.files_endpoints.routes import delete_files
 from depictio.api.v1.models.base import PyObjectId, convert_objectid_to_str
 from depictio.api.v1.models.orm_models import (
     DataCollectionConfigORM,
@@ -40,8 +45,7 @@ data_collection_config_collection = db["data_collection_config"]
 users_collection = db["users"]
 
 
-
-@workflows_endpoint_router.get("/get_workflows")
+@workflows_endpoint_router.get("/get", response_model=List[Workflow])
 # @workflows_endpoint_router.get("/get_workflows", response_model=List[Workflow])
 async def get_workflows(current_user: str = Depends(get_current_user)):
     # Assuming the 'current_user' now holds a 'user_id' as an ObjectId after being parsed in 'get_current_user'
@@ -68,7 +72,7 @@ async def get_workflows(current_user: str = Depends(get_current_user)):
     return workflows
 
 
-@workflows_endpoint_router.post("/create_workflow")
+@workflows_endpoint_router.post("/create")
 async def create_workflow(
     workflow: Workflow, current_user: str = Depends(get_current_user)
 ):
@@ -102,40 +106,42 @@ async def create_workflow(
     return str(res.inserted_id)
 
 
-@workflows_endpoint_router.put("/update_workflow/{workflow_id}")
-async def update_workflow(
-    workflow_id: str, updated_workflow: Workflow, current_user: str = Depends(get_current_user)
+# @workflows_endpoint_router.put("/update_workflow/{workflow_id}")
+# async def update_workflow(
+#     workflow_id: str, updated_workflow: Workflow, current_user: str = Depends(get_current_user)
+# ):
+#     # Find the workflow by ID
+#     existing_workflow = workflows_collection.find_one({"id": workflow_id})
+#     workflow_tag = existing_workflow["workflow_tag"]
+
+#     if not existing_workflow:
+#         raise HTTPException(
+#             status_code=404, detail=f"Workflow with ID '{workflow_id}' does not exist."
+#         )
+
+#     # Ensure that the current user is authorized to update the workflow
+#     user_id = current_user.user_id
+#     if user_id not in existing_workflow["permissions"]["owners"]:
+#         raise HTTPException(
+#             status_code=403,
+#             detail=f"User with ID '{user_id}' is not authorized to update workflow with ID '{id}'",
+#         )
+
+#     # Update the workflow
+#     updated_data = updated_workflow.dict()
+#     workflows_collection.update_one({"id": id}, {"$set": updated_data})
+
+#     return {"message": f"Workflow {workflow_tag} with ID '{id}' updated successfully"}
+
+
+@workflows_endpoint_router.delete("/delete/{workflow_id}")
+async def delete_workflow(
+    workflow_id: str, current_user: str = Depends(get_current_user)
 ):
     # Find the workflow by ID
-    existing_workflow = workflows_collection.find_one({"id": workflow_id})
-    workflow_tag = existing_workflow["workflow_tag"]
-
-    if not existing_workflow:
-        raise HTTPException(
-            status_code=404, detail=f"Workflow with ID '{workflow_id}' does not exist."
-        )
-
-    # Ensure that the current user is authorized to update the workflow
-    user_id = current_user.user_id
-    if user_id not in existing_workflow["permissions"]["owners"]:
-        raise HTTPException(
-            status_code=403,
-            detail=f"User with ID '{user_id}' is not authorized to update workflow with ID '{id}'",
-        )
-
-    # Update the workflow
-    updated_data = updated_workflow.dict()
-    workflows_collection.update_one({"id": id}, {"$set": updated_data})
-
-    return {"message": f"Workflow {workflow_tag} with ID '{id}' updated successfully"}
-
-
-@workflows_endpoint_router.delete("/delete_workflow/{workflow_id}")
-async def delete_workflow(workflow_id: str, current_user: str = Depends(get_current_user)):
-    # Find the workflow by ID
-    id = ObjectId(id)
-    assert isinstance(id, ObjectId)
-    existing_workflow = workflows_collection.find_one({"_id": workflow_id})
+    workflow_oid = ObjectId(workflow_id)
+    assert isinstance(workflow_oid, ObjectId)
+    existing_workflow = workflows_collection.find_one({"_id": workflow_oid})
 
     print(existing_workflow)
 
@@ -145,6 +151,8 @@ async def delete_workflow(workflow_id: str, current_user: str = Depends(get_curr
         )
 
     workflow_tag = existing_workflow["workflow_tag"]
+
+    data_collections = existing_workflow["data_collections"]
 
     # Ensure that the current user is authorized to update the workflow
     user_id = current_user.user_id
@@ -162,7 +170,18 @@ async def delete_workflow(workflow_id: str, current_user: str = Depends(get_curr
             detail=f"User with ID '{user_id}' is not authorized to delete workflow with ID '{workflow_id}'",
         )
     # Delete the workflow
-    workflows_collection.delete_one({"_id": id})
-    assert workflows_collection.find_one({"_id": id}) is None
+    workflows_collection.delete_one({"_id": workflow_oid})
+    assert workflows_collection.find_one({"_id": workflow_oid}) is None
 
-    return {"message": f"Workflow {workflow_tag} with ID '{id}' deleted successfully"}
+    for data_collection in data_collections:
+        delete_files_message = await delete_files(
+            workflow_id, data_collection["data_collection_id"], current_user
+        )
+
+        delete_datatable_message = await delete_deltatable(
+            workflow_id, data_collection["data_collection_id"], current_user
+        )
+
+    return {
+        "message": f"Workflow {workflow_tag} with ID '{id}' deleted successfully, as well as all files"
+    }
