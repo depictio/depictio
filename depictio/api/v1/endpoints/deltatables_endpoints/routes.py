@@ -318,8 +318,7 @@ async def query_data(
         df = df.filter(combined_filter)
 
 
-    df = df.collect()
-    print(df)
+    return df.collect().to_dict()
 
     
 
