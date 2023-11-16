@@ -111,7 +111,7 @@ def create_workflow(
 
 
     response = httpx.post(
-        f"{API_BASE_URL}/api/v1/workflows/create_workflow",
+        f"{API_BASE_URL}/api/v1/workflows/create",
         json=workflow_data_dict,
         headers=headers,
     )
@@ -129,7 +129,7 @@ def list_workflows():
     """
     List all workflows.
     """
-    workflows = httpx.get(f"{API_BASE_URL}/api/v1/workflows/get_workflows")
+    workflows = httpx.get(f"{API_BASE_URL}/api/v1/workflows/get")
     print(workflows)
     workflows_json = workflows.json()
     print(workflows_json)
@@ -139,7 +139,7 @@ def list_workflows():
 
 
 @app.command()
-def scan_data_collection(
+def scan_files_from_data_collection(
     config_path: str = typer.Option(
         ...,
         "--config_path",
@@ -160,7 +160,7 @@ def scan_data_collection(
     ),
 ):
     """
-    Scan files for a given workflow.
+    Scan files for a given data collection of a workflow.
     """
 
     if not token:
@@ -226,7 +226,7 @@ def scan_data_collection(
     # print(data_payload_json)
     # print(data_payload["data_collection"])
     response = httpx.post(
-        f"{API_BASE_URL}/api/v1/datacollections/scan/{workflow_id}/{data_collection_id}",
+        f"{API_BASE_URL}/api/v1/files/scan/{workflow_id}/{data_collection_id}",
         # json=data_payload_json,
         headers=headers,
     )
@@ -241,7 +241,7 @@ def scan_data_collection(
 
 
 @app.command()
-def aggregate_data(
+def create_deltatable(
     config_path: str = typer.Option(
         ...,
         "--config_path",
@@ -322,7 +322,7 @@ def aggregate_data(
     # print(data_payload_json, type(data_payload_json))
 
     response = httpx.post(
-        f"{API_BASE_URL}/api/v1/datacollections/aggregate_data/{workflow_id}/{data_collection_id}",
+        f"{API_BASE_URL}/api/v1/deltatables/create/{workflow_id}/{data_collection_id}",
         # json=data_payload_json,
         headers=headers,
     )
@@ -380,7 +380,7 @@ def list_files_for_data_collection(
     headers = {"Authorization": f"Bearer {token}"}  # Token is now mandatory
 
     response = httpx.get(
-        f"{API_BASE_URL}/api/v1/datacollections/list_registered_files/{workflow_id}/{data_collection_id}",
+        f"{API_BASE_URL}/api/v1/files/list/{workflow_id}/{data_collection_id}",
         # json=data_payload_json,
         headers=headers,
     )
@@ -426,7 +426,7 @@ def delete_files_for_data_collection(
     headers = {"Authorization": f"Bearer {token}"}  # Token is now mandatory
 
     response = httpx.get(
-        f"{API_BASE_URL}/api/v1/datacollections/list_registered_files/{workflow_id}/{data_collection_id}",
+        f"{API_BASE_URL}/api/v1/files/list/{workflow_id}/{data_collection_id}",
         # json=data_payload_json,
         headers=headers,
     )
@@ -485,7 +485,7 @@ def get_aggregated_file(
         data_payload = data_collection.dict()
 
         response = httpx.get(
-            f"{API_BASE_URL}/api/v1/datacollections/get_aggregated_file",
+            f"{API_BASE_URL}/api/v1/deltatables/get",
             params=data_payload,
         )
         print(response)

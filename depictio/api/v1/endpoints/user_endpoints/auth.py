@@ -1,3 +1,4 @@
+import os
 from typing import Optional
 from bson import ObjectId
 from fastapi import APIRouter, FastAPI, Depends, HTTPException, status
@@ -109,33 +110,24 @@ def fetch_user_from_id(user_id_str: str) -> User:
         email=user_document["email"],
     )
 
+
 async def get_current_user(token: str = Depends(oauth2_scheme)) -> TokenData:
-    # print("\n\n\n")
-    # print("get_current_user")
-    # print(token)
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    # print(credentials_exception)
     try:
         payload = jwt.decode(token, PUBLIC_KEY, algorithms=[ALGORITHM])
-        # print("\n\n\n")
-        # print("payload")
-        # print(payload)
+
         user_id: str = payload.get("sub")
         if user_id is None:
             raise credentials_exception
-        token_data = TokenData(
-            user_id=user_id,
-        )
-        # print(token_data)
+        token_data = TokenData(user_id=PyObjectId(user_id))
+        return token_data
+
     except JWTError as e:
-        # print(f"JWT Error: {e}")
         raise credentials_exception
-    # print(token_data)
-    return TokenData(user_id=PyObjectId(user_id))
 
 
 @auth_endpoint_router.get("/users/me", response_model=User)
