@@ -32,7 +32,7 @@ from depictio.dash.modules.figure_component.utils import (
 )
 from depictio.dash.utils import (
     get_columns_from_data_collection,
-    load_gridfs_file,
+    load_deltatable,
 )
 
 
@@ -508,7 +508,7 @@ def register_callbacks_figure_component(app):
 
         # print(dict_kwargs)
         dict_kwargs = {k: v for k, v in dict_kwargs.items() if v is not None}
-        df = load_gridfs_file(workflow, data_collection)
+        df = load_deltatable(workflow, data_collection)
         print("\n\n\n")
         # print(dict_kwargs)
         if dict_kwargs:

@@ -65,31 +65,24 @@ async def list_registered_files(
     Fetch all files registered from a Data Collection registered into a workflow.
     """
 
-    workflow_oid = ObjectId(workflow_id)
-    data_collection_oid = ObjectId(data_collection_id)
-    user_oid = ObjectId(current_user.user_id)  # This should be the ObjectId
-    assert isinstance(workflow_oid, ObjectId)
-    assert isinstance(data_collection_oid, ObjectId)
-    assert isinstance(user_oid, ObjectId)
+    (
+        workflow_oid,
+        data_collection_oid,
+        workflow,
+        data_collection,
+        user_oid,
+    ) = validate_workflow_and_collection(
+         workflows_collection, current_user.user_id, workflow_id, data_collection_id, 
+    )
 
-    # Construct the query
-    query = {
-        "_id": workflow_oid,
-        "permissions.owners.user_id": user_oid,
-        "data_collections._id": data_collection_oid,
-    }
-    print(query)
-    if not workflows_collection.find_one(query):
-        raise HTTPException(
-            status_code=404,
-            detail=f"No workflows with id {workflow_oid} found for the current user.",
-        )
-    
-    query_files = {
-        "data_collection._id": data_collection_oid,
-    }
-    files = list(files_collection.find(query_files))
-    return convert_objectid_to_str(files)
+    # Query to find deltatable associated with the data collection
+    query = {"_id": workflow_oid, "data_collections._id": data_collection_oid}
+    deltatable_cursor = workflows_collection.find(query, {"data_collections.$": 1})
+    deltatable = list(deltatable_cursor)[0]["data_collections"][0]["deltaTable"]
+    print(deltatable)
+
+
+    return convert_objectid_to_str(deltatable)
 
 
 @deltatables_endpoint_router.post(
@@ -176,7 +169,7 @@ async def aggregate_data(
         aggregated_df = pl.concat(data_frames)
         print(aggregated_df)
         # Write aggregated dataframe to Delta Lake
-        aggregated_df.write_delta(delta_table_path)
+        aggregated_df.write_delta(delta_table_path, mode="overwrite")
 
     # data_frames = []
 
@@ -206,14 +199,19 @@ async def aggregate_data(
     # filename_structure = f"aggregates/{data_collection.workflow_id}/{data_collection.data_collection_id}.pkl"
     # file_id = grid_fs.put(output, filename=filename_structure)
 
-    results = collections.defaultdict(dict)
+    results = list()
+
+    aggregated_df = aggregated_df.to_pandas()
 
     # For each column in the DataFrame
     for column in aggregated_df.columns:
+        tmp_dict = collections.defaultdict(dict)
+        tmp_dict["name"] = column
         # Identify the column data type
-        col_type = str(aggregated_df[column].dtype)
-        results[column]["type"] = col_type.lower()
-
+        col_type = str(aggregated_df[column].dtype).lower()
+        print(col_type)
+        tmp_dict["type"] = col_type.lower()
+        print(agg_functions)
         # Check if the type exists in the agg_functions dict
         if col_type in agg_functions:
             methods = agg_functions[col_type]["card_methods"]
@@ -224,19 +222,26 @@ async def aggregate_data(
             for method_name, method_info in methods.items():
                 print(column, method_name)
                 pandas_method = method_info["pandas"]
-
+                print(pandas_method)
                 # Check if the method is callable or a string
                 if callable(pandas_method):
                     result = pandas_method(aggregated_df[column])
+                    print(result)
                 elif isinstance(pandas_method, str):
                     result = getattr(aggregated_df[column], pandas_method)()
+                    print(result)
                 else:
                     continue  # Skip if method is not available
 
                 result = result.values if isinstance(result, np.ndarray) else result
+                print(result)
                 if method_name == "mode" and isinstance(result.values, np.ndarray):
                     result = result[0]
-                results[column][str(method_name)] = numpy_to_python(result)
+                tmp_dict["specs"][str(method_name)] = numpy_to_python(result)
+        results.append(tmp_dict)
+    print(results)
+    
+
 
     # Update the data_collection_config with the GridFS file_id
     workflows_collection.update_one(
@@ -244,8 +249,7 @@ async def aggregate_data(
         {
             "$set": {
                 "data_collections.$[elem].deltaTable": deltaTable.mongo(),
-                "data_collections.$[elem].columns_list": aggregated_df.columns,
-                "data_collections.$[elem].columns_specs": serialize_for_mongo(results),
+                "data_collections.$[elem].columns": serialize_for_mongo(results),
             }
         },
         array_filters=[{"elem._id": data_collection_oid}],
@@ -260,65 +264,65 @@ async def aggregate_data(
 
 
 
-@deltatables_endpoint_router.get("/query/{workflow_id}/{data_collection_id}")
-async def query_data(
-    workflow_id: str,
-    data_collection_id: str,
-    query: DeltaTableQuery,
-    current_user: str = Depends(get_current_user),
-):
-    """
-    Query the aggregated data from Delta Lake.
-    """
+# @deltatables_endpoint_router.get("/query/{workflow_id}/{data_collection_id}")
+# async def query_data(
+#     workflow_id: str,
+#     data_collection_id: str,
+#     query: DeltaTableQuery,
+#     current_user: str = Depends(get_current_user),
+# ):
+#     """
+#     Query the aggregated data from Delta Lake.
+#     """
 
-    (
-        workflow_oid,
-        data_collection_oid,
-        workflow,
-        data_collection,
-        user_oid,
-    ) = validate_workflow_and_collection(
-         workflows_collection, current_user.user_id, workflow_id, data_collection_id, 
-    )
+#     (
+#         workflow_oid,
+#         data_collection_oid,
+#         workflow,
+#         data_collection,
+#         user_oid,
+#     ) = validate_workflow_and_collection(
+#          workflows_collection, current_user.user_id, workflow_id, data_collection_id, 
+#     )
 
-    deltatable_location = data_collection.deltaTable.delta_table_location
-    print(deltatable_location, type(deltatable_location))
-    print(query.columns)
-
-
+#     deltatable_location = data_collection.deltaTable.delta_table_location
+#     print(deltatable_location, type(deltatable_location))
+#     print(query.columns)
 
 
-    # Lazily read the Delta table & perform the query
-    df = pl.scan_delta(str(deltatable_location))
-    df = df.select(query.columns)
 
 
-    # Build and apply combined filter expressions
-    filter_expressions = []
-    for col, condition in query.filters.items():
-        col_filter = None
-        if condition.above is not None:
-            col_filter = (pl.col(col) > condition.above)
-        if condition.equal is not None:
-            col_filter = col_filter & (pl.col(col) == condition.equal) if col_filter else (pl.col(col) == condition.equal)
-        if condition.under is not None:
-            col_filter = col_filter & (pl.col(col) < condition.under) if col_filter else (pl.col(col) < condition.under)
-
-        if col_filter is not None:
-            filter_expressions.append(col_filter)
-        print(col_filter)
-
-    print(filter_expressions)
-    if filter_expressions:
-        combined_filter = filter_expressions[0]
-        for expr in filter_expressions[1:]:
-            combined_filter = combined_filter & expr
-
-        print(combined_filter)
-        df = df.filter(combined_filter)
+#     # Lazily read the Delta table & perform the query
+#     df = pl.scan_delta(str(deltatable_location))
+#     df = df.select(query.columns)
 
 
-    return df.collect().to_dict()
+#     # Build and apply combined filter expressions
+#     filter_expressions = []
+#     for col, condition in query.filters.items():
+#         col_filter = None
+#         if condition.above is not None:
+#             col_filter = (pl.col(col) > condition.above)
+#         if condition.equal is not None:
+#             col_filter = col_filter & (pl.col(col) == condition.equal) if col_filter else (pl.col(col) == condition.equal)
+#         if condition.under is not None:
+#             col_filter = col_filter & (pl.col(col) < condition.under) if col_filter else (pl.col(col) < condition.under)
+
+#         if col_filter is not None:
+#             filter_expressions.append(col_filter)
+#         print(col_filter)
+
+#     print(filter_expressions)
+#     if filter_expressions:
+#         combined_filter = filter_expressions[0]
+#         for expr in filter_expressions[1:]:
+#             combined_filter = combined_filter & expr
+
+#         print(combined_filter)
+#         df = df.filter(combined_filter)
+
+
+#     return df.collect().to_dict()
 
     
 

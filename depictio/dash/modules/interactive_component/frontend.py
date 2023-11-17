@@ -16,7 +16,7 @@ from depictio.dash.utils import (
     list_data_collections_for_dropdown,
     list_workflows_for_dropdown,
     get_columns_from_data_collection,
-    load_gridfs_file,
+    load_deltatable,
 )
 
 
@@ -94,7 +94,7 @@ def register_callbacks_interactive_component(app):
         ):
             return []
 
-        df = load_gridfs_file(wf_id, dc_id)
+        df = load_deltatable(wf_id, dc_id)
         cols_json = get_columns_from_data_collection(wf_id, dc_id)
 
         # Get the type of the selected column

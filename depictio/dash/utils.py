@@ -16,12 +16,11 @@ import inspect
 import numpy as np
 import os, json
 import pandas as pd
+import polars as pl
 import plotly.express as px
 import re
 
 API_BASE_URL = "http://localhost:8058"
-
-
 
 
 SELECTED_STYLE = {
@@ -49,77 +48,57 @@ def load_data():
     return None
 
 
-def load_gridfs_file(workflow_id: str, data_collection_id: str, cols: list = None):
-    print(workflow_id, data_collection_id)
+token = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2NGE4NDI4NDJiZjRmYTdkZWFhM2RiZWQiLCJleHAiOjE3MDY4NTQzOTJ9.q3sJLcwEwes32JoeAEGQdjlaTnn6rC1xmfHs2jjwJuML1jWgWBzuv37fJDb70y7-pRaRjTojAz9iGcUPC91Zc9krbmO6fXedLVre8a4_TvsgVwZTSPXpikA_t6EeHYjVxCDh_FftGZv0hXeRbOV83ob7GykkUP5HWTuXrv_o8v4S8ccnsy3fVIIy51NZj6MuU4YL2BfPDuWdBp2d0IN2UDognt1wcwsjIt_26AQJQHwQaxDevvzlNA6RvQIcxC5Es5PSHfpaF7w4MxiZ6J-JE25EnQ7Fw1k-z7bsleb_30Qdh68Kjs-c-BOoTm_hxDF-15G9qLPhFTqJMl148oxAjw"
 
-    if workflow_id is None or data_collection_id is None:
-        response = httpx.get(f"{API_BASE_URL}/api/v1/workflows/get_workflows")
-        print(response)
-        if response.status_code == 200:
-            workflow_id = response.json()[0]["workflow_id"]
-            data_collection_id = response.json()[0]["data_collection_ids"][0]
-            print(response.json())
 
-        else:
-            print("No workflows found")
-            return None
+def list_workflows_for_dropdown():
+    workflows_model_list = list_workflows(token)
+    workflows = [wf["workflow_tag"] for wf in workflows_model_list]
+    workflows_dict_for_dropdown = [{"label": wf, "value": wf} for wf in workflows]
+    return workflows_dict_for_dropdown
 
-    print(workflow_id)
 
-    workflow_engine = workflow_id.split("/")[0]
-    workflow_name = workflow_id.split("/")[1]
+def list_data_collections_for_dropdown(workflow_tag: str = None):
+    if workflow_tag is None:
+        return []
+    else:
+        data_collections = [
+            dc["data_collection_tag"]
+            for wf in list_workflows(token)
+            for dc in wf["data_collections"]
+            if wf["workflow_tag"] == workflow_tag
+        ]
+        data_collections_dict_for_dropdown = [
+            {"label": dc, "value": dc} for dc in data_collections
+        ]
+        return data_collections_dict_for_dropdown
 
-    print(workflow_engine, workflow_name)
-    print(data_collection_id)
 
-    response = httpx.get(
-        f"{API_BASE_URL}/api/v1/datacollections/get_aggregated_file_id/{workflow_engine}/{workflow_name}/{data_collection_id}"
-    )
-    print(response)
-
-    if response.status_code == 200:
-        file_id = response.json()["gridfs_file_id"]
-
-        # Get the file from GridFS
-
-        # Check if present in redis cache otherwise load and save to redis
-
-        if redis_cache.exists(file_id):
-            print("Loading from redis cache")
-            # Convert the binary data to a BytesIO stream
-            data_stream = BytesIO(redis_cache.get(file_id))
-            if not cols:
-                df = pd.read_parquet(data_stream)
-            else:
-                df = pd.read_parquet(data_stream, columns=cols)
-
-        else:
-            print("Loading from gridfs")
-            associated_file = grid_fs.get(ObjectId(file_id))
-            if not cols:
-                df = pd.read_parquet(associated_file)
-            else:
-                df = pd.read_parquet(associated_file, columns=cols)
-            redis_cache.set(file_id, df.to_parquet())
-
-        return df
+# TODO: utils / config
 
 
 def get_columns_from_data_collection(
     workflow_id: str,
     data_collection_id: str,
 ):
-    print("get_columns_from_data_collection")
-    print(workflow_id, data_collection_id)
+
+    workflows = list_workflows(token)
+    workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_id][0]["_id"]
+    data_collection_id = [
+        f
+        for e in workflows
+        if e["_id"] == workflow_id
+        for f in e["data_collections"]
+        if f["data_collection_tag"] == data_collection_id
+    ][0]["_id"]
 
     if workflow_id is not None and data_collection_id is not None:
-        # print("OK")
-        # print(workflow_id, data_collection_id)
-        workflow_engine = workflow_id.split("/")[0]
-        workflow_name = workflow_id.split("/")[1]
-        # print(workflow_engine, workflow_name)
+
         response = httpx.get(
-            f"{API_BASE_URL}/api/v1/datacollections/get_columns/{workflow_engine}/{workflow_name}/{data_collection_id}"
+            f"{API_BASE_URL}/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
+            headers={
+                "Authorization": f"Bearer {token}",
+            },
         )
         # print(response)
         if response.status_code == 200:
@@ -131,28 +110,77 @@ def get_columns_from_data_collection(
             return None
 
 
-def list_workflows_for_dropdown():
-    workflows = [wf["workflow_id"] for wf in list_workflows()]
-    workflows_dict_for_dropdown = [{"label": wf, "value": wf} for wf in workflows]
-    print(workflows_dict_for_dropdown)
-    return workflows_dict_for_dropdown
+def load_deltatable(workflow_id: str, data_collection_id: str, cols: list = None):
 
+    workflows = list_workflows(token)
 
-def list_data_collections_for_dropdown(workflow_id: str = None):
-    if workflow_id is None:
-        return []
+    if workflow_id is None or data_collection_id is None:
+        default_workflow = workflows[0]
+        workflow_id = default_workflow["_id"]
+        data_collection_id = default_workflow["data_collections"][0]["_id"]
+        print(workflow_id, data_collection_id)
+    #     response = httpx.get(f"{API_BASE_URL}/api/v1/workflows/get", headers=headers)
+    #     print(response)
+    #     if response.status_code == 200:
+    #         print(response.json())
+    #         workflow_id = response.json()[0]["workflow_id"]
+    #         data_collection_id = response.json()[0]["data_collection_ids"][0]
+    #         print(response.json())
+
+    #     else:
+    #         print("No workflows found")
+    #         return None
+
     else:
-        data_collections = [
-            dc
-            for wf in list_workflows()
-            for dc in wf["data_collection_ids"]
-            if wf["workflow_id"] == workflow_id
-        ]
-        data_collections_dict_for_dropdown = [
-            {"label": dc, "value": dc} for dc in data_collections
-        ]
-        return data_collections_dict_for_dropdown
+        # find workflow_id and data_collection_id from workflow_tag and data_collection_tag
+
+        workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_id][0]["_id"]
+        data_collection_id = [
+            f
+            for e in workflows
+            if e["_id"] == workflow_id
+            for f in e["data_collections"]
+            if f["data_collection_tag"] == data_collection_id
+        ][0]["_id"]
 
 
-# TODO: utils / config
+    # print(workflow_id)
+
+    # workflow_engine = workflow_id.split("/")[0]
+    # workflow_name = workflow_id.split("/")[1]
+
+    # print(workflow_engine, workflow_name)
+    # print(data_collection_id)
+
+    response = httpx.get(
+        f"{API_BASE_URL}/api/v1/deltatables/get/{workflow_id}/{data_collection_id}",
+        headers={
+            "Authorization": f"Bearer {token}",
+        },
+    )
+
+    if response.status_code == 200:
+        file_id = response.json()["delta_table_location"]
+
+        # Get the file from GridFS
+
+        # Check if present in redis cache otherwise load and save to redis
+
+        if redis_cache.exists(file_id):
+            print("Loading from redis cache")
+            data_stream = BytesIO(redis_cache.get(file_id))
+            data_stream.seek(0)  # Important: reset stream position to the beginning
+            df = pl.read_parquet(data_stream, columns=cols if cols else None)
+            print(df)
+        else:
+            print("Loading from DeltaTable")
+            df = pl.read_delta(file_id, columns=cols if cols else None)
+
+            # Convert DataFrame to parquet and then to bytes
+            output_stream = BytesIO()
+            df.write_parquet(output_stream)
+            output_stream.seek(0)  # Reset stream position after writing
+            redis_cache.set(file_id, output_stream.read())
+        return df
+
 

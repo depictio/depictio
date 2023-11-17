@@ -45,7 +45,7 @@ data_collection_config_collection = db["data_collection_config"]
 users_collection = db["users"]
 
 
-@workflows_endpoint_router.get("/get", response_model=List[Workflow])
+@workflows_endpoint_router.get("/get")
 # @workflows_endpoint_router.get("/get_workflows", response_model=List[Workflow])
 async def get_workflows(current_user: str = Depends(get_current_user)):
     # Assuming the 'current_user' now holds a 'user_id' as an ObjectId after being parsed in 'get_current_user'

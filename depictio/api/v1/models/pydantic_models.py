@@ -38,6 +38,7 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     user_id: PyObjectId
     exp: Optional[int] = None
+    is_admin: bool = False
 
 
 ###################
@@ -271,15 +272,17 @@ class DataCollectionConfig(BaseModel):
 
 
 class DataCollectionColumn(MongoModel):
-    column_name: str
-    column_type: str
-    column_description: Optional[str] = None  # Optional description
+    name: str
+    type: str
+    description: Optional[str] = None  # Optional description
+    specs: Optional[Dict] = None
 
-    @validator("column_type")
+    @validator("type")
     def validate_column_type(cls, v):
         allowed_values = [
             "string",
-            "object"
+            "utf8",
+            "object",
             "int64",
             "float64",
             "bool",
