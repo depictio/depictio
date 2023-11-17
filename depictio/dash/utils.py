@@ -43,7 +43,7 @@ def load_data():
     if os.path.exists("data.json"):
         with open("data.json", "r") as file:
             data = json.load(file)
-            print(data)
+            # print(data)
         return data
     return None
 
@@ -82,8 +82,8 @@ def get_columns_from_data_collection(
     data_collection_id: str,
 ):
     
-    print("\n\n\n")
-    print("get_columns_from_data_collection")
+    # print("\n\n\n")
+    # print("get_columns_from_data_collection")
 
     workflows = list_workflows(token)
     workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_id][0]["_id"]
@@ -127,7 +127,7 @@ def load_deltatable(workflow_id: str, data_collection_id: str, cols: list = None
         default_workflow = workflows[0]
         workflow_id = default_workflow["_id"]
         data_collection_id = default_workflow["data_collections"][0]["_id"]
-        print(workflow_id, data_collection_id)
+        # print(workflow_id, data_collection_id)
     #     response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/workflows/get", headers=headers)
     #     print(response)
     #     if response.status_code == 200:
@@ -180,7 +180,7 @@ def load_deltatable(workflow_id: str, data_collection_id: str, cols: list = None
             data_stream = BytesIO(redis_cache.get(file_id))
             data_stream.seek(0)  # Important: reset stream position to the beginning
             df = pl.read_parquet(data_stream, columns=cols if cols else None)
-            print(df)
+            # print(df)
         else:
             print("Loading from DeltaTable")
             df = pl.read_delta(file_id, columns=cols if cols else None)

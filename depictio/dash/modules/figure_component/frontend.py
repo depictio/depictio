@@ -467,14 +467,14 @@ def register_callbacks_figure_component(app):
         # prevent_initial_call=True,
     )
     def update_figure(*args):
-        print("\n\n\n")
-        print("update_figure")
+        # print("\n\n\n")
+        # print("update_figure")
         dict_kwargs = args[0]
 
         visu_type = args[1]
         workflow = args[2]
         data_collection = args[3]
-        print(args)
+        # print(args)
 
         columns_json = get_columns_from_data_collection(workflow, data_collection)
         # print(columns_json, type(columns_json))
@@ -484,7 +484,7 @@ def register_callbacks_figure_component(app):
             columns_specs_reformatted[v["type"]].append(k)
             for k, v in columns_json.items()
         }
-        print(columns_specs_reformatted)
+        # print(columns_specs_reformatted)
 
         x_col, color_col, y_col = None, None, None
 
@@ -500,7 +500,7 @@ def register_callbacks_figure_component(app):
         # if dict_kwargs is empty, fill it with default values
         if not dict_kwargs:
             dict_kwargs = {"x": x_col, "y": y_col, "color": color_col}
-            print(dict_kwargs)
+            # print(dict_kwargs)
 
         # print("update figure")
         # print(dict_kwargs)
@@ -510,14 +510,14 @@ def register_callbacks_figure_component(app):
         # print(dict_kwargs)
         dict_kwargs = {k: v for k, v in dict_kwargs.items() if v is not None}
         df = load_deltatable(workflow, data_collection)
-        print("\n\n\n")
+        # print("\n\n\n")
         # print(dict_kwargs)
         if dict_kwargs:
             figure = plotly_vizu_dict[visu_type.lower()](df, **dict_kwargs)
             # figure = px.scatter(df, **dict_kwargs)
             # print(figure)
             # figure.update_layout(uirevision=1)
-            print("TOTO")
+            # print("TOTO")
 
             return figure
         # print("\n")

@@ -33,7 +33,7 @@ def register_callbacks_interactive_component(app):
     )
     def update_aggregation_options(column_value, wf_id, dc_id):
         cols_json = get_columns_from_data_collection(wf_id, dc_id)
-        print(cols_json)
+        # print(cols_json)
 
         if column_value is None:
             return []

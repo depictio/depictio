@@ -34,8 +34,8 @@ def register_callbacks_card_component(app):
         prevent_initial_call=True,
     )
     def update_aggregation_options(column_value, wf_id, dc_id):
-        print("update_aggregation_options", column_value)
-        print("\n\n")
+        # print("update_aggregation_options", column_value)
+        # print("\n\n")
 
         cols_json = get_columns_from_data_collection(wf_id, dc_id)
 
@@ -97,7 +97,7 @@ def register_callbacks_card_component(app):
         func_name = agg_functions[column_type]["card_methods"][aggregation_value][
             "pandas"
         ]
-        print(column_value, aggregation_value, func_name)
+        # print(column_value, aggregation_value, func_name)
 
         v = cols_json[column_value]["specs"][aggregation_value]
 
