@@ -79,7 +79,7 @@ async def list_registered_files(
     query = {"_id": workflow_oid, "data_collections._id": data_collection_oid}
     deltatable_cursor = workflows_collection.find(query, {"data_collections.$": 1})
     deltatable = list(deltatable_cursor)[0]["data_collections"][0]["deltaTable"]
-    print(deltatable)
+    # print(deltatable)
 
 
     return convert_objectid_to_str(deltatable)

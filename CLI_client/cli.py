@@ -154,7 +154,7 @@ def list_workflows(
     workflows = httpx.get(f"{API_BASE_URL}/depictio/api/v1/workflows/get", headers=headers)
     workflows_json = workflows.json()
     pretty_workflows = json.dumps(workflows_json, indent=4)
-    typer.echo(pretty_workflows)
+    # typer.echo(pretty_workflows)
     return workflows_json
 
 

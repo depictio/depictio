@@ -69,7 +69,7 @@ register_callbacks_stepper(app)
 
 from depictio.dash.utils import (
     # create_initial_figure,
-    # load_data,
+    load_data,
     load_deltatable,
     list_workflows_for_dropdown,
     list_data_collections_for_dropdown,
@@ -108,8 +108,8 @@ backend_components = html.Div(
             interval=50000,  # Save input value every 1 second
             n_intervals=0,
         ),
-        dcc.Store(id="stored-children", storage_type="memory"),
-        dcc.Store(id="stored-layout", storage_type="memory"),
+        dcc.Store(id="stored-children", storage_type="session"),
+        dcc.Store(id="stored-layout", storage_type="session"),
     ]
 )
 
@@ -177,15 +177,21 @@ header = html.Div(
         ),
         dcc.Store(
             id="stored-edit-dashboard-mode-button",
-            storage_type="memory",
+            storage_type="session",
             data={"count": 0},
         ),
     ],
 )
 
 
-init_layout = dict()
-init_children = list()
+# init_layout = dict()
+# init_children = list()
+
+
+data = load_data()
+init_layout = data["stored_layout_data"] if data else {}
+init_children = data["stored_children_data"] if data else list()
+
 app.layout = dbc.Container(
     [
         html.Div(
@@ -382,7 +388,7 @@ def analyze_structure(struct, depth=0):
     """
 
     if isinstance(struct, list):
-        print("  " * depth + f"Depth {depth} Type: List with {len(struct)} elements")
+        # print("  " * depth + f"Depth {depth} Type: List with {len(struct)} elements")
         for idx, child in enumerate(struct):
             print(
                 "  " * depth
@@ -480,8 +486,8 @@ def freeze_layout(value):
     prevent_initial_call=True,
 )
 def update(back, next_, workflow_selection, data_selection, btn_component, current):
-    print("update")
-    print(back, next_, current, workflow_selection, data_selection, btn_component)
+    # print("update")
+    # print(back, next_, current, workflow_selection, data_selection, btn_component)
 
     if back is None and next_ is None:
         if workflow_selection is not None and data_selection is not None:
@@ -489,11 +495,11 @@ def update(back, next_, workflow_selection, data_selection, btn_component, curre
         else:
             disable_next = True
 
-        print(current, disable_next)
+        # print(current, disable_next)
         return current, disable_next
     else:
         button_id = ctx.triggered_id
-        print(button_id)
+        # print(button_id)
         step = current if current is not None else active
 
         if button_id["type"] == "back-basic-usage":
@@ -556,12 +562,12 @@ def update_step_2(workflow_selection, data_collection_selection):
         cols = get_columns_from_data_collection(
             workflow_selection, data_collection_selection
         )
-        print(cols)
+        # print(cols)
         columnDefs = [
             {"field": c, "headerTooltip": f"Column type: {e['type']}"}
             for c, e in cols.items()
         ]
-        print(columnDefs)
+        # print(columnDefs)
         run_nb = cols["depictio_run_id"]["specs"]["nunique"]
         run_nb_title = dmc.Title(
             f"Run Nb : {run_nb}", order=3, align="left", weight=500
@@ -570,7 +576,7 @@ def update_step_2(workflow_selection, data_collection_selection):
         data_previz_title = dmc.Title(
             "Data previsualization", order=3, align="left", weight=500
         )
-        print(df.head(20).to_dict("records"))
+        # print(df.head(20).to_dict("records"))
         grid = dag.AgGrid(
             id="get-started-example-basic",
             rowData=df.head(20).to_dict("records"),
@@ -578,7 +584,7 @@ def update_step_2(workflow_selection, data_collection_selection):
             dashGridOptions={"tooltipShowDelay": 500},
         )
         layout = [run_nb_title, html.Hr(), data_previz_title, html.Hr(), grid]
-        print(layout)
+        # print(layout)
         return layout
     else:
         return html.Div()
@@ -607,7 +613,7 @@ def update_step_2(
         and data_collection_selection is not None
         and btn_component is not None
     ):
-        print("update_step_2")
+        # print("update_step_2")
         # retrieve value in btn_component that is higher than the previous value in store_btn_component at the same index
         btn_index = [
             i
@@ -1099,31 +1105,34 @@ def update_draggable_children(
         #     updated_draggable_children,
         # )
 
-    # elif triggered_input == "stored-layout" or triggered_input == "stored-children":
-    #     if stored_layout_data and stored_children_data:
-    #         return (
-    #             stored_children_data,
-    #             stored_layout_data,
-    #             stored_layout_data,
-    #             stored_children_data,
-    #         )
-    #     else:
-    #         # Load data from the file if it exists
-    #         loaded_data = load_data()
-    #         if loaded_data:
-    #             return (
-    #                 loaded_data["stored_children_data"],
-    #                 loaded_data["stored_layout_data"],
-    #                 loaded_data["stored_layout_data"],
-    #                 loaded_data["stored_children_data"],
-    #             )
-    #         else:
-    #             return (
-    #                 current_draggable_children,
-    #                 {},
-    #                 stored_layout,
-    #                 stored_figures,
-    #             )
+    elif triggered_input == "stored-layout" or triggered_input == "stored-children":
+        if stored_layout_data and stored_children_data:
+            return (
+                stored_children_data,
+                stored_layout_data,
+                stored_layout_data,
+                stored_children_data,
+                stored_edit_dashboard,
+            )
+        else:
+            # Load data from the file if it exists
+            loaded_data = load_data()
+            if loaded_data:
+                return (
+                    loaded_data["stored_children_data"],
+                    loaded_data["stored_layout_data"],
+                    loaded_data["stored_layout_data"],
+                    loaded_data["stored_children_data"],
+                    stored_edit_dashboard,
+                )
+            else:
+                return (
+                    current_draggable_children,
+                    {},
+                    stored_layout,
+                    stored_figures,
+                    stored_edit_dashboard,
+                )
 
     elif triggered_input == "draggable":
         return (
