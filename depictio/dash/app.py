@@ -87,7 +87,6 @@ def return_deltatable(workflow_id: str = None, data_collection_id: str = None):
     return df
 
 
-
 df = load_deltatable(workflow_id=None, data_collection_id=None)
 
 
@@ -556,16 +555,14 @@ def update_step_2(workflow_selection, data_collection_selection):
         df = return_deltatable(workflow_selection, data_collection_selection)
         cols = get_columns_from_data_collection(
             workflow_selection, data_collection_selection
-        )["columns"]
+        )
         print(cols)
-        cols_type = [c["type"] for c in cols]
         columnDefs = [
-            {"field": c, "headerTooltip": f"Column type: {e}"}
-            for (c, e) in zip(list(df.columns), list(cols_type))
+            {"field": c, "headerTooltip": f"Column type: {e['type']}"}
+            for c, e in cols.items()
         ]
         print(columnDefs)
-
-        run_nb = cols["columns_specs"]["depictio_run_id"]["nunique"]
+        run_nb = cols["depictio_run_id"]["specs"]["nunique"]
         run_nb_title = dmc.Title(
             f"Run Nb : {run_nb}", order=3, align="left", weight=500
         )
@@ -573,6 +570,7 @@ def update_step_2(workflow_selection, data_collection_selection):
         data_previz_title = dmc.Title(
             "Data previsualization", order=3, align="left", weight=500
         )
+        print(df.head(20).to_dict("records"))
         grid = dag.AgGrid(
             id="get-started-example-basic",
             rowData=df.head(20).to_dict("records"),
@@ -580,6 +578,7 @@ def update_step_2(workflow_selection, data_collection_selection):
             dashGridOptions={"tooltipShowDelay": 500},
         )
         layout = [run_nb_title, html.Hr(), data_previz_title, html.Hr(), grid]
+        print(layout)
         return layout
     else:
         return html.Div()

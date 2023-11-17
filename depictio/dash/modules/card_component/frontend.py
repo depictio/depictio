@@ -43,7 +43,7 @@ def register_callbacks_card_component(app):
             return []
 
         # Get the type of the selected column
-        column_type = cols_json["columns_specs"][column_value]["type"]
+        column_type = cols_json[column_value]["type"]
         # print(column_value, column_type, type(column_type))
 
         # Get the aggregation functions available for the selected column type
@@ -91,7 +91,7 @@ def register_callbacks_card_component(app):
         cols_json = get_columns_from_data_collection(wf_id, dc_id)
 
         # Get the type of the selected column
-        column_type = cols_json["columns_specs"][column_value]["type"]
+        column_type = cols_json[column_value]["type"]
 
         # Get the pandas function for the selected aggregation
         func_name = agg_functions[column_type]["card_methods"][aggregation_value][
@@ -99,7 +99,7 @@ def register_callbacks_card_component(app):
         ]
         print(column_value, aggregation_value, func_name)
 
-        v = cols_json["columns_specs"][column_value][aggregation_value]
+        v = cols_json[column_value]["specs"][aggregation_value]
 
         # if callable(func_name):
         #     # If the function is a lambda function

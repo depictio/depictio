@@ -201,6 +201,7 @@ async def aggregate_data(
 
     results = list()
 
+    # TODO: performance improvement: use polars instead of pandas
     aggregated_df = aggregated_df.to_pandas()
 
     # For each column in the DataFrame

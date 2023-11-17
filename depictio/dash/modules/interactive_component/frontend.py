@@ -38,14 +38,14 @@ def register_callbacks_interactive_component(app):
         if column_value is None:
             return []
 
-        column_type = cols_json["columns_specs"][column_value]["type"]
+        column_type = cols_json[column_value]["type"]
 
         # Get the type of the selected column
         # column_type = df[column_value].dtype
         # print(column_value, column_type, type(column_type))
 
         if column_type in ["object", "category"]:
-            nb_unique = cols_json["columns_specs"][column_value]["nunique"]
+            nb_unique = cols_json[column_value]["specs"]["nunique"]
         else:
             nb_unique = 0
 
@@ -99,7 +99,7 @@ def register_callbacks_interactive_component(app):
 
         # Get the type of the selected column
         # column_type = str(df[column_value].dtype)
-        column_type = cols_json["columns_specs"][column_value]["type"]
+        column_type = cols_json[column_value]["type"]
 
         # Get the pandas function for the selected aggregation
         func_name = agg_functions[column_type]["input_methods"][aggregation_value][
@@ -148,8 +148,8 @@ def register_callbacks_interactive_component(app):
             return new_card_body
 
         elif aggregation_value in ["Slider", "RangeSlider"]:
-            min_value = cols_json["columns_specs"][column_value]["min"]
-            max_value = cols_json["columns_specs"][column_value]["max"]
+            min_value = cols_json[column_value]["specs"]["min"]
+            max_value = cols_json[column_value]["specs"]["max"]
 
             # min_value = df[column_value].min()
             # max_value = df[column_value].max()
