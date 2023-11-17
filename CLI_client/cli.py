@@ -125,14 +125,34 @@ def create_workflow(
 
 
 @app.command()
-def list_workflows():
+def list_workflows(
+
+    token: str = typer.Option(
+        None,  # Default to None (not specified)
+        "--token",
+        help="Optionally specify a token to be used for authentication",
+    ),
+):
     """
     List all workflows.
     """
-    workflows = httpx.get(f"{API_BASE_URL}/api/v1/workflows/get")
-    print(workflows)
+
+
+    if not token:
+        typer.echo("A valid token must be provided for authentication.")
+        raise typer.Exit(code=1)
+
+    user = return_user_from_token(token)  # Decode the token to get the user information
+    if not user:
+        typer.echo("Invalid token or unable to decode user information.")
+        raise typer.Exit(code=1)
+
+    # Set permissions with the user as both owner and viewer
+    headers = {"Authorization": f"Bearer {token}"}  # Token is now mandatory
+
+
+    workflows = httpx.get(f"{API_BASE_URL}/api/v1/workflows/get", headers=headers)
     workflows_json = workflows.json()
-    print(workflows_json)
     pretty_workflows = json.dumps(workflows_json, indent=4)
     typer.echo(pretty_workflows)
     return workflows_json

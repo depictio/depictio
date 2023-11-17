@@ -70,7 +70,7 @@ register_callbacks_stepper(app)
 from depictio.dash.utils import (
     # create_initial_figure,
     # load_data,
-    load_gridfs_file,
+    load_deltatable,
     list_workflows_for_dropdown,
     list_data_collections_for_dropdown,
     get_columns_from_data_collection,
@@ -81,15 +81,14 @@ from depictio.dash.utils import (
 # Data
 
 
-def return_gridfs_df(workflow_id: str = None, data_collection_id: str = None):
-    df = load_gridfs_file(workflow_id, data_collection_id)
+def return_deltatable(workflow_id: str = None, data_collection_id: str = None):
+    df = load_deltatable(workflow_id, data_collection_id)
     # print(df)
     return df
 
 
-# df = return_gridfs_df()
 
-df = load_gridfs_file(workflow_id=None, data_collection_id=None)
+df = load_deltatable(workflow_id=None, data_collection_id=None)
 
 
 # df = pd.read_csv(
@@ -554,11 +553,12 @@ def update_button_style(figure_clicks, card_clicks, interactive_clicks):
 )
 def update_step_2(workflow_selection, data_collection_selection):
     if workflow_selection is not None and data_collection_selection is not None:
-        df = return_gridfs_df(workflow_selection, data_collection_selection)
+        df = return_deltatable(workflow_selection, data_collection_selection)
         cols = get_columns_from_data_collection(
             workflow_selection, data_collection_selection
-        )
-        cols_type = [cols["columns_specs"][c]["type"] for c in cols["columns_list"]]
+        )["columns"]
+        print(cols)
+        cols_type = [c["type"] for c in cols]
         columnDefs = [
             {"field": c, "headerTooltip": f"Column type: {e}"}
             for (c, e) in zip(list(df.columns), list(cols_type))
@@ -616,7 +616,7 @@ def update_step_2(
             if x > y
         ]
         if btn_index:
-            df = return_gridfs_df(workflow_selection, data_collection_selection)
+            df = return_deltatable(workflow_selection, data_collection_selection)
 
             components_list = ["Figure", "Card", "Interactive", "Genome browser"]
             component_selected = components_list[btn_index[0]]

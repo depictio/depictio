@@ -35,7 +35,7 @@ from depictio.dash_frontend.utils import (
 from depictio.dash_frontend.utils import (
     create_initial_figure,
     load_data,
-    load_gridfs_file,
+    load_deltatable,
     list_workflows_for_dropdown,
     list_data_collections_for_dropdown,
     get_columns_from_data_collection,
@@ -45,7 +45,7 @@ from depictio.dash_frontend.utils import (
 
 
 def return_gridfs_df(workflow_id: str = None, data_collection_id: str = None):
-    df = load_gridfs_file(workflow_id, data_collection_id)
+    df = load_deltatable(workflow_id, data_collection_id)
     # print(df)
     return df
 

@@ -7,6 +7,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import jwt, JWTError
 from pydantic import BaseModel, ValidationError
 from datetime import datetime, timedelta
+from werkzeug.security import check_password_hash
 
 from depictio.api.v1.models.pydantic_models import PyObjectId, TokenData, Token, User
 
@@ -33,8 +34,10 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"/api/v1/auth/token")
 
 # Helper function to verify password (modify this to hash verification in production)
 def verify_password(plain_password, hashed_password):
-    # In production, use: return pwd_context.verify(plain_password, hashed_password)
-    return plain_password == hashed_password
+    return check_password_hash(
+        hashed_password,
+        plain_password,
+    )
 
 
 # Authentication function

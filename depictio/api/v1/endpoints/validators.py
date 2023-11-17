@@ -32,7 +32,15 @@ def validate_workflow_and_collection(collection, user_id: str, workflow_id: str,
 
     workflow_cursor = collection.find_one(query)
     print(workflow_cursor)
+    print("\n\n\n")
+    print("validate_workflow_and_collection")
+    print(query)
+    print(workflow_cursor)
+
+
     workflow = Workflow.from_mongo(workflow_cursor)
+    print(workflow)
+    print("\n\n\n")
 
     if not workflow_cursor:
         raise HTTPException(
