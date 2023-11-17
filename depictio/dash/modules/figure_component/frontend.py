@@ -71,7 +71,9 @@ def register_callbacks_figure_component(app):
         columns_json = get_columns_from_data_collection(workflow, data_collection)
         # print(columns_json)
 
-        columns = columns_json["columns_list"]
+        columns = list(columns_json.keys())
+
+
         # print(columns)
         # print("\n\n\n")
 
@@ -476,12 +478,11 @@ def register_callbacks_figure_component(app):
 
         columns_json = get_columns_from_data_collection(workflow, data_collection)
         # print(columns_json, type(columns_json))
-        print(columns_json["columns_specs"])
 
         columns_specs_reformatted = collections.defaultdict(list)
         {
             columns_specs_reformatted[v["type"]].append(k)
-            for k, v in columns_json["columns_specs"].items()
+            for k, v in columns_json.items()
         }
         print(columns_specs_reformatted)
 

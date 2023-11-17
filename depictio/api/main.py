@@ -17,5 +17,5 @@ app.add_middleware(
 )
 
 api_version = "v1"
-api_prefix = f"/api/{api_version}"
+api_prefix = f"/depictio/api/{api_version}"
 app.include_router(router, prefix=api_prefix)

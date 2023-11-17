@@ -111,7 +111,7 @@ def create_workflow(
 
 
     response = httpx.post(
-        f"{API_BASE_URL}/api/v1/workflows/create",
+        f"{API_BASE_URL}/depictio/api/v1/workflows/create",
         json=workflow_data_dict,
         headers=headers,
     )
@@ -151,7 +151,7 @@ def list_workflows(
     headers = {"Authorization": f"Bearer {token}"}  # Token is now mandatory
 
 
-    workflows = httpx.get(f"{API_BASE_URL}/api/v1/workflows/get", headers=headers)
+    workflows = httpx.get(f"{API_BASE_URL}/depictio/api/v1/workflows/get", headers=headers)
     workflows_json = workflows.json()
     pretty_workflows = json.dumps(workflows_json, indent=4)
     typer.echo(pretty_workflows)
@@ -246,7 +246,7 @@ def scan_files_from_data_collection(
     # print(data_payload_json)
     # print(data_payload["data_collection"])
     response = httpx.post(
-        f"{API_BASE_URL}/api/v1/files/scan/{workflow_id}/{data_collection_id}",
+        f"{API_BASE_URL}/depictio/api/v1/files/scan/{workflow_id}/{data_collection_id}",
         # json=data_payload_json,
         headers=headers,
     )
@@ -342,7 +342,7 @@ def create_deltatable(
     # print(data_payload_json, type(data_payload_json))
 
     response = httpx.post(
-        f"{API_BASE_URL}/api/v1/deltatables/create/{workflow_id}/{data_collection_id}",
+        f"{API_BASE_URL}/depictio/api/v1/deltatables/create/{workflow_id}/{data_collection_id}",
         # json=data_payload_json,
         headers=headers,
     )
@@ -400,7 +400,7 @@ def list_files_for_data_collection(
     headers = {"Authorization": f"Bearer {token}"}  # Token is now mandatory
 
     response = httpx.get(
-        f"{API_BASE_URL}/api/v1/files/list/{workflow_id}/{data_collection_id}",
+        f"{API_BASE_URL}/depictio/api/v1/files/list/{workflow_id}/{data_collection_id}",
         # json=data_payload_json,
         headers=headers,
     )
@@ -446,7 +446,7 @@ def delete_files_for_data_collection(
     headers = {"Authorization": f"Bearer {token}"}  # Token is now mandatory
 
     response = httpx.get(
-        f"{API_BASE_URL}/api/v1/files/list/{workflow_id}/{data_collection_id}",
+        f"{API_BASE_URL}/depictio/api/v1/files/list/{workflow_id}/{data_collection_id}",
         # json=data_payload_json,
         headers=headers,
     )
@@ -505,7 +505,7 @@ def get_aggregated_file(
         data_payload = data_collection.dict()
 
         response = httpx.get(
-            f"{API_BASE_URL}/api/v1/deltatables/get",
+            f"{API_BASE_URL}/depictio/api/v1/deltatables/get",
             params=data_payload,
         )
         print(response)

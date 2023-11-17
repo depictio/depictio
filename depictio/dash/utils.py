@@ -81,6 +81,9 @@ def get_columns_from_data_collection(
     workflow_id: str,
     data_collection_id: str,
 ):
+    
+    print("\n\n\n")
+    print("get_columns_from_data_collection")
 
     workflows = list_workflows(token)
     workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_id][0]["_id"]
@@ -95,7 +98,7 @@ def get_columns_from_data_collection(
     if workflow_id is not None and data_collection_id is not None:
 
         response = httpx.get(
-            f"{API_BASE_URL}/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
+            f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
             headers={
                 "Authorization": f"Bearer {token}",
             },
@@ -103,8 +106,14 @@ def get_columns_from_data_collection(
         # print(response)
         if response.status_code == 200:
             json = response.json()
-            # print(json)
-            return json
+            
+            json_cols = json["columns"]
+            reformat_cols = collections.defaultdict(dict)
+            for c in json_cols:
+                reformat_cols[c["name"]]["type"] = c["type"]
+                reformat_cols[c["name"]]["description"] = c["description"]
+                reformat_cols[c["name"]]["specs"] = c["specs"]
+            return reformat_cols
         else:
             print("No workflows found")
             return None
@@ -119,7 +128,7 @@ def load_deltatable(workflow_id: str, data_collection_id: str, cols: list = None
         workflow_id = default_workflow["_id"]
         data_collection_id = default_workflow["data_collections"][0]["_id"]
         print(workflow_id, data_collection_id)
-    #     response = httpx.get(f"{API_BASE_URL}/api/v1/workflows/get", headers=headers)
+    #     response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/workflows/get", headers=headers)
     #     print(response)
     #     if response.status_code == 200:
     #         print(response.json())
@@ -153,7 +162,7 @@ def load_deltatable(workflow_id: str, data_collection_id: str, cols: list = None
     # print(data_collection_id)
 
     response = httpx.get(
-        f"{API_BASE_URL}/api/v1/deltatables/get/{workflow_id}/{data_collection_id}",
+        f"{API_BASE_URL}/depictio/api/v1/deltatables/get/{workflow_id}/{data_collection_id}",
         headers={
             "Authorization": f"Bearer {token}",
         },
@@ -181,6 +190,8 @@ def load_deltatable(workflow_id: str, data_collection_id: str, cols: list = None
             df.write_parquet(output_stream)
             output_stream.seek(0)  # Reset stream position after writing
             redis_cache.set(file_id, output_stream.read())
+        # TODO: move to polars
+        df = df.to_pandas()
         return df
 
 
