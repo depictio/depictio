@@ -315,7 +315,7 @@ def register_callbacks_figure_component(app):
             return True
 
     @app.callback(
-        Output({"type": "dict_kwargs", "index": MATCH}, "value"),
+        Output({"type": "dict_kwargs", "index": MATCH}, "data"),
         [
             Input({"type": "collapse", "index": MATCH}, "children"),
             # Input("interval", "n_intervals"),
@@ -333,6 +333,9 @@ def register_callbacks_figure_component(app):
         # visu_type = args[1]
         # print(children)
         existing_kwargs = args[-1]
+        print('\n\n\n')
+        print("existing_kwargs")
+        print(existing_kwargs)
 
         accordion_primary_common_params_args = dict()
         accordion_secondary_common_params_args = dict()
@@ -453,7 +456,7 @@ def register_callbacks_figure_component(app):
     @app.callback(
         Output({"type": "graph", "index": MATCH}, "figure"),
         [
-            Input({"type": "dict_kwargs", "index": MATCH}, "value"),
+            Input({"type": "dict_kwargs", "index": MATCH}, "data"),
             Input({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
             State({"type": "workflow-selection-label", "index": MATCH}, "value"),
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),

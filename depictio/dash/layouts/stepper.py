@@ -39,9 +39,11 @@ def register_callbacks_stepper(app):
             _type_: _description_
         """
         tmp_data = list_workflows_for_dropdown()
+        print("\n\n\n")
         print("set_workflow_options")
 
         print(tmp_data)
+        print("\n\n\n")
 
         # Return the data and the first value if the data is not empty
         if tmp_data:
@@ -68,6 +70,10 @@ def register_callbacks_stepper(app):
         Returns:
             _type_: _description_
         """
+        print("\n\n\n")
+        print("set_datacollection_options")
+        print(selected_workflow)
+        print("\n\n\n")
         if not selected_workflow:
             raise dash.exceptions.PreventUpdate
 
