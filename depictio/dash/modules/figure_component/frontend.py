@@ -333,9 +333,9 @@ def register_callbacks_figure_component(app):
         # visu_type = args[1]
         # print(children)
         existing_kwargs = args[-1]
-        print('\n\n\n')
-        print("existing_kwargs")
-        print(existing_kwargs)
+        # print('\n\n\n')
+        # print("existing_kwargs")
+        # print(existing_kwargs)
 
         accordion_primary_common_params_args = dict()
         accordion_secondary_common_params_args = dict()

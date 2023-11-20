@@ -39,11 +39,11 @@ def register_callbacks_stepper(app):
             _type_: _description_
         """
         tmp_data = list_workflows_for_dropdown()
-        print("\n\n\n")
-        print("set_workflow_options")
+        # print("\n\n\n")
+        # print("set_workflow_options")
 
-        print(tmp_data)
-        print("\n\n\n")
+        # print(tmp_data)
+        # print("\n\n\n")
 
         # Return the data and the first value if the data is not empty
         if tmp_data:
@@ -70,16 +70,16 @@ def register_callbacks_stepper(app):
         Returns:
             _type_: _description_
         """
-        print("\n\n\n")
-        print("set_datacollection_options")
-        print(selected_workflow)
-        print("\n\n\n")
+        # print("\n\n\n")
+        # print("set_datacollection_options")
+        # print(selected_workflow)
+        # print("\n\n\n")
         if not selected_workflow:
             raise dash.exceptions.PreventUpdate
 
         tmp_data = list_data_collections_for_dropdown(selected_workflow)
-        print("set_datacollection_options")
-        print(tmp_data)
+        # print("set_datacollection_options")
+        # print(tmp_data)
 
         # Return the data and the first value if the data is not empty
         if tmp_data:
@@ -213,10 +213,10 @@ def create_stepper_buttons(n):
         dmc.Center(dbc.Row(special_components)),
     ]
 
-    print(store_list + buttons_list)
+    # print(store_list + buttons_list)
 
     stepper_buttons = dbc.Row(store_list + buttons_list)
-    print(stepper_buttons)
+    # print(stepper_buttons)
     return stepper_buttons
 
 
