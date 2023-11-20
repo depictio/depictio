@@ -43,7 +43,7 @@ def load_data():
     if os.path.exists("data.json"):
         with open("data.json", "r") as file:
             data = json.load(file)
-            # print(data)
+            # print(data.keys())
         return data
     return None
 
@@ -176,13 +176,13 @@ def load_deltatable(workflow_id: str, data_collection_id: str, cols: list = None
         # Check if present in redis cache otherwise load and save to redis
 
         if redis_cache.exists(file_id):
-            print("Loading from redis cache")
+            # print("Loading from redis cache")
             data_stream = BytesIO(redis_cache.get(file_id))
             data_stream.seek(0)  # Important: reset stream position to the beginning
             df = pl.read_parquet(data_stream, columns=cols if cols else None)
             # print(df)
         else:
-            print("Loading from DeltaTable")
+            # print("Loading from DeltaTable")
             df = pl.read_delta(file_id, columns=cols if cols else None)
 
             # Convert DataFrame to parquet and then to bytes

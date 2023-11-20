@@ -96,6 +96,19 @@ df = load_deltatable(workflow_id=None, data_collection_id=None)
 # print(df)
 
 
+data = load_data()
+init_layout = data["stored_layout_data"] if data else {}
+init_children = data["stored_children_data"] if data else list()
+init_nclicks_add_button = data["stored-add-button"] if data else {"count": 0}
+init_nclicks_edit_dashboard_mode_button = (
+    data["stored_edit_dashboard_mode_button"] if data else [0]
+)
+print("stored_add_button")
+print(data["stored-add-button"])
+print("stored_edit_dashboard_mode_button")
+print(data["stored_edit_dashboard_mode_button"])
+
+
 backend_components = html.Div(
     [
         dcc.Interval(
@@ -150,7 +163,7 @@ header = html.Div(
             size="lg",
             radius="xl",
             variant="gradient",
-            n_clicks=0,
+            n_clicks=init_nclicks_add_button,
         ),
         modal_save_button,
         dmc.Button(
@@ -172,8 +185,13 @@ header = html.Div(
             options=[
                 {"label": "Edit dashboard", "value": 0},
             ],
-            value=[0],
+            value=init_nclicks_edit_dashboard_mode_button,
             switch=True,
+        ),
+        dcc.Store(
+            id="stored-add-button",
+            storage_type="session",
+            data={"count": 0},
         ),
         dcc.Store(
             id="stored-edit-dashboard-mode-button",
@@ -188,9 +206,7 @@ header = html.Div(
 # init_children = list()
 
 
-data = load_data()
-init_layout = data["stored_layout_data"] if data else {}
-init_children = data["stored_children_data"] if data else list()
+
 
 app.layout = dbc.Container(
     [
@@ -261,19 +277,30 @@ def toggle_success_modal_dashboard(n_save, n_close, is_open):
     Input("save-button-dashboard", "n_clicks"),
     State("stored-layout", "data"),
     State("stored-children", "data"),
+    State("stored-edit-dashboard-mode-button", "data"),
+    State("stored-add-button", "data"),
     # State("stored-year", "data"),
+    prevent_initial_call=True,
 )
 def save_data_dashboard(
     n_clicks,
     stored_layout_data,
     stored_children_data,
+    edit_dashboard_mode_button,
+    add_button,
     # stored_year_data,
 ):
+    print("save_data_dashboard")
+    print(n_clicks)
+    print(edit_dashboard_mode_button)
+    print(add_button)
     # print(dash.callback_context.triggered[0]["prop_id"].split(".")[0], n_clicks)
     if n_clicks > 0:
         data = {
             "stored_layout_data": stored_layout_data,
             "stored_children_data": stored_children_data,
+            "stored_edit_dashboard_mode_button": edit_dashboard_mode_button,
+            "stored-add-button": add_button,
             # "stored_year_data": stored_year_data,
         }
         with open("data.json", "w") as file:
@@ -447,9 +474,9 @@ def update_button(n_clicks, children, btn_id, switch_state):
 
     btn_index = btn_id["index"]  # Extracting index from btn_id dict
 
-    switch_state_bool = True if len(switch_state) > 0 else False
+    # switch_state_bool = True if len(switch_state) > 0 else False
 
-    new_draggable_child = enable_box_edit_mode(children, switch_state_bool)
+    new_draggable_child = enable_box_edit_mode(children, switch_state)
     # new_draggable_child = enable_box_edit_mode(children, btn_index, switch_state_bool)
 
     return new_draggable_child
@@ -465,10 +492,15 @@ def update_button(n_clicks, children, btn_id, switch_state):
     ],
     [Input("edit-dashboard-mode-button", "value")],
 )
-def freeze_layout(value):
+def freeze_layout(switch_state):
+    print("\n\n\n")
+    print("freeze_layout")
+    print(switch_state)
+    print("\n\n\n")
     # switch based on button's value
-    switch_state = True if len(value) > 0 else False
-    if switch_state is False:
+    # switch_state = True if len(value) > 0 else False
+
+    if len(switch_state) == 0:
         return False, False, True, True
     else:
         return True, True, False, False
@@ -649,6 +681,7 @@ def update_step_2(
         Output("stored-layout", "data"),
         Output("stored-children", "data"),
         Output("stored-edit-dashboard-mode-button", "data"),
+        Output("stored-add-button", "data"),
     ],
     # [
     #     Input(f"add-plot-button-{plot_type.lower().replace(' ', '-')}", "n_clicks")
@@ -658,6 +691,7 @@ def update_step_2(
     [
         Input("add-button", "n_clicks"),
         Input("edit-dashboard-mode-button", "value"),
+        State("stored-add-button", "data"),
         Input(
             {"type": "remove-box-button", "index": dash.dependencies.ALL}, "n_clicks"
         ),
@@ -682,11 +716,14 @@ def update_draggable_children(
 ):
     ctx = dash.callback_context
     ctx_triggered = ctx.triggered
-    print(f"CTX triggered: {ctx.triggered}")
+    # print(f"CTX triggered: {ctx.triggered}")
 
     triggered_input = ctx.triggered[0]["prop_id"].split(".")[0]
-    print(triggered_input)
-    print(f"REMOVE BUTTON ARGS {args[-10]}")
+    # print(triggered_input)
+
+    stored_add_button = args[-11]
+
+    # print(f"REMOVE BUTTON ARGS {args[-10]}")
 
     stored_layout_data = args[-8]
     stored_children_data = args[-7]
@@ -710,7 +747,8 @@ def update_draggable_children(
     stored_figures = args[-2]
     stored_edit_dashboard = args[-1]
 
-    switch_state = True if len(args[-11]) > 0 else False
+    # switch_state = True if len(args[-12]) > 0 else False
+    switch_state = args[-12]
     switch_state_index = -1 if switch_state is True else -1
     # print(f"Switch state: {switch_state}")
     # print(f"Switch state value: {stored_edit_dashboard}")
@@ -763,6 +801,8 @@ def update_draggable_children(
     if "add-button" in triggered_input:
         # Retrieve index of the button that was clicked - this is the number of the plot
 
+        stored_add_button["count"] += 1
+
         n = ctx.triggered[0]["value"]
         new_plot_id = f"{n}"
 
@@ -803,6 +843,7 @@ def update_draggable_children(
             current_layouts,
             current_draggable_children,
             stored_edit_dashboard,
+            stored_add_button,
         )
 
     #     return (
@@ -1095,7 +1136,8 @@ def update_draggable_children(
             # selected_year,
             new_layouts,
             current_draggable_children,
-            stored_edit_dashboard
+            stored_edit_dashboard,
+            stored_add_button,
             # selected_year,
         )
         # return (
@@ -1113,6 +1155,7 @@ def update_draggable_children(
                 stored_layout_data,
                 stored_children_data,
                 stored_edit_dashboard,
+                stored_add_button
             )
         else:
             # Load data from the file if it exists
@@ -1124,6 +1167,7 @@ def update_draggable_children(
                     loaded_data["stored_layout_data"],
                     loaded_data["stored_children_data"],
                     stored_edit_dashboard,
+                    stored_add_button
                 )
             else:
                 return (
@@ -1132,6 +1176,7 @@ def update_draggable_children(
                     stored_layout,
                     stored_figures,
                     stored_edit_dashboard,
+                    stored_add_button
                 )
 
     elif triggered_input == "draggable":
@@ -1143,7 +1188,8 @@ def update_draggable_children(
             new_layouts,
             dash.no_update,
             # current_draggable_children,
-            stored_edit_dashboard
+            stored_edit_dashboard,
+            stored_add_button,
             # selected_year,
         )
 
@@ -1206,25 +1252,21 @@ def update_draggable_children(
 
     elif triggered_input == "edit-dashboard-mode-button":
         # print("\n\n")
-        stored_edit_dashboard["count"] = (
-            stored_edit_dashboard["count"] + 1
-            if switch_state
-            else stored_edit_dashboard["count"]
-        )
 
         # switch_state = True if len(ctx.triggered[0]["value"]) > 0 else False
         # print(switch_state)
         # print(stored_edit_dashboard)
         # print(current_draggable_children)
         # assuming the switch state is added as the first argument in args
-        print("\n\n\n")
         updated_draggable_children = []
-        print(
-            current_draggable_children,
-            len(current_draggable_children),
-            type(current_draggable_children),
-        )
-        analyze_structure(current_draggable_children)
+        print("\n\n")
+        print("edit-dashboard-mode-button")
+        print(switch_state)
+        print(stored_edit_dashboard)
+
+        stored_edit_dashboard = switch_state
+
+        # analyze_structure(current_draggable_children)
         # print(current_draggable_children[0]["props"]["children"])
         # print(len(current_draggable_children[0]["props"]["children"]))
         # print(
@@ -1235,17 +1277,7 @@ def update_draggable_children(
         for j, child in enumerate(current_draggable_children):
             for i, sub_child in enumerate(child["props"]["children"]):
                 if i != (len(child["props"]["children"]) - 1):
-                    print("\n\n")
-                    print("sub_child")
-                    print(sub_child)
-                    print("\n\n")
-                    print("\n\n")
-                    print("\n\n")
-                    print("\n\n")
-                    print("\n\n")
-                    analyze_structure(sub_child)
-                    print(sub_child)
-                    print(switch_state)
+
                     try:
                         updated_sub_child = enable_box_edit_mode_dev(
                             sub_child, switch_state
@@ -1253,7 +1285,6 @@ def update_draggable_children(
                     except Exception as e:
                         print(f"Error when calling enable_box_edit_mode_dev: {e}")
                     # print(updated_sub_child)
-                    print("\n\n")
                     child["props"]["children"][i] = updated_sub_child
                 else:
                     child["props"]["children"][i] = sub_child
@@ -1374,7 +1405,8 @@ def update_draggable_children(
             # selected_year,
             new_layouts,
             updated_draggable_children,
-            stored_edit_dashboard
+            stored_edit_dashboard,
+            stored_add_button,
             # selected_year,
         )
 
