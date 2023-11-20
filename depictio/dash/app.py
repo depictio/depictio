@@ -97,17 +97,25 @@ df = load_deltatable(workflow_id=None, data_collection_id=None)
 
 
 data = load_data()
+# data = dict()
 init_layout = data["stored_layout_data"] if data else {}
 init_children = data["stored_children_data"] if data else list()
-init_nclicks_add_button = data["stored-add-button"] if data else {"count": 0}
+init_nclicks_add_button = data["stored_add_button"] if data else {"count": 0}
 init_nclicks_edit_dashboard_mode_button = (
-    data["stored_edit_dashboard_mode_button"] if data else [0]
+    data["stored_edit_dashboard_mode_button"] if data else [int(0)]
 )
-print("stored_add_button")
-print(data["stored-add-button"])
-print("stored_edit_dashboard_mode_button")
-print(data["stored_edit_dashboard_mode_button"])
-
+if data:
+    print("stored_add_button")
+    print(data["stored_add_button"])
+    print("stored_edit_dashboard_mode_button")
+    print(data["stored_edit_dashboard_mode_button"])
+    print(init_nclicks_add_button)
+    print(init_nclicks_edit_dashboard_mode_button)
+else:
+    print("data")
+    print(data)
+    print(init_nclicks_add_button)
+    print(init_nclicks_edit_dashboard_mode_button)
 
 backend_components = html.Div(
     [
@@ -163,7 +171,7 @@ header = html.Div(
             size="lg",
             radius="xl",
             variant="gradient",
-            n_clicks=init_nclicks_add_button,
+            n_clicks=init_nclicks_add_button["count"],
         ),
         modal_save_button,
         dmc.Button(
@@ -191,12 +199,12 @@ header = html.Div(
         dcc.Store(
             id="stored-add-button",
             storage_type="session",
-            data={"count": 0},
+            data=init_nclicks_add_button,
         ),
         dcc.Store(
             id="stored-edit-dashboard-mode-button",
             storage_type="session",
-            data={"count": 0},
+            data=init_nclicks_edit_dashboard_mode_button,
         ),
     ],
 )
@@ -300,7 +308,7 @@ def save_data_dashboard(
             "stored_layout_data": stored_layout_data,
             "stored_children_data": stored_children_data,
             "stored_edit_dashboard_mode_button": edit_dashboard_mode_button,
-            "stored-add-button": add_button,
+            "stored_add_button": add_button,
             # "stored_year_data": stored_year_data,
         }
         with open("data.json", "w") as file:
@@ -310,6 +318,9 @@ def save_data_dashboard(
 
 
 def enable_box_edit_mode(box, switch_state=True):
+    print("\n\n\n")
+    print("enable_box_edit_mode")
+    print(box["props"]["id"])
     btn_index = box["props"]["id"]["index"]
     edit_button = dbc.Button(
         "Edit",
@@ -366,6 +377,9 @@ def enable_box_edit_mode_dev(sub_child, switch_state=True):
         # If switch_state is true and buttons are not yet added, add them
         if switch_state and not (edit_button_exists and remove_button_exists):
             # Assuming that the ID for box is structured like: {'type': '...', 'index': 1}
+            print("\n\n\n")
+            print("Adding buttons")
+            print(box["props"]["id"])
             btn_index = box["props"]["id"]["index"]
 
             edit_button = dbc.Button(
@@ -466,10 +480,15 @@ def analyze_structure(struct, depth=0):
     prevent_initial_call=True,
 )
 def update_button(n_clicks, children, btn_id, switch_state):
-    # print("update_button")
+    print("\n\n\n")
+    print("update_button")
+    print(children["props"]["id"])
     # children = [children[4]]
     # print(len(children))
     # print(children)
+
+
+
     children["props"]["id"]["type"] = "updated-" + children["props"]["id"]["type"]
 
     btn_index = btn_id["index"]  # Extracting index from btn_id dict
@@ -718,9 +737,15 @@ def update_draggable_children(
     ctx_triggered = ctx.triggered
     # print(f"CTX triggered: {ctx.triggered}")
 
-    triggered_input = ctx.triggered[0]["prop_id"].split(".")[0]
-    # print(triggered_input)
+    print('CTX triggered: ')
 
+    triggered_input = ctx.triggered[0]["prop_id"].split(".")[0]
+    print(triggered_input)
+    # print(args[-11])
+    # print(args[-10])
+
+    switch_state = args[-12]
+    switch_state_index = -1 if switch_state is True else -1
     stored_add_button = args[-11]
 
     # print(f"REMOVE BUTTON ARGS {args[-10]}")
@@ -748,8 +773,7 @@ def update_draggable_children(
     stored_edit_dashboard = args[-1]
 
     # switch_state = True if len(args[-12]) > 0 else False
-    switch_state = args[-12]
-    switch_state_index = -1 if switch_state is True else -1
+
     # print(f"Switch state: {switch_state}")
     # print(f"Switch state value: {stored_edit_dashboard}")
 
@@ -798,7 +822,7 @@ def update_draggable_children(
     )
 
     # Add a new box to the dashboard
-    if "add-button" in triggered_input:
+    if triggered_input == "add-button":
         # Retrieve index of the button that was clicked - this is the number of the plot
 
         stored_add_button["count"] += 1

@@ -213,10 +213,10 @@ def create_stepper_buttons(n):
         dmc.Center(dbc.Row(special_components)),
     ]
 
-    # print(store_list + buttons_list)
+    print(store_list + buttons_list)
 
     stepper_buttons = dbc.Row(store_list + buttons_list)
-    # print(stepper_buttons)
+    print(stepper_buttons)
     return stepper_buttons
 
 
