@@ -24,12 +24,12 @@ def register_callbacks_stepper(app):
     @dash.callback(
         Output({"type": "workflow-selection-label", "index": MATCH}, "data"),
         Output({"type": "workflow-selection-label", "index": MATCH}, "value"),
-        [
-            Input("interval_long", "n_intervals")
-        ],  # or whatever triggers the workflow dropdown to update
+        Input("add-button", "n_clicks"),
+        # State("stored-add-button", "data"),
+        # Input("interval_long", "n_intervals"),
         # prevent_initial_call=True,
     )
-    def set_workflow_options(n_intervals):
+    def set_workflow_options(n_clicks):
         """Define the options for the workflow dropdown
 
         Args:
@@ -38,26 +38,37 @@ def register_callbacks_stepper(app):
         Returns:
             _type_: _description_
         """
-        tmp_data = list_workflows_for_dropdown()
-        # print("\n\n\n")
-        # print("set_workflow_options")
+        print("\n\n\n")
+        print("set_workflow_options")
+        print(n_clicks)
+        if int(n_clicks) > 0:
 
-        # print(tmp_data)
-        # print("\n\n\n")
+                
 
-        # Return the data and the first value if the data is not empty
-        if tmp_data:
-            return tmp_data, tmp_data[0]["value"]
+            # print(id)
+            tmp_data = list_workflows_for_dropdown()
+            # print("\n\n\n")
+            # print("set_workflow_options")
+
+            # print(tmp_data)
+            # print("\n\n\n")
+
+            # Return the data and the first value if the data is not empty
+            if tmp_data:
+                return tmp_data, tmp_data[0]["value"]
+            else:
+                return dash.no_update
         else:
-            return dash.no_update
+            raise dash.exceptions.PreventUpdate
 
     @dash.callback(
         Output({"type": "datacollection-selection-label", "index": MATCH}, "data"),
         Output({"type": "datacollection-selection-label", "index": MATCH}, "value"),
         Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
+        State({"type": "workflow-selection-label", "index": MATCH}, "id"),
         # prevent_initial_call=True,
     )
-    def set_datacollection_options(selected_workflow):
+    def set_datacollection_options(selected_workflow, id):
         """Define the options for the data collection dropdown
 
         Args:
@@ -73,6 +84,7 @@ def register_callbacks_stepper(app):
         # print("\n\n\n")
         # print("set_datacollection_options")
         # print(selected_workflow)
+        # print(id)
         # print("\n\n\n")
         if not selected_workflow:
             raise dash.exceptions.PreventUpdate
