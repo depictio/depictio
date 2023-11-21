@@ -2,6 +2,10 @@ import sys
 
 print(sys.path)
 
+print("\n\n\n")
+print("STARTING")
+print("\n\n\n")
+
 
 # Import necessary libraries
 import numpy as np
@@ -105,6 +109,7 @@ init_nclicks_edit_dashboard_mode_button = (
     data["stored_edit_dashboard_mode_button"] if data else [int(0)]
 )
 if data:
+    print("Data loaded from JSON")
     print("stored_add_button")
     print(data["stored_add_button"])
     print("stored_edit_dashboard_mode_button")
@@ -512,9 +517,9 @@ def update_button(n_clicks, children, btn_id, switch_state):
     [Input("edit-dashboard-mode-button", "value")],
 )
 def freeze_layout(switch_state):
-    print("\n\n\n")
-    print("freeze_layout")
-    print(switch_state)
+    # print("\n\n\n")
+    # print("freeze_layout")
+    # print(switch_state)
     print("\n\n\n")
     # switch based on button's value
     # switch_state = True if len(value) > 0 else False
@@ -695,125 +700,80 @@ def update_step_2(
 
 @app.callback(
     [
-        Output("draggable", "children"),
+        Output("draggable", "children"), 
         Output("draggable", "layouts"),
         Output("stored-layout", "data"),
         Output("stored-children", "data"),
         Output("stored-edit-dashboard-mode-button", "data"),
         Output("stored-add-button", "data"),
     ],
-    # [
-    #     Input(f"add-plot-button-{plot_type.lower().replace(' ', '-')}", "n_clicks")
-    #     for plot_type in AVAILABLE_PLOT_TYPES.keys()
-    # ]
-    # +
     [
         Input("add-button", "n_clicks"),
         Input("edit-dashboard-mode-button", "value"),
-        State("stored-add-button", "data"),
-        Input(
-            {"type": "remove-box-button", "index": dash.dependencies.ALL}, "n_clicks"
-        ),
-        Input({"type": "input-component", "index": dash.dependencies.ALL}, "value"),
-        # Input("time-input", "value"),
+        # Input(
+        #     {"type": "remove-box-button", "index": dash.dependencies.ALL}, "n_clicks"
+        # ),
+        # Input({"type": "input-component", "index": dash.dependencies.ALL}, "value"),
         Input("stored-layout", "data"),
         Input("stored-children", "data"),
         Input("draggable", "layouts"),
     ],
     [
-        State("draggable", "children"),
-        State("draggable", "layouts"),
-        State("stored-layout", "data"),
-        State("stored-children", "data"),
-        State("stored-edit-dashboard-mode-button", "data"),
+        State("draggable", "children"), # List of components currently in the dashboard
+        # State("draggable", "layouts"), # Layouts for the dashboard
+        State("stored-layout", "data"), # Saved layouts for the dashboard
+        State("stored-children", "data"), # Saved components for the dashboard
+        State("stored-edit-dashboard-mode-button", "data"), # Saved edit mode for the dashboard
+        State("stored-add-button", "data"),
     ],
     prevent_initial_call=True,
 )
 def update_draggable_children(
-    # n_clicks, selected_year, current_draggable_children, current_layouts, stored_figures
     *args,
 ):
     ctx = dash.callback_context
-    ctx_triggered = ctx.triggered
-    # print(f"CTX triggered: {ctx.triggered}")
 
     print('CTX triggered: ')
 
+    print(ctx.triggered[0])
     triggered_input = ctx.triggered[0]["prop_id"].split(".")[0]
     print(triggered_input)
-    # print(args[-11])
-    # print(args[-10])
+    # print(len(args))
+    # print(args)
 
-    switch_state = args[-12]
-    switch_state_index = -1 if switch_state is True else -1
-    stored_add_button = args[-11]
 
-    # print(f"REMOVE BUTTON ARGS {args[-10]}")
-
-    stored_layout_data = args[-8]
-    stored_children_data = args[-7]
-    new_layouts = args[-6]
-    # print(args[-10])
-
-    # remove-button -7
-    # selected_year = args[-6]
-
+    # Inputs
+    add_button = args[-10]
+    switch_state = args[-9]
+    input_stored_layout = args[-8]
+    input_stored_children = args[-7]
+    current_layouts = args[-6]
+    # States
     current_draggable_children = args[-5]
-    # print("\n\n\n")
-    # print("\n\n\n")
-    # print("\n\n\n")
-    # print("current_draggable_children")
-    # print(current_draggable_children)
-    # print("\n\n\n")
-    # print("\n\n\n")
-    # print("\n\n\n")
-    current_layouts = args[-4]
-    stored_layout = args[-3]
-    stored_figures = args[-2]
-    stored_edit_dashboard = args[-1]
+    stored_layout = args[-4]
+    stored_figures = args[-3]
+    stored_edit_dashboard = args[-2]
+    stored_add_button = args[-1]
 
-    # switch_state = True if len(args[-12]) > 0 else False
 
-    # print(f"Switch state: {switch_state}")
-    # print(f"Switch state value: {stored_edit_dashboard}")
+    new_layouts = current_layouts
 
-    ######################################################################
-    # filter_dict = {}
-    # # Enumerate through all the children
-    # for j, child in enumerate(current_draggable_children):
-    #     # print(f"TOTO-{j}")
-    #     # print(child["props"]["id"])
-    #     # print(child["props"]["children"][switch_state_index]["props"])
+    # switch_state = args[-12]
+    # switch_state_index = -1 if switch_state is True else -1
+    # stored_add_button = args[-11]
 
-    #     # Filter out those children that are not input components
-    #     if (
-    #         "-input" in child["props"]["id"]
-    #         and "value"
-    #         in child["props"]["children"][switch_state_index]["props"]["children"][-1][
-    #             "props"
-    #         ]
-    #     ):
-    #         # Extract the id and the value of the input component
-    #         # print(f"TATA-{j}")
+    # stored_layout_data = args[-8]
+    # stored_children_data = args[-7]
+    # new_layouts = args[-6]
 
-    #         id_components = child["props"]["children"][switch_state_index]["props"][
-    #             "children"
-    #         ][-1]["props"]["id"]["index"].split("-")[2:]
-    #         value = child["props"]["children"][switch_state_index]["props"]["children"][
-    #             -1
-    #         ]["props"]["value"]
 
-    #         # Construct the key for the dictionary
-    #         key = "-".join(id_components)
+    # current_draggable_children = args[-5]
+    # current_layouts = args[-4]
+    # stored_layout = args[-3]
+    # stored_figures = args[-2]
+    # stored_edit_dashboard = args[-1]
 
-    #         # Add the key-value pair to the dictionary
-    #         filter_dict[key] = value
-    ######################################################################
 
-    # if current_draggable_children is None:
-    #     current_draggable_children = []
-    # if current_layouts is None:
-    #     current_layouts = dict()
 
     from depictio.dash.layouts.stepper import (
         create_stepper_dropdowns,
@@ -827,6 +787,12 @@ def update_draggable_children(
 
         stored_add_button["count"] += 1
 
+        print("\n\n\n")
+        print("add-button")
+        print()
+        print(stored_add_button)
+
+        # n = stored_add_button["count"]
         n = ctx.triggered[0]["value"]
         new_plot_id = f"{n}"
 
@@ -1171,37 +1137,37 @@ def update_draggable_children(
         #     updated_draggable_children,
         # )
 
-    elif triggered_input == "stored-layout" or triggered_input == "stored-children":
-        if stored_layout_data and stored_children_data:
-            return (
-                stored_children_data,
-                stored_layout_data,
-                stored_layout_data,
-                stored_children_data,
-                stored_edit_dashboard,
-                stored_add_button
-            )
-        else:
-            # Load data from the file if it exists
-            loaded_data = load_data()
-            if loaded_data:
-                return (
-                    loaded_data["stored_children_data"],
-                    loaded_data["stored_layout_data"],
-                    loaded_data["stored_layout_data"],
-                    loaded_data["stored_children_data"],
-                    stored_edit_dashboard,
-                    stored_add_button
-                )
-            else:
-                return (
-                    current_draggable_children,
-                    {},
-                    stored_layout,
-                    stored_figures,
-                    stored_edit_dashboard,
-                    stored_add_button
-                )
+    # elif triggered_input == "stored-layout" or triggered_input == "stored-children":
+    #     if stored_layout and stored_figures:
+    #         return (
+    #             stored_figures,
+    #             stored_layout,
+    #             stored_layout,
+    #             stored_figures,
+    #             stored_edit_dashboard,
+    #             stored_add_button
+    #         )
+    #     else:
+    #         # Load data from the file if it exists
+    #         # loaded_data = load_data()
+    #         # if loaded_data:
+    #         #     return (
+    #         #         loaded_data["stored_children_data"],
+    #         #         loaded_data["stored_layout_data"],
+    #         #         loaded_data["stored_layout_data"],
+    #         #         loaded_data["stored_children_data"],
+    #         #         stored_edit_dashboard,
+    #         #         stored_add_button
+    #         #     )
+    #         # else:
+    #             return (
+    #                 current_draggable_children,
+    #                 {},
+    #                 stored_layout,
+    #                 stored_figures,
+    #                 stored_edit_dashboard,
+    #                 stored_add_button
+    #             )
 
     elif triggered_input == "draggable":
         return (
@@ -1274,45 +1240,45 @@ def update_draggable_children(
     #     id=f"draggable-{btn_id}",
     # )
 
-    elif triggered_input == "edit-dashboard-mode-button":
-        # print("\n\n")
+    # elif triggered_input == "edit-dashboard-mode-button":
+    #     # print("\n\n")
 
-        # switch_state = True if len(ctx.triggered[0]["value"]) > 0 else False
-        # print(switch_state)
-        # print(stored_edit_dashboard)
-        # print(current_draggable_children)
-        # assuming the switch state is added as the first argument in args
-        updated_draggable_children = []
-        print("\n\n")
-        print("edit-dashboard-mode-button")
-        print(switch_state)
-        print(stored_edit_dashboard)
+    #     # switch_state = True if len(ctx.triggered[0]["value"]) > 0 else False
+    #     # print(switch_state)
+    #     # print(stored_edit_dashboard)
+    #     # print(current_draggable_children)
+    #     # assuming the switch state is added as the first argument in args
+    #     updated_draggable_children = []
+    #     print("\n\n")
+    #     print("edit-dashboard-mode-button")
+    #     print(switch_state)
+    #     print(stored_edit_dashboard)
 
-        stored_edit_dashboard = switch_state
+    #     stored_edit_dashboard = switch_state
 
-        # analyze_structure(current_draggable_children)
-        # print(current_draggable_children[0]["props"]["children"])
-        # print(len(current_draggable_children[0]["props"]["children"]))
-        # print(
-        #     current_draggable_children[0]["props"]["children"][:-1],
-        #     type(current_draggable_children[0]["props"]["children"][:-1]),
-        #     len(current_draggable_children[0]["props"]["children"][:-1]),
-        # )
-        for j, child in enumerate(current_draggable_children):
-            for i, sub_child in enumerate(child["props"]["children"]):
-                if i != (len(child["props"]["children"]) - 1):
+    #     # analyze_structure(current_draggable_children)
+    #     # print(current_draggable_children[0]["props"]["children"])
+    #     # print(len(current_draggable_children[0]["props"]["children"]))
+    #     # print(
+    #     #     current_draggable_children[0]["props"]["children"][:-1],
+    #     #     type(current_draggable_children[0]["props"]["children"][:-1]),
+    #     #     len(current_draggable_children[0]["props"]["children"][:-1]),
+    #     # )
+    #     for j, child in enumerate(current_draggable_children):
+    #         for i, sub_child in enumerate(child["props"]["children"]):
+    #             if i != (len(child["props"]["children"]) - 1):
 
-                    try:
-                        updated_sub_child = enable_box_edit_mode_dev(
-                            sub_child, switch_state
-                        )
-                    except Exception as e:
-                        print(f"Error when calling enable_box_edit_mode_dev: {e}")
-                    # print(updated_sub_child)
-                    child["props"]["children"][i] = updated_sub_child
-                else:
-                    child["props"]["children"][i] = sub_child
-            updated_draggable_children.append(child)
+    #                 try:
+    #                     updated_sub_child = enable_box_edit_mode_dev(
+    #                         sub_child, switch_state
+    #                     )
+    #                 except Exception as e:
+    #                     print(f"Error when calling enable_box_edit_mode_dev: {e}")
+    #                 # print(updated_sub_child)
+    #                 child["props"]["children"][i] = updated_sub_child
+    #             else:
+    #                 child["props"]["children"][i] = sub_child
+    #         updated_draggable_children.append(child)
             # if j != (len(current_draggable_children)-1):
         #         print("\n\n")
         #         print("updated_child")
@@ -1423,16 +1389,16 @@ def update_draggable_children(
         #     updated_draggable_children.append(child)
         # updated_draggable_children.append(child)
 
-        return (
-            updated_draggable_children,
-            new_layouts,
-            # selected_year,
-            new_layouts,
-            updated_draggable_children,
-            stored_edit_dashboard,
-            stored_add_button,
-            # selected_year,
-        )
+        # return (
+        #     updated_draggable_children,
+        #     new_layouts,
+        #     # selected_year,
+        #     new_layouts,
+        #     updated_draggable_children,
+        #     stored_edit_dashboard,
+        #     stored_add_button,
+        #     # selected_year,
+        # )
 
     # # Add an else condition to return the current layout when there's no triggering input
     else:
