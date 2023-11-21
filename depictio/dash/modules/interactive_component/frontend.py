@@ -71,8 +71,12 @@ def register_callbacks_interactive_component(app):
     def reset_aggregation_value(column_value):
         return None
 
+    
+
     # Callback to update card body based on the selected column and aggregation
     @app.callback(
+        # Output({"type": "title-input-body", "index": MATCH}, "children"),
+        # Output({"type": "interactive-component-div", "index": MATCH}, "children"),
         Output({"type": "input-body", "index": MATCH}, "children"),
         [
             Input({"type": "input-title", "index": MATCH}, "value"),
@@ -80,11 +84,12 @@ def register_callbacks_interactive_component(app):
             Input({"type": "input-dropdown-method", "index": MATCH}, "value"),
             State({"type": "workflow-selection-label", "index": MATCH}, "value"),
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+            State({"type": "input-dropdown-method", "index": MATCH}, "id")
             # Input("interval", "n_intervals"),
         ],
         prevent_initial_call=True,
     )
-    def update_card_body(input_value, column_value, aggregation_value, wf_id, dc_id):
+    def update_card_body(input_value, column_value, aggregation_value, wf_id, dc_id, id):
         if (
             input_value is None
             or column_value is None
@@ -134,14 +139,33 @@ def register_callbacks_interactive_component(app):
             # data = cols_json["columns_specs"][column_value]["unique"]
             data = df[column_value].unique()
 
-            new_card_body = [card_title, func_name(data=data)]
+            new_card_body = [card_title, func_name(data=data, id={"type": "interactive-component", "index": id["index"]}), 
+                             dcc.Store(
+                                    id={"type": "stored-interactive-component", "index": id["index"]}, data={
+                                        "type": aggregation_value,
+                                        "id": id,
+                                        "wf_id": wf_id,
+                                        "dc_id": dc_id,
+                                        "column_value": column_value,
+                                    }, storage_type="memory"
+
+                             )
+                             ]
             # print(new_card_body)
 
             return new_card_body
         elif aggregation_value in ["TextInput"]:
             new_card_body = [
                 card_title,
-                func_name(placeholder="Your selected value"),
+                func_name(placeholder="Your selected value", id={"type": "interactive-component", "index": id["index"]}),
+                dcc.Store(id={"type": "stored-interactive-component", "index": id["index"]}, data={
+                    "type": aggregation_value,
+                    "id": id,
+                    "wf_id": wf_id,
+                    "dc_id": dc_id,
+                    "column_value": column_value,
+                }, storage_type="memory"
+                ),
             ]
             # print(new_card_body)
 
@@ -174,9 +198,20 @@ def register_callbacks_interactive_component(app):
 
             new_card_body = [
                 card_title,
-                func_name(min=min_value, max=max_value, **kwargs),
+                dcc.Store(id={"type": "stored-interactive-component", "index": id["index"]}, data={
+                    "type": aggregation_value,
+                    "min": min_value,
+                    "max": max_value,
+                    # "kwargs": kwargs,
+                    "id": id,
+                    "wf_id": wf_id,
+                    "dc_id": dc_id,
+                    "column_value": column_value,
+                }, storage_type="memory"
+                ),
+                func_name(min=min_value, max=max_value, **kwargs, id={"type": "interactive-component", "index": id["index"]}),
             ]
-            # print(new_card_body)
+            print(new_card_body)
             return new_card_body
 
 
@@ -234,6 +269,20 @@ def design_interactive(id, df):
                             html.Div(
                                 dbc.Card(
                                     dbc.CardBody(
+                                        # children = [
+                                        #     html.Div(
+                                        #         id={
+                                        #             "type": "title-input-body",
+                                        #             "index": id["index"],
+                                        #         },
+                                        #     ),
+                                        #     html.Div(
+                                        #         id={
+                                        #             "type": "interactive-component-div",
+                                        #             "index": id["index"],
+                                        #         },
+                                        #     ),
+                                        # ],
                                         id={
                                             "type": "input-body",
                                             "index": id["index"],

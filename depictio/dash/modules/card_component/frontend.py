@@ -74,11 +74,13 @@ def register_callbacks_card_component(app):
             Input({"type": "card-dropdown-aggregation", "index": MATCH}, "value"),
             State({"type": "workflow-selection-label", "index": MATCH}, "value"),
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+            State({"type": "card-dropdown-column", "index": MATCH}, "id")
+
             # Input("interval", "n_intervals"),
         ],
         prevent_initial_call=True,
     )
-    def update_card_body(input_value, column_value, aggregation_value, wf_id, dc_id):
+    def update_card_body(input_value, column_value, aggregation_value, wf_id, dc_id, id):
         if (
             input_value is None
             or column_value is None
@@ -124,7 +126,7 @@ def register_callbacks_card_component(app):
         # v = "{:,.2f}".format(round(v, 2))
         # v = "{:,.2f}".format(round(v, 2)).replace(",", " ")
 
-        new_card_body = [html.H5(f"{input_value}"), html.P(f"{v}")]
+        new_card_body = [html.H5(f"{input_value}"), html.P(f"{v}", id={"type": "card-value", "value": f"{wf_id}--{dc_id}--{column_value}" , "index": str(id)})]
 
         return new_card_body
 
