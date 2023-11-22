@@ -1,3 +1,4 @@
+import collections
 import os
 from bson import ObjectId
 from fastapi import HTTPException, Depends, APIRouter
@@ -185,3 +186,29 @@ async def delete_workflow(
     return {
         "message": f"Workflow {workflow_tag} with ID '{id}' deleted successfully, as well as all files"
     }
+
+@workflows_endpoint_router.get("/get_join_tables/{workflow_id}")
+async def get_join_tables(workflow_id: str, current_user: str = Depends(get_current_user)):
+    # Find the workflow by ID
+    workflow_oid = ObjectId(workflow_id)
+    assert isinstance(workflow_oid, ObjectId)
+    existing_workflow = workflows_collection.find_one({"_id": workflow_oid})
+
+    if not existing_workflow:
+        raise HTTPException(
+            status_code=404, detail=f"Workflow with ID '{workflow_id}' does not exist."
+        )
+
+    data_collections = existing_workflow["data_collections"]
+
+    join_tables = collections.defaultdict(list)
+    for data_collection in data_collections:
+        print(data_collection)
+        if "join" in data_collection["config"]:
+            join_tables[str(data_collection["_id"])].extend(data_collection["config"]["join"]["with_dc"])
+    print(join_tables)
+    # Turn into list of tuples
+    join_tables = [v+[k] for k, v in join_tables.items()]
+    print(join_tables)
+
+    return join_tables

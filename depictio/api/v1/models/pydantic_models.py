@@ -231,12 +231,27 @@ class DeltaTableAggregated(MongoModel):
         return value
 
 
+class JoinConfig(BaseModel):
+    on: List[str]
+    how: Optional[str]
+    with_dc: List[PyObjectId]
+    # lsuffix: str
+    # rsuffix: str
+
+
+    @validator("how")
+    def validate_join_how(cls, v):
+        allowed_values = ["inner", "outer", "left", "right"]
+        if v.lower() not in allowed_values:
+            raise ValueError(f"join_how must be one of {allowed_values}")
+        return v
 
 class DataCollectionConfig(BaseModel):
     regex: str
     format: str
     polars_kwargs: Optional[Dict[str, Any]] = {}
     keep_columns: Optional[List[str]] = []
+    join: Optional[JoinConfig]
 
     # validate the format
     @validator("format")
