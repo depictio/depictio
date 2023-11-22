@@ -233,6 +233,11 @@ def create_stepper_buttons(n):
 
 
 def create_stepper_output(n, active, new_plot_id, stepper_dropdowns, stepper_buttons):
+    print("\n\n\n")
+    print('create_stepper_output')
+    print(n)
+    print(active)
+    print(new_plot_id)
     new_element = html.Div(
         [
             html.Div(id={"type": "add-content", "index": n}),

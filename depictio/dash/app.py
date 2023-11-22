@@ -246,6 +246,9 @@ app.layout = dbc.Container(
     prevent_initial_call=True,
 )
 def close_modal(n_clicks):
+    print("\n\n\n")
+    print("close_modal")
+    print(n_clicks)
     if n_clicks > 0:
         return False
     return True
@@ -721,7 +724,7 @@ def update_step_2(
         ),
         State(
             {
-                "type": "stored-interactive-component",
+                "type": "stored-metadata-component",
                 # "value": dash.dependencies.ALL,
                 "index": dash.dependencies.ALL,
             },
@@ -768,11 +771,14 @@ def update_draggable_children(
     triggered_input = ctx.triggered[0]["prop_id"].split(".")[0]
     print(triggered_input)
 
-    if args[5]:
+    print("\n\n\n")
+    print("Interactive component value (input)")
+    if args[6]:
         print(args[6])
-
+    print("Interactive component id (state)")
     if args[0]:
         print(args[0])
+    print("Stored metadata component data (state)")
     if args[1]:
         print(args[1])
 
@@ -785,6 +791,7 @@ def update_draggable_children(
     switch_state = args[-12]
     switch_state_index = -1 if switch_state is True else -1
     stored_add_button = args[-11]
+    add_button_nclicks = args[2]
 
     # print(f"REMOVE BUTTON ARGS {args[-10]}")
 
@@ -862,51 +869,59 @@ def update_draggable_children(
     # Add a new box to the dashboard
     if triggered_input == "add-button":
         # Retrieve index of the button that was clicked - this is the number of the plot
+        if add_button_nclicks > stored_add_button["count"]:
+            print("\n\n\n")
+            print("add-button compared to stored_add_button")
+            print(add_button_nclicks)
+            print(stored_add_button["count"])
 
-        stored_add_button["count"] += 1
+            n = ctx.triggered[0]["value"]
+            new_plot_id = f"{n}"
 
-        n = ctx.triggered[0]["value"]
-        new_plot_id = f"{n}"
 
-        stepper_dropdowns = create_stepper_dropdowns(n)
-        stepper_buttons = create_stepper_buttons(n)
-        stepper_output = create_stepper_output(
-            n, active, new_plot_id, stepper_dropdowns, stepper_buttons
-        )
-        # print("\n\n\n")
-        # print("\n\n\n")
-        # print("\n\n\n")
-        # print("stepper_output")
-        # print(stepper_output)
-        # print("\n\n\n")
-        # print("\n\n\n")
-        # print("\n\n\n")
+            stepper_dropdowns = create_stepper_dropdowns(n)
+            stepper_buttons = create_stepper_buttons(n)
+            stepper_output = create_stepper_output(
+                n, active, new_plot_id, stepper_dropdowns, stepper_buttons
+            )
+            stored_add_button["count"] += 1
 
-        current_draggable_children.append(stepper_output)
+            # print("\n\n\n")
+            # print("\n\n\n")
+            # print("\n\n\n")
+            # print("stepper_output")
+            # print(stepper_output)
+            # print("\n\n\n")
+            # print("\n\n\n")
+            # print("\n\n\n")
 
-        # Define the default size and position for the new plot
-        new_layout_item = {
-            "i": f"{new_plot_id}",
-            "x": 10 * ((len(current_draggable_children) + 1) % 2),
-            "y": n * 10,
-            "w": 6,
-            "h": 5,
-        }
+            current_draggable_children.append(stepper_output)
 
-        # Update the layouts property for both 'lg' and 'sm' sizes
-        updated_layouts = {}
-        for size in ["lg", "sm"]:
-            if size not in current_layouts:
-                current_layouts[size] = []
-            current_layouts[size] = current_layouts[size] + [new_layout_item]
-        return (
-            current_draggable_children,
-            current_layouts,
-            current_layouts,
-            current_draggable_children,
-            stored_edit_dashboard,
-            stored_add_button,
-        )
+            # Define the default size and position for the new plot
+            new_layout_item = {
+                "i": f"{new_plot_id}",
+                "x": 10 * ((len(current_draggable_children) + 1) % 2),
+                "y": n * 10,
+                "w": 6,
+                "h": 5,
+            }
+
+            # Update the layouts property for both 'lg' and 'sm' sizes
+            updated_layouts = {}
+            for size in ["lg", "sm"]:
+                if size not in current_layouts:
+                    current_layouts[size] = []
+                current_layouts[size] = current_layouts[size] + [new_layout_item]
+            return (
+                current_draggable_children,
+                current_layouts,
+                current_layouts,
+                current_draggable_children,
+                stored_edit_dashboard,
+                stored_add_button,
+            )
+        else:
+            raise dash.exceptions.PreventUpdate
 
     #     return (
     #         updated_draggable_children,
