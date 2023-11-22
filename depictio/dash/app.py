@@ -949,118 +949,140 @@ def update_draggable_children(
         print("\n\n\n")
 
         # Retrieve index of the interactive component that was clicked
-        triggered_input_eval = ast.literal_eval(triggered_input)
-        n = triggered_input_eval["index"]
-        n = int(n)
-        print(n, type(n))
-        # Retrieve corresponding metadata
-        n_dict = interactive_components_dict[n]
-        print(n_dict)
+        # triggered_input_eval = ast.literal_eval(triggered_input)
+        # n = triggered_input_eval["index"]
+        # n = int(n)
+        # print(n, type(n))
+
+        print(interactive_components_dict)
 
         # Access the corresponding non interactive component with same workflow, data collection and column
         for e in stored_metadata:
             if e["component_type"] != "interactive_component":
-                if e["wf_id"] == n_dict["metadata"]["wf_id"]:
-                    if e["dc_id"] == n_dict["metadata"]["dc_id"]:
-                        print(e["component_type"])
-                        print(e["wf_id"])
-                        print(e["dc_id"])
+                new_df = return_deltatable(e["wf_id"], e["dc_id"])
 
-                        new_df = return_deltatable(e["wf_id"], e["dc_id"])
-                        print(new_df)
+                for n in list(interactive_components_dict.keys()):
+                    # Retrieve corresponding metadata
+                    n_dict = interactive_components_dict[n]
+                    print(n_dict)
 
-                        # filter based on the column and the interactive component
-                        # handle if the column is categorical or numerical
+                    if e["wf_id"] == n_dict["metadata"]["wf_id"]:
+                        if e["dc_id"] == n_dict["metadata"]["dc_id"]:
+                            print(e["component_type"])
+                            print(e["wf_id"])
+                            print(e["dc_id"])
 
-                        # TODO: replace e["type"] with n_metadata["type"]
-                        if n_dict["metadata"]["type"] == "utf8":
-                            new_df = new_df[
-                                new_df[n_dict["metadata"]["column_value"]].isin(
-                                    n_dict["value"]
-                                )
-                            ]
-                        elif (
-                            n_dict["metadata"]["type"] == "int64"
-                            or n_dict["metadata"]["type"] == "float64"
-                        ):
-                            print(n_dict["metadata"]["interactive_component_type"])
-                            print(n_dict["value"])
+                            print(new_df)
+                            print(n_dict["metadata"]["type"])
 
-                            if n_dict["value"] is None:
-                                continue
+                            # filter based on the column and the interactive component
+                            # handle if the column is categorical or numerical
 
-                            # handle if the input is a range or a single value
-                            if (
-                                n_dict["metadata"]["interactive_component_type"]
-                                == "RangeSlider"
-                            ):
-                                new_df = new_df[
-                                    (
-                                        new_df[n_dict["metadata"]["column_value"]]
-                                        >= n_dict["value"][0]
+                            if n_dict["value"] is None or n_dict["value"] == []:
+                                pass
+                            else:
+                                if n_dict["metadata"]["type"] == "object":
+                                    print("utf8")
+                                    print(
+                                        n_dict["metadata"]["interactive_component_type"]
                                     )
-                                    & (
-                                        new_df[n_dict["metadata"]["column_value"]]
-                                        <= n_dict["value"][1]
+                                    print(n_dict["value"])
+                                    print(n_dict["metadata"]["column_value"])
+                                    new_df = new_df[
+                                        new_df[n_dict["metadata"]["column_value"]].isin(
+                                            n_dict["value"]
+                                        )
+                                    ]
+                                elif (
+                                    n_dict["metadata"]["type"] == "int64"
+                                    or n_dict["metadata"]["type"] == "float64"
+                                ):
+                                    print(
+                                        n_dict["metadata"]["interactive_component_type"]
                                     )
-                                ]
-                            elif (
-                                n_dict["metadata"]["interactive_component_type"]
-                                == "Slider"
-                            ):
-                                new_df = new_df[
-                                    new_df[n_dict["column_value"]] == n_dict["value"]
-                                ]
+                                    print(n_dict["value"])
 
-                        print(new_df)
+                                    # handle if the input is a range or a single value
+                                    if (
+                                        n_dict["metadata"]["interactive_component_type"]
+                                        == "RangeSlider"
+                                    ):
+                                        new_df = new_df[
+                                            (
+                                                new_df[
+                                                    n_dict["metadata"]["column_value"]
+                                                ]
+                                                >= n_dict["value"][0]
+                                            )
+                                            & (
+                                                new_df[
+                                                    n_dict["metadata"]["column_value"]
+                                                ]
+                                                <= n_dict["value"][1]
+                                            )
+                                        ]
+                                    elif (
+                                        n_dict["metadata"]["interactive_component_type"]
+                                        == "Slider"
+                                    ):
+                                        new_df = new_df[
+                                            new_df[n_dict["column_value"]]
+                                            == n_dict["value"]
+                                        ]
 
-                        # CARD PART
+                            print(new_df)
 
-                        # create the new component - test for card
-                        aggregation = e["aggregation"]
-                        new_value = new_df[e["column_value"]].agg(aggregation)
-                        print(new_value, type(new_value))
-                        if type(new_value) is np.float64:
-                            new_value = round(new_value, 2)
-                        print(aggregation)
-                        print(new_value)
+                            # CARD PART
 
-                        # replace the card value in the children props
-                        for child in current_draggable_children:
-                            print(child)
-                            print(child["props"]["id"])
-                            print(len(child["props"]["children"]))
-                            if int(child["props"]["id"]) == int(e["index"]):
-                                for sub_child in child["props"]["children"][0]["props"][
-                                    "children"
-                                ]["props"]["children"]:
-                                    if type(sub_child["props"]["children"]) is dict:
-                                        for sub_sub_child in sub_child["props"][
-                                            "children"
-                                        ]["props"]["children"]:
-                                            if "id" in sub_sub_child["props"]:
-                                                if (
-                                                    sub_sub_child["props"]["id"]["type"]
-                                                    == "card-value"
-                                                ):
-                                                    print(sub_sub_child)
-                                                    print(sub_sub_child["props"]["id"])
-                                                    sub_sub_child["props"][
-                                                        "children"
-                                                    ] = new_value
-                                                    print(
+                            # create the new component - test for card
+                            aggregation = e["aggregation"]
+                            new_value = new_df[e["column_value"]].agg(aggregation)
+                            print(new_value, type(new_value))
+                            if type(new_value) is np.float64:
+                                new_value = round(new_value, 2)
+                            print(aggregation)
+                            print(new_value)
+
+                            # replace the card value in the children props
+                            for child in current_draggable_children:
+                                print(child)
+                                print(child["props"]["id"])
+                                print(len(child["props"]["children"]))
+                                if int(child["props"]["id"]) == int(e["index"]):
+                                    for sub_child in child["props"]["children"][0][
+                                        "props"
+                                    ]["children"]["props"]["children"]:
+                                        if type(sub_child["props"]["children"]) is dict:
+                                            for sub_sub_child in sub_child["props"][
+                                                "children"
+                                            ]["props"]["children"]:
+                                                if "id" in sub_sub_child["props"]:
+                                                    if (
+                                                        sub_sub_child["props"]["id"][
+                                                            "type"
+                                                        ]
+                                                        == "card-value"
+                                                    ):
+                                                        print(sub_sub_child)
+                                                        print(
+                                                            sub_sub_child["props"]["id"]
+                                                        )
                                                         sub_sub_child["props"][
                                                             "children"
-                                                        ]
-                                                    )
-                                                    break
-                                #     if sub_child["props"]["id"]["type"] == "card-value":
-                                #         print(sub_child)
-                                #         print(sub_child["props"]["id"])
-                                #         sub_child["props"]["children"] = new_value
-                                #         print(sub_child["props"]["children"])
-                                #         break
-                                # break
+                                                        ] = new_value
+                                                        print(
+                                                            sub_sub_child["props"][
+                                                                "children"
+                                                            ]
+                                                        )
+                                                        break
+                                    #     if sub_child["props"]["id"]["type"] == "card-value":
+                                    #         print(sub_child)
+                                    #         print(sub_child["props"]["id"])
+                                    #         sub_child["props"]["children"] = new_value
+                                    #         print(sub_child["props"]["children"])
+                                    #         break
+                                    # break
 
         return (
             current_draggable_children,
