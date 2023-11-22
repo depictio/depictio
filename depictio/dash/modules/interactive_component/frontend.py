@@ -71,8 +71,6 @@ def register_callbacks_interactive_component(app):
     def reset_aggregation_value(column_value):
         return None
 
-    
-
     # Callback to update card body based on the selected column and aggregation
     @app.callback(
         # Output({"type": "title-input-body", "index": MATCH}, "children"),
@@ -89,7 +87,9 @@ def register_callbacks_interactive_component(app):
         ],
         prevent_initial_call=True,
     )
-    def update_card_body(input_value, column_value, aggregation_value, wf_id, dc_id, id):
+    def update_card_body(
+        input_value, column_value, aggregation_value, wf_id, dc_id, id
+    ):
         if (
             input_value is None
             or column_value is None
@@ -101,118 +101,59 @@ def register_callbacks_interactive_component(app):
 
         df = load_deltatable(wf_id, dc_id)
         cols_json = get_columns_from_data_collection(wf_id, dc_id)
-
-        # Get the type of the selected column
-        # column_type = str(df[column_value].dtype)
         column_type = cols_json[column_value]["type"]
-
-        # Get the pandas function for the selected aggregation
         func_name = agg_functions[column_type]["input_methods"][aggregation_value][
             "component"
         ]
-        # print(func_name)
-
-        # if callable(func_name):
-        #     # If the function is a lambda function
-        #     v = func_name(df[column_value])
-        # else:
-        #     # If the function is a pandas function
-        #     v = getattr(df[column_value], func_name)()
-        #     print(v, type(v))
-        #     if type(v) is pd.core.series.Series and func_name != "mode":
-        #         v = v.iloc[0]
-        #     elif type(v) is pd.core.series.Series and func_name == "mode":
-        #         if v.shape[0] == df[column_value].nunique():
-        #             v = "All values are represented equally"
-        #         else:
-        #             v = v.iloc[0]
-
-        # if type(v) is np.float64:
-        #     v = round(v, 2)
-        # v = "{:,.2f}".format(round(v, 2))
-        # v = "{:,.2f}".format(round(v, 2)).replace(",", " ")
-
         card_title = html.H5(f"{input_value}")
 
-        # TODO: solve this in a better way
+        # Common Store Component
+        store_component = dcc.Store(
+            id={"type": "stored-metadata-component", "index": id["index"]},
+            data={
+                "component_type": "interactive_component",
+                "interactive_component_type": aggregation_value,
+                "index": id["index"],
+                "wf_id": wf_id,
+                "dc_id": dc_id,
+                "column_value": column_value,
+            },
+            storage_type="memory",
+        )
+
+        # Handling different aggregation values
         if aggregation_value in ["Select", "MultiSelect", "SegmentedControl"]:
-            # data = cols_json["columns_specs"][column_value]["unique"]
             data = df[column_value].unique()
+            interactive_component = func_name(
+                data=data, id={"type": "interactive-component", "index": id["index"]}
+            )
 
-            new_card_body = [card_title, func_name(data=data, id={"type": "interactive-component", "index": id["index"]}), 
-                             dcc.Store(
-                                    id={"type": "stored-interactive-component", "index": id["index"]}, data={
-                                        "type": aggregation_value,
-                                        "id": id,
-                                        "wf_id": wf_id,
-                                        "dc_id": dc_id,
-                                        "column_value": column_value,
-                                    }, storage_type="memory"
-
-                             )
-                             ]
-            # print(new_card_body)
-
-            return new_card_body
-        elif aggregation_value in ["TextInput"]:
-            new_card_body = [
-                card_title,
-                func_name(placeholder="Your selected value", id={"type": "interactive-component", "index": id["index"]}),
-                dcc.Store(id={"type": "stored-interactive-component", "index": id["index"]}, data={
-                    "type": aggregation_value,
-                    "id": id,
-                    "wf_id": wf_id,
-                    "dc_id": dc_id,
-                    "column_value": column_value,
-                }, storage_type="memory"
-                ),
-            ]
-            # print(new_card_body)
-
-            return new_card_body
+        elif aggregation_value == "TextInput":
+            interactive_component = func_name(
+                placeholder="Your selected value",
+                id={"type": "interactive-component", "index": id["index"]},
+            )
 
         elif aggregation_value in ["Slider", "RangeSlider"]:
-            min_value = cols_json[column_value]["specs"]["min"]
-            max_value = cols_json[column_value]["specs"]["max"]
-
-            # min_value = df[column_value].min()
-            # max_value = df[column_value].max()
-            kwargs = dict()
+            min_value, max_value = (
+                cols_json[column_value]["specs"]["min"],
+                cols_json[column_value]["specs"]["max"],
+            )
+            kwargs = {
+                "min": min_value,
+                "max": max_value,
+                "id": {"type": "interactive-component", "index": id["index"]},
+            }
             if aggregation_value == "Slider":
-                marks = dict()
+                marks = (
+                    {str(elem): str(elem) for elem in df[column_value].unique()}
+                    if df[column_value].nunique() < 30
+                    else {}
+                )
+                kwargs.update({"marks": marks, "step": None, "included": False})
+            interactive_component = func_name(**kwargs)
 
-                # TODO: solve this in a better way
-                # if cols_json["columns_specs"][column_value]["nunique"] < 50:
-                if df[column_value].nunique() < 30:
-                    marks = {str(elem): str(elem) for elem in df[column_value].unique()}
-                else:
-                    bins = pd.cut(df[column_value], bins=10, precision=2)
-
-                    marks = {
-                        str(elem): str(elem)
-                        for elem in bins.value_counts().index.categories.values
-                    }
-                step = None
-                included = False
-                kwargs = dict(marks=marks, step=step, included=included)
-
-            new_card_body = [
-                card_title,
-                dcc.Store(id={"type": "stored-interactive-component", "index": id["index"]}, data={
-                    "type": aggregation_value,
-                    "min": min_value,
-                    "max": max_value,
-                    # "kwargs": kwargs,
-                    "id": id,
-                    "wf_id": wf_id,
-                    "dc_id": dc_id,
-                    "column_value": column_value,
-                }, storage_type="memory"
-                ),
-                func_name(min=min_value, max=max_value, **kwargs, id={"type": "interactive-component", "index": id["index"]}),
-            ]
-            print(new_card_body)
-            return new_card_body
+        return [card_title, interactive_component, store_component]
 
 
 def design_interactive(id, df):

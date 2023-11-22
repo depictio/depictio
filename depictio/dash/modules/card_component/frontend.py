@@ -74,13 +74,13 @@ def register_callbacks_card_component(app):
             Input({"type": "card-dropdown-aggregation", "index": MATCH}, "value"),
             State({"type": "workflow-selection-label", "index": MATCH}, "value"),
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
-            State({"type": "card-dropdown-column", "index": MATCH}, "id")
-
-            # Input("interval", "n_intervals"),
+            State({"type": "card-dropdown-column", "index": MATCH}, "id"),
         ],
         prevent_initial_call=True,
     )
-    def update_card_body(input_value, column_value, aggregation_value, wf_id, dc_id, id):
+    def design_card_body(
+        input_value, column_value, aggregation_value, wf_id, dc_id, id
+    ):
         if (
             input_value is None
             or column_value is None
@@ -95,38 +95,41 @@ def register_callbacks_card_component(app):
         # Get the type of the selected column
         column_type = cols_json[column_value]["type"]
 
-        # Get the pandas function for the selected aggregation
-        func_name = agg_functions[column_type]["card_methods"][aggregation_value][
-            "pandas"
-        ]
-        # print(column_value, aggregation_value, func_name)
-
         v = cols_json[column_value]["specs"][aggregation_value]
-
-        # if callable(func_name):
-        #     # If the function is a lambda function
-        #     v = func_name(df[column_value])
-        # else:
-        #     # If the function is a pandas function
-        #     v = getattr(df[column_value], func_name)()
-        #     # print(v, type(v))
-        #     if type(v) is pd.core.series.Series and func_name != "mode":
-        #         v = v.iloc[0]
-        #     elif type(v) is pd.core.series.Series and func_name == "mode":
-        #         if v.shape[0] == df[column_value].nunique():
-        #             v = "All values are represented equally"
-        #         else:
-        #             v = v.iloc[0]
 
         try:
             v = round(float(v), 2)
         except:
             pass
-        # if type(v) is np.float64:
-        # v = "{:,.2f}".format(round(v, 2))
-        # v = "{:,.2f}".format(round(v, 2)).replace(",", " ")
 
-        new_card_body = [html.H5(f"{input_value}"), html.P(f"{v}", id={"type": "card-value", "value": f"{wf_id}--{dc_id}--{column_value}" , "index": str(id)})]
+        store_component = dcc.Store(
+            id={
+                "type": "stored-metadata-component",
+                "index": id["index"],
+            },
+            data={
+                "index": id["index"],
+                "component_type": "card",
+                "title": input_value,
+                "wf_id": wf_id,
+                "dc_id": dc_id,
+                "column_value": column_value,
+                "aggregation": aggregation_value,
+                "type": column_type,
+                
+            },
+        )
+        new_card_body = [
+            html.H5(f"{input_value}"),
+            html.P(
+                f"{v}",
+                id={
+                    "type": "card-value",
+                    "index": id["index"],
+                },
+            ),
+            store_component,
+        ]
 
         return new_card_body
 
