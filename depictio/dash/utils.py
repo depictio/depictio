@@ -81,7 +81,6 @@ def get_columns_from_data_collection(
     workflow_id: str,
     data_collection_id: str,
 ):
-    
     # print("\n\n\n")
     # print("get_columns_from_data_collection")
 
@@ -96,7 +95,6 @@ def get_columns_from_data_collection(
     ][0]["_id"]
 
     if workflow_id is not None and data_collection_id is not None:
-
         response = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
             headers={
@@ -106,9 +104,10 @@ def get_columns_from_data_collection(
         # print(response)
         if response.status_code == 200:
             json = response.json()
-            
+
             json_cols = json["columns"]
             reformat_cols = collections.defaultdict(dict)
+            print(json_cols)
             for c in json_cols:
                 reformat_cols[c["name"]]["type"] = c["type"]
                 reformat_cols[c["name"]]["description"] = c["description"]
@@ -120,7 +119,6 @@ def get_columns_from_data_collection(
 
 
 def load_deltatable(workflow_id: str, data_collection_id: str, cols: list = None):
-
     workflows = list_workflows(token)
 
     if workflow_id is None or data_collection_id is None:
@@ -143,7 +141,9 @@ def load_deltatable(workflow_id: str, data_collection_id: str, cols: list = None
     else:
         # find workflow_id and data_collection_id from workflow_tag and data_collection_tag
 
-        workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_id][0]["_id"]
+        workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_id][0][
+            "_id"
+        ]
         data_collection_id = [
             f
             for e in workflows
@@ -152,6 +152,33 @@ def load_deltatable(workflow_id: str, data_collection_id: str, cols: list = None
             if f["data_collection_tag"] == data_collection_id
         ][0]["_id"]
 
+        # Check if there is join defined in config
+        # if so, load the joined data collection
+        # if not, load the data collection
+
+
+        join_tables_for_wf = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/workflows/get_join_tables/{workflow_id}",
+        )
+        print(join_tables_for_wf.json())
+        for association in join_tables_for_wf:
+            print(association)
+            if data_collection_id in association:
+                for tmp_dc_id in association:
+                    print(tmp_dc_id)
+                    tmp_df = load_deltatable(workflow_id, tmp_dc_id)
+                    
+            # print(association["join"])
+            #
+
+        print(
+            [
+                f["join"]
+                for e in workflows
+                if e["_id"] == workflow_id
+                for f in e["data_collections"]
+            ]
+        )
 
     # print(workflow_id)
 
@@ -193,5 +220,3 @@ def load_deltatable(workflow_id: str, data_collection_id: str, cols: list = None
         # TODO: move to polars
         df = df.to_pandas()
         return df
-
-

@@ -986,6 +986,7 @@ def update_draggable_children(
                                     print(
                                         n_dict["metadata"]["interactive_component_type"]
                                     )
+                                    print(n_dict)
                                     print(n_dict["value"])
                                     print(n_dict["metadata"]["column_value"])
                                     new_df = new_df[
@@ -1026,7 +1027,7 @@ def update_draggable_children(
                                         == "Slider"
                                     ):
                                         new_df = new_df[
-                                            new_df[n_dict["column_value"]]
+                                            new_df[n_dict["metadata"]["column_value"]]
                                             == n_dict["value"]
                                         ]
 
