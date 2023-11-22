@@ -119,8 +119,14 @@ def register_callbacks_card_component(app):
                 
             },
         )
+
+        if not input_value:
+            card_title = html.H5(f"{aggregation_value} on {column_value}")
+        else:
+            card_title = html.H5(f"{input_value}")
+
         new_card_body = [
-            html.H5(f"{input_value}"),
+            card_title,
             html.P(
                 f"{v}",
                 id={

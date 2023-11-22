@@ -105,7 +105,8 @@ def register_callbacks_interactive_component(app):
         func_name = agg_functions[column_type]["input_methods"][aggregation_value][
             "component"
         ]
-        card_title = html.H5(f"{input_value}")
+
+
 
         # Common Store Component
         store_component = dcc.Store(
@@ -153,6 +154,11 @@ def register_callbacks_interactive_component(app):
                 )
                 kwargs.update({"marks": marks, "step": None, "included": False})
             interactive_component = func_name(**kwargs)
+
+        if not input_value:
+            card_title = html.H5(f"{aggregation_value} on {column_value}")
+        else:
+            card_title = html.H5(f"{input_value}")
 
         return [card_title, interactive_component, store_component]
 
