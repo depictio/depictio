@@ -82,6 +82,14 @@ from depictio.dash.utils import (
     UNSELECTED_STYLE,
 )
 
+
+from depictio.dash.layouts.stepper import (
+    create_stepper_dropdowns,
+    create_stepper_buttons,
+    create_stepper_output,
+)
+
+
 # Data
 
 
@@ -474,7 +482,9 @@ def analyze_structure(struct, depth=0):
 
 @app.callback(
     Output({"type": "add-content", "index": MATCH}, "children"),
-    Output({"type": "test-container", "index": MATCH}, "children", allow_duplicate=True),
+    Output(
+        {"type": "test-container", "index": MATCH}, "children", allow_duplicate=True
+    ),
     [
         Input({"type": "btn-done", "index": MATCH}, "n_clicks"),
     ],
@@ -782,6 +792,10 @@ def update_draggable_children(
     if args[1]:
         print(args[1])
 
+    interactive_component_ids = args[0]
+    interactive_component_values = args[6]
+    stored_metadata = args[1]
+
     # print([e for e in args[-5]])
     print("\n\n\n")
 
@@ -817,54 +831,61 @@ def update_draggable_children(
     stored_figures = args[-2]
     stored_edit_dashboard = args[-1]
 
-    # switch_state = True if len(args[-12]) > 0 else False
+    stored_metadata_interactive = [
+        e for e in stored_metadata if e["component_type"] == "interactive_component"
+    ]
+    print(stored_metadata_interactive)
+    interactive_components_dict = {
+        id["index"]: {"value": value, "metadata": metadata}
+        for (id, value, metadata) in zip(
+            interactive_component_ids,
+            interactive_component_values,
+            stored_metadata_interactive,
+        )
+    }
+    print(interactive_components_dict)
 
-    # print(f"Switch state: {switch_state}")
-    # print(f"Switch state value: {stored_edit_dashboard}")
+    check_value = False
+    if "interactive-component" in triggered_input:
+        triggered_input_eval = ast.literal_eval(triggered_input)
+        print(triggered_input_eval)
+        triggered_input_eval_index = int(triggered_input_eval["index"])
 
-    ######################################################################
-    # filter_dict = {}
-    # # Enumerate through all the children
-    # for j, child in enumerate(current_draggable_children):
-    #     # print(f"TOTO-{j}")
-    #     # print(child["props"]["id"])
-    #     # print(child["props"]["children"][switch_state_index]["props"])
+        value = interactive_components_dict[triggered_input_eval_index]["value"]
+        check_value = True if value is not None else False
 
-    #     # Filter out those children that are not input components
-    #     if (
-    #         "-input" in child["props"]["id"]
-    #         and "value"
-    #         in child["props"]["children"][switch_state_index]["props"]["children"][-1][
-    #             "props"
-    #         ]
-    #     ):
-    #         # Extract the id and the value of the input component
-    #         # print(f"TATA-{j}")
+    other_components_dict = {
+        id["index"]: {"value": value, "metadata": metadata}
+        for (id, value, metadata) in zip(
+            interactive_component_ids,
+            interactive_component_values,
+            stored_metadata_interactive,
+        )
+    }
+    print(other_components_dict)
 
-    #         id_components = child["props"]["children"][switch_state_index]["props"][
-    #             "children"
-    #         ][-1]["props"]["id"]["index"].split("-")[2:]
-    #         value = child["props"]["children"][switch_state_index]["props"]["children"][
-    #             -1
-    #         ]["props"]["value"]
+    # print("\n\n\n")
+    # print(current_draggable_children)
+    # print(analyze_structure(current_draggable_children))
+    # # current_draggable_children_to_keep = current_draggable_children[0]["props"]["children"]
+    # print("\n\n\n")
+    new_draggable_children = []
+    for child in current_draggable_children:
+        print(child["props"]["id"])
+        for sub_child in child["props"]["children"]:
+            if sub_child["props"]["id"]["type"] == "add-content":
+                print(sub_child["props"]["id"])
+                print(sub_child["props"]["children"])
+                child["props"]["children"] = [sub_child]
+                continue
+            # else:
+            #     # child["props"]["children"] = child["props"]["children"].remove(sub_child)
+            #     print("Removed sub_child with id " + str(sub_child["props"]["id"]))
 
-    #         # Construct the key for the dictionary
-    #         key = "-".join(id_components)
-
-    #         # Add the key-value pair to the dictionary
-    #         filter_dict[key] = value
-    ######################################################################
-
-    # if current_draggable_children is None:
-    #     current_draggable_children = []
-    # if current_layouts is None:
-    #     current_layouts = dict()
-
-    from depictio.dash.layouts.stepper import (
-        create_stepper_dropdowns,
-        create_stepper_buttons,
-        create_stepper_output,
-    )
+    print("\n\n\n")
+    print(current_draggable_children)
+    print("\n\n\n")
+    print("END")
 
     # Add a new box to the dashboard
     if triggered_input == "add-button":
@@ -877,7 +898,6 @@ def update_draggable_children(
 
             n = ctx.triggered[0]["value"]
             new_plot_id = f"{n}"
-
 
             stepper_dropdowns = create_stepper_dropdowns(n)
             stepper_buttons = create_stepper_buttons(n)
@@ -922,6 +942,136 @@ def update_draggable_children(
             )
         else:
             raise dash.exceptions.PreventUpdate
+
+    elif "interactive-component" in triggered_input and check_value:
+        print("\n\n\n")
+        print("interactive-component")
+        print("\n\n\n")
+
+        # Retrieve index of the interactive component that was clicked
+        triggered_input_eval = ast.literal_eval(triggered_input)
+        n = triggered_input_eval["index"]
+        n = int(n)
+        print(n, type(n))
+        # Retrieve corresponding metadata
+        n_dict = interactive_components_dict[n]
+        print(n_dict)
+
+        # Access the corresponding non interactive component with same workflow, data collection and column
+        for e in stored_metadata:
+            if e["component_type"] != "interactive_component":
+                if e["wf_id"] == n_dict["metadata"]["wf_id"]:
+                    if e["dc_id"] == n_dict["metadata"]["dc_id"]:
+                        print(e["component_type"])
+                        print(e["wf_id"])
+                        print(e["dc_id"])
+
+                        new_df = return_deltatable(e["wf_id"], e["dc_id"])
+                        print(new_df)
+
+                        # filter based on the column and the interactive component
+                        # handle if the column is categorical or numerical
+
+                        # TODO: replace e["type"] with n_metadata["type"]
+                        if n_dict["metadata"]["type"] == "utf8":
+                            new_df = new_df[
+                                new_df[n_dict["metadata"]["column_value"]].isin(
+                                    n_dict["value"]
+                                )
+                            ]
+                        elif (
+                            n_dict["metadata"]["type"] == "int64"
+                            or n_dict["metadata"]["type"] == "float64"
+                        ):
+                            print(n_dict["metadata"]["interactive_component_type"])
+                            print(n_dict["value"])
+
+                            if n_dict["value"] is None:
+                                continue
+
+                            # handle if the input is a range or a single value
+                            if (
+                                n_dict["metadata"]["interactive_component_type"]
+                                == "RangeSlider"
+                            ):
+                                new_df = new_df[
+                                    (
+                                        new_df[n_dict["metadata"]["column_value"]]
+                                        >= n_dict["value"][0]
+                                    )
+                                    & (
+                                        new_df[n_dict["metadata"]["column_value"]]
+                                        <= n_dict["value"][1]
+                                    )
+                                ]
+                            elif (
+                                n_dict["metadata"]["interactive_component_type"]
+                                == "Slider"
+                            ):
+                                new_df = new_df[
+                                    new_df[n_dict["column_value"]] == n_dict["value"]
+                                ]
+
+                        print(new_df)
+
+                        # CARD PART
+
+                        # create the new component - test for card
+                        aggregation = e["aggregation"]
+                        new_value = new_df[e["column_value"]].agg(aggregation)
+                        print(new_value, type(new_value))
+                        if type(new_value) is np.float64:
+                            new_value = round(new_value, 2)
+                        print(aggregation)
+                        print(new_value)
+
+                        # replace the card value in the children props
+                        for child in current_draggable_children:
+                            print(child)
+                            print(child["props"]["id"])
+                            print(len(child["props"]["children"]))
+                            if int(child["props"]["id"]) == int(e["index"]):
+                                for sub_child in child["props"]["children"][0]["props"][
+                                    "children"
+                                ]["props"]["children"]:
+                                    if type(sub_child["props"]["children"]) is dict:
+                                        for sub_sub_child in sub_child["props"][
+                                            "children"
+                                        ]["props"]["children"]:
+                                            if "id" in sub_sub_child["props"]:
+                                                if (
+                                                    sub_sub_child["props"]["id"]["type"]
+                                                    == "card-value"
+                                                ):
+                                                    print(sub_sub_child)
+                                                    print(sub_sub_child["props"]["id"])
+                                                    sub_sub_child["props"][
+                                                        "children"
+                                                    ] = new_value
+                                                    print(
+                                                        sub_sub_child["props"][
+                                                            "children"
+                                                        ]
+                                                    )
+                                                    break
+                                #     if sub_child["props"]["id"]["type"] == "card-value":
+                                #         print(sub_child)
+                                #         print(sub_child["props"]["id"])
+                                #         sub_child["props"]["children"] = new_value
+                                #         print(sub_child["props"]["children"])
+                                #         break
+                                # break
+
+        return (
+            current_draggable_children,
+            current_layouts,
+            current_layouts,
+            current_draggable_children,
+            stored_edit_dashboard,
+            stored_add_button,
+        )
+
+        # raise dash.exceptions.PreventUpdate
 
     #     return (
     #         updated_draggable_children,

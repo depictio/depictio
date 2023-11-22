@@ -117,6 +117,7 @@ def register_callbacks_interactive_component(app):
                 "wf_id": wf_id,
                 "dc_id": dc_id,
                 "column_value": column_value,
+                "type": column_type,
             },
             storage_type="memory",
         )
