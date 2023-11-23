@@ -127,7 +127,6 @@ def load_deltatable(workflow_id: str, data_collection_id: str, cols: list = None
         data_collection_id = default_workflow["data_collections"][0]["_id"]
 
     else:
-
         workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_id][0][
             "_id"
         ]
@@ -143,31 +142,102 @@ def load_deltatable(workflow_id: str, data_collection_id: str, cols: list = None
         # if so, load the joined data collection
         # if not, load the data collection
 
+        headers = {
+            "Authorization": f"Bearer {token}",
+        }
 
-        join_tables_for_wf = httpx.get(
-            f"{API_BASE_URL}/depictio/api/v1/workflows/get_join_tables/{workflow_id}",
-        )
-        
-        
-        print(join_tables_for_wf.json())
-        for association in join_tables_for_wf:
-            print(association)
-            if data_collection_id in association:
-                for tmp_dc_id in association:
-                    print(tmp_dc_id)
-                    tmp_df = load_deltatable(workflow_id, tmp_dc_id)
 
-            # print(association["join"])
-            #
 
-        print(
-            [
-                f["join"]
-                for e in workflows
-                if e["_id"] == workflow_id
-                for f in e["data_collections"]
-            ]
-        )
+
+
+        def tmp_load_deltatable(workflow_id: str, data_collection_id: str):
+            response = httpx.get(
+                f"{API_BASE_URL}/depictio/api/v1/deltatables/get/{workflow_id}/{data_collection_id}",
+                headers={
+                    "Authorization": f"Bearer {token}",
+                },
+            )
+
+            if response.status_code == 200:
+                file_id = response.json()["delta_table_location"]
+                print(file_id)
+
+
+                if redis_cache.exists(file_id):
+                    # print("Loading from redis cache")
+                    data_stream = BytesIO(redis_cache.get(file_id))
+                    data_stream.seek(0)  # Important: reset stream position to the beginning
+                    df = pl.read_parquet(data_stream, columns=cols if cols else None)
+                    # print(df)
+                else:
+                    # print("Loading from DeltaTable")
+                    df = pl.read_delta(file_id, columns=cols if cols else None)
+
+                    # Convert DataFrame to parquet and then to bytes
+                    output_stream = BytesIO()
+                    df.write_parquet(output_stream)
+                    output_stream.seek(0)  # Reset stream position after writing
+                    redis_cache.set(file_id, output_stream.read())
+                # TODO: move to polars
+                df = df.to_pandas()
+                return df
+            else:
+                raise Exception("Error loading deltatable")
+
+
+        main_data_collection_df = tmp_load_deltatable(workflow_id, data_collection_id)
+        print(main_data_collection_df)
+
+        # print("\n\n\n")
+        # print("JOIN TABLES")
+
+        # join_tables_for_wf = httpx.get(
+        #     f"{API_BASE_URL}/depictio/api/v1/workflows/get_join_tables/{workflow_id}",
+        #     headers=headers,
+        # )
+
+    
+        # if join_tables_for_wf.status_code == 200:
+        #     print(join_tables_for_wf.json())
+        #     if data_collection_id in join_tables_for_wf.json():
+        #         print(data_collection_id)
+        #         for join in join_tables_for_wf.json()[data_collection_id]:
+        #             print(["depictio_run_id"] + join["on"])
+        #             for tmp_dc_id in join["with_dc"]:
+        #                 print(tmp_dc_id)
+        #                 tmp_df = tmp_load_deltatable(workflow_id, tmp_dc_id)
+        #                 # TODO: remove this - used for debugging
+        #                 tmp_df["cell"] = tmp_df["cell"].str.replace(".sort.mdup.bam", "")
+        #                 print(tmp_df)
+        #                 main_data_collection_df = pd.merge(main_data_collection_df, tmp_df, how=join["how"], on=["depictio_run_id"] + join["on"])
+        #                 print(main_data_collection_df)
+
+        return main_data_collection_df
+
+                        
+                    
+        #             tmp_df = 
+        #             print(tmp_df)
+
+        # print(join_tables_for_wf.json())
+        # for association in join_tables_for_wf:
+        #     print(association)
+        #     if data_collection_id in association:
+        #         for tmp_dc_id in association:
+        #             print(tmp_dc_id)
+        #             tmp_df = load_deltatable(workflow_id, tmp_dc_id)
+
+        #     # print(association["join"])
+        #     #
+
+        # print(
+        #     [
+        #         f["join"]
+        #         for e in workflows
+        #         if e["_id"] == workflow_id
+        #         for f in e["data_collections"]
+        #     ]
+        # )
 
     # print(workflow_id)
 
@@ -177,35 +247,35 @@ def load_deltatable(workflow_id: str, data_collection_id: str, cols: list = None
     # print(workflow_engine, workflow_name)
     # print(data_collection_id)
 
-    response = httpx.get(
-        f"{API_BASE_URL}/depictio/api/v1/deltatables/get/{workflow_id}/{data_collection_id}",
-        headers={
-            "Authorization": f"Bearer {token}",
-        },
-    )
+    # response = httpx.get(
+    #     f"{API_BASE_URL}/depictio/api/v1/deltatables/get/{workflow_id}/{data_collection_id}",
+    #     headers={
+    #         "Authorization": f"Bearer {token}",
+    #     },
+    # )
 
-    if response.status_code == 200:
-        file_id = response.json()["delta_table_location"]
+    # if response.status_code == 200:
+    #     file_id = response.json()["delta_table_location"]
 
-        # Get the file from GridFS
+    #     # Get the file from GridFS
 
-        # Check if present in redis cache otherwise load and save to redis
+    #     # Check if present in redis cache otherwise load and save to redis
 
-        if redis_cache.exists(file_id):
-            # print("Loading from redis cache")
-            data_stream = BytesIO(redis_cache.get(file_id))
-            data_stream.seek(0)  # Important: reset stream position to the beginning
-            df = pl.read_parquet(data_stream, columns=cols if cols else None)
-            # print(df)
-        else:
-            # print("Loading from DeltaTable")
-            df = pl.read_delta(file_id, columns=cols if cols else None)
+    #     if redis_cache.exists(file_id):
+    #         # print("Loading from redis cache")
+    #         data_stream = BytesIO(redis_cache.get(file_id))
+    #         data_stream.seek(0)  # Important: reset stream position to the beginning
+    #         df = pl.read_parquet(data_stream, columns=cols if cols else None)
+    #         # print(df)
+    #     else:
+    #         # print("Loading from DeltaTable")
+    #         df = pl.read_delta(file_id, columns=cols if cols else None)
 
-            # Convert DataFrame to parquet and then to bytes
-            output_stream = BytesIO()
-            df.write_parquet(output_stream)
-            output_stream.seek(0)  # Reset stream position after writing
-            redis_cache.set(file_id, output_stream.read())
-        # TODO: move to polars
-        df = df.to_pandas()
-        return df
+    #         # Convert DataFrame to parquet and then to bytes
+    #         output_stream = BytesIO()
+    #         df.write_parquet(output_stream)
+    #         output_stream.seek(0)  # Reset stream position after writing
+    #         redis_cache.set(file_id, output_stream.read())
+    #     # TODO: move to polars
+    #     df = df.to_pandas()
+    #     return df

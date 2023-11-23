@@ -834,7 +834,7 @@ def update_draggable_children(
     stored_metadata_interactive = [
         e for e in stored_metadata if e["component_type"] == "interactive_component"
     ]
-    print(stored_metadata_interactive)
+    # print(stored_metadata_interactive)
     interactive_components_dict = {
         id["index"]: {"value": value, "metadata": metadata}
         for (id, value, metadata) in zip(
@@ -843,7 +843,7 @@ def update_draggable_children(
             stored_metadata_interactive,
         )
     }
-    print(interactive_components_dict)
+    # print(interactive_components_dict)
 
     check_value = False
     if "interactive-component" in triggered_input:
@@ -862,7 +862,7 @@ def update_draggable_children(
             stored_metadata_interactive,
         )
     }
-    print(other_components_dict)
+    # print(other_components_dict)
 
     # print("\n\n\n")
     # print(current_draggable_children)
@@ -882,9 +882,9 @@ def update_draggable_children(
             #     # child["props"]["children"] = child["props"]["children"].remove(sub_child)
             #     print("Removed sub_child with id " + str(sub_child["props"]["id"]))
 
-    print("\n\n\n")
-    print(current_draggable_children)
-    print("\n\n\n")
+    # print("\n\n\n")
+    # print(current_draggable_children)
+    # print("\n\n\n")
     print("END")
 
     # Add a new box to the dashboard
@@ -964,10 +964,11 @@ def update_draggable_children(
                 for n in list(interactive_components_dict.keys()):
                     # Retrieve corresponding metadata
                     n_dict = interactive_components_dict[n]
+                    n_join_dc = n_dict["metadata"]["dc_config"]["join"]["with_dc"]
                     print(n_dict)
 
                     if e["wf_id"] == n_dict["metadata"]["wf_id"]:
-                        if e["dc_id"] == n_dict["metadata"]["dc_id"]:
+                        if e["dc_id"] == n_dict["metadata"]["dc_id"] or e["dc_id"] in n_join_dc:
                             print(e["component_type"])
                             print(e["wf_id"])
                             print(e["dc_id"])

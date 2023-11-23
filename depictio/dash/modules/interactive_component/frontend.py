@@ -4,6 +4,7 @@ import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import pandas as pd
 from dash_iconify import DashIconify
+from CLI_client.cli import list_workflows
 
 
 # Depictio imports
@@ -106,6 +107,35 @@ def register_callbacks_interactive_component(app):
             "component"
         ]
 
+        token = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2NGE4NDI4NDJiZjRmYTdkZWFhM2RiZWQiLCJleHAiOjE3MDY4NTQzOTJ9.q3sJLcwEwes32JoeAEGQdjlaTnn6rC1xmfHs2jjwJuML1jWgWBzuv37fJDb70y7-pRaRjTojAz9iGcUPC91Zc9krbmO6fXedLVre8a4_TvsgVwZTSPXpikA_t6EeHYjVxCDh_FftGZv0hXeRbOV83ob7GykkUP5HWTuXrv_o8v4S8ccnsy3fVIIy51NZj6MuU4YL2BfPDuWdBp2d0IN2UDognt1wcwsjIt_26AQJQHwQaxDevvzlNA6RvQIcxC5Es5PSHfpaF7w4MxiZ6J-JE25EnQ7Fw1k-z7bsleb_30Qdh68Kjs-c-BOoTm_hxDF-15G9qLPhFTqJMl148oxAjw"
+
+        workflows = list_workflows(token)
+
+
+        workflow_id = [e for e in workflows if e["workflow_tag"] == wf_id][0][
+            "_id"
+        ]
+        data_collection_id = [
+            f
+            for e in workflows
+            if e["_id"] == workflow_id
+            for f in e["data_collections"]
+            if f["data_collection_tag"] == dc_id
+        ][0]["_id"]
+
+        import httpx
+
+        API_BASE_URL = "http://localhost:8058"
+
+
+
+        dc_specs = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
+            headers={
+                "Authorization": f"Bearer {token}",
+            },
+        ).json()
+
 
 
         # Common Store Component
@@ -117,6 +147,7 @@ def register_callbacks_interactive_component(app):
                 "index": id["index"],
                 "wf_id": wf_id,
                 "dc_id": dc_id,
+                "dc_config" : dc_specs["config"],
                 "column_value": column_value,
                 "type": column_type,
             },
