@@ -125,21 +125,8 @@ def load_deltatable(workflow_id: str, data_collection_id: str, cols: list = None
         default_workflow = workflows[0]
         workflow_id = default_workflow["_id"]
         data_collection_id = default_workflow["data_collections"][0]["_id"]
-        # print(workflow_id, data_collection_id)
-    #     response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/workflows/get", headers=headers)
-    #     print(response)
-    #     if response.status_code == 200:
-    #         print(response.json())
-    #         workflow_id = response.json()[0]["workflow_id"]
-    #         data_collection_id = response.json()[0]["data_collection_ids"][0]
-    #         print(response.json())
-
-    #     else:
-    #         print("No workflows found")
-    #         return None
 
     else:
-        # find workflow_id and data_collection_id from workflow_tag and data_collection_tag
 
         workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_id][0][
             "_id"
@@ -160,6 +147,8 @@ def load_deltatable(workflow_id: str, data_collection_id: str, cols: list = None
         join_tables_for_wf = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/workflows/get_join_tables/{workflow_id}",
         )
+        
+        
         print(join_tables_for_wf.json())
         for association in join_tables_for_wf:
             print(association)
@@ -167,7 +156,7 @@ def load_deltatable(workflow_id: str, data_collection_id: str, cols: list = None
                 for tmp_dc_id in association:
                     print(tmp_dc_id)
                     tmp_df = load_deltatable(workflow_id, tmp_dc_id)
-                    
+
             # print(association["join"])
             #
 

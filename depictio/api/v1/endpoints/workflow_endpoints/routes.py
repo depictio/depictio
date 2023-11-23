@@ -201,14 +201,20 @@ async def get_join_tables(workflow_id: str, current_user: str = Depends(get_curr
 
     data_collections = existing_workflow["data_collections"]
 
-    join_tables = collections.defaultdict(list)
-    for data_collection in data_collections:
-        print(data_collection)
-        if "join" in data_collection["config"]:
-            join_tables[str(data_collection["_id"])].extend(data_collection["config"]["join"]["with_dc"])
-    print(join_tables)
-    # Turn into list of tuples
-    join_tables = [v+[k] for k, v in join_tables.items()]
-    print(join_tables)
 
-    return join_tables
+
+    # Initialize a map to track join details
+    join_details_map = collections.defaultdict(list)
+    for data_collection in data_collections:
+        if "join" in data_collection["config"]:
+            dc_id = str(data_collection["_id"])
+            join_details_map[dc_id].append(data_collection["config"]["join"])
+
+            for sub_dc_id in data_collection["config"]["join"]["with_dc"]:
+                tmp_dict = data_collection["config"]["join"]
+                tmp_dict["with_dc"] = [e for e in tmp_dict["with_dc"] if e != dc_id and e != sub_dc_id]
+                tmp_dict["with_dc"].append(dc_id)
+                join_details_map[sub_dc_id].append(tmp_dict)
+
+
+    return join_details_map
