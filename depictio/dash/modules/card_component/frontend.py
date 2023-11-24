@@ -132,8 +132,21 @@ def register_callbacks_card_component(app):
             },
         ).json()
 
+        headers = {
+            "Authorization": f"Bearer {token}",
+        }
 
 
+        join_tables_for_wf = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/workflows/get_join_tables/{workflow_id}",
+            headers=headers,
+        )
+        if join_tables_for_wf.status_code == 200:
+            join_tables_for_wf = join_tables_for_wf.json()
+            if data_collection_id in join_tables_for_wf:
+                join_details = join_tables_for_wf[data_collection_id]
+                dc_specs["config"]["join"] = join_details
+                
 
 
 
@@ -156,8 +169,8 @@ def register_callbacks_card_component(app):
                 "index": id["index"],
                 "component_type": "card",
                 "title": input_value,
-                "wf_id": wf_id,
-                "dc_id": dc_id,
+                "wf_id": workflow_id,
+                "dc_id": data_collection_id,
                 "dc_config": dc_specs["config"],
                 "column_value": column_value,
                 "aggregation": aggregation_value,
@@ -165,6 +178,7 @@ def register_callbacks_card_component(app):
                 
             },
         )
+        print(store_component)
 
         if not input_value:
             card_title = html.H5(f"{aggregation_value} on {column_value}")

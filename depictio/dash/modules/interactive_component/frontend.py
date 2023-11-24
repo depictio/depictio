@@ -138,6 +138,24 @@ def register_callbacks_interactive_component(app):
 
 
 
+        headers = {
+            "Authorization": f"Bearer {token}",
+        }
+
+
+        join_tables_for_wf = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/workflows/get_join_tables/{workflow_id}",
+            headers=headers,
+        )
+        if join_tables_for_wf.status_code == 200:
+            join_tables_for_wf = join_tables_for_wf.json()
+            if data_collection_id in join_tables_for_wf:
+                join_details = join_tables_for_wf[data_collection_id]
+                dc_specs["config"]["join"] = join_details
+                
+
+
+
         # Common Store Component
         store_component = dcc.Store(
             id={"type": "stored-metadata-component", "index": id["index"]},
@@ -145,8 +163,8 @@ def register_callbacks_interactive_component(app):
                 "component_type": "interactive_component",
                 "interactive_component_type": aggregation_value,
                 "index": id["index"],
-                "wf_id": wf_id,
-                "dc_id": dc_id,
+                "wf_id": workflow_id,
+                "dc_id": data_collection_id,
                 "dc_config" : dc_specs["config"],
                 "column_value": column_value,
                 "type": column_type,
