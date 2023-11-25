@@ -118,7 +118,7 @@ def get_columns_from_data_collection(
             return None
 
 
-def load_deltatable(workflow_id: str, data_collection_id: str, cols: list = None):
+def load_deltatable(workflow_id: str, data_collection_id: str, cols: list = None, raw: bool = False):
     workflows = list_workflows(token)
 
     if workflow_id is None or data_collection_id is None:
@@ -210,39 +210,53 @@ def load_deltatable(workflow_id: str, data_collection_id: str, cols: list = None
                 raise Exception("Error loading deltatable")
 
 
+
         main_data_collection_df = tmp_load_deltatable(workflow_id, data_collection_id)
-        # print(main_data_collection_df)
-        main_data_collection_df["cell"] = main_data_collection_df["cell"].str.replace(".sort.mdup.bam", "")
+
+        print("main_data_collection_df")
+        print(main_data_collection_df)
+        
+
+        if raw == True:
+            return main_data_collection_df
+        
+        else:
 
 
-        # print("\n\n\n")
-        # print("JOIN TABLES")
+            # print(main_data_collection_df)
+            main_data_collection_df["cell"] = main_data_collection_df["cell"].str.replace(".sort.mdup.bam", "")
 
-        join_tables_for_wf = httpx.get(
-            f"{API_BASE_URL}/depictio/api/v1/workflows/get_join_tables/{workflow_id}",
-            headers=headers,
-        )
 
-    
-        if join_tables_for_wf.status_code == 200:
-            # print(join_tables_for_wf.json())
-            if str(data_collection_id) in join_tables_for_wf.json():
-                # print(data_collection_id)
-                for join in join_tables_for_wf.json()[str(data_collection_id)]:
-                    # print(["depictio_run_id"] + join["on"])
-                    for tmp_dc_id in join["with_dc"]:
-                        # print(tmp_dc_id)
-                        tmp_df = tmp_load_deltatable(str(workflow_id), str(tmp_dc_id))
-                        # TODO: remove this - used for debugging
-                        tmp_df["cell"] = tmp_df["cell"].str.replace(".sort.mdup.bam", "")
-                        # print("tmp_df")
-                        # print(tmp_df)
-                        # print("\n")
-                        main_data_collection_df = pd.merge(main_data_collection_df, tmp_df, on=["depictio_run_id"] + join["on"])
-                        # print("main_data_collection_df")
-                        # print(main_data_collection_df)
 
-        return main_data_collection_df
+
+            # print("\n\n\n")
+            # print("JOIN TABLES")
+
+            join_tables_for_wf = httpx.get(
+                f"{API_BASE_URL}/depictio/api/v1/workflows/get_join_tables/{workflow_id}",
+                headers=headers,
+            )
+
+        
+            if join_tables_for_wf.status_code == 200:
+                # print(join_tables_for_wf.json())
+                if str(data_collection_id) in join_tables_for_wf.json():
+                    # print(data_collection_id)
+                    for join in join_tables_for_wf.json()[str(data_collection_id)]:
+                        # print(["depictio_run_id"] + join["on"])
+                        for tmp_dc_id in join["with_dc"]:
+                            # print(tmp_dc_id)
+                            tmp_df = tmp_load_deltatable(str(workflow_id), str(tmp_dc_id))
+                            # TODO: remove this - used for debugging
+                            tmp_df["cell"] = tmp_df["cell"].str.replace(".sort.mdup.bam", "")
+                            # print("tmp_df")
+                            # print(tmp_df)
+                            # print("\n")
+                            main_data_collection_df = pd.merge(main_data_collection_df, tmp_df, on=["depictio_run_id"] + join["on"])
+                            # print("main_data_collection_df")
+                            # print(main_data_collection_df)
+
+            return main_data_collection_df
 
                         
                     
