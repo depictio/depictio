@@ -215,9 +215,10 @@ def load_deltatable(workflow_id: str, data_collection_id: str, cols: list = None
 
         print("main_data_collection_df")
         print(main_data_collection_df)
-        
+
 
         if raw == True:
+            print("Raw data = TRUE")
             return main_data_collection_df
         
         else:
