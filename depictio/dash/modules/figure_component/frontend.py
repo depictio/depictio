@@ -12,6 +12,7 @@ import plotly.express as px
 import re
 from dash_iconify import DashIconify
 import ast
+from CLI_client.cli import list_workflows
 from depictio.dash.utils import (
     SELECTED_STYLE,
     UNSELECTED_STYLE,
@@ -72,7 +73,6 @@ def register_callbacks_figure_component(app):
         # print(columns_json)
 
         columns = list(columns_json.keys())
-
 
         # print(columns)
         # print("\n\n\n")
@@ -460,6 +460,7 @@ def register_callbacks_figure_component(app):
             Input({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
             State({"type": "workflow-selection-label", "index": MATCH}, "value"),
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+            State({"type": "segmented-control-visu-graph", "index": MATCH}, "id"),
             # Input({"type": "tmp-x", "index": MATCH}, "value"),
             # [
             #     Input({"type": f"tmp-{e}", "index": MATCH}, "children")
@@ -470,24 +471,26 @@ def register_callbacks_figure_component(app):
         # prevent_initial_call=True,
     )
     def update_figure(*args):
-        # print("\n\n\n")
-        # print("update_figure")
+        print("\n\n\n")
+        print("update_figure")
         dict_kwargs = args[0]
 
         visu_type = args[1]
         workflow = args[2]
         data_collection = args[3]
-        # print(args)
+        id = args[4]
+        print(args)
 
         columns_json = get_columns_from_data_collection(workflow, data_collection)
-        # print(columns_json, type(columns_json))
+        print(columns_json, type(columns_json))
 
         columns_specs_reformatted = collections.defaultdict(list)
         {
             columns_specs_reformatted[v["type"]].append(k)
             for k, v in columns_json.items()
         }
-        # print(columns_specs_reformatted)
+        print("columns_specs_reformatted")
+        print(columns_specs_reformatted)
 
         x_col, color_col, y_col = None, None, None
 
@@ -505,14 +508,89 @@ def register_callbacks_figure_component(app):
             dict_kwargs = {"x": x_col, "y": y_col, "color": color_col}
             # print(dict_kwargs)
 
-        # print("update figure")
-        # print(dict_kwargs)
-        # print(visu_type)
+        print("update figure 2")
+        print(dict_kwargs)
+        print(visu_type)
         # # print(app._callback_list)
+
+        import httpx
+
+        API_BASE_URL = "http://localhost:8058"
+
+        token = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2NGE4NDI4NDJiZjRmYTdkZWFhM2RiZWQiLCJleHAiOjE3MDY4NTQzOTJ9.q3sJLcwEwes32JoeAEGQdjlaTnn6rC1xmfHs2jjwJuML1jWgWBzuv37fJDb70y7-pRaRjTojAz9iGcUPC91Zc9krbmO6fXedLVre8a4_TvsgVwZTSPXpikA_t6EeHYjVxCDh_FftGZv0hXeRbOV83ob7GykkUP5HWTuXrv_o8v4S8ccnsy3fVIIy51NZj6MuU4YL2BfPDuWdBp2d0IN2UDognt1wcwsjIt_26AQJQHwQaxDevvzlNA6RvQIcxC5Es5PSHfpaF7w4MxiZ6J-JE25EnQ7Fw1k-z7bsleb_30Qdh68Kjs-c-BOoTm_hxDF-15G9qLPhFTqJMl148oxAjw"
+
+        workflows = list_workflows(token)
+        print("workflows")
+        print(workflows)
+
+        workflow_id = [e for e in workflows if e["workflow_tag"] == workflow][0]["_id"]
+        data_collection_id = [
+            f
+            for e in workflows
+            if e["_id"] == workflow_id
+            for f in e["data_collections"]
+            if f["data_collection_tag"] == data_collection
+        ][0]["_id"]
+
+
+        dc_specs = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
+            headers={
+                "Authorization": f"Bearer {token}",
+            },
+        ).json()
+
+        headers = {
+            "Authorization": f"Bearer {token}",
+        }
+
+        join_tables_for_wf = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/workflows/get_join_tables/{workflow_id}",
+            headers=headers,
+        )
+
+        if join_tables_for_wf.status_code == 200:
+            join_tables_for_wf = join_tables_for_wf.json()
+            if data_collection_id in join_tables_for_wf:
+                join_details = join_tables_for_wf[data_collection_id]
+                dc_specs["config"]["join"] = join_details
+        print("dc_specs")
+        print(dc_specs)
+        print(visu_type)
+
+        # # Get the type of the selected column
+        # column_type = cols_json[column_value]["type"]
+
+        # v = cols_json[column_value]["specs"][aggregation_value]
+
+        try:
+            v = round(float(v), 2)
+        except:
+            pass
+
+        store_component = dcc.Store(
+            id={
+                "type": "stored-metadata-component",
+                "index": id["index"],
+            },
+            data={
+                "index": id["index"],
+                "component_type": "graph",
+                "dict_kwargs": dict_kwargs,
+                "visu_type": visu_type,
+                "wf_id": workflow_id,
+                "dc_id": data_collection_id,
+                "dc_config": dc_specs["config"],
+            },
+        )
+        print(store_component)
 
         # print(dict_kwargs)
         dict_kwargs = {k: v for k, v in dict_kwargs.items() if v is not None}
         df = load_deltatable(workflow, data_collection)
+
+        print("df")
+        print(df)
         # print("\n\n\n")
         # print(dict_kwargs)
         if dict_kwargs:
