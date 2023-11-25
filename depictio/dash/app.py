@@ -956,18 +956,24 @@ def update_draggable_children(
         # print(interactive_components_dict)
 
         # Access the corresponding non interactive component with same workflow, data collection and column
-        for e in stored_metadata:
+        for j, e in enumerate(stored_metadata):
             if e["component_type"] != "interactive_component":
+                print("\n\n\n")
+                print("\n\n\n")
+                print("J : " + str(j))
                 print(e)
                 new_df = return_deltatable(e["wf_id"], e["dc_id"])
                 print(new_df)
                 print("\n\n\n")
 
 
-                for n in list(interactive_components_dict.keys()):
+                for i, n in enumerate(list(interactive_components_dict.keys())):
                     # Retrieve corresponding metadata
                     n_dict = interactive_components_dict[n]
                     print("\n\n\n")
+                    print("i : " + str(i))
+                    print("j : " + str(j))
+                
                     print("n_dict")
                     print(n_dict)
                     print(e["wf_id"])
@@ -982,12 +988,16 @@ def update_draggable_children(
                     else:
                         n_join_dc = []
 
-                    check_join = [e["dc_id"] for sub_join in n_join_dc if e["dc_id"] in sub_join]
-                    
+                    check_join = [e["dc_id"] for sub_join in n_join_dc if e["dc_id"] in sub_join["with_dc"]]
+                    print("CHECK JOIN")
                     print(n_join_dc)
+                    print(check_join)
+                    print(len(check_join))
+                    print((e["dc_id"] == n_dict["metadata"]["dc_id"]))
+                    print((len(check_join) > 0))
 
                     if e["wf_id"] == n_dict["metadata"]["wf_id"]:
-                        if e["dc_id"] == n_dict["metadata"]["dc_id"] or len(check_join) > 0:
+                        if (e["dc_id"] == n_dict["metadata"]["dc_id"]) or (len(check_join) > 0):
                             # print(e["component_type"])
                             # print(e["wf_id"])
                             # print(e["dc_id"])
