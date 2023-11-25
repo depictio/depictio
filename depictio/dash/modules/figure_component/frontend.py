@@ -454,7 +454,10 @@ def register_callbacks_figure_component(app):
             # accordion_specific_params = args[0][3]
 
     @app.callback(
-        Output({"type": "graph", "index": MATCH}, "figure"),
+        [
+            Output({"type": "graph", "index": MATCH}, "figure"), 
+            Output({"type": "stored-metadata-component", "index": MATCH}, "data"), 
+         ],
         [
             Input({"type": "dict_kwargs", "index": MATCH}, "data"),
             Input({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
@@ -532,7 +535,6 @@ def register_callbacks_figure_component(app):
             if f["data_collection_tag"] == data_collection
         ][0]["_id"]
 
-
         dc_specs = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
             headers={
@@ -568,12 +570,7 @@ def register_callbacks_figure_component(app):
         except:
             pass
 
-        store_component = dcc.Store(
-            id={
-                "type": "stored-metadata-component",
-                "index": id["index"],
-            },
-            data={
+        store_component_data={
                 "index": id["index"],
                 "component_type": "graph",
                 "dict_kwargs": dict_kwargs,
@@ -581,9 +578,8 @@ def register_callbacks_figure_component(app):
                 "wf_id": workflow_id,
                 "dc_id": data_collection_id,
                 "dc_config": dc_specs["config"],
-            },
-        )
-        print(store_component)
+            }
+        print(store_component_data)
 
         # print(dict_kwargs)
         dict_kwargs = {k: v for k, v in dict_kwargs.items() if v is not None}
@@ -600,7 +596,9 @@ def register_callbacks_figure_component(app):
             # figure.update_layout(uirevision=1)
             # print("TOTO")
 
-            return figure
+            return figure, store_component_data
+        else:
+            raise dash.exceptions.PreventUpdate
         # print("\n")
 
         # accordion_specific_params = args[0][3]
@@ -636,6 +634,13 @@ def design_figure(id, wfs_list):
                             # figure=figure,
                             id={"type": "graph", "index": id["index"]},
                             config={"editable": True},
+                        ),
+                        dcc.Store(
+                            id={
+                                "type": "stored-metadata-component",
+                                "index": id["index"],
+                            },
+                            data={},
                         ),
                         id={"type": "test-container", "index": id["index"]},
                     ),

@@ -808,6 +808,9 @@ def update_draggable_children(
 
     # print([e for e in args[-5]])
     print("\n\n\n")
+    print("stored_metadata")
+    print(stored_metadata)
+    print("\n\n\n")
 
     # print(args[-11])
     # print(args[-10])
@@ -1088,18 +1091,31 @@ def update_draggable_children(
 
                             # replace the card value in the children props
                             for child in current_draggable_children:
-                                # print(child)
-                                # print(child["props"]["id"])
                                 # print(len(child["props"]["children"]))
+                                print("\n\n\n")
+                                print("analyzing child: child")
+                                analyze_structure(child)
+                                print('int(e["index"])')
+                                print(int(e["index"]))
                                 if int(child["props"]["id"]) == int(e["index"]):
                                     for sub_child in child["props"]["children"][0][
                                         "props"
                                     ]["children"]["props"]["children"]:
+                                        print("\n\n\n")
+                                        print("analyzing sub_child: sub_child")
+                                        analyze_structure(sub_child)
                                         if type(sub_child["props"]["children"]) is dict:
                                             for sub_sub_child in sub_child["props"][
                                                 "children"
                                             ]["props"]["children"]:
                                                 if "id" in sub_sub_child["props"]:
+                                                    print(
+                                                        sub_sub_child["props"]["id"]
+                                                    )
+                                                    # get all "id" from nested children
+                                                    print("\n\n\n")
+                                                    print('analyze_structure(sub_sub_child)')
+                                                    analyze_structure(sub_sub_child)
                                                     if (
                                                         sub_sub_child["props"]["id"][
                                                             "type"
@@ -1118,7 +1134,8 @@ def update_draggable_children(
                                                         #         "children"
                                                         #     ]
                                                         # )
-                                                        break
+                                                        continue
+                                                     
                                     #     if sub_child["props"]["id"]["type"] == "card-value":
                                     #         print(sub_child)
                                     #         print(sub_child["props"]["id"])
