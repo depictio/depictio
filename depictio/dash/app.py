@@ -93,8 +93,8 @@ from depictio.dash.layouts.stepper import (
 # Data
 
 
-def return_deltatable(workflow_id: str = None, data_collection_id: str = None):
-    df = load_deltatable(workflow_id, data_collection_id)
+def return_deltatable(workflow_id: str = None, data_collection_id: str = None, raw=False):
+    df = load_deltatable(workflow_id, data_collection_id, raw=raw)
     # print(df)
     return df
 
@@ -332,9 +332,9 @@ def save_data_dashboard(
 
 
 def enable_box_edit_mode(box, switch_state=True):
-    print("\n\n\n")
-    print("enable_box_edit_mode")
-    print(box["props"]["children"]["props"]["children"][1])
+    # print("\n\n\n")
+    # print("enable_box_edit_mode")
+    # print(box["props"]["children"]["props"]["children"][1])
     btn_index = box["props"]["id"]["index"]
     edit_button = dbc.Button(
         "Edit",
@@ -352,17 +352,17 @@ def enable_box_edit_mode(box, switch_state=True):
         color="danger",
     )
 
-    reset_button = dbc.Button(
-        "Reset",
-        id={"type": "reset-box-button", "index": f"{btn_index}"},
-        color="info",
-        style={"margin-left": "24px"},
+    # reset_button = dbc.Button(
+    #     "Reset",
+    #     id={"type": "reset-box-button", "index": f"{btn_index}"},
+    #     color="info",
+    #     style={"margin-left": "24px"},
+    # )
 
-    )
     if switch_state:
         box_components_list = [remove_button, edit_button, box]
-        if box["props"]["children"]["props"]["children"][1]["props"]["id"]["type"] == "interactive-component":
-            box_components_list.append(reset_button)
+        # if box["props"]["children"]["props"]["children"][1]["props"]["id"]["type"] == "interactive-component":
+        #     box_components_list.append(reset_button)
     else:
         box_components_list = [box]
 
@@ -635,7 +635,7 @@ def update_button_style(figure_clicks, card_clicks, interactive_clicks):
 )
 def update_step_2(workflow_selection, data_collection_selection):
     if workflow_selection is not None and data_collection_selection is not None:
-        df = return_deltatable(workflow_selection, data_collection_selection)
+        df = return_deltatable(workflow_selection, data_collection_selection, raw=True)
         cols = get_columns_from_data_collection(
             workflow_selection, data_collection_selection
         )
@@ -698,7 +698,7 @@ def update_step_2(
             if x > y
         ]
         if btn_index:
-            df = return_deltatable(workflow_selection, data_collection_selection)
+            df = return_deltatable(workflow_selection, data_collection_selection, raw=True)
 
             components_list = ["Figure", "Card", "Interactive", "Genome browser"]
             component_selected = components_list[btn_index[0]]
