@@ -334,7 +334,7 @@ def save_data_dashboard(
 def enable_box_edit_mode(box, switch_state=True):
     print("\n\n\n")
     print("enable_box_edit_mode")
-    print(box["props"]["id"])
+    print(box["props"]["children"]["props"]["children"][1])
     btn_index = box["props"]["id"]["index"]
     edit_button = dbc.Button(
         "Edit",
@@ -351,8 +351,18 @@ def enable_box_edit_mode(box, switch_state=True):
         id={"type": "remove-box-button", "index": f"{btn_index}"},
         color="danger",
     )
+
+    reset_button = dbc.Button(
+        "Reset",
+        id={"type": "reset-box-button", "index": f"{btn_index}"},
+        color="info",
+        style={"margin-left": "24px"},
+
+    )
     if switch_state:
         box_components_list = [remove_button, edit_button, box]
+        if box["props"]["children"]["props"]["children"][1]["props"]["id"]["type"] == "interactive-component":
+            box_components_list.append(reset_button)
     else:
         box_components_list = [box]
 
