@@ -455,9 +455,9 @@ def register_callbacks_figure_component(app):
 
     @app.callback(
         [
-            Output({"type": "graph", "index": MATCH}, "figure"), 
-            Output({"type": "stored-metadata-component", "index": MATCH}, "data"), 
-         ],
+            Output({"type": "graph", "index": MATCH}, "figure"),
+            Output({"type": "stored-metadata-component", "index": MATCH}, "data"),
+        ],
         [
             Input({"type": "dict_kwargs", "index": MATCH}, "data"),
             Input({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
@@ -483,6 +483,8 @@ def register_callbacks_figure_component(app):
         data_collection = args[3]
         id = args[4]
         print(args)
+        print(id)
+        print("\n\n\n")
 
         columns_json = get_columns_from_data_collection(workflow, data_collection)
         print(columns_json, type(columns_json))
@@ -570,15 +572,15 @@ def register_callbacks_figure_component(app):
         except:
             pass
 
-        store_component_data={
-                "index": id["index"],
-                "component_type": "graph",
-                "dict_kwargs": dict_kwargs,
-                "visu_type": visu_type,
-                "wf_id": workflow_id,
-                "dc_id": data_collection_id,
-                "dc_config": dc_specs["config"],
-            }
+        store_component_data = {
+            "index": id["index"],
+            "component_type": "graph",
+            "dict_kwargs": dict_kwargs,
+            "visu_type": visu_type,
+            "wf_id": workflow_id,
+            "dc_id": data_collection_id,
+            "dc_config": dc_specs["config"],
+        }
         print(store_component_data)
 
         # print(dict_kwargs)
@@ -596,9 +598,10 @@ def register_callbacks_figure_component(app):
             # figure.update_layout(uirevision=1)
             # print("TOTO")
 
+            # return [figure]
             return figure, store_component_data
-        else:
-            raise dash.exceptions.PreventUpdate
+        # else:
+        #     raise dash.exceptions.PreventUpdate
         # print("\n")
 
         # accordion_specific_params = args[0][3]
@@ -628,19 +631,19 @@ def design_figure(id, wfs_list):
         html.Br(),
         dbc.Row(
             [
+                dcc.Store(
+                    id={
+                        "type": "stored-metadata-component",
+                        "index": id["index"],
+                    },
+                    data={},
+                ),
                 dbc.Col(
                     html.Div(
                         dcc.Graph(
                             # figure=figure,
                             id={"type": "graph", "index": id["index"]},
                             config={"editable": True},
-                        ),
-                        dcc.Store(
-                            id={
-                                "type": "stored-metadata-component",
-                                "index": id["index"],
-                            },
-                            data={},
                         ),
                         id={"type": "test-container", "index": id["index"]},
                     ),
