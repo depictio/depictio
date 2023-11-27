@@ -1098,59 +1098,64 @@ def update_draggable_children(
                                         print("analyzing sub_child: sub_child")
                                         print(k)
                                         analyze_structure(sub_child)
+                                        print(sub_child["props"].keys())
 
 
+                                        if "children" in sub_child["props"].keys():
                                         # CARD PART UPDATE
 
 
-                                        if type(sub_child["props"]["children"]) is dict:
-                                            for sub_sub_child in sub_child["props"][
-                                                "children"
-                                            ]["props"]["children"]:
-                                                if "id" in sub_sub_child["props"]:
-                                                    print(
-                                                        sub_sub_child["props"]["id"]
-                                                    )
-                                                    # get all "id" from nested children
-                                                    print("\n\n\n")
-                                                    print('analyze_structure(sub_sub_child)')
-                                                    analyze_structure(sub_sub_child)
-                                                    if (
-                                                        sub_sub_child["props"]["id"][
-                                                            "type"
-                                                        ]
-                                                        == "card-value"
-                                                    ):
-                                                        
+                                            if type(sub_child["props"]["children"]) is dict:
+                                                for sub_sub_child in sub_child["props"][
+                                                    "children"
+                                                ]["props"]["children"]:
+                                                    if "id" in sub_sub_child["props"]:
+                                                        print(
+                                                            sub_sub_child["props"]["id"]
+                                                        )
+                                                        # get all "id" from nested children
+                                                        print("\n\n\n")
+                                                        print('analyze_structure(sub_sub_child)')
+                                                        analyze_structure(sub_sub_child)
+                                                        if (
+                                                            sub_sub_child["props"]["id"][
+                                                                "type"
+                                                            ]
+                                                            == "card-value"
+                                                        ):
+                                                            
 
-                                                        # CARD PART
+                                                            # CARD PART
 
-                                                        # create the new component - test for card
-                                                        aggregation = e["aggregation"]
-                                                        new_value = new_df[e["column_value"]].agg(aggregation)
-                                                        # print(new_value, type(new_value))
-                                                        if type(new_value) is np.float64:
-                                                            new_value = round(new_value, 2)
-                                                        # print(aggregation)
-                                                        # print(new_value)
+                                                            # create the new component - test for card
+                                                            aggregation = e["aggregation"]
+                                                            new_value = new_df[e["column_value"]].agg(aggregation)
+                                                            # print(new_value, type(new_value))
+                                                            if type(new_value) is np.float64:
+                                                                new_value = round(new_value, 2)
+                                                            # print(aggregation)
+                                                            # print(new_value)
 
 
-                                                        # print(sub_sub_child)
-                                                        # print(
-                                                        #     sub_sub_child["props"]["id"]
-                                                        # )
-                                                        sub_sub_child["props"][
-                                                            "children"
-                                                        ] = new_value
-                                                        # print(
-                                                        #     sub_sub_child["props"][
-                                                        #         "children"
-                                                        #     ]
-                                                        # )
-                                                        continue
-                                        else:
+                                                            # print(sub_sub_child)
+                                                            # print(
+                                                            #     sub_sub_child["props"]["id"]
+                                                            # )
+                                                            sub_sub_child["props"][
+                                                                "children"
+                                                            ] = new_value
+                                                            # print(
+                                                            #     sub_sub_child["props"][
+                                                            #         "children"
+                                                            #     ]
+                                                            # )
+                                                            continue
+                                        elif "figure" in sub_child["props"].keys():
                                             print("POTENTIAL GRAPH PART UPDATE")
                                             print(sub_child)
+                                        else:
+                                            print("OTHER")
+                                            
 
                                                      
                                     #     if sub_child["props"]["id"]["type"] == "card-value":
