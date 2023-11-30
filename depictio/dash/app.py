@@ -961,6 +961,7 @@ def update_draggable_children(
         # print(interactive_components_dict)
 
         # Access the corresponding non interactive component with same workflow, data collection and column
+        print(stored_metadata)
         for j, e in enumerate(stored_metadata):
             if e["component_type"] != "interactive_component":
                 print("\n\n\n")
