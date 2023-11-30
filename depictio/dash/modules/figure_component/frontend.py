@@ -80,10 +80,7 @@ def register_callbacks_figure_component(app):
         value = visu_type.lower()
         # value = "scatter"
         if value is not None:
-            specific_params_options = [
-                {"label": param_name, "value": param_name}
-                for param_name in specific_params[value]
-            ]
+            specific_params_options = [{"label": param_name, "value": param_name} for param_name in specific_params[value]]
 
             specific_params_dropdowns = list()
             for e in specific_params[value]:
@@ -263,18 +260,12 @@ def register_callbacks_figure_component(app):
                     start_collapsed=True,
                 )
             ]
-            return [
-                primary_common_params_layout
-                + secondary_common_params_layout
-                + dynamic_specific_params_layout
-            ]
+            return [primary_common_params_layout + secondary_common_params_layout + dynamic_specific_params_layout]
         else:
             return html.Div()
 
     def generate_dropdown_ids(value):
-        specific_param_ids = [
-            f"{value}-{param_name}" for param_name in specific_params[value]
-        ]
+        specific_param_ids = [f"{value}-{param_name}" for param_name in specific_params[value]]
         secondary_param_ids = [f"{value}-{e}" for e in secondary_common_params]
 
         return secondary_param_ids + specific_param_ids
@@ -347,48 +338,28 @@ def register_callbacks_figure_component(app):
 
         if children:
             # accordion_secondary_common_params = children[0]["props"]["children"]["props"]["children"]
-            accordion_primary_common_params = children[0]["props"]["children"]["props"][
-                "children"
-            ][0]["props"]["children"]
+            accordion_primary_common_params = children[0]["props"]["children"]["props"]["children"][0]["props"]["children"]
 
             # accordion_secondary_common_params = children[1]["props"]["children"]
             if accordion_primary_common_params:
                 # print("TOTO")
-                accordion_primary_common_params = [
-                    param["props"]["children"][0]["props"]["children"]
-                    for param in accordion_primary_common_params
-                ]
+                accordion_primary_common_params = [param["props"]["children"][0]["props"]["children"] for param in accordion_primary_common_params]
 
-                accordion_primary_common_params_args = {
-                    elem["props"]["id"]["type"].replace("tmp-", ""): elem["props"][
-                        "value"
-                    ]
-                    for elem in accordion_primary_common_params
-                }
+                accordion_primary_common_params_args = {elem["props"]["id"]["type"].replace("tmp-", ""): elem["props"]["value"] for elem in accordion_primary_common_params}
 
                 # print(accordion_primary_common_params_args)
                 # print(accordion_primary_common_params)
 
                 # print(accordion_secondary_common_params)
                 # return accordion_secondary_common_params_args
-            accordion_secondary_common_params = children[1]["props"]["children"][
-                "props"
-            ]["children"][0]["props"]["children"]
+            accordion_secondary_common_params = children[1]["props"]["children"]["props"]["children"][0]["props"]["children"]
 
             # accordion_secondary_common_params = children[1]["props"]["children"]
             if accordion_secondary_common_params:
                 # print("TOTO")
-                accordion_secondary_common_params = [
-                    param["props"]["children"][0]["props"]["children"]
-                    for param in accordion_secondary_common_params
-                ]
+                accordion_secondary_common_params = [param["props"]["children"][0]["props"]["children"] for param in accordion_secondary_common_params]
 
-                accordion_secondary_common_params_args = {
-                    elem["props"]["id"]["type"].replace("tmp-", ""): elem["props"][
-                        "value"
-                    ]
-                    for elem in accordion_secondary_common_params
-                }
+                accordion_secondary_common_params_args = {elem["props"]["id"]["type"].replace("tmp-", ""): elem["props"]["value"] for elem in accordion_secondary_common_params}
                 # print(accordion_secondary_common_params_args)
                 # if not {
                 #     k: v
@@ -402,24 +373,14 @@ def register_callbacks_figure_component(app):
                 # print(accordion_secondary_common_params_args)
                 # print(accordion_secondary_common_params)
                 # return accordion_secondary_common_params_args
-            specific_params = children[2]["props"]["children"]["props"]["children"][0][
-                "props"
-            ]["children"]
+            specific_params = children[2]["props"]["children"]["props"]["children"][0]["props"]["children"]
 
             # accordion_secondary_common_params = children[1]["props"]["children"]
             if specific_params:
                 # print("specific_params")
-                specific_params = [
-                    param["props"]["children"][0]["props"]["children"]
-                    for param in specific_params
-                ]
+                specific_params = [param["props"]["children"][0]["props"]["children"] for param in specific_params]
 
-                specific_params_args = {
-                    elem["props"]["id"]["type"].replace("tmp-", ""): elem["props"][
-                        "value"
-                    ]
-                    for elem in specific_params
-                }
+                specific_params_args = {elem["props"]["id"]["type"].replace("tmp-", ""): elem["props"]["value"] for elem in specific_params}
                 # print(specific_params_args)
 
             return_dict = dict(
@@ -490,10 +451,7 @@ def register_callbacks_figure_component(app):
         print(columns_json, type(columns_json))
 
         columns_specs_reformatted = collections.defaultdict(list)
-        {
-            columns_specs_reformatted[v["type"]].append(k)
-            for k, v in columns_json.items()
-        }
+        {columns_specs_reformatted[v["type"]].append(k) for k, v in columns_json.items()}
         print("columns_specs_reformatted")
         print(columns_specs_reformatted)
 
@@ -529,13 +487,7 @@ def register_callbacks_figure_component(app):
         print(workflows)
 
         workflow_id = [e for e in workflows if e["workflow_tag"] == workflow][0]["_id"]
-        data_collection_id = [
-            f
-            for e in workflows
-            if e["_id"] == workflow_id
-            for f in e["data_collections"]
-            if f["data_collection_tag"] == data_collection
-        ][0]["_id"]
+        data_collection_id = [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["data_collection_tag"] == data_collection][0]["_id"]
 
         dc_specs = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
@@ -631,22 +583,46 @@ def design_figure(id, wfs_list):
         html.Br(),
         dbc.Row(
             [
-                dcc.Store(
-                    id={
-                        "type": "stored-metadata-component",
-                        "index": id["index"],
-                    },
-                    data={},
-                ),
                 dbc.Col(
-                    html.Div(
-                        dcc.Graph(
-                            # figure=figure,
-                            id={"type": "graph", "index": id["index"]},
-                            config={"editable": True},
+                    [
+                        # dcc.Store(
+                        #     id={
+                        #         "type": "stored-metadata-component",
+                        #         "index": id["index"],
+                        #     }
+                        # ),
+                        html.Div(
+                            dbc.Card(
+                                dbc.CardBody(
+                                    html.Div(
+                                        children=[
+                                            dcc.Store(
+                                                id={
+                                                    "type": "stored-metadata-component",
+                                                    "index": id["index"],
+                                                }
+                                            ),
+                                            dcc.Graph(
+                                                # figure=figure,
+                                                id={"type": "graph", "index": id["index"]},
+                                                config={"editable": True},
+                                            ),
+                                        ],
+                                        id={
+                                            "type": "card-body",
+                                            "index": id["index"],
+                                        },
+                                    ),
+                                    style={"width": "100%"},
+                                    id={
+                                        "type": "interactive",
+                                        "index": id["index"],
+                                    },
+                                ),
+                                id={"type": "test-container", "index": id["index"]},
+                            )
                         ),
-                        id={"type": "test-container", "index": id["index"]},
-                    ),
+                    ],
                     width="auto",
                 ),
                 # dbc.Col(width=0.5),
@@ -671,9 +647,7 @@ def design_figure(id, wfs_list):
                                         ),
                                         dbc.Col(
                                             dmc.ActionIcon(
-                                                DashIconify(
-                                                    icon="mdi:refresh", width=0
-                                                ),
+                                                DashIconify(icon="mdi:refresh", width=0),
                                                 id={
                                                     "type": "refresh-button",
                                                     "index": id["index"],

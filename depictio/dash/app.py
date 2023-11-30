@@ -474,37 +474,43 @@ def analyze_structure(struct, depth=0):
             analyze_structure(child, depth=depth + 1)
 
 
-def analyze_structure_and_get_max_depth(struct, depth=0, max_depth=0):
+def analyze_structure_and_get_deepest_type(struct, depth=0, max_depth=0, deepest_type=None):
     """
-    Recursively analyze a nested plotly dash structure and return the maximum depth.
+    Recursively analyze a nested plotly dash structure and return the type of the deepest element (excluding 'stored-metadata-component').
 
     Args:
     - struct: The nested structure.
     - depth: Current depth in the structure.
     - max_depth: Maximum depth encountered so far.
+    - deepest_type: Type of the deepest element encountered so far.
 
     Returns:
-    - int: Maximum depth of the structure.
+    - tuple: (Maximum depth of the structure, Type of the deepest element)
     """
 
-    # Update the maximum depth if the current depth is greater
-    max_depth = max(max_depth, depth)
+    # Update the maximum depth and deepest type if the current depth is greater
+    current_type = None
+    if isinstance(struct, dict):
+        id_value = struct.get("props", {}).get("id", None)
+        if isinstance(id_value, dict) and id_value.get("type") != "stored-metadata-component":
+            current_type = id_value.get("type")
+
+    if depth > max_depth:
+        max_depth = depth
+        deepest_type = current_type
+    elif depth == max_depth and current_type is not None:
+        deepest_type = current_type
 
     if isinstance(struct, list):
         for child in struct:
-            max_depth = analyze_structure_and_get_max_depth(child, depth=depth + 1, max_depth=max_depth)
-        return max_depth
+            max_depth, deepest_type = analyze_structure_and_get_deepest_type(child, depth=depth + 1, max_depth=max_depth, deepest_type=deepest_type)
+    elif isinstance(struct, dict):
+        children = struct.get("props", {}).get("children", None)
+        if isinstance(children, (list, dict)):
+            max_depth, deepest_type = analyze_structure_and_get_deepest_type(children, depth=depth + 1, max_depth=max_depth, deepest_type=deepest_type)
 
-    # Base case: if the struct is not a dictionary, return the current max depth
-    if not isinstance(struct, dict):
-        return max_depth
+    return max_depth, deepest_type
 
-    # If struct is a dictionary with 'children', process the children
-    children = struct.get("props", {}).get("children", None)
-    if isinstance(children, (list, dict)):
-        max_depth = analyze_structure_and_get_max_depth(children, depth=depth + 1, max_depth=max_depth)
-
-    return max_depth
 
 
 @app.callback(
@@ -524,6 +530,38 @@ def analyze_structure_and_get_max_depth(struct, depth=0, max_depth=0):
 def update_button(n_clicks, children, btn_id, switch_state):
     print("\n\n\n")
     print("update_button")
+    print(children)
+    print(analyze_structure(children))
+    print(len(children))
+
+    # Depth 0 ID: {'type': 'graph', 'index': 32}
+
+    # Element 0 ID: {'type': 'stored-metadata-component', 'index': 33}
+    # Depth 1 ID: {'type': 'stored-metadata-component', 'index': 33}
+    # Element 1 ID: {'type': 'graph', 'index': 33}
+    # Depth 1 ID: {'type': 'graph', 'index': 33}
+
+
+    # Depth 0 ID: {'type': 'interactive', 'index': 33}
+    # Depth 0 Type: Dict
+    #   Depth 1 ID: {'type': 'card-body', 'index': 33}
+    #   Depth 1 Type: List with 3 elements
+    #   Element 0 ID: None
+    #     Depth 2 ID: None
+    #   Element 1 ID: {'type': 'card-value', 'index': 33}
+    #     Depth 2 ID: {'type': 'card-value', 'index': 33}
+    #   Element 2 ID: {'type': 'stored-metadata-component', 'index': 33}
+    #     Depth 2 ID: {'type': 'stored-metadata-component', 'index': 33}
+
+
+# Depth 0 ID: None
+# Depth 0 Type: List with 2 elements
+# Element 0 ID: {'type': 'stored-metadata-component', 'index': 33}
+#   Depth 1 ID: {'type': 'stored-metadata-component', 'index': 33}
+# Element 1 ID: {'type': 'graph', 'index': 33}
+#   Depth 1 ID: {'type': 'graph', 'index': 33}
+
+
     print(children["props"]["id"])
     # children = [children[4]]
     # print(len(children))
@@ -536,7 +574,8 @@ def update_button(n_clicks, children, btn_id, switch_state):
 
     # switch_state_bool = True if len(switch_state) > 0 else False
 
-    new_draggable_child = enable_box_edit_mode(children, switch_state)
+    new_draggable_child = children
+    # new_draggable_child = enable_box_edit_mode(children, switch_state)
     # new_draggable_child = enable_box_edit_mode(children, btn_index, switch_state_bool)
 
     return new_draggable_child, []
@@ -1049,14 +1088,14 @@ def update_draggable_children(
                                 print("analyzing child: child")
                                 analyze_structure(child)
                                 print("GET_MAX_DEPTH")
-                                max_depth = analyze_structure_and_get_max_depth(child)
-                                print(max_depth)
+                                max_depth, deepest_element_type  = analyze_structure_and_get_deepest_type(child)
+                                print(max_depth, deepest_element_type)
                                 print('int(e["index"])')
                                 print(int(e["index"]))
 
                                 # CARD PART UPDATE
 
-                                if max_depth == 8:
+                                if deepest_element_type == "card-value":
                                     print("CARD PART UPDATE")
                                     print(child["props"]["id"], int(e["index"]))
                                     if int(child["props"]["id"]) == int(e["index"]):
@@ -1087,14 +1126,21 @@ def update_draggable_children(
                                                                 #     ]
                                                                 # )
                                                                 continue
-                                elif max_depth == 5:
+                                if deepest_element_type == "graph":
                                     print("POTENTIAL GRAPH PART UPDATE")
                                     print(stored_metadata)
                                     print(child["props"]["id"], int(e["index"]))
+                                    print(analyze_structure(child))
+                                    print(child["props"].keys())
+                                    print(len(child["props"]["children"]))
+                                    print(child["props"]["children"][0]["props"]["children"]["props"].keys())
+                                    print(len(child["props"]["children"][0]["props"]["children"]["props"]["children"]))
                                     if int(child["props"]["id"]) == int(e["index"]):
-                                        for k, sub_child in enumerate(child["props"]["children"][0]["props"]["children"]["props"]["children"]):
-                                            print(sub_child["props"]['id'])
-                                            if sub_child["props"]["id"]["type"] == "updated-graph":
+                                        for k, sub_child in enumerate(child["props"]["children"][0]["props"]["children"]["props"]["children"]["props"]["children"]):
+                                            print("sub_child")
+                                            print(sub_child)
+                                            print(analyze_structure(sub_child))
+                                            if sub_child["props"]["id"]["type"] == "graph":
                                                 from depictio.dash.modules.figure_component.utils import plotly_vizu_dict 
                                                 new_figure = plotly_vizu_dict[e["visu_type"].lower()](new_df, **e["dict_kwargs"])
                                                 sub_child["props"]["figure"] = new_figure
