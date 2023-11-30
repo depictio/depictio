@@ -79,21 +79,11 @@ def register_callbacks_card_component(app):
         ],
         prevent_initial_call=True,
     )
-    def design_card_body(
-        input_value, column_value, aggregation_value, wf_id, dc_id, id
-    ):
-        if (
-            input_value is None
-            or column_value is None
-            or aggregation_value is None
-            or wf_id is None
-            or dc_id is None
-        ):
+    def design_card_body(input_value, column_value, aggregation_value, wf_id, dc_id, id):
+        if input_value is None or column_value is None or aggregation_value is None or wf_id is None or dc_id is None:
             return []
 
         cols_json = get_columns_from_data_collection(wf_id, dc_id)
-
-
 
         import httpx
 
@@ -101,27 +91,14 @@ def register_callbacks_card_component(app):
 
         token = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2NGE4NDI4NDJiZjRmYTdkZWFhM2RiZWQiLCJleHAiOjE3MDY4NTQzOTJ9.q3sJLcwEwes32JoeAEGQdjlaTnn6rC1xmfHs2jjwJuML1jWgWBzuv37fJDb70y7-pRaRjTojAz9iGcUPC91Zc9krbmO6fXedLVre8a4_TvsgVwZTSPXpikA_t6EeHYjVxCDh_FftGZv0hXeRbOV83ob7GykkUP5HWTuXrv_o8v4S8ccnsy3fVIIy51NZj6MuU4YL2BfPDuWdBp2d0IN2UDognt1wcwsjIt_26AQJQHwQaxDevvzlNA6RvQIcxC5Es5PSHfpaF7w4MxiZ6J-JE25EnQ7Fw1k-z7bsleb_30Qdh68Kjs-c-BOoTm_hxDF-15G9qLPhFTqJMl148oxAjw"
 
-
-
         workflows = list_workflows(token)
 
-
-        workflow_id = [e for e in workflows if e["workflow_tag"] == wf_id][0][
-            "_id"
-        ]
-        data_collection_id = [
-            f
-            for e in workflows
-            if e["_id"] == workflow_id
-            for f in e["data_collections"]
-            if f["data_collection_tag"] == dc_id
-        ][0]["_id"]
+        workflow_id = [e for e in workflows if e["workflow_tag"] == wf_id][0]["_id"]
+        data_collection_id = [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["data_collection_tag"] == dc_id][0]["_id"]
 
         import httpx
 
         API_BASE_URL = "http://localhost:8058"
-
-
 
         dc_specs = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
@@ -134,7 +111,6 @@ def register_callbacks_card_component(app):
             "Authorization": f"Bearer {token}",
         }
 
-
         join_tables_for_wf = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/workflows/get_join_tables/{workflow_id}",
             headers=headers,
@@ -144,9 +120,6 @@ def register_callbacks_card_component(app):
             if data_collection_id in join_tables_for_wf:
                 join_details = join_tables_for_wf[data_collection_id]
                 dc_specs["config"]["join"] = join_details
-                
-
-
 
         # Get the type of the selected column
         column_type = cols_json[column_value]["type"]
@@ -173,7 +146,6 @@ def register_callbacks_card_component(app):
                 "column_value": column_value,
                 "aggregation": aggregation_value,
                 "type": column_type,
-                
             },
         )
         print(store_component)
@@ -222,10 +194,7 @@ def design_card(id, df):
                                                 "type": "card-dropdown-column",
                                                 "index": id["index"],
                                             },
-                                            data=[
-                                                {"label": e, "value": e}
-                                                for e in df.columns
-                                            ],
+                                            data=[{"label": e, "value": e} for e in df.columns],
                                             value=None,
                                         ),
                                         dmc.Select(
@@ -257,23 +226,25 @@ def design_card(id, df):
                         [
                             html.H5("Resulting card"),
                             html.Div(
-                                dbc.Card(
-                                    dbc.CardBody(
+                                html.Div(
+                                    dbc.Card(
+                                        dbc.CardBody(
+                                            id={
+                                                "type": "card-body",
+                                                "index": id["index"],
+                                            }
+                                        ),
+                                        style={"width": "100%"},
                                         id={
-                                            "type": "card-body",
+                                            "type": "interactive",
                                             "index": id["index"],
-                                        }
+                                        },
                                     ),
-                                    style={"width": "100%"},
                                     id={
-                                        "type": "interactive",
+                                        "type": "test-container",
                                         "index": id["index"],
                                     },
-                                ),
-                                id={
-                                    "type": "test-container",
-                                    "index": id["index"],
-                                },
+                                )
                             ),
                         ],
                         width="auto",
