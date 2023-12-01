@@ -1099,33 +1099,48 @@ def update_draggable_children(
                                     print("CARD PART UPDATE")
                                     print(child["props"]["id"], int(e["index"]))
                                     if int(child["props"]["id"]) == int(e["index"]):
-                                        for k, sub_child in enumerate(child["props"]["children"][0]["props"]["children"]["props"]["children"]):
-                                            if "children" in sub_child["props"].keys():
-                                                if type(sub_child["props"]["children"]) is dict:
-                                                    for sub_sub_child in sub_child["props"]["children"]["props"]["children"]:
-                                                        if "id" in sub_sub_child["props"]:
-                                                            if sub_sub_child["props"]["id"]["type"] == "card-value":
-                                                                # CARD PART
+                                        print("EQUAL")
+                                        for k, sub_child in enumerate(child["props"]["children"][0]["props"]["children"]["props"]["children"]["props"]["children"]):
+                                            print("sub_child")
+                                            print(sub_child)
+                                            print(analyze_structure(sub_child))
+                                            if "id" in sub_child["props"]:
+                                                if sub_child["props"]["id"]["type"] == "card-value":
+                                                    print(sub_child["props"]["children"])
 
-                                                                aggregation = e["aggregation"]
-                                                                new_value = new_df[e["column_value"]].agg(aggregation)
-                                                                # print(new_value, type(new_value))
-                                                                if type(new_value) is np.float64:
-                                                                    new_value = round(new_value, 2)
-                                                                # print(aggregation)
-                                                                # print(new_value)
+                                                    aggregation = e["aggregation"]
+                                                    new_value = new_df[e["column_value"]].agg(aggregation)
+                                                    if type(new_value) is np.float64:
+                                                        new_value = round(new_value, 2)
+                                                    sub_child["props"]["children"] = new_value
+                                                    print(sub_child["props"]["children"])
+                                                    continue
 
-                                                                # print(sub_sub_child)
-                                                                # print(
-                                                                #     sub_sub_child["props"]["id"]
-                                                                # )
-                                                                sub_sub_child["props"]["children"] = new_value
-                                                                # print(
-                                                                #     sub_sub_child["props"][
-                                                                #         "children"
-                                                                #     ]
-                                                                # )
-                                                                continue
+                                            # if type(sub_child["props"]["children"]) is dict:
+                                                # for sub_sub_child in sub_child["props"]["children"]["props"]["children"]:
+                                                #     if "id" in sub_sub_child["props"]:
+                                                #         if sub_sub_child["props"]["id"]["type"] == "card-value":
+                                                #             # CARD PART
+
+                                                #             aggregation = e["aggregation"]
+                                                #             new_value = new_df[e["column_value"]].agg(aggregation)
+                                                #             # print(new_value, type(new_value))
+                                                #             if type(new_value) is np.float64:
+                                                #                 new_value = round(new_value, 2)
+                                                #             # print(aggregation)
+                                                #             # print(new_value)
+
+                                                #             # print(sub_sub_child)
+                                                #             # print(
+                                                #             #     sub_sub_child["props"]["id"]
+                                                #             # )
+                                                #             sub_sub_child["props"]["children"] = new_value
+                                                #             # print(
+                                                #             #     sub_sub_child["props"][
+                                                #             #         "children"
+                                                #             #     ]
+                                                #             # )
+                                                #             continue
                                 if deepest_element_type == "graph":
                                     print("POTENTIAL GRAPH PART UPDATE")
                                     print(stored_metadata)
