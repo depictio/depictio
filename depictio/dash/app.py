@@ -242,7 +242,7 @@ app.layout = dbc.Container(
             ],
         ),
     ],
-    fluid=False,
+    fluid=True,
 )
 
 
@@ -735,7 +735,7 @@ def update_step_2(
         if btn_index:
             df = return_deltatable(workflow_selection, data_collection_selection, raw=True)
 
-            components_list = ["Figure", "Card", "Interactive", "Genome browser"]
+            components_list = ["Figure", "Card", "Interactive", "Genome browser", "Graph", "Map"]
             component_selected = components_list[btn_index[0]]
             print(ids)
             id = ids[btn_index[0]]
@@ -748,6 +748,11 @@ def update_step_2(
                 return design_interactive(id, df), btn_component
             elif component_selected == "Genome browser":
                 return design_jbrowse(id), btn_component
+            # TODO: update this
+            elif component_selected == "Graph":
+                return dash.no_update, dash.no_update
+            elif component_selected == "Map":
+                return dash.no_update, dash.no_update
 
         else:
             raise dash.exceptions.PreventUpdate
@@ -866,6 +871,7 @@ def update_draggable_children(
     # selected_year = args[-6]
 
     current_draggable_children = args[-5]
+    print(current_draggable_children)
     # print("\n\n\n")
     # print("\n\n\n")
     # print("\n\n\n")
@@ -989,7 +995,12 @@ def update_draggable_children(
 
     elif "interactive-component" in triggered_input and check_value:
         print("\n\n\n")
-        print("interactive-component")
+        print("\n\n\n")
+        print("\n\n\n")
+        print("================")
+        print("================")
+        print("================")
+        print("interactive-component PART")
 
         # Retrieve index of the interactive component that was clicked
         # triggered_input_eval = ast.literal_eval(triggered_input)
@@ -1513,6 +1524,8 @@ def update_draggable_children(
                 )
 
     elif triggered_input == "draggable":
+        for child in current_draggable_children:
+            print(child)
         return (
             dash.no_update,
             # current_draggable_children,

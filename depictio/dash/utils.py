@@ -35,7 +35,8 @@ UNSELECTED_STYLE = {
     "display": "inline-block",
     "width": "250px",
     "height": "100px",
-    "opacity": 0.65,
+    "border": "3px solid",
+    "opacity": 1,
 }
 
 

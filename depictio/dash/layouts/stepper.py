@@ -213,7 +213,40 @@ def create_stepper_buttons(n):
         interactive_stepper_button,
     ]
 
-    special_components = [jbrowse_stepper_button]
+    graph_stepper_button = dbc.Col(dmc.Button(
+        "Graph",
+        # id={
+        #     "type": "btn-option",
+        #     "index": n,
+        #     "value": "graph",
+        # },
+        n_clicks=0,
+        style=UNSELECTED_STYLE,
+        size="xl",
+        color="orange",
+        leftIcon=DashIconify(
+            icon="ph:graph-fill", color="white"
+        ),
+    ))
+
+    map_stepper_button = dbc.Col(dmc.Button(
+        "Map",
+        # id={
+        #     "type": "btn-option",
+        #     "index": n,
+        #     "value": "map",
+        # },
+        n_clicks=0,
+        style=UNSELECTED_STYLE,
+        size="xl",
+        color="red",
+        leftIcon=DashIconify(
+            icon="gridicons:globe", color="white"
+        ),
+    ))
+
+
+    special_components = [jbrowse_stepper_button, graph_stepper_button, map_stepper_button]
 
     buttons_list = [
         html.H5("Standard components", style={"margin-top": "20px"}),
