@@ -65,7 +65,7 @@ def create_stepper_jbrowse_button(n):
         _type_: _description_
     """
 
-    button = dmc.Button(
+    button = dbc.Col(dmc.Button(
         "Genome browser",
         id={
             "type": "btn-option",
@@ -73,18 +73,13 @@ def create_stepper_jbrowse_button(n):
             "value": "genome_browser",
         },
         n_clicks=0,
-        # style={
-        #     "display": "inline-block",
-        #     "width": "250px",
-        #     "height": "100px",
-        # },
         style=UNSELECTED_STYLE,
         size="xl",
-        color="orange",
+        color="yellow",
         leftIcon=DashIconify(
             icon="material-symbols:table-rows-narrow-rounded", color="white"
         ),
-    )
+    ))
     store = dcc.Store(
         id={
             "type": "store-btn-option",
