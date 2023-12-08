@@ -38,16 +38,17 @@ def design_jbrowse(id):
     row = [
         html.Div(
             # html.Div("TOTO",  id={"type": "jbrowse", "index": id["index"]}),
+            html.Iframe(src="http://localhost:3000/?config=test_data%2Fvolvox%2Fconfig.json&session=local-tnTOERg9W79LR92t6PExk", width="100%", height="100%", id={"type": "jbrowse", "index": id["index"]}),
             # html.Iframe(src="http://localhost:5500/", width="100%", height="500px", id={"type": "jbrowse", "index": id["index"]}),
-            dash_jbrowse.LinearGenomeView(
-                id={"type": "jbrowse", "index": id["index"]},
-                assembly=my_assembly,
-                tracks=my_tracks,
-                # # defaultSession=my_default_session,
-                location=my_location,
-                # aggregateTextSearchAdapters=my_aggregate_text_search_adapters,
-                # configuration=my_theme,
-            ),
+            # dash_jbrowse.LinearGenomeView(
+            #     id={"type": "jbrowse", "index": id["index"]},
+            #     assembly=my_assembly,
+            #     tracks=my_tracks,
+            #     # # defaultSession=my_default_session,
+            #     location=my_location,
+            #     # aggregateTextSearchAdapters=my_aggregate_text_search_adapters,
+            #     # configuration=my_theme,
+            # ),
             id={"type": "test-container", "index": id["index"]},
         )
     ]
