@@ -266,20 +266,6 @@ def design_interactive(id, df):
                             html.Div(
                                 dbc.Card(
                                     dbc.CardBody(
-                                        # children = [
-                                        #     html.Div(
-                                        #         id={
-                                        #             "type": "title-input-body",
-                                        #             "index": id["index"],
-                                        #         },
-                                        #     ),
-                                        #     html.Div(
-                                        #         id={
-                                        #             "type": "interactive-component-div",
-                                        #             "index": id["index"],
-                                        #         },
-                                        #     ),
-                                        # ],
                                         id={
                                             "type": "input-body",
                                             "index": id["index"],
@@ -327,11 +313,6 @@ def create_stepper_interactive_button(n):
                 "value": "Interactive",
             },
             n_clicks=0,
-            # style={
-            #     "display": "inline-block",
-            #     "width": "250px",
-            #     "height": "100px",
-            # },
             style=UNSELECTED_STYLE,
             size="xl",
             color="indigo",
