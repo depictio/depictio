@@ -116,6 +116,7 @@ async def aggregate_data(
     assert len(files) > 0
     files = [File.from_mongo(file) for file in files]
 
+
     # Define the path to your Delta table
     delta_table_path = f"/Users/tweber/Gits/depictio/data/delta_lake/{user_oid}/{workflow_oid}/{data_collection_oid}"
     print(delta_table_path)
