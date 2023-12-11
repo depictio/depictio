@@ -21,7 +21,6 @@ services:
     depends_on:
       - redis
 
-
   openldap:
     image: osixia/openldap:1.5.0
     environment:
@@ -52,28 +51,40 @@ services:
       KEYCLOAK_PASSWORD: test
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
-      # If you are running Keycloak behind a reverse proxy with SSL offloading (i.e., HTTPS is terminated at the proxy),
-      # you need to set the proxy address forwarding to true.
-      # PROXY_ADDRESS_FORWARDING: "true"
     ports:
       - "8080:8080"
     depends_on:
       - openldap
 
-  # depictio_frontend:
-  #   build:
-  #     context: .
-  #     dockerfile: docker-images/Dockerfile_depictio_frontend.dockerfile
-  #   ports:
-  #     - "5080:5080" # Assuming frontend runs on 5080. Adjust if needed.
+  minio:
+    image: minio/minio:latest
+    volumes:
+      - ./minio_data:/data
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio123
+    command: server /data --console-address :9001
+    ports:
+      - "9000:9000"
+      - "9001:9001"
 
-  # depictio_backend:
-  #   build:
-  #     context: .
-  #     dockerfile: docker-images/Dockerfile_depictio_backend.dockerfile
-  #   ports:
-  #     - "8058:8058"
-  #   depends_on:
-  #     - mongo
-  #     - redis
 
+# Uncomment and configure the below services as per your application requirement
+
+# depictio_frontend:
+#   build:
+#     context: .
+#     dockerfile: docker-images/Dockerfile_depictio_frontend.dockerfile
+#   ports:
+#     - "5080:5080" # Assuming frontend runs on 5080. Adjust if needed.
+
+# depictio_backend:
+#   build:
+#     context: .
+#     dockerfile: docker-images/Dockerfile_depictio_backend.dockerfile
+#   ports:
+#     - "8058:8058"
+#   depends_on:
+#     - mongo
+#     - redis
+#     - minio
