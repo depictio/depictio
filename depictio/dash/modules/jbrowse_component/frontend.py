@@ -38,7 +38,7 @@ def design_jbrowse(id):
     row = [
         html.Div(
             # html.Div("TOTO",  id={"type": "jbrowse", "index": id["index"]}),
-            html.Iframe(src="http://localhost:3000/?config=test_data%2Fvolvox%2Fconfig.json&session=local-tnTOERg9W79LR92t6PExk", width="100%", height="100%", id={"type": "jbrowse", "index": id["index"]}),
+            html.Iframe(src="http://localhost:3000", width="100%", height="1000px", id={"type": "jbrowse", "index": id["index"]}),
             # html.Iframe(src="http://localhost:5500/", width="100%", height="500px", id={"type": "jbrowse", "index": id["index"]}),
             # dash_jbrowse.LinearGenomeView(
             #     id={"type": "jbrowse", "index": id["index"]},
