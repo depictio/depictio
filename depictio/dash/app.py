@@ -330,8 +330,8 @@ def save_data_dashboard(
 
 
 def enable_box_edit_mode(box, switch_state=True):
-    # print("\n\n\n")
-    # print("enable_box_edit_mode")
+    print("\n\n\n")
+    print("enable_box_edit_mode")
     # print(box["props"]["children"]["props"]["children"][1])
     btn_index = box["props"]["id"]["index"]
     edit_button = dbc.Button(
@@ -373,22 +373,22 @@ def enable_box_edit_mode(box, switch_state=True):
 
 
 def enable_box_edit_mode_dev(sub_child, switch_state=True):
-    # print("enable_box_edit_mode_dev")
-    # print(switch_state)
+    print("enable_box_edit_mode_dev")
+    print(switch_state)
 
     # Extract the required substructure based on the depth analysis
     box = sub_child["props"]["children"]
-    # print(box)
+    print(box)
 
     # Check if the children attribute is a list
     if isinstance(box["props"]["children"], list):
-        # print("List")
+        print("List")
 
         # Identify if edit and remove buttons are present
         edit_button_exists = any(child.get("props", {}).get("id", {}).get("type") == "edit-box-button" for child in box["props"]["children"])
         remove_button_exists = any(child.get("props", {}).get("id", {}).get("type") == "remove-box-button" for child in box["props"]["children"])
 
-        # print(switch_state, edit_button_exists, remove_button_exists)
+        print(switch_state, edit_button_exists, remove_button_exists)
 
         # If switch_state is true and buttons are not yet added, add them
         if switch_state and not (edit_button_exists and remove_button_exists):
@@ -574,8 +574,8 @@ def update_button(n_clicks, children, btn_id, switch_state):
 
     # switch_state_bool = True if len(switch_state) > 0 else False
 
-    new_draggable_child = children
-    # new_draggable_child = enable_box_edit_mode(children, switch_state)
+    # new_draggable_child = children
+    new_draggable_child = enable_box_edit_mode(children, switch_state)
     # new_draggable_child = enable_box_edit_mode(children, btn_index, switch_state_bool)
 
     return new_draggable_child, []
