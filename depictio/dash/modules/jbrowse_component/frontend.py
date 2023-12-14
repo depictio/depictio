@@ -29,7 +29,6 @@ from depictio.dash.utils import (
 )
 
 
-# def register_callbacks_jbrowse_component(app):
 
 
 # TODO: try both dash-jbrowse and dash-iframe with full jbrowse instance
