@@ -6,10 +6,6 @@ FROM node:latest
 # Install the JBrowse CLI globally
 RUN npm install -g @jbrowse/cli
 
-# Clone the JBrowse 2 repository (if needed)
-# RUN git clone https://github.com/GMOD/jbrowse-components.git jbrowse2
-# WORKDIR /usr/src/app/jbrowse2
-
 # Install dependencies and build JBrowse (if needed)
 # RUN npm install && npm run build
 WORKDIR /usr/src/app
