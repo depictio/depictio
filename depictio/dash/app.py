@@ -574,8 +574,8 @@ def update_button(n_clicks, children, btn_id, switch_state):
 
     # switch_state_bool = True if len(switch_state) > 0 else False
 
-    # new_draggable_child = children
-    new_draggable_child = enable_box_edit_mode(children, switch_state)
+    new_draggable_child = children
+    # new_draggable_child = enable_box_edit_mode(children, switch_state)
     # new_draggable_child = enable_box_edit_mode(children, btn_index, switch_state_bool)
 
     return new_draggable_child, []
@@ -1604,34 +1604,35 @@ def update_draggable_children(
         # print(stored_edit_dashboard)
         # print(current_draggable_children)
         # assuming the switch state is added as the first argument in args
-        updated_draggable_children = []
-        print("\n\n")
-        print("edit-dashboard-mode-button")
-        print(switch_state)
-        print(stored_edit_dashboard)
+        # updated_draggable_children = []
+        updated_draggable_children = current_draggable_children
+        # print("\n\n")
+        # print("edit-dashboard-mode-button")
+        # print(switch_state)
+        # print(stored_edit_dashboard)
 
-        stored_edit_dashboard = switch_state
+        # stored_edit_dashboard = switch_state
 
-        # analyze_structure(current_draggable_children)
-        # print(current_draggable_children[0]["props"]["children"])
-        # print(len(current_draggable_children[0]["props"]["children"]))
-        # print(
-        #     current_draggable_children[0]["props"]["children"][:-1],
-        #     type(current_draggable_children[0]["props"]["children"][:-1]),
-        #     len(current_draggable_children[0]["props"]["children"][:-1]),
-        # )
-        for j, child in enumerate(current_draggable_children):
-            for i, sub_child in enumerate(child["props"]["children"]):
-                if i != (len(child["props"]["children"]) - 1):
-                    try:
-                        updated_sub_child = enable_box_edit_mode_dev(sub_child, switch_state)
-                    except Exception as e:
-                        print(f"Error when calling enable_box_edit_mode_dev: {e}")
-                    # print(updated_sub_child)
-                    child["props"]["children"][i] = updated_sub_child
-                else:
-                    child["props"]["children"][i] = sub_child
-            updated_draggable_children.append(child)
+        # # analyze_structure(current_draggable_children)
+        # # print(current_draggable_children[0]["props"]["children"])
+        # # print(len(current_draggable_children[0]["props"]["children"]))
+        # # print(
+        # #     current_draggable_children[0]["props"]["children"][:-1],
+        # #     type(current_draggable_children[0]["props"]["children"][:-1]),
+        # #     len(current_draggable_children[0]["props"]["children"][:-1]),
+        # # )
+        # for j, child in enumerate(current_draggable_children):
+        #     for i, sub_child in enumerate(child["props"]["children"]):
+        #         if i != (len(child["props"]["children"]) - 1):
+        #             try:
+        #                 updated_sub_child = enable_box_edit_mode_dev(sub_child, switch_state)
+        #             except Exception as e:
+        #                 print(f"Error when calling enable_box_edit_mode_dev: {e}")
+        #             # print(updated_sub_child)
+        #             child["props"]["children"][i] = updated_sub_child
+        #         else:
+        #             child["props"]["children"][i] = sub_child
+        #     updated_draggable_children.append(child)
             # if j != (len(current_draggable_children)-1):
         #         print("\n\n")
         #         print("updated_child")
