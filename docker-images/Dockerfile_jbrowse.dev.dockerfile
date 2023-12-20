@@ -18,4 +18,4 @@ WORKDIR /usr/src/app/jbrowse2
 EXPOSE 3000
 
 # Start JBrowse (if needed)
-CMD ["npx", "serve", "."]
+CMD ["npx", "serve", "-S", "."]
