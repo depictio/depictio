@@ -22,3 +22,7 @@ docker exec -it c53f197b071b06b1625c8c612afa97a6ac0cd81619eaf9cbaabf5fb7bd0115ed
   * Categories
   * Subfolders ...
 * How to provide interactivity through depictio interactive components: modify config.json directly?   
+
+# Follow up on 
+
+* jbrowse & interactivity discussions
