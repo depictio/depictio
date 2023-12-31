@@ -27,3 +27,4 @@ docker exec -it c53f197b071b06b1625c8c612afa97a6ac0cd81619eaf9cbaabf5fb7bd0115ed
 
 * jbrowse & interactivity discussions
   * Develop a side module to select/unselect/add/remove tracks ? 
+  * Follow up on discussion
