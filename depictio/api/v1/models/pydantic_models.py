@@ -234,7 +234,7 @@ class DeltaTableAggregated(MongoModel):
 class JoinConfig(BaseModel):
     on: List[str]
     how: Optional[str]
-    with_dc: List[PyObjectId]
+    with_dc: List[str]
     # lsuffix: str
     # rsuffix: str
 

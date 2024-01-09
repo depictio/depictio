@@ -530,9 +530,9 @@ def analyze_structure_and_get_deepest_type(struct, depth=0, max_depth=0, deepest
 def update_button(n_clicks, children, btn_id, switch_state):
     print("\n\n\n")
     print("update_button")
-    print(children)
-    print(analyze_structure(children))
-    print(len(children))
+    # print(children)
+    # print(analyze_structure(children))
+    # print(len(children))
 
     # Depth 0 ID: {'type': 'graph', 'index': 32}
 
@@ -562,7 +562,7 @@ def update_button(n_clicks, children, btn_id, switch_state):
 #   Depth 1 ID: {'type': 'graph', 'index': 33}
 
 
-    print(children["props"]["id"])
+    # print(children["props"]["id"])
     # children = [children[4]]
     # print(len(children))
     # print(children)
@@ -829,18 +829,18 @@ def update_draggable_children(
     print("CTX triggered: ")
 
     triggered_input = ctx.triggered[0]["prop_id"].split(".")[0]
-    print(triggered_input)
+    # print(triggered_input)
 
-    print("\n\n\n")
-    print("Interactive component value (input)")
-    if args[6]:
-        print(args[6])
-    print("Interactive component id (state)")
-    if args[0]:
-        print(args[0])
-    print("Stored metadata component data (state)")
-    if args[1]:
-        print(args[1])
+    # print("\n\n\n")
+    # print("Interactive component value (input)")
+    # if args[6]:
+    #     print(args[6])
+    # print("Interactive component id (state)")
+    # if args[0]:
+    #     print(args[0])
+    # print("Stored metadata component data (state)")
+    # if args[1]:
+    #     print(args[1])
 
     interactive_component_ids = args[0]
     interactive_component_values = args[6]
@@ -848,9 +848,9 @@ def update_draggable_children(
 
     # print([e for e in args[-5]])
     print("\n\n\n")
-    print("stored_metadata")
-    print(stored_metadata)
-    print("\n\n\n")
+    # print("stored_metadata")
+    # print(stored_metadata)
+    # print("\n\n\n")
 
     # print(args[-11])
     # print(args[-10])
@@ -871,7 +871,7 @@ def update_draggable_children(
     # selected_year = args[-6]
 
     current_draggable_children = args[-5]
-    print(current_draggable_children)
+    # print(current_draggable_children)
     # print("\n\n\n")
     # print("\n\n\n")
     # print("\n\n\n")
@@ -899,12 +899,23 @@ def update_draggable_children(
 
     check_value = False
     if "interactive-component" in triggered_input:
+        # print(triggered_input)
         triggered_input_eval = ast.literal_eval(triggered_input)
-        print(triggered_input_eval)
+        # print(triggered_input_eval)
         triggered_input_eval_index = int(triggered_input_eval["index"])
+        # print(triggered_input_eval_index)
 
         value = interactive_components_dict[triggered_input_eval_index]["value"]
-        check_value = True if value is not None else False
+        # print(value)
+        # print(interactive_components_dict[triggered_input_eval_index])
+        if interactive_components_dict[triggered_input_eval_index]["metadata"]["interactive_component_type"] != "TextInput":
+            check_value = True if value is not None else False
+        else:
+            check_value = True if value is not "" else False
+
+    # print("CHECK VALUE")
+    # print(check_value)
+    # print("\n\n\n")
 
     other_components_dict = {
         id["index"]: {"value": value, "metadata": metadata}
@@ -923,11 +934,11 @@ def update_draggable_children(
     # print("\n\n\n")
     new_draggable_children = []
     for child in current_draggable_children:
-        print(child["props"]["id"])
+        # print(child["props"]["id"])
         for sub_child in child["props"]["children"]:
             if sub_child["props"]["id"]["type"] == "add-content":
-                print(sub_child["props"]["id"])
-                print(sub_child["props"]["children"])
+                # print(sub_child["props"]["id"])
+                # print(sub_child["props"]["children"])
                 child["props"]["children"] = [sub_child]
                 continue
             # else:
@@ -994,13 +1005,13 @@ def update_draggable_children(
             raise dash.exceptions.PreventUpdate
 
     elif "interactive-component" in triggered_input and check_value:
-        print("\n\n\n")
-        print("\n\n\n")
-        print("\n\n\n")
-        print("================")
-        print("================")
-        print("================")
-        print("interactive-component PART")
+        # print("\n\n\n")
+        # print("\n\n\n")
+        # print("\n\n\n")
+        # print("================")
+        # print("================")
+        # print("================")
+        # print("interactive-component PART")
 
         # Retrieve index of the interactive component that was clicked
         # triggered_input_eval = ast.literal_eval(triggered_input)
@@ -1011,31 +1022,31 @@ def update_draggable_children(
         # print(interactive_components_dict)
 
         # Access the corresponding non interactive component with same workflow, data collection and column
-        print(stored_metadata)
+        # print(stored_metadata)
         for j, e in enumerate(stored_metadata):
             if e["component_type"] != "interactive_component":
-                print("\n\n\n")
-                print("\n\n\n")
-                print("J : " + str(j))
-                print(e)
+                # print("\n\n\n")
+                # print("\n\n\n")
+                # print("J : " + str(j))
+                # print(e)
                 new_df = return_deltatable(e["wf_id"], e["dc_id"])
-                print(new_df)
-                print("\n\n\n")
+                # print(new_df)
+                # print("\n\n\n")
 
                 for i, n in enumerate(list(interactive_components_dict.keys())):
                     # Retrieve corresponding metadata
                     n_dict = interactive_components_dict[n]
-                    print("\n\n\n")
-                    print("i : " + str(i))
-                    print("j : " + str(j))
+                    # print("\n\n\n")
+                    # print("i : " + str(i))
+                    # print("j : " + str(j))
 
-                    print("n_dict")
-                    print(n_dict)
-                    print(e["wf_id"])
-                    print(e["dc_id"])
+                    # print("n_dict")
+                    # print(n_dict)
+                    # print(e["wf_id"])
+                    # print(e["dc_id"])
 
-                    print(n_dict["metadata"]["wf_id"])
-                    print(n_dict["metadata"]["dc_id"])
+                    # print(n_dict["metadata"]["wf_id"])
+                    # print(n_dict["metadata"]["dc_id"])
 
                     if n_dict["metadata"]["dc_config"]["join"]:
                         n_join_dc = n_dict["metadata"]["dc_config"]["join"]
@@ -1043,12 +1054,12 @@ def update_draggable_children(
                         n_join_dc = []
 
                     check_join = [e["dc_id"] for sub_join in n_join_dc if e["dc_id"] in sub_join["with_dc"]]
-                    print("CHECK JOIN")
-                    print(n_join_dc)
-                    print(check_join)
-                    print(len(check_join))
-                    print((e["dc_id"] == n_dict["metadata"]["dc_id"]))
-                    print((len(check_join) > 0))
+                    # print("CHECK JOIN")
+                    # print(n_join_dc)
+                    # print(check_join)
+                    # print(len(check_join))
+                    # print((e["dc_id"] == n_dict["metadata"]["dc_id"]))
+                    # print((len(check_join) > 0))
 
                     if e["wf_id"] == n_dict["metadata"]["wf_id"]:
                         if (e["dc_id"] == n_dict["metadata"]["dc_id"]) or (len(check_join) > 0):
@@ -1073,7 +1084,18 @@ def update_draggable_children(
                                     # print(n_dict)
                                     # print(n_dict["value"])
                                     # print(n_dict["metadata"]["column_value"])
-                                    new_df = new_df[new_df[n_dict["metadata"]["column_value"]].isin(n_dict["value"])]
+                                    if n_dict["metadata"]["interactive_component_type"] in ["Select", "MultiSelect"]:
+                                        # n_dict["value"] = list(n_dict["value"]) if type(n_dict["value"]) is str else n_dict["value"]
+                                        if n_dict["value"] is not None:
+                                            new_df = new_df[new_df[n_dict["metadata"]["column_value"]].isin(n_dict["value"])]
+                                        else:
+                                            new_df = new_df 
+                                    elif n_dict["metadata"]["interactive_component_type"] == "TextInput":
+                                        if n_dict["value"] != "":
+                                            new_df = new_df[new_df[n_dict["metadata"]["column_value"]].str.contains(n_dict["value"], regex=True, na=False)]
+                                        else:
+                                            new_df = new_df
+                                        
                                 elif n_dict["metadata"]["type"] == "int64" or n_dict["metadata"]["type"] == "float64":
                                     # print(
                                     #     n_dict["metadata"]["interactive_component_type"]
@@ -1088,33 +1110,33 @@ def update_draggable_children(
                                     elif n_dict["metadata"]["interactive_component_type"] == "Slider":
                                         new_df = new_df[new_df[n_dict["metadata"]["column_value"]] == n_dict["value"]]
 
-                            print("\n\n\n")
-                            print("new_df after filtering")
-                            print(new_df)
+                            # print("\n\n\n")
+                            # print("new_df after filtering")
+                            # print(new_df)
 
                             # replace the card value in the children props
                             for child in current_draggable_children:
-                                print(len(child["props"]["children"]))
-                                print("\n\n\n")
-                                print("analyzing child: child")
-                                analyze_structure(child)
-                                print("GET_MAX_DEPTH")
+                                # print(len(child["props"]["children"]))
+                                # print("\n\n\n")
+                                # print("analyzing child: child")
+                                # analyze_structure(child)
+                                # print("GET_MAX_DEPTH")
                                 max_depth, deepest_element_type  = analyze_structure_and_get_deepest_type(child)
-                                print(max_depth, deepest_element_type)
-                                print('int(e["index"])')
-                                print(int(e["index"]))
+                                # print(max_depth, deepest_element_type)
+                                # print('int(e["index"])')
+                                # print(int(e["index"]))
 
                                 # CARD PART UPDATE
 
                                 if deepest_element_type == "card-value":
-                                    print("CARD PART UPDATE")
-                                    print(child["props"]["id"], int(e["index"]))
+                                    # print("CARD PART UPDATE")
+                                    # print(child["props"]["id"], int(e["index"]))
                                     if int(child["props"]["id"]) == int(e["index"]):
-                                        print("EQUAL")
+                                        # print("EQUAL")
                                         for k, sub_child in enumerate(child["props"]["children"][0]["props"]["children"]["props"]["children"]["props"]["children"]):
-                                            print("sub_child")
-                                            print(sub_child)
-                                            print(analyze_structure(sub_child))
+                                            # print("sub_child")
+                                            # print(sub_child)
+                                            # print(analyze_structure(sub_child))
                                             if "id" in sub_child["props"]:
                                                 if sub_child["props"]["id"]["type"] == "card-value":
                                                     print(sub_child["props"]["children"])
@@ -1124,7 +1146,7 @@ def update_draggable_children(
                                                     if type(new_value) is np.float64:
                                                         new_value = round(new_value, 2)
                                                     sub_child["props"]["children"] = new_value
-                                                    print(sub_child["props"]["children"])
+                                                    # print(sub_child["props"]["children"])
                                                     continue
 
                                             # if type(sub_child["props"]["children"]) is dict:
@@ -1153,19 +1175,19 @@ def update_draggable_children(
                                                 #             # )
                                                 #             continue
                                 if deepest_element_type == "graph":
-                                    print("POTENTIAL GRAPH PART UPDATE")
-                                    print(stored_metadata)
-                                    print(child["props"]["id"], int(e["index"]))
-                                    print(analyze_structure(child))
-                                    print(child["props"].keys())
-                                    print(len(child["props"]["children"]))
-                                    print(child["props"]["children"][0]["props"]["children"]["props"].keys())
-                                    print(len(child["props"]["children"][0]["props"]["children"]["props"]["children"]))
+                                    # print("POTENTIAL GRAPH PART UPDATE")
+                                    # print(stored_metadata)
+                                    # print(child["props"]["id"], int(e["index"]))
+                                    # print(analyze_structure(child))
+                                    # print(child["props"].keys())
+                                    # print(len(child["props"]["children"]))
+                                    # print(child["props"]["children"][0]["props"]["children"]["props"].keys())
+                                    # print(len(child["props"]["children"][0]["props"]["children"]["props"]["children"]))
                                     if int(child["props"]["id"]) == int(e["index"]):
                                         for k, sub_child in enumerate(child["props"]["children"][0]["props"]["children"]["props"]["children"]["props"]["children"]):
-                                            print("sub_child")
-                                            print(sub_child)
-                                            print(analyze_structure(sub_child))
+                                            # print("sub_child")
+                                            # print(sub_child)
+                                            # print(analyze_structure(sub_child))
                                             if sub_child["props"]["id"]["type"] == "graph":
                                                 from depictio.dash.modules.figure_component.utils import plotly_vizu_dict 
                                                 new_figure = plotly_vizu_dict[e["visu_type"].lower()](new_df, **e["dict_kwargs"])
@@ -1192,16 +1214,16 @@ def update_draggable_children(
             stored_add_button,
         )
 
-        # raise dash.exceptions.PreventUpdate
+        raise dash.exceptions.PreventUpdate
 
-    #     return (
-    #         updated_draggable_children,
-    #         updated_layouts,
-    #         # selected_year,
-    #         updated_layouts,
-    #         updated_draggable_children,
-    #         # selected_year,
-    #     )
+        return (
+            updated_draggable_children,
+            updated_layouts,
+            # selected_year,
+            updated_layouts,
+            updated_draggable_children,
+            # selected_year,
+        )
 
     # if triggered_input.startswith("add-plot-button-"):
     #     plot_type = triggered_input.replace("add-plot-button-", "")
@@ -1524,8 +1546,8 @@ def update_draggable_children(
                 )
 
     elif triggered_input == "draggable":
-        for child in current_draggable_children:
-            print(child)
+        # for child in current_draggable_children:
+        #     print(child)
         return (
             dash.no_update,
             # current_draggable_children,

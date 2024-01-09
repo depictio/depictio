@@ -95,8 +95,8 @@ async def scan_data_collection(
     data_collection_id: str,
     current_user: str = Depends(get_current_user),
 ):
-    runs_collection.drop()
-    files_collection.drop()
+    # runs_collection.drop()
+    # files_collection.drop()
 
     # workflow_oid = ObjectId(workflow_id)
     # data_collection_oid = ObjectId(data_collection_id)
@@ -131,6 +131,11 @@ async def scan_data_collection(
     # print(data_collection)
 
     # Use the utility function to validate and retrieve necessary info
+
+
+    print(workflow_id)
+    print(data_collection_id)
+
     (
         workflow_oid,
         data_collection_oid,
