@@ -100,9 +100,16 @@ def register_callbacks_interactive_component(app):
         ):
             return []
 
+
+        print("update_card_body")
         df = load_deltatable(wf_id, dc_id)
+        print(df)
         cols_json = get_columns_from_data_collection(wf_id, dc_id)
+        print("cols_json")
+        print(cols_json)
         column_type = cols_json[column_value]["type"]
+        print("column_type")
+        print(column_type)
         func_name = agg_functions[column_type]["input_methods"][aggregation_value][
             "component"
         ]
@@ -174,7 +181,7 @@ def register_callbacks_interactive_component(app):
 
         # Handling different aggregation values
         if aggregation_value in ["Select", "MultiSelect", "SegmentedControl"]:
-            data = df[column_value].unique()
+            data = df[column_value].dropna().unique()
             interactive_component = func_name(
                 data=data, id={"type": "interactive-component", "index": id["index"]}
             )

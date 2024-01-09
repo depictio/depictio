@@ -226,7 +226,9 @@ def load_deltatable(workflow_id: str, data_collection_id: str, cols: list = None
 
 
             # print(main_data_collection_df)
-            main_data_collection_df["cell"] = main_data_collection_df["cell"].str.replace(".sort.mdup.bam", "")
+            # TODO: URGENT: remove this - used for debugging
+            if "cell" in main_data_collection_df.columns:
+                main_data_collection_df["cell"] = main_data_collection_df["cell"].str.replace(".sort.mdup.bam", "")
 
 
 

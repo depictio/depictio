@@ -17,6 +17,7 @@ def validate_workflow_and_collection(collection, user_id: str, workflow_id: str,
     """
     user_oid = ObjectId(user_id)
     workflow_oid = ObjectId(workflow_id)
+    print(data_collection_id)
     if data_collection_id:
         data_collection_oid = ObjectId(data_collection_id)
 

@@ -77,15 +77,15 @@ async def get_workflows(current_user: str = Depends(get_current_user)):
 async def create_workflow(
     workflow: Workflow, current_user: str = Depends(get_current_user)
 ):
-    workflows_collection.drop()
-    data_collections_collection.drop()
-    runs_collection.drop()
-    files_collection.drop()
-    fschunks_collection.drop()
-    fsfiles_collection.drop()
-    permissions_collection.drop()
-    workflow_config_collection.drop()
-    data_collection_config_collection.drop()
+    # workflows_collection.drop()
+    # data_collections_collection.drop()
+    # runs_collection.drop()
+    # files_collection.drop()
+    # fschunks_collection.drop()
+    # fsfiles_collection.drop()
+    # permissions_collection.drop()
+    # workflow_config_collection.drop()
+    # data_collection_config_collection.drop()
 
     existing_workflow = workflows_collection.find_one(
         {
