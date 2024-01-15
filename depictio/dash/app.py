@@ -574,8 +574,8 @@ def update_button(n_clicks, children, btn_id, switch_state):
 
     # switch_state_bool = True if len(switch_state) > 0 else False
 
-    new_draggable_child = children
-    # new_draggable_child = enable_box_edit_mode(children, switch_state)
+    # new_draggable_child = children
+    new_draggable_child = enable_box_edit_mode(children, switch_state)
     # new_draggable_child = enable_box_edit_mode(children, btn_index, switch_state_bool)
 
     return new_draggable_child, []
@@ -1086,7 +1086,11 @@ def update_draggable_children(
                                     # print(n_dict["metadata"]["column_value"])
                                     if n_dict["metadata"]["interactive_component_type"] in ["Select", "MultiSelect"]:
                                         # n_dict["value"] = list(n_dict["value"]) if type(n_dict["value"]) is str else n_dict["value"]
+                                        print('n_dict["value"]')
+                                        print(n_dict["value"])
+
                                         if n_dict["value"] is not None:
+                                            n_dict["value"] = list(n_dict["value"]) if type(n_dict["value"]) is str else n_dict["value"]
                                             new_df = new_df[new_df[n_dict["metadata"]["column_value"]].isin(n_dict["value"])]
                                         else:
                                             new_df = new_df 
@@ -1133,13 +1137,13 @@ def update_draggable_children(
                                     # print(child["props"]["id"], int(e["index"]))
                                     if int(child["props"]["id"]) == int(e["index"]):
                                         # print("EQUAL")
-                                        for k, sub_child in enumerate(child["props"]["children"][0]["props"]["children"]["props"]["children"]["props"]["children"]):
+                                        for k, sub_child in enumerate(child["props"]["children"][0]["props"]["children"]["props"]["children"][-1]["props"]["children"]["props"]["children"]):
                                             # print("sub_child")
                                             # print(sub_child)
                                             # print(analyze_structure(sub_child))
                                             if "id" in sub_child["props"]:
                                                 if sub_child["props"]["id"]["type"] == "card-value":
-                                                    print(sub_child["props"]["children"])
+                                                    # print(sub_child["props"]["children"])
 
                                                     aggregation = e["aggregation"]
                                                     new_value = new_df[e["column_value"]].agg(aggregation)
@@ -1183,8 +1187,12 @@ def update_draggable_children(
                                     # print(len(child["props"]["children"]))
                                     # print(child["props"]["children"][0]["props"]["children"]["props"].keys())
                                     # print(len(child["props"]["children"][0]["props"]["children"]["props"]["children"]))
+                                    # print(int(child["props"]["id"]))
+                                    # print(int(e["index"]))
+                                    # print(child["props"]["children"][0]["props"]["children"]["props"]["children"][-1]["props"]["children"])
                                     if int(child["props"]["id"]) == int(e["index"]):
-                                        for k, sub_child in enumerate(child["props"]["children"][0]["props"]["children"]["props"]["children"]["props"]["children"]):
+                                        # for k, sub_child in enumerate(child["props"]["children"][0]["props"]["children"]["props"]["children"]["props"]["children"]):
+                                        for k, sub_child in enumerate(child["props"]["children"][0]["props"]["children"]["props"]["children"][-1]["props"]["children"]["props"]["children"]):
                                             # print("sub_child")
                                             # print(sub_child)
                                             # print(analyze_structure(sub_child))
@@ -1195,7 +1203,8 @@ def update_draggable_children(
 
                                    
                                 else:
-                                    print("OTHER")
+                                    # print("OTHER")
+                                    pass
 
                                     #     if sub_child["props"]["id"]["type"] == "card-value":
                                     #         print(sub_child)

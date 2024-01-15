@@ -214,15 +214,16 @@ def load_deltatable(workflow_id: str, data_collection_id: str, cols: list = None
 
         main_data_collection_df = tmp_load_deltatable(workflow_id, data_collection_id)
 
-        print("main_data_collection_df")
-        print(main_data_collection_df)
+        # print("main_data_collection_df")
+        # print(main_data_collection_df)
 
 
         if raw == True:
-            print("Raw data = TRUE")
+            # print("Raw data = TRUE")
             return main_data_collection_df
         
         else:
+            # print("Raw data = FALSE")
 
 
             # print(main_data_collection_df)
@@ -259,6 +260,7 @@ def load_deltatable(workflow_id: str, data_collection_id: str, cols: list = None
                             main_data_collection_df = pd.merge(main_data_collection_df, tmp_df, on=["depictio_run_id"] + join["on"])
                             # print("main_data_collection_df")
                             # print(main_data_collection_df)
+            # print("Raw data = FALSE")
 
             return main_data_collection_df
 
