@@ -140,8 +140,10 @@ backend_components = html.Div(
             interval=50000,  # Save input value every 1 second
             n_intervals=0,
         ),
-        dcc.Store(id="stored-children", storage_type="session"),
-        dcc.Store(id="stored-layout", storage_type="session"),
+        dcc.Store(id="stored-children", storage_type="memory"),
+        # dcc.Store(id="stored-children", storage_type="session"),
+        dcc.Store(id="stored-layout", storage_type="memory"),
+        # dcc.Store(id="stored-layout", storage_type="session"),
     ]
 )
 
@@ -209,12 +211,14 @@ header = html.Div(
         ),
         dcc.Store(
             id="stored-add-button",
-            storage_type="session",
+            storage_type="memory",
+            # storage_type="session",
             data=init_nclicks_add_button,
         ),
         dcc.Store(
             id="stored-edit-dashboard-mode-button",
-            storage_type="session",
+            storage_type="memory",
+            # storage_type="session",
             data=init_nclicks_edit_dashboard_mode_button,
         ),
     ],
@@ -1024,6 +1028,7 @@ def update_draggable_children(
         # Access the corresponding non interactive component with same workflow, data collection and column
         # print(stored_metadata)
         for j, e in enumerate(stored_metadata):
+            print(j, e)
             if e["component_type"] != "interactive_component":
                 # print("\n\n\n")
                 # print("\n\n\n")
