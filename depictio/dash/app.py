@@ -175,40 +175,40 @@ modal_save_button = dbc.Modal(
     centered=True,
 )
 
+
+header_style = {
+    "display": "flex",
+    "alignItems": "center",
+    "justifyContent": "space-between",
+    "padding": "10px 20px",
+    "backgroundColor": "#f5f5f5",
+    "borderBottom": "1px solid #eaeaea",
+    "fontFamily": "'Open Sans', sans-serif"
+}
+
+title_style = {
+    "fontWeight": "bold",
+    "fontSize": "24px",
+    "color": "#333"
+}
+
+button_style = {
+    "margin": "0 10px",
+    "fontWeight": "500"
+}
+
 header = html.Div(
     [
-        html.H1("Depictio"),
-        dmc.Button(
-            "Add new component",
-            id="add-button",
-            size="lg",
-            radius="xl",
-            variant="gradient",
-            n_clicks=init_nclicks_add_button["count"],
-        ),
-        modal_save_button,
-        dmc.Button(
-            "Save",
-            id="save-button-dashboard",
-            size="lg",
-            radius="xl",
-            variant="gradient",
-            gradient={"from": "teal", "to": "lime", "deg": 105},
-            n_clicks=0,
-            style={"margin-left": "5px"},
-        ),
-        dbc.Checklist(
-            id="edit-dashboard-mode-button",
-            # color="secondary",
-            style={"margin-left": "20px", "font-size": "22px"},
-            # size="lg",
-            # n_clicks=0,
-            options=[
-                {"label": "Edit dashboard", "value": 0},
+        html.H1("Depictio", style=title_style),
+        html.Div(
+            [
+                dmc.Button("Add new component", id="add-button", size="lg", radius="xl", variant="gradient", n_clicks=init_nclicks_add_button["count"], style=button_style),
+                modal_save_button,
+                dmc.Button("Save", id="save-button-dashboard", size="lg", radius="xl", variant="gradient", gradient={"from": "teal", "to": "lime", "deg": 105}, n_clicks=0, style={"...": "..."})  # Add your specific styles here
             ],
-            value=init_nclicks_edit_dashboard_mode_button,
-            switch=True,
+            style={"display": "flex", "alignItems": "center"}
         ),
+        dbc.Checklist(id="edit-dashboard-mode-button", style={"fontSize": "22px"}, options=[{"label": "Edit dashboard", "value": 0}], value=init_nclicks_edit_dashboard_mode_button, switch=True),
         dcc.Store(
             id="stored-add-button",
             storage_type="memory",
@@ -220,9 +220,49 @@ header = html.Div(
             storage_type="memory",
             # storage_type="session",
             data=init_nclicks_edit_dashboard_mode_button,
-        ),
-    ],
+        ),    ],
+    style=header_style
 )
+
+
+
+# header = html.Div(
+#     [
+#         html.H1("Depictio"),
+#         dmc.Button(
+#             "Add new component",
+#             id="add-button",
+#             size="lg",
+#             radius="xl",
+#             variant="gradient",
+#             n_clicks=init_nclicks_add_button["count"],
+#         ),
+#         modal_save_button,
+#         dmc.Button(
+#             "Save",
+#             id="save-button-dashboard",
+#             size="lg",
+#             radius="xl",
+#             variant="gradient",
+#             gradient={"from": "teal", "to": "lime", "deg": 105},
+#             n_clicks=0,
+#             style={"margin-left": "5px"},
+#         ),
+#         dbc.Checklist(
+#             id="edit-dashboard-mode-button",
+#             # color="secondary",
+#             style={"margin-left": "20px", "font-size": "22px"},
+#             # size="lg",
+#             # n_clicks=0,
+#             options=[
+#                 {"label": "Edit dashboard", "value": 0},
+#             ],
+#             value=init_nclicks_edit_dashboard_mode_button,
+#             switch=True,
+#         ),
+
+#     ],
+# )
 
 
 # init_layout = dict()
