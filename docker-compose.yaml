@@ -21,40 +21,6 @@ services:
     depends_on:
       - redis
 
-  openldap:
-    image: osixia/openldap:1.5.0
-    environment:
-      LDAP_ORGANISATION: "Depictio"
-      LDAP_DOMAIN: "depictio.local"
-      LDAP_ADMIN_PASSWORD: "admin"
-    ports:
-      - "389:389"
-      - "636:636"
-    volumes:
-      - ./ldap_db:/var/lib/ldap
-      - ./ldap_config:/etc/ldap/slapd.d
-
-  phpldapadmin:
-    image: osixia/phpldapadmin:latest
-    environment:
-      PHPLDAPADMIN_LDAP_HOSTS: openldap
-    ports:
-      - "6443:443"
-    depends_on:
-      - openldap
-
-  keycloak:
-    image: quay.io/keycloak/keycloak:22.0.5
-    command: start-dev
-    environment:
-      KEYCLOAK_USER: user
-      KEYCLOAK_PASSWORD: test
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
-    ports:
-      - "8080:8080"
-    depends_on:
-      - openldap
 
   minio:
     image: minio/minio:latest
@@ -67,6 +33,22 @@ services:
     ports:
       - "9000:9000"
       - "9001:9001"
+
+
+
+
+  jbrowse2:
+    image: jbrowse2:latest
+    build:
+      dockerfile: docker-images/Dockerfile_jbrowse.dev.plugin.dockerfile
+    ports: 
+      - "3000:3000"
+      - "9010:9010"
+    volumes:
+      - "/Users/tweber/Gits/jbrowse-watcher-plugin:/usr/src/plugin"
+      # - "/Users/tweber/Gits/jbrowse2_config/jbrowse2_bak:/usr/src/plugin"
+
+
 
 
 # Uncomment and configure the below services as per your application requirement
@@ -88,3 +70,40 @@ services:
 #     - mongo
 #     - redis
 #     - minio
+
+
+
+  # openldap:
+  #   image: osixia/openldap:1.5.0
+  #   environment:
+  #     LDAP_ORGANISATION: "Depictio"
+  #     LDAP_DOMAIN: "depictio.local"
+  #     LDAP_ADMIN_PASSWORD: "admin"
+  #   ports:
+  #     - "389:389"
+  #     - "636:636"
+  #   volumes:
+  #     - ./ldap_db:/var/lib/ldap
+  #     - ./ldap_config:/etc/ldap/slapd.d
+
+  # phpldapadmin:
+  #   image: osixia/phpldapadmin:latest
+  #   environment:
+  #     PHPLDAPADMIN_LDAP_HOSTS: openldap
+  #   ports:
+  #     - "6443:443"
+  #   depends_on:
+  #     - openldap
+
+  # keycloak:
+  #   image: quay.io/keycloak/keycloak:22.0.5
+  #   command: start-dev
+  #   environment:
+  #     KEYCLOAK_USER: user
+  #     KEYCLOAK_PASSWORD: test
+  #     KEYCLOAK_ADMIN: admin
+  #     KEYCLOAK_ADMIN_PASSWORD: admin
+  #   ports:
+  #     - "8080:8080"
+  #   depends_on:
+  #     - openldap
