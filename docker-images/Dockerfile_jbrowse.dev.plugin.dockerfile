@@ -1,21 +1,22 @@
 # Use a Node.js base image
 FROM node:latest
 
-# Set the working directory in the container
-
 # Install the JBrowse CLI globally
 RUN npm install -g @jbrowse/cli
 
-# Install dependencies and build JBrowse (if needed)
-# RUN npm install && npm run build
-WORKDIR /usr/src/app
-
+# Create a directory for JBrowse
+WORKDIR /usr/src/jbrowse
 RUN jbrowse create jbrowse2
+WORKDIR /usr/src/jbrowse/jbrowse2
 
-WORKDIR /usr/src/app/jbrowse2
+# Clone and set up the plugin in a separate directory
+WORKDIR /usr/src/plugin
+RUN git clone https://github.com/weber8thomas/jbrowse-watcher-plugin.git .
+RUN npm install --force
+# Uncomment if a build step is required for your plugin
+# RUN npm run build
 
-# Expose the port JBrowse runs on
-EXPOSE 3000
 
-# Start JBrowse (if needed)
-CMD ["npx", "serve", "-S", "."]
+
+# Start JBrowse using npx serve
+CMD sh -c 'cd /usr/src/jbrowse/jbrowse2 && npx serve -S . & cd /usr/src/plugin && npm start'
