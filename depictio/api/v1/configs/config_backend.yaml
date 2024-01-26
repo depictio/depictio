@@ -1,4 +1,4 @@
-mongo_url: "mongodb://localhost:27018/"
+mongo_url: "mongodb://host.docker.internal:27018/"
 mongo_db: "depictioDB"
 collections: 
   data_collection: "data_collection"
