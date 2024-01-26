@@ -1,22 +1,34 @@
-name: depictio_frontend
+name: depictio
 channels:
-  - plotly
   - conda-forge
+  - plotly
+  - anaconda
 dependencies:
-  - python
-  - pymongo
-  - redis-py
-  - dash
-  - httpx
+  - bleach
   - bson
+  - dash
   - dash-bootstrap-components
   - dash-mantine-components
+  - fastapi
+  - fastparquet
+  - httpx
   - numpy
   - pandas
-  - polars
   - plotly_express=0.4.1
+  - polars
+  - pydantic==1.10.10
+  - pymongo
+  - python
+  - python-jose
+  - python-multipart
   - pyyaml
-  - pip:
+  - redis-py
+  - typer
+  - uvicorn
+  # - deltalake
+  - pip:  
+    - deltalake
+    - pydantic[email]
     - dash-mantine-components==0.12.1
     - dash-jbrowse==1.2.0
     - dash-iconify==0.1.2
