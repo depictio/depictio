@@ -53,23 +53,37 @@ services:
 
 # Uncomment and configure the below services as per your application requirement
 
-# depictio_frontend:
-#   build:
-#     context: .
-#     dockerfile: docker-images/Dockerfile_depictio_frontend.dockerfile
-#   ports:
-#     - "5080:5080" # Assuming frontend runs on 5080. Adjust if needed.
+  depictio_frontend:
+    build:
+      context: .
+      dockerfile: docker-images/Dockerfile_depictio.dockerfile
+    ports:
+      - "5080:5080" # Assuming frontend runs on 5080. Adjust if needed.
+    volumes:
+      - ./depictio:/app/depictio # Mount the local depictio directory
+      - ./CLI_client:/app/CLI_client # Mount the local depictio directory
+    command: ["python", "depictio/dash/app.py"]
+    depends_on:
+      - mongo
+      - redis
+      - minio
+      - depictio_backend
 
-# depictio_backend:
-#   build:
-#     context: .
-#     dockerfile: docker-images/Dockerfile_depictio_backend.dockerfile
-#   ports:
-#     - "8058:8058"
-#   depends_on:
-#     - mongo
-#     - redis
-#     - minio
+
+  depictio_backend:
+    build:
+      context: .
+      dockerfile: docker-images/Dockerfile_depictio.dockerfile
+    ports:
+      - "8058:8058"
+    volumes:
+      - ./depictio:/app/depictio
+      - ./CLI_client:/app/CLI_client
+    command: ["python", "depictio/api/run.py"]
+    depends_on:
+      - mongo
+      - redis
+      - minio
 
 
 

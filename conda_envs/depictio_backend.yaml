@@ -8,8 +8,15 @@ dependencies:
   - pydantic
   - numpy
   - pandas
+  - polars
+  # - deltalake
+  - pyyaml
   - pymongo
   - redis-py
   - bleach
   - fastparquet
   - bson
+  - pip:  
+    - deltalake
+    - pydantic[email]
+    - dash-mantine-components==0.12.1
