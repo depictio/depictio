@@ -1,5 +1,5 @@
 # Dockerfile_backend
-FROM mambaorg/micromamba:0.15.3
+FROM mambaorg/micromamba:latest
 
 WORKDIR /app
 
@@ -10,7 +10,8 @@ COPY conda_envs/depictio_backend.yaml depictio_backend.yaml
 RUN micromamba install -y -n base -f depictio_backend.yaml && \
     micromamba clean --all --yes
 
-# Copy the backend app files into the container
-COPY fastapi_backend/ ./fastapi_backend/
+# Set the PYTHONPATH to include the depictio directory
+ENV PYTHONPATH="${PYTHONPATH}:/app"
 
-CMD ["python", "fastapi_backend/run.py"]
+# The command to run the FastAPI application
+CMD ["python", "depictio/api/run.py"]

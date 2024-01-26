@@ -16,7 +16,8 @@ fastapi_server:
   port: 8060
 
 mongodb:
-  host: localhost
+  host: host.docker.internal
+  # host: localhost
   port: 27017
   database: depictioDB
   collection: depictioCollection

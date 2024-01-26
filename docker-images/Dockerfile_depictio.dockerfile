@@ -4,10 +4,10 @@ FROM mambaorg/micromamba:latest
 WORKDIR /app
 
 # Copy the environment file
-COPY conda_envs/depictio_frontend.yaml depictio_frontend.yaml
+COPY conda_envs/depictio.yaml depictio.yaml
 
 # Install the environment using micromamba
-RUN micromamba install -y -n base -f depictio_frontend.yaml && \
+RUN micromamba install -y -n base -f depictio.yaml && \
     micromamba clean --all --yes
 
 # Copy the entire depictio directory into the container
@@ -18,4 +18,4 @@ RUN micromamba install -y -n base -f depictio_frontend.yaml && \
 ENV PYTHONPATH="${PYTHONPATH}:/app"
 
 # Run the Dash app
-CMD ["python", "depictio/dash/app.py"]
+# CMD ["python", "depictio/dash/app.py"]
