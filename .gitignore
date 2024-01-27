@@ -187,3 +187,5 @@ dev/token/private_key.pem
 dev/token/public_key.pem
 docker-compose.yaml
 minio_data/
+depictio/private_key.pem
+depictio/public_key.pem
