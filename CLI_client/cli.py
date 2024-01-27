@@ -37,7 +37,7 @@ from depictio.api.v1.utils import (
 
 app = typer.Typer()
 
-API_BASE_URL = "http://localhost:8058"  # replace with your FastAPI server URL
+API_BASE_URL = "http://host.docker.internal:8058"  # replace with your FastAPI server URL
 
 
 def return_user_from_token(token: str) -> dict:
