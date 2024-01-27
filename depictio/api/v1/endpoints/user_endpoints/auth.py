@@ -20,10 +20,10 @@ auth_endpoint_router = APIRouter()
 
 
 # Load your private key
-with open("dev/token/private_key.pem", "rb") as f:
+with open("depictio/private_key.pem", "rb") as f:
     PRIVATE_KEY = f.read()
 # Load your private key
-with open("dev/token/public_key.pem", "rb") as f:
+with open("depictio/public_key.pem", "rb") as f:
     PUBLIC_KEY = f.read()
 
 ALGORITHM = "RS256"

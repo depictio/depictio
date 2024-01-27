@@ -44,7 +44,7 @@ class User(BaseModel):
     password_hash: str = Field(..., min_length=60, max_length=60, alias="password")
 
     class Config:
-        allow_population_by_field_name = True
+        populate_by_name = True
         json_encoders = {ObjectId: ObjectIdEncoder}
         schema_extra = {
             "example": {

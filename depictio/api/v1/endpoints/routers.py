@@ -5,6 +5,7 @@ from depictio.api.v1.endpoints.datacollections_endpoints.routes import datacolle
 from depictio.api.v1.endpoints.files_endpoints.routes import files_endpoint_router
 from depictio.api.v1.endpoints.deltatables_endpoints.routes import deltatables_endpoint_router
 from depictio.api.v1.endpoints.user_endpoints.auth import auth_endpoint_router
+from depictio.api.v1.endpoints.jbrowse_endpoints.routes import jbrowse_endpoints_router
 
 router = APIRouter()
 
@@ -28,6 +29,11 @@ router.include_router(
     deltatables_endpoint_router,
     prefix="/deltatables",
     tags=["DeltaTables"],
+)
+router.include_router(
+    jbrowse_endpoints_router,
+    prefix="/jbrowse",
+    tags=["JBrowse"],
 )
 router.include_router(
     auth_endpoint_router,
