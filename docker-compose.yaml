@@ -54,14 +54,16 @@ services:
 # Uncomment and configure the below services as per your application requirement
 
   depictio_frontend:
-    build:
-      context: .
-      dockerfile: docker-images/Dockerfile_depictio.dockerfile
+    # build:
+    #   context: .
+    #   dockerfile: docker-images/Dockerfile_depictio.dockerfile
+    image: depictio_container
     ports:
       - "5080:5080" # Assuming frontend runs on 5080. Adjust if needed.
     volumes:
       - ./depictio:/app/depictio # Mount the local depictio directory
-      - ./CLI_client:/app/CLI_client # Mount the local depictio directory
+      - /Users/tweber/Gits/depictio/CLI_client:/app/CLI_client
+      - /Users:/Users # TMP - Mount the local Users directory
     command: ["python", "depictio/dash/app.py"]
     depends_on:
       - mongo
@@ -71,14 +73,16 @@ services:
 
 
   depictio_backend:
-    build:
-      context: .
-      dockerfile: docker-images/Dockerfile_depictio.dockerfile
+    # build:
+    #   context: .
+    #   dockerfile: docker-images/Dockerfile_depictio.dockerfile
+    image: depictio_container
     ports:
       - "8058:8058"
     volumes:
       - ./depictio:/app/depictio
-      - ./CLI_client:/app/CLI_client
+      - /Users/tweber/Gits/depictio/CLI_client:/app/CLI_client
+      - /Users:/Users # TMP - Mount the local Users directory 
     command: ["python", "depictio/api/run.py"]
     depends_on:
       - mongo
