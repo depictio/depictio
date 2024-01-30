@@ -25,20 +25,42 @@ from depictio.api.v1.models.base import (
 )
 
 from depictio.api.v1.endpoints.user_endpoints.auth import (
-    ALGORITHM,
-    PUBLIC_KEY,
+    # ALGORITHM,
+    # PUBLIC_KEY,
     fetch_user_from_id,
 )
+
+
+
 from depictio.api.v1.utils import (
     get_config,
     validate_all_workflows,
     validate_config,
 )
 
+
+# Load your private key
+with open("depictio/private_key.pem", "rb") as f:
+    PRIVATE_KEY = f.read()
+# Load your private key
+with open("depictio/public_key.pem", "rb") as f:
+    PUBLIC_KEY = f.read()
+
+ALGORITHM = "RS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 31 * 3600
+
+
 app = typer.Typer()
 
+# API_BASE_URL = "http://localhost:8058"  # replace with your FastAPI server URL
 API_BASE_URL = "http://host.docker.internal:8058"  # replace with your FastAPI server URL
 
+print("\n\n")
+print("\n\n")
+print("API_BASE_URL")
+print(API_BASE_URL)
+print("\n\n")
+print("\n\n")
 
 def return_user_from_token(token: str) -> dict:
     try:
@@ -65,7 +87,7 @@ def create_workflow(
     workflow_tag: Optional[str] = typer.Option(
         None, "--workflow_tag", help="Workflow name to be created"
     ),
-    token: str = typer.Option(
+    token: Optional[str] = typer.Option(
         None,  # Default to None (not specified)
         "--token",
         help="Optionally specify a token to be used for authentication",
@@ -76,14 +98,14 @@ def create_workflow(
     """
     assert workflow_tag is not None
 
-    if not token:
-        typer.echo("A valid token must be provided for authentication.")
-        raise typer.Exit(code=1)
+    # if not token:
+    #     typer.echo("A valid token must be provided for authentication.")
+    #     raise typer.Exit(code=1)
 
-    user = return_user_from_token(token)  # Decode the token to get the user information
-    if not user:
-        typer.echo("Invalid token or unable to decode user information.")
-        raise typer.Exit(code=1)
+    # user = return_user_from_token(token)  # Decode the token to get the user information
+    # if not user:
+    #     typer.echo("Invalid token or unable to decode user information.")
+    #     raise typer.Exit(code=1)
 
     # Set permissions with the user as both owner and viewer
     headers = {"Authorization": f"Bearer {token}"}  # Token is now mandatory
@@ -93,7 +115,8 @@ def create_workflow(
 
     config = validate_config(config_data, RootConfig)
 
-    validated_config = validate_all_workflows(config, user=user)
+    validated_config = validate_all_workflows(config)
+    # validated_config = validate_all_workflows(config, user=user)
 
     # config_dict = {f"{e.workflow_tag}": e for e in validated_config.workflows}
 
@@ -114,6 +137,7 @@ def create_workflow(
         f"{API_BASE_URL}/depictio/api/v1/workflows/create",
         json=workflow_data_dict,
         headers=headers,
+        timeout=30.0  # Increase the timeout as needed
     )
 
     if response.status_code == 200:
@@ -151,6 +175,7 @@ def list_workflows(
     headers = {"Authorization": f"Bearer {token}"}  # Token is now mandatory
 
 
+    print(token)
     workflows = httpx.get(f"{API_BASE_URL}/depictio/api/v1/workflows/get", headers=headers)
     workflows_json = workflows.json()
     pretty_workflows = json.dumps(workflows_json, indent=4)
@@ -187,10 +212,10 @@ def scan_files_from_data_collection(
         typer.echo("A valid token must be provided for authentication.")
         raise typer.Exit(code=1)
 
-    user = return_user_from_token(token)  # Decode the token to get the user information
-    if not user:
-        typer.echo("Invalid token or unable to decode user information.")
-        raise typer.Exit(code=1)
+    # user = return_user_from_token(token)  # Decode the token to get the user information
+    # if not user:
+    #     typer.echo("Invalid token or unable to decode user information.")
+    #     raise typer.Exit(code=1)
 
     # Set permissions with the user as both owner and viewer
     headers = {"Authorization": f"Bearer {token}"}  # Token is now mandatory
@@ -249,6 +274,7 @@ def scan_files_from_data_collection(
         f"{API_BASE_URL}/depictio/api/v1/files/scan/{workflow_id}/{data_collection_id}",
         # json=data_payload_json,
         headers=headers,
+        timeout=30.0  # Increase the timeout as needed
     )
     print(response)
     print(response.text)
@@ -291,10 +317,10 @@ def create_deltatable(
         typer.echo("A valid token must be provided for authentication.")
         raise typer.Exit(code=1)
 
-    user = return_user_from_token(token)  # Decode the token to get the user information
-    if not user:
-        typer.echo("Invalid token or unable to decode user information.")
-        raise typer.Exit(code=1)
+    # user = return_user_from_token(token)  # Decode the token to get the user information
+    # if not user:
+    #     typer.echo("Invalid token or unable to decode user information.")
+    #     raise typer.Exit(code=1)
 
     # Set permissions with the user as both owner and viewer
     headers = {"Authorization": f"Bearer {token}"}  # Token is now mandatory
@@ -345,6 +371,7 @@ def create_deltatable(
         f"{API_BASE_URL}/depictio/api/v1/deltatables/create/{workflow_id}/{data_collection_id}",
         # json=data_payload_json,
         headers=headers,
+        timeout=30.0  # Increase the timeout as needed
     )
     print(response)
     print(response.text)
