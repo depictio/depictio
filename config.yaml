@@ -25,6 +25,7 @@ mongodb:
 
 redis_cache:
   host: localhost
+  # host: host.docker.internal
   port: 6379
   db: 0
   cache_ttl: 300
