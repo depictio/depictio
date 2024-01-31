@@ -2,6 +2,8 @@ import collections
 from io import BytesIO
 import sys
 
+import bson
+
 sys.path.append("/Users/tweber/Gits/depictio")
 
 from depictio.api.v1.db import grid_fs, redis_cache
@@ -21,6 +23,8 @@ import plotly.express as px
 import re
 
 API_BASE_URL = "http://localhost:8058"
+# API_BASE_URL = "http://host.docker.internal:8058"
+
 
 
 SELECTED_STYLE = {
@@ -121,6 +125,7 @@ def get_columns_from_data_collection(
 
 def load_deltatable(workflow_id: str, data_collection_id: str, cols: list = None, raw: bool = False):
     workflows = list_workflows(token)
+    print(workflows)
 
     if workflow_id is None or data_collection_id is None:
         default_workflow = workflows[0]
@@ -176,7 +181,21 @@ def load_deltatable(workflow_id: str, data_collection_id: str, cols: list = None
 
 
 
+
         def tmp_load_deltatable(workflow_id: str, data_collection_id: str):
+            
+            # Get data_collection_id from data_collection_tag
+            # print('tmp_load_deltatable')
+            # print("workflow_id", workflow_id)
+            # print("data_collection_tag", data_collection_tag)
+            # data_collection_id = [
+            #     f
+            #     for e in workflows
+            #     if e["_id"] == workflow_id
+            #     for f in e["data_collections"]
+            #     if f["data_collection_tag"] == data_collection_tag
+            # ][0]["_id"]
+
             response = httpx.get(
                 f"{API_BASE_URL}/depictio/api/v1/deltatables/get/{workflow_id}/{data_collection_id}",
                 headers={
@@ -249,15 +268,44 @@ def load_deltatable(workflow_id: str, data_collection_id: str, cols: list = None
                     # print(data_collection_id)
                     for join in join_tables_for_wf.json()[str(data_collection_id)]:
                         # print(["depictio_run_id"] + join["on"])
-                        for tmp_dc_id in join["with_dc"]:
-                            # print(tmp_dc_id)
+                        for tmp_dc_tag in join["with_dc"]:
+                            print("tmp_dc_tag")
+                            print(tmp_dc_tag)
+                            # check if tmp_dc_tag is str or pyobjectid
+                            # if str, retrieve pyobjectid
+                            # else skip
+                            if not bson.objectid.ObjectId.is_valid(tmp_dc_tag): 
+                                print("tmp_dc_tag is not valid pyobjectid")
+                                print(tmp_dc_tag)
+                                print("workflow_id")
+                                print(workflow_id)
+                                print(workflows)
+                                print([
+                                    f
+                                    for e in workflows
+                                    if e["_id"] == workflow_id
+                                    for f in e["data_collections"]
+                                    if f["data_collection_tag"] == tmp_dc_tag
+                                ])
+                                tmp_dc_id = None
+                                for e in workflows:
+                                    print(e["_id"], workflow_id, e["_id"] == workflow_id)
+                                    for f in e["data_collections"]:
+                                        print(f["data_collection_tag"], tmp_dc_tag, f["data_collection_tag"] == tmp_dc_tag)
+                                        if f["data_collection_tag"] == tmp_dc_tag:
+                                            print(f["_id"])
+                                            tmp_dc_id = f["_id"]
+                                            break
+                                        
+                            else:
+                                tmp_dc_id = tmp_dc_tag
                             tmp_df = tmp_load_deltatable(str(workflow_id), str(tmp_dc_id))
                             # TODO: remove this - used for debugging
                             tmp_df["cell"] = tmp_df["cell"].str.replace(".sort.mdup.bam", "")
                             # print("tmp_df")
                             # print(tmp_df)
                             # print("\n")
-                            main_data_collection_df = pd.merge(main_data_collection_df, tmp_df, on=["depictio_run_id"] + join["on"])
+                            main_data_collection_df = pd.merge(main_data_collection_df, tmp_df, on=["depictio_run_id"] + join["on_columns"])
                             # print("main_data_collection_df")
                             # print(main_data_collection_df)
             # print("Raw data = FALSE")

@@ -27,7 +27,7 @@ workflows:
 
           # FIX BUG ABOUT OBJECTID
           join:
-            on:
+            on_columns:
               - "sample"
               - "cell"
             how: "inner"
@@ -58,20 +58,20 @@ workflows:
 
   # pivot/melt system for ASV table for instance
   
-  - workflow_engine: nextflow
-    workflow_name: ampliseq
-    workflow_description: "nf-core/ampliseq workflow for ASV count table generation & taxonomy assignment"
-    workflow_config:
-      parent_runs_location: 
-        - "/Users/tweber/Gits/sc-interactome/Network_analysis/Sequencing"
-      runs_regex: ".*"
+  # - workflow_engine: nextflow
+  #   workflow_name: ampliseq
+  #   workflow_description: "nf-core/ampliseq workflow for ASV count table generation & taxonomy assignment"
+  #   workflow_config:
+  #     parent_runs_location: 
+  #       - "/Users/tweber/Gits/sc-interactome/Network_analysis/Sequencing"
+  #     runs_regex: ".*"
 
-    data_collections:
-    - data_collection_tag: "ASV_with_taxonomy"
-      description: "DADA2 ASV table with PR2 taxonomy"
-      config:
-        # type: "Table"
-        regex: ".*.ASV.reformated.tsv"
-        format: "TSV"
-        polars_kwargs:
-          separator: "\t"
+  #   data_collections:
+  #   - data_collection_tag: "ASV_with_taxonomy"
+  #     description: "DADA2 ASV table with PR2 taxonomy"
+  #     config:
+  #       # type: "Table"
+  #       regex: ".*.ASV.reformated.tsv"
+  #       format: "TSV"
+  #       polars_kwargs:
+  #         separator: "\t"

@@ -232,7 +232,7 @@ class DeltaTableAggregated(MongoModel):
 
 
 class JoinConfig(BaseModel):
-    on: List[str]
+    on_columns: List[str]
     how: Optional[str]
     with_dc: List[str]
     # lsuffix: str

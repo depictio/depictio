@@ -133,6 +133,7 @@ def register_callbacks_interactive_component(app):
         import httpx
 
         API_BASE_URL = "http://localhost:8058"
+        # API_BASE_URL = "http://host.docker.internal:8058"
 
 
 
@@ -181,10 +182,17 @@ def register_callbacks_interactive_component(app):
 
         # Handling different aggregation values
         if aggregation_value in ["Select", "MultiSelect", "SegmentedControl"]:
-            data = df[column_value].dropna().unique()
+            data = sorted(df[column_value].dropna().unique())
             interactive_component = func_name(
                 data=data, id={"type": "interactive-component", "index": id["index"]}
             )
+            if aggregation_value == "MultiSelect":
+                kwargs = {"searchable": True, "clearable": True}
+                interactive_component = func_name(
+                    data=data,
+                    id={"type": "interactive-component", "index": id["index"]},
+                    **kwargs,
+                )
 
         elif aggregation_value == "TextInput":
             interactive_component = func_name(
