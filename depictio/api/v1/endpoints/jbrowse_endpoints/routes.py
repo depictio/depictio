@@ -18,6 +18,8 @@ def construct_jbrowse_url(base_url, config_url, block, tracks):
     )
     return url
 
+
+# TODO: fix in config
 @jbrowse_endpoints_router.post("/log")
 async def log_message(log_data: LogData):
     print(datetime.now(), log_data)  # Or store it in a database/file
