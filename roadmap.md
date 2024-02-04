@@ -1,3 +1,21 @@
+# 2024/02/04 - merge StrandScape architecture and depictio
+
+- Simplify and make Strand-Scape more generic => one platform with run monitoring (workflow agnostic and without control) and dashboarding
+  - Run monitoring similar to depictio YAML config (multiple location ...) and MosaiWatcher
+  - Standard interface for run monitoring 
+  - Provide a way to indicate status (complete, error, to process ...)
+    - Agnostic system
+  - 
+- Communication/synergy between landing page that can point to information at the run level and dashboard page
+  - System to do back and forth between dashboard and individual page
+- Retrieve information from LabID to feed metadata 
+
+
+- Final design
+  - One space per workflow/project
+
+# Backup
+
 * Pages #TODO
   * Landing page
   * Dataset listing
