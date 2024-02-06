@@ -247,18 +247,58 @@ class JoinConfig(BaseModel):
         return v
 
 class DataCollectionConfig(BaseModel):
+    type: str
     regex: str
     format: str
     polars_kwargs: Optional[Dict[str, Any]] = {}
     keep_columns: Optional[List[str]] = []
     join: Optional[JoinConfig]
+    jbrowse_params: Optional[Dict[str, Any]] = {}
 
-    # validate the format
-    @validator("format")
-    def validate_format(cls, v):
-        allowed_values = ["csv", "tsv", "parquet", "feather", "xls", "xlsx"]
+
+
+    @validator("jbrowse_params")
+    def validate_jbrowse_params(cls, v):
+        if v is not None:
+            if not isinstance(v, dict):
+                raise ValueError("jbrowse_params must be a dictionary")
+        # allowed values
+        allowed_values = ["category", "assemblyName"]
+        for key in v:
+            if key not in allowed_values:
+                raise ValueError(f"jbrowse_params key must be one of {allowed_values}")
+        return v
+    
+    
+
+
+    @validator("type")
+    def validate_type(cls, v):
+        allowed_values = ["table", "genome browser"]
         if v.lower() not in allowed_values:
-            raise ValueError(f"format must be one of {allowed_values}")
+            raise ValueError(f"type must be one of {allowed_values}")
+        return v
+
+    @validator("format")
+    def validate_format(cls, v, values, **kwargs):
+        allowed_values_for_table = ["csv", "tsv", "parquet", "feather", "xls", "xlsx"]
+        allowed_values_for_genome_browser = ["gff3", "gff", "gtf", "bed", "bigbed", "vcf", "bigwig", "bw", "bam", "cram", "bai", "crai", "fai", "tbi", "csi", "gzi", "2bit", "sizes", "chrom.sizes", "chromSizes", "fasta", "fa", "fna", "fasta.gz"]
+        
+        # Use the 'type' to determine allowed formats
+        data_type = values.get('type', '').lower()  # Ensuring type is accessed in lowercase
+        if data_type:  # Check if 'type' is available
+            allowed_values = {
+                "table": allowed_values_for_table,
+                "genome browser": allowed_values_for_genome_browser
+            }.get(data_type, [])  # Default to empty list if type is not recognized
+            
+            if v.lower() not in allowed_values:
+                allowed_formats_str = ", ".join(allowed_values)
+                raise ValueError(f"Invalid format '{v}' for type '{data_type}'. Allowed formats for this type are: {allowed_formats_str}")
+        else:
+            # Handle case where 'type' is not yet validated or missing
+            raise ValueError("Type must be validated before format.")
+
         return v
 
     @validator("regex")
