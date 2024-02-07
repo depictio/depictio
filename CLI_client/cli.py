@@ -63,6 +63,9 @@ print("\n\n")
 print("\n\n")
 
 def return_user_from_token(token: str) -> dict:
+    print(token)
+    print(PUBLIC_KEY)
+    print(ALGORITHM)
     try:
         payload = jwt.decode(token, PUBLIC_KEY, algorithms=[ALGORITHM])
         user_id = payload.get("sub")
@@ -86,6 +89,9 @@ def create_workflow(
     ),
     workflow_tag: Optional[str] = typer.Option(
         None, "--workflow_tag", help="Workflow name to be created"
+    ),
+    update: Optional[bool] = typer.Option(
+        False, "--update", help="Update the workflow if it already exists"
     ),
     token: Optional[str] = typer.Option(
         None,  # Default to None (not specified)
@@ -130,6 +136,7 @@ def create_workflow(
 
     workflow_data_raw = workflow_data.dict(by_alias=True, exclude_none=True)
     workflow_data_dict = convert_objectid_to_str(workflow_data_raw)
+    workflow_data_dict["update"] = update
 
 
 
@@ -141,7 +148,7 @@ def create_workflow(
     )
 
     if response.status_code == 200:
-        typer.echo(f"Workflow successfully created! : {response.json()}")
+        typer.echo(f"Workflow successfully created or updated! : {response.json()}")
     else:
         typer.echo(f"Error: {response.text}")
 
@@ -166,6 +173,7 @@ def list_workflows(
         typer.echo("A valid token must be provided for authentication.")
         raise typer.Exit(code=1)
 
+    print(token)
     user = return_user_from_token(token)  # Decode the token to get the user information
     if not user:
         typer.echo("Invalid token or unable to decode user information.")
