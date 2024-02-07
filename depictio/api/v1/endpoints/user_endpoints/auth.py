@@ -27,7 +27,7 @@ with open("depictio/public_key.pem", "rb") as f:
     PUBLIC_KEY = f.read()
 
 ALGORITHM = "RS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 31 * 3600
+ACCESS_TOKEN_EXPIRE_MINUTES = 360 * 3600
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"/api/v1/auth/token")
 

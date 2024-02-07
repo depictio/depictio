@@ -75,7 +75,7 @@ async def get_workflows(current_user: str = Depends(get_current_user)):
 
 @workflows_endpoint_router.post("/create")
 async def create_workflow(
-    workflow: Workflow, current_user: str = Depends(get_current_user)
+    workflow: Workflow, current_user: str = Depends(get_current_user), update: bool = False
 ):
     workflows_collection.drop()
     data_collections_collection.drop()
@@ -93,18 +93,31 @@ async def create_workflow(
             "permissions.owners.user_id": current_user.user_id,
         }
     )
-    if existing_workflow:
+     
+    if existing_workflow and not update:
         raise HTTPException(
             status_code=400,
-            detail=f"Workflow with name '{workflow.workflow_tag}' already exists.",
+            detail=f"Workflow with name '{workflow.workflow_tag}' already exists. Use update option to modify it.",
         )
-
-    assert isinstance(workflow.id, ObjectId)
-    res = workflows_collection.insert_one(workflow.mongo())
-    assert res.inserted_id == workflow.id
+    
+    if update and existing_workflow:
+        # Update existing workflow
+        workflow.id = existing_workflow.get("_id")  # Ensure we have the correct ID for updating
+        res = workflows_collection.update_one(
+            {"_id": workflow.id}, 
+            {"$set": workflow.mongo()}, 
+            upsert=True
+        )
+        return str(workflow.id)
+    else:
+        # Create new workflow
+        assert isinstance(workflow.id, ObjectId)
+        res = workflows_collection.insert_one(workflow.mongo())
+        assert res.inserted_id == workflow.id
+        return str(res.inserted_id)
 
     # found = workflows_collection.find_one({"_id": res.inserted_id})
-    return str(res.inserted_id)
+    # return str(res.inserted_id)
 
 
 # @workflows_endpoint_router.put("/update_workflow/{workflow_id}")
