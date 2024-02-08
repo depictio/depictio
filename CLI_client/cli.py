@@ -137,11 +137,12 @@ def create_workflow(
     workflow_data_raw = workflow_data.dict(by_alias=True, exclude_none=True)
     workflow_data_dict = convert_objectid_to_str(workflow_data_raw)
     workflow_data_dict["update"] = update
+    print(workflow_data_dict)
 
 
 
     response = httpx.post(
-        f"{API_BASE_URL}/depictio/api/v1/workflows/create",
+        f"{API_BASE_URL}/depictio/api/v1/workflows/create?update={update}",
         json=workflow_data_dict,
         headers=headers,
         timeout=30.0  # Increase the timeout as needed

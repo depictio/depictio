@@ -50,6 +50,7 @@ workflows:
           type: "Genome Browser"
           regex: ".*.bed.gz"
           format: "BED"
+          index_extension: "tbi" 
           jbrowse_params:
             category: "SV calls"
             assemblyName: "hg38"

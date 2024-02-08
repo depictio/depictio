@@ -254,7 +254,7 @@ class DataCollectionConfig(BaseModel):
     keep_columns: Optional[List[str]] = []
     join: Optional[JoinConfig]
     jbrowse_params: Optional[Dict[str, Any]] = {}
-
+    index_extension: Optional[str] = None
 
 
     @validator("jbrowse_params")
@@ -268,7 +268,6 @@ class DataCollectionConfig(BaseModel):
             if key not in allowed_values:
                 raise ValueError(f"jbrowse_params key must be one of {allowed_values}")
         return v
-    
     
 
 
