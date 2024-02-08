@@ -73,9 +73,10 @@ async def get_workflows(current_user: str = Depends(get_current_user)):
     return workflows
 
 
+# TODO: update without removing the modified fields in mongo, and not changing
 @workflows_endpoint_router.post("/create")
 async def create_workflow(
-    workflow: Workflow, current_user: str = Depends(get_current_user), update: bool = False
+    workflow: Workflow, update: bool = False, current_user: str = Depends(get_current_user)
 ):
     workflows_collection.drop()
     data_collections_collection.drop()
@@ -86,6 +87,8 @@ async def create_workflow(
     # permissions_collection.drop()
     # workflow_config_collection.drop()
     # data_collection_config_collection.drop()
+
+    
 
     existing_workflow = workflows_collection.find_one(
         {

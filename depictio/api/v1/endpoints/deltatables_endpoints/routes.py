@@ -52,8 +52,6 @@ files_collection = db[settings.collections.files_collection]
 users_collection = db["users"]
 
 
-
-
 @deltatables_endpoint_router.get("/get/{workflow_id}/{data_collection_id}")
 # @datacollections_endpoint_router.get("/files/{workflow_id}/{data_collection_id}", response_model=List[GridFSFileInfo])
 async def list_registered_files(
@@ -65,8 +63,6 @@ async def list_registered_files(
     Fetch all files registered from a Data Collection registered into a workflow.
     """
 
-
-
     (
         workflow_oid,
         data_collection_oid,
@@ -74,7 +70,10 @@ async def list_registered_files(
         data_collection,
         user_oid,
     ) = validate_workflow_and_collection(
-         workflows_collection, current_user.user_id, workflow_id, data_collection_id, 
+        workflows_collection,
+        current_user.user_id,
+        workflow_id,
+        data_collection_id,
     )
 
     # Query to find deltatable associated with the data collection
@@ -83,13 +82,35 @@ async def list_registered_files(
     deltatable = list(deltatable_cursor)[0]["data_collections"][0]["deltaTable"]
     # print(deltatable)
 
-
     return convert_objectid_to_str(deltatable)
 
 
-@deltatables_endpoint_router.post(
-    "/create/{workflow_id}/{data_collection_id}"
-)
+def upload_dir_to_s3(bucket_name, s3_folder, local_dir, s3_client):
+    """
+    Recursively uploads a directory to S3 preserving the directory structure.
+
+    :param bucket_name: Name of the S3 bucket.
+    :param s3_folder: S3 folder path where the directory will be uploaded.
+    :param local_dir: The local directory to upload.
+    :param s3_client: Initialized boto3 S3 client.
+    """
+    for root, dirs, files in os.walk(local_dir):
+        for filename in files:
+            # construct the full local path
+            local_path = os.path.join(root, filename)
+            
+            # construct the full S3 path
+            relative_path = os.path.relpath(local_path, local_dir)
+            s3_path = os.path.join(s3_folder, relative_path).replace("\\", "/")
+            
+            # upload the file
+            print(f"Uploading {local_path} to {bucket_name}/{s3_path}...")
+            s3_client.upload_file(local_path, bucket_name, s3_path)
+
+
+
+
+@deltatables_endpoint_router.post("/create/{workflow_id}/{data_collection_id}")
 async def aggregate_data(
     # data_collection: DataCollection,
     workflow_id: str,
@@ -106,17 +127,53 @@ async def aggregate_data(
         data_collection,
         user_oid,
     ) = validate_workflow_and_collection(
-         workflows_collection, current_user.user_id, workflow_id, data_collection_id, 
+        workflows_collection,
+        current_user.user_id,
+        workflow_id,
+        data_collection_id,
     )
 
     data_collection_config = data_collection.config
+    print(data_collection_config)
+    # Assert type of data_collection_config is Table
+    assert data_collection_config.type == "Table", "Data collection type must be Table"
 
     # Using the config, find relevant files
-    files = list(files_collection.find({"data_collection._id": data_collection_oid}))
+    files = list(
+        files_collection.find(
+            {
+                "data_collection._id": data_collection_oid,
+                # "data_collection.type": "Table",  # Assuming there's a type field under data_collection that specifies the type
+            }
+        )
+    )
     print(files)
     assert isinstance(files, list)
     assert len(files) > 0
     files = [File.from_mongo(file) for file in files]
+
+
+
+
+
+
+
+    import boto3
+    from botocore.client import Config
+
+    # Step 2: Upload the Parquet file to MinIO using boto3
+    minio_url = "http://localhost:9000"  # Your MinIO endpoint
+    access_key = "minio"  # Use MINIO_ROOT_USER value
+    secret_key = "minio123"  # Use MINIO_ROOT_PASSWORD value
+    bucket_name = "depictio-bucket"  # Your bucket name
+    destination_file_name = f"{user_oid}/{workflow_oid}/{data_collection_oid}"  # Destination path in MinIO
+
+    s3_client = boto3.client('s3',
+                            endpoint_url=minio_url,
+                            aws_access_key_id=access_key,
+                            aws_secret_access_key=secret_key,
+                            config=Config(signature_version='s3v4'),
+                            region_name='us-east-1')  # Region name can be a placeholder
 
 
     # TODO: Move to S3
@@ -173,8 +230,15 @@ async def aggregate_data(
         aggregated_df = pl.concat(data_frames)
         print(aggregated_df)
         # Write aggregated dataframe to Delta Lake
-        aggregated_df.write_delta(delta_table_path, mode="overwrite")
+        aggregated_df.write_delta(
+            delta_table_path, mode="overwrite"
+        )
 
+
+        # Upload the Delta table directory to MinIO
+        upload_dir_to_s3(bucket_name, destination_file_name, delta_table_path, s3_client)
+
+        print("Upload complete.")
     # data_frames = []
 
     # for file_info in files:
@@ -245,8 +309,6 @@ async def aggregate_data(
                 tmp_dict["specs"][str(method_name)] = numpy_to_python(result)
         results.append(tmp_dict)
     print(results)
-    
-
 
     # Update the data_collection_config with the GridFS file_id
     workflows_collection.update_one(
@@ -268,7 +330,6 @@ async def aggregate_data(
     }
 
 
-
 # @deltatables_endpoint_router.get("/query/{workflow_id}/{data_collection_id}")
 # async def query_data(
 #     workflow_id: str,
@@ -287,14 +348,12 @@ async def aggregate_data(
 #         data_collection,
 #         user_oid,
 #     ) = validate_workflow_and_collection(
-#          workflows_collection, current_user.user_id, workflow_id, data_collection_id, 
+#          workflows_collection, current_user.user_id, workflow_id, data_collection_id,
 #     )
 
 #     deltatable_location = data_collection.deltaTable.delta_table_location
 #     print(deltatable_location, type(deltatable_location))
 #     print(query.columns)
-
-
 
 
 #     # Lazily read the Delta table & perform the query
@@ -329,16 +388,12 @@ async def aggregate_data(
 
 #     return df.collect().to_dict()
 
-    
-
-
 
 @deltatables_endpoint_router.delete("/delete/{workflow_id}/{data_collection_id}")
 async def delete_deltatable(
     workflow_id: str,
     data_collection_id: str,
     current_user: str = Depends(get_current_user),
-
 ):
     """
     Delete all files from GridFS.
@@ -362,17 +417,17 @@ async def delete_deltatable(
             status_code=404,
             detail=f"No workflows with id {workflow_oid} found for the current user.",
         )
-    
+
     # Query to find files associated with the data collection
     query_files = {"data_collection_id": data_collection_oid}
-    
+
     # Batch delete the files
     delete_result = files_collection.delete_many(query_files)
 
     # Optionally, update the workflow document to reflect the deletion
     workflows_collection.update_one(
         {"_id": workflow_oid},
-        {"$pull": {"data_collections": {"_id": data_collection_oid}}}
+        {"$pull": {"data_collections": {"_id": data_collection_oid}}},
     )
-    
+
     return {"message": f"Deleted {delete_result.deleted_count} files successfully"}
