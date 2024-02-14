@@ -230,7 +230,7 @@ def scan_files_from_data_collection(
     headers = {"Authorization": f"Bearer {token}"}  # Token is now mandatory
 
     config_data = get_config(config_path)
-    # print(config_data)
+    print(config_data)
     config = validate_config(config_data, RootConfig)
     assert isinstance(config, RootConfig)
     print(config)
@@ -283,7 +283,8 @@ def scan_files_from_data_collection(
         f"{API_BASE_URL}/depictio/api/v1/files/scan/{workflow_id}/{data_collection_id}",
         # json=data_payload_json,
         headers=headers,
-        timeout=30.0  # Increase the timeout as needed
+        # TODO: find a fix for this timeout
+        timeout=5*60  # Increase the timeout as needed
     )
     print(response)
     print(response.text)
@@ -380,7 +381,7 @@ def create_deltatable(
         f"{API_BASE_URL}/depictio/api/v1/deltatables/create/{workflow_id}/{data_collection_id}",
         # json=data_payload_json,
         headers=headers,
-        timeout=30.0  # Increase the timeout as needed
+        timeout=60.0 * 5  # Increase the timeout as needed
     )
     print(response)
     print(response.text)

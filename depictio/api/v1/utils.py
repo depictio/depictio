@@ -150,7 +150,7 @@ def scan_files(
 
     for root, dirs, files in os.walk(run_location):
         for file in files:
-            if re.match(data_collection.config.regex, file):
+            if re.match(data_collection.config.files_regex, file):
                 file_location = os.path.join(root, file)
                 
                 # if os.path.exists(file_location + ".md5"):
