@@ -1,7 +1,12 @@
 from datetime import datetime
 from fastapi import HTTPException, Depends, APIRouter
+import boto3
+from botocore.exceptions import NoCredentialsError
+
 from depictio.api.v1.endpoints.jbrowse_endpoints.models import LogData
 
+from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user
+from depictio.api.v1.utils import scan_runs
 jbrowse_endpoints_router = APIRouter()
 
 
@@ -37,3 +42,4 @@ async def log_message(log_data: LogData):
         print("JBrowse URL:", jbrowse_url)
 
     return {"jbrowse_url": jbrowse_url}
+

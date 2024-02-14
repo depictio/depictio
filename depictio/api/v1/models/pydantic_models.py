@@ -231,7 +231,7 @@ class DeltaTableAggregated(MongoModel):
         return value
 
 
-class JoinConfig(BaseModel):
+class TableJoinConfig(BaseModel):
     on_columns: List[str]
     how: Optional[str]
     with_dc: List[str]
@@ -246,16 +246,57 @@ class JoinConfig(BaseModel):
             raise ValueError(f"join_how must be one of {allowed_values}")
         return v
 
+
+
+class Wildcard(BaseModel):
+    name: str
+    regex: str
+    join_with: Optional[str] = None
+
+    @validator("regex")
+    def validate_regex(cls, v):
+        try:
+            re.compile(v)
+            return v
+        except re.error:
+            raise ValueError("Invalid regex pattern")
+
+    @validator("join_with")
+    def validate_join_with(cls, v):
+        if v is not None:
+            if not isinstance(v, str):
+                raise ValueError("join_with must be a string")
+        return v
+
+
 class DataCollectionConfig(BaseModel):
     type: str
-    regex: str
+    files_regex: str
     format: str
     polars_kwargs: Optional[Dict[str, Any]] = {}
     keep_columns: Optional[List[str]] = []
-    join: Optional[JoinConfig]
+    table_join: Optional[TableJoinConfig]
     jbrowse_params: Optional[Dict[str, Any]] = {}
     index_extension: Optional[str] = None
+    regex_wildcards: Optional[List[Wildcard]] = []
 
+
+
+
+    @root_validator
+    def check_wildcards_defined(cls, values):
+        files_regex = values.get('files_regex')
+        regex_wildcards = values.get('regex_wildcards', [])
+        
+        if files_regex:
+            wildcards = re.findall(r"\{(\w+)\}", files_regex)
+            defined_wildcards = {wc.name for wc in regex_wildcards}
+            
+            undefined_wildcards = set(wildcards) - defined_wildcards
+            if undefined_wildcards:
+                raise ValueError(f"Undefined wildcards in files_regex: {', '.join(undefined_wildcards)}")
+        
+        return values
 
     @validator("jbrowse_params")
     def validate_jbrowse_params(cls, v):
@@ -300,13 +341,7 @@ class DataCollectionConfig(BaseModel):
 
         return v
 
-    @validator("regex")
-    def validate_regex(cls, v):
-        try:
-            re.compile(v)
-            return v
-        except re.error:
-            raise ValueError("Invalid regex pattern")
+ 
 
     # TODO : check that the columns to keep are in the dataframe
     @validator("keep_columns")
@@ -390,6 +425,7 @@ def validate_datetime(value):
 class File(MongoModel):
     id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
     file_location: FilePath
+    S3_location: Optional[str] = None
     filename: str
     creation_time: datetime
     modification_time: datetime
@@ -397,6 +433,15 @@ class File(MongoModel):
     # file_hash: Optional[str] = None
     run_id: Optional[str] = None
     aggregated: Optional[bool] = False
+
+    @validator("S3_location")
+    def validate_S3_location(cls, value):
+        if value is not None:
+            if not isinstance(value, str):
+                raise ValueError("S3_location must be a string")
+            if not value.startswith("s3://"):
+                raise ValueError("Invalid S3 location")
+        return value
 
     @validator("creation_time", pre=True, always=True)
     def validate_creation_time(cls, value):

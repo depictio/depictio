@@ -154,37 +154,21 @@ async def aggregate_data(
 
 
 
+    # Set environment variables for MinIO access
+    os.environ["AWS_ACCESS_KEY_ID"] = "minio"
+    os.environ["AWS_SECRET_ACCESS_KEY"] = "minio123"
+    os.environ["AWS_S3_ENDPOINT_URL"] = "http://localhost:9000"  # This might need to be AWS_S3_ENDPOINT_URL depending on the version and setup
+    os.environ["AWS_REGION"] = "us-east-1"  # This can be a placeholder value
+    bucket_name = "depictio-bucket"
+
+    
+    destination_file_name = f"./minio_data/{bucket_name}/{user_oid}/{workflow_oid}/{data_collection_oid}"  # Destination path in MinIO
 
 
-
-
-    import boto3
-    from botocore.client import Config
-
-    # Step 2: Upload the Parquet file to MinIO using boto3
-    minio_url = "http://localhost:9000"  # Your MinIO endpoint
-    access_key = "minio"  # Use MINIO_ROOT_USER value
-    secret_key = "minio123"  # Use MINIO_ROOT_PASSWORD value
-    bucket_name = "depictio-bucket"  # Your bucket name
-    destination_file_name = f"{user_oid}/{workflow_oid}/{data_collection_oid}"  # Destination path in MinIO
-
-    s3_client = boto3.client('s3',
-                            endpoint_url=minio_url,
-                            aws_access_key_id=access_key,
-                            aws_secret_access_key=secret_key,
-                            config=Config(signature_version='s3v4'),
-                            region_name='us-east-1')  # Region name can be a placeholder
-
-
-    # TODO: Move to S3
-    # Define the path to your Delta table
-    delta_table_path = f"/Users/tweber/Gits/depictio/data/delta_lake/{user_oid}/{workflow_oid}/{data_collection_oid}"
-    print(delta_table_path)
-    # os.remove(delta_table_path)
     user = User.from_mongo(users_collection.find_one({"_id": user_oid}))
     # fix this below
     deltaTable = DeltaTableAggregated(
-        delta_table_location=delta_table_path,
+        delta_table_location=destination_file_name,
         aggregation=[
             Aggregation(
                 aggregation_time=datetime.now(),
@@ -231,41 +215,11 @@ async def aggregate_data(
         print(aggregated_df)
         # Write aggregated dataframe to Delta Lake
         aggregated_df.write_delta(
-            delta_table_path, mode="overwrite"
+            destination_file_name
         )
 
+        print("Write complete.")
 
-        # Upload the Delta table directory to MinIO
-        upload_dir_to_s3(bucket_name, destination_file_name, delta_table_path, s3_client)
-
-        print("Upload complete.")
-    # data_frames = []
-
-    # for file_info in files:
-    #     file_path = file_info["file_location"]
-
-    #     # Read the file using pandas and the given config
-    #     with open(file_path, "r") as file:
-    #         df = pd.read_csv(
-    #             file,
-    #             **data_collection_config["pandas_kwargs"],
-    #         )
-    #         raw_cols = df.columns.tolist()
-    #         df["depictio_run_id"] = file_info["run_id"]
-    #         df = df[["depictio_run_id"] + raw_cols]
-    #         data_frames.append(df)
-
-    # # Aggregate data
-    # aggregated_df = pd.concat(data_frames, axis=0, ignore_index=True)
-
-    # # Convert aggregated dataframe to bytes and save to GridFS
-    # output = BytesIO()
-    # aggregated_df.to_parquet(output)
-    # output.seek(0)  # Rewind to the start
-
-    # # Using a naming convention for directories in GridFS
-    # filename_structure = f"aggregates/{data_collection.workflow_id}/{data_collection.data_collection_id}.pkl"
-    # file_id = grid_fs.put(output, filename=filename_structure)
 
     results = list()
 
@@ -329,64 +283,6 @@ async def aggregate_data(
         "message": f"Data successfully aggregated and saved for data_collection: {data_collection_id} of workflow: {workflow_id}, aggregation id: {deltaTable.id}",
     }
 
-
-# @deltatables_endpoint_router.get("/query/{workflow_id}/{data_collection_id}")
-# async def query_data(
-#     workflow_id: str,
-#     data_collection_id: str,
-#     query: DeltaTableQuery,
-#     current_user: str = Depends(get_current_user),
-# ):
-#     """
-#     Query the aggregated data from Delta Lake.
-#     """
-
-#     (
-#         workflow_oid,
-#         data_collection_oid,
-#         workflow,
-#         data_collection,
-#         user_oid,
-#     ) = validate_workflow_and_collection(
-#          workflows_collection, current_user.user_id, workflow_id, data_collection_id,
-#     )
-
-#     deltatable_location = data_collection.deltaTable.delta_table_location
-#     print(deltatable_location, type(deltatable_location))
-#     print(query.columns)
-
-
-#     # Lazily read the Delta table & perform the query
-#     df = pl.scan_delta(str(deltatable_location))
-#     df = df.select(query.columns)
-
-
-#     # Build and apply combined filter expressions
-#     filter_expressions = []
-#     for col, condition in query.filters.items():
-#         col_filter = None
-#         if condition.above is not None:
-#             col_filter = (pl.col(col) > condition.above)
-#         if condition.equal is not None:
-#             col_filter = col_filter & (pl.col(col) == condition.equal) if col_filter else (pl.col(col) == condition.equal)
-#         if condition.under is not None:
-#             col_filter = col_filter & (pl.col(col) < condition.under) if col_filter else (pl.col(col) < condition.under)
-
-#         if col_filter is not None:
-#             filter_expressions.append(col_filter)
-#         print(col_filter)
-
-#     print(filter_expressions)
-#     if filter_expressions:
-#         combined_filter = filter_expressions[0]
-#         for expr in filter_expressions[1:]:
-#             combined_filter = combined_filter & expr
-
-#         print(combined_filter)
-#         df = df.filter(combined_filter)
-
-
-#     return df.collect().to_dict()
 
 
 @deltatables_endpoint_router.delete("/delete/{workflow_id}/{data_collection_id}")
