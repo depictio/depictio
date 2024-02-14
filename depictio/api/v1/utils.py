@@ -133,6 +133,16 @@ def calculate_file_hash(file_path: str) -> str:
         return hashlib.md5(f.read()).hexdigest()
 
 
+
+def construct_full_regex(files_regex, regex_wildcards):
+    # Iterate through each wildcard definition and replace it in the files_regex
+    for wildcard in regex_wildcards:
+        print(wildcard)
+        placeholder = f"{{{wildcard['name']}}}"  # Format placeholder as it appears in files_regex
+        regex_pattern = wildcard['regex']
+        files_regex = files_regex.replace(placeholder, f"({regex_pattern})")
+    return files_regex
+
 def scan_files(
     run_location: str, run_id: str, data_collection: DataCollection
 ) -> List[File]:
@@ -148,9 +158,20 @@ def scan_files(
 
     file_list = list()
 
+
+    regex_wildcards_list = [e.dict() for e in data_collection.config.regex_wildcards]
+
+    if data_collection.config.regex_wildcards:
+        full_regex = construct_full_regex(data_collection.config.files_regex, regex_wildcards_list)
+    else:
+        full_regex = data_collection.config.files_regex
+
+    print(full_regex)
+
     for root, dirs, files in os.walk(run_location):
         for file in files:
-            if re.match(data_collection.config.files_regex, file):
+
+            if re.match(full_regex, file):
                 file_location = os.path.join(root, file)
                 
                 # if os.path.exists(file_location + ".md5"):
