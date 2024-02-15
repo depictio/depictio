@@ -137,7 +137,6 @@ def calculate_file_hash(file_path: str) -> str:
 def construct_full_regex(files_regex, regex_wildcards):
     # Iterate through each wildcard definition and replace it in the files_regex
     for wildcard in regex_wildcards:
-        print(wildcard)
         placeholder = f"{{{wildcard['name']}}}"  # Format placeholder as it appears in files_regex
         regex_pattern = wildcard['regex']
         files_regex = files_regex.replace(placeholder, f"({regex_pattern})")
@@ -166,7 +165,6 @@ def scan_files(
     else:
         full_regex = data_collection.config.files_regex
 
-    print(full_regex)
 
     for root, dirs, files in os.walk(run_location):
         for file in files:

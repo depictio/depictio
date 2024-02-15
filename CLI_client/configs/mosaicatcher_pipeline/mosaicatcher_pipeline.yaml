@@ -56,7 +56,7 @@ workflows:
 
           format: "BED"
           index_extension: "tbi" 
-          jbrowse_template_location: "/Users/tweber/Gits/depictio/jbrowse2/templates/mosaicatcher_pipeline/SV_calls"
+          jbrowse_template_location: "/Users/tweber/Gits/depictio/CLI_client/configs/mosaicatcher_pipeline/jbrowse2_templates/SV_calls.json"
 
           
           # jbrowse_params:

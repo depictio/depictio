@@ -281,7 +281,7 @@ class DataCollectionConfig(BaseModel):
     # jbrowse_params: Optional[Dict[str, Any]] = {}
     index_extension: Optional[str] = None
     regex_wildcards: Optional[List[Wildcard]] = []
-    jbrowse_template_location: Optional[Path] = None
+    jbrowse_template_location: Optional[str] = None
 
 
     @root_validator
@@ -299,12 +299,6 @@ class DataCollectionConfig(BaseModel):
         
         return values
 
-    @validator("jbrowse_template_location")
-    def validate_jbrowse_template_location(cls, v):
-        if v is not None:
-            if not isinstance(v, Path):
-                raise ValueError("jbrowse_template_location must be a Path")
-        return v
 
     # @validator("jbrowse_params")
     # def validate_jbrowse_params(cls, v):

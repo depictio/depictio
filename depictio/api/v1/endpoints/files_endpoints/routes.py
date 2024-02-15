@@ -37,6 +37,7 @@ from depictio.api.v1.models.pydantic_models import GridFSFileInfo
 from depictio.api.v1.utils import (
     # decode_token,
     # public_key_path,
+    construct_full_regex,
     numpy_to_python,
     scan_runs,
     serialize_for_mongo,
@@ -99,6 +100,38 @@ def generate_track_config(track_type, track_details, data_collection_config):
     # Logic for other track types can be similarly extended using elif blocks
 
     return track_config
+
+
+def populate_template_recursive(template, values):
+    """
+    Recursively populate a template with values.
+    
+    Args:
+        template (dict | list | str): The template to populate.
+        values (dict): The values to populate the template with.
+    
+    Returns:
+        The populated template.
+    """
+    if isinstance(template, dict):
+        # For dictionaries, recursively populate each value.
+        return {k: populate_template_recursive(v, values) for k, v in template.items()}
+    elif isinstance(template, list):
+        # For lists, recursively populate each element.
+        return [populate_template_recursive(item, values) for item in template]
+    elif isinstance(template, str):
+        # For strings, replace placeholders with actual values.
+        result = template
+        for key, value in values.items():
+            placeholder = f'{{{key}}}'
+            if placeholder in result:
+                result = result.replace(placeholder, str(value))
+        print(result)
+
+        return result
+    else:
+        # If not a dict, list, or str, return the template as is.
+        return template
 
 
 def update_jbrowse_config(config_path, new_tracks=[]):
@@ -277,7 +310,7 @@ async def scan_data_collection(
         ):
             return_dict = {workflow.id: collections.defaultdict(list)}
             for run in runs_and_content:
-                # for run in runs_and_content[:1]:
+            # for run in runs_and_content[:1]:
                 files = run.pop("files", [])
 
                 run = WorkflowRun(**run)
@@ -288,7 +321,8 @@ async def scan_data_collection(
 
                 # Add run_id to each file before inserting
                 # for file in files:
-                for file in files:
+                print(files)
+                for file in sorted(files, key=lambda x: x["file_location"]):
                     file = File(**file)
                     print(data_collection.config.type)
                     if data_collection.config.type == "Genome Browser":
@@ -306,24 +340,67 @@ async def scan_data_collection(
                         print(s3_key)
 
                         track_details = {
-                            "trackId": file.filename,
+                            "trackId": f"{endpoint_url}/{bucket_name}/{s3_key}",
                             "name": file.filename,
                             "uri": f"{endpoint_url}/{bucket_name}/{s3_key}",
+                            "indexUri": f"{endpoint_url}/{bucket_name}/{s3_key}.tbi",
                             "run_id": run_id,
+
                         }
                         print(track_details)
+
+                        regex_wildcards_list = [e.dict() for e in data_collection.config.regex_wildcards]
+                        full_regex = construct_full_regex(data_collection.config.files_regex, regex_wildcards_list)
+
+                        print(regex_wildcards_list)
+                        print(full_regex)
+                        wildcards_dict = dict()
+                        if regex_wildcards_list:
+                            for i, wc in enumerate(data_collection.config.regex_wildcards):
+                                match = re.match(full_regex, file.filename).group(i+1)
+                                print(match)
+                                wildcards_dict[regex_wildcards_list[i]["name"]] = match
+                            print(wildcards_dict)
+
+                        if wildcards_dict:
+                            track_details.update(wildcards_dict)
+                                
+                                
+
+
                         # print(data_collection.config)
+                        
+                        
                         track_config = generate_track_config(
                             "FeatureTrack",
                             track_details,
                             data_collection.mongo()["config"],
                         )
-                        print(track_config)
+                        # print(track_config)
 
-                        # check if index
                         file_index = data_collection.config.index_extension
                         if not file_location.endswith(file_index):
+
+                            jbrowse_template_location = data_collection.config.jbrowse_template_location
+                            print(jbrowse_template_location)
+                            print(os.path.exists(jbrowse_template_location))
+                            jbrowse_template_json = json.load(open(jbrowse_template_location))
+                            print(jbrowse_template_json)
+                            track_config = populate_template_recursive(jbrowse_template_json, track_details)
+
+                            print(track_config)
+                            track_config["category"] =  track_config["category"] + [run_id]
+                            print(track_config)
+
                             new_tracks.append(track_config)
+
+                            # break
+                        
+
+
+
+                        # check if index
+
                         # prepare_and_add_track(track_config, workflow_id, data_collection_id)
 
                         try:
