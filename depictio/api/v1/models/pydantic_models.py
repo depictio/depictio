@@ -269,6 +269,8 @@ class Wildcard(BaseModel):
         return v
 
 
+    
+
 class DataCollectionConfig(BaseModel):
     type: str
     files_regex: str
@@ -276,11 +278,10 @@ class DataCollectionConfig(BaseModel):
     polars_kwargs: Optional[Dict[str, Any]] = {}
     keep_columns: Optional[List[str]] = []
     table_join: Optional[TableJoinConfig]
-    jbrowse_params: Optional[Dict[str, Any]] = {}
+    # jbrowse_params: Optional[Dict[str, Any]] = {}
     index_extension: Optional[str] = None
     regex_wildcards: Optional[List[Wildcard]] = []
-
-
+    jbrowse_template_location: Optional[Path] = None
 
 
     @root_validator
@@ -298,17 +299,24 @@ class DataCollectionConfig(BaseModel):
         
         return values
 
-    @validator("jbrowse_params")
-    def validate_jbrowse_params(cls, v):
+    @validator("jbrowse_template_location")
+    def validate_jbrowse_template_location(cls, v):
         if v is not None:
-            if not isinstance(v, dict):
-                raise ValueError("jbrowse_params must be a dictionary")
-        # allowed values
-        allowed_values = ["category", "assemblyName"]
-        for key in v:
-            if key not in allowed_values:
-                raise ValueError(f"jbrowse_params key must be one of {allowed_values}")
+            if not isinstance(v, Path):
+                raise ValueError("jbrowse_template_location must be a Path")
         return v
+
+    # @validator("jbrowse_params")
+    # def validate_jbrowse_params(cls, v):
+    #     if v is not None:
+    #         if not isinstance(v, dict):
+    #             raise ValueError("jbrowse_params must be a dictionary")
+    #     # allowed values
+    #     allowed_values = ["category", "assemblyName"]
+    #     for key in v:
+    #         if key not in allowed_values:
+    #             raise ValueError(f"jbrowse_params key must be one of {allowed_values}")
+    #     return v
     
 
 

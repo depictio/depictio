@@ -56,9 +56,17 @@ workflows:
 
           format: "BED"
           index_extension: "tbi" 
-          jbrowse_params:
-            category: "SV calls"
-            assemblyName: "hg38"
+          jbrowse_template_location: "/Users/tweber/Gits/depictio/jbrowse2/templates/mosaicatcher_pipeline/SV_calls"
+
+          
+          # jbrowse_params:
+          #   category: "SV calls"
+          #   assemblyName: "hg38"
+          #   display:
+          #     type: "LinearBasicDisplay"
+          #     renderer: 
+          #       type: "SVGFeatureRenderer"
+
 
   
   # - workflow_engine: nextflow
