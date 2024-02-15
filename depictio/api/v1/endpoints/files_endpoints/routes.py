@@ -53,9 +53,6 @@ files_collection = db[settings.collections.files_collection]
 users_collection = db["users"]
 
 
-
-
-
 def generate_track_config(track_type, track_details, data_collection_config):
     # Extract common JBrowse parameters from data collection config
     category = data_collection_config.get("jbrowse_params", {}).get(
@@ -67,7 +64,7 @@ def generate_track_config(track_type, track_details, data_collection_config):
 
     # Base configuration common to all tracks
     track_config = {
-        "trackId": track_details.get("trackId"),
+        "trackId": track_details.get("uri"),
         "name": track_details.get("name", "Unnamed Track"),
         "assemblyNames": [assemblyName],
         "category": category.split(",") + [track_details["run_id"]],
@@ -104,44 +101,64 @@ def generate_track_config(track_type, track_details, data_collection_config):
     return track_config
 
 
-
 def update_jbrowse_config(config_path, new_tracks=[]):
     try:
-        with open(config_path, 'r') as file:
+        with open(config_path, "r") as file:
             config = json.load(file)
     except FileNotFoundError:
         print(f"Config file {config_path} not found.")
     except json.JSONDecodeError:
         print(f"Error decoding JSON from {config_path}.")
 
-    if 'tracks' not in config:
-        config['tracks'] = []
-    config['tracks'].extend(new_tracks)
+    if "tracks" not in config:
+        config["tracks"] = []
+
+    endpoint_url = "http://localhost:9000"
+    bucket_name = "depictio-bucket"
+
+    config["tracks"] = list()
+    config["tracks"] = [
+        track
+        for track in config["tracks"]
+        if f"{endpoint_url}/{bucket_name}" not in track["trackId"]
+    ]
+
+    print(config["tracks"])
+    print(new_tracks)
+
+    config["tracks"].extend(new_tracks)
 
     try:
-        with open(config_path, 'w') as file:
+        with open(config_path, "w") as file:
             json.dump(config, file, indent=4)
     except Exception as e:
         print(f"Failed to save JBrowse config: {e}")
 
 
-def export_track_config_to_file(track_config, track_id, workflow_id, data_collection_id):
+def export_track_config_to_file(
+    track_config, track_id, workflow_id, data_collection_id
+):
     # Define a directory where you want to save the track configuration files
-    config_dir = f'jbrowse2/configs/{workflow_id}/{data_collection_id}'  # Ensure this directory exists
+    config_dir = f"jbrowse2/configs/{workflow_id}/{data_collection_id}"  # Ensure this directory exists
     os.makedirs(config_dir, exist_ok=True)
     file_path = os.path.join(config_dir, f"{track_id}.json")
-    
-    with open(file_path, 'w') as f:
+
+    with open(file_path, "w") as f:
         json.dump(track_config, f, indent=4)
-    
+
     return file_path
+
 
 def add_track_to_jbrowse(track_json_path):
     # Use npx to run the JBrowse CLI command directly
     command = [
-        "npx", "@jbrowse/cli", "add-track-json", track_json_path,
-        "--out", "/Users/tweber/Gits/jbrowse-watcher-plugin/config.json",  # Adjust as necessary
-        "--update"
+        "npx",
+        "@jbrowse/cli",
+        "add-track-json",
+        track_json_path,
+        "--out",
+        "/Users/tweber/Gits/jbrowse-watcher-plugin/config.json",  # Adjust as necessary
+        "--update",
     ]
 
     # Execute the command
@@ -149,6 +166,7 @@ def add_track_to_jbrowse(track_json_path):
         subprocess.run(command, check=True)
     except subprocess.CalledProcessError as e:
         print(f"Failed to add track: {e}")
+
 
 def prepare_and_add_track(track_config, workflow_id, data_collection_id):
     # Generate track configuration
@@ -244,7 +262,7 @@ async def scan_data_collection(
     )
 
     # Scan the runs and retrieve the files
-    
+
     new_tracks = []
 
     for location in locations:
@@ -259,7 +277,7 @@ async def scan_data_collection(
         ):
             return_dict = {workflow.id: collections.defaultdict(list)}
             for run in runs_and_content:
-            # for run in runs_and_content[:1]:
+                # for run in runs_and_content[:1]:
                 files = run.pop("files", [])
 
                 run = WorkflowRun(**run)
@@ -270,13 +288,12 @@ async def scan_data_collection(
 
                 # Add run_id to each file before inserting
                 # for file in files:
-                for file in files[:1]:
+                for file in files:
                     file = File(**file)
-
+                    print(data_collection.config.type)
                     if data_collection.config.type == "Genome Browser":
+                        print("Genome Browser")
                         file_location = file.mongo()["file_location"]
-
-
 
                         run_id = file.mongo()["run_id"]
                         # Extract the path structure after "/Data/"
@@ -302,13 +319,12 @@ async def scan_data_collection(
                             data_collection.mongo()["config"],
                         )
                         print(track_config)
-                        
-                        # check if index 
+
+                        # check if index
                         file_index = data_collection.config.index_extension
                         if not file_location.endswith(file_index):
                             new_tracks.append(track_config)
                         # prepare_and_add_track(track_config, workflow_id, data_collection_id)
-                        
 
                         try:
                             # Upload the file to S3
