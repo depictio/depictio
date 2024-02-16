@@ -58,7 +58,7 @@ from depictio.dash.modules.figure_component.frontend import (
 )
 from depictio.dash.modules.jbrowse_component.frontend import (
     design_jbrowse,
-    # register_callbacks_figure_component,
+    register_callbacks_jbrowse_component,
 )
 
 from depictio.dash.layouts.stepper import (
@@ -68,8 +68,8 @@ from depictio.dash.layouts.stepper import (
 register_callbacks_card_component(app)
 register_callbacks_interactive_component(app)
 register_callbacks_figure_component(app)
+register_callbacks_jbrowse_component(app)
 register_callbacks_stepper(app)
-
 
 from depictio.dash.utils import (
     # create_initial_figure,
@@ -791,6 +791,7 @@ def update_step_2(
             elif component_selected == "Interactive":
                 return design_interactive(id, df), btn_component
             elif component_selected == "Genome browser":
+                print("Genome browser")
                 return design_jbrowse(id), btn_component
             # TODO: update this
             elif component_selected == "Graph":
