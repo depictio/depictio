@@ -309,7 +309,7 @@ async def scan_data_collection(
             isinstance(item, dict) for item in runs_and_content
         ):
             return_dict = {workflow.id: collections.defaultdict(list)}
-            for run in runs_and_content:
+            for run in sorted(runs_and_content, key=lambda x: x["run_location"]):
             # for run in runs_and_content[:1]:
                 files = run.pop("files", [])
 
