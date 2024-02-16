@@ -177,7 +177,7 @@ def create_stepper_dropdowns(n):
     return stepper_dropdowns
 
 
-def create_stepper_buttons(n):
+def create_stepper_buttons(n, data_collection_type):
     """
     Create the buttons for the stepper
 
@@ -189,6 +189,8 @@ def create_stepper_buttons(n):
     """
 
     # IMPORTANT: TO BE UPDATED FOR EACH NEW COMPONENT
+
+
     figure_stepper_button, figure_stepper_button_store = create_stepper_figure_button(n)
     card_stepper_button, card_stepper_button_store = create_stepper_card_button(n)
     (
@@ -207,46 +209,56 @@ def create_stepper_buttons(n):
         jbrowse_stepper_button_store,
     ]
 
-    standard_components = [
-        figure_stepper_button,
-        card_stepper_button,
-        interactive_stepper_button,
-    ]
-
-    graph_stepper_button = dbc.Col(dmc.Button(
-        "Graph",
-        # id={
-        #     "type": "btn-option",
-        #     "index": n,
-        #     "value": "graph",
-        # },
-        n_clicks=0,
-        style=UNSELECTED_STYLE,
-        size="xl",
-        color="orange",
-        leftIcon=DashIconify(
-            icon="ph:graph-fill", color="white"
-        ),
-    ))
-
-    map_stepper_button = dbc.Col(dmc.Button(
-        "Map",
-        # id={
-        #     "type": "btn-option",
-        #     "index": n,
-        #     "value": "map",
-        # },
-        n_clicks=0,
-        style=UNSELECTED_STYLE,
-        size="xl",
-        color="red",
-        leftIcon=DashIconify(
-            icon="gridicons:globe", color="white"
-        ),
-    ))
+    if data_collection_type == "Table":
 
 
-    special_components = [jbrowse_stepper_button, graph_stepper_button, map_stepper_button]
+        standard_components = [
+            figure_stepper_button,
+            card_stepper_button,
+            interactive_stepper_button,
+        ]
+        special_components = []
+    
+    elif data_collection_type == "Genome Browser":
+
+        standard_components = []
+
+        special_components = [jbrowse_stepper_button]
+
+    # graph_stepper_button = dbc.Col(dmc.Button(
+    #     "Graph",
+    #     # id={
+    #     #     "type": "btn-option",
+    #     #     "index": n,
+    #     #     "value": "graph",
+    #     # },
+    #     n_clicks=0,
+    #     style=UNSELECTED_STYLE,
+    #     size="xl",
+    #     color="orange",
+    #     leftIcon=DashIconify(
+    #         icon="ph:graph-fill", color="white"
+    #     ),
+    # ))
+
+    # map_stepper_button = dbc.Col(dmc.Button(
+    #     "Map",
+    #     # id={
+    #     #     "type": "btn-option",
+    #     #     "index": n,
+    #     #     "value": "map",
+    #     # },
+    #     n_clicks=0,
+    #     style=UNSELECTED_STYLE,
+    #     size="xl",
+    #     color="red",
+    #     leftIcon=DashIconify(
+    #         icon="gridicons:globe", color="white"
+    #     ),
+    # ))
+
+
+    # special_components = [jbrowse_stepper_button, graph_stepper_button, map_stepper_button]
 
     buttons_list = [
         html.H5("Standard components", style={"margin-top": "20px"}),

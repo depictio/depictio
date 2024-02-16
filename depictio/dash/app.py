@@ -32,6 +32,8 @@ min_step = 0
 max_step = 3
 active = 0
 
+token = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2NGE4NDI4NDJiZjRmYTdkZWFhM2RiZWQiLCJleHAiOjE3ODQ5ODY3ODV9.a5bkSctoCNYXVh035g_wt-bio3iC3uuM9anFKiJOKrmBHDH0tmcL2O9Rc1HIQtAxCH-mc1K4q4aJsAO8oeayuPyA3w7FPIUnLsZGRHB8aBoDCoxEIpmACi0nEH8hF9xd952JuBt6ggchyMyrnxHC65Qc8mHC9PeylWonHvNl5jGZqi-uhbeLpsjuPcsyg76X2aqu_fip67eJ8mdr6yuII6DLykpfbzALpn0k66j79YzOzDuyn4IjBfBPWiqZzl_9oDMLK7ODebu6FTDmQL0ZGto_dxyIJtkf1CdxPaYkgiXVOh00Y6sXJ24jHSqfNP-dqvAQ3G8izuurq6B4SNgtDw"
+
 
 app = dash.Dash(
     __name__,
@@ -780,8 +782,6 @@ def update_button_style(figure_clicks, card_clicks, interactive_clicks):
     prevent_initial_call=True,
 )
 def update_step_2(workflow_selection, data_collection_selection):
-    token = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2NGE4NDI4NDJiZjRmYTdkZWFhM2RiZWQiLCJleHAiOjE3ODQ5ODY3ODV9.a5bkSctoCNYXVh035g_wt-bio3iC3uuM9anFKiJOKrmBHDH0tmcL2O9Rc1HIQtAxCH-mc1K4q4aJsAO8oeayuPyA3w7FPIUnLsZGRHB8aBoDCoxEIpmACi0nEH8hF9xd952JuBt6ggchyMyrnxHC65Qc8mHC9PeylWonHvNl5jGZqi-uhbeLpsjuPcsyg76X2aqu_fip67eJ8mdr6yuII6DLykpfbzALpn0k66j79YzOzDuyn4IjBfBPWiqZzl_9oDMLK7ODebu6FTDmQL0ZGto_dxyIJtkf1CdxPaYkgiXVOh00Y6sXJ24jHSqfNP-dqvAQ3G8izuurq6B4SNgtDw"
-
     workflows = list_workflows(token)
 
     workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_selection][0][
@@ -831,24 +831,68 @@ def update_step_2(workflow_selection, data_collection_selection):
 
         dc_main_info = dmc.Title("Main info", order=3, align="left", weight=500)
 
-        main_info = html.Table([
-            html.Tr([
-                html.Td("Type:", style={'font-weight': 'bold', 'text-align': 'left', 'width': '20%'}),
-                html.Td(dc_specs["config"]["type"], style={'text-align': 'left'})
-            ]),
-            html.Tr([
-                html.Td("Name:", style={'font-weight': 'bold', 'text-align': 'left', 'width': '20%'}),
-                html.Td(dc_specs["data_collection_tag"], style={'text-align': 'left'})
-            ]),
-            html.Tr([
-                html.Td("Description:", style={'font-weight': 'bold', 'text-align': 'left', 'width': '20%'}),
-                html.Td(dc_specs["description"], style={'text-align': 'left'})
-            ]),
-            html.Tr([
-                html.Td("MongoDB ID:", style={'font-weight': 'bold', 'text-align': 'left', 'width': '20%'}),
-                html.Td(dc_specs["_id"], style={'text-align': 'left'})
-            ]),
-        ], style={'width': '100%', 'table-layout': 'fixed'})
+        main_info = html.Table(
+            [
+                html.Tr(
+                    [
+                        html.Td(
+                            "Type:",
+                            style={
+                                "font-weight": "bold",
+                                "text-align": "left",
+                                "width": "20%",
+                            },
+                        ),
+                        html.Td(
+                            dc_specs["config"]["type"], style={"text-align": "left"}
+                        ),
+                    ]
+                ),
+                html.Tr(
+                    [
+                        html.Td(
+                            "Name:",
+                            style={
+                                "font-weight": "bold",
+                                "text-align": "left",
+                                "width": "20%",
+                            },
+                        ),
+                        html.Td(
+                            dc_specs["data_collection_tag"],
+                            style={"text-align": "left"},
+                        ),
+                    ]
+                ),
+                html.Tr(
+                    [
+                        html.Td(
+                            "Description:",
+                            style={
+                                "font-weight": "bold",
+                                "text-align": "left",
+                                "width": "20%",
+                            },
+                        ),
+                        html.Td(dc_specs["description"], style={"text-align": "left"}),
+                    ]
+                ),
+                html.Tr(
+                    [
+                        html.Td(
+                            "MongoDB ID:",
+                            style={
+                                "font-weight": "bold",
+                                "text-align": "left",
+                                "width": "20%",
+                            },
+                        ),
+                        html.Td(dc_specs["_id"], style={"text-align": "left"}),
+                    ]
+                ),
+            ],
+            style={"width": "100%", "table-layout": "fixed"},
+        )
 
         # turn main_info into 4 rows with 2 columns
 
@@ -884,34 +928,39 @@ def update_step_2(workflow_selection, data_collection_selection):
                 id="get-started-example-basic",
                 rowData=df.head(2000).to_dict("records"),
                 columnDefs=columnDefs,
-                dashGridOptions={"tooltipShowDelay": 500, "pagination": True, "paginationAutoPageSize":False, "animateRows": False},
+                dashGridOptions={
+                    "tooltipShowDelay": 500,
+                    "pagination": True,
+                    "paginationAutoPageSize": False,
+                    "animateRows": False,
+                },
                 columnSize="sizeToFit",
                 defaultColDef={"resizable": True, "sortable": True, "filter": True},
                 # use the parameters above
-                
-
             )
             # layout += [run_nb_title, html.Hr(), data_previz_title, html.Hr(), grid]
             # print(layout)
 
-            layout += [dmc.Accordion(
-                children=[
-                    dmc.AccordionItem(
-                        [
-                            dmc.AccordionControl(data_previz_title),
-                            dmc.AccordionPanel(grid),
-                        ],
-                        value="data_collection_table_previz",
-                    ),
-                    dmc.AccordionItem(
-                        [
-                            dmc.AccordionControl(config_title),
-                            dmc.AccordionPanel(prism),
-                        ],
-                        value="data_collection_config",
-                    ),
-                ],
-            )]
+            layout += [
+                dmc.Accordion(
+                    children=[
+                        dmc.AccordionItem(
+                            [
+                                dmc.AccordionControl(data_previz_title),
+                                dmc.AccordionPanel(grid),
+                            ],
+                            value="data_collection_table_previz",
+                        ),
+                        dmc.AccordionItem(
+                            [
+                                dmc.AccordionControl(config_title),
+                                dmc.AccordionPanel(prism),
+                            ],
+                            value="data_collection_config",
+                        ),
+                    ],
+                )
+            ]
 
         elif dc_specs["config"]["type"] == "Genome Browser":
             if dc_specs["config"]["jbrowse_template_location"]:
@@ -924,8 +973,6 @@ def update_step_2(workflow_selection, data_collection_selection):
                 )
                 prism_template = dbc.Col(
                     [
-                        template_title,
-                        html.Hr(),
                         dmc.Prism(
                             f"""{json.dumps(template_json, indent=2)}""",
                             language="json",
@@ -935,7 +982,26 @@ def update_step_2(workflow_selection, data_collection_selection):
                     ],
                     width=6,
                 )
-                layout = dbc.Row(layout + [prism_template])
+                layout += [
+                    dmc.Accordion(
+                        children=[
+                            dmc.AccordionItem(
+                                [
+                                    dmc.AccordionControl(config_title),
+                                    dmc.AccordionPanel(prism),
+                                ],
+                                value="data_collection_config",
+                            ),
+                            dmc.AccordionItem(
+                                [
+                                    dmc.AccordionControl(template_title),
+                                    dmc.AccordionPanel(prism_template),
+                                ],
+                                value="jbrowse_template",
+                            ),
+                        ],
+                    )
+                ]
 
     else:
         layout = html.Div("No data to display")
@@ -1027,6 +1093,8 @@ def update_step_2(
     # ]
     # +
     [
+        Input({"type": "workflow-selection-label", "index": ALL}, "value"),
+        Input({"type": "datacollection-selection-label", "index": ALL}, "value"),
         State(
             {
                 "type": "interactive-component",
@@ -1077,66 +1145,72 @@ def update_draggable_children(
 ):
     ctx = dash.callback_context
     ctx_triggered = ctx.triggered
-    # print(f"CTX triggered: {ctx.triggered}")
 
     print("CTX triggered: ")
 
     triggered_input = ctx.triggered[0]["prop_id"].split(".")[0]
-    # print(triggered_input)
 
-    # print("\n\n\n")
-    # print("Interactive component value (input)")
-    # if args[6]:
-    #     print(args[6])
-    # print("Interactive component id (state)")
-    # if args[0]:
-    #     print(args[0])
-    # print("Stored metadata component data (state)")
-    # if args[1]:
-    #     print(args[1])
+    workflow_label = args[-17]
+    data_collection_label = args[-16]
 
-    interactive_component_ids = args[0]
-    interactive_component_values = args[6]
-    stored_metadata = args[1]
-
-    # print([e for e in args[-5]])
     print("\n\n\n")
-    # print("stored_metadata")
-    # print(stored_metadata)
-    # print("\n\n\n")
 
-    # print(args[-11])
-    # print(args[-10])
+    print("workflow_label")
+    print(workflow_label)
+    print("data_collection_label")
+    print(data_collection_label)
 
+    import httpx
+
+    workflows = list_workflows(token)
+    if len(workflow_label) == 0 and len(data_collection_label) == 0:
+        workflow_label = [workflows[0]["workflow_tag"]]
+        data_collection_label = [workflows[0]["data_collections"][0]["data_collection_tag"]]
+
+
+    print("workflow_label")
+    print(workflow_label)
+    print("data_collection_label")
+    print(data_collection_label)
+    print("\n\n\n")
+
+    workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_label[0]][0][
+        "_id"
+    ]
+    data_collection_id = [
+        f
+        for e in workflows
+        if e["_id"] == workflow_id
+        for f in e["data_collections"]
+        if f["data_collection_tag"] == data_collection_label[0]
+    ][0]["_id"]
+
+    API_BASE_URL = "http://localhost:8058"
+
+    dc_specs = httpx.get(
+        f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
+        headers={
+            "Authorization": f"Bearer {token}",
+        },
+    ).json()
+
+    interactive_component_ids = args[-15]
+    stored_metadata = args[-14]
+    add_button_nclicks = args[-13]
     switch_state = args[-12]
-    switch_state_index = -1 if switch_state is True else -1
     stored_add_button = args[-11]
-    add_button_nclicks = args[2]
-
-    # print(f"REMOVE BUTTON ARGS {args[-10]}")
-
+    remove_box_button_values = args[-10]
+    interactive_component_values = args[-9]
     stored_layout_data = args[-8]
     stored_children_data = args[-7]
     new_layouts = args[-6]
-    # print(args[-10])
-
-    # remove-button -7
-    # selected_year = args[-6]
-
     current_draggable_children = args[-5]
-    # print(current_draggable_children)
-    # print("\n\n\n")
-    # print("\n\n\n")
-    # print("\n\n\n")
-    # print("current_draggable_children")
-    # print(current_draggable_children)
-    # print("\n\n\n")
-    # print("\n\n\n")
-    # print("\n\n\n")
     current_layouts = args[-4]
     stored_layout = args[-3]
     stored_figures = args[-2]
     stored_edit_dashboard = args[-1]
+
+    switch_state_index = -1 if switch_state is True else -1
 
     stored_metadata_interactive = [
         e for e in stored_metadata if e["component_type"] == "interactive_component"
@@ -1218,12 +1292,21 @@ def update_draggable_children(
             print("add-button compared to stored_add_button")
             print(add_button_nclicks)
             print(stored_add_button["count"])
+            print("\n\n\n")
+            print("\n\n\n")
+            print("\n\n\n")
+            print("stored_metadata")
+            print(stored_metadata)
+            print("\n\n\n")
+            print("\n\n\n")
+            print("\n\n\n")
+            # exit()
 
             n = ctx.triggered[0]["value"]
             new_plot_id = f"{n}"
 
             stepper_dropdowns = create_stepper_dropdowns(n)
-            stepper_buttons = create_stepper_buttons(n)
+            stepper_buttons = create_stepper_buttons(n, dc_specs["config"]["type"])
             stepper_output = create_stepper_output(
                 n, active, new_plot_id, stepper_dropdowns, stepper_buttons
             )
