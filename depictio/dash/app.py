@@ -1,5 +1,7 @@
 import sys
 
+from CLI_client.cli import list_workflows
+
 print(sys.path)
 
 print("\n\n\n")
@@ -93,7 +95,9 @@ from depictio.dash.layouts.stepper import (
 # Data
 
 
-def return_deltatable(workflow_id: str = None, data_collection_id: str = None, raw=False):
+def return_deltatable(
+    workflow_id: str = None, data_collection_id: str = None, raw=False
+):
     df = load_deltatable(workflow_id, data_collection_id, raw=raw)
     # print(df)
     return df
@@ -113,7 +117,9 @@ data = load_data()
 init_layout = data["stored_layout_data"] if data else {}
 init_children = data["stored_children_data"] if data else list()
 init_nclicks_add_button = data["stored_add_button"] if data else {"count": 0}
-init_nclicks_edit_dashboard_mode_button = data["stored_edit_dashboard_mode_button"] if data else [int(0)]
+init_nclicks_edit_dashboard_mode_button = (
+    data["stored_edit_dashboard_mode_button"] if data else [int(0)]
+)
 if data:
     print("Data loaded from JSON")
     print("stored_add_button")
@@ -183,32 +189,48 @@ header_style = {
     "padding": "10px 20px",
     "backgroundColor": "#f5f5f5",
     "borderBottom": "1px solid #eaeaea",
-    "fontFamily": "'Open Sans', sans-serif"
+    "fontFamily": "'Open Sans', sans-serif",
 }
 
-title_style = {
-    "fontWeight": "bold",
-    "fontSize": "24px",
-    "color": "#333"
-}
+title_style = {"fontWeight": "bold", "fontSize": "24px", "color": "#333"}
 
-button_style = {
-    "margin": "0 10px",
-    "fontWeight": "500"
-}
+button_style = {"margin": "0 10px", "fontWeight": "500"}
 
 header = html.Div(
     [
         html.H1("Depictio", style=title_style),
         html.Div(
             [
-                dmc.Button("Add new component", id="add-button", size="lg", radius="xl", variant="gradient", n_clicks=init_nclicks_add_button["count"], style=button_style),
+                dmc.Button(
+                    "Add new component",
+                    id="add-button",
+                    size="lg",
+                    radius="xl",
+                    variant="gradient",
+                    n_clicks=init_nclicks_add_button["count"],
+                    style=button_style,
+                ),
                 modal_save_button,
-                dmc.Button("Save", id="save-button-dashboard", size="lg", radius="xl", variant="gradient", gradient={"from": "teal", "to": "lime", "deg": 105}, n_clicks=0, style={"...": "..."})  # Add your specific styles here
+                dmc.Button(
+                    "Save",
+                    id="save-button-dashboard",
+                    size="lg",
+                    radius="xl",
+                    variant="gradient",
+                    gradient={"from": "teal", "to": "lime", "deg": 105},
+                    n_clicks=0,
+                    style={"...": "..."},
+                ),  # Add your specific styles here
             ],
-            style={"display": "flex", "alignItems": "center"}
+            style={"display": "flex", "alignItems": "center"},
         ),
-        dbc.Checklist(id="edit-dashboard-mode-button", style={"fontSize": "22px"}, options=[{"label": "Edit dashboard", "value": 0}], value=init_nclicks_edit_dashboard_mode_button, switch=True),
+        dbc.Checklist(
+            id="edit-dashboard-mode-button",
+            style={"fontSize": "22px"},
+            options=[{"label": "Edit dashboard", "value": 0}],
+            value=init_nclicks_edit_dashboard_mode_button,
+            switch=True,
+        ),
         dcc.Store(
             id="stored-add-button",
             storage_type="memory",
@@ -220,10 +242,10 @@ header = html.Div(
             storage_type="memory",
             # storage_type="session",
             data=init_nclicks_edit_dashboard_mode_button,
-        ),    ],
-    style=header_style
+        ),
+    ],
+    style=header_style,
 )
-
 
 
 # header = html.Div(
@@ -429,8 +451,14 @@ def enable_box_edit_mode_dev(sub_child, switch_state=True):
         print("List")
 
         # Identify if edit and remove buttons are present
-        edit_button_exists = any(child.get("props", {}).get("id", {}).get("type") == "edit-box-button" for child in box["props"]["children"])
-        remove_button_exists = any(child.get("props", {}).get("id", {}).get("type") == "remove-box-button" for child in box["props"]["children"])
+        edit_button_exists = any(
+            child.get("props", {}).get("id", {}).get("type") == "edit-box-button"
+            for child in box["props"]["children"]
+        )
+        remove_button_exists = any(
+            child.get("props", {}).get("id", {}).get("type") == "remove-box-button"
+            for child in box["props"]["children"]
+        )
 
         print(switch_state, edit_button_exists, remove_button_exists)
 
@@ -458,7 +486,9 @@ def enable_box_edit_mode_dev(sub_child, switch_state=True):
             )
 
             # Place buttons at the beginning of the children list
-            box["props"]["children"] = [remove_button, edit_button] + box["props"]["children"]
+            box["props"]["children"] = [remove_button, edit_button] + box["props"][
+                "children"
+            ]
 
         # If switch_state is false and buttons are present, remove them
         elif not switch_state and edit_button_exists and remove_button_exists:
@@ -489,7 +519,10 @@ def analyze_structure(struct, depth=0):
     if isinstance(struct, list):
         # print("  " * depth + f"Depth {depth} Type: List with {len(struct)} elements")
         for idx, child in enumerate(struct):
-            print("  " * depth + f"Element {idx} ID: {child.get('props', {}).get('id', None)}")
+            print(
+                "  " * depth
+                + f"Element {idx} ID: {child.get('props', {}).get('id', None)}"
+            )
             analyze_structure(child, depth=depth + 1)
         return
 
@@ -513,12 +546,17 @@ def analyze_structure(struct, depth=0):
     elif isinstance(children, list):
         print("  " * depth + f"Depth {depth} Type: List with {len(children)} elements")
         for idx, child in enumerate(children):
-            print("  " * depth + f"Element {idx} ID: {child.get('props', {}).get('id', None)}")
+            print(
+                "  " * depth
+                + f"Element {idx} ID: {child.get('props', {}).get('id', None)}"
+            )
             # Recursive call
             analyze_structure(child, depth=depth + 1)
 
 
-def analyze_structure_and_get_deepest_type(struct, depth=0, max_depth=0, deepest_type=None):
+def analyze_structure_and_get_deepest_type(
+    struct, depth=0, max_depth=0, deepest_type=None
+):
     """
     Recursively analyze a nested plotly dash structure and return the type of the deepest element (excluding 'stored-metadata-component').
 
@@ -536,7 +574,10 @@ def analyze_structure_and_get_deepest_type(struct, depth=0, max_depth=0, deepest
     current_type = None
     if isinstance(struct, dict):
         id_value = struct.get("props", {}).get("id", None)
-        if isinstance(id_value, dict) and id_value.get("type") != "stored-metadata-component":
+        if (
+            isinstance(id_value, dict)
+            and id_value.get("type") != "stored-metadata-component"
+        ):
             current_type = id_value.get("type")
 
     if depth > max_depth:
@@ -547,19 +588,27 @@ def analyze_structure_and_get_deepest_type(struct, depth=0, max_depth=0, deepest
 
     if isinstance(struct, list):
         for child in struct:
-            max_depth, deepest_type = analyze_structure_and_get_deepest_type(child, depth=depth + 1, max_depth=max_depth, deepest_type=deepest_type)
+            max_depth, deepest_type = analyze_structure_and_get_deepest_type(
+                child, depth=depth + 1, max_depth=max_depth, deepest_type=deepest_type
+            )
     elif isinstance(struct, dict):
         children = struct.get("props", {}).get("children", None)
         if isinstance(children, (list, dict)):
-            max_depth, deepest_type = analyze_structure_and_get_deepest_type(children, depth=depth + 1, max_depth=max_depth, deepest_type=deepest_type)
+            max_depth, deepest_type = analyze_structure_and_get_deepest_type(
+                children,
+                depth=depth + 1,
+                max_depth=max_depth,
+                deepest_type=deepest_type,
+            )
 
     return max_depth, deepest_type
 
 
-
 @app.callback(
     Output({"type": "add-content", "index": MATCH}, "children"),
-    Output({"type": "test-container", "index": MATCH}, "children", allow_duplicate=True),
+    Output(
+        {"type": "test-container", "index": MATCH}, "children", allow_duplicate=True
+    ),
     [
         Input({"type": "btn-done", "index": MATCH}, "n_clicks"),
     ],
@@ -585,7 +634,6 @@ def update_button(n_clicks, children, btn_id, switch_state):
     # Element 1 ID: {'type': 'graph', 'index': 33}
     # Depth 1 ID: {'type': 'graph', 'index': 33}
 
-
     # Depth 0 ID: {'type': 'interactive', 'index': 33}
     # Depth 0 Type: Dict
     #   Depth 1 ID: {'type': 'card-body', 'index': 33}
@@ -597,14 +645,12 @@ def update_button(n_clicks, children, btn_id, switch_state):
     #   Element 2 ID: {'type': 'stored-metadata-component', 'index': 33}
     #     Depth 2 ID: {'type': 'stored-metadata-component', 'index': 33}
 
-
-# Depth 0 ID: None
-# Depth 0 Type: List with 2 elements
-# Element 0 ID: {'type': 'stored-metadata-component', 'index': 33}
-#   Depth 1 ID: {'type': 'stored-metadata-component', 'index': 33}
-# Element 1 ID: {'type': 'graph', 'index': 33}
-#   Depth 1 ID: {'type': 'graph', 'index': 33}
-
+    # Depth 0 ID: None
+    # Depth 0 Type: List with 2 elements
+    # Element 0 ID: {'type': 'stored-metadata-component', 'index': 33}
+    #   Depth 1 ID: {'type': 'stored-metadata-component', 'index': 33}
+    # Element 1 ID: {'type': 'graph', 'index': 33}
+    #   Depth 1 ID: {'type': 'graph', 'index': 33}
 
     # print(children["props"]["id"])
     # children = [children[4]]
@@ -696,7 +742,9 @@ def update(back, next_, workflow_selection, data_selection, btn_component, curre
     [
         Input({"type": "btn-option", "index": MATCH, "value": "Figure"}, "n_clicks"),
         Input({"type": "btn-option", "index": MATCH, "value": "Card"}, "n_clicks"),
-        Input({"type": "btn-option", "index": MATCH, "value": "Interactive"}, "n_clicks"),
+        Input(
+            {"type": "btn-option", "index": MATCH, "value": "Interactive"}, "n_clicks"
+        ),
     ],
     prevent_initial_call=True,
 )
@@ -730,28 +778,144 @@ def update_button_style(figure_clicks, card_clicks, interactive_clicks):
     prevent_initial_call=True,
 )
 def update_step_2(workflow_selection, data_collection_selection):
-    if workflow_selection is not None and data_collection_selection is not None:
-        df = return_deltatable(workflow_selection, data_collection_selection, raw=True)
-        cols = get_columns_from_data_collection(workflow_selection, data_collection_selection)
-        # print(cols)
-        columnDefs = [{"field": c, "headerTooltip": f"Column type: {e['type']}"} for c, e in cols.items()]
-        # print(columnDefs)
-        run_nb = cols["depictio_run_id"]["specs"]["nunique"]
-        run_nb_title = dmc.Title(f"Run Nb : {run_nb}", order=3, align="left", weight=500)
+    token = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2NGE4NDI4NDJiZjRmYTdkZWFhM2RiZWQiLCJleHAiOjE3ODQ5ODY3ODV9.a5bkSctoCNYXVh035g_wt-bio3iC3uuM9anFKiJOKrmBHDH0tmcL2O9Rc1HIQtAxCH-mc1K4q4aJsAO8oeayuPyA3w7FPIUnLsZGRHB8aBoDCoxEIpmACi0nEH8hF9xd952JuBt6ggchyMyrnxHC65Qc8mHC9PeylWonHvNl5jGZqi-uhbeLpsjuPcsyg76X2aqu_fip67eJ8mdr6yuII6DLykpfbzALpn0k66j79YzOzDuyn4IjBfBPWiqZzl_9oDMLK7ODebu6FTDmQL0ZGto_dxyIJtkf1CdxPaYkgiXVOh00Y6sXJ24jHSqfNP-dqvAQ3G8izuurq6B4SNgtDw"
 
-        data_previz_title = dmc.Title("Data previsualization", order=3, align="left", weight=500)
-        # print(df.head(20).to_dict("records"))
-        grid = dag.AgGrid(
-            id="get-started-example-basic",
-            rowData=df.head(20).to_dict("records"),
-            columnDefs=columnDefs,
-            dashGridOptions={"tooltipShowDelay": 500},
+    workflows = list_workflows(token)
+
+    workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_selection][0][
+        "_id"
+    ]
+    data_collection_id = [
+        f
+        for e in workflows
+        if e["_id"] == workflow_id
+        for f in e["data_collections"]
+        if f["data_collection_tag"] == data_collection_selection
+    ][0]["_id"]
+
+    import httpx
+
+    API_BASE_URL = "http://localhost:8058"
+
+    print(data_collection_selection)
+
+    dc_specs = httpx.get(
+        f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
+        headers={
+            "Authorization": f"Bearer {token}",
+        },
+    ).json()
+
+    print(dc_specs)
+
+    if workflow_selection is not None and data_collection_selection is not None:
+
+        config_title = dmc.Title(
+            "Data collection config", order=3, align="left", weight=500
         )
-        layout = [run_nb_title, html.Hr(), data_previz_title, html.Hr(), grid]
-        # print(layout)
-        return layout
+        json_formatted = json.dumps(dc_specs["config"], indent=2)
+        prism = dbc.Col(
+            [
+                config_title,
+                dmc.AccordionPanel(dmc.Prism(
+                    f"""{json_formatted}""",
+                    language="json",
+                    colorScheme="light",
+                    noCopy=True,
+                )),
+            ],
+            width=6,
+        )
+        layout = [prism]
+        if dc_specs["config"]["type"] == "Table":
+            df = return_deltatable(
+                workflow_selection, data_collection_selection, raw=True
+            )
+            cols = get_columns_from_data_collection(
+                workflow_selection, data_collection_selection
+            )
+            # print(cols)
+            columnDefs = [
+                {"field": c, "headerTooltip": f"Column type: {e['type']}"}
+                for c, e in cols.items()
+            ]
+            print(columnDefs)
+
+
+
+            run_nb = cols["depictio_run_id"]["specs"]["nunique"]
+            run_nb_title = dmc.Title(
+                f"Run Nb : {run_nb}", order=3, align="left", weight=500
+            )
+
+            data_previz_title = dmc.Title(
+                "Data previsualization", order=3, align="left", weight=500
+            )
+            # print(df.head(20).to_dict("records"))
+            grid = dag.AgGrid(
+                id="get-started-example-basic",
+                rowData=df.head(20).to_dict("records"),
+                columnDefs=columnDefs,
+                dashGridOptions={"tooltipShowDelay": 500},
+            )
+            layout += [run_nb_title, html.Hr(), data_previz_title, html.Hr(), grid]
+            # print(layout)
+
+
+
+            layout = dmc.Accordion(
+                children=[
+                    dmc.AccordionItem(
+                        [
+                            dmc.AccordionControl("Customization"),
+                            dmc.AccordionPanel(
+                                "Colors, fonts, shadows and many other parts are customizable to fit your design needs"
+                            ),
+                        ],
+                        value="customization",
+                    ),
+                    dmc.AccordionItem(
+                        [
+                            dmc.AccordionControl("Flexibility"),
+                            dmc.AccordionPanel(
+                                prism
+                            ),
+                        ],
+                        value="flexibility",
+                    ),
+                ],
+            )
+
+
+        elif dc_specs["config"]["type"] == "Genome Browser":
+
+            if dc_specs["config"]["jbrowse_template_location"]:
+                template_json = json.load(
+                    open(dc_specs["config"]["jbrowse_template_location"])
+                )
+                print(template_json)
+                template_title = dmc.Title(
+                    "JBrowse template", order=3, align="left", weight=500
+                )
+                prism_template = dbc.Col(
+                    [
+                        template_title,
+                        html.Hr(),
+                        dmc.Prism(
+                            f"""{json.dumps(template_json, indent=2)}""",
+                            language="json",
+                            colorScheme="light",
+                            noCopy=True,
+                        ),
+                    ],
+                    width=6,
+                )
+                layout = dbc.Row(layout + [prism_template])
+
     else:
-        return html.Div()
+        layout = html.Div("No data to display")
+
+    return layout
 
 
 # TODO: optimise to match the modular architecture
@@ -772,14 +936,31 @@ def update_step_2(
     store_btn_component,
     ids,
 ):
-    if workflow_selection is not None and data_collection_selection is not None and btn_component is not None:
+    if (
+        workflow_selection is not None
+        and data_collection_selection is not None
+        and btn_component is not None
+    ):
         # print("update_step_2")
         # retrieve value in btn_component that is higher than the previous value in store_btn_component at the same index
-        btn_index = [i for i, (x, y) in enumerate(zip(btn_component, store_btn_component)) if x > y]
+        btn_index = [
+            i
+            for i, (x, y) in enumerate(zip(btn_component, store_btn_component))
+            if x > y
+        ]
         if btn_index:
-            df = return_deltatable(workflow_selection, data_collection_selection, raw=True)
+            df = return_deltatable(
+                workflow_selection, data_collection_selection, raw=True
+            )
 
-            components_list = ["Figure", "Card", "Interactive", "Genome browser", "Graph", "Map"]
+            components_list = [
+                "Figure",
+                "Card",
+                "Interactive",
+                "Genome browser",
+                "Graph",
+                "Map",
+            ]
             component_selected = components_list[btn_index[0]]
             print(ids)
             id = ids[btn_index[0]]
@@ -840,7 +1021,9 @@ def update_step_2(
         Input("add-button", "n_clicks"),
         Input("edit-dashboard-mode-button", "value"),
         State("stored-add-button", "data"),
-        Input({"type": "remove-box-button", "index": dash.dependencies.ALL}, "n_clicks"),
+        Input(
+            {"type": "remove-box-button", "index": dash.dependencies.ALL}, "n_clicks"
+        ),
         Input(
             {
                 "type": "interactive-component",
@@ -930,7 +1113,9 @@ def update_draggable_children(
     stored_figures = args[-2]
     stored_edit_dashboard = args[-1]
 
-    stored_metadata_interactive = [e for e in stored_metadata if e["component_type"] == "interactive_component"]
+    stored_metadata_interactive = [
+        e for e in stored_metadata if e["component_type"] == "interactive_component"
+    ]
     # print(stored_metadata_interactive)
     interactive_components_dict = {
         id["index"]: {"value": value, "metadata": metadata}
@@ -953,7 +1138,12 @@ def update_draggable_children(
         value = interactive_components_dict[triggered_input_eval_index]["value"]
         # print(value)
         # print(interactive_components_dict[triggered_input_eval_index])
-        if interactive_components_dict[triggered_input_eval_index]["metadata"]["interactive_component_type"] != "TextInput":
+        if (
+            interactive_components_dict[triggered_input_eval_index]["metadata"][
+                "interactive_component_type"
+            ]
+            != "TextInput"
+        ):
             check_value = True if value is not None else False
         else:
             check_value = True if value is not "" else False
@@ -1009,7 +1199,9 @@ def update_draggable_children(
 
             stepper_dropdowns = create_stepper_dropdowns(n)
             stepper_buttons = create_stepper_buttons(n)
-            stepper_output = create_stepper_output(n, active, new_plot_id, stepper_dropdowns, stepper_buttons)
+            stepper_output = create_stepper_output(
+                n, active, new_plot_id, stepper_dropdowns, stepper_buttons
+            )
             stored_add_button["count"] += 1
 
             # print("\n\n\n")
@@ -1099,7 +1291,11 @@ def update_draggable_children(
                     else:
                         n_join_dc = []
 
-                    check_join = [e["dc_id"] for sub_join in n_join_dc if e["dc_id"] in sub_join["with_dc"]]
+                    check_join = [
+                        e["dc_id"]
+                        for sub_join in n_join_dc
+                        if e["dc_id"] in sub_join["with_dc"]
+                    ]
                     # print("CHECK JOIN")
                     # print(n_join_dc)
                     # print(check_join)
@@ -1108,7 +1304,9 @@ def update_draggable_children(
                     # print((len(check_join) > 0))
 
                     if e["wf_id"] == n_dict["metadata"]["wf_id"]:
-                        if (e["dc_id"] == n_dict["metadata"]["dc_id"]) or (len(check_join) > 0):
+                        if (e["dc_id"] == n_dict["metadata"]["dc_id"]) or (
+                            len(check_join) > 0
+                        ):
                             # print(e["component_type"])
                             # print(e["wf_id"])
                             # print(e["dc_id"])
@@ -1130,35 +1328,79 @@ def update_draggable_children(
                                     # print(n_dict)
                                     # print(n_dict["value"])
                                     # print(n_dict["metadata"]["column_value"])
-                                    if n_dict["metadata"]["interactive_component_type"] in ["Select", "MultiSelect"]:
+                                    if n_dict["metadata"][
+                                        "interactive_component_type"
+                                    ] in ["Select", "MultiSelect"]:
                                         # n_dict["value"] = list(n_dict["value"]) if type(n_dict["value"]) is str else n_dict["value"]
                                         print('n_dict["value"]')
                                         print(n_dict["value"])
 
                                         if n_dict["value"] is not None:
-                                            n_dict["value"] = list(n_dict["value"]) if type(n_dict["value"]) is str else n_dict["value"]
-                                            new_df = new_df[new_df[n_dict["metadata"]["column_value"]].isin(n_dict["value"])]
-                                        else:
-                                            new_df = new_df 
-                                    elif n_dict["metadata"]["interactive_component_type"] == "TextInput":
-                                        if n_dict["value"] != "":
-                                            new_df = new_df[new_df[n_dict["metadata"]["column_value"]].str.contains(n_dict["value"], regex=True, na=False)]
+                                            n_dict["value"] = (
+                                                list(n_dict["value"])
+                                                if type(n_dict["value"]) is str
+                                                else n_dict["value"]
+                                            )
+                                            new_df = new_df[
+                                                new_df[
+                                                    n_dict["metadata"]["column_value"]
+                                                ].isin(n_dict["value"])
+                                            ]
                                         else:
                                             new_df = new_df
-                                        
-                                elif n_dict["metadata"]["type"] == "int64" or n_dict["metadata"]["type"] == "float64":
+                                    elif (
+                                        n_dict["metadata"]["interactive_component_type"]
+                                        == "TextInput"
+                                    ):
+                                        if n_dict["value"] != "":
+                                            new_df = new_df[
+                                                new_df[
+                                                    n_dict["metadata"]["column_value"]
+                                                ].str.contains(
+                                                    n_dict["value"],
+                                                    regex=True,
+                                                    na=False,
+                                                )
+                                            ]
+                                        else:
+                                            new_df = new_df
+
+                                elif (
+                                    n_dict["metadata"]["type"] == "int64"
+                                    or n_dict["metadata"]["type"] == "float64"
+                                ):
                                     # print(
                                     #     n_dict["metadata"]["interactive_component_type"]
                                     # )
                                     # print(n_dict["value"])
 
                                     # handle if the input is a range or a single value
-                                    if n_dict["metadata"]["interactive_component_type"] == "RangeSlider":
+                                    if (
+                                        n_dict["metadata"]["interactive_component_type"]
+                                        == "RangeSlider"
+                                    ):
                                         new_df = new_df[
-                                            (new_df[n_dict["metadata"]["column_value"]] >= n_dict["value"][0]) & (new_df[n_dict["metadata"]["column_value"]] <= n_dict["value"][1])
+                                            (
+                                                new_df[
+                                                    n_dict["metadata"]["column_value"]
+                                                ]
+                                                >= n_dict["value"][0]
+                                            )
+                                            & (
+                                                new_df[
+                                                    n_dict["metadata"]["column_value"]
+                                                ]
+                                                <= n_dict["value"][1]
+                                            )
                                         ]
-                                    elif n_dict["metadata"]["interactive_component_type"] == "Slider":
-                                        new_df = new_df[new_df[n_dict["metadata"]["column_value"]] == n_dict["value"]]
+                                    elif (
+                                        n_dict["metadata"]["interactive_component_type"]
+                                        == "Slider"
+                                    ):
+                                        new_df = new_df[
+                                            new_df[n_dict["metadata"]["column_value"]]
+                                            == n_dict["value"]
+                                        ]
 
                             # print("\n\n\n")
                             # print("new_df after filtering")
@@ -1171,7 +1413,10 @@ def update_draggable_children(
                                 # print("analyzing child: child")
                                 # analyze_structure(child)
                                 # print("GET_MAX_DEPTH")
-                                max_depth, deepest_element_type  = analyze_structure_and_get_deepest_type(child)
+                                (
+                                    max_depth,
+                                    deepest_element_type,
+                                ) = analyze_structure_and_get_deepest_type(child)
                                 # print(max_depth, deepest_element_type)
                                 # print('int(e["index"])')
                                 # print(int(e["index"]))
@@ -1183,47 +1428,60 @@ def update_draggable_children(
                                     # print(child["props"]["id"], int(e["index"]))
                                     if int(child["props"]["id"]) == int(e["index"]):
                                         # print("EQUAL")
-                                        for k, sub_child in enumerate(child["props"]["children"][0]["props"]["children"]["props"]["children"][-1]["props"]["children"]["props"]["children"]):
+                                        for k, sub_child in enumerate(
+                                            child["props"]["children"][0]["props"][
+                                                "children"
+                                            ]["props"]["children"][-1]["props"][
+                                                "children"
+                                            ]["props"]["children"]
+                                        ):
                                             # print("sub_child")
                                             # print(sub_child)
                                             # print(analyze_structure(sub_child))
                                             if "id" in sub_child["props"]:
-                                                if sub_child["props"]["id"]["type"] == "card-value":
+                                                if (
+                                                    sub_child["props"]["id"]["type"]
+                                                    == "card-value"
+                                                ):
                                                     # print(sub_child["props"]["children"])
 
                                                     aggregation = e["aggregation"]
-                                                    new_value = new_df[e["column_value"]].agg(aggregation)
+                                                    new_value = new_df[
+                                                        e["column_value"]
+                                                    ].agg(aggregation)
                                                     if type(new_value) is np.float64:
                                                         new_value = round(new_value, 2)
-                                                    sub_child["props"]["children"] = new_value
+                                                    sub_child["props"][
+                                                        "children"
+                                                    ] = new_value
                                                     # print(sub_child["props"]["children"])
                                                     continue
 
                                             # if type(sub_child["props"]["children"]) is dict:
-                                                # for sub_sub_child in sub_child["props"]["children"]["props"]["children"]:
-                                                #     if "id" in sub_sub_child["props"]:
-                                                #         if sub_sub_child["props"]["id"]["type"] == "card-value":
-                                                #             # CARD PART
+                                            # for sub_sub_child in sub_child["props"]["children"]["props"]["children"]:
+                                            #     if "id" in sub_sub_child["props"]:
+                                            #         if sub_sub_child["props"]["id"]["type"] == "card-value":
+                                            #             # CARD PART
 
-                                                #             aggregation = e["aggregation"]
-                                                #             new_value = new_df[e["column_value"]].agg(aggregation)
-                                                #             # print(new_value, type(new_value))
-                                                #             if type(new_value) is np.float64:
-                                                #                 new_value = round(new_value, 2)
-                                                #             # print(aggregation)
-                                                #             # print(new_value)
+                                            #             aggregation = e["aggregation"]
+                                            #             new_value = new_df[e["column_value"]].agg(aggregation)
+                                            #             # print(new_value, type(new_value))
+                                            #             if type(new_value) is np.float64:
+                                            #                 new_value = round(new_value, 2)
+                                            #             # print(aggregation)
+                                            #             # print(new_value)
 
-                                                #             # print(sub_sub_child)
-                                                #             # print(
-                                                #             #     sub_sub_child["props"]["id"]
-                                                #             # )
-                                                #             sub_sub_child["props"]["children"] = new_value
-                                                #             # print(
-                                                #             #     sub_sub_child["props"][
-                                                #             #         "children"
-                                                #             #     ]
-                                                #             # )
-                                                #             continue
+                                            #             # print(sub_sub_child)
+                                            #             # print(
+                                            #             #     sub_sub_child["props"]["id"]
+                                            #             # )
+                                            #             sub_sub_child["props"]["children"] = new_value
+                                            #             # print(
+                                            #             #     sub_sub_child["props"][
+                                            #             #         "children"
+                                            #             #     ]
+                                            #             # )
+                                            #             continue
                                 if deepest_element_type == "graph":
                                     # print("POTENTIAL GRAPH PART UPDATE")
                                     # print(stored_metadata)
@@ -1238,16 +1496,31 @@ def update_draggable_children(
                                     # print(child["props"]["children"][0]["props"]["children"]["props"]["children"][-1]["props"]["children"])
                                     if int(child["props"]["id"]) == int(e["index"]):
                                         # for k, sub_child in enumerate(child["props"]["children"][0]["props"]["children"]["props"]["children"]["props"]["children"]):
-                                        for k, sub_child in enumerate(child["props"]["children"][0]["props"]["children"]["props"]["children"][-1]["props"]["children"]["props"]["children"]):
+                                        for k, sub_child in enumerate(
+                                            child["props"]["children"][0]["props"][
+                                                "children"
+                                            ]["props"]["children"][-1]["props"][
+                                                "children"
+                                            ]["props"]["children"]
+                                        ):
                                             # print("sub_child")
                                             # print(sub_child)
                                             # print(analyze_structure(sub_child))
-                                            if sub_child["props"]["id"]["type"] == "graph":
-                                                from depictio.dash.modules.figure_component.utils import plotly_vizu_dict 
-                                                new_figure = plotly_vizu_dict[e["visu_type"].lower()](new_df, **e["dict_kwargs"])
-                                                sub_child["props"]["figure"] = new_figure
+                                            if (
+                                                sub_child["props"]["id"]["type"]
+                                                == "graph"
+                                            ):
+                                                from depictio.dash.modules.figure_component.utils import (
+                                                    plotly_vizu_dict,
+                                                )
 
-                                   
+                                                new_figure = plotly_vizu_dict[
+                                                    e["visu_type"].lower()
+                                                ](new_df, **e["dict_kwargs"])
+                                                sub_child["props"][
+                                                    "figure"
+                                                ] = new_figure
+
                                 else:
                                     # print("OTHER")
                                     pass
@@ -1458,7 +1731,11 @@ def update_draggable_children(
         print("Input ID:", input_id)
 
         # Use list comprehension to filter
-        current_draggable_children = [child for child in current_draggable_children if child["props"]["id"] != input_id]
+        current_draggable_children = [
+            child
+            for child in current_draggable_children
+            if child["props"]["id"] != input_id
+        ]
 
         # elif "remove-" in triggered_input and [e for e in args[-10] if e]:
         #     print("\nREMOVE")
@@ -1710,7 +1987,7 @@ def update_draggable_children(
         #         else:
         #             child["props"]["children"][i] = sub_child
         #     updated_draggable_children.append(child)
-            # if j != (len(current_draggable_children)-1):
+        # if j != (len(current_draggable_children)-1):
         #         print("\n\n")
         #         print("updated_child")
 
