@@ -686,7 +686,7 @@ def design_figure(id, wfs_list):
     return figure_row
 
 
-def create_stepper_figure_button(n):
+def create_stepper_figure_button(n, disabled=False):
     """
     Create the stepper figure button
 
@@ -715,6 +715,7 @@ def create_stepper_figure_button(n):
             size="xl",
             color="grape",
             leftIcon=DashIconify(icon="mdi:graph-box"),
+            disabled=disabled,
         )
     )
     store = dcc.Store(
