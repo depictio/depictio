@@ -308,7 +308,7 @@ def design_interactive(id, df):
     return interactive_row
 
 
-def create_stepper_interactive_button(n):
+def create_stepper_interactive_button(n, disabled=False):
     """
     Create the stepper interactive button
 
@@ -332,6 +332,7 @@ def create_stepper_interactive_button(n):
             size="xl",
             color="indigo",
             leftIcon=DashIconify(icon="bx:slider-alt", color="white"),
+            disabled=disabled,
         )
     )
     store = dcc.Store(

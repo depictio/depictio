@@ -42,9 +42,6 @@ def register_callbacks_stepper(app):
         print("set_workflow_options")
         print(n_clicks)
         if int(n_clicks) > 0:
-
-                
-
             # print(id)
             tmp_data = list_workflows_for_dropdown()
             # print("\n\n\n")
@@ -100,16 +97,105 @@ def register_callbacks_stepper(app):
             raise dash.exceptions.PreventUpdate
 
 
-def create_stepper_dropdowns(n):
-    """
-    Create the dropdowns for the stepper
+# def create_stepper_dropdowns(n):
+#     """
+#     Create the dropdowns for the stepper
 
-    Args:
-        n (_type_): _description_
+#     Args:
+#         n (_type_): _description_
 
-    Returns:
-        _type_: _description_
-    """
+#     Returns:
+#         _type_: _description_
+#     """
+#     stepper_dropdowns = html.Div(
+#         [
+#             html.Hr(),
+#             dbc.Row(
+#                 [
+#                     dbc.Col(
+#                         # Workflow selection dropdown
+#                         dmc.Select(
+#                             id={"type": "workflow-selection-label", "index": n},
+#                             label=html.H4(
+#                                 [
+#                                     DashIconify(icon="flat-color-icons:workflow"),
+#                                     "Workflow selection",
+#                                 ]
+#                             ),
+#                             # data=["Test1", "Test2"],
+#                             style={
+#                                 "height": "100%",
+#                                 "display": "inline-block",
+#                                 "width": "100%",
+#                                 # "display": "flex",
+#                                 # "flex-direction": "column",
+#                                 # "flex-grow": "0",
+#                             },
+#                         )
+#                     ),
+#                     dbc.Col(
+#                         # Data collection selection dropdown
+#                         dmc.Select(
+#                             id={
+#                                 "type": "datacollection-selection-label",
+#                                 "index": n,
+#                             },
+#                             label=html.H4(
+#                                 [
+#                                     DashIconify(icon="bxs:data"),
+#                                     "Data collection selection",
+#                                 ]
+#                             ),
+#                             # data=["Test3", "Test4"],
+#                             style={
+#                                 "height": "100%",
+#                                 "width": "100%",
+#                                 "display": "inline-block",
+#                                 # "display": "flex",
+#                                 # "flex-direction": "column",
+#                                 # "flex-grow": "0",
+#                             },
+#                         )
+#                     ),
+#                 ],
+#                 # style={"width": "80%"},
+#             ),
+#             html.Hr(),
+#             dbc.Row(html.Div(id={"type": "dropdown-output", "index": n})),
+#         ],
+#         style={
+#             "height": "100%",
+#             "width": "822px",
+#             # "display": "flex",
+#             # "flex-direction": "column",
+#             # "flex-grow": "0",
+#         },
+#     )
+#     return stepper_dropdowns
+
+
+# def create_stepper_buttons(n, data_collection_type):
+#     """
+#     Create the buttons for the stepper
+
+#     Args:
+#         n (_type_): _description_
+
+#     Returns:
+#         _type_: _description_
+#     """
+
+#     # IMPORTANT: TO BE UPDATED FOR EACH NEW COMPONENT
+
+
+def create_stepper_output(n, active, new_plot_id, data_collection_type):
+    # def create_stepper_output(n, active, new_plot_id, stepper_dropdowns, stepper_buttons, data_collection_type):  # noqa: E999
+    print("\n\n\n")
+    print("create_stepper_output")
+    print(n)
+    print(active)
+    print(new_plot_id)
+
     stepper_dropdowns = html.Div(
         [
             html.Hr(),
@@ -174,115 +260,24 @@ def create_stepper_dropdowns(n):
             # "flex-grow": "0",
         },
     )
-    return stepper_dropdowns
 
-
-def create_stepper_buttons(n, data_collection_type):
-    """
-    Create the buttons for the stepper
-
-    Args:
-        n (_type_): _description_
-
-    Returns:
-        _type_: _description_
-    """
-
-    # IMPORTANT: TO BE UPDATED FOR EACH NEW COMPONENT
-
-
-    figure_stepper_button, figure_stepper_button_store = create_stepper_figure_button(n)
-    card_stepper_button, card_stepper_button_store = create_stepper_card_button(n)
-    (
-        interactive_stepper_button,
-        interactive_stepper_button_store,
-    ) = create_stepper_interactive_button(n)
-    (
-        jbrowse_stepper_button,
-        jbrowse_stepper_button_store,
-    ) = create_stepper_jbrowse_button(n)
-
-    store_list = [
-        figure_stepper_button_store,
-        card_stepper_button_store,
-        interactive_stepper_button_store,
-        jbrowse_stepper_button_store,
-    ]
-
-    if data_collection_type == "Table":
-
-
-        standard_components = [
-            figure_stepper_button,
-            card_stepper_button,
-            interactive_stepper_button,
+    buttons_list = html.Div(
+        [
+            html.Div(
+                id={
+                    "type": "buttons-list",
+                    "index": n,
+                }
+            ),
+            html.Div(
+                id={
+                    "type": "store-list",
+                    "index": n,
+                }
+            ),
         ]
-        special_components = []
-    
-    elif data_collection_type == "Genome Browser":
+    )
 
-        standard_components = []
-
-        special_components = [jbrowse_stepper_button]
-
-    # graph_stepper_button = dbc.Col(dmc.Button(
-    #     "Graph",
-    #     # id={
-    #     #     "type": "btn-option",
-    #     #     "index": n,
-    #     #     "value": "graph",
-    #     # },
-    #     n_clicks=0,
-    #     style=UNSELECTED_STYLE,
-    #     size="xl",
-    #     color="orange",
-    #     leftIcon=DashIconify(
-    #         icon="ph:graph-fill", color="white"
-    #     ),
-    # ))
-
-    # map_stepper_button = dbc.Col(dmc.Button(
-    #     "Map",
-    #     # id={
-    #     #     "type": "btn-option",
-    #     #     "index": n,
-    #     #     "value": "map",
-    #     # },
-    #     n_clicks=0,
-    #     style=UNSELECTED_STYLE,
-    #     size="xl",
-    #     color="red",
-    #     leftIcon=DashIconify(
-    #         icon="gridicons:globe", color="white"
-    #     ),
-    # ))
-
-
-    # special_components = [jbrowse_stepper_button, graph_stepper_button, map_stepper_button]
-
-    buttons_list = [
-        html.H5("Standard components", style={"margin-top": "20px"}),
-        html.Hr(),
-        dmc.Center(dbc.Row(standard_components)),
-        html.Br(),
-        html.H5("Special components", style={"margin-top": "20px"}),
-        html.Hr(),
-        dmc.Center(dbc.Row(special_components)),
-    ]
-
-    print(store_list + buttons_list)
-
-    stepper_buttons = dbc.Row(store_list + buttons_list)
-    print(stepper_buttons)
-    return stepper_buttons
-
-
-def create_stepper_output(n, active, new_plot_id, stepper_dropdowns, stepper_buttons):
-    print("\n\n\n")
-    print('create_stepper_output')
-    print(n)
-    print(active)
-    print(new_plot_id)
     new_element = html.Div(
         [
             html.Div(id={"type": "add-content", "index": n}),
@@ -307,7 +302,7 @@ def create_stepper_output(n, active, new_plot_id, stepper_dropdowns, stepper_but
                                     dmc.StepperStep(
                                         label="Component selection",
                                         description="Select your component type",
-                                        children=stepper_buttons,
+                                        children=buttons_list,
                                         id={"type": "stepper-step-2", "index": n},
                                     ),
                                     dmc.StepperStep(

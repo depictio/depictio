@@ -90,8 +90,8 @@ from depictio.dash.utils import (
 
 
 from depictio.dash.layouts.stepper import (
-    create_stepper_dropdowns,
-    create_stepper_buttons,
+    # create_stepper_dropdowns,
+    # create_stepper_buttons,
     create_stepper_output,
 )
 
@@ -775,6 +775,133 @@ def update_button_style(figure_clicks, card_clicks, interactive_clicks):
     return figure_style, card_style, interactive_style
 
 
+from depictio.dash.modules.figure_component.frontend import create_stepper_figure_button
+from depictio.dash.modules.card_component.frontend import create_stepper_card_button
+from depictio.dash.modules.interactive_component.frontend import (
+    create_stepper_interactive_button,
+)
+from depictio.dash.modules.jbrowse_component.frontend import (
+    create_stepper_jbrowse_button,
+)
+
+
+@app.callback(
+    Output({"type": "buttons-list", "index": MATCH}, "children"),
+    Output({"type": "store-list", "index": MATCH}, "children"),
+    Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
+    Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+    Input("add-button", "n_clicks"),
+    prevent_initial_call=True,
+)
+def update_button_list(workflow_selection, data_collection_selection, n):
+    print("\n\n\n")
+    print("update_button_list")
+    print(n)
+
+    workflows = list_workflows(token)
+
+    workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_selection][0][
+        "_id"
+    ]
+    data_collection_id = [
+        f
+        for e in workflows
+        if e["_id"] == workflow_id
+        for f in e["data_collections"]
+        if f["data_collection_tag"] == data_collection_selection
+    ][0]["_id"]
+
+    import httpx
+
+    API_BASE_URL = "http://localhost:8058"
+
+    print(data_collection_selection)
+
+    dc_specs = httpx.get(
+        f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
+        headers={
+            "Authorization": f"Bearer {token}",
+        },
+    ).json()
+
+    print(dc_specs)
+
+    data_collection_type = dc_specs["config"]["type"]
+
+
+    if data_collection_type == "Table":
+        (
+            figure_stepper_button,
+            figure_stepper_button_store,
+        ) = create_stepper_figure_button(n, disabled=False)
+        card_stepper_button, card_stepper_button_store = create_stepper_card_button(
+            n, disabled=False
+        )
+
+        (
+            interactive_stepper_button,
+            interactive_stepper_button_store,
+        ) = create_stepper_interactive_button(n, disabled=False)
+
+        (
+            jbrowse_stepper_button,
+            jbrowse_stepper_button_store,
+        ) = create_stepper_jbrowse_button(n, disabled=True)
+
+        standard_components = [
+            figure_stepper_button,
+            card_stepper_button,
+            interactive_stepper_button,
+        ]
+        special_components = [jbrowse_stepper_button]
+
+    elif data_collection_type == "Genome Browser":
+        (
+            figure_stepper_button,
+            figure_stepper_button_store,
+        ) = create_stepper_figure_button(n, disabled=True)
+        card_stepper_button, card_stepper_button_store = create_stepper_card_button(
+            n, disabled=True
+        )
+
+        (
+            interactive_stepper_button,
+            interactive_stepper_button_store,
+        ) = create_stepper_interactive_button(n, disabled=True)
+
+        (
+            jbrowse_stepper_button,
+            jbrowse_stepper_button_store,
+        ) = create_stepper_jbrowse_button(n, disabled=False)
+
+        standard_components = [
+            figure_stepper_button,
+            card_stepper_button,
+            interactive_stepper_button,
+        ]
+        special_components = [jbrowse_stepper_button]
+
+    buttons_list = html.Div(
+        [
+            html.H5("Standard components", style={"margin-top": "20px"}),
+            html.Hr(),
+            dmc.Center(dbc.Row(standard_components)),
+            html.Br(),
+            html.H5("Special components", style={"margin-top": "20px"}),
+            html.Hr(),
+            dmc.Center(dbc.Row(special_components)),
+        ]
+    )
+
+    store_list = [
+        figure_stepper_button_store,
+        card_stepper_button_store,
+        interactive_stepper_button_store,
+        jbrowse_stepper_button_store,
+    ]
+    return buttons_list, store_list
+
+
 @app.callback(
     Output({"type": "dropdown-output", "index": MATCH}, "children"),
     Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
@@ -809,6 +936,69 @@ def update_step_2(workflow_selection, data_collection_selection):
     ).json()
 
     print(dc_specs)
+
+    n = 0
+
+    # store_list = [
+    #     figure_stepper_button_store,
+    #     card_stepper_button_store,
+    #     interactive_stepper_button_store,
+    #     jbrowse_stepper_button_store,
+    # ]
+    # data_collection_type  = dc_specs["config"]["type"]
+
+    # if data_collection_type == "Table":
+    #     figure_stepper_button, figure_stepper_button_store = create_stepper_figure_button(n, disabled=False)
+    #     card_stepper_button, card_stepper_button_store = create_stepper_card_button(n, disabled=False)
+
+    #     (
+    #         interactive_stepper_button,
+    #         interactive_stepper_button_store,
+    #     ) = create_stepper_interactive_button(n, disabled=False)
+
+    #     (
+    #         jbrowse_stepper_button,
+    #         jbrowse_stepper_button_store,
+    #     ) = create_stepper_jbrowse_button(n, disabled=True)
+
+    #     standard_components = [
+    #         figure_stepper_button,
+    #         card_stepper_button,
+    #         interactive_stepper_button,
+    #     ]
+    #     special_components = [jbrowse_stepper_button]
+
+    # elif data_collection_type == "Genome Browser":
+
+    #     figure_stepper_button, figure_stepper_button_store = create_stepper_figure_button(n, disabled=True)
+    #     card_stepper_button, card_stepper_button_store = create_stepper_card_button(n, disabled=True)
+
+    #     (
+    #         interactive_stepper_button,
+    #         interactive_stepper_button_store,
+    #     ) = create_stepper_interactive_button(n, disabled=True)
+
+    #     (
+    #         jbrowse_stepper_button,
+    #         jbrowse_stepper_button_store,
+    #     ) = create_stepper_jbrowse_button(n, disabled=False)
+
+    #     standard_components = [
+    #         figure_stepper_button,
+    #         card_stepper_button,
+    #         interactive_stepper_button,
+    #     ]
+    #     special_components = [jbrowse_stepper_button]
+
+    # buttons_list = html.Div([
+    #     html.H5("Standard components", style={"margin-top": "20px"}),
+    #     html.Hr(),
+    #     dmc.Center(dbc.Row(standard_components)),
+    #     html.Br(),
+    #     html.H5("Special components", style={"margin-top": "20px"}),
+    #     html.Hr(),
+    #     dmc.Center(dbc.Row(special_components)),
+    # ])
 
     if workflow_selection is not None and data_collection_selection is not None:
         config_title = dmc.Title(
@@ -959,7 +1149,8 @@ def update_step_2(workflow_selection, data_collection_selection):
                             value="data_collection_config",
                         ),
                     ],
-                )
+                ),
+                # buttons_list
             ]
 
         elif dc_specs["config"]["type"] == "Genome Browser":
@@ -1001,6 +1192,7 @@ def update_step_2(workflow_selection, data_collection_selection):
                             ),
                         ],
                     )
+                    # ,buttons_list
                 ]
 
     else:
@@ -1165,8 +1357,9 @@ def update_draggable_children(
     workflows = list_workflows(token)
     if len(workflow_label) == 0 and len(data_collection_label) == 0:
         workflow_label = [workflows[0]["workflow_tag"]]
-        data_collection_label = [workflows[0]["data_collections"][0]["data_collection_tag"]]
-
+        data_collection_label = [
+            workflows[0]["data_collections"][0]["data_collection_tag"]
+        ]
 
     print("workflow_label")
     print(workflow_label)
@@ -1305,10 +1498,14 @@ def update_draggable_children(
             n = ctx.triggered[0]["value"]
             new_plot_id = f"{n}"
 
-            stepper_dropdowns = create_stepper_dropdowns(n)
-            stepper_buttons = create_stepper_buttons(n, dc_specs["config"]["type"])
+            # stepper_dropdowns = create_stepper_dropdowns(n)
+            # stepper_buttons = create_stepper_buttons(n, dc_specs["config"]["type"])
             stepper_output = create_stepper_output(
-                n, active, new_plot_id, stepper_dropdowns, stepper_buttons
+                n,
+                active,
+                new_plot_id,
+                dc_specs["config"]["type"],
+                # n, active, new_plot_id, stepper_dropdowns, stepper_buttons, dc_specs["config"]["type"]
             )
             stored_add_button["count"] += 1
 

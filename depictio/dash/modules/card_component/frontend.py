@@ -264,7 +264,7 @@ def design_card(id, df):
     return row
 
 
-def create_stepper_card_button(n):
+def create_stepper_card_button(n, disabled=False):
     """
     Create the stepper card button
 
@@ -288,6 +288,7 @@ def create_stepper_card_button(n):
             size="xl",
             color="violet",
             leftIcon=DashIconify(icon="formkit:number", color="white"),
+            disabled=disabled,
         )
     )
     store = dcc.Store(
@@ -298,6 +299,7 @@ def create_stepper_card_button(n):
         },
         data=0,
         storage_type="memory",
+        
     )
 
     return button, store
