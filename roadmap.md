@@ -1,3 +1,7 @@
+
+# 2024/02/16 - TODO
+
+
 # 2024/02/04 - merge StrandScape architecture and depictio
 
 - Simplify and make Strand-Scape more generic => one platform with run monitoring (workflow agnostic and without control) and dashboarding
@@ -14,7 +18,8 @@
 - Final design
   - One space per workflow/project
     - Load button (that will use JSON / mongoDB)
-  - 
+  
+
 
 # Backup
 
