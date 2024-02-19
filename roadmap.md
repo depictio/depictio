@@ -1,5 +1,5 @@
 
-# 2024/02/16 - TODO
+# 2024/02/16 - Jbrowse update
 
 
 # 2024/02/04 - merge StrandScape architecture and depictio
