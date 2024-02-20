@@ -1245,10 +1245,9 @@ def update_step_2(
         ]
         if btn_index:
             component_selected = components_list[btn_index[0]]
+            id = ids[btn_index[0]]
+
             if component_selected not in ["Genome browser", "Graph", "Map"]:
-                print(ids)
-                id = ids[btn_index[0]]
-                print(id)
                 
                 df = return_deltatable(
                     workflow_selection, data_collection_selection, raw=True
@@ -1256,20 +1255,26 @@ def update_step_2(
 
 
 
-                if component_selected == "Figure":
-                    return design_figure(id, df), btn_component
-                elif component_selected == "Card":
-                    return design_card(id, df), btn_component
-                elif component_selected == "Interactive":
-                    return design_interactive(id, df), btn_component
-                elif component_selected == "Genome browser":
-                    print("Genome browser")
-                    return design_jbrowse(id), btn_component
-                # TODO: update this
-                elif component_selected == "Graph":
-                    return dash.no_update, dash.no_update
-                elif component_selected == "Map":
-                    return dash.no_update, dash.no_update
+            if component_selected == "Figure":
+                return design_figure(id, df), btn_component
+            elif component_selected == "Card":
+                return design_card(id, df), btn_component
+            elif component_selected == "Interactive":
+                return design_interactive(id, df), btn_component
+            elif component_selected == "Genome browser":
+                print("Genome browser")
+                return_values = design_jbrowse(id)
+                print("return_values")
+                print(return_values)
+                print("btn_component")
+                print(btn_component)
+
+                return return_values, btn_component
+            # TODO: update this
+            elif component_selected == "Graph":
+                return dash.no_update, dash.no_update
+            elif component_selected == "Map":
+                return dash.no_update, dash.no_update
             else: 
                 return html.Div("Not implemented yet"), dash.no_update
 
