@@ -485,8 +485,8 @@ def register_callbacks_figure_component(app):
         token = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2NGE4NDI4NDJiZjRmYTdkZWFhM2RiZWQiLCJleHAiOjE3ODQ5ODY3ODV9.a5bkSctoCNYXVh035g_wt-bio3iC3uuM9anFKiJOKrmBHDH0tmcL2O9Rc1HIQtAxCH-mc1K4q4aJsAO8oeayuPyA3w7FPIUnLsZGRHB8aBoDCoxEIpmACi0nEH8hF9xd952JuBt6ggchyMyrnxHC65Qc8mHC9PeylWonHvNl5jGZqi-uhbeLpsjuPcsyg76X2aqu_fip67eJ8mdr6yuII6DLykpfbzALpn0k66j79YzOzDuyn4IjBfBPWiqZzl_9oDMLK7ODebu6FTDmQL0ZGto_dxyIJtkf1CdxPaYkgiXVOh00Y6sXJ24jHSqfNP-dqvAQ3G8izuurq6B4SNgtDw"
 
         workflows = list_workflows(token)
-        print("workflows")
-        print(workflows)
+        # print("workflows")
+        # print(workflows)
 
         workflow_id = [e for e in workflows if e["workflow_tag"] == workflow][0]["_id"]
         data_collection_id = [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["data_collection_tag"] == data_collection][0]["_id"]
@@ -512,8 +512,8 @@ def register_callbacks_figure_component(app):
             if data_collection_id in join_tables_for_wf:
                 join_details = join_tables_for_wf[data_collection_id]
                 dc_specs["config"]["join"] = join_details
-        print("dc_specs")
-        print(dc_specs)
+        # print("dc_specs")
+        # print(dc_specs)
         print(visu_type)
 
         # # Get the type of the selected column

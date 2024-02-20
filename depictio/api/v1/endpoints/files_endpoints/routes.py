@@ -256,8 +256,8 @@ async def scan_data_collection(
     data_collection_id: str,
     current_user: str = Depends(get_current_user),
 ):
-    print(workflow_id)
-    print(data_collection_id)
+    # print(workflow_id)
+    # print(data_collection_id)
 
     (
         workflow_oid,

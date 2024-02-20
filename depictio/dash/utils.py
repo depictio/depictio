@@ -112,7 +112,7 @@ def get_columns_from_data_collection(
 
             json_cols = json["columns"]
             reformat_cols = collections.defaultdict(dict)
-            print(json_cols)
+            # print(json_cols)
             for c in json_cols:
                 reformat_cols[c["name"]]["type"] = c["type"]
                 reformat_cols[c["name"]]["description"] = c["description"]
@@ -125,7 +125,7 @@ def get_columns_from_data_collection(
 
 def load_deltatable(workflow_id: str, data_collection_id: str, cols: list = None, raw: bool = False):
     workflows = list_workflows(token)
-    print(workflows)
+    # print(workflows)
 
     if workflow_id is None or data_collection_id is None:
         default_workflow = workflows[0]
@@ -279,14 +279,14 @@ def load_deltatable(workflow_id: str, data_collection_id: str, cols: list = None
                                 print(tmp_dc_tag)
                                 print("workflow_id")
                                 print(workflow_id)
-                                print(workflows)
-                                print([
-                                    f
-                                    for e in workflows
-                                    if e["_id"] == workflow_id
-                                    for f in e["data_collections"]
-                                    if f["data_collection_tag"] == tmp_dc_tag
-                                ])
+                                # print(workflows)
+                                # print([
+                                #     f
+                                #     for e in workflows
+                                #     if e["_id"] == workflow_id
+                                #     for f in e["data_collections"]
+                                #     if f["data_collection_tag"] == tmp_dc_tag
+                                # ])
                                 tmp_dc_id = None
                                 for e in workflows:
                                     print(e["_id"], workflow_id, e["_id"] == workflow_id)

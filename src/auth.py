@@ -208,15 +208,15 @@ async def create_user_api(user: User, current_user: User = Depends(get_current_u
 @app.get("/users")
 async def get_users(token: str = Depends(oauth2_scheme)):
     # Verify the token and get the user ID from the "sub" claim
-    print(token)
+    # print(token)
     payload = decode_access_token(token)
-    print(payload)
+    # print(payload)
     user_id = payload.get("sub")
     if user_id is None:
         raise HTTPException(status_code=400, detail="Invalid token")
     # Get the user object from the database using the user ID
     user = get_user_by_id(user_id)
-    print(user)
+    # print(user)
     if user is None:
         raise HTTPException(status_code=400, detail="User not found")
     users = list(mongo_db.users.find({}))

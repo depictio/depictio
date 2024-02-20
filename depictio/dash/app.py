@@ -711,8 +711,8 @@ def freeze_layout(switch_state):
     prevent_initial_call=True,
 )
 def update(back, next_, workflow_selection, data_selection, btn_component, current):
-    # print("update")
-    # print(back, next_, current, workflow_selection, data_selection, btn_component)
+    print("update")
+    print(back, next_, current, workflow_selection, data_selection, btn_component)
 
     if back is None and next_ is None:
         if workflow_selection is not None and data_selection is not None:
@@ -797,6 +797,8 @@ def update_button_list(workflow_selection, data_collection_selection, n):
     print("\n\n\n")
     print("update_button_list")
     print(n)
+    print(workflow_selection, data_collection_selection)
+    print("\n\n\n")
 
     workflows = list_workflows(token)
 
@@ -824,7 +826,7 @@ def update_button_list(workflow_selection, data_collection_selection, n):
         },
     ).json()
 
-    print(dc_specs)
+    # print(dc_specs)
 
     data_collection_type = dc_specs["config"]["type"]
 
@@ -926,7 +928,7 @@ def update_step_2(workflow_selection, data_collection_selection):
 
     API_BASE_URL = "http://localhost:8058"
 
-    print(data_collection_selection)
+    # print(data_collection_selection)
 
     dc_specs = httpx.get(
         f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
@@ -935,9 +937,9 @@ def update_step_2(workflow_selection, data_collection_selection):
         },
     ).json()
 
-    print(dc_specs)
+    # print(dc_specs)
 
-    n = 0
+    # n = 0
 
     # store_list = [
     #     figure_stepper_button_store,
@@ -1099,7 +1101,7 @@ def update_step_2(workflow_selection, data_collection_selection):
                 {"field": c, "headerTooltip": f"Column type: {e['type']}"}
                 for c, e in cols.items()
             ]
-            print(columnDefs)
+            # print(columnDefs)
 
             run_nb = cols["depictio_run_id"]["specs"]["nunique"]
             run_nb_title = dmc.Title(
@@ -1219,6 +1221,16 @@ def update_step_2(
     store_btn_component,
     ids,
 ):
+
+    components_list = [
+        "Figure",
+        "Card",
+        "Interactive",
+        "Genome browser",
+        "Graph",
+        "Map",
+    ]    
+
     if (
         workflow_selection is not None
         and data_collection_selection is not None
@@ -1232,36 +1244,34 @@ def update_step_2(
             if x > y
         ]
         if btn_index:
-            df = return_deltatable(
-                workflow_selection, data_collection_selection, raw=True
-            )
-
-            components_list = [
-                "Figure",
-                "Card",
-                "Interactive",
-                "Genome browser",
-                "Graph",
-                "Map",
-            ]
             component_selected = components_list[btn_index[0]]
-            print(ids)
-            id = ids[btn_index[0]]
-            print(id)
-            if component_selected == "Figure":
-                return design_figure(id, df), btn_component
-            elif component_selected == "Card":
-                return design_card(id, df), btn_component
-            elif component_selected == "Interactive":
-                return design_interactive(id, df), btn_component
-            elif component_selected == "Genome browser":
-                print("Genome browser")
-                return design_jbrowse(id), btn_component
-            # TODO: update this
-            elif component_selected == "Graph":
-                return dash.no_update, dash.no_update
-            elif component_selected == "Map":
-                return dash.no_update, dash.no_update
+            if component_selected not in ["Genome browser", "Graph", "Map"]:
+                print(ids)
+                id = ids[btn_index[0]]
+                print(id)
+                
+                df = return_deltatable(
+                    workflow_selection, data_collection_selection, raw=True
+                )
+
+
+
+                if component_selected == "Figure":
+                    return design_figure(id, df), btn_component
+                elif component_selected == "Card":
+                    return design_card(id, df), btn_component
+                elif component_selected == "Interactive":
+                    return design_interactive(id, df), btn_component
+                elif component_selected == "Genome browser":
+                    print("Genome browser")
+                    return design_jbrowse(id), btn_component
+                # TODO: update this
+                elif component_selected == "Graph":
+                    return dash.no_update, dash.no_update
+                elif component_selected == "Map":
+                    return dash.no_update, dash.no_update
+            else: 
+                return html.Div("Not implemented yet"), dash.no_update
 
         else:
             raise dash.exceptions.PreventUpdate
@@ -1285,8 +1295,8 @@ def update_step_2(
     # ]
     # +
     [
-        Input({"type": "workflow-selection-label", "index": ALL}, "value"),
-        Input({"type": "datacollection-selection-label", "index": ALL}, "value"),
+        # Input({"type": "workflow-selection-label", "index": ALL}, "value"),
+        # Input({"type": "datacollection-selection-label", "index": ALL}, "value"),
         State(
             {
                 "type": "interactive-component",
@@ -1335,58 +1345,14 @@ def update_draggable_children(
     # n_clicks, selected_year, current_draggable_children, current_layouts, stored_figures
     *args,
 ):
-    ctx = dash.callback_context
-    ctx_triggered = ctx.triggered
-
-    print("CTX triggered: ")
-
-    triggered_input = ctx.triggered[0]["prop_id"].split(".")[0]
-
-    workflow_label = args[-17]
-    data_collection_label = args[-16]
-
+    
     print("\n\n\n")
+    print("-------------------------")
+    print("update_draggable_children")
 
-    print("workflow_label")
-    print(workflow_label)
-    print("data_collection_label")
-    print(data_collection_label)
 
-    import httpx
-
-    workflows = list_workflows(token)
-    if len(workflow_label) == 0 and len(data_collection_label) == 0:
-        workflow_label = [workflows[0]["workflow_tag"]]
-        data_collection_label = [
-            workflows[0]["data_collections"][0]["data_collection_tag"]
-        ]
-
-    print("workflow_label")
-    print(workflow_label)
-    print("data_collection_label")
-    print(data_collection_label)
-    print("\n\n\n")
-
-    workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_label[0]][0][
-        "_id"
-    ]
-    data_collection_id = [
-        f
-        for e in workflows
-        if e["_id"] == workflow_id
-        for f in e["data_collections"]
-        if f["data_collection_tag"] == data_collection_label[0]
-    ][0]["_id"]
-
-    API_BASE_URL = "http://localhost:8058"
-
-    dc_specs = httpx.get(
-        f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
-        headers={
-            "Authorization": f"Bearer {token}",
-        },
-    ).json()
-
+    # workflow_label = args[-17]
+    # data_collection_label = args[-16]
     interactive_component_ids = args[-15]
     stored_metadata = args[-14]
     add_button_nclicks = args[-13]
@@ -1402,6 +1368,16 @@ def update_draggable_children(
     stored_layout = args[-3]
     stored_figures = args[-2]
     stored_edit_dashboard = args[-1]
+
+
+    ctx = dash.callback_context
+    ctx_triggered = ctx.triggered
+
+    print("CTX triggered: ")
+    print(ctx_triggered)
+
+    triggered_input = ctx.triggered[0]["prop_id"].split(".")[0]
+    print(triggered_input)
 
     switch_state_index = -1 if switch_state is True else -1
 
@@ -1498,15 +1474,73 @@ def update_draggable_children(
             n = ctx.triggered[0]["value"]
             new_plot_id = f"{n}"
 
+
+
+
+
+
+
+            # print("\n\n\n")
+
+            # print("workflow_label")
+            # print(workflow_label)
+            # print("data_collection_label")
+            # print(data_collection_label)
+            # print("add_button_nclicks")
+            # print(add_button_nclicks)
+
+            # import httpx
+
+            # workflows = list_workflows(token)
+            # if len(workflow_label) == 0 and len(data_collection_label) == 0:
+            #     workflow_label = [workflows[0]["workflow_tag"]]
+            #     data_collection_label = [
+            #         workflows[0]["data_collections"][0]["data_collection_tag"]
+            #     ]
+
+            # print("workflow_label")
+            # print(workflow_label)
+            # print("data_collection_label")
+            # print(data_collection_label)
+            # print("\n\n\n")
+
+            # workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_label[0]][0][
+            #     "_id"
+            # ]
+            # data_collection_id = [
+            #     f
+            #     for e in workflows
+            #     if e["_id"] == workflow_id
+            #     for f in e["data_collections"]
+            #     if f["data_collection_tag"] == data_collection_label[0]
+            # ][0]["_id"]
+
+            # API_BASE_URL = "http://localhost:8058"
+
+            # dc_specs = httpx.get(
+            #     f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
+            #     headers={
+            #         "Authorization": f"Bearer {token}",
+            #     },
+            # ).json()
+
+
+
+
+
+
             # stepper_dropdowns = create_stepper_dropdowns(n)
             # stepper_buttons = create_stepper_buttons(n, dc_specs["config"]["type"])
             stepper_output = create_stepper_output(
                 n,
                 active,
                 new_plot_id,
-                dc_specs["config"]["type"],
+                # dc_specs["config"]["type"],
                 # n, active, new_plot_id, stepper_dropdowns, stepper_buttons, dc_specs["config"]["type"]
             )
+
+
+
             stored_add_button["count"] += 1
 
             # print("\n\n\n")
