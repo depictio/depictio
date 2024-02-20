@@ -31,7 +31,7 @@ from depictio.dash.utils import (
 
 def register_callbacks_jbrowse_component(app):
     @app.callback(
-        Output({"type": "jbrowse_body", "index": MATCH}, "children"),
+        Output({"type": "jbrowse-body", "index": MATCH}, "children"),
         [
             Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
             Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
@@ -79,7 +79,7 @@ def register_callbacks_jbrowse_component(app):
             },
             storage_type="memory",
         )
-        return [iframe, store_component]
+        return html.Div([iframe, store_component])
 
 
 def design_jbrowse(id):
@@ -103,7 +103,7 @@ def design_jbrowse(id):
             #     height="1000px",
             #     id={"type": "jbrowse", "index": id["index"]},
             # ),
-            html.Div(id={"type": "jbrowse_body", "index": id["index"]}),
+            html.Div(id={"type": "jbrowse-body", "index": id["index"]}),
             id={"type": "test-container", "index": id["index"]},
         ),
     ]

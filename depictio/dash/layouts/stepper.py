@@ -188,7 +188,7 @@ def register_callbacks_stepper(app):
 #     # IMPORTANT: TO BE UPDATED FOR EACH NEW COMPONENT
 
 
-def create_stepper_output(n, active, new_plot_id, data_collection_type):
+def create_stepper_output(n, active, new_plot_id, data_collection_type=None):
     # def create_stepper_output(n, active, new_plot_id, stepper_dropdowns, stepper_buttons, data_collection_type):  # noqa: E999
     print("\n\n\n")
     print("create_stepper_output")

@@ -121,7 +121,7 @@ async def get_workflows():
     #     return jsonable_encoder(workflows)
 
     workflows = mongo_db.list_collection_names()
-    print(workflows)
+    # print(workflows)
     # Cache the results
     # redis_client.setex("workflows", settings.redis_cache_ttl, jsonable_encoder(workflows))
 

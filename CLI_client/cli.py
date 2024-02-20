@@ -55,17 +55,17 @@ app = typer.Typer()
 API_BASE_URL = "http://localhost:8058"  # replace with your FastAPI server URL
 # API_BASE_URL = "http://host.docker.internal:8058"  # replace with your FastAPI server URL
 
-print("\n\n")
-print("\n\n")
-print("API_BASE_URL")
-print(API_BASE_URL)
-print("\n\n")
-print("\n\n")
+# print("\n\n")
+# print("\n\n")
+# print("API_BASE_URL")
+# print(API_BASE_URL)
+# print("\n\n")
+# print("\n\n")
 
 def return_user_from_token(token: str) -> dict:
-    print(token)
-    print(PUBLIC_KEY)
-    print(ALGORITHM)
+    # print(token)
+    # print(PUBLIC_KEY)
+    # print(ALGORITHM)
     try:
         payload = jwt.decode(token, PUBLIC_KEY, algorithms=[ALGORITHM])
         user_id = payload.get("sub")
@@ -137,7 +137,7 @@ def create_workflow(
     workflow_data_raw = workflow_data.dict(by_alias=True, exclude_none=True)
     workflow_data_dict = convert_objectid_to_str(workflow_data_raw)
     workflow_data_dict["update"] = update
-    print(workflow_data_dict)
+    # print(workflow_data_dict)
 
 
 
@@ -174,7 +174,7 @@ def list_workflows(
         typer.echo("A valid token must be provided for authentication.")
         raise typer.Exit(code=1)
 
-    print(token)
+    # print(token)
     user = return_user_from_token(token)  # Decode the token to get the user information
     if not user:
         typer.echo("Invalid token or unable to decode user information.")
@@ -184,11 +184,11 @@ def list_workflows(
     headers = {"Authorization": f"Bearer {token}"}  # Token is now mandatory
 
 
-    print(token)
+    # print(token)
     workflows = httpx.get(f"{API_BASE_URL}/depictio/api/v1/workflows/get", headers=headers)
     workflows_json = workflows.json()
     pretty_workflows = json.dumps(workflows_json, indent=4)
-    typer.echo(pretty_workflows)
+    # typer.echo(pretty_workflows)
     return workflows_json
 
 
@@ -230,10 +230,10 @@ def scan_files_from_data_collection(
     headers = {"Authorization": f"Bearer {token}"}  # Token is now mandatory
 
     config_data = get_config(config_path)
-    print(config_data)
+    # print(config_data)
     config = validate_config(config_data, RootConfig)
     assert isinstance(config, RootConfig)
-    print(config)
+    # print(config)
 
     # validated_config = validate_all_workflows(config, user=user)
 
