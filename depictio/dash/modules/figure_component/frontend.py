@@ -12,7 +12,7 @@ import plotly.express as px
 import re
 from dash_iconify import DashIconify
 import ast
-from CLI_client.cli import list_workflows
+from depictio.dash.utils import list_workflows
 from depictio.dash.utils import (
     SELECTED_STYLE,
     UNSELECTED_STYLE,

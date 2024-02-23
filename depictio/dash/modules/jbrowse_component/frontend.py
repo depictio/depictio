@@ -7,8 +7,7 @@ from dash_iconify import DashIconify
 
 
 import dash_jbrowse
-from CLI_client.cli import list_workflows
-
+from depictio.dash.utils import list_workflows
 
 # Depictio imports
 from depictio.dash.modules.jbrowse_component.utils import (

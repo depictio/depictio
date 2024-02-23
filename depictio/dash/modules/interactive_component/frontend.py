@@ -4,8 +4,7 @@ import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import pandas as pd
 from dash_iconify import DashIconify
-from CLI_client.cli import list_workflows
-
+from depictio.dash.utils import list_workflows
 
 # Depictio imports
 from depictio.dash.modules.interactive_component.utils import (
