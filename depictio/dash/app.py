@@ -2,7 +2,7 @@ import sys
 
 import yaml
 
-from CLI_client.cli import list_workflows
+from depictio.dash.utils import list_workflows
 
 print(sys.path)
 

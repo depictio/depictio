@@ -3,12 +3,14 @@ from io import BytesIO
 import sys
 
 import bson
+from jose import JWTError
+import jwt
 
 sys.path.append("/Users/tweber/Gits/depictio")
 
 from depictio.api.v1.db import grid_fs, redis_cache
 from depictio.api.v1.configs.config import settings
-from CLI_client.cli import list_workflows
+# from CLI_client.cli import list_workflows
 import httpx
 from bson import ObjectId
 from dash import html, dcc, Input, Output, State, ALL, MATCH
@@ -54,6 +56,52 @@ def load_data():
 
 
 token = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2NGE4NDI4NDJiZjRmYTdkZWFhM2RiZWQiLCJleHAiOjE3ODQ5ODY3ODV9.a5bkSctoCNYXVh035g_wt-bio3iC3uuM9anFKiJOKrmBHDH0tmcL2O9Rc1HIQtAxCH-mc1K4q4aJsAO8oeayuPyA3w7FPIUnLsZGRHB8aBoDCoxEIpmACi0nEH8hF9xd952JuBt6ggchyMyrnxHC65Qc8mHC9PeylWonHvNl5jGZqi-uhbeLpsjuPcsyg76X2aqu_fip67eJ8mdr6yuII6DLykpfbzALpn0k66j79YzOzDuyn4IjBfBPWiqZzl_9oDMLK7ODebu6FTDmQL0ZGto_dxyIJtkf1CdxPaYkgiXVOh00Y6sXJ24jHSqfNP-dqvAQ3G8izuurq6B4SNgtDw"
+
+from depictio.api.v1.endpoints.user_endpoints.auth import (
+    ALGORITHM,
+    PUBLIC_KEY,
+    fetch_user_from_id,
+)
+
+def return_user_from_token(token: str) -> dict:
+    # print(token)
+    # print(PUBLIC_KEY)
+    # print(ALGORITHM)
+    try:
+        payload = jwt.decode(token, PUBLIC_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("sub")
+        if user_id is None:
+            print("Token is invalid or expired.")
+            raise sys.exit(code=1)
+        # Fetch user from the database or wherever it is stored
+        user = fetch_user_from_id(user_id)
+        return user
+    except JWTError as e:
+        print(f"Token verification failed: {e}")
+        raise sys.exit(code=1)
+
+
+def list_workflows(token: str = None):
+    if not token:
+        print("A valid token must be provided for authentication.")
+        raise sys.exit(code=1)
+
+    # print(token)
+    user = return_user_from_token(token)  # Decode the token to get the user information
+    if not user:
+        print("Invalid token or unable to decode user information.")
+        raise sys.exit(code=1)
+
+    # Set permissions with the user as both owner and viewer
+    headers = {"Authorization": f"Bearer {token}"}  # Token is now mandatory
+
+
+    # print(token)
+    workflows = httpx.get(f"{API_BASE_URL}/depictio/api/v1/workflows/get", headers=headers)
+    workflows_json = workflows.json()
+    # pretty_workflows = json.dumps(workflows_json, indent=4)
+    # typer.echo(pretty_workflows)
+    return workflows_json
 
 
 def list_workflows_for_dropdown():
