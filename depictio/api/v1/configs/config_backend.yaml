@@ -1,5 +1,5 @@
-# mongo_url: "mongodb://host.docker.internal:27018/"
-mongo_url: "mongodb://localhost:27018/"
+mongo_url: "mongodb://host.docker.internal:27018/"
+# mongo_url: "mongodb://localhost:27018/"
 mongo_db: "depictioDB"
 collections: 
   data_collection: "data_collection"
@@ -7,8 +7,12 @@ collections:
   runs_collection: "runs_collection"
   files_collection: "files_collection"
 
-redis_host: localhost
+redis_host: host.docker.internal
 redis_port: 6379
 redis_db: 0
 redis_cache_ttl: 300
 user_secret_key: mysecretkey
+
+fastapi:
+  host: "host.docker.internal"
+  port: 8058

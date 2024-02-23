@@ -35,7 +35,8 @@ from depictio.dash.utils import (
     get_columns_from_data_collection,
     load_deltatable,
 )
-
+from depictio.api.v1.configs.config import settings
+from depictio.api.v1.configs.config import API_BASE_URL
 
 def register_callbacks_figure_component(app):
     # Define the callback to update the specific parameters dropdowns
@@ -478,7 +479,7 @@ def register_callbacks_figure_component(app):
 
         import httpx
 
-        API_BASE_URL = "http://localhost:8058"
+        # API_BASE_URL = "http://localhost:8058"
         # API_BASE_URL = "http://host.docker.internal:8058"
 
 

@@ -18,7 +18,7 @@ from depictio.dash.utils import (
     get_columns_from_data_collection,
     load_deltatable,
 )
-
+from depictio.api.v1.configs.config import API_BASE_URL
 
 def register_callbacks_interactive_component(app):
     # Callback to update aggregation dropdown options based on the selected column
@@ -131,7 +131,7 @@ def register_callbacks_interactive_component(app):
 
         import httpx
 
-        API_BASE_URL = "http://localhost:8058"
+        # API_BASE_URL = "http://localhost:8058"
         # API_BASE_URL = "http://host.docker.internal:8058"
 
 
