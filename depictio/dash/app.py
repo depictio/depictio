@@ -12,43 +12,10 @@ import json
 import httpx
 
 import yaml
+from depictio.api.v1.configs.config import settings
 
 from depictio.dash.utils import list_workflows
-from depictio.api.v1.configs.config import API_BASE_URL
-
-# API_BASE_URL = f"http://{settings['fastapi']['host']}:{settings['fastapi']['port']}"
-
-print(sys.path)
-
-print("\n\n\n")
-print("STARTING")
-print("\n\n\n")
-
-
-
-
-
-min_step = 0
-max_step = 3
-active = 0
-
-token = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2NGE4NDI4NDJiZjRmYTdkZWFhM2RiZWQiLCJleHAiOjE3ODQ5ODY3ODV9.a5bkSctoCNYXVh035g_wt-bio3iC3uuM9anFKiJOKrmBHDH0tmcL2O9Rc1HIQtAxCH-mc1K4q4aJsAO8oeayuPyA3w7FPIUnLsZGRHB8aBoDCoxEIpmACi0nEH8hF9xd952JuBt6ggchyMyrnxHC65Qc8mHC9PeylWonHvNl5jGZqi-uhbeLpsjuPcsyg76X2aqu_fip67eJ8mdr6yuII6DLykpfbzALpn0k66j79YzOzDuyn4IjBfBPWiqZzl_9oDMLK7ODebu6FTDmQL0ZGto_dxyIJtkf1CdxPaYkgiXVOh00Y6sXJ24jHSqfNP-dqvAQ3G8izuurq6B4SNgtDw"
-
-
-app = dash.Dash(
-    __name__,
-    external_stylesheets=[
-        dbc.themes.BOOTSTRAP,
-        {
-            "href": "https://fonts.googleapis.com/icon?family=Material+Icons",
-            "rel": "stylesheet",
-        },
-    ],
-    suppress_callback_exceptions=True,
-    title="Depictio",
-)
-application = app.server
-
+from depictio.api.v1.configs.config import API_BASE_URL, TOKEN
 
 from depictio.dash.modules.card_component.frontend import (
     design_card,
@@ -71,11 +38,15 @@ from depictio.dash.layouts.stepper import (
     register_callbacks_stepper,
 )
 
-register_callbacks_card_component(app)
-register_callbacks_interactive_component(app)
-register_callbacks_figure_component(app)
-register_callbacks_jbrowse_component(app)
-register_callbacks_stepper(app)
+
+from depictio.dash.modules.figure_component.frontend import create_stepper_figure_button
+from depictio.dash.modules.card_component.frontend import create_stepper_card_button
+from depictio.dash.modules.interactive_component.frontend import (
+    create_stepper_interactive_button,
+)
+from depictio.dash.modules.jbrowse_component.frontend import (
+    create_stepper_jbrowse_button,
+)
 
 from depictio.dash.utils import (
     # create_initial_figure,
@@ -94,6 +65,41 @@ from depictio.dash.layouts.stepper import (
     # create_stepper_buttons,
     create_stepper_output,
 )
+
+
+
+
+
+min_step = 0
+max_step = 3
+active = 0
+
+
+
+app = dash.Dash(
+    __name__,
+    external_stylesheets=[
+        dbc.themes.BOOTSTRAP,
+        {
+            "href": "https://fonts.googleapis.com/icon?family=Material+Icons",
+            "rel": "stylesheet",
+        },
+    ],
+    suppress_callback_exceptions=True,
+    title="Depictio",
+)
+application = app.server
+
+
+
+register_callbacks_card_component(app)
+register_callbacks_interactive_component(app)
+register_callbacks_figure_component(app)
+register_callbacks_jbrowse_component(app)
+register_callbacks_stepper(app)
+
+
+
 
 
 # Data
@@ -775,14 +781,7 @@ def update_button_style(figure_clicks, card_clicks, interactive_clicks):
     return figure_style, card_style, interactive_style
 
 
-from depictio.dash.modules.figure_component.frontend import create_stepper_figure_button
-from depictio.dash.modules.card_component.frontend import create_stepper_card_button
-from depictio.dash.modules.interactive_component.frontend import (
-    create_stepper_interactive_button,
-)
-from depictio.dash.modules.jbrowse_component.frontend import (
-    create_stepper_jbrowse_button,
-)
+
 
 
 @app.callback(
@@ -800,7 +799,7 @@ def update_button_list(workflow_selection, data_collection_selection, n):
     print(workflow_selection, data_collection_selection)
     print("\n\n\n")
 
-    workflows = list_workflows(token)
+    workflows = list_workflows(TOKEN)
 
     workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_selection][0][
         "_id"
@@ -820,7 +819,7 @@ def update_button_list(workflow_selection, data_collection_selection, n):
     dc_specs = httpx.get(
         f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
         headers={
-            "Authorization": f"Bearer {token}",
+            "Authorization": f"Bearer {TOKEN}",
         },
     ).json()
 
@@ -909,7 +908,7 @@ def update_button_list(workflow_selection, data_collection_selection, n):
     prevent_initial_call=True,
 )
 def update_step_2(workflow_selection, data_collection_selection):
-    workflows = list_workflows(token)
+    workflows = list_workflows(TOKEN)
 
     workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_selection][0][
         "_id"
@@ -928,7 +927,7 @@ def update_step_2(workflow_selection, data_collection_selection):
     dc_specs = httpx.get(
         f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
         headers={
-            "Authorization": f"Bearer {token}",
+            "Authorization": f"Bearer {TOKEN}",
         },
     ).json()
 
@@ -1881,16 +1880,16 @@ def update_draggable_children(
             stored_add_button,
         )
 
-        raise dash.exceptions.PreventUpdate
+        # raise dash.exceptions.PreventUpdate
 
-        return (
-            updated_draggable_children,
-            updated_layouts,
-            # selected_year,
-            updated_layouts,
-            updated_draggable_children,
-            # selected_year,
-        )
+        # return (
+        #     updated_draggable_children,
+        #     updated_layouts,
+        #     # selected_year,
+        #     updated_layouts,
+        #     updated_draggable_children,
+        #     # selected_year,
+        # )
 
     # if triggered_input.startswith("add-plot-button-"):
     #     plot_type = triggered_input.replace("add-plot-button-", "")
@@ -2453,4 +2452,4 @@ def update_draggable_children(
 
 
 if __name__ == "__main__":
-    app.run_server(debug=True, host='0.0.0.0',  port="5080")
+    app.run_server(debug=True, host=settings.dash["host"],  port=settings_models.dash["port"])

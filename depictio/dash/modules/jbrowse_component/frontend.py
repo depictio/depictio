@@ -26,7 +26,7 @@ from depictio.dash.utils import (
     get_columns_from_data_collection,
     load_deltatable,
 )
-from depictio.api.v1.configs.config import API_BASE_URL
+from depictio.api.v1.configs.config import API_BASE_URL, TOKEN
 
 def register_callbacks_jbrowse_component(app):
     @app.callback(
@@ -42,9 +42,8 @@ def register_callbacks_jbrowse_component(app):
     def update_jbrowse(wf_id, dc_id, n_clicks, id):
         print("update_jbrowse", wf_id, dc_id, n_clicks)
 
-        token = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2NGE4NDI4NDJiZjRmYTdkZWFhM2RiZWQiLCJleHAiOjE3ODQ5ODY3ODV9.a5bkSctoCNYXVh035g_wt-bio3iC3uuM9anFKiJOKrmBHDH0tmcL2O9Rc1HIQtAxCH-mc1K4q4aJsAO8oeayuPyA3w7FPIUnLsZGRHB8aBoDCoxEIpmACi0nEH8hF9xd952JuBt6ggchyMyrnxHC65Qc8mHC9PeylWonHvNl5jGZqi-uhbeLpsjuPcsyg76X2aqu_fip67eJ8mdr6yuII6DLykpfbzALpn0k66j79YzOzDuyn4IjBfBPWiqZzl_9oDMLK7ODebu6FTDmQL0ZGto_dxyIJtkf1CdxPaYkgiXVOh00Y6sXJ24jHSqfNP-dqvAQ3G8izuurq6B4SNgtDw"
 
-        workflows = list_workflows(token)
+        workflows = list_workflows(TOKEN)
 
         workflow_id = [e for e in workflows if e["workflow_tag"] == wf_id][0]["_id"]
         data_collection_id = [
@@ -65,7 +64,7 @@ def register_callbacks_jbrowse_component(app):
         dc_specs = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
             headers={
-                "Authorization": f"Bearer {token}",
+                "Authorization": f"Bearer {TOKEN}",
             },
         ).json()
         print(dc_specs)

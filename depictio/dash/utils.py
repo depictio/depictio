@@ -1,35 +1,33 @@
-import collections
-from io import BytesIO
-import sys
-
-import bson
-from jose import JWTError
-import jwt
-
-sys.path.append("/Users/tweber/Gits/depictio")
-
-from depictio.api.v1.db import grid_fs, redis_cache
-from depictio.api.v1.configs.config import settings
-# from CLI_client.cli import list_workflows
-import httpx
 from bson import ObjectId
-from dash import html, dcc, Input, Output, State, ALL, MATCH
-import dash_bootstrap_components as dbc
-import dash_mantine_components as dmc
-import inspect
-import numpy as np
+from depictio.api.v1.configs.config import API_BASE_URL, TOKEN
+from depictio.api.v1.db import redis_cache
+from io import BytesIO
+from jose import JWTError
+import bson
+import collections
+import httpx
+import jwt
 import os, json
 import pandas as pd
 import polars as pl
-import plotly.express as px
-import re
+import sys
+
+sys.path.append("/Users/tweber/Gits/depictio")
+
+
+from depictio.api.v1.endpoints.user_endpoints.auth import (
+    ALGORITHM,
+    PUBLIC_KEY,
+    fetch_user_from_id,
+)
+
 
 # API_BASE_URL = "http://localhost:8058"
 # API_BASE_URL = "http://host.docker.internal:8058"
-print("settings")
-print(settings)
-print(settings.fastapi["host"])
-API_BASE_URL = f"http://{settings.fastapi['host']}:{settings.fastapi['port']}"
+# print("settings")
+# print(settings)
+# print(settings.fastapi["host"])
+# API_BASE_URL = f"http://{settings.fastapi['host']}:{settings.fastapi['port']}"
 
 
 SELECTED_STYLE = {
@@ -58,13 +56,6 @@ def load_data():
     return None
 
 
-token = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2NGE4NDI4NDJiZjRmYTdkZWFhM2RiZWQiLCJleHAiOjE3ODQ5ODY3ODV9.a5bkSctoCNYXVh035g_wt-bio3iC3uuM9anFKiJOKrmBHDH0tmcL2O9Rc1HIQtAxCH-mc1K4q4aJsAO8oeayuPyA3w7FPIUnLsZGRHB8aBoDCoxEIpmACi0nEH8hF9xd952JuBt6ggchyMyrnxHC65Qc8mHC9PeylWonHvNl5jGZqi-uhbeLpsjuPcsyg76X2aqu_fip67eJ8mdr6yuII6DLykpfbzALpn0k66j79YzOzDuyn4IjBfBPWiqZzl_9oDMLK7ODebu6FTDmQL0ZGto_dxyIJtkf1CdxPaYkgiXVOh00Y6sXJ24jHSqfNP-dqvAQ3G8izuurq6B4SNgtDw"
-
-from depictio.api.v1.endpoints.user_endpoints.auth import (
-    ALGORITHM,
-    PUBLIC_KEY,
-    fetch_user_from_id,
-)
 
 def return_user_from_token(token: str) -> dict:
     # print(token)
@@ -108,7 +99,7 @@ def list_workflows(token: str = None):
 
 
 def list_workflows_for_dropdown():
-    workflows_model_list = list_workflows(token)
+    workflows_model_list = list_workflows(TOKEN)
     workflows = [wf["workflow_tag"] for wf in workflows_model_list]
     workflows_dict_for_dropdown = [{"label": wf, "value": wf} for wf in workflows]
     return workflows_dict_for_dropdown
@@ -120,7 +111,7 @@ def list_data_collections_for_dropdown(workflow_tag: str = None):
     else:
         data_collections = [
             dc["data_collection_tag"]
-            for wf in list_workflows(token)
+            for wf in list_workflows(TOKEN)
             for dc in wf["data_collections"]
             if wf["workflow_tag"] == workflow_tag
         ]
@@ -140,7 +131,7 @@ def get_columns_from_data_collection(
     # print("\n\n\n")
     # print("get_columns_from_data_collection")
 
-    workflows = list_workflows(token)
+    workflows = list_workflows(TOKEN)
     workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_id][0]["_id"]
     data_collection_id = [
         f
@@ -154,7 +145,7 @@ def get_columns_from_data_collection(
         response = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
             headers={
-                "Authorization": f"Bearer {token}",
+                "Authorization": f"Bearer {TOKEN}",
             },
         )
         # print(response)
@@ -175,7 +166,7 @@ def get_columns_from_data_collection(
 
 
 def load_deltatable(workflow_id: str, data_collection_id: str, cols: list = None, raw: bool = False):
-    workflows = list_workflows(token)
+    workflows = list_workflows(TOKEN)
     # print(workflows)
 
     if workflow_id is None or data_collection_id is None:
@@ -225,7 +216,7 @@ def load_deltatable(workflow_id: str, data_collection_id: str, cols: list = None
         # if not, load the data collection
 
         headers = {
-            "Authorization": f"Bearer {token}",
+            "Authorization": f"Bearer {TOKEN}",
         }
 
 
@@ -250,7 +241,7 @@ def load_deltatable(workflow_id: str, data_collection_id: str, cols: list = None
             response = httpx.get(
                 f"{API_BASE_URL}/depictio/api/v1/deltatables/get/{workflow_id}/{data_collection_id}",
                 headers={
-                    "Authorization": f"Bearer {token}",
+                    "Authorization": f"Bearer {TOKEN}",
                 },
             )
 
