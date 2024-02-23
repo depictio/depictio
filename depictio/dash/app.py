@@ -1,8 +1,22 @@
 import sys
+# Import necessary libraries
+import numpy as np
+from dash import html, dcc, Input, Output, State, ALL, MATCH, ctx, callback
+import dash
+import dash_bootstrap_components as dbc
+import dash_mantine_components as dmc
+import dash_draggable
+import ast
+import dash_ag_grid as dag
+import json
+import httpx
 
 import yaml
 
 from depictio.dash.utils import list_workflows
+from depictio.api.v1.configs.config import API_BASE_URL
+
+# API_BASE_URL = f"http://{settings['fastapi']['host']}:{settings['fastapi']['port']}"
 
 print(sys.path)
 
@@ -11,22 +25,8 @@ print("STARTING")
 print("\n\n\n")
 
 
-# Import necessary libraries
-import numpy as np
-from dash import html, dcc, Input, Output, State, ALL, MATCH, ctx, callback
-import dash
-import dash_bootstrap_components as dbc
-import dash_mantine_components as dmc
-import dash_draggable
 
-import inspect
-import pandas as pd
-import plotly.express as px
-import re
-from dash_iconify import DashIconify
-import ast
-import dash_ag_grid as dag
-import json
+
 
 min_step = 0
 max_step = 3
@@ -813,9 +813,7 @@ def update_button_list(workflow_selection, data_collection_selection, n):
         if f["data_collection_tag"] == data_collection_selection
     ][0]["_id"]
 
-    import httpx
 
-    API_BASE_URL = "http://localhost:8058"
 
     print(data_collection_selection)
 
@@ -924,9 +922,6 @@ def update_step_2(workflow_selection, data_collection_selection):
         if f["data_collection_tag"] == data_collection_selection
     ][0]["_id"]
 
-    import httpx
-
-    API_BASE_URL = "http://localhost:8058"
 
     # print(data_collection_selection)
 
@@ -1520,7 +1515,7 @@ def update_draggable_children(
             #     if f["data_collection_tag"] == data_collection_label[0]
             # ][0]["_id"]
 
-            # API_BASE_URL = "http://localhost:8058"
+            # # API_BASE_URL = "http://localhost:8058"
 
             # dc_specs = httpx.get(
             #     f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
@@ -2458,4 +2453,4 @@ def update_draggable_children(
 
 
 if __name__ == "__main__":
-    app.run_server(debug=True, port="5080")
+    app.run_server(debug=True, host='0.0.0.0',  port="5080")

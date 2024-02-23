@@ -715,6 +715,7 @@ class Settings(BaseModel):
     redis_db: int
     redis_cache_ttl: int
     user_secret_key: str
+    fastapi: Dict[str, Union[str, int]]
 
     @classmethod
     def from_yaml(cls, path: str):

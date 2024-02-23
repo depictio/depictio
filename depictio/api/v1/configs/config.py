@@ -23,3 +23,5 @@ from depictio.api.v1.utils import get_config, validate_config, validate_all_work
 settings = validate_config(
     get_config("depictio/api/v1/configs/config_backend.yaml"), Settings
 )
+API_BASE_URL = f"http://{settings.fastapi['host']}:{settings.fastapi['port']}"
+

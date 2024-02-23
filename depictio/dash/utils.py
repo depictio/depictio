@@ -24,9 +24,12 @@ import polars as pl
 import plotly.express as px
 import re
 
-API_BASE_URL = "http://localhost:8058"
+# API_BASE_URL = "http://localhost:8058"
 # API_BASE_URL = "http://host.docker.internal:8058"
-
+print("settings")
+print(settings)
+print(settings.fastapi["host"])
+API_BASE_URL = f"http://{settings.fastapi['host']}:{settings.fastapi['port']}"
 
 
 SELECTED_STYLE = {
