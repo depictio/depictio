@@ -34,10 +34,12 @@ from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user
 
 workflows_endpoint_router = APIRouter()
 
-data_collections_collection = db[settings.collections.data_collection]
-workflows_collection = db[settings.collections.workflow_collection]
-runs_collection = db[settings.collections.runs_collection]
-files_collection = db[settings.collections.files_collection]
+
+data_collections_collection = db[settings.mongodb.collections.data_collection]
+workflows_collection = db[settings.mongodb.collections.workflow_collection]
+runs_collection = db[settings.mongodb.collections.runs_collection]
+files_collection = db[settings.mongodb.collections.files_collection]
+users_collection = db["users"]
 fschunks_collection = db["fs.chunks"]
 fsfiles_collection = db["fs.files"]
 permissions_collection = db["permissions"]

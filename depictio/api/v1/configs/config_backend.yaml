@@ -1,6 +1,7 @@
 mongodb:
+  # host: "localhost"
   host: "host.docker.internal"
-  port: 27018
+  port: "27018"
   # mongo_url: "mongodb://localhost:27018/"
   db_name: "depictioDB"
   collections: 
