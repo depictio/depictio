@@ -698,27 +698,3 @@ class GridFSAggregatedFile(BaseModel):
 
 ########
 
-
-class Collections(BaseModel):
-    data_collection: str
-    workflow_collection: str
-    runs_collection: str
-    files_collection: str
-
-
-class Settings(BaseModel):
-    mongo_url: str
-    mongo_db: str
-    collections: Collections
-    redis_host: str
-    redis_port: int
-    redis_db: int
-    redis_cache_ttl: int
-    user_secret_key: str
-    fastapi: Dict[str, Union[str, int]]
-
-    @classmethod
-    def from_yaml(cls, path: str):
-        with open(path, "r") as f:
-            data = yaml.safe_load(f)
-        return cls(**data)

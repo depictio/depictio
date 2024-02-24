@@ -13,6 +13,8 @@ import httpx
 
 import yaml
 from depictio.api.v1.configs.config import settings
+print("settings")
+print(settings)
 
 from depictio.dash.utils import list_workflows
 from depictio.api.v1.configs.config import API_BASE_URL, TOKEN
@@ -823,7 +825,8 @@ def update_button_list(workflow_selection, data_collection_selection, n):
         },
     ).json()
 
-    # print(dc_specs)
+    print("dc_specs")
+    print(dc_specs)
 
     data_collection_type = dc_specs["config"]["type"]
 
@@ -2452,4 +2455,4 @@ def update_draggable_children(
 
 
 if __name__ == "__main__":
-    app.run_server(debug=True, host=settings.dash["host"],  port=settings_models.dash["port"])
+    app.run_server(debug=True, host=settings.dash.host,  port=settings.dash.port)
