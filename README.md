@@ -18,6 +18,12 @@ Depictio is currently in the development phase and is not yet available for gene
 
 ## Current setup
 
+### Conda
+
+### Docker
+
+### Kubernetes
+
 
 Clone the repo:
 
