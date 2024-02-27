@@ -1765,7 +1765,7 @@ def update_draggable_children(
             )
         else:
             # Load data from the file if it exists
-            loaded_data = load_data()
+            loaded_data = load_depictio_data()
             if loaded_data:
                 return (
                     loaded_data["stored_children_data"],
