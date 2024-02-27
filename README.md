@@ -12,17 +12,32 @@ Depictio is an innovative web-based platform currently under development, aimed 
 * Robust Backend Technologies: Utilizes FastAPI, MongoDB, and Redis cache for high-performance data management and processing.
 * Intuitive Frontend: Built on Plotly Dash, a ReactJS-based framework, complemented by visualization tools like JBrowse and Cytoscape.
 
-## Development Status
+## Current Status
 
 Depictio is currently in the development phase and is not yet available for general use. The platform is being built with an emphasis on versatility and adaptability to various biological research needs.
 
-## Current setup
+## Architecture
 
-### Conda
+![Depictio architecture](./docs/images/excalidraw.png "Depictio architecture")
+
+### Kubernetes 
+
+- API (FastAPI)
+- NoSQL database (MongoDB)
+- Interactive Frontend (plotly Dash)
+- Caching mechanism (redis)
+- S3 bucket system (MinIO)
+- Genome browser (Jbrowse)
+
+### Local
+
+- CLI client
+
+## Installation
+
+Depictio microservices architecture aims to be deployed on a Kubernetes instance. Before transitioning to kubernetes, the current reproduces a similar setup using a docker-compose layer that encapsulates the different services that will be deployed on K8S. A Command Line Interface (CLI) was developed to interact with the API running on K8S in order to register workflows and data collections, scan files, aggregate data over time and so on. 
 
 ### Docker
-
-### Kubernetes
 
 
 Clone the repo:
@@ -31,37 +46,36 @@ Clone the repo:
 git clone https://github.com/weber8thomas/depictio.git
 ```
 
-Create the conda environments (for the frontend and the FastAPI instance):
-
-```
-mamba env create -f conda_envs/depictio_backend.yaml
-mamba env create -f conda_envs/depictio_frontend.yaml
-```
-
-
-
-
-
-For database and redis cache:
 
 ```
 docker-compose up -d
 ```
 
-Export PYTHONPATH (temporary) and run the API instance
 
-```
-export PYTHONPATH=$PYTHONPATH:DEPICTIO_LOCATION
-python depictio/api/run.py
-```
 
-Export PYTHONPATH (temporary) and run the frontend instance
+### Kubernetes
 
-```
-export PYTHONPATH=$PYTHONPATH:DEPICTIO_LOCATION
-python depictio/dash/app.py
-```
+Ongoing 
 
+
+## Depictio data YAML config setup
+
+
+## Modularity
+
+### API
+
+### Frontend components
+
+## Jbrowse config 
+
+## Validation and models
+
+
+## Others
+
+
+- config_backend.yaml
 
 
 ## Biological Use-Cases
