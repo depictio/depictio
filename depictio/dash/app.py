@@ -1,7 +1,5 @@
-import sys
-# Import necessary libraries
 import numpy as np
-from dash import html, dcc, Input, Output, State, ALL, MATCH, ctx, callback
+from dash import html, Input, Output, State, ALL, MATCH, ctx
 import dash
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
@@ -10,15 +8,14 @@ import ast
 import dash_ag_grid as dag
 import json
 import httpx
-
 import yaml
-from depictio.api.v1.configs.config import settings
-print("settings")
-print(settings)
 
+# Depictio imports
+from depictio.api.v1.configs.config import settings
 from depictio.dash.utils import list_workflows
 from depictio.api.v1.configs.config import API_BASE_URL, TOKEN
 
+# Depictio components imports - design step
 from depictio.dash.modules.card_component.frontend import (
     design_card,
     register_callbacks_card_component,
@@ -36,11 +33,12 @@ from depictio.dash.modules.jbrowse_component.frontend import (
     register_callbacks_jbrowse_component,
 )
 
+# Depictio layout imports
 from depictio.dash.layouts.stepper import (
     register_callbacks_stepper,
 )
 
-
+# Depictio components imports - button step
 from depictio.dash.modules.figure_component.frontend import create_stepper_figure_button
 from depictio.dash.modules.card_component.frontend import create_stepper_card_button
 from depictio.dash.modules.interactive_component.frontend import (
@@ -50,9 +48,10 @@ from depictio.dash.modules.jbrowse_component.frontend import (
     create_stepper_jbrowse_button,
 )
 
+# Depictio utils imports
 from depictio.dash.utils import (
     # create_initial_figure,
-    load_data,
+    load_depictio_data,
     load_deltatable,
     list_workflows_for_dropdown,
     list_data_collections_for_dropdown,
@@ -61,23 +60,24 @@ from depictio.dash.utils import (
     UNSELECTED_STYLE,
 )
 
-
+# Depictio layout imports for stepper
 from depictio.dash.layouts.stepper import (
     # create_stepper_dropdowns,
     # create_stepper_buttons,
     create_stepper_output,
 )
 
+# Depictio layout imports for header
+from depictio.dash.layouts.header import design_header
 
 
-
-
+# TODO: move to depictio.dash.utils or somewhere else
 min_step = 0
 max_step = 3
 active = 0
 
 
-
+# Start the app
 app = dash.Dash(
     __name__,
     external_stylesheets=[
@@ -93,7 +93,7 @@ app = dash.Dash(
 application = app.server
 
 
-
+# Register callbacks for the design step
 register_callbacks_card_component(app)
 register_callbacks_interactive_component(app)
 register_callbacks_figure_component(app)
@@ -101,15 +101,9 @@ register_callbacks_jbrowse_component(app)
 register_callbacks_stepper(app)
 
 
-
-
-
-# Data
-
-
-def return_deltatable(
-    workflow_id: str = None, data_collection_id: str = None, raw=False
-):
+# TODO : move to depictio.dash.utils or somewhere else
+# DeltaTable load
+def return_deltatable(workflow_id: str = None, data_collection_id: str = None, raw=False):
     df = load_deltatable(workflow_id, data_collection_id, raw=raw)
     # print(df)
     return df
@@ -118,197 +112,27 @@ def return_deltatable(
 df = load_deltatable(workflow_id=None, data_collection_id=None)
 
 
-# df = pd.read_csv(
-#     "https://raw.githubusercontent.com/plotly/datasets/master/gapminderDataFiveYear.csv"
-# )
-# print(df)
+# Load depictio data from JSON
+data = load_depictio_data()
 
 
-data = load_data()
-# data = dict()
+# Init layout and children if data is available, else set to empty
 init_layout = data["stored_layout_data"] if data else {}
 init_children = data["stored_children_data"] if data else list()
-init_nclicks_add_button = data["stored_add_button"] if data else {"count": 0}
-init_nclicks_edit_dashboard_mode_button = (
-    data["stored_edit_dashboard_mode_button"] if data else [int(0)]
-)
-if data:
-    print("Data loaded from JSON")
-    print("stored_add_button")
-    print(data["stored_add_button"])
-    print("stored_edit_dashboard_mode_button")
-    print(data["stored_edit_dashboard_mode_button"])
-    print(init_nclicks_add_button)
-    print(init_nclicks_edit_dashboard_mode_button)
-else:
-    print("data")
-    print(data)
-    print(init_nclicks_add_button)
-    print(init_nclicks_edit_dashboard_mode_button)
 
-backend_components = html.Div(
-    [
-        dcc.Interval(
-            id="interval",
-            interval=1000,  # Save input value every 1 second
-            n_intervals=0,
-        ),
-        dcc.Interval(
-            id="interval_long",
-            interval=50000,  # Save input value every 1 second
-            n_intervals=0,
-        ),
-        dcc.Store(id="stored-children", storage_type="memory"),
-        # dcc.Store(id="stored-children", storage_type="session"),
-        dcc.Store(id="stored-layout", storage_type="memory"),
-        # dcc.Store(id="stored-layout", storage_type="session"),
-    ]
-)
-
-modal_save_button = dbc.Modal(
-    [
-        dbc.ModalHeader(
-            html.H1(
-                "Success!",
-                className="text-success",
-            )
-        ),
-        dbc.ModalBody(
-            html.H5(
-                "Your amazing dashboard was successfully saved!",
-                className="text-success",
-            ),
-            style={"background-color": "#F0FFF0"},
-        ),
-        dbc.ModalFooter(
-            dbc.Button(
-                "Close",
-                id="success-modal-close",
-                className="ml-auto",
-                color="success",
-            )
-        ),
-    ],
-    id="success-modal-dashboard",
-    centered=True,
-)
+# Generate header and backend components
+header, backend_components = design_header(data)
 
 
-header_style = {
-    "display": "flex",
-    "alignItems": "center",
-    "justifyContent": "space-between",
-    "padding": "10px 20px",
-    "backgroundColor": "#f5f5f5",
-    "borderBottom": "1px solid #eaeaea",
-    "fontFamily": "'Open Sans', sans-serif",
-}
-
-title_style = {"fontWeight": "bold", "fontSize": "24px", "color": "#333"}
-
-button_style = {"margin": "0 10px", "fontWeight": "500"}
-
-header = html.Div(
-    [
-        html.H1("Depictio", style=title_style),
-        html.Div(
-            [
-                dmc.Button(
-                    "Add new component",
-                    id="add-button",
-                    size="lg",
-                    radius="xl",
-                    variant="gradient",
-                    n_clicks=init_nclicks_add_button["count"],
-                    style=button_style,
-                ),
-                modal_save_button,
-                dmc.Button(
-                    "Save",
-                    id="save-button-dashboard",
-                    size="lg",
-                    radius="xl",
-                    variant="gradient",
-                    gradient={"from": "teal", "to": "lime", "deg": 105},
-                    n_clicks=0,
-                    style={"...": "..."},
-                ),  # Add your specific styles here
-            ],
-            style={"display": "flex", "alignItems": "center"},
-        ),
-        dbc.Checklist(
-            id="edit-dashboard-mode-button",
-            style={"fontSize": "22px"},
-            options=[{"label": "Edit dashboard", "value": 0}],
-            value=init_nclicks_edit_dashboard_mode_button,
-            switch=True,
-        ),
-        dcc.Store(
-            id="stored-add-button",
-            storage_type="memory",
-            # storage_type="session",
-            data=init_nclicks_add_button,
-        ),
-        dcc.Store(
-            id="stored-edit-dashboard-mode-button",
-            storage_type="memory",
-            # storage_type="session",
-            data=init_nclicks_edit_dashboard_mode_button,
-        ),
-    ],
-    style=header_style,
-)
-
-
-# header = html.Div(
-#     [
-#         html.H1("Depictio"),
-#         dmc.Button(
-#             "Add new component",
-#             id="add-button",
-#             size="lg",
-#             radius="xl",
-#             variant="gradient",
-#             n_clicks=init_nclicks_add_button["count"],
-#         ),
-#         modal_save_button,
-#         dmc.Button(
-#             "Save",
-#             id="save-button-dashboard",
-#             size="lg",
-#             radius="xl",
-#             variant="gradient",
-#             gradient={"from": "teal", "to": "lime", "deg": 105},
-#             n_clicks=0,
-#             style={"margin-left": "5px"},
-#         ),
-#         dbc.Checklist(
-#             id="edit-dashboard-mode-button",
-#             # color="secondary",
-#             style={"margin-left": "20px", "font-size": "22px"},
-#             # size="lg",
-#             # n_clicks=0,
-#             options=[
-#                 {"label": "Edit dashboard", "value": 0},
-#             ],
-#             value=init_nclicks_edit_dashboard_mode_button,
-#             switch=True,
-#         ),
-
-#     ],
-# )
-
-
-# init_layout = dict()
-# init_children = list()
-
-
+# APP Layout
 app.layout = dbc.Container(
     [
         html.Div(
             [
+                # Backend components & header
                 backend_components,
                 header,
+                # Draggable layout
                 dash_draggable.ResponsiveGridLayout(
                     id="draggable",
                     clearSavedLayout=True,
@@ -330,9 +154,6 @@ app.layout = dbc.Container(
     prevent_initial_call=True,
 )
 def close_modal(n_clicks):
-    print("\n\n\n")
-    print("close_modal")
-    print(n_clicks)
     if n_clicks > 0:
         return False
     return True
@@ -377,7 +198,6 @@ def toggle_success_modal_dashboard(n_save, n_close, is_open):
     State("stored-children", "data"),
     State("stored-edit-dashboard-mode-button", "data"),
     State("stored-add-button", "data"),
-    # State("stored-year", "data"),
     prevent_initial_call=True,
 )
 def save_data_dashboard(
@@ -386,31 +206,21 @@ def save_data_dashboard(
     stored_children_data,
     edit_dashboard_mode_button,
     add_button,
-    # stored_year_data,
 ):
-    print("save_data_dashboard")
-    print(n_clicks)
-    print(edit_dashboard_mode_button)
-    print(add_button)
-    # print(dash.callback_context.triggered[0]["prop_id"].split(".")[0], n_clicks)
     if n_clicks > 0:
         data = {
             "stored_layout_data": stored_layout_data,
             "stored_children_data": stored_children_data,
             "stored_edit_dashboard_mode_button": edit_dashboard_mode_button,
             "stored_add_button": add_button,
-            # "stored_year_data": stored_year_data,
         }
-        with open("data.json", "w") as file:
+        with open("depictio_data.json", "w") as file:
             json.dump(data, file)
         return n_clicks
     return n_clicks
 
 
 def enable_box_edit_mode(box, switch_state=True):
-    print("\n\n\n")
-    print("enable_box_edit_mode")
-    # print(box["props"]["children"]["props"]["children"][1])
     btn_index = box["props"]["id"]["index"]
     edit_button = dbc.Button(
         "Edit",
@@ -463,14 +273,8 @@ def enable_box_edit_mode_dev(sub_child, switch_state=True):
         print("List")
 
         # Identify if edit and remove buttons are present
-        edit_button_exists = any(
-            child.get("props", {}).get("id", {}).get("type") == "edit-box-button"
-            for child in box["props"]["children"]
-        )
-        remove_button_exists = any(
-            child.get("props", {}).get("id", {}).get("type") == "remove-box-button"
-            for child in box["props"]["children"]
-        )
+        edit_button_exists = any(child.get("props", {}).get("id", {}).get("type") == "edit-box-button" for child in box["props"]["children"])
+        remove_button_exists = any(child.get("props", {}).get("id", {}).get("type") == "remove-box-button" for child in box["props"]["children"])
 
         print(switch_state, edit_button_exists, remove_button_exists)
 
@@ -498,9 +302,7 @@ def enable_box_edit_mode_dev(sub_child, switch_state=True):
             )
 
             # Place buttons at the beginning of the children list
-            box["props"]["children"] = [remove_button, edit_button] + box["props"][
-                "children"
-            ]
+            box["props"]["children"] = [remove_button, edit_button] + box["props"]["children"]
 
         # If switch_state is false and buttons are present, remove them
         elif not switch_state and edit_button_exists and remove_button_exists:
@@ -531,10 +333,7 @@ def analyze_structure(struct, depth=0):
     if isinstance(struct, list):
         # print("  " * depth + f"Depth {depth} Type: List with {len(struct)} elements")
         for idx, child in enumerate(struct):
-            print(
-                "  " * depth
-                + f"Element {idx} ID: {child.get('props', {}).get('id', None)}"
-            )
+            print("  " * depth + f"Element {idx} ID: {child.get('props', {}).get('id', None)}")
             analyze_structure(child, depth=depth + 1)
         return
 
@@ -558,17 +357,12 @@ def analyze_structure(struct, depth=0):
     elif isinstance(children, list):
         print("  " * depth + f"Depth {depth} Type: List with {len(children)} elements")
         for idx, child in enumerate(children):
-            print(
-                "  " * depth
-                + f"Element {idx} ID: {child.get('props', {}).get('id', None)}"
-            )
+            print("  " * depth + f"Element {idx} ID: {child.get('props', {}).get('id', None)}")
             # Recursive call
             analyze_structure(child, depth=depth + 1)
 
 
-def analyze_structure_and_get_deepest_type(
-    struct, depth=0, max_depth=0, deepest_type=None
-):
+def analyze_structure_and_get_deepest_type(struct, depth=0, max_depth=0, deepest_type=None):
     """
     Recursively analyze a nested plotly dash structure and return the type of the deepest element (excluding 'stored-metadata-component').
 
@@ -586,10 +380,7 @@ def analyze_structure_and_get_deepest_type(
     current_type = None
     if isinstance(struct, dict):
         id_value = struct.get("props", {}).get("id", None)
-        if (
-            isinstance(id_value, dict)
-            and id_value.get("type") != "stored-metadata-component"
-        ):
+        if isinstance(id_value, dict) and id_value.get("type") != "stored-metadata-component":
             current_type = id_value.get("type")
 
     if depth > max_depth:
@@ -600,9 +391,7 @@ def analyze_structure_and_get_deepest_type(
 
     if isinstance(struct, list):
         for child in struct:
-            max_depth, deepest_type = analyze_structure_and_get_deepest_type(
-                child, depth=depth + 1, max_depth=max_depth, deepest_type=deepest_type
-            )
+            max_depth, deepest_type = analyze_structure_and_get_deepest_type(child, depth=depth + 1, max_depth=max_depth, deepest_type=deepest_type)
     elif isinstance(struct, dict):
         children = struct.get("props", {}).get("children", None)
         if isinstance(children, (list, dict)):
@@ -618,9 +407,7 @@ def analyze_structure_and_get_deepest_type(
 
 @app.callback(
     Output({"type": "add-content", "index": MATCH}, "children"),
-    Output(
-        {"type": "test-container", "index": MATCH}, "children", allow_duplicate=True
-    ),
+    Output({"type": "test-container", "index": MATCH}, "children", allow_duplicate=True),
     [
         Input({"type": "btn-done", "index": MATCH}, "n_clicks"),
     ],
@@ -754,9 +541,7 @@ def update(back, next_, workflow_selection, data_selection, btn_component, curre
     [
         Input({"type": "btn-option", "index": MATCH, "value": "Figure"}, "n_clicks"),
         Input({"type": "btn-option", "index": MATCH, "value": "Card"}, "n_clicks"),
-        Input(
-            {"type": "btn-option", "index": MATCH, "value": "Interactive"}, "n_clicks"
-        ),
+        Input({"type": "btn-option", "index": MATCH, "value": "Interactive"}, "n_clicks"),
     ],
     prevent_initial_call=True,
 )
@@ -783,9 +568,6 @@ def update_button_style(figure_clicks, card_clicks, interactive_clicks):
     return figure_style, card_style, interactive_style
 
 
-
-
-
 @app.callback(
     Output({"type": "buttons-list", "index": MATCH}, "children"),
     Output({"type": "store-list", "index": MATCH}, "children"),
@@ -803,18 +585,8 @@ def update_button_list(workflow_selection, data_collection_selection, n):
 
     workflows = list_workflows(TOKEN)
 
-    workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_selection][0][
-        "_id"
-    ]
-    data_collection_id = [
-        f
-        for e in workflows
-        if e["_id"] == workflow_id
-        for f in e["data_collections"]
-        if f["data_collection_tag"] == data_collection_selection
-    ][0]["_id"]
-
-
+    workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_selection][0]["_id"]
+    data_collection_id = [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["data_collection_tag"] == data_collection_selection][0]["_id"]
 
     print(data_collection_selection)
 
@@ -830,15 +602,12 @@ def update_button_list(workflow_selection, data_collection_selection, n):
 
     data_collection_type = dc_specs["config"]["type"]
 
-
     if data_collection_type == "Table":
         (
             figure_stepper_button,
             figure_stepper_button_store,
         ) = create_stepper_figure_button(n, disabled=False)
-        card_stepper_button, card_stepper_button_store = create_stepper_card_button(
-            n, disabled=False
-        )
+        card_stepper_button, card_stepper_button_store = create_stepper_card_button(n, disabled=False)
 
         (
             interactive_stepper_button,
@@ -862,9 +631,7 @@ def update_button_list(workflow_selection, data_collection_selection, n):
             figure_stepper_button,
             figure_stepper_button_store,
         ) = create_stepper_figure_button(n, disabled=True)
-        card_stepper_button, card_stepper_button_store = create_stepper_card_button(
-            n, disabled=True
-        )
+        card_stepper_button, card_stepper_button_store = create_stepper_card_button(n, disabled=True)
 
         (
             interactive_stepper_button,
@@ -913,17 +680,8 @@ def update_button_list(workflow_selection, data_collection_selection, n):
 def update_step_2(workflow_selection, data_collection_selection):
     workflows = list_workflows(TOKEN)
 
-    workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_selection][0][
-        "_id"
-    ]
-    data_collection_id = [
-        f
-        for e in workflows
-        if e["_id"] == workflow_id
-        for f in e["data_collections"]
-        if f["data_collection_tag"] == data_collection_selection
-    ][0]["_id"]
-
+    workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_selection][0]["_id"]
+    data_collection_id = [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["data_collection_tag"] == data_collection_selection][0]["_id"]
 
     # print(data_collection_selection)
 
@@ -934,75 +692,9 @@ def update_step_2(workflow_selection, data_collection_selection):
         },
     ).json()
 
-    # print(dc_specs)
-
-    # n = 0
-
-    # store_list = [
-    #     figure_stepper_button_store,
-    #     card_stepper_button_store,
-    #     interactive_stepper_button_store,
-    #     jbrowse_stepper_button_store,
-    # ]
-    # data_collection_type  = dc_specs["config"]["type"]
-
-    # if data_collection_type == "Table":
-    #     figure_stepper_button, figure_stepper_button_store = create_stepper_figure_button(n, disabled=False)
-    #     card_stepper_button, card_stepper_button_store = create_stepper_card_button(n, disabled=False)
-
-    #     (
-    #         interactive_stepper_button,
-    #         interactive_stepper_button_store,
-    #     ) = create_stepper_interactive_button(n, disabled=False)
-
-    #     (
-    #         jbrowse_stepper_button,
-    #         jbrowse_stepper_button_store,
-    #     ) = create_stepper_jbrowse_button(n, disabled=True)
-
-    #     standard_components = [
-    #         figure_stepper_button,
-    #         card_stepper_button,
-    #         interactive_stepper_button,
-    #     ]
-    #     special_components = [jbrowse_stepper_button]
-
-    # elif data_collection_type == "Genome Browser":
-
-    #     figure_stepper_button, figure_stepper_button_store = create_stepper_figure_button(n, disabled=True)
-    #     card_stepper_button, card_stepper_button_store = create_stepper_card_button(n, disabled=True)
-
-    #     (
-    #         interactive_stepper_button,
-    #         interactive_stepper_button_store,
-    #     ) = create_stepper_interactive_button(n, disabled=True)
-
-    #     (
-    #         jbrowse_stepper_button,
-    #         jbrowse_stepper_button_store,
-    #     ) = create_stepper_jbrowse_button(n, disabled=False)
-
-    #     standard_components = [
-    #         figure_stepper_button,
-    #         card_stepper_button,
-    #         interactive_stepper_button,
-    #     ]
-    #     special_components = [jbrowse_stepper_button]
-
-    # buttons_list = html.Div([
-    #     html.H5("Standard components", style={"margin-top": "20px"}),
-    #     html.Hr(),
-    #     dmc.Center(dbc.Row(standard_components)),
-    #     html.Br(),
-    #     html.H5("Special components", style={"margin-top": "20px"}),
-    #     html.Hr(),
-    #     dmc.Center(dbc.Row(special_components)),
-    # ])
 
     if workflow_selection is not None and data_collection_selection is not None:
-        config_title = dmc.Title(
-            "Data collection config", order=3, align="left", weight=500
-        )
+        config_title = dmc.Title("Data collection config", order=3, align="left", weight=500)
         json_formatted = yaml.dump(dc_specs["config"], indent=2)
         prism = dbc.Col(
             [
@@ -1032,9 +724,7 @@ def update_step_2(workflow_selection, data_collection_selection):
                                 "width": "20%",
                             },
                         ),
-                        html.Td(
-                            dc_specs["config"]["type"], style={"text-align": "left"}
-                        ),
+                        html.Td(dc_specs["config"]["type"], style={"text-align": "left"}),
                     ]
                 ),
                 html.Tr(
@@ -1087,30 +777,17 @@ def update_step_2(workflow_selection, data_collection_selection):
 
         layout = [dc_main_info, html.Hr(), main_info, html.Hr()]
         if dc_specs["config"]["type"] == "Table":
-            df = return_deltatable(
-                workflow_selection, data_collection_selection, raw=True
-            )
-            cols = get_columns_from_data_collection(
-                workflow_selection, data_collection_selection
-            )
+            df = return_deltatable(workflow_selection, data_collection_selection, raw=True)
+            cols = get_columns_from_data_collection(workflow_selection, data_collection_selection)
             # print(cols)
-            columnDefs = [
-                {"field": c, "headerTooltip": f"Column type: {e['type']}"}
-                for c, e in cols.items()
-            ]
+            columnDefs = [{"field": c, "headerTooltip": f"Column type: {e['type']}"} for c, e in cols.items()]
             # print(columnDefs)
 
             run_nb = cols["depictio_run_id"]["specs"]["nunique"]
-            run_nb_title = dmc.Title(
-                f"Run Nb : {run_nb}", order=3, align="left", weight=500
-            )
+            run_nb_title = dmc.Title(f"Run Nb : {run_nb}", order=3, align="left", weight=500)
 
-            data_previz_title = dmc.Title(
-                "Data previsualization", order=3, align="left", weight=500
-            )
-            config_title = dmc.Title(
-                "Data collection configuration", order=3, align="left", weight=500
-            )
+            data_previz_title = dmc.Title("Data previsualization", order=3, align="left", weight=500)
+            config_title = dmc.Title("Data collection configuration", order=3, align="left", weight=500)
             # print(df.head(20).to_dict("records"))
             # cellClicked, cellDoubleClicked, cellRendererData, cellValueChanged, className, columnDefs, columnSize, columnSizeOptions, columnState, csvExportParams, dangerously_allow_code, dashGridOptions, defaultColDef, deleteSelectedRows, deselectAll, detailCellRendererParams, enableEnterpriseModules, exportDataAsCsv, filterModel, getDetailRequest, getDetailResponse, getRowId, getRowStyle, getRowsRequest, getRowsResponse, id, licenseKey, masterDetail, paginationGoTo, paginationInfo, persisted_props, persistence, persistence_type, resetColumnState, rowClass, rowClassRules, rowData, rowModelType, rowStyle, rowTransaction, scrollTo, selectAll, selectedRows, style, suppressDragLeaveHidesColumns, updateColumnState, virtualRowData
             grid = dag.AgGrid(
@@ -1154,13 +831,9 @@ def update_step_2(workflow_selection, data_collection_selection):
 
         elif dc_specs["config"]["type"] == "Genome Browser":
             if dc_specs["config"]["jbrowse_template_location"]:
-                template_json = json.load(
-                    open(dc_specs["config"]["jbrowse_template_location"])
-                )
+                template_json = json.load(open(dc_specs["config"]["jbrowse_template_location"]))
                 print(template_json)
-                template_title = dmc.Title(
-                    "JBrowse template", order=3, align="left", weight=500
-                )
+                template_title = dmc.Title("JBrowse template", order=3, align="left", weight=500)
                 prism_template = dbc.Col(
                     [
                         dmc.Prism(
@@ -1226,31 +899,19 @@ def update_step_2(
         "Genome browser",
         "Graph",
         "Map",
-    ]    
+    ]
 
-    if (
-        workflow_selection is not None
-        and data_collection_selection is not None
-        and btn_component is not None
-    ):
+    if workflow_selection is not None and data_collection_selection is not None and btn_component is not None:
         # print("update_step_2")
         # retrieve value in btn_component that is higher than the previous value in store_btn_component at the same index
-        btn_index = [
-            i
-            for i, (x, y) in enumerate(zip(btn_component, store_btn_component))
-            if x > y
-        ]
+        btn_index = [i for i, (x, y) in enumerate(zip(btn_component, store_btn_component)) if x > y]
         if btn_index:
             component_selected = components_list[btn_index[0]]
             id = ids[btn_index[0]]
 
             if component_selected not in ["Genome browser", "Graph", "Map"]:
-                
-                df = return_deltatable(
-                    workflow_selection, data_collection_selection, raw=True
-                )
 
-
+                df = return_deltatable(workflow_selection, data_collection_selection, raw=True)
 
             if component_selected == "Figure":
                 return design_figure(id, df), btn_component
@@ -1272,7 +933,7 @@ def update_step_2(
                 return dash.no_update, dash.no_update
             elif component_selected == "Map":
                 return dash.no_update, dash.no_update
-            else: 
+            else:
                 return html.Div("Not implemented yet"), dash.no_update
 
         else:
@@ -1318,9 +979,7 @@ def update_step_2(
         Input("add-button", "n_clicks"),
         Input("edit-dashboard-mode-button", "value"),
         State("stored-add-button", "data"),
-        Input(
-            {"type": "remove-box-button", "index": dash.dependencies.ALL}, "n_clicks"
-        ),
+        Input({"type": "remove-box-button", "index": dash.dependencies.ALL}, "n_clicks"),
         Input(
             {
                 "type": "interactive-component",
@@ -1347,11 +1006,10 @@ def update_draggable_children(
     # n_clicks, selected_year, current_draggable_children, current_layouts, stored_figures
     *args,
 ):
-    
+
     print("\n\n\n")
     print("-------------------------")
     print("update_draggable_children")
-
 
     # workflow_label = args[-17]
     # data_collection_label = args[-16]
@@ -1371,7 +1029,6 @@ def update_draggable_children(
     stored_figures = args[-2]
     stored_edit_dashboard = args[-1]
 
-
     ctx = dash.callback_context
     ctx_triggered = ctx.triggered
 
@@ -1383,9 +1040,7 @@ def update_draggable_children(
 
     switch_state_index = -1 if switch_state is True else -1
 
-    stored_metadata_interactive = [
-        e for e in stored_metadata if e["component_type"] == "interactive_component"
-    ]
+    stored_metadata_interactive = [e for e in stored_metadata if e["component_type"] == "interactive_component"]
     # print(stored_metadata_interactive)
     interactive_components_dict = {
         id["index"]: {"value": value, "metadata": metadata}
@@ -1408,12 +1063,7 @@ def update_draggable_children(
         value = interactive_components_dict[triggered_input_eval_index]["value"]
         # print(value)
         # print(interactive_components_dict[triggered_input_eval_index])
-        if (
-            interactive_components_dict[triggered_input_eval_index]["metadata"][
-                "interactive_component_type"
-            ]
-            != "TextInput"
-        ):
+        if interactive_components_dict[triggered_input_eval_index]["metadata"]["interactive_component_type"] != "TextInput":
             check_value = True if value is not None else False
         else:
             check_value = True if value is not "" else False
@@ -1476,12 +1126,6 @@ def update_draggable_children(
             n = ctx.triggered[0]["value"]
             new_plot_id = f"{n}"
 
-
-
-
-
-
-
             # print("\n\n\n")
 
             # print("workflow_label")
@@ -1526,11 +1170,6 @@ def update_draggable_children(
             #     },
             # ).json()
 
-
-
-
-
-
             # stepper_dropdowns = create_stepper_dropdowns(n)
             # stepper_buttons = create_stepper_buttons(n, dc_specs["config"]["type"])
             stepper_output = create_stepper_output(
@@ -1540,8 +1179,6 @@ def update_draggable_children(
                 # dc_specs["config"]["type"],
                 # n, active, new_plot_id, stepper_dropdowns, stepper_buttons, dc_specs["config"]["type"]
             )
-
-
 
             stored_add_button["count"] += 1
 
@@ -1632,11 +1269,7 @@ def update_draggable_children(
                     else:
                         n_join_dc = []
 
-                    check_join = [
-                        e["dc_id"]
-                        for sub_join in n_join_dc
-                        if e["dc_id"] in sub_join["with_dc"]
-                    ]
+                    check_join = [e["dc_id"] for sub_join in n_join_dc if e["dc_id"] in sub_join["with_dc"]]
                     # print("CHECK JOIN")
                     # print(n_join_dc)
                     # print(check_join)
@@ -1645,9 +1278,7 @@ def update_draggable_children(
                     # print((len(check_join) > 0))
 
                     if e["wf_id"] == n_dict["metadata"]["wf_id"]:
-                        if (e["dc_id"] == n_dict["metadata"]["dc_id"]) or (
-                            len(check_join) > 0
-                        ):
+                        if (e["dc_id"] == n_dict["metadata"]["dc_id"]) or (len(check_join) > 0):
                             # print(e["component_type"])
                             # print(e["wf_id"])
                             # print(e["dc_id"])
@@ -1669,35 +1300,20 @@ def update_draggable_children(
                                     # print(n_dict)
                                     # print(n_dict["value"])
                                     # print(n_dict["metadata"]["column_value"])
-                                    if n_dict["metadata"][
-                                        "interactive_component_type"
-                                    ] in ["Select", "MultiSelect"]:
+                                    if n_dict["metadata"]["interactive_component_type"] in ["Select", "MultiSelect"]:
                                         # n_dict["value"] = list(n_dict["value"]) if type(n_dict["value"]) is str else n_dict["value"]
                                         print('n_dict["value"]')
                                         print(n_dict["value"])
 
                                         if n_dict["value"] is not None:
-                                            n_dict["value"] = (
-                                                list(n_dict["value"])
-                                                if type(n_dict["value"]) is str
-                                                else n_dict["value"]
-                                            )
-                                            new_df = new_df[
-                                                new_df[
-                                                    n_dict["metadata"]["column_value"]
-                                                ].isin(n_dict["value"])
-                                            ]
+                                            n_dict["value"] = list(n_dict["value"]) if type(n_dict["value"]) is str else n_dict["value"]
+                                            new_df = new_df[new_df[n_dict["metadata"]["column_value"]].isin(n_dict["value"])]
                                         else:
                                             new_df = new_df
-                                    elif (
-                                        n_dict["metadata"]["interactive_component_type"]
-                                        == "TextInput"
-                                    ):
+                                    elif n_dict["metadata"]["interactive_component_type"] == "TextInput":
                                         if n_dict["value"] != "":
                                             new_df = new_df[
-                                                new_df[
-                                                    n_dict["metadata"]["column_value"]
-                                                ].str.contains(
+                                                new_df[n_dict["metadata"]["column_value"]].str.contains(
                                                     n_dict["value"],
                                                     regex=True,
                                                     na=False,
@@ -1706,42 +1322,19 @@ def update_draggable_children(
                                         else:
                                             new_df = new_df
 
-                                elif (
-                                    n_dict["metadata"]["type"] == "int64"
-                                    or n_dict["metadata"]["type"] == "float64"
-                                ):
+                                elif n_dict["metadata"]["type"] == "int64" or n_dict["metadata"]["type"] == "float64":
                                     # print(
                                     #     n_dict["metadata"]["interactive_component_type"]
                                     # )
                                     # print(n_dict["value"])
 
                                     # handle if the input is a range or a single value
-                                    if (
-                                        n_dict["metadata"]["interactive_component_type"]
-                                        == "RangeSlider"
-                                    ):
+                                    if n_dict["metadata"]["interactive_component_type"] == "RangeSlider":
                                         new_df = new_df[
-                                            (
-                                                new_df[
-                                                    n_dict["metadata"]["column_value"]
-                                                ]
-                                                >= n_dict["value"][0]
-                                            )
-                                            & (
-                                                new_df[
-                                                    n_dict["metadata"]["column_value"]
-                                                ]
-                                                <= n_dict["value"][1]
-                                            )
+                                            (new_df[n_dict["metadata"]["column_value"]] >= n_dict["value"][0]) & (new_df[n_dict["metadata"]["column_value"]] <= n_dict["value"][1])
                                         ]
-                                    elif (
-                                        n_dict["metadata"]["interactive_component_type"]
-                                        == "Slider"
-                                    ):
-                                        new_df = new_df[
-                                            new_df[n_dict["metadata"]["column_value"]]
-                                            == n_dict["value"]
-                                        ]
+                                    elif n_dict["metadata"]["interactive_component_type"] == "Slider":
+                                        new_df = new_df[new_df[n_dict["metadata"]["column_value"]] == n_dict["value"]]
 
                             # print("\n\n\n")
                             # print("new_df after filtering")
@@ -1770,31 +1363,20 @@ def update_draggable_children(
                                     if int(child["props"]["id"]) == int(e["index"]):
                                         # print("EQUAL")
                                         for k, sub_child in enumerate(
-                                            child["props"]["children"][0]["props"][
-                                                "children"
-                                            ]["props"]["children"][-1]["props"][
-                                                "children"
-                                            ]["props"]["children"]
+                                            child["props"]["children"][0]["props"]["children"]["props"]["children"][-1]["props"]["children"]["props"]["children"]
                                         ):
                                             # print("sub_child")
                                             # print(sub_child)
                                             # print(analyze_structure(sub_child))
                                             if "id" in sub_child["props"]:
-                                                if (
-                                                    sub_child["props"]["id"]["type"]
-                                                    == "card-value"
-                                                ):
+                                                if sub_child["props"]["id"]["type"] == "card-value":
                                                     # print(sub_child["props"]["children"])
 
                                                     aggregation = e["aggregation"]
-                                                    new_value = new_df[
-                                                        e["column_value"]
-                                                    ].agg(aggregation)
+                                                    new_value = new_df[e["column_value"]].agg(aggregation)
                                                     if type(new_value) is np.float64:
                                                         new_value = round(new_value, 2)
-                                                    sub_child["props"][
-                                                        "children"
-                                                    ] = new_value
+                                                    sub_child["props"]["children"] = new_value
                                                     # print(sub_child["props"]["children"])
                                                     continue
 
@@ -1838,29 +1420,18 @@ def update_draggable_children(
                                     if int(child["props"]["id"]) == int(e["index"]):
                                         # for k, sub_child in enumerate(child["props"]["children"][0]["props"]["children"]["props"]["children"]["props"]["children"]):
                                         for k, sub_child in enumerate(
-                                            child["props"]["children"][0]["props"][
-                                                "children"
-                                            ]["props"]["children"][-1]["props"][
-                                                "children"
-                                            ]["props"]["children"]
+                                            child["props"]["children"][0]["props"]["children"]["props"]["children"][-1]["props"]["children"]["props"]["children"]
                                         ):
                                             # print("sub_child")
                                             # print(sub_child)
                                             # print(analyze_structure(sub_child))
-                                            if (
-                                                sub_child["props"]["id"]["type"]
-                                                == "graph"
-                                            ):
+                                            if sub_child["props"]["id"]["type"] == "graph":
                                                 from depictio.dash.modules.figure_component.utils import (
                                                     plotly_vizu_dict,
                                                 )
 
-                                                new_figure = plotly_vizu_dict[
-                                                    e["visu_type"].lower()
-                                                ](new_df, **e["dict_kwargs"])
-                                                sub_child["props"][
-                                                    "figure"
-                                                ] = new_figure
+                                                new_figure = plotly_vizu_dict[e["visu_type"].lower()](new_df, **e["dict_kwargs"])
+                                                sub_child["props"]["figure"] = new_figure
 
                                 else:
                                     # print("OTHER")
@@ -2072,11 +1643,7 @@ def update_draggable_children(
         print("Input ID:", input_id)
 
         # Use list comprehension to filter
-        current_draggable_children = [
-            child
-            for child in current_draggable_children
-            if child["props"]["id"] != input_id
-        ]
+        current_draggable_children = [child for child in current_draggable_children if child["props"]["id"] != input_id]
 
         # elif "remove-" in triggered_input and [e for e in args[-10] if e]:
         #     print("\nREMOVE")
@@ -2455,4 +2022,4 @@ def update_draggable_children(
 
 
 if __name__ == "__main__":
-    app.run_server(debug=True, host=settings.dash.host,  port=settings.dash.port)
+    app.run_server(debug=True, host=settings.dash.host, port=settings.dash.port)
