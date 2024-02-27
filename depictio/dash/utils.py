@@ -47,9 +47,9 @@ UNSELECTED_STYLE = {
 }
 
 
-def load_data():
-    if os.path.exists("data.json"):
-        with open("data.json", "r") as file:
+def load_depictio_data():
+    if os.path.exists("depictio_data.json"):
+        with open("depictio_data.json", "r") as file:
             data = json.load(file)
             # print(data.keys())
         return data

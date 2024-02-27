@@ -63,6 +63,11 @@ Ongoing
 
 ## Modularity
 
+## General design
+
+![alt text](docs/images/schema.png)
+
+
 ### API
 
 ### Frontend components
