@@ -1,0 +1,82 @@
+import json
+from dash import html, Input, Output, State, ALL, MATCH, ctx
+import dash
+import dash_bootstrap_components as dbc
+import dash_mantine_components as dmc
+from dash_iconify import DashIconify
+import httpx
+import yaml
+
+
+# Depictio components imports - design step
+from depictio.dash.modules.card_component.frontend import design_card
+from depictio.dash.modules.interactive_component.frontend import design_interactive
+from depictio.dash.modules.figure_component.frontend import design_figure
+from depictio.dash.modules.jbrowse_component.frontend import design_jbrowse
+
+# Depictio utils imports
+from depictio.dash.utils import load_deltatable
+
+
+def register_callbacks_stepper_part_three(app):
+
+    @app.callback(
+        Output({"type": "output-stepper-step-3", "index": MATCH}, "children"),
+        Output({"type": "store-btn-option", "index": MATCH, "value": ALL}, "data"),
+        Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
+        Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+        Input({"type": "btn-option", "index": MATCH, "value": ALL}, "n_clicks"),
+        Input({"type": "store-btn-option", "index": MATCH, "value": ALL}, "data"),
+        State({"type": "btn-option", "index": MATCH, "value": ALL}, "id"),
+        # prevent_initial_call=True,
+    )
+    def update_step_2(
+        workflow_selection,
+        data_collection_selection,
+        btn_component,
+        store_btn_component,
+        ids,
+    ):
+
+        components_list = [
+            "Figure",
+            "Card",
+            "Interactive",
+            "Genome browser",
+            "Graph",
+            "Map",
+        ]
+
+        if workflow_selection is not None and data_collection_selection is not None and btn_component is not None:
+            # print("update_step_2")
+            # retrieve value in btn_component that is higher than the previous value in store_btn_component at the same index
+            btn_index = [i for i, (x, y) in enumerate(zip(btn_component, store_btn_component)) if x > y]
+            if btn_index:
+                component_selected = components_list[btn_index[0]]
+                id = ids[btn_index[0]]
+
+                if component_selected not in ["Genome browser", "Graph", "Map"]:
+
+                    df = load_deltatable(workflow_selection, data_collection_selection, raw=True)
+
+                if component_selected == "Figure":
+                    return design_figure(id, df), btn_component
+                elif component_selected == "Card":
+                    return design_card(id, df), btn_component
+                elif component_selected == "Interactive":
+                    return design_interactive(id, df), btn_component
+                elif component_selected == "Genome browser":
+                    return design_jbrowse(id), btn_component
+                # TODO: implement the following components
+                elif component_selected == "Graph":
+                    return dash.no_update, dash.no_update
+                elif component_selected == "Map":
+                    return dash.no_update, dash.no_update
+                else:
+                    return html.Div("Not implemented yet"), dash.no_update
+
+            else:
+                raise dash.exceptions.PreventUpdate
+
+        else:
+            raise dash.exceptions.PreventUpdate
