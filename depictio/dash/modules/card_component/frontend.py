@@ -4,12 +4,10 @@ import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 from dash_iconify import DashIconify
 
-
-
+# Depictio imports
 from depictio.dash.utils import list_workflows
 from depictio.api.v1.configs.config import API_BASE_URL, TOKEN
 
-# Depictio imports
 from depictio.dash.modules.card_component.utils import (
     agg_functions,
 )
