@@ -5,64 +5,30 @@ import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import dash_draggable
 import ast
-import dash_ag_grid as dag
-import json
-import httpx
-import yaml
 
 # Depictio imports
 from depictio.api.v1.configs.config import settings
-from depictio.api.v1.configs.config import API_BASE_URL, TOKEN
 
 # Depictio components imports - design step
-from depictio.dash.modules.card_component.frontend import (
-    design_card,
-    register_callbacks_card_component,
-)
-from depictio.dash.modules.interactive_component.frontend import (
-    design_interactive,
-    register_callbacks_interactive_component,
-)
-from depictio.dash.modules.figure_component.frontend import (
-    design_figure,
-    register_callbacks_figure_component,
-)
-from depictio.dash.modules.jbrowse_component.frontend import (
-    design_jbrowse,
-    register_callbacks_jbrowse_component,
-)
+from depictio.dash.modules.card_component.frontend import register_callbacks_card_component
+from depictio.dash.modules.interactive_component.frontend import register_callbacks_interactive_component
+from depictio.dash.modules.figure_component.frontend import register_callbacks_figure_component
+from depictio.dash.modules.jbrowse_component.frontend import register_callbacks_jbrowse_component
 
 # Depictio layout imports
-from depictio.dash.layouts.stepper import (
-    register_callbacks_stepper,
-)
+from depictio.dash.layouts.stepper import register_callbacks_stepper
+from depictio.dash.layouts.stepper_parts.part_one import register_callbacks_stepper_part_one
+from depictio.dash.layouts.stepper_parts.part_two import register_callbacks_stepper_part_two
+from depictio.dash.layouts.stepper_parts.part_three import register_callbacks_stepper_part_three
 from depictio.dash.layouts.header import register_callbacks_header
 from depictio.dash.layouts.draggable import register_callbacks_draggable
 
 
-# Depictio components imports - button step
-from depictio.dash.modules.figure_component.frontend import create_stepper_figure_button
-from depictio.dash.modules.card_component.frontend import create_stepper_card_button
-from depictio.dash.modules.interactive_component.frontend import (
-    create_stepper_interactive_button,
-)
-from depictio.dash.modules.jbrowse_component.frontend import (
-    create_stepper_jbrowse_button,
-)
-
 # Depictio utils imports
 from depictio.dash.utils import (
-    # create_initial_figure,
-    list_workflows,
-    analyze_structure,
     analyze_structure_and_get_deepest_type,
     load_depictio_data,
     load_deltatable,
-    list_workflows_for_dropdown,
-    list_data_collections_for_dropdown,
-    get_columns_from_data_collection,
-    SELECTED_STYLE,
-    UNSELECTED_STYLE,
 )
 
 # Depictio layout imports for stepper
@@ -94,14 +60,20 @@ app = dash.Dash(
 )
 
 
-# Register callbacks
+# Register callbacks for layout
+register_callbacks_stepper(app)
+register_callbacks_stepper_part_one(app)
+register_callbacks_stepper_part_two(app)
+register_callbacks_stepper_part_three(app)
+register_callbacks_header(app)
+register_callbacks_draggable(app)
+
+
+# Register callbacks for components
 register_callbacks_card_component(app)
 register_callbacks_interactive_component(app)
 register_callbacks_figure_component(app)
 register_callbacks_jbrowse_component(app)
-register_callbacks_stepper(app)
-register_callbacks_header(app)
-register_callbacks_draggable(app)
 
 
 # Load depictio data from JSON
@@ -140,417 +112,6 @@ app.layout = dbc.Container(
 )
 
 
-# TODO: optimise to match the modular architecture
-@app.callback(
-    [
-        Output({"type": "btn-option", "index": MATCH, "value": "Figure"}, "style"),
-        Output({"type": "btn-option", "index": MATCH, "value": "Card"}, "style"),
-        Output({"type": "btn-option", "index": MATCH, "value": "Interactive"}, "style"),
-    ],
-    [
-        Input({"type": "btn-option", "index": MATCH, "value": "Figure"}, "n_clicks"),
-        Input({"type": "btn-option", "index": MATCH, "value": "Card"}, "n_clicks"),
-        Input({"type": "btn-option", "index": MATCH, "value": "Interactive"}, "n_clicks"),
-    ],
-    prevent_initial_call=True,
-)
-def update_button_style(figure_clicks, card_clicks, interactive_clicks):
-    ctx_triggered = dash.callback_context.triggered
-
-    # Reset all buttons to unselected style
-    figure_style = UNSELECTED_STYLE
-    card_style = UNSELECTED_STYLE
-    interactive_style = UNSELECTED_STYLE
-
-    # Check which button was clicked and update its style
-    if ctx_triggered:
-        button_id = ctx_triggered[0]["prop_id"].split(".")[0]
-        button_value = eval(button_id)["value"]
-
-        if button_value == "Figure":
-            figure_style = SELECTED_STYLE
-        elif button_value == "Card":
-            card_style = SELECTED_STYLE
-        elif button_value == "Interactive":
-            interactive_style = SELECTED_STYLE
-
-    return figure_style, card_style, interactive_style
-
-
-@app.callback(
-    Output({"type": "buttons-list", "index": MATCH}, "children"),
-    Output({"type": "store-list", "index": MATCH}, "children"),
-    Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
-    Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
-    Input("add-button", "n_clicks"),
-    prevent_initial_call=True,
-)
-def update_button_list(workflow_selection, data_collection_selection, n):
-    print("\n\n\n")
-    print("update_button_list")
-    print(n)
-    print(workflow_selection, data_collection_selection)
-    print("\n\n\n")
-
-    workflows = list_workflows(TOKEN)
-
-    workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_selection][0]["_id"]
-    data_collection_id = [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["data_collection_tag"] == data_collection_selection][0]["_id"]
-
-    print(data_collection_selection)
-
-    dc_specs = httpx.get(
-        f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
-        headers={
-            "Authorization": f"Bearer {TOKEN}",
-        },
-    ).json()
-
-    print("dc_specs")
-    print(dc_specs)
-
-    data_collection_type = dc_specs["config"]["type"]
-
-    if data_collection_type == "Table":
-        (
-            figure_stepper_button,
-            figure_stepper_button_store,
-        ) = create_stepper_figure_button(n, disabled=False)
-        card_stepper_button, card_stepper_button_store = create_stepper_card_button(n, disabled=False)
-
-        (
-            interactive_stepper_button,
-            interactive_stepper_button_store,
-        ) = create_stepper_interactive_button(n, disabled=False)
-
-        (
-            jbrowse_stepper_button,
-            jbrowse_stepper_button_store,
-        ) = create_stepper_jbrowse_button(n, disabled=True)
-
-        standard_components = [
-            figure_stepper_button,
-            card_stepper_button,
-            interactive_stepper_button,
-        ]
-        special_components = [jbrowse_stepper_button]
-
-    elif data_collection_type == "Genome Browser":
-        (
-            figure_stepper_button,
-            figure_stepper_button_store,
-        ) = create_stepper_figure_button(n, disabled=True)
-        card_stepper_button, card_stepper_button_store = create_stepper_card_button(n, disabled=True)
-
-        (
-            interactive_stepper_button,
-            interactive_stepper_button_store,
-        ) = create_stepper_interactive_button(n, disabled=True)
-
-        (
-            jbrowse_stepper_button,
-            jbrowse_stepper_button_store,
-        ) = create_stepper_jbrowse_button(n, disabled=False)
-
-        standard_components = [
-            figure_stepper_button,
-            card_stepper_button,
-            interactive_stepper_button,
-        ]
-        special_components = [jbrowse_stepper_button]
-
-    buttons_list = html.Div(
-        [
-            html.H5("Standard components", style={"margin-top": "20px"}),
-            html.Hr(),
-            dmc.Center(dbc.Row(standard_components)),
-            html.Br(),
-            html.H5("Special components", style={"margin-top": "20px"}),
-            html.Hr(),
-            dmc.Center(dbc.Row(special_components)),
-        ]
-    )
-
-    store_list = [
-        figure_stepper_button_store,
-        card_stepper_button_store,
-        interactive_stepper_button_store,
-        jbrowse_stepper_button_store,
-    ]
-    return buttons_list, store_list
-
-
-@app.callback(
-    Output({"type": "dropdown-output", "index": MATCH}, "children"),
-    Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
-    Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
-    prevent_initial_call=True,
-)
-def update_step_2(workflow_selection, data_collection_selection):
-    workflows = list_workflows(TOKEN)
-
-    workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_selection][0]["_id"]
-    data_collection_id = [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["data_collection_tag"] == data_collection_selection][0]["_id"]
-
-    # print(data_collection_selection)
-
-    dc_specs = httpx.get(
-        f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
-        headers={
-            "Authorization": f"Bearer {TOKEN}",
-        },
-    ).json()
-
-    if workflow_selection is not None and data_collection_selection is not None:
-        config_title = dmc.Title("Data collection config", order=3, align="left", weight=500)
-        json_formatted = yaml.dump(dc_specs["config"], indent=2)
-        prism = dbc.Col(
-            [
-                dmc.AccordionPanel(
-                    dmc.Prism(
-                        f"""{json_formatted}""",
-                        language="yaml",
-                        colorScheme="light",
-                        noCopy=True,
-                    )
-                ),
-            ],
-            width=6,
-        )
-
-        dc_main_info = dmc.Title("Main info", order=3, align="left", weight=500)
-
-        main_info = html.Table(
-            [
-                html.Tr(
-                    [
-                        html.Td(
-                            "Type:",
-                            style={
-                                "font-weight": "bold",
-                                "text-align": "left",
-                                "width": "20%",
-                            },
-                        ),
-                        html.Td(dc_specs["config"]["type"], style={"text-align": "left"}),
-                    ]
-                ),
-                html.Tr(
-                    [
-                        html.Td(
-                            "Name:",
-                            style={
-                                "font-weight": "bold",
-                                "text-align": "left",
-                                "width": "20%",
-                            },
-                        ),
-                        html.Td(
-                            dc_specs["data_collection_tag"],
-                            style={"text-align": "left"},
-                        ),
-                    ]
-                ),
-                html.Tr(
-                    [
-                        html.Td(
-                            "Description:",
-                            style={
-                                "font-weight": "bold",
-                                "text-align": "left",
-                                "width": "20%",
-                            },
-                        ),
-                        html.Td(dc_specs["description"], style={"text-align": "left"}),
-                    ]
-                ),
-                html.Tr(
-                    [
-                        html.Td(
-                            "MongoDB ID:",
-                            style={
-                                "font-weight": "bold",
-                                "text-align": "left",
-                                "width": "20%",
-                            },
-                        ),
-                        html.Td(dc_specs["_id"], style={"text-align": "left"}),
-                    ]
-                ),
-            ],
-            style={"width": "100%", "table-layout": "fixed"},
-        )
-
-        # turn main_info into 4 rows with 2 columns
-
-        layout = [dc_main_info, html.Hr(), main_info, html.Hr()]
-        if dc_specs["config"]["type"] == "Table":
-            df = load_deltatable(workflow_selection, data_collection_selection, raw=True)
-            cols = get_columns_from_data_collection(workflow_selection, data_collection_selection)
-            # print(cols)
-            columnDefs = [{"field": c, "headerTooltip": f"Column type: {e['type']}"} for c, e in cols.items()]
-            # print(columnDefs)
-
-            run_nb = cols["depictio_run_id"]["specs"]["nunique"]
-            run_nb_title = dmc.Title(f"Run Nb : {run_nb}", order=3, align="left", weight=500)
-
-            data_previz_title = dmc.Title("Data previsualization", order=3, align="left", weight=500)
-            config_title = dmc.Title("Data collection configuration", order=3, align="left", weight=500)
-            # print(df.head(20).to_dict("records"))
-            # cellClicked, cellDoubleClicked, cellRendererData, cellValueChanged, className, columnDefs, columnSize, columnSizeOptions, columnState, csvExportParams, dangerously_allow_code, dashGridOptions, defaultColDef, deleteSelectedRows, deselectAll, detailCellRendererParams, enableEnterpriseModules, exportDataAsCsv, filterModel, getDetailRequest, getDetailResponse, getRowId, getRowStyle, getRowsRequest, getRowsResponse, id, licenseKey, masterDetail, paginationGoTo, paginationInfo, persisted_props, persistence, persistence_type, resetColumnState, rowClass, rowClassRules, rowData, rowModelType, rowStyle, rowTransaction, scrollTo, selectAll, selectedRows, style, suppressDragLeaveHidesColumns, updateColumnState, virtualRowData
-            grid = dag.AgGrid(
-                id="get-started-example-basic",
-                rowData=df.head(2000).to_dict("records"),
-                columnDefs=columnDefs,
-                dashGridOptions={
-                    "tooltipShowDelay": 500,
-                    "pagination": True,
-                    "paginationAutoPageSize": False,
-                    "animateRows": False,
-                },
-                columnSize="sizeToFit",
-                defaultColDef={"resizable": True, "sortable": True, "filter": True},
-                # use the parameters above
-            )
-            # layout += [run_nb_title, html.Hr(), data_previz_title, html.Hr(), grid]
-            # print(layout)
-
-            layout += [
-                dmc.Accordion(
-                    children=[
-                        dmc.AccordionItem(
-                            [
-                                dmc.AccordionControl(data_previz_title),
-                                dmc.AccordionPanel(grid),
-                            ],
-                            value="data_collection_table_previz",
-                        ),
-                        dmc.AccordionItem(
-                            [
-                                dmc.AccordionControl(config_title),
-                                dmc.AccordionPanel(prism),
-                            ],
-                            value="data_collection_config",
-                        ),
-                    ],
-                ),
-                # buttons_list
-            ]
-
-        elif dc_specs["config"]["type"] == "Genome Browser":
-            if dc_specs["config"]["jbrowse_template_location"]:
-                template_json = json.load(open(dc_specs["config"]["jbrowse_template_location"]))
-                print(template_json)
-                template_title = dmc.Title("JBrowse template", order=3, align="left", weight=500)
-                prism_template = dbc.Col(
-                    [
-                        dmc.Prism(
-                            f"""{json.dumps(template_json, indent=2)}""",
-                            language="json",
-                            colorScheme="light",
-                            noCopy=True,
-                        ),
-                    ],
-                    width=6,
-                )
-                layout += [
-                    dmc.Accordion(
-                        children=[
-                            dmc.AccordionItem(
-                                [
-                                    dmc.AccordionControl(config_title),
-                                    dmc.AccordionPanel(prism),
-                                ],
-                                value="data_collection_config",
-                            ),
-                            dmc.AccordionItem(
-                                [
-                                    dmc.AccordionControl(template_title),
-                                    dmc.AccordionPanel(prism_template),
-                                ],
-                                value="jbrowse_template",
-                            ),
-                        ],
-                    )
-                    # ,buttons_list
-                ]
-
-    else:
-        layout = html.Div("No data to display")
-
-    return layout
-
-
-# TODO: optimise to match the modular architecture
-@app.callback(
-    Output({"type": "output-stepper-step-3", "index": MATCH}, "children"),
-    Output({"type": "store-btn-option", "index": MATCH, "value": ALL}, "data"),
-    Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
-    Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
-    Input({"type": "btn-option", "index": MATCH, "value": ALL}, "n_clicks"),
-    Input({"type": "store-btn-option", "index": MATCH, "value": ALL}, "data"),
-    State({"type": "btn-option", "index": MATCH, "value": ALL}, "id"),
-    # prevent_initial_call=True,
-)
-def update_step_2(
-    workflow_selection,
-    data_collection_selection,
-    btn_component,
-    store_btn_component,
-    ids,
-):
-
-    components_list = [
-        "Figure",
-        "Card",
-        "Interactive",
-        "Genome browser",
-        "Graph",
-        "Map",
-    ]
-
-    if workflow_selection is not None and data_collection_selection is not None and btn_component is not None:
-        # print("update_step_2")
-        # retrieve value in btn_component that is higher than the previous value in store_btn_component at the same index
-        btn_index = [i for i, (x, y) in enumerate(zip(btn_component, store_btn_component)) if x > y]
-        if btn_index:
-            component_selected = components_list[btn_index[0]]
-            id = ids[btn_index[0]]
-
-            if component_selected not in ["Genome browser", "Graph", "Map"]:
-
-                df = load_deltatable(workflow_selection, data_collection_selection, raw=True)
-
-            if component_selected == "Figure":
-                return design_figure(id, df), btn_component
-            elif component_selected == "Card":
-                return design_card(id, df), btn_component
-            elif component_selected == "Interactive":
-                return design_interactive(id, df), btn_component
-            elif component_selected == "Genome browser":
-                print("Genome browser")
-                return_values = design_jbrowse(id)
-                print("return_values")
-                print(return_values)
-                print("btn_component")
-                print(btn_component)
-
-                return return_values, btn_component
-            # TODO: update this
-            elif component_selected == "Graph":
-                return dash.no_update, dash.no_update
-            elif component_selected == "Map":
-                return dash.no_update, dash.no_update
-            else:
-                return html.Div("Not implemented yet"), dash.no_update
-
-        else:
-            raise dash.exceptions.PreventUpdate
-
-    else:
-        raise dash.exceptions.PreventUpdate
-
-
 @app.callback(
     [
         Output("draggable", "children"),
@@ -560,18 +121,10 @@ def update_step_2(
         Output("stored-edit-dashboard-mode-button", "data"),
         Output("stored-add-button", "data"),
     ],
-    # [
-    #     Input(f"add-plot-button-{plot_type.lower().replace(' ', '-')}", "n_clicks")
-    #     for plot_type in AVAILABLE_PLOT_TYPES.keys()
-    # ]
-    # +
     [
-        # Input({"type": "workflow-selection-label", "index": ALL}, "value"),
-        # Input({"type": "datacollection-selection-label", "index": ALL}, "value"),
         State(
             {
                 "type": "interactive-component",
-                # "value": dash.dependencies.ALL,
                 "index": dash.dependencies.ALL,
             },
             "id",
@@ -579,7 +132,6 @@ def update_step_2(
         State(
             {
                 "type": "stored-metadata-component",
-                # "value": dash.dependencies.ALL,
                 "index": dash.dependencies.ALL,
             },
             "data",
@@ -591,12 +143,10 @@ def update_step_2(
         Input(
             {
                 "type": "interactive-component",
-                # "value": dash.dependencies.ALL,
                 "index": dash.dependencies.ALL,
             },
             "value",
         ),
-        # Input("time-input", "value"),
         Input("stored-layout", "data"),
         Input("stored-children", "data"),
         Input("draggable", "layouts"),
@@ -611,16 +161,9 @@ def update_step_2(
     prevent_initial_call=True,
 )
 def update_draggable_children(
-    # n_clicks, selected_year, current_draggable_children, current_layouts, stored_figures
     *args,
 ):
 
-    print("\n\n\n")
-    print("-------------------------")
-    print("update_draggable_children")
-
-    # workflow_label = args[-17]
-    # data_collection_label = args[-16]
     interactive_component_ids = args[-15]
     stored_metadata = args[-14]
     add_button_nclicks = args[-13]
@@ -649,7 +192,6 @@ def update_draggable_children(
     switch_state_index = -1 if switch_state is True else -1
 
     stored_metadata_interactive = [e for e in stored_metadata if e["component_type"] == "interactive_component"]
-    # print(stored_metadata_interactive)
     interactive_components_dict = {
         id["index"]: {"value": value, "metadata": metadata}
         for (id, value, metadata) in zip(
@@ -658,27 +200,18 @@ def update_draggable_children(
             stored_metadata_interactive,
         )
     }
-    # print(interactive_components_dict)
 
     check_value = False
     if "interactive-component" in triggered_input:
-        # print(triggered_input)
         triggered_input_eval = ast.literal_eval(triggered_input)
-        # print(triggered_input_eval)
         triggered_input_eval_index = int(triggered_input_eval["index"])
-        # print(triggered_input_eval_index)
 
         value = interactive_components_dict[triggered_input_eval_index]["value"]
-        # print(value)
-        # print(interactive_components_dict[triggered_input_eval_index])
         if interactive_components_dict[triggered_input_eval_index]["metadata"]["interactive_component_type"] != "TextInput":
             check_value = True if value is not None else False
         else:
             check_value = True if value is not "" else False
 
-    # print("CHECK VALUE")
-    # print(check_value)
-    # print("\n\n\n")
 
     other_components_dict = {
         id["index"]: {"value": value, "metadata": metadata}
@@ -688,30 +221,15 @@ def update_draggable_children(
             stored_metadata_interactive,
         )
     }
-    # print(other_components_dict)
 
-    # print("\n\n\n")
-    # print(current_draggable_children)
-    # print(analyze_structure(current_draggable_children))
-    # # current_draggable_children_to_keep = current_draggable_children[0]["props"]["children"]
-    # print("\n\n\n")
     new_draggable_children = []
     for child in current_draggable_children:
-        # print(child["props"]["id"])
         for sub_child in child["props"]["children"]:
             if sub_child["props"]["id"]["type"] == "add-content":
-                # print(sub_child["props"]["id"])
-                # print(sub_child["props"]["children"])
                 child["props"]["children"] = [sub_child]
                 continue
-            # else:
-            #     # child["props"]["children"] = child["props"]["children"].remove(sub_child)
-            #     print("Removed sub_child with id " + str(sub_child["props"]["id"]))
 
-    # print("\n\n\n")
-    # print(current_draggable_children)
-    # print("\n\n\n")
-    print("END")
+
 
     # Add a new box to the dashboard
     if triggered_input == "add-button":
