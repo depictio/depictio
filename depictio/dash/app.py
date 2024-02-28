@@ -12,7 +12,6 @@ import yaml
 
 # Depictio imports
 from depictio.api.v1.configs.config import settings
-from depictio.dash.utils import list_workflows
 from depictio.api.v1.configs.config import API_BASE_URL, TOKEN
 
 # Depictio components imports - design step
@@ -37,6 +36,9 @@ from depictio.dash.modules.jbrowse_component.frontend import (
 from depictio.dash.layouts.stepper import (
     register_callbacks_stepper,
 )
+from depictio.dash.layouts.header import register_callbacks_header
+from depictio.dash.layouts.draggable import register_callbacks_draggable
+
 
 # Depictio components imports - button step
 from depictio.dash.modules.figure_component.frontend import create_stepper_figure_button
@@ -51,6 +53,9 @@ from depictio.dash.modules.jbrowse_component.frontend import (
 # Depictio utils imports
 from depictio.dash.utils import (
     # create_initial_figure,
+    list_workflows,
+    analyze_structure,
+    analyze_structure_and_get_deepest_type,
     load_depictio_data,
     load_deltatable,
     list_workflows_for_dropdown,
@@ -68,13 +73,10 @@ from depictio.dash.layouts.stepper import (
 )
 
 # Depictio layout imports for header
-from depictio.dash.layouts.header import design_header
+from depictio.dash.layouts.header import design_header, enable_box_edit_mode, enable_box_edit_mode_dev
 
 
 # TODO: move to depictio.dash.utils or somewhere else
-min_step = 0
-max_step = 3
-active = 0
 
 
 # Start the app
@@ -90,26 +92,16 @@ app = dash.Dash(
     suppress_callback_exceptions=True,
     title="Depictio",
 )
-application = app.server
 
 
-# Register callbacks for the design step
+# Register callbacks
 register_callbacks_card_component(app)
 register_callbacks_interactive_component(app)
 register_callbacks_figure_component(app)
 register_callbacks_jbrowse_component(app)
 register_callbacks_stepper(app)
-
-
-# TODO : move to depictio.dash.utils or somewhere else
-# DeltaTable load
-def return_deltatable(workflow_id: str = None, data_collection_id: str = None, raw=False):
-    df = load_deltatable(workflow_id, data_collection_id, raw=raw)
-    # print(df)
-    return df
-
-
-df = load_deltatable(workflow_id=None, data_collection_id=None)
+register_callbacks_header(app)
+register_callbacks_draggable(app)
 
 
 # Load depictio data from JSON
@@ -146,389 +138,6 @@ app.layout = dbc.Container(
     ],
     fluid=True,
 )
-
-
-@app.callback(
-    Output({"type": "modal", "index": MATCH}, "is_open"),
-    [Input({"type": "btn-done", "index": MATCH}, "n_clicks")],
-    prevent_initial_call=True,
-)
-def close_modal(n_clicks):
-    if n_clicks > 0:
-        return False
-    return True
-
-
-@app.callback(
-    Output("success-modal-dashboard", "is_open"),
-    [
-        Input("save-button-dashboard", "n_clicks"),
-        Input("success-modal-close", "n_clicks"),
-    ],
-    [State("success-modal-dashboard", "is_open")],
-)
-def toggle_success_modal_dashboard(n_save, n_close, is_open):
-    ctx = dash.callback_context
-
-    if not ctx.triggered:
-        raise dash.exceptions.PreventUpdate
-
-    trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
-    # print(trigger_id, n_save, n_close)
-
-    if trigger_id == "save-button-dashboard":
-        if n_save is None or n_save == 0:
-            raise dash.exceptions.PreventUpdate
-        else:
-            return True
-
-    elif trigger_id == "success-modal-close":
-        if n_close is None or n_close == 0:
-            raise dash.exceptions.PreventUpdate
-        else:
-            return False
-
-    return is_open
-
-
-@app.callback(
-    Output("save-button-dashboard", "n_clicks"),
-    Input("save-button-dashboard", "n_clicks"),
-    State("stored-layout", "data"),
-    State("stored-children", "data"),
-    State("stored-edit-dashboard-mode-button", "data"),
-    State("stored-add-button", "data"),
-    prevent_initial_call=True,
-)
-def save_data_dashboard(
-    n_clicks,
-    stored_layout_data,
-    stored_children_data,
-    edit_dashboard_mode_button,
-    add_button,
-):
-    if n_clicks > 0:
-        data = {
-            "stored_layout_data": stored_layout_data,
-            "stored_children_data": stored_children_data,
-            "stored_edit_dashboard_mode_button": edit_dashboard_mode_button,
-            "stored_add_button": add_button,
-        }
-        with open("depictio_data.json", "w") as file:
-            json.dump(data, file)
-        return n_clicks
-    return n_clicks
-
-
-def enable_box_edit_mode(box, switch_state=True):
-    btn_index = box["props"]["id"]["index"]
-    edit_button = dbc.Button(
-        "Edit",
-        id={
-            "type": "edit-box-button",
-            "index": f"{btn_index}",
-        },
-        color="secondary",
-        style={"margin-left": "12px"},
-        # size="lg",
-    )
-    remove_button = dbc.Button(
-        "Remove",
-        id={"type": "remove-box-button", "index": f"{btn_index}"},
-        color="danger",
-    )
-
-    # reset_button = dbc.Button(
-    #     "Reset",
-    #     id={"type": "reset-box-button", "index": f"{btn_index}"},
-    #     color="info",
-    #     style={"margin-left": "24px"},
-    # )
-
-    if switch_state:
-        box_components_list = [remove_button, edit_button, box]
-        # if box["props"]["children"]["props"]["children"][1]["props"]["id"]["type"] == "interactive-component":
-        #     box_components_list.append(reset_button)
-    else:
-        box_components_list = [box]
-
-    new_draggable_child = html.Div(
-        box_components_list,
-        id={"type": f"draggable-{btn_index}", "index": btn_index},
-    )
-
-    return new_draggable_child
-
-
-def enable_box_edit_mode_dev(sub_child, switch_state=True):
-    print("enable_box_edit_mode_dev")
-    print(switch_state)
-
-    # Extract the required substructure based on the depth analysis
-    box = sub_child["props"]["children"]
-    print(box)
-
-    # Check if the children attribute is a list
-    if isinstance(box["props"]["children"], list):
-        print("List")
-
-        # Identify if edit and remove buttons are present
-        edit_button_exists = any(child.get("props", {}).get("id", {}).get("type") == "edit-box-button" for child in box["props"]["children"])
-        remove_button_exists = any(child.get("props", {}).get("id", {}).get("type") == "remove-box-button" for child in box["props"]["children"])
-
-        print(switch_state, edit_button_exists, remove_button_exists)
-
-        # If switch_state is true and buttons are not yet added, add them
-        if switch_state and not (edit_button_exists and remove_button_exists):
-            # Assuming that the ID for box is structured like: {'type': '...', 'index': 1}
-            print("\n\n\n")
-            print("Adding buttons")
-            print(box["props"]["id"])
-            btn_index = box["props"]["id"]["index"]
-
-            edit_button = dbc.Button(
-                "Edit",
-                id={
-                    "type": "edit-box-button",
-                    "index": f"{btn_index}",
-                },
-                color="secondary",
-                style={"margin-left": "12px"},
-            )
-            remove_button = dbc.Button(
-                "Remove",
-                id={"type": "remove-box-button", "index": f"{btn_index}"},
-                color="danger",
-            )
-
-            # Place buttons at the beginning of the children list
-            box["props"]["children"] = [remove_button, edit_button] + box["props"]["children"]
-
-        # If switch_state is false and buttons are present, remove them
-        elif not switch_state and edit_button_exists and remove_button_exists:
-            # print("Removing buttons")
-            # Assuming the last element is the main content box
-            # print(analyze_structure(box))
-            # print(box)
-            content_box = box["props"]["children"][-1]
-            # print(content_box)
-            box["props"]["children"] = [content_box]
-            # print(box)
-
-    sub_child["props"]["children"] = box
-    # print(sub_child)
-    # Return the modified sub_child structure
-    return sub_child
-
-
-def analyze_structure(struct, depth=0):
-    """
-    Recursively analyze a nested plotly dash structure.
-
-    Args:
-    - struct: The nested structure.
-    - depth: Current depth in the structure. Default is 0 (top level).
-    """
-
-    if isinstance(struct, list):
-        # print("  " * depth + f"Depth {depth} Type: List with {len(struct)} elements")
-        for idx, child in enumerate(struct):
-            print("  " * depth + f"Element {idx} ID: {child.get('props', {}).get('id', None)}")
-            analyze_structure(child, depth=depth + 1)
-        return
-
-    # Base case: if the struct is not a dictionary, we stop the recursion
-    if not isinstance(struct, dict):
-        return
-
-    # Extracting id if available
-
-    id_value = struct.get("props", {}).get("id", None)
-    children = struct.get("props", {}).get("children", None)
-
-    # Printing the id value
-    print("  " * depth + f"Depth {depth} ID: {id_value}")
-
-    if isinstance(children, dict):
-        print("  " * depth + f"Depth {depth} Type: Dict")
-        # Recursive call
-        analyze_structure(children, depth=depth + 1)
-
-    elif isinstance(children, list):
-        print("  " * depth + f"Depth {depth} Type: List with {len(children)} elements")
-        for idx, child in enumerate(children):
-            print("  " * depth + f"Element {idx} ID: {child.get('props', {}).get('id', None)}")
-            # Recursive call
-            analyze_structure(child, depth=depth + 1)
-
-
-def analyze_structure_and_get_deepest_type(struct, depth=0, max_depth=0, deepest_type=None):
-    """
-    Recursively analyze a nested plotly dash structure and return the type of the deepest element (excluding 'stored-metadata-component').
-
-    Args:
-    - struct: The nested structure.
-    - depth: Current depth in the structure.
-    - max_depth: Maximum depth encountered so far.
-    - deepest_type: Type of the deepest element encountered so far.
-
-    Returns:
-    - tuple: (Maximum depth of the structure, Type of the deepest element)
-    """
-
-    # Update the maximum depth and deepest type if the current depth is greater
-    current_type = None
-    if isinstance(struct, dict):
-        id_value = struct.get("props", {}).get("id", None)
-        if isinstance(id_value, dict) and id_value.get("type") != "stored-metadata-component":
-            current_type = id_value.get("type")
-
-    if depth > max_depth:
-        max_depth = depth
-        deepest_type = current_type
-    elif depth == max_depth and current_type is not None:
-        deepest_type = current_type
-
-    if isinstance(struct, list):
-        for child in struct:
-            max_depth, deepest_type = analyze_structure_and_get_deepest_type(child, depth=depth + 1, max_depth=max_depth, deepest_type=deepest_type)
-    elif isinstance(struct, dict):
-        children = struct.get("props", {}).get("children", None)
-        if isinstance(children, (list, dict)):
-            max_depth, deepest_type = analyze_structure_and_get_deepest_type(
-                children,
-                depth=depth + 1,
-                max_depth=max_depth,
-                deepest_type=deepest_type,
-            )
-
-    return max_depth, deepest_type
-
-
-@app.callback(
-    Output({"type": "add-content", "index": MATCH}, "children"),
-    Output({"type": "test-container", "index": MATCH}, "children", allow_duplicate=True),
-    [
-        Input({"type": "btn-done", "index": MATCH}, "n_clicks"),
-    ],
-    [
-        State({"type": "test-container", "index": MATCH}, "children"),
-        State({"type": "btn-done", "index": MATCH}, "id"),
-        State("stored-edit-dashboard-mode-button", "data"),
-        # State({"type": "graph", "index": MATCH}, "figure"),
-    ],
-    prevent_initial_call=True,
-)
-def update_button(n_clicks, children, btn_id, switch_state):
-    print("\n\n\n")
-    print("update_button")
-    # print(children)
-    # print(analyze_structure(children))
-    # print(len(children))
-
-    # Depth 0 ID: {'type': 'graph', 'index': 32}
-
-    # Element 0 ID: {'type': 'stored-metadata-component', 'index': 33}
-    # Depth 1 ID: {'type': 'stored-metadata-component', 'index': 33}
-    # Element 1 ID: {'type': 'graph', 'index': 33}
-    # Depth 1 ID: {'type': 'graph', 'index': 33}
-
-    # Depth 0 ID: {'type': 'interactive', 'index': 33}
-    # Depth 0 Type: Dict
-    #   Depth 1 ID: {'type': 'card-body', 'index': 33}
-    #   Depth 1 Type: List with 3 elements
-    #   Element 0 ID: None
-    #     Depth 2 ID: None
-    #   Element 1 ID: {'type': 'card-value', 'index': 33}
-    #     Depth 2 ID: {'type': 'card-value', 'index': 33}
-    #   Element 2 ID: {'type': 'stored-metadata-component', 'index': 33}
-    #     Depth 2 ID: {'type': 'stored-metadata-component', 'index': 33}
-
-    # Depth 0 ID: None
-    # Depth 0 Type: List with 2 elements
-    # Element 0 ID: {'type': 'stored-metadata-component', 'index': 33}
-    #   Depth 1 ID: {'type': 'stored-metadata-component', 'index': 33}
-    # Element 1 ID: {'type': 'graph', 'index': 33}
-    #   Depth 1 ID: {'type': 'graph', 'index': 33}
-
-    # print(children["props"]["id"])
-    # children = [children[4]]
-    # print(len(children))
-    # print(children)
-
-    children["props"]["id"]["type"] = "updated-" + children["props"]["id"]["type"]
-    # print(children)
-
-    btn_index = btn_id["index"]  # Extracting index from btn_id dict
-
-    # switch_state_bool = True if len(switch_state) > 0 else False
-
-    # new_draggable_child = children
-    new_draggable_child = enable_box_edit_mode(children, switch_state)
-    # new_draggable_child = enable_box_edit_mode(children, btn_index, switch_state_bool)
-
-    return new_draggable_child, []
-
-
-# Add a callback to update the isDraggable property
-@app.callback(
-    [
-        Output("draggable", "isDraggable"),
-        Output("draggable", "isResizable"),
-        Output("add-button", "disabled"),
-        Output("save-button-dashboard", "disabled"),
-    ],
-    [Input("edit-dashboard-mode-button", "value")],
-)
-def freeze_layout(switch_state):
-    # print("\n\n\n")
-    # print("freeze_layout")
-    # print(switch_state)
-    print("\n\n\n")
-    # switch based on button's value
-    # switch_state = True if len(value) > 0 else False
-
-    if len(switch_state) == 0:
-        return False, False, True, True
-    else:
-        return True, True, False, False
-
-
-@app.callback(
-    Output({"type": "stepper-basic-usage", "index": MATCH}, "active"),
-    Output({"type": "next-basic-usage", "index": MATCH}, "disabled"),
-    Input({"type": "back-basic-usage", "index": MATCH}, "n_clicks"),
-    Input({"type": "next-basic-usage", "index": MATCH}, "n_clicks"),
-    Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
-    Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
-    Input({"type": "btn-option", "index": MATCH, "value": ALL}, "n_clicks"),
-    State({"type": "stepper-basic-usage", "index": MATCH}, "active"),
-    prevent_initial_call=True,
-)
-def update(back, next_, workflow_selection, data_selection, btn_component, current):
-    print("update")
-    print(back, next_, current, workflow_selection, data_selection, btn_component)
-
-    if back is None and next_ is None:
-        if workflow_selection is not None and data_selection is not None:
-            disable_next = False
-        else:
-            disable_next = True
-
-        # print(current, disable_next)
-        return current, disable_next
-    else:
-        button_id = ctx.triggered_id
-        # print(button_id)
-        step = current if current is not None else active
-
-        if button_id["type"] == "back-basic-usage":
-            step = step - 1 if step > min_step else step
-            return step, False
-
-        else:
-            step = step + 1 if step < max_step else step
-            return step, False
 
 
 # TODO: optimise to match the modular architecture
@@ -692,7 +301,6 @@ def update_step_2(workflow_selection, data_collection_selection):
         },
     ).json()
 
-
     if workflow_selection is not None and data_collection_selection is not None:
         config_title = dmc.Title("Data collection config", order=3, align="left", weight=500)
         json_formatted = yaml.dump(dc_specs["config"], indent=2)
@@ -777,7 +385,7 @@ def update_step_2(workflow_selection, data_collection_selection):
 
         layout = [dc_main_info, html.Hr(), main_info, html.Hr()]
         if dc_specs["config"]["type"] == "Table":
-            df = return_deltatable(workflow_selection, data_collection_selection, raw=True)
+            df = load_deltatable(workflow_selection, data_collection_selection, raw=True)
             cols = get_columns_from_data_collection(workflow_selection, data_collection_selection)
             # print(cols)
             columnDefs = [{"field": c, "headerTooltip": f"Column type: {e['type']}"} for c, e in cols.items()]
@@ -911,7 +519,7 @@ def update_step_2(
 
             if component_selected not in ["Genome browser", "Graph", "Map"]:
 
-                df = return_deltatable(workflow_selection, data_collection_selection, raw=True)
+                df = load_deltatable(workflow_selection, data_collection_selection, raw=True)
 
             if component_selected == "Figure":
                 return design_figure(id, df), btn_component
@@ -1172,6 +780,7 @@ def update_draggable_children(
 
             # stepper_dropdowns = create_stepper_dropdowns(n)
             # stepper_buttons = create_stepper_buttons(n, dc_specs["config"]["type"])
+            active = 0
             stepper_output = create_stepper_output(
                 n,
                 active,
@@ -1245,7 +854,7 @@ def update_draggable_children(
                 # print("\n\n\n")
                 # print("J : " + str(j))
                 # print(e)
-                new_df = return_deltatable(e["wf_id"], e["dc_id"])
+                new_df = load_deltatable(e["wf_id"], e["dc_id"])
                 # print(new_df)
                 # print("\n\n\n")
 

@@ -1,27 +1,33 @@
-from dash import html, dcc, Input, Output, State, ALL, MATCH, ctx, callback
+from dash import html, Input, Output, State, ALL, MATCH, ctx
 import dash
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 from dash_iconify import DashIconify
 
+# Depictio imports
 from depictio.dash.utils import (
-    SELECTED_STYLE,
-    UNSELECTED_STYLE,
     list_data_collections_for_dropdown,
     list_workflows_for_dropdown,
 )
-from depictio.dash.modules.figure_component.frontend import create_stepper_figure_button
-from depictio.dash.modules.card_component.frontend import create_stepper_card_button
-from depictio.dash.modules.interactive_component.frontend import (
-    create_stepper_interactive_button,
-)
-from depictio.dash.modules.jbrowse_component.frontend import (
-    create_stepper_jbrowse_button,
-)
 
+
+min_step = 0
+max_step = 3
+active = 0
 
 def register_callbacks_stepper(app):
-    @dash.callback(
+
+    @app.callback(
+        Output({"type": "modal", "index": MATCH}, "is_open"),
+        [Input({"type": "btn-done", "index": MATCH}, "n_clicks")],
+        prevent_initial_call=True,
+    )
+    def close_modal(n_clicks):
+        if n_clicks > 0:
+            return False
+        return True
+
+    @app.callback(
         Output({"type": "workflow-selection-label", "index": MATCH}, "data"),
         Output({"type": "workflow-selection-label", "index": MATCH}, "value"),
         Input("add-button", "n_clicks"),
@@ -58,7 +64,7 @@ def register_callbacks_stepper(app):
         else:
             raise dash.exceptions.PreventUpdate
 
-    @dash.callback(
+    @app.callback(
         Output({"type": "datacollection-selection-label", "index": MATCH}, "data"),
         Output({"type": "datacollection-selection-label", "index": MATCH}, "value"),
         Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
@@ -95,6 +101,44 @@ def register_callbacks_stepper(app):
             return tmp_data, tmp_data[0]["value"]
         else:
             raise dash.exceptions.PreventUpdate
+
+
+
+
+
+    @app.callback(
+        Output({"type": "stepper-basic-usage", "index": MATCH}, "active"),
+        Output({"type": "next-basic-usage", "index": MATCH}, "disabled"),
+        Input({"type": "back-basic-usage", "index": MATCH}, "n_clicks"),
+        Input({"type": "next-basic-usage", "index": MATCH}, "n_clicks"),
+        Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
+        Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+        Input({"type": "btn-option", "index": MATCH, "value": ALL}, "n_clicks"),
+        State({"type": "stepper-basic-usage", "index": MATCH}, "active"),
+        prevent_initial_call=True,
+    )
+    def update(back, next_, workflow_selection, data_selection, btn_component, current):
+
+
+
+        if back is None and next_ is None:
+            if workflow_selection is not None and data_selection is not None:
+                disable_next = False
+            else:
+                disable_next = True
+
+            return current, disable_next
+        else:
+            button_id = ctx.triggered_id
+            step = current if current is not None else active
+
+            if button_id["type"] == "back-basic-usage":
+                step = step - 1 if step > min_step else step
+                return step, False
+
+            else:
+                step = step + 1 if step < max_step else step
+                return step, False
 
 
 # def create_stepper_dropdowns(n):
@@ -189,12 +233,6 @@ def register_callbacks_stepper(app):
 
 
 def create_stepper_output(n, active, new_plot_id, data_collection_type=None):
-    # def create_stepper_output(n, active, new_plot_id, stepper_dropdowns, stepper_buttons, data_collection_type):  # noqa: E999
-    print("\n\n\n")
-    print("create_stepper_output")
-    print(n)
-    print(active)
-    print(new_plot_id)
 
     stepper_dropdowns = html.Div(
         [

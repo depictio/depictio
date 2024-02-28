@@ -165,7 +165,7 @@ def get_columns_from_data_collection(
             return None
 
 
-def load_deltatable(workflow_id: str, data_collection_id: str, cols: list = None, raw: bool = False):
+def load_deltatable(workflow_id: str = None, data_collection_id: str = None, cols: list = None, raw: bool = False):
     workflows = list_workflows(TOKEN)
     # print(workflows)
 
@@ -419,3 +419,97 @@ def load_deltatable(workflow_id: str, data_collection_id: str, cols: list = None
     #     # TODO: move to polars
     #     df = df.to_pandas()
     #     return df
+
+
+
+# DeltaTable load
+# def return_deltatable(workflow_id: str = None, data_collection_id: str = None, raw=False):
+#     df = load_deltatable(workflow_id, data_collection_id, raw=raw)
+#     # print(df)
+#     return df
+        
+
+
+
+def analyze_structure(struct, depth=0):
+    """
+    Recursively analyze a nested plotly dash structure.
+
+    Args:
+    - struct: The nested structure.
+    - depth: Current depth in the structure. Default is 0 (top level).
+    """
+
+    if isinstance(struct, list):
+        # print("  " * depth + f"Depth {depth} Type: List with {len(struct)} elements")
+        for idx, child in enumerate(struct):
+            print("  " * depth + f"Element {idx} ID: {child.get('props', {}).get('id', None)}")
+            analyze_structure(child, depth=depth + 1)
+        return
+
+    # Base case: if the struct is not a dictionary, we stop the recursion
+    if not isinstance(struct, dict):
+        return
+
+    # Extracting id if available
+
+    id_value = struct.get("props", {}).get("id", None)
+    children = struct.get("props", {}).get("children", None)
+
+    # Printing the id value
+    print("  " * depth + f"Depth {depth} ID: {id_value}")
+
+    if isinstance(children, dict):
+        print("  " * depth + f"Depth {depth} Type: Dict")
+        # Recursive call
+        analyze_structure(children, depth=depth + 1)
+
+    elif isinstance(children, list):
+        print("  " * depth + f"Depth {depth} Type: List with {len(children)} elements")
+        for idx, child in enumerate(children):
+            print("  " * depth + f"Element {idx} ID: {child.get('props', {}).get('id', None)}")
+            # Recursive call
+            analyze_structure(child, depth=depth + 1)
+
+
+def analyze_structure_and_get_deepest_type(struct, depth=0, max_depth=0, deepest_type=None):
+    """
+    Recursively analyze a nested plotly dash structure and return the type of the deepest element (excluding 'stored-metadata-component').
+
+    Args:
+    - struct: The nested structure.
+    - depth: Current depth in the structure.
+    - max_depth: Maximum depth encountered so far.
+    - deepest_type: Type of the deepest element encountered so far.
+
+    Returns:
+    - tuple: (Maximum depth of the structure, Type of the deepest element)
+    """
+
+    # Update the maximum depth and deepest type if the current depth is greater
+    current_type = None
+    if isinstance(struct, dict):
+        id_value = struct.get("props", {}).get("id", None)
+        if isinstance(id_value, dict) and id_value.get("type") != "stored-metadata-component":
+            current_type = id_value.get("type")
+
+    if depth > max_depth:
+        max_depth = depth
+        deepest_type = current_type
+    elif depth == max_depth and current_type is not None:
+        deepest_type = current_type
+
+    if isinstance(struct, list):
+        for child in struct:
+            max_depth, deepest_type = analyze_structure_and_get_deepest_type(child, depth=depth + 1, max_depth=max_depth, deepest_type=deepest_type)
+    elif isinstance(struct, dict):
+        children = struct.get("props", {}).get("children", None)
+        if isinstance(children, (list, dict)):
+            max_depth, deepest_type = analyze_structure_and_get_deepest_type(
+                children,
+                depth=depth + 1,
+                max_depth=max_depth,
+                deepest_type=deepest_type,
+            )
+
+    return max_depth, deepest_type
