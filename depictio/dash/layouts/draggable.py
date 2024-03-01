@@ -1,19 +1,39 @@
 import ast
-import json
-import dash_core_components as dcc
-import dash_html_components as html
-import dash_bootstrap_components as dbc
-import dash_mantine_components as dmc
 from dash import html, dcc, Input, Output, State, ALL, MATCH
 import dash
 import numpy as np
+from depictio.dash.layouts.draggable_scenarios.add_component import add_new_component
 
 from depictio.dash.layouts.stepper import create_stepper_output
-from depictio.dash.utils import analyze_structure_and_get_deepest_type, load_deltatable, load_depictio_data
+from depictio.dash.utils import (
+    analyze_structure_and_get_deepest_type,
+    load_deltatable,
+    load_depictio_data,
+)
+
+# Depictio utils imports
+from depictio.dash.utils import (
+    analyze_structure_and_get_deepest_type,
+    load_depictio_data,
+    load_deltatable,
+)
+
+# Depictio layout imports for stepper
+from depictio.dash.layouts.stepper import (
+    # create_stepper_dropdowns,
+    # create_stepper_buttons,
+    create_stepper_output,
+)
+
+# Depictio layout imports for header
+from depictio.dash.layouts.header import (
+    design_header,
+    enable_box_edit_mode,
+    enable_box_edit_mode_dev,
+)
 
 
 def register_callbacks_draggable(app):
-
     # Add a callback to update the isDraggable property
     @app.callback(
         [
@@ -25,19 +45,10 @@ def register_callbacks_draggable(app):
         [Input("edit-dashboard-mode-button", "value")],
     )
     def freeze_layout(switch_state):
-        # print("\n\n\n")
-        # print("freeze_layout")
-        # print(switch_state)
-        print("\n\n\n")
-        # switch based on button's value
-        # switch_state = True if len(value) > 0 else False
-
         if len(switch_state) == 0:
             return False, False, True, True
         else:
             return True, True, False, False
-
-
 
     @app.callback(
         [
@@ -66,7 +77,10 @@ def register_callbacks_draggable(app):
             Input("add-button", "n_clicks"),
             Input("edit-dashboard-mode-button", "value"),
             State("stored-add-button", "data"),
-            Input({"type": "remove-box-button", "index": dash.dependencies.ALL}, "n_clicks"),
+            Input(
+                {"type": "remove-box-button", "index": dash.dependencies.ALL},
+                "n_clicks",
+            ),
             Input(
                 {
                     "type": "interactive-component",
@@ -90,6 +104,7 @@ def register_callbacks_draggable(app):
     def update_draggable_children(
         *args,
     ):
+        # Getting the arguments
 
         interactive_component_ids = args[-15]
         stored_metadata = args[-14]
@@ -107,18 +122,21 @@ def register_callbacks_draggable(app):
         stored_figures = args[-2]
         stored_edit_dashboard = args[-1]
 
+        # Check if the callback was triggered by an input or a state
         ctx = dash.callback_context
         ctx_triggered = ctx.triggered
-
         print("CTX triggered: ")
         print(ctx_triggered)
-
         triggered_input = ctx.triggered[0]["prop_id"].split(".")[0]
         print(triggered_input)
 
+        # Set the switch state index to 0 if switch_state is True, else set it to -1
         switch_state_index = -1 if switch_state is True else -1
 
-        stored_metadata_interactive = [e for e in stored_metadata if e["component_type"] == "interactive_component"]
+        # Create a dictionary to store the values of the interactive components
+        stored_metadata_interactive = [
+            e for e in stored_metadata if e["component_type"] == "interactive_component"
+        ]
         interactive_components_dict = {
             id["index"]: {"value": value, "metadata": metadata}
             for (id, value, metadata) in zip(
@@ -128,18 +146,24 @@ def register_callbacks_draggable(app):
             )
         }
 
+        # Check if the value of the interactive component is not None
         check_value = False
         if "interactive-component" in triggered_input:
             triggered_input_eval = ast.literal_eval(triggered_input)
             triggered_input_eval_index = int(triggered_input_eval["index"])
 
             value = interactive_components_dict[triggered_input_eval_index]["value"]
-            if interactive_components_dict[triggered_input_eval_index]["metadata"]["interactive_component_type"] != "TextInput":
+            if (
+                interactive_components_dict[triggered_input_eval_index]["metadata"][
+                    "interactive_component_type"
+                ]
+                != "TextInput"
+            ):
                 check_value = True if value is not None else False
             else:
                 check_value = True if value is not "" else False
 
-
+        # Create a dictionary to store the values of the other components
         other_components_dict = {
             id["index"]: {"value": value, "metadata": metadata}
             for (id, value, metadata) in zip(
@@ -156,122 +180,16 @@ def register_callbacks_draggable(app):
                     child["props"]["children"] = [sub_child]
                     continue
 
-
-
         # Add a new box to the dashboard
         if triggered_input == "add-button":
-            # Retrieve index of the button that was clicked - this is the number of the plot
-            if add_button_nclicks > stored_add_button["count"]:
-                print("\n\n\n")
-                print("add-button compared to stored_add_button")
-                print(add_button_nclicks)
-                print(stored_add_button["count"])
-                print("\n\n\n")
-                print("\n\n\n")
-                print("\n\n\n")
-                print("stored_metadata")
-                print(stored_metadata)
-                print("\n\n\n")
-                print("\n\n\n")
-                print("\n\n\n")
-                # exit()
-
-                n = ctx.triggered[0]["value"]
-                new_plot_id = f"{n}"
-
-                # print("\n\n\n")
-
-                # print("workflow_label")
-                # print(workflow_label)
-                # print("data_collection_label")
-                # print(data_collection_label)
-                # print("add_button_nclicks")
-                # print(add_button_nclicks)
-
-                # import httpx
-
-                # workflows = list_workflows(token)
-                # if len(workflow_label) == 0 and len(data_collection_label) == 0:
-                #     workflow_label = [workflows[0]["workflow_tag"]]
-                #     data_collection_label = [
-                #         workflows[0]["data_collections"][0]["data_collection_tag"]
-                #     ]
-
-                # print("workflow_label")
-                # print(workflow_label)
-                # print("data_collection_label")
-                # print(data_collection_label)
-                # print("\n\n\n")
-
-                # workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_label[0]][0][
-                #     "_id"
-                # ]
-                # data_collection_id = [
-                #     f
-                #     for e in workflows
-                #     if e["_id"] == workflow_id
-                #     for f in e["data_collections"]
-                #     if f["data_collection_tag"] == data_collection_label[0]
-                # ][0]["_id"]
-
-                # # API_BASE_URL = "http://localhost:8058"
-
-                # dc_specs = httpx.get(
-                #     f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
-                #     headers={
-                #         "Authorization": f"Bearer {token}",
-                #     },
-                # ).json()
-
-                # stepper_dropdowns = create_stepper_dropdowns(n)
-                # stepper_buttons = create_stepper_buttons(n, dc_specs["config"]["type"])
-                active = 0
-                stepper_output = create_stepper_output(
-                    n,
-                    active,
-                    new_plot_id,
-                    # dc_specs["config"]["type"],
-                    # n, active, new_plot_id, stepper_dropdowns, stepper_buttons, dc_specs["config"]["type"]
-                )
-
-                stored_add_button["count"] += 1
-
-                # print("\n\n\n")
-                # print("\n\n\n")
-                # print("\n\n\n")
-                # print("stepper_output")
-                # print(stepper_output)
-                # print("\n\n\n")
-                # print("\n\n\n")
-                # print("\n\n\n")
-
-                current_draggable_children.append(stepper_output)
-
-                # Define the default size and position for the new plot
-                new_layout_item = {
-                    "i": f"{new_plot_id}",
-                    "x": 10 * ((len(current_draggable_children) + 1) % 2),
-                    "y": n * 10,
-                    "w": 6,
-                    "h": 5,
-                }
-
-                # Update the layouts property for both 'lg' and 'sm' sizes
-                updated_layouts = {}
-                for size in ["lg", "sm"]:
-                    if size not in current_layouts:
-                        current_layouts[size] = []
-                    current_layouts[size] = current_layouts[size] + [new_layout_item]
-                return (
-                    current_draggable_children,
-                    current_layouts,
-                    current_layouts,
-                    current_draggable_children,
-                    stored_edit_dashboard,
-                    stored_add_button,
-                )
-            else:
-                raise dash.exceptions.PreventUpdate
+            return add_new_component(
+                add_button_nclicks,
+                stored_add_button,
+                current_draggable_children,
+                current_layouts,
+                stored_edit_dashboard,
+                ctx,
+            )
 
         elif "interactive-component" in triggered_input and check_value:
             # print("\n\n\n")
@@ -323,7 +241,11 @@ def register_callbacks_draggable(app):
                         else:
                             n_join_dc = []
 
-                        check_join = [e["dc_id"] for sub_join in n_join_dc if e["dc_id"] in sub_join["with_dc"]]
+                        check_join = [
+                            e["dc_id"]
+                            for sub_join in n_join_dc
+                            if e["dc_id"] in sub_join["with_dc"]
+                        ]
                         # print("CHECK JOIN")
                         # print(n_join_dc)
                         # print(check_join)
@@ -332,7 +254,9 @@ def register_callbacks_draggable(app):
                         # print((len(check_join) > 0))
 
                         if e["wf_id"] == n_dict["metadata"]["wf_id"]:
-                            if (e["dc_id"] == n_dict["metadata"]["dc_id"]) or (len(check_join) > 0):
+                            if (e["dc_id"] == n_dict["metadata"]["dc_id"]) or (
+                                len(check_join) > 0
+                            ):
                                 # print(e["component_type"])
                                 # print(e["wf_id"])
                                 # print(e["dc_id"])
@@ -354,20 +278,41 @@ def register_callbacks_draggable(app):
                                         # print(n_dict)
                                         # print(n_dict["value"])
                                         # print(n_dict["metadata"]["column_value"])
-                                        if n_dict["metadata"]["interactive_component_type"] in ["Select", "MultiSelect"]:
+                                        if n_dict["metadata"][
+                                            "interactive_component_type"
+                                        ] in ["Select", "MultiSelect"]:
                                             # n_dict["value"] = list(n_dict["value"]) if type(n_dict["value"]) is str else n_dict["value"]
                                             print('n_dict["value"]')
                                             print(n_dict["value"])
 
                                             if n_dict["value"] is not None:
-                                                n_dict["value"] = list(n_dict["value"]) if isinstance(n_dict["value"], str) else n_dict["value"]
-                                                new_df = new_df[new_df[n_dict["metadata"]["column_value"]].isin(n_dict["value"])]
+                                                n_dict["value"] = (
+                                                    list(n_dict["value"])
+                                                    if isinstance(n_dict["value"], str)
+                                                    else n_dict["value"]
+                                                )
+                                                new_df = new_df[
+                                                    new_df[
+                                                        n_dict["metadata"][
+                                                            "column_value"
+                                                        ]
+                                                    ].isin(n_dict["value"])
+                                                ]
                                             else:
                                                 new_df = new_df
-                                        elif n_dict["metadata"]["interactive_component_type"] == "TextInput":
+                                        elif (
+                                            n_dict["metadata"][
+                                                "interactive_component_type"
+                                            ]
+                                            == "TextInput"
+                                        ):
                                             if n_dict["value"] != "":
                                                 new_df = new_df[
-                                                    new_df[n_dict["metadata"]["column_value"]].str.contains(
+                                                    new_df[
+                                                        n_dict["metadata"][
+                                                            "column_value"
+                                                        ]
+                                                    ].str.contains(
                                                         n_dict["value"],
                                                         regex=True,
                                                         na=False,
@@ -376,19 +321,52 @@ def register_callbacks_draggable(app):
                                             else:
                                                 new_df = new_df
 
-                                    elif n_dict["metadata"]["type"] == "int64" or n_dict["metadata"]["type"] == "float64":
+                                    elif (
+                                        n_dict["metadata"]["type"] == "int64"
+                                        or n_dict["metadata"]["type"] == "float64"
+                                    ):
                                         # print(
                                         #     n_dict["metadata"]["interactive_component_type"]
                                         # )
                                         # print(n_dict["value"])
 
                                         # handle if the input is a range or a single value
-                                        if n_dict["metadata"]["interactive_component_type"] == "RangeSlider":
-                                            new_df = new_df[
-                                                (new_df[n_dict["metadata"]["column_value"]] >= n_dict["value"][0]) & (new_df[n_dict["metadata"]["column_value"]] <= n_dict["value"][1])
+                                        if (
+                                            n_dict["metadata"][
+                                                "interactive_component_type"
                                             ]
-                                        elif n_dict["metadata"]["interactive_component_type"] == "Slider":
-                                            new_df = new_df[new_df[n_dict["metadata"]["column_value"]] == n_dict["value"]]
+                                            == "RangeSlider"
+                                        ):
+                                            new_df = new_df[
+                                                (
+                                                    new_df[
+                                                        n_dict["metadata"][
+                                                            "column_value"
+                                                        ]
+                                                    ]
+                                                    >= n_dict["value"][0]
+                                                )
+                                                & (
+                                                    new_df[
+                                                        n_dict["metadata"][
+                                                            "column_value"
+                                                        ]
+                                                    ]
+                                                    <= n_dict["value"][1]
+                                                )
+                                            ]
+                                        elif (
+                                            n_dict["metadata"][
+                                                "interactive_component_type"
+                                            ]
+                                            == "Slider"
+                                        ):
+                                            new_df = new_df[
+                                                new_df[
+                                                    n_dict["metadata"]["column_value"]
+                                                ]
+                                                == n_dict["value"]
+                                            ]
 
                                 # print("\n\n\n")
                                 # print("new_df after filtering")
@@ -417,20 +395,36 @@ def register_callbacks_draggable(app):
                                         if int(child["props"]["id"]) == int(e["index"]):
                                             # print("EQUAL")
                                             for k, sub_child in enumerate(
-                                                child["props"]["children"][0]["props"]["children"]["props"]["children"][-1]["props"]["children"]["props"]["children"]
+                                                child["props"]["children"][0]["props"][
+                                                    "children"
+                                                ]["props"]["children"][-1]["props"][
+                                                    "children"
+                                                ]["props"]["children"]
                                             ):
                                                 # print("sub_child")
                                                 # print(sub_child)
                                                 # print(analyze_structure(sub_child))
                                                 if "id" in sub_child["props"]:
-                                                    if sub_child["props"]["id"]["type"] == "card-value":
+                                                    if (
+                                                        sub_child["props"]["id"]["type"]
+                                                        == "card-value"
+                                                    ):
                                                         # print(sub_child["props"]["children"])
 
                                                         aggregation = e["aggregation"]
-                                                        new_value = new_df[e["column_value"]].agg(aggregation)
-                                                        if type(new_value) is np.float64:
-                                                            new_value = round(new_value, 2)
-                                                        sub_child["props"]["children"] = new_value
+                                                        new_value = new_df[
+                                                            e["column_value"]
+                                                        ].agg(aggregation)
+                                                        if (
+                                                            type(new_value)
+                                                            is np.float64
+                                                        ):
+                                                            new_value = round(
+                                                                new_value, 2
+                                                            )
+                                                        sub_child["props"][
+                                                            "children"
+                                                        ] = new_value
                                                         # print(sub_child["props"]["children"])
                                                         continue
 
@@ -474,18 +468,29 @@ def register_callbacks_draggable(app):
                                         if int(child["props"]["id"]) == int(e["index"]):
                                             # for k, sub_child in enumerate(child["props"]["children"][0]["props"]["children"]["props"]["children"]["props"]["children"]):
                                             for k, sub_child in enumerate(
-                                                child["props"]["children"][0]["props"]["children"]["props"]["children"][-1]["props"]["children"]["props"]["children"]
+                                                child["props"]["children"][0]["props"][
+                                                    "children"
+                                                ]["props"]["children"][-1]["props"][
+                                                    "children"
+                                                ]["props"]["children"]
                                             ):
                                                 # print("sub_child")
                                                 # print(sub_child)
                                                 # print(analyze_structure(sub_child))
-                                                if sub_child["props"]["id"]["type"] == "graph":
+                                                if (
+                                                    sub_child["props"]["id"]["type"]
+                                                    == "graph"
+                                                ):
                                                     from depictio.dash.modules.figure_component.utils import (
                                                         plotly_vizu_dict,
                                                     )
 
-                                                    new_figure = plotly_vizu_dict[e["visu_type"].lower()](new_df, **e["dict_kwargs"])
-                                                    sub_child["props"]["figure"] = new_figure
+                                                    new_figure = plotly_vizu_dict[
+                                                        e["visu_type"].lower()
+                                                    ](new_df, **e["dict_kwargs"])
+                                                    sub_child["props"][
+                                                        "figure"
+                                                    ] = new_figure
 
                                     else:
                                         # print("OTHER")
@@ -697,7 +702,11 @@ def register_callbacks_draggable(app):
             print("Input ID:", input_id)
 
             # Use list comprehension to filter
-            current_draggable_children = [child for child in current_draggable_children if child["props"]["id"] != input_id]
+            current_draggable_children = [
+                child
+                for child in current_draggable_children
+                if child["props"]["id"] != input_id
+            ]
 
             # elif "remove-" in triggered_input and [e for e in args[-10] if e]:
             #     print("\nREMOVE")

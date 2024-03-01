@@ -1,10 +1,7 @@
-import numpy as np
-from dash import html, Input, Output, State, ALL, MATCH, ctx
+from dash import html
 import dash
 import dash_bootstrap_components as dbc
-import dash_mantine_components as dmc
 import dash_draggable
-import ast
 
 # Depictio imports
 from depictio.api.v1.configs.config import settings
@@ -20,26 +17,12 @@ from depictio.dash.layouts.stepper import register_callbacks_stepper
 from depictio.dash.layouts.stepper_parts.part_one import register_callbacks_stepper_part_one
 from depictio.dash.layouts.stepper_parts.part_two import register_callbacks_stepper_part_two
 from depictio.dash.layouts.stepper_parts.part_three import register_callbacks_stepper_part_three
-from depictio.dash.layouts.header import register_callbacks_header
+from depictio.dash.layouts.header import design_header, register_callbacks_header
 from depictio.dash.layouts.draggable import register_callbacks_draggable
 
 
 # Depictio utils imports
-from depictio.dash.utils import (
-    analyze_structure_and_get_deepest_type,
-    load_depictio_data,
-    load_deltatable,
-)
-
-# Depictio layout imports for stepper
-from depictio.dash.layouts.stepper import (
-    # create_stepper_dropdowns,
-    # create_stepper_buttons,
-    create_stepper_output,
-)
-
-# Depictio layout imports for header
-from depictio.dash.layouts.header import design_header, enable_box_edit_mode, enable_box_edit_mode_dev
+from depictio.dash.utils import load_depictio_data
 
 
 # TODO: move to depictio.dash.utils or somewhere else
