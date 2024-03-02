@@ -22,14 +22,6 @@ from depictio.api.v1.endpoints.user_endpoints.auth import (
 )
 
 
-# API_BASE_URL = "http://localhost:8058"
-# API_BASE_URL = "http://host.docker.internal:8058"
-# print("settings")
-# print(settings)
-# print(settings.fastapi["host"])
-# API_BASE_URL = f"http://{settings.fastapi['host']}:{settings.fastapi['port']}"
-
-
 SELECTED_STYLE = {
     "display": "inline-block",
     "width": "250px",
