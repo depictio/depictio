@@ -160,6 +160,7 @@ cython_debug/
 #.idea/
 .nfs*
 depictioDB/
+depictioDB_bak/
 diagnostic.data/
 journal/
 *.db
