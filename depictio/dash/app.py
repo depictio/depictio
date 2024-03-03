@@ -1,22 +1,38 @@
 from dash import html
 import dash
 import dash_bootstrap_components as dbc
+import dash_mantine_components as dmc
+from dash_iconify import DashIconify
 import dash_draggable
 
 # Depictio imports
 from depictio.api.v1.configs.config import settings
 
 # Depictio components imports - design step
-from depictio.dash.modules.card_component.frontend import register_callbacks_card_component
-from depictio.dash.modules.interactive_component.frontend import register_callbacks_interactive_component
-from depictio.dash.modules.figure_component.frontend import register_callbacks_figure_component
-from depictio.dash.modules.jbrowse_component.frontend import register_callbacks_jbrowse_component
+from depictio.dash.modules.card_component.frontend import (
+    register_callbacks_card_component,
+)
+from depictio.dash.modules.interactive_component.frontend import (
+    register_callbacks_interactive_component,
+)
+from depictio.dash.modules.figure_component.frontend import (
+    register_callbacks_figure_component,
+)
+from depictio.dash.modules.jbrowse_component.frontend import (
+    register_callbacks_jbrowse_component,
+)
 
 # Depictio layout imports
 from depictio.dash.layouts.stepper import register_callbacks_stepper
-from depictio.dash.layouts.stepper_parts.part_one import register_callbacks_stepper_part_one
-from depictio.dash.layouts.stepper_parts.part_two import register_callbacks_stepper_part_two
-from depictio.dash.layouts.stepper_parts.part_three import register_callbacks_stepper_part_three
+from depictio.dash.layouts.stepper_parts.part_one import (
+    register_callbacks_stepper_part_one,
+)
+from depictio.dash.layouts.stepper_parts.part_two import (
+    register_callbacks_stepper_part_two,
+)
+from depictio.dash.layouts.stepper_parts.part_three import (
+    register_callbacks_stepper_part_three,
+)
 from depictio.dash.layouts.header import design_header, register_callbacks_header
 from depictio.dash.layouts.draggable import register_callbacks_draggable
 
@@ -70,6 +86,40 @@ init_children = data["stored_children_data"] if data else list()
 # Generate header and backend components
 header, backend_components = design_header(data)
 
+if not data:
+    core = html.Div(
+        [
+            dmc.Center(dmc.Group(
+                [
+                    DashIconify(icon="feather:info", color="orange", width=60),
+                    dmc.Text(
+                        "No data available.",
+                        variant="gradient",
+                        gradient={"from": "red", "to": "yellow", "deg": 45},
+                        style={"fontSize": 40, "textAlign": "center"},
+                    ),
+                ]
+            )),
+            dmc.Text(
+                "Please first register workflows and data using Depictio CLI.",
+                variant="gradient",
+                gradient={"from": "red", "to": "yellow", "deg": 45},
+                style={"fontSize": 30, "textAlign": "center"},
+            ),
+        ]
+    )
+else:
+    core = (
+        dash_draggable.ResponsiveGridLayout(
+            id="draggable",
+            clearSavedLayout=True,
+            layouts=init_layout,
+            children=init_children,
+            isDraggable=True,
+            isResizable=True,
+        ),
+    )
+
 
 # APP Layout
 app.layout = dbc.Container(
@@ -80,14 +130,7 @@ app.layout = dbc.Container(
                 backend_components,
                 header,
                 # Draggable layout
-                dash_draggable.ResponsiveGridLayout(
-                    id="draggable",
-                    clearSavedLayout=True,
-                    layouts=init_layout,
-                    children=init_children,
-                    isDraggable=True,
-                    isResizable=True,
-                ),
+                core,
             ],
         ),
     ],
