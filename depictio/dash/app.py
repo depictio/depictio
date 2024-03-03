@@ -1,38 +1,21 @@
 from dash import html
 import dash
 import dash_bootstrap_components as dbc
-import dash_mantine_components as dmc
-from dash_iconify import DashIconify
-import dash_draggable
 
 # Depictio imports
 from depictio.api.v1.configs.config import settings
 
 # Depictio components imports - design step
-from depictio.dash.modules.card_component.frontend import (
-    register_callbacks_card_component,
-)
-from depictio.dash.modules.interactive_component.frontend import (
-    register_callbacks_interactive_component,
-)
-from depictio.dash.modules.figure_component.frontend import (
-    register_callbacks_figure_component,
-)
-from depictio.dash.modules.jbrowse_component.frontend import (
-    register_callbacks_jbrowse_component,
-)
+from depictio.dash.modules.card_component.frontend import register_callbacks_card_component
+from depictio.dash.modules.interactive_component.frontend import register_callbacks_interactive_component
+from depictio.dash.modules.figure_component.frontend import register_callbacks_figure_component
+from depictio.dash.modules.jbrowse_component.frontend import register_callbacks_jbrowse_component
 
 # Depictio layout imports
 from depictio.dash.layouts.stepper import register_callbacks_stepper
-from depictio.dash.layouts.stepper_parts.part_one import (
-    register_callbacks_stepper_part_one,
-)
-from depictio.dash.layouts.stepper_parts.part_two import (
-    register_callbacks_stepper_part_two,
-)
-from depictio.dash.layouts.stepper_parts.part_three import (
-    register_callbacks_stepper_part_three,
-)
+from depictio.dash.layouts.stepper_parts.part_one import register_callbacks_stepper_part_one
+from depictio.dash.layouts.stepper_parts.part_two import register_callbacks_stepper_part_two
+from depictio.dash.layouts.stepper_parts.part_three import register_callbacks_stepper_part_three
 from depictio.dash.layouts.header import design_header, register_callbacks_header
 from depictio.dash.layouts.draggable import (
     design_draggable,
