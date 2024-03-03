@@ -2,13 +2,14 @@ version: '3.8'
 
 services:
   mongo:
-    # image: mongo:latest
-    image: mongodb/mongodb-community-server:latest
+    image: mongo:latest
+    # image: mongodb/mongodb-community-server:latest
     command: --dbpath /data/depictioDB --port 27018
     ports:
       - "27018:27018"
     volumes:
       - /Users/tweber/Gits/depictio/depictioDB:/data/depictioDB
+    # user: "999:999"
 
   redis:
     image: redis:latest
