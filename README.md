@@ -58,7 +58,17 @@ docker-compose up -d
 Ongoing 
 
 
+
+
 ## Depictio data YAML config setup
+
+#TODO: YAML schema 
+
+## Get started
+
+- Prepare data
+- Prepare YAML
+- CLI commands
 
 
 ## Modularity
