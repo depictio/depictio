@@ -205,6 +205,19 @@ def design_header(data):
 
     title_style = {"fontWeight": "bold", "fontSize": "24px", "color": "#333"}
     button_style = {"margin": "0 10px", "fontWeight": "500"}
+    
+    # Right side of the header - Edit dashboard mode button
+    if data:
+        edit_switch = dbc.Checklist(
+                    id="edit-dashboard-mode-button",
+                    style={"fontSize": "22px"},
+                    options=[{"label": "Edit dashboard", "value": 0}],
+                    value=init_nclicks_edit_dashboard_mode_button,
+                    switch=True,
+        )
+    else:       
+        edit_switch = html.Div()
+
 
     header = html.Div(
         [
@@ -237,15 +250,7 @@ def design_header(data):
                 ],
                 style={"display": "flex", "alignItems": "center"},
             ),
-            # Right side of the header - Edit dashboard mode button
-            dbc.Checklist(
-                id="edit-dashboard-mode-button",
-                style={"fontSize": "22px"},
-                options=[{"label": "Edit dashboard", "value": 0}],
-                value=init_nclicks_edit_dashboard_mode_button,
-                switch=True,
-                # disabled=disabled,
-            ),
+            edit_switch,
             # Store the number of clicks for the add button and edit dashboard mode button
             dcc.Store(
                 id="stored-add-button",
