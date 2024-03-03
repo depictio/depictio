@@ -34,7 +34,10 @@ from depictio.dash.layouts.stepper_parts.part_three import (
     register_callbacks_stepper_part_three,
 )
 from depictio.dash.layouts.header import design_header, register_callbacks_header
-from depictio.dash.layouts.draggable import register_callbacks_draggable
+from depictio.dash.layouts.draggable import (
+    design_draggable,
+    register_callbacks_draggable,
+)
 
 
 # Depictio utils imports
@@ -86,39 +89,8 @@ init_children = data["stored_children_data"] if data else list()
 # Generate header and backend components
 header, backend_components = design_header(data)
 
-if not data:
-    core = html.Div(
-        [
-            dmc.Center(dmc.Group(
-                [
-                    DashIconify(icon="feather:info", color="orange", width=60),
-                    dmc.Text(
-                        "No data available.",
-                        variant="gradient",
-                        gradient={"from": "red", "to": "yellow", "deg": 45},
-                        style={"fontSize": 40, "textAlign": "center"},
-                    ),
-                ]
-            )),
-            dmc.Text(
-                "Please first register workflows and data using Depictio CLI.",
-                variant="gradient",
-                gradient={"from": "red", "to": "yellow", "deg": 45},
-                style={"fontSize": 30, "textAlign": "center"},
-            ),
-        ]
-    )
-else:
-    core = (
-        dash_draggable.ResponsiveGridLayout(
-            id="draggable",
-            clearSavedLayout=True,
-            layouts=init_layout,
-            children=init_children,
-            isDraggable=True,
-            isResizable=True,
-        ),
-    )
+# Generate draggable layout
+core = design_draggable(data, init_layout, init_children)
 
 
 # APP Layout
