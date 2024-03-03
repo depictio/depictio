@@ -6,11 +6,8 @@ import dash_mantine_components as dmc
 from dash import html, dcc, Input, Output, State, ALL, MATCH
 import dash
 
+
 def register_callbacks_header(app):
-
-
-
-
     @app.callback(
         Output("save-button-dashboard", "n_clicks"),
         Input("save-button-dashboard", "n_clicks"),
@@ -38,7 +35,6 @@ def register_callbacks_header(app):
                 json.dump(data, file)
             return n_clicks
         return n_clicks
-
 
     @app.callback(
         Output("success-modal-dashboard", "is_open"),
@@ -71,10 +67,11 @@ def register_callbacks_header(app):
 
         return is_open
 
-
     @app.callback(
         Output({"type": "add-content", "index": MATCH}, "children"),
-        Output({"type": "test-container", "index": MATCH}, "children", allow_duplicate=True),
+        Output(
+            {"type": "test-container", "index": MATCH}, "children", allow_duplicate=True
+        ),
         [
             Input({"type": "btn-done", "index": MATCH}, "n_clicks"),
         ],
@@ -136,13 +133,25 @@ def register_callbacks_header(app):
 
         return new_draggable_child, []
 
+    # @app.callback(
+    #     Output({"type": "add-button", "index": MATCH}, "disabled"),
+    #     Output({"type": "save-button", "index": MATCH}, "disabled"),
+    #     Input()
+
 
 def design_header(data):
     """
     Design the header of the dashboard
     """
     init_nclicks_add_button = data["stored_add_button"] if data else {"count": 0}
-    init_nclicks_edit_dashboard_mode_button = data["stored_edit_dashboard_mode_button"] if data else [int(0)]
+    init_nclicks_edit_dashboard_mode_button = (
+        data["stored_edit_dashboard_mode_button"] if data else [int(0)]
+    )
+
+    # Check if data is available, if not set the buttons to disabled
+    disabled = False
+    if not data:
+        disabled = True
 
     # Backend components - dcc.Store for storing children and layout - memory storage
     # https://dash.plotly.com/dash-core-components/store
@@ -211,6 +220,7 @@ def design_header(data):
                         variant="gradient",
                         n_clicks=init_nclicks_add_button["count"],
                         style=button_style,
+                        disabled=disabled,
                     ),
                     # Center part of the header - Save button + related modal
                     modal_save_button,
@@ -222,6 +232,7 @@ def design_header(data):
                         variant="gradient",
                         gradient={"from": "teal", "to": "lime", "deg": 105},
                         n_clicks=0,
+                        disabled=disabled,
                     ),
                 ],
                 style={"display": "flex", "alignItems": "center"},
@@ -233,6 +244,7 @@ def design_header(data):
                 options=[{"label": "Edit dashboard", "value": 0}],
                 value=init_nclicks_edit_dashboard_mode_button,
                 switch=True,
+                # disabled=disabled,
             ),
             # Store the number of clicks for the add button and edit dashboard mode button
             dcc.Store(
@@ -250,11 +262,8 @@ def design_header(data):
         ],
         style=header_style,
     )
+
     return header, backend_components
-
-
-
-
 
 
 def enable_box_edit_mode(box, switch_state=True):
@@ -310,8 +319,14 @@ def enable_box_edit_mode_dev(sub_child, switch_state=True):
         print("List")
 
         # Identify if edit and remove buttons are present
-        edit_button_exists = any(child.get("props", {}).get("id", {}).get("type") == "edit-box-button" for child in box["props"]["children"])
-        remove_button_exists = any(child.get("props", {}).get("id", {}).get("type") == "remove-box-button" for child in box["props"]["children"])
+        edit_button_exists = any(
+            child.get("props", {}).get("id", {}).get("type") == "edit-box-button"
+            for child in box["props"]["children"]
+        )
+        remove_button_exists = any(
+            child.get("props", {}).get("id", {}).get("type") == "remove-box-button"
+            for child in box["props"]["children"]
+        )
 
         print(switch_state, edit_button_exists, remove_button_exists)
 
@@ -339,7 +354,9 @@ def enable_box_edit_mode_dev(sub_child, switch_state=True):
             )
 
             # Place buttons at the beginning of the children list
-            box["props"]["children"] = [remove_button, edit_button] + box["props"]["children"]
+            box["props"]["children"] = [remove_button, edit_button] + box["props"][
+                "children"
+            ]
 
         # If switch_state is false and buttons are present, remove them
         elif not switch_state and edit_button_exists and remove_button_exists:

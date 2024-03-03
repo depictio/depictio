@@ -35,20 +35,20 @@ from depictio.dash.layouts.header import (
 
 def register_callbacks_draggable(app):
     # Add a callback to update the isDraggable property
-    @app.callback(
-        [
-            Output("draggable", "isDraggable"),
-            Output("draggable", "isResizable"),
-            Output("add-button", "disabled"),
-            Output("save-button-dashboard", "disabled"),
-        ],
-        [Input("edit-dashboard-mode-button", "value")],
-    )
-    def freeze_layout(switch_state):
-        if len(switch_state) == 0:
-            return False, False, True, True
-        else:
-            return True, True, False, False
+    # @app.callback(
+    #     [
+    #         Output("draggable", "isDraggable"),
+    #         Output("draggable", "isResizable"),
+    #         Output("add-button", "disabled"),
+    #         Output("save-button-dashboard", "disabled"),
+    #     ],
+    #     [Input("edit-dashboard-mode-button", "value")],
+    # )
+    # def freeze_layout(switch_state):
+    #     if len(switch_state) == 0:
+    #         return False, False, True, True
+    #     else:
+    #         return True, True, False, False
 
     @app.callback(
         [
