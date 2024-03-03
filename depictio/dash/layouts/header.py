@@ -221,7 +221,8 @@ def design_header(data):
 
     header = html.Div(
         [
-            html.H1("Depictio", style=title_style),
+            # html.H1("Depictio", style=title_style),
+            html.Img(src=dash.get_asset_url('logo.png')), 
             html.Div(
                 [
                     # Left side of the header - Add new component button
