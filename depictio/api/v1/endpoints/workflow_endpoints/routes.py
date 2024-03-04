@@ -1,31 +1,14 @@
 import collections
-import os
 from bson import ObjectId
 from fastapi import HTTPException, Depends, APIRouter
-from typing import List
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.db import db
-from depictio.api.v1.endpoints.datacollections_endpoints.routes import (
-    delete_datacollection,
-)
 from depictio.api.v1.endpoints.deltatables_endpoints.routes import delete_deltatable
 from depictio.api.v1.endpoints.files_endpoints.routes import delete_files
-from depictio.api.v1.models.base import PyObjectId, convert_objectid_to_str
-from depictio.api.v1.models.orm_models import (
-    DataCollectionConfigORM,
-    DataCollectionORM,
-    PermissionORM,
-    WorkflowConfigORM,
-    WorkflowORM,
-)
-from depictio.api.v1.models.pydantic_models import (
-    DataCollection,
-    Permission,
-    RootConfig,
-    User,
+from depictio.api.v1.models.base import convert_objectid_to_str
+from depictio.api.v1.models.top_structure import (
     Workflow,
-    WorkflowConfig,
 )
 from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user
 

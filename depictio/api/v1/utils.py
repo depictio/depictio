@@ -11,17 +11,13 @@ import re
 from typing import Dict, Type, List, Tuple, Optional, Any
 from pydantic import BaseModel, ValidationError
 import yaml
-from depictio.api.v1.models.pydantic_models import (
-    DataCollection,
-    File,
-    Permission,
-    User,
-    Workflow,
-    DataCollectionConfig,
-    WorkflowConfig,
-    RootConfig,
-    WorkflowRun,
-)
+
+from depictio.api.v1.endpoints.datacollections_endpoints.models import DataCollection
+from depictio.api.v1.endpoints.files_endpoints.models import File
+from depictio.api.v1.endpoints.user_endpoints.models import Permission, User
+from depictio.api.v1.endpoints.workflow_endpoints.models import Workflow, WorkflowConfig, WorkflowRun
+from depictio.api.v1.models.top_structure import RootConfig
+
 
 
 # def return_user_from_id(token: str) -> dict:
@@ -89,7 +85,8 @@ def populate_file_models(workflow: Workflow) -> List[DataCollection]:
     return datacollections_models
 
 
-def validate_worfklow(workflow: Workflow, config: RootConfig, user: User) -> dict:
+# def validate_worfklow(workflow: Workflow, config: RootConfig, user: User) -> dict:
+def validate_worfklow(workflow: Workflow, config: RootConfig) -> dict:
     """
     Validate the workflow.
     """
@@ -110,18 +107,20 @@ def validate_worfklow(workflow: Workflow, config: RootConfig, user: User) -> dic
     # workflow.runs = {}
 
     # Create the permissions using the decoded user
-    permissions = Permission(owners={user})
-    workflow.permissions = permissions
+    # permissions = Permission(owners={user})
+    # workflow.permissions = permissions
     
     return workflow
 
 
-def validate_all_workflows(config: RootConfig, user: User) -> RootConfig:
+# def validate_all_workflows(config: RootConfig, user: User) -> RootConfig:
+def validate_all_workflows(config: RootConfig) -> RootConfig:
     """
     Validate all workflows in the config.
     """
     for workflow in config.workflows:
-        validate_worfklow(workflow, config, user)
+        validate_worfklow(workflow, config)
+        # validate_worfklow(workflow, config, user)
 
     return config
 

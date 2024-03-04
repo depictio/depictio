@@ -106,3 +106,14 @@ class DirectoryPath(str):
         if not path.is_dir():
             raise ValueError(f"'{value}' is not a directory.")
         return value
+
+class HashModel(str):
+    @classmethod
+    def __get_validators__(cls):
+        yield cls.validate
+
+    @classmethod
+    def validate(cls, value: str) -> str:
+        if not re.match(r"^[a-fA-F0-9]{64}$", value):
+            raise ValueError("Invalid hash")
+        return value
