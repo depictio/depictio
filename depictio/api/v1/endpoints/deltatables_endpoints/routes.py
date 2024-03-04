@@ -138,6 +138,7 @@ async def aggregate_data(
 
 
 
+    # TODO: Implement MinIO upload if useful
     # Set environment variables for MinIO access
     os.environ["AWS_ACCESS_KEY_ID"] = "minio"
     os.environ["AWS_SECRET_ACCESS_KEY"] = "minio123"
@@ -157,6 +158,7 @@ async def aggregate_data(
             Aggregation(
                 aggregation_time=datetime.now(),
                 aggregation_by=user,
+                # TODO: Implement versioning if necessary
                 aggregation_version=1,
             )
         ],
