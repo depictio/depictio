@@ -1,10 +1,12 @@
 from bson import ObjectId
 from fastapi import HTTPException
 
-from depictio.api.v1.models.pydantic_models import Workflow
+from depictio.api.v1.endpoints.workflow_endpoints.models import Workflow
 
 
-def validate_workflow_and_collection(collection, user_id: str, workflow_id: str, data_collection_id: str = None):
+
+def validate_workflow_and_collection(collection, workflow_id: str, data_collection_id: str = None):
+# def validate_workflow_and_collection(collection, user_id: str, workflow_id: str, data_collection_id: str = None):
     """
     Validates the existence of a workflow and a specific data collection within it.
     Raises HTTPException if the validation fails.
@@ -15,7 +17,7 @@ def validate_workflow_and_collection(collection, user_id: str, workflow_id: str,
     :param collection: The MongoDB collection object.
     :return: Tuple containing the workflow ObjectId and the data collection document.
     """
-    user_oid = ObjectId(user_id)
+    # user_oid = ObjectId(user_id)
     workflow_oid = ObjectId(workflow_id)
     print(data_collection_id)
     if data_collection_id:
@@ -24,7 +26,7 @@ def validate_workflow_and_collection(collection, user_id: str, workflow_id: str,
     # Construct the query to find the workflow
     query = {
         "_id": workflow_oid,
-        "permissions.owners.user_id": user_oid,
+        # "permissions.owners.user_id": user_oid,
     }
 
     if data_collection_id:
@@ -61,6 +63,8 @@ def validate_workflow_and_collection(collection, user_id: str, workflow_id: str,
                 detail=f"Data collection with id {data_collection_oid} not found in the workflow.",
             )
 
-        return workflow_oid, data_collection_oid, workflow, data_collection, user_oid
+        return workflow_oid, data_collection_oid, workflow, data_collection
+        # return workflow_oid, data_collection_oid, workflow, data_collection, user_oid
     
-    return workflow_oid, workflow, user_oid
+    return workflow_oid, workflow
+    # return workflow_oid, workflow, user_oid

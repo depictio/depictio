@@ -23,16 +23,6 @@ from depictio.api.v1.endpoints.validators import validate_workflow_and_collectio
 from depictio.api.v1.models.base import convert_objectid_to_str
 
 
-from depictio.api.v1.models.pydantic_models import (
-    Aggregation,
-    DeltaTableAggregated,
-    User,
-    Workflow,
-    File,
-    DataCollection,
-    WorkflowRun,
-)
-from depictio.api.v1.models.pydantic_models import GridFSFileInfo
 from depictio.api.v1.utils import (
     # decode_token,
     # public_key_path,

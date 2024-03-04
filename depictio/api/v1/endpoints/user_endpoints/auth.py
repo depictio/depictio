@@ -7,9 +7,10 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import jwt, JWTError
 from pydantic import BaseModel, ValidationError
 from datetime import datetime, timedelta
-from werkzeug.security import check_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
+from depictio.api.v1.endpoints.user_endpoints.models import User, Token, TokenData
+from depictio.api.v1.models.base import PyObjectId
 
-from depictio.api.v1.models.pydantic_models import PyObjectId, TokenData, Token, User
 
 from depictio.api.v1.db import db
 
@@ -34,18 +35,31 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"/api/v1/auth/token")
 
 # Helper function to verify password (modify this to hash verification in production)
 def verify_password(plain_password, hashed_password):
-    return check_password_hash(
-        hashed_password,
-        plain_password,
-    )
+    # return check_password_hash(
+    #     hashed_password,
+    #     plain_password,
+    # )
+    return plain_password == hashed_password
 
 
-# Authentication function
-def authenticate_user(username: str, password: str):
+
+def register_user(username: str, email: str, password: str):
     user = users_collection.find_one({"username": username})
-    if user and verify_password(password, user.get("password")):
-        return user
-    return None
+    if user:
+        raise HTTPException(status_code=400, detail="Username already registered")
+    user = users_collection.find_one({"email": email})
+    if user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    hashed_password = password
+
+    user = {
+        "username": username,
+        "email": email,
+        "password": hashed_password,
+    }
+    users_collection.insert_one(user)
+    return user
 
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
@@ -63,11 +77,21 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     return encoded_jwt
 
 
+# Authentication function
+def authenticate_user(username: str, password: str):
+    user = users_collection.find_one({"username": username})
+    if user and verify_password(password, user.get("password")):
+        return user
+    return None
+
+
+
 @auth_endpoint_router.post("/token", response_model=Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
     user = authenticate_user(form_data.username, form_data.password)
     print("\n\n\n")
     print("login_for_access_token")
+    print(form_data.username)
     print(user)
 
     if not user:
@@ -103,7 +127,8 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     # return json_compatible_data
 
 
-def fetch_user_from_id(user_id_str: str) -> User:
+@auth_endpoint_router.get("/fetch_user", response_model=User)
+async def fetch_user_from_id(user_id_str: str) -> User:
     user_document = users_collection.find_one({"_id": ObjectId(user_id_str)})
     if not user_document:
         raise HTTPException(status_code=404, detail="User not found")
@@ -112,6 +137,17 @@ def fetch_user_from_id(user_id_str: str) -> User:
         username=user_document["username"],
         email=user_document["email"],
     )
+
+
+# def fetch_user_from_id(user_id_str: str) -> User:
+#     user_document = users_collection.find_one({"_id": ObjectId(user_id_str)})
+#     if not user_document:
+#         raise HTTPException(status_code=404, detail="User not found")
+#     return User(
+#         user_id=user_document["_id"],
+#         username=user_document["username"],
+#         email=user_document["email"],
+#     )
 
 
 async def get_current_user(token: str = Depends(oauth2_scheme)) -> TokenData:
