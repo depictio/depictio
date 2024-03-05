@@ -1,13 +1,13 @@
-import os
-from typing import Optional
+import sys
 from bson import ObjectId
-from fastapi import APIRouter, FastAPI, Depends, HTTPException, status
-from fastapi.encoders import jsonable_encoder
+from fastapi import APIRouter, Depends, HTTPException, status
+
+# from fastapi.encoders import jsonable_encoder
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import jwt, JWTError
-from pydantic import BaseModel, ValidationError
 from datetime import datetime, timedelta
-from werkzeug.security import check_password_hash, generate_password_hash
+
+# from werkzeug.security import check_password_hash, generate_password_hash
 from depictio.api.v1.endpoints.user_endpoints.models import User, Token, TokenData
 from depictio.api.v1.models.base import PyObjectId
 
@@ -40,7 +40,6 @@ def verify_password(plain_password, hashed_password):
     #     plain_password,
     # )
     return plain_password == hashed_password
-
 
 
 def register_user(username: str, email: str, password: str):
@@ -85,7 +84,6 @@ def authenticate_user(username: str, password: str):
     return None
 
 
-
 @auth_endpoint_router.post("/token", response_model=Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
     user = authenticate_user(form_data.username, form_data.password)
@@ -110,26 +108,18 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
         scope="read",
     )
 
-    # token_data = {
-    #     "access_token": access_token,
-    #     "token_type": "bearer",
-    #     "user_id": user["_id"],
-    #     "expires_in": int(access_token_expires.total_seconds()),
-    #     "scope": "read",
-    # }
-    # print(token_data)
-
-    # json_compatible_data = jsonable_encoder(token_data, custom_encoder={ObjectId: str})
-    # print("\n\n\n")
-    # print("json_compatible_data")
-    # print(json_compatible_data)
-
-    # return json_compatible_data
-
 
 @auth_endpoint_router.get("/fetch_user", response_model=User)
-async def fetch_user_from_id(user_id_str: str) -> User:
-    user_document = users_collection.find_one({"_id": ObjectId(user_id_str)})
+async def fetch_user_from_token(token: str = Depends(oauth2_scheme)) -> User:
+    print("\n\n\n")
+    print("fetch_user_from_token")
+    payload = jwt.decode(token, PUBLIC_KEY, algorithms=[ALGORITHM])
+    user_id = payload.get("sub")
+    if user_id is None:
+        print("Token is invalid or expired.")
+        sys.exit(code=1)
+    # Fetch user from the database or wherever it is stored
+    user_document = users_collection.find_one({"_id": ObjectId(str(user_id))})
     if not user_document:
         raise HTTPException(status_code=404, detail="User not found")
     return User(
@@ -137,17 +127,6 @@ async def fetch_user_from_id(user_id_str: str) -> User:
         username=user_document["username"],
         email=user_document["email"],
     )
-
-
-# def fetch_user_from_id(user_id_str: str) -> User:
-#     user_document = users_collection.find_one({"_id": ObjectId(user_id_str)})
-#     if not user_document:
-#         raise HTTPException(status_code=404, detail="User not found")
-#     return User(
-#         user_id=user_document["_id"],
-#         username=user_document["username"],
-#         email=user_document["email"],
-#     )
 
 
 async def get_current_user(token: str = Depends(oauth2_scheme)) -> TokenData:
@@ -167,8 +146,3 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> TokenData:
 
     except JWTError as e:
         raise credentials_exception
-
-
-@auth_endpoint_router.get("/users/me", response_model=User)
-async def read_users_me(current_user: TokenData = Depends(get_current_user)):
-    return fetch_user_from_id(str(current_user.user_id))

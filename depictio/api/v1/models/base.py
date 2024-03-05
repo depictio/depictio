@@ -1,4 +1,5 @@
 from datetime import datetime
+import hashlib
 import os
 from pathlib import Path
 from typing import Type, Dict, List, Tuple, Optional, Any, Set
@@ -107,7 +108,7 @@ class DirectoryPath(str):
             raise ValueError(f"'{value}' is not a directory.")
         return value
 
-class HashModel(str):
+class HashModel(BaseModel):
     @classmethod
     def __get_validators__(cls):
         yield cls.validate
@@ -117,3 +118,8 @@ class HashModel(str):
         if not re.match(r"^[a-fA-F0-9]{64}$", value):
             raise ValueError("Invalid hash")
         return value
+
+    @classmethod
+    def compute_hash(cls, value: dict) -> str:
+        hash_str = json.dumps(value, sort_keys=True).encode('utf-8')
+        return hashlib.sha256(hash_str).hexdigest()

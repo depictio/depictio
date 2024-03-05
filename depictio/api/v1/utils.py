@@ -85,8 +85,7 @@ def populate_file_models(workflow: Workflow) -> List[DataCollection]:
     return datacollections_models
 
 
-# def validate_worfklow(workflow: Workflow, config: RootConfig, user: User) -> dict:
-def validate_worfklow(workflow: Workflow, config: RootConfig) -> dict:
+def validate_worfklow(workflow: Workflow, config: RootConfig, user: User) -> dict:
     """
     Validate the workflow.
     """
@@ -107,20 +106,19 @@ def validate_worfklow(workflow: Workflow, config: RootConfig) -> dict:
     # workflow.runs = {}
 
     # Create the permissions using the decoded user
-    # permissions = Permission(owners={user})
-    # workflow.permissions = permissions
+    print(user)
+    permissions = Permission(owners=[user])
+    workflow.permissions = permissions
     
     return workflow
 
 
-# def validate_all_workflows(config: RootConfig, user: User) -> RootConfig:
-def validate_all_workflows(config: RootConfig) -> RootConfig:
+def validate_all_workflows(config: RootConfig, user: User) -> RootConfig:
     """
     Validate all workflows in the config.
     """
     for workflow in config.workflows:
-        validate_worfklow(workflow, config)
-        # validate_worfklow(workflow, config, user)
+        validate_worfklow(workflow, config, user)
 
     return config
 
