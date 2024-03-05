@@ -1,9 +1,13 @@
 import getpass
 import json
+from pprint import pprint
+
+# from pprint import pprint
 import httpx
 import typer
-from typing import Optional
+from typing import Dict, Optional, Tuple
 from jose import JWTError, jwt  # Use python-jose to decode JWT tokens
+from devtools import debug
 
 from depictio.api.v1.models.base import convert_objectid_to_str
 
@@ -13,6 +17,7 @@ from depictio.api.v1.models.base import convert_objectid_to_str
 #     fetch_user_from_id,
 # )
 from depictio.api.v1.models.top_structure import RootConfig
+import httpx
 
 
 from depictio.api.v1.utils import (
@@ -29,20 +34,14 @@ cli_config = get_config("CLI_client/CLI_config.yaml")
 API_BASE_URL = cli_config["DEPICTIO_API"]
 
 
-# def return_user_from_token(token: str) -> dict:
-#     try:
-#         payload = jwt.decode(token, PUBLIC_KEY, algorithms=[ALGORITHM])
-#         user_id = payload.get("sub")
-#         if user_id is None:
-#             typer.echo("Token is invalid or expired.")
-#             raise typer.Exit(code=1)
-#         # Fetch user from the database or wherever it is stored
-#         # user = fetch_user_from_id(user_id)
-#         user = httpx.get(f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user?user_id={user_id}").json()
-#         return user
-#     except JWTError as e:
-#         typer.echo(f"Token verification failed: {e}")
-#         raise typer.Exit(code=1)
+def return_user_from_token(token: str) -> dict:
+    try:
+        headers = {"Authorization": f"Bearer {token}"}
+        user = httpx.get(f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user", headers=headers).json()
+        return user
+    except JWTError as e:
+        typer.echo(f"Token verification failed: {e}")
+        raise typer.Exit(code=1)
 
 
 @app.command()
@@ -71,7 +70,7 @@ def get_access_token(
     if response.status_code == 200:
         # Parse the token from the response
         token_data = response.json()
-        access_token = token_data['access_token']
+        access_token = token_data["access_token"]
         print("Access token retrieved successfully!")
         print(f"Token: {access_token}")
         return access_token
@@ -80,14 +79,98 @@ def get_access_token(
         print(f"Failed to retrieve access token: {response.text}")
 
 
+def check_workflow_exists(workflow_tag: str, headers: dict) -> Tuple[bool, Optional[Dict]]:
+    """
+    Check if the workflow exists and return its details if it does.
+    """
+    response = httpx.get(
+        f"{API_BASE_URL}/depictio/api/v1/workflows/get?workflow_tag={workflow_tag}",
+        headers=headers,
+        timeout=30.0,
+    )
+    if response.status_code == 200:
+        return True, response.json()
+    return False, None
+
+
+def send_workflow_request(endpoint: str, workflow_data_dict: dict, headers: dict) -> None:
+    """
+    Send a request to the workflow API to create, update, or delete a workflow, based on the specified method.
+    """
+    print("Workflow data dict: ", workflow_data_dict)
+    method_dict = {
+        "create": "post",
+        "update": "put",
+        "delete": "delete",
+    }
+    method = method_dict[endpoint]
+
+    # Dynamically select the HTTP method
+    # Simplify by directly using the httpx.request method
+    request_method = method.upper()  # Ensure method is in uppercase
+    url = f"{API_BASE_URL}/depictio/api/v1/workflows/{endpoint}"
+    json_body = None if request_method == "DELETE" else workflow_data_dict
+
+    response = httpx.request(
+        method=request_method,
+        url=url,
+        headers=headers,
+        json=json_body,
+        timeout=30.0,
+        )
+
+    # Check response status
+    if response.status_code in [200, 204]:  # 204 for successful DELETE requests
+        typer.echo(f"Workflow {workflow_data_dict.get('workflow_tag', 'N/A')} successfully {endpoint}d! : {response.json() if response.status_code != 204 else ''}")
+    else:
+        typer.echo(f"Error during {endpoint}d: {response.text}")
+        raise httpx.HTTPStatusError(message=f"Error during {endpoint}d: {response.text}", request=response.request, response=response)
+
+
+def create_update_delete_workflow(workflow_data_dict: dict, headers: dict, update: bool = False) -> None:
+    """
+    Create or update a workflow based on the update flag.
+    """
+    exists, _ = check_workflow_exists(workflow_data_dict["workflow_tag"], headers)
+    endpoint = "update" if update else "create"
+
+
+    if exists:
+        if not update:
+            typer.echo(f"Workflow {workflow_data_dict['workflow_tag']} already exists.")
+            return
+
+        else:
+            typer.echo(f"Workflow {workflow_data_dict['workflow_tag']} already exists, updating it.")
+
+    send_workflow_request(endpoint, workflow_data_dict, headers)
+
+    # Retrieve workflow ID and data collection IDs
+
+
+
+def scan_files_for_data_collection(workflow_id: str, data_collection_id: str, headers: dict) -> None:
+    """
+    Scan files for a given data collection of a workflow.
+    """
+    response = httpx.post(
+        f"{API_BASE_URL}/depictio/api/v1/files/scan/{workflow_id}/{data_collection_id}",
+        headers=headers,
+        timeout=5 * 60,  # Increase the timeout as needed
+    )
+    if response.status_code == 200:
+        typer.echo(f"Files successfully scanned for data collection {data_collection_id}!")
+    else:
+        typer.echo(f"Error for data collection {data_collection_id}: {response.text}")
+
 @app.command()
-def create_workflow(
+def setup(
     config_path: str = typer.Option(
         ...,
         "--config_path",
         help="Path to the YAML configuration file",
     ),
-    workflow_tag: Optional[str] = typer.Option(None, "--workflow_tag", help="Workflow name to be created"),
+    # workflow_tag: Optional[str] = typer.Option(None, "--workflow_tag", help="Workflow name to be created"),
     update: Optional[bool] = typer.Option(False, "--update", help="Update the workflow if it already exists"),
     token: Optional[str] = typer.Option(
         None,  # Default to None (not specified)
@@ -98,7 +181,7 @@ def create_workflow(
     """
     Create a new workflow from a given YAML configuration file.
     """
-    assert workflow_tag is not None
+    # assert workflow_tag is not None
 
     if not token:
         typer.echo("A valid token must be provided for authentication.")
@@ -117,33 +200,19 @@ def create_workflow(
 
     config = validate_config(config_data, RootConfig)
 
-    # validated_config = validate_all_workflows(config)
     validated_config = validate_all_workflows(config, user=user)
 
-    # config_dict = {f"{e.workflow_tag}": e for e in validated_config.workflows}
+    # TMP: to print the validated config
+    debug(validated_config)
 
-    if workflow_tag not in [w.workflow_tag for w in validated_config.workflows]:
-        typer.echo(f"Workflow '{workflow_tag}' not found in the config file.")
-        raise typer.Exit(code=1)
+    # Populate DB with the validated config for each workflow
+    for workflow in validated_config.workflows:
+        workflow_data_raw = workflow.dict(by_alias=True, exclude_none=True)
+        workflow_data_dict = convert_objectid_to_str(workflow_data_raw)
+        create_update_delete_workflow(workflow_data_dict, headers, update)
+        # for dc in workflow.data_collections:
+        #     scan_files_for_data_collection(workflow.workflow_tag, dc.data_collection_id, headers)
 
-    workflow_data = [w for w in validated_config.workflows if w.workflow_tag == workflow_tag][0]
-
-    workflow_data_raw = workflow_data.dict(by_alias=True, exclude_none=True)
-    workflow_data_dict = convert_objectid_to_str(workflow_data_raw)
-    workflow_data_dict["update"] = update
-    # print(workflow_data_dict)
-
-    response = httpx.post(
-        f"{API_BASE_URL}/depictio/api/v1/workflows/create?update={update}",
-        json=workflow_data_dict,
-        headers=headers,
-        timeout=30.0,  # Increase the timeout as needed
-    )
-
-    if response.status_code == 200:
-        typer.echo(f"Workflow successfully created or updated! : {response.json()}")
-    else:
-        typer.echo(f"Error: {response.text}")
 
 
 @app.command()
@@ -206,63 +275,13 @@ def scan_files_from_data_collection(
         typer.echo("A valid token must be provided for authentication.")
         raise typer.Exit(code=1)
 
-    # user = return_user_from_token(token)  # Decode the token to get the user information
-    # if not user:
-    #     typer.echo("Invalid token or unable to decode user information.")
-    #     raise typer.Exit(code=1)
-
-    # Set permissions with the user as both owner and viewer
     headers = {"Authorization": f"Bearer {token}"}  # Token is now mandatory
 
     config_data = get_config(config_path)
     # print(config_data)
     config = validate_config(config_data, RootConfig)
     assert isinstance(config, RootConfig)
-    # print(config)
-
-    # validated_config = validate_all_workflows(config, user=user)
-
-    # config_dict = {f"{e.id}": e for e in validated_config.workflows}
-
-    # if workflow_id not in config_dict:
-    #     raise ValueError(f"Workflow '{workflow_id}' not found in the config file.")
-
-    # if workflow_id is None:
-    #     raise ValueError("Please provide a workflow id.")
-
-    # workflow = config_dict[workflow_id]
-
-    # If a specific data_collection_id is given, use that, otherwise default to all data_collections
-    # data_collections_to_process = []
-    # if data_collection_id:
-    #     if data_collection_id not in workflow.data_collections:
-    #         raise ValueError(
-    #             f"Data collection '{data_collection_id}' not found for the given workflow."
-    #         )
-    #     data_collections_to_process.append(
-    #         workflow.data_collections[data_collection_id]
-    #     )
-    # else:
-    #     data_collections_to_process = list(workflow.data_collections.values())
-
-    # Assuming workflow and data_collection are Pydantic models and have .dict() method
-    # data_payload = {
-    #     "workflow_id": workflow_id,
-    #     "data_collection_id": data_collection_id,
-    # }
-
-    # Convert the payload to JSON using the custom encoder
-    # print(data_payload, type(data_payload))
-
-    # data_payload_json = convert_objectid_to_str(data_payload)
-
-    # print(data_payload_json, type(data_payload_json))
-
-    # workflow_data_dict = workflow_data.dict()
-
-    print("\n\n")
-    # print(data_payload_json)
-    # print(data_payload["data_collection"])
+   
     response = httpx.post(
         f"{API_BASE_URL}/depictio/api/v1/files/scan/{workflow_id}/{data_collection_id}",
         # json=data_payload_json,
@@ -270,15 +289,7 @@ def scan_files_from_data_collection(
         # TODO: find a fix for this timeout
         timeout=5 * 60,  # Increase the timeout as needed
     )
-    print(response)
-    print(response.text)
-    print(response.status_code)
-    print("\n\n")
-    # if response.status_code == 200:
-    #     typer.echo("Files successfully scanned!")
-    # else:
-    #     typer.echo(f"Error: {response.text}")
-
+    
 
 @app.command()
 def create_deltatable(

@@ -10,6 +10,7 @@ from pydantic import (
     root_validator,
 )
 from depictio.api.v1.endpoints.files_endpoints.models import File
+from depictio.api.v1.endpoints.user_endpoints.models import Permission
 from depictio.api.v1.models.base import DirectoryPath, HashModel, MongoModel, PyObjectId
 from depictio.api.v1.endpoints.datacollections_endpoints.models import DataCollection
 
@@ -134,6 +135,7 @@ class WorkflowSystem(BaseModel):
         return value
 
 
+
 class Workflow(MongoModel):
     id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
     name: str = None
@@ -147,7 +149,18 @@ class Workflow(MongoModel):
     config: WorkflowConfig
     registration_time: datetime = datetime.now()
     # data_collection_ids: Optional[List[str]] = []
-    # permissions: Optional[Permission]
+    permissions: Optional[Permission]
+    # hash: Optional[HashModel] = None
+
+    # @root_validator(pre=True)
+    # def compute_and_assign_hash(cls, values):
+    #     values_copy = values.copy()
+    #     values_copy.pop('hash', None)  # Remove the hash to avoid hashing the hash
+    #     computed_hash = HashModel.compute_hash(values_copy)
+    #     hash_instance = HashModel(hash=computed_hash)
+    #     values['hash'] = hash_instance
+    #     return values
+
 
     @validator("name", pre=True, always=True)
     def validate_name(cls, value):

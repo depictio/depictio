@@ -1,6 +1,7 @@
 import collections
 from bson import ObjectId
 from fastapi import HTTPException, Depends, APIRouter
+from pymongo import ReturnDocument
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.db import db
@@ -51,29 +52,22 @@ async def get_workflows(current_user: str = Depends(get_current_user)):
     workflows = convert_objectid_to_str(list(workflows_cursor))
 
     if not workflows:
-        raise HTTPException(
-            status_code=404, detail="No workflows found for the current user."
-        )
+        raise HTTPException(status_code=404, detail="No workflows found for the current user.")
 
     return workflows
 
 
-# TODO: update without removing the modified fields in mongo, and not changing
 @workflows_endpoint_router.post("/create")
-async def create_workflow(
-    workflow: Workflow, update: bool = False, current_user: str = Depends(get_current_user)
-):
+async def create_workflow(workflow: Workflow, current_user: str = Depends(get_current_user)):
     workflows_collection.drop()
-    data_collections_collection.drop()
-    runs_collection.drop()
-    files_collection.drop()
+    # data_collections_collection.drop()
+    # runs_collection.drop()
+    # files_collection.drop()
     # fschunks_collection.drop()
     # fsfiles_collection.drop()
     # permissions_collection.drop()
     # workflow_config_collection.drop()
     # data_collection_config_collection.drop()
-
-    
 
     existing_workflow = workflows_collection.find_one(
         {
@@ -81,65 +75,48 @@ async def create_workflow(
             "permissions.owners.user_id": current_user.user_id,
         }
     )
-     
-    if existing_workflow and not update:
+
+    if existing_workflow:
         raise HTTPException(
             status_code=400,
             detail=f"Workflow with name '{workflow.workflow_tag}' already exists. Use update option to modify it.",
         )
-    
-    if update and existing_workflow:
-        # Update existing workflow
-        workflow.id = existing_workflow.get("_id")  # Ensure we have the correct ID for updating
-        res = workflows_collection.update_one(
-            {"_id": workflow.id}, 
-            {"$set": workflow.mongo()}, 
-            upsert=True
-        )
-        return str(workflow.id)
+
     else:
         # Create new workflow
         assert isinstance(workflow.id, ObjectId)
         res = workflows_collection.insert_one(workflow.mongo())
         assert res.inserted_id == workflow.id
-        return str(res.inserted_id)
-
-    # found = workflows_collection.find_one({"_id": res.inserted_id})
-    # return str(res.inserted_id)
+        return_dict = {str(workflow.id): [str(data_collection.id) for data_collection in workflow.data_collections]}
+        return return_dict
 
 
-# @workflows_endpoint_router.put("/update_workflow/{workflow_id}")
-# async def update_workflow(
-#     workflow_id: str, updated_workflow: Workflow, current_user: str = Depends(get_current_user)
-# ):
-#     # Find the workflow by ID
-#     existing_workflow = workflows_collection.find_one({"id": workflow_id})
-#     workflow_tag = existing_workflow["workflow_tag"]
+# TODO: find a way to update the workflow and data collections by keeping the IDs
+@workflows_endpoint_router.put("/update")
+async def update_workflow(workflow: Workflow, current_user: str = Depends(get_current_user)):
+    existing_workflow = workflows_collection.find_one(
+        {
+            "workflow_tag": workflow.workflow_tag,
+            "permissions.owners.user_id": current_user.user_id,
+        }
+    )
 
-#     if not existing_workflow:
-#         raise HTTPException(
-#             status_code=404, detail=f"Workflow with ID '{workflow_id}' does not exist."
-#         )
-
-#     # Ensure that the current user is authorized to update the workflow
-#     user_id = current_user.user_id
-#     if user_id not in existing_workflow["permissions"]["owners"]:
-#         raise HTTPException(
-#             status_code=403,
-#             detail=f"User with ID '{user_id}' is not authorized to update workflow with ID '{id}'",
-#         )
-
-#     # Update the workflow
-#     updated_data = updated_workflow.dict()
-#     workflows_collection.update_one({"id": id}, {"$set": updated_data})
-
-#     return {"message": f"Workflow {workflow_tag} with ID '{id}' updated successfully"}
+    if existing_workflow:
+        # Update existing workflow
+        workflow.id = existing_workflow.get("_id")  # Ensure we have the correct ID for updating
+        res = workflows_collection.find_one_and_update({"_id": workflow.id}, {"$set": workflow.mongo()}, return_document=ReturnDocument.AFTER, upsert=True)
+        assert res.get("_id") == workflow.id
+        return_dict = {str(workflow.id): [str(data_collection.id) for data_collection in workflow.data_collections]}
+        return return_dict
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Workflow with name '{workflow.workflow_tag}' does not exist. Use create option to create it.",
+        )
 
 
 @workflows_endpoint_router.delete("/delete/{workflow_id}")
-async def delete_workflow(
-    workflow_id: str, current_user: str = Depends(get_current_user)
-):
+async def delete_workflow(workflow_id: str, current_user: str = Depends(get_current_user)):
     # Find the workflow by ID
     workflow_oid = ObjectId(workflow_id)
     assert isinstance(workflow_oid, ObjectId)
@@ -148,9 +125,7 @@ async def delete_workflow(
     print(existing_workflow)
 
     if not existing_workflow:
-        raise HTTPException(
-            status_code=404, detail=f"Workflow with ID '{workflow_id}' does not exist."
-        )
+        raise HTTPException(status_code=404, detail=f"Workflow with ID '{workflow_id}' does not exist.")
 
     workflow_tag = existing_workflow["workflow_tag"]
 
@@ -164,9 +139,7 @@ async def delete_workflow(
         existing_workflow["permissions"]["owners"],
         [u["user_id"] for u in existing_workflow["permissions"]["owners"]],
     )
-    if user_id not in [
-        u["user_id"] for u in existing_workflow["permissions"]["owners"]
-    ]:
+    if user_id not in [u["user_id"] for u in existing_workflow["permissions"]["owners"]]:
         raise HTTPException(
             status_code=403,
             detail=f"User with ID '{user_id}' is not authorized to delete workflow with ID '{workflow_id}'",
@@ -176,17 +149,12 @@ async def delete_workflow(
     assert workflows_collection.find_one({"_id": workflow_oid}) is None
 
     for data_collection in data_collections:
-        delete_files_message = await delete_files(
-            workflow_id, data_collection["data_collection_id"], current_user
-        )
+        delete_files_message = await delete_files(workflow_id, data_collection["data_collection_id"], current_user)
 
-        delete_datatable_message = await delete_deltatable(
-            workflow_id, data_collection["data_collection_id"], current_user
-        )
+        delete_datatable_message = await delete_deltatable(workflow_id, data_collection["data_collection_id"], current_user)
 
-    return {
-        "message": f"Workflow {workflow_tag} with ID '{id}' deleted successfully, as well as all files"
-    }
+    return {"message": f"Workflow {workflow_tag} with ID '{id}' deleted successfully, as well as all files"}
+
 
 @workflows_endpoint_router.get("/get_join_tables/{workflow_id}")
 async def get_join_tables(workflow_id: str, current_user: str = Depends(get_current_user)):
@@ -196,13 +164,9 @@ async def get_join_tables(workflow_id: str, current_user: str = Depends(get_curr
     existing_workflow = workflows_collection.find_one({"_id": workflow_oid})
 
     if not existing_workflow:
-        raise HTTPException(
-            status_code=404, detail=f"Workflow with ID '{workflow_id}' does not exist."
-        )
+        raise HTTPException(status_code=404, detail=f"Workflow with ID '{workflow_id}' does not exist.")
 
     data_collections = existing_workflow["data_collections"]
-
-
 
     # Initialize a map to track join details
     join_details_map = collections.defaultdict(list)

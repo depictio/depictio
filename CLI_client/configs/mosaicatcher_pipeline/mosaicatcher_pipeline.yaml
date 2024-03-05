@@ -3,7 +3,7 @@ workflows:
   - engine: "snakemake"
     name: "mosaicatcher-pipeline"
     description: "Strand-Seq SV calling framework"
-    repository: "https://github.com/friendsofstrandseq/mosaicatcher-pipeline"
+    repository_url: "https://github.com/friendsofstrandseq/mosaicatcher-pipeline"
     config:
       parent_runs_location:
         - "/Users/tweber/Data/mosaicatcher-pipeline"
