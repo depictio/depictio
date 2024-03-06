@@ -1,0 +1,140 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+      "depictio_version": {
+        "type": "string"
+      },
+      "workflows": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "engine": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "repository_url": {
+              "type": "string",
+              "format": "uri"
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "parent_runs_location": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "runs_regex": {
+                  "type": "string"
+                }
+              },
+              "required": ["parent_runs_location", "runs_regex"]
+            },
+            "data_collections": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "data_collection_tag": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "config": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": ["Table", "JBrowse2"]
+                      },
+                      "files_regex": {
+                        "type": "string"
+                      },
+                      "dc_specific_properties": {
+                        "type": "object"
+                      },
+                      "format": {
+                        "type": "string"
+                      },
+                      "index_extension": {
+                        "type": "string"
+                      },
+                      "jbrowse_template_location": {
+                        "type": "string"
+                      },
+                      "regex_wildcards": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string"
+                            },
+                            "regex": {
+                              "type": "string"
+                            },
+                            "join_data_collection": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["name", "regex"]
+                        }
+                      },
+                      "table_join": {
+                        "type": "object",
+                        "properties": {
+                          "on_columns": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "how": {
+                            "type": "string"
+                          },
+                          "with_dc": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "polars_kwargs": {
+                        "type": "object"
+                      },
+                      "separator": {
+                        "type": "string"
+                      },
+                      "skip_rows": {
+                        "type": "integer"
+                      },
+                      "keep_columns": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": ["type", "files_regex"]
+                  }
+                },
+                "required": ["data_collection_tag", "config"]
+              }
+            }
+          },
+          "required": ["engine", "name", "config", "data_collections"]
+        }
+      }
+    },
+    "required": ["depictio_version", "workflows"]
+  }
