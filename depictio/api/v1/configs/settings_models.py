@@ -9,6 +9,7 @@ class Collections(BaseModel):
     workflow_collection: str
     runs_collection: str
     files_collection: str
+    users_collection: str
 
 
 class MongoConfig(BaseModel):

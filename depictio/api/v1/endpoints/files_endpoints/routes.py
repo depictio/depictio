@@ -339,7 +339,7 @@ async def scan_data_collection(
                 # Add run_id to each file before inserting
                 for file in sorted(files, key=lambda x: x["file_location"]):
                     file = File(**file)
-                    print(data_collection.config.type)
+                    # print(data_collection.config.type)
 
                     # if data_collection.config.type == "Genome Browser":
                     #     # print(data_collection.config)

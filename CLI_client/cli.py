@@ -12,7 +12,6 @@ from jose import JWTError, jwt  # Use python-jose to decode JWT tokens
 from devtools import debug
 
 
-
 from depictio.api.v1.models.base import convert_objectid_to_str
 
 # from depictio.api.v1.endpoints.user_endpoints.auth import (
@@ -40,7 +39,6 @@ cli_config = get_config("CLI_client/CLI_config.yaml")
 API_BASE_URL = cli_config["DEPICTIO_API"]
 
 
-
 def load_json_schema(schema_path):
     """Load JSON Schema."""
     with open(schema_path, "r") as f:
@@ -54,6 +52,7 @@ def validate_config_using_jsonschema(config, schema):
         print("Validation successful. The configuration is valid.")
     except jsonschema.ValidationError as e:
         sys.exit(f"{e}")
+
 
 def return_user_from_token(token: str) -> dict:
     try:
@@ -138,7 +137,7 @@ def send_workflow_request(endpoint: str, workflow_data_dict: dict, headers: dict
         headers=headers,
         json=json_body,
         timeout=30.0,
-        )
+    )
 
     # Check response status
     if response.status_code in [200, 204]:  # 204 for successful DELETE requests
@@ -156,7 +155,6 @@ def create_update_delete_workflow(workflow_data_dict: dict, headers: dict, updat
     exists, _ = check_workflow_exists(workflow_data_dict["workflow_tag"], headers)
     endpoint = "update" if update else "create"
 
-
     if exists:
         if not update:
             typer.echo(f"Workflow {workflow_data_dict['workflow_tag']} already exists.")
@@ -169,7 +167,6 @@ def create_update_delete_workflow(workflow_data_dict: dict, headers: dict, updat
     return workflow_json
 
     # Retrieve workflow ID and data collection IDs
-
 
 
 # TODO: change logic to just initiate the scan and not wait for the completion (thousands of files can take a long time)
@@ -186,6 +183,22 @@ def scan_files_for_data_collection(workflow_id: str, data_collection_id: str, he
         typer.echo(f"Files successfully scanned for data collection {data_collection_id}!")
     else:
         typer.echo(f"Error for data collection {data_collection_id}: {response.text}")
+
+
+def create_deltatable_request(workflow_id: str, data_collection_id: str, headers: dict) -> None:
+    """
+    Create a delta table for a given data collection of a workflow.
+    """
+    response = httpx.post(
+        f"{API_BASE_URL}/depictio/api/v1/deltatables/create/{workflow_id}/{data_collection_id}",
+        headers=headers,
+        timeout=60.0 * 5,  # Increase the timeout as needed
+    )
+    if response.status_code == 200:
+        typer.echo(f"Data successfully aggregated for data collection {data_collection_id}!")
+    else:
+        typer.echo(f"Error for data collection {data_collection_id}: {response.text}")
+
 
 @app.command()
 def setup(
@@ -241,13 +254,19 @@ def setup(
         print(d)
         for wf, dcs in d.items():
             for dc in dcs:
-                print("scan_files_for_data_collection")
-                print(wf, dc, headers)
-                scan_files_for_data_collection(wf, dc, headers)
-        # TODO: clean & refactor jbrowse part in files endpoint
-        # TODO: add a jbrowse endpoint to create a TrackSet for each data collection of type Genome Browser
-        #     create_deltatable(workflow.workflow_tag, dc.data_collection_id, headers)
+                dc_object = [e for e in workflow.data_collections if str(e.id) == dc][0]
+                if dc_object.config.type.lower() == "table":
+                    print("scan_files_for_data_collection")
+                    print(wf, dc, headers)
+                    scan_files_for_data_collection(wf, dc, headers)
+                    # TODO: clean & refactor jbrowse part in files endpoint
+                    # TODO: add a jbrowse endpoint to create a TrackSet for each data collection of type Genome Browser
 
+                    # Retrieve the data collection details
+
+                    # print("create_deltatable")
+                    # print(wf, dc, headers)
+                    # create_deltatable_request(wf, dc, headers)
 
 
 @app.command()
@@ -316,7 +335,7 @@ def scan_files_from_data_collection(
     # print(config_data)
     config = validate_config(config_data, RootConfig)
     assert isinstance(config, RootConfig)
-   
+
     response = httpx.post(
         f"{API_BASE_URL}/depictio/api/v1/files/scan/{workflow_id}/{data_collection_id}",
         # json=data_payload_json,
@@ -324,7 +343,7 @@ def scan_files_from_data_collection(
         # TODO: find a fix for this timeout
         timeout=5 * 60,  # Increase the timeout as needed
     )
-    
+
 
 @app.command()
 def create_deltatable(

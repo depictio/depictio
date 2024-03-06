@@ -4,7 +4,7 @@ from fastapi import HTTPException, Depends, APIRouter
 from pymongo import ReturnDocument
 
 from depictio.api.v1.configs.config import settings
-from depictio.api.v1.db import db
+from depictio.api.v1.db import workflows_collection
 from depictio.api.v1.endpoints.deltatables_endpoints.routes import delete_deltatable
 from depictio.api.v1.endpoints.files_endpoints.routes import delete_files
 from depictio.api.v1.models.base import convert_objectid_to_str
@@ -14,22 +14,8 @@ from depictio.api.v1.models.top_structure import (
 from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user
 
 
-# from modules.workflow_endpoints.models import Workflow
-
+# Define the router
 workflows_endpoint_router = APIRouter()
-
-
-data_collections_collection = db[settings.mongodb.collections.data_collection]
-workflows_collection = db[settings.mongodb.collections.workflow_collection]
-runs_collection = db[settings.mongodb.collections.runs_collection]
-files_collection = db[settings.mongodb.collections.files_collection]
-users_collection = db["users"]
-fschunks_collection = db["fs.chunks"]
-fsfiles_collection = db["fs.files"]
-permissions_collection = db["permissions"]
-workflow_config_collection = db["workflow_config"]
-data_collection_config_collection = db["data_collection_config"]
-users_collection = db["users"]
 
 
 @workflows_endpoint_router.get("/get")
