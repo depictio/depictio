@@ -31,14 +31,15 @@ dash:
   port: 5080
 
 minio:
-  endpoint: "host.docker.internal"
+  endpoint: "http://host.docker.internal"
   port: 9000
   access_key: "minio"
   secret_key: "minio123"
   secure: False
-  bucket: "depictio"
+  bucket: "depictio-bucket"
 
 jbrowse:
+  enabled: True
   instance:
     host: "host.docker.internal"
     port: 3000
