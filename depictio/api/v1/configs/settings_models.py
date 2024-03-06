@@ -42,6 +42,7 @@ class MinioConfig(BaseModel):
 
 
 class JbrowseConfig(BaseModel):
+    enabled: bool
     instance: Dict[str, Union[str, int]]
     watcher_plugin: Dict[str, Union[str, int]]
     data_dir: str

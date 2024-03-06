@@ -66,9 +66,7 @@ class Group(BaseModel):
     @validator("members", each_item=True, pre=True)
     def ensure_unique_users(cls, user):
         if not isinstance(user, User):
-            raise ValueError(
-                f"Each member must be an instance of User, got {type(user)}"
-            )
+            raise ValueError(f"Each member must be an instance of User, got {type(user)}")
         return user
 
     # This function ensures there are no duplicate users in the group
@@ -95,52 +93,25 @@ class Permission(BaseModel):
     viewers: Optional[List[User]] = set()  # Set default to empty set
 
     def dict(self, **kwargs):
-        # Before converting to list, let's print the owners and viewers
-        # print("Converting to dict - Owners and Viewers as objects:")
-        # print("Owners:", self.owners)
-        # print("Viewers:", self.viewers)
-
         # Generate list of owner and viewer dictionaries
         owners_list = [owner.dict(**kwargs) for owner in self.owners]
         viewers_list = [viewer.dict(**kwargs) for viewer in self.viewers]
-
-        # print("Converting to dict - Owners and Viewers as lists of dicts:")
-        # print("Owners Dict List:", owners_list)
-        # print("Viewers Dict List:", viewers_list)
-
         return {"owners": owners_list, "viewers": viewers_list}
 
     @validator("owners", "viewers", pre=True, each_item=True)
     def convert_dict_to_user(cls, v):
         if isinstance(v, dict):
-            return User(
-                **v
-            )  # Assuming `User` is a Pydantic model and can be instantiated like this
+            return User(**v)  # Assuming `User` is a Pydantic model and can be instantiated like this
         elif not isinstance(v, User):
             raise ValueError("Permissions should be assigned to User instances.")
         return v
 
     @root_validator(pre=True)
     def validate_permissions(cls, values):
-        # print("Inside validate_permissions - Raw input values:")
-        # print(values)
-
         owners = values.get("owners", set())
         viewers = values.get("viewers", set())
-
-        # print("Inside validate_permissions - Parsed owners and viewers:")
-        # print("Owners:", owners)
-        # print("Viewers:", viewers)
-
-        # Check if owners and viewers are sets and contain only User instances
         if not owners:
             raise ValueError("At least one owner is required.")
-
-        # if not isinstance(owners, set) or any(not isinstance(owner, User) for owner in owners):
-        #     raise ValueError("All owners must be User instances.")
-
-        # if viewers and (not isinstance(viewers, set) or any(not isinstance(viewer, User) for viewer in viewers)):
-        #     raise ValueError("All viewers must be User instances if provided.")
 
         return values
 
@@ -152,14 +123,7 @@ class Permission(BaseModel):
         owner_ids = {owner.user_id for owner in owners}
         viewer_ids = {viewer.user_id for viewer in viewers}
 
-        # Check if there is any intersection between owners and viewers
         if not owner_ids.isdisjoint(viewer_ids):
             raise ValueError("A User cannot be both an owner and a viewer.")
 
-        # You would add additional checks here to ensure all users exist in your database
-        # If you're pulling from a real database, this would be the place to query it and validate
-
         return values
-
-
-
