@@ -1,13 +1,17 @@
 import getpass
 import json
 from pprint import pprint
+import sys
 
 # from pprint import pprint
 import httpx
+import jsonschema
 import typer
 from typing import Dict, Optional, Tuple
 from jose import JWTError, jwt  # Use python-jose to decode JWT tokens
 from devtools import debug
+
+
 
 from depictio.api.v1.models.base import convert_objectid_to_str
 
@@ -22,8 +26,10 @@ import httpx
 
 from depictio.api.v1.utils import (
     get_config,
+    # load_json_schema,
     validate_all_workflows,
     validate_config,
+    # validate_config_using_jsonschema,
 )
 
 
@@ -33,6 +39,21 @@ cli_config = get_config("CLI_client/CLI_config.yaml")
 
 API_BASE_URL = cli_config["DEPICTIO_API"]
 
+
+
+def load_json_schema(schema_path):
+    """Load JSON Schema."""
+    with open(schema_path, "r") as f:
+        return json.load(f)
+
+
+def validate_config_using_jsonschema(config, schema):
+    """Validate YAML configuration against the JSON Schema."""
+    try:
+        jsonschema.validate(instance=config, schema=schema)
+        print("Validation successful. The configuration is valid.")
+    except jsonschema.ValidationError as e:
+        sys.exit(f"{e}")
 
 def return_user_from_token(token: str) -> dict:
     try:
@@ -122,6 +143,7 @@ def send_workflow_request(endpoint: str, workflow_data_dict: dict, headers: dict
     # Check response status
     if response.status_code in [200, 204]:  # 204 for successful DELETE requests
         typer.echo(f"Workflow {workflow_data_dict.get('workflow_tag', 'N/A')} successfully {endpoint}d! : {response.json() if response.status_code != 204 else ''}")
+        return response.json() if response.status_code != 204 else None
     else:
         typer.echo(f"Error during {endpoint}d: {response.text}")
         raise httpx.HTTPStatusError(message=f"Error during {endpoint}d: {response.text}", request=response.request, response=response)
@@ -143,12 +165,14 @@ def create_update_delete_workflow(workflow_data_dict: dict, headers: dict, updat
         else:
             typer.echo(f"Workflow {workflow_data_dict['workflow_tag']} already exists, updating it.")
 
-    send_workflow_request(endpoint, workflow_data_dict, headers)
+    workflow_json = send_workflow_request(endpoint, workflow_data_dict, headers)
+    return workflow_json
 
     # Retrieve workflow ID and data collection IDs
 
 
 
+# TODO: change logic to just initiate the scan and not wait for the completion (thousands of files can take a long time)
 def scan_files_for_data_collection(workflow_id: str, data_collection_id: str, headers: dict) -> None:
     """
     Scan files for a given data collection of a workflow.
@@ -198,6 +222,10 @@ def setup(
     # Get the config data (assuming get_config returns a dictionary)
     config_data = get_config(config_path)
 
+    # Validate the config data using JSON Schema
+    json_schema = load_json_schema("CLI_client/depictio_json_schema.json")
+    validate_config_using_jsonschema(config_data, json_schema)
+
     config = validate_config(config_data, RootConfig)
 
     validated_config = validate_all_workflows(config, user=user)
@@ -209,9 +237,16 @@ def setup(
     for workflow in validated_config.workflows:
         workflow_data_raw = workflow.dict(by_alias=True, exclude_none=True)
         workflow_data_dict = convert_objectid_to_str(workflow_data_raw)
-        create_update_delete_workflow(workflow_data_dict, headers, update)
-        # for dc in workflow.data_collections:
-        #     scan_files_for_data_collection(workflow.workflow_tag, dc.data_collection_id, headers)
+        d = create_update_delete_workflow(workflow_data_dict, headers, update)
+        print(d)
+        for wf, dcs in d.items():
+            for dc in dcs:
+                print("scan_files_for_data_collection")
+                print(wf, dc, headers)
+                scan_files_for_data_collection(wf, dc, headers)
+        # TODO: clean & refactor jbrowse part in files endpoint
+        # TODO: add a jbrowse endpoint to create a TrackSet for each data collection of type Genome Browser
+        #     create_deltatable(workflow.workflow_tag, dc.data_collection_id, headers)
 
 
 

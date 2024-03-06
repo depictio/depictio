@@ -1,5 +1,6 @@
 # in /app/api/v1/routers.py
 from fastapi import APIRouter
+from depictio.api.v1.configs.config import settings
 from depictio.api.v1.endpoints.workflow_endpoints.routes import workflows_endpoint_router
 from depictio.api.v1.endpoints.datacollections_endpoints.routes import datacollections_endpoint_router
 from depictio.api.v1.endpoints.files_endpoints.routes import files_endpoint_router
@@ -30,11 +31,12 @@ router.include_router(
     prefix="/deltatables",
     tags=["DeltaTables"],
 )
-router.include_router(
-    jbrowse_endpoints_router,
-    prefix="/jbrowse",
-    tags=["JBrowse"],
-)
+if settings.jbrowse.enabled:
+    router.include_router(
+        jbrowse_endpoints_router,
+        prefix="/jbrowse",
+        tags=["JBrowse"],
+    )
 router.include_router(
     auth_endpoint_router,
     prefix="/auth",

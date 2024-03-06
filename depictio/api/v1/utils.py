@@ -1,8 +1,10 @@
 from datetime import datetime
 import hashlib
+import json
 from pathlib import Path, PosixPath
 import dash_mantine_components as dmc
 from dash import dcc
+# import jsonschema
 import numpy as np
 from jose import jwt, JWTError
 
@@ -19,7 +21,6 @@ from depictio.api.v1.endpoints.workflow_endpoints.models import Workflow, Workfl
 from depictio.api.v1.models.top_structure import RootConfig
 
 
-
 # def return_user_from_id(token: str) -> dict:
 #     try:
 #         payload = jwt.decode(token, PUBLIC_KEY, algorithms=[ALGORITHM])
@@ -33,6 +34,8 @@ from depictio.api.v1.models.top_structure import RootConfig
 #     except JWTError as e:
 #         typer.echo(f"Token verification failed: {e}")
 #         raise typer.Exit(code=1)
+
+
 
 
 def get_config(filename: str):
@@ -109,7 +112,7 @@ def validate_worfklow(workflow: Workflow, config: RootConfig, user: User) -> dic
     print(user)
     permissions = Permission(owners=[user])
     workflow.permissions = permissions
-    
+
     return workflow
 
 
@@ -130,18 +133,18 @@ def calculate_file_hash(file_path: str) -> str:
         return hashlib.md5(f.read()).hexdigest()
 
 
-
 def construct_full_regex(files_regex, regex_wildcards):
-    # Iterate through each wildcard definition and replace it in the files_regex
+    """
+    Construct the full regex using the wildcards defined in the config.
+    """
     for wildcard in regex_wildcards:
-        placeholder = f"{{{wildcard['name']}}}"  # Format placeholder as it appears in files_regex
-        regex_pattern = wildcard['regex']
+        placeholder = f"{{{wildcard['name']}}}"  # e.g. {date}
+        regex_pattern = wildcard["regex"]
         files_regex = files_regex.replace(placeholder, f"({regex_pattern})")
     return files_regex
 
-def scan_files(
-    run_location: str, run_id: str, data_collection: DataCollection
-) -> List[File]:
+
+def scan_files(run_location: str, run_id: str, data_collection: DataCollection) -> List[File]:
     """
     Scan the files for a given workflow.
     """
@@ -154,33 +157,22 @@ def scan_files(
 
     file_list = list()
 
+    # Construct the full regex using the wildcards defined in the config if the data collection is JBrowse2
+    if data_collection.config.type.lower() == "jbrowse2":
+        # Get the regex wildcards
+        regex_wildcards_list = [e.dict() for e in data_collection.config.dc_specific_properties.regex_wildcards]
 
-    regex_wildcards_list = [e.dict() for e in data_collection.config.regex_wildcards]
-
-    if data_collection.config.regex_wildcards:
-        full_regex = construct_full_regex(data_collection.config.files_regex, regex_wildcards_list)
+        # Construct the full regex using the wildcards defined in the config
+        if data_collection.config.dc_specific_properties.regex_wildcards:
+            full_regex = construct_full_regex(data_collection.config.files_regex, regex_wildcards_list)
     else:
         full_regex = data_collection.config.files_regex
 
-
+    # Scan the files
     for root, dirs, files in os.walk(run_location):
         for file in files:
-
             if re.match(full_regex, file):
                 file_location = os.path.join(root, file)
-                
-                # if os.path.exists(file_location + ".md5"):
-                #     hash_file = file_location + ".md5"
-                #     with open(hash_file, "r") as f:
-                #         file_hash = f.read()
-                #         # print(file_hash)
-                #         # print(calculate_file_hash(file_location))
-                #         if file_hash == calculate_file_hash(file_location):
-                #             continue
-                #         else:
-                #             with open(hash_file, "w") as f:
-                #                 f.write(calculate_file_hash(file_location))
-
 
                 filename = file
                 creation_time_float = os.path.getctime(file_location)
@@ -192,11 +184,7 @@ def scan_files(
 
                 # Convert the datetime objects to ISO formatted strings
                 creation_time_iso = creation_time_dt.strftime("%Y-%m-%d %H:%M:%S")
-                modification_time_iso = modification_time_dt.strftime(
-                    "%Y-%m-%d %H:%M:%S"
-                )
-
-                # data_collection_id = str(data_collection.id)
+                modification_time_iso = modification_time_dt.strftime("%Y-%m-%d %H:%M:%S")
 
                 file_instance = File(
                     filename=filename,
@@ -229,21 +217,10 @@ def scan_runs(
 
     for run in os.listdir(parent_runs_location):
         if re.match(workflow_config.runs_regex, run):
-            # print(run)
             run_location = os.path.join(parent_runs_location, run)
-            # print(run_location)
-            files = scan_files(
-                run_location=run_location, run_id=run, data_collection=data_collection
-            )
-            # print(files)
-            execution_time = datetime.fromtimestamp(
-                os.path.getctime(run_location)
-            )
-            # print(execution_time)
+            files = scan_files(run_location=run_location, run_id=run, data_collection=data_collection)
+            execution_time = datetime.fromtimestamp(os.path.getctime(run_location))
 
-            print(run_location)
-
-            # Create a WorkflowRun instance
             workflow_run = WorkflowRun(
                 run_tag=run,
                 files=files,
@@ -252,15 +229,11 @@ def scan_runs(
                 execution_time=execution_time,
                 execution_profile=None,
             )
-            # print(workflow_run)
             runs.append(workflow_run)
-    # print("\n\n")
     return runs
 
 
-def populate_database(
-    config_path: str, workflow_id: str, data_collection_id: str
-) -> List[WorkflowRun]:
+def populate_database(config_path: str, workflow_id: str, data_collection_id: str) -> List[WorkflowRun]:
     """
     Populate the database with files for a given workflow.
     """
@@ -281,8 +254,8 @@ def populate_database(
     data_collection = workflow.data_collections[data_collection_id]
 
     runs_and_content = scan_runs(
-        parent_runs_location=workflow.workflow_config.parent_runs_location,
-        workflow_config=workflow.workflow_config,
+        parent_runs_location=workflow.config.parent_runs_location,
+        workflow_config=workflow.config,
         data_collection=data_collection,
     )
 
@@ -303,6 +276,7 @@ def serialize_for_mongo(data):
     else:
         return data
 
+
 def numpy_to_python(value):
     """Converts numpy data types to native Python data types."""
     if isinstance(value, (np.int64, np.int32, np.int16, np.int8)):
@@ -312,8 +286,6 @@ def numpy_to_python(value):
     elif isinstance(value, np.bool_):
         return bool(value)
     return value
-
-
 
 
 agg_functions = {

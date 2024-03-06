@@ -155,30 +155,3 @@ async def delete_workflow(workflow_id: str, current_user: str = Depends(get_curr
 
     return {"message": f"Workflow {workflow_tag} with ID '{id}' deleted successfully, as well as all files"}
 
-
-@workflows_endpoint_router.get("/get_join_tables/{workflow_id}")
-async def get_join_tables(workflow_id: str, current_user: str = Depends(get_current_user)):
-    # Find the workflow by ID
-    workflow_oid = ObjectId(workflow_id)
-    assert isinstance(workflow_oid, ObjectId)
-    existing_workflow = workflows_collection.find_one({"_id": workflow_oid})
-
-    if not existing_workflow:
-        raise HTTPException(status_code=404, detail=f"Workflow with ID '{workflow_id}' does not exist.")
-
-    data_collections = existing_workflow["data_collections"]
-
-    # Initialize a map to track join details
-    join_details_map = collections.defaultdict(list)
-    for data_collection in data_collections:
-        if "join" in data_collection["config"]:
-            dc_id = str(data_collection["_id"])
-            join_details_map[dc_id].append(data_collection["config"]["join"].copy())
-            for sub_dc_id in data_collection["config"]["join"]["with_dc"]:
-                tmp_dict = data_collection["config"]["join"]
-                tmp_dict["with_dc"] = [e for e in tmp_dict["with_dc"] if e != dc_id and e != sub_dc_id]
-                tmp_dict["with_dc"].append(dc_id)
-                join_details_map[sub_dc_id].append(tmp_dict)
-
-    print(join_details_map)
-    return join_details_map
