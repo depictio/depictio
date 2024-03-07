@@ -4,7 +4,7 @@ from fastapi import HTTPException, Depends, APIRouter
 from pymongo import ReturnDocument
 
 from depictio.api.v1.configs.config import settings
-from depictio.api.v1.db import workflows_collection
+from depictio.api.v1.db import workflows_collection, data_collections_collection, runs_collection, files_collection
 from depictio.api.v1.endpoints.deltatables_endpoints.routes import delete_deltatable
 from depictio.api.v1.endpoints.files_endpoints.routes import delete_files
 from depictio.api.v1.models.base import convert_objectid_to_str
@@ -70,7 +70,7 @@ async def get_workflow(workflow_tag: str, current_user: str = Depends(get_curren
 
 @workflows_endpoint_router.post("/create")
 async def create_workflow(workflow: Workflow, current_user: str = Depends(get_current_user)):
-    workflows_collection.drop()
+    # workflows_collection.drop()
     # data_collections_collection.drop()
     # runs_collection.drop()
     # files_collection.drop()
@@ -95,6 +95,15 @@ async def create_workflow(workflow: Workflow, current_user: str = Depends(get_cu
 
     else:
         # Create new workflow
+        print(workflow)
+        
+        # Assign PyObjectId to workflow ID and data collection IDs
+        workflow.id = ObjectId()
+        for data_collection in workflow.data_collections:
+            data_collection.id = ObjectId()
+        print("\n\n\n")
+        print("create_workflow")
+        print(workflow)
         assert isinstance(workflow.id, ObjectId)
         res = workflows_collection.insert_one(workflow.mongo())
         assert res.inserted_id == workflow.id
@@ -105,6 +114,11 @@ async def create_workflow(workflow: Workflow, current_user: str = Depends(get_cu
 # TODO: find a way to update the workflow and data collections by keeping the IDs
 @workflows_endpoint_router.put("/update")
 async def update_workflow(workflow: Workflow, current_user: str = Depends(get_current_user)):
+    # workflows_collection.drop()
+    # data_collections_collection.drop()
+    # runs_collection.drop()
+    # files_collection.drop()
+
     existing_workflow = workflows_collection.find_one(
         {
             "workflow_tag": workflow.workflow_tag,
@@ -113,7 +127,9 @@ async def update_workflow(workflow: Workflow, current_user: str = Depends(get_cu
     )
 
     # Preserve existing data collection IDs
-    existing_data_collections = {dc['data_collection_tag']: dc['_id'] for dc in existing_workflow.get('data_collections', [])}
+    print("existing_workflow")
+    print(existing_workflow)
+    existing_data_collections = {dc['data_collection_tag']: dc['id'] for dc in existing_workflow.get('data_collections', [])}
     for dc in workflow.data_collections:
         if dc.data_collection_tag in existing_data_collections:
             # If the data collection exists, preserve its ID

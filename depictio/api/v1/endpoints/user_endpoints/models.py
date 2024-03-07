@@ -40,9 +40,17 @@ class TokenData(BaseModel):
 
 
 class User(MongoModel):
-    user_id: PyObjectId = Field(default_factory=PyObjectId)
+    # user_id: PyObjectId = Field(default_factory=PyObjectId)
+    user_id: Optional[PyObjectId] = None
     username: str
     email: EmailStr
+
+    @root_validator(pre=True)
+    def set_default_id(cls, values):
+        if values is None or "id" not in values or values["id"] is None:
+            return values  # Ensure we don't proceed if values is None
+        values["id"] = PyObjectId()
+        return values
 
     class Config:
         json_encoders = {ObjectId: lambda v: str(v)}

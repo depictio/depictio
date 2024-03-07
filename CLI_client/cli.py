@@ -147,19 +147,19 @@ def compare_models(workflow_yaml: dict, workflow_db: dict, user) -> bool:
     # Compare the workflow data dictionary with the retrieved workflow JSON - excluding dynamic fields
     set_checks = []
     workflow_yaml_only = Workflow(**workflow_yaml)
-    workflow_yaml_only = workflow_yaml_only.dict(exclude={"id", "registration_time", "data_collections", "permissions", "runs"})
+    workflow_yaml_only = workflow_yaml_only.dict(exclude={"registration_time"})
     workflow_db_only = Workflow(**workflow_db)
-    workflow_db_only = workflow_db_only.dict(exclude={"id", "registration_time", "data_collections", "permissions", "runs"})
+    workflow_db_only = workflow_db_only.dict(exclude={"registration_time"})
     set_checks.append(workflow_yaml_only == workflow_db_only)
 
-    # Compare the data collections 
+    # Compare the data collections
     for dc_yaml, dc_db in zip(workflow_yaml["data_collections"], workflow_db["data_collections"]):
         dc_yaml = DataCollection(**dc_yaml)
-        dc_yaml_only = dc_yaml.dict(exclude={"id", "registration_time"})
+        dc_yaml_only = dc_yaml.dict(exclude={"registration_time"})
         dc_db = DataCollection(**dc_db)
-        dc_db_only = dc_db.dict(exclude={"id", "registration_time"})
+        dc_db_only = dc_db.dict(exclude={"registration_time"})
         set_checks.append(dc_yaml_only == dc_db_only)
-    
+
     # Check if workflow and data collections are the same between the YAML and the DB
     return set(set_checks) == {True}
 
@@ -189,6 +189,7 @@ def send_workflow_request(endpoint: str, workflow_data_dict: dict, headers: dict
         json=json_body,
         timeout=30.0,
     )
+    # print(response.json() if response.status_code != 204 else "")
 
     # Check response status
     if response.status_code in [200, 204]:  # 204 for successful DELETE requests
@@ -218,37 +219,31 @@ def create_update_delete_workflow(
     # Check if the workflow exists
     if exists:
         # If the workflow exists, check if there is a conflict with the existing workflow
-        comparison_check = compare_models(workflow_data_dict, _, user)
-        if not comparison_check:
+        check_modif = compare_models(workflow_data_dict, _, user)
+
+        # If the workflow exists but there is a conflict, check if the user wants to update the existing workflow
+        if not check_modif:
+            # If the user does not want to update the existing workflow, exit
             if not update:
-                sys.exit(f"Workflow {workflow_data_dict['workflow_tag']} already exists but with different configuration. Please use the --update flag to update the existing workflow.")
+                sys.exit(
+                    f"Workflow {workflow_data_dict['workflow_tag']} already exists but with different configuration. Please use the --update flag to update the existing workflow."
+                )
+
+            # If the user wants to update the existing workflow, update it
             else:
                 typer.echo(f"Workflow {workflow_data_dict['workflow_tag']} already exists, updating it.")
-                print(send_workflow_request(endpoint, workflow_data_dict, headers))
-                exit()
                 return send_workflow_request(endpoint, workflow_data_dict, headers)
+
+        # If the workflow exists and there is no conflict, skip the creation
         else:
             typer.echo(f"Workflow {workflow_data_dict['workflow_tag']} already exists, skipping creation.")
-            print(type(_), _)
             return_dict = {str(_["_id"]): [str(data_collection["_id"]) for data_collection in _["data_collections"]]}
-            print(return_dict)
-            exit()
             return return_dict
-    #     print(workflow_data_dict["data_collections"])
-    #     print(_["data_collections"])
-    #     exit()
 
-    #     if not update:
-    #         typer.echo(f"Workflow {workflow_data_dict['workflow_tag']} already exists.")
-    #         return
-
-    #     else:
-    #         typer.echo(f"Workflow {workflow_data_dict['workflow_tag']} already exists, updating it.")
-
+    # If the workflow does not exist, create it
+    typer.echo(f"Workflow {workflow_data_dict['workflow_tag']} does not exist, creating it.")
     workflow_json = send_workflow_request(endpoint, workflow_data_dict, headers)
     return workflow_json
-
-    # Retrieve workflow ID and data collection IDs
 
 
 # TODO: change logic to just initiate the scan and not wait for the completion (thousands of files can take a long time)
@@ -320,15 +315,19 @@ def setup(
     # TODO: select strategy to validate the config data - JSON Schema or Pydantic models or both
 
     # Validate the config data using JSON Schema
-    json_schema = load_json_schema("CLI_client/depictio_json_schema.json")
-    validate_config_using_jsonschema(config_data, json_schema)
+    # json_schema = load_json_schema("CLI_client/depictio_json_schema.json")
+    # validate_config_using_jsonschema(config_data, json_schema)
+
+    print(f"Initializing Workflow model with data: {config_data}")
 
     # Validate the config data using Pydantic models
     config = validate_config(config_data, RootConfig)
+    print(config)
     validated_config = validate_all_workflows(config, user=user)
+    print(validate_config)
 
     # TMP: to print the validated config
-    # debug(validated_config)
+    debug(validated_config)
 
     # Populate DB with the validated config for each workflow
     for workflow in validated_config.workflows:
@@ -336,6 +335,7 @@ def setup(
         workflow_data_dict = convert_objectid_to_str(workflow_data_raw)
         d = create_update_delete_workflow(workflow_data_dict, headers, user, update)
         print(d)
+        exit()
         for wf, dcs in d.items():
             for dc in dcs:
                 dc_object = [e for e in workflow.data_collections if str(e.id) == dc][0]

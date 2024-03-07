@@ -3,6 +3,7 @@ import os
 from typing import Dict, List, Optional
 import bleach
 import re
+from bson import ObjectId
 from pydantic import (
     BaseModel,
     Field,
@@ -57,7 +58,8 @@ class WorkflowConfig(MongoModel):
 
 
 class WorkflowRun(MongoModel):
-    id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
+    id: Optional[PyObjectId] = None
+    # id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
     run_tag: str
     files: List[File] = []
     workflow_config: WorkflowConfig
@@ -65,6 +67,14 @@ class WorkflowRun(MongoModel):
     execution_time: datetime
     execution_profile: Optional[Dict]
     registration_time: datetime = datetime.now()
+
+
+    @root_validator(pre=True)
+    def set_default_id(cls, values):
+        if values is None or "id" not in values or values["id"] is None:
+            return values  # Ensure we don't proceed if values is None
+        values["id"] = PyObjectId()
+        return values
 
     @validator("files")
     def validate_files(cls, value):
@@ -135,11 +145,12 @@ class WorkflowSystem(BaseModel):
         return value
 
 
-
 class Workflow(MongoModel):
-    id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
-    name: str = None
-    engine: str = None
+    # id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
+    id: Optional[PyObjectId] = None
+    # id: Optional[PyObjectId] = Field(default=None, alias='_id')
+    name: str
+    engine: str
     workflow_tag: str
     # workflow_engine: WorkflowSystem
     description: str
@@ -150,26 +161,40 @@ class Workflow(MongoModel):
     registration_time: datetime = datetime.now()
     # data_collection_ids: Optional[List[str]] = []
     permissions: Optional[Permission]
-    # hash: Optional[HashModel] = None
+    hash: Optional[str] = None  # Change this to expect a string
+
+
+    class Config:
+        arbitrary_types_allowed = True
+        json_encoders = {
+            ObjectId: lambda oid: str(oid),  # or `str` for simplicity
+        }
 
     # @root_validator(pre=True)
-    # def compute_and_assign_hash(cls, values):
-    #     values_copy = values.copy()
-    #     values_copy.pop('hash', None)  # Remove the hash to avoid hashing the hash
-    #     computed_hash = HashModel.compute_hash(values_copy)
-    #     hash_instance = HashModel(hash=computed_hash)
-    #     values['hash'] = hash_instance
+    # def ensure_id(cls, values):
+    #     """Ensure an ObjectId is set for new documents."""
+    #     if not values.get('id'):
+    #         values['id'] = PyObjectId()
     #     return values
+
+
+    @root_validator(pre=True)
+    def compute_and_assign_hash(cls, values):
+        # Copy the values to avoid mutating the input directly
+        values_copy = values.copy()
+        # Remove the hash field to avoid including it in the hash computation
+        values_copy.pop('hash', None)
+        # Compute the hash of the values
+        computed_hash = HashModel.compute_hash(values_copy)
+        # Assign the computed hash directly as a string
+        values['hash'] = computed_hash
+        return values
+
 
     def __eq__(self, other):
         if isinstance(other, Workflow):
-            return all(
-                getattr(self, field) == getattr(other, field)
-                for field in self.__fields__.keys()
-                if field not in ['id', 'registration_time']
-            )
+            return all(getattr(self, field) == getattr(other, field) for field in self.__fields__.keys() if field not in ["id", "registration_time"])
         return NotImplemented
-
 
     @validator("name", pre=True, always=True)
     def validate_name(cls, value):
@@ -189,14 +214,16 @@ class Workflow(MongoModel):
             raise ValueError("Invalid repository URL")
         return value
 
-    @validator("id", pre=True, always=True)
-    def validate_id(cls, id):
-        if not id:
-            raise ValueError("id is required")
-        return id
+    # @validator("id", pre=True, always=True)
+    # def validate_id(cls, id):
+    #     if not id:
+    #         raise ValueError("id is required")
+    #     return id
 
     @root_validator(pre=True)
     def set_workflow_tag(cls, values):
+        # print(f"Received values: {values}")
+
         engine = values.get("engine")
         name = values.get("name")
         if engine and name:

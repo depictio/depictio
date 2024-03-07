@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any, Union
 import bleach
 import re
+from bson import ObjectId
 from pydantic import (
     BaseModel,
     Field,
@@ -80,7 +81,9 @@ class DataCollectionColumn(MongoModel):
 
 
 class DataCollection(MongoModel):
-    id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
+    # id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
+    id: Optional[PyObjectId] = None
+    # id: Optional[PyObjectId] = Field(default=None, alias='_id')
     data_collection_tag: str
     description: str = None  # Optional description
     config: DataCollectionConfig
@@ -91,6 +94,19 @@ class DataCollection(MongoModel):
     deltaTable: Optional[DeltaTableAggregated] = None
     columns: Optional[List[DataCollectionColumn]] = None
     registration_time: datetime = datetime.now()
+
+    class Config:
+        arbitrary_types_allowed = True
+        json_encoders = {
+            ObjectId: lambda oid: str(oid),  # or `str` for simplicity
+        }
+
+    # @root_validator(pre=True)
+    # def set_default_id(cls, values):
+    #     if values is None or "id" not in values or values["id"] is None:
+    #         return values  # Ensure we don't proceed if values is None
+    #     values["id"] = PyObjectId()
+    #     return values
 
     @validator("description", pre=True, always=True)
     def sanitize_description(cls, value):
