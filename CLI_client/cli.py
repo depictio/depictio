@@ -10,6 +10,8 @@ import typer
 from typing import Dict, Optional, Tuple
 from jose import JWTError, jwt  # Use python-jose to decode JWT tokens
 from devtools import debug
+from depictio.api.v1.endpoints.datacollections_endpoints.models import DataCollection
+from depictio.api.v1.endpoints.workflow_endpoints.models import Workflow
 
 
 from depictio.api.v1.models.base import convert_objectid_to_str
@@ -28,6 +30,7 @@ from depictio.api.v1.utils import (
     # load_json_schema,
     validate_all_workflows,
     validate_config,
+    validate_worfklow,
     # validate_config_using_jsonschema,
 )
 
@@ -113,6 +116,54 @@ def check_workflow_exists(workflow_tag: str, headers: dict) -> Tuple[bool, Optio
     return False, None
 
 
+def find_differences(dict_a: dict, dict_b: dict):
+    """
+    Find differences between two Pydantic model objects.
+
+    Args:
+        model_a (BaseModel): The first model object to compare.
+        model_b (BaseModel): The second model object to compare.
+
+    Returns:
+        Dict[str, Dict[str, Any]]: A dictionary containing the differences,
+        with keys being the attribute names and values being a dictionary
+        showing the values from each model for that attribute.
+    """
+    differences = {}
+
+    all_keys = set(dict_a.keys()) | set(dict_b.keys())
+
+    for key in all_keys:
+        if dict_a.get(key) != dict_b.get(key):
+            differences[key] = {"model_a": dict_a.get(key), "model_b": dict_b.get(key)}
+
+    return differences
+
+
+def compare_models(workflow_yaml: dict, workflow_db: dict, user) -> bool:
+    """
+    Compare the workflow data dictionary with the retrieved workflow JSON.
+    """
+    # Compare the workflow data dictionary with the retrieved workflow JSON - excluding dynamic fields
+    set_checks = []
+    workflow_yaml_only = Workflow(**workflow_yaml)
+    workflow_yaml_only = workflow_yaml_only.dict(exclude={"id", "registration_time", "data_collections", "permissions", "runs"})
+    workflow_db_only = Workflow(**workflow_db)
+    workflow_db_only = workflow_db_only.dict(exclude={"id", "registration_time", "data_collections", "permissions", "runs"})
+    set_checks.append(workflow_yaml_only == workflow_db_only)
+
+    # Compare the data collections 
+    for dc_yaml, dc_db in zip(workflow_yaml["data_collections"], workflow_db["data_collections"]):
+        dc_yaml = DataCollection(**dc_yaml)
+        dc_yaml_only = dc_yaml.dict(exclude={"id", "registration_time"})
+        dc_db = DataCollection(**dc_db)
+        dc_db_only = dc_db.dict(exclude={"id", "registration_time"})
+        set_checks.append(dc_yaml_only == dc_db_only)
+    
+    # Check if workflow and data collections are the same between the YAML and the DB
+    return set(set_checks) == {True}
+
+
 def send_workflow_request(endpoint: str, workflow_data_dict: dict, headers: dict) -> None:
     """
     Send a request to the workflow API to create, update, or delete a workflow, based on the specified method.
@@ -148,20 +199,51 @@ def send_workflow_request(endpoint: str, workflow_data_dict: dict, headers: dict
         raise httpx.HTTPStatusError(message=f"Error during {endpoint}d: {response.text}", request=response.request, response=response)
 
 
-def create_update_delete_workflow(workflow_data_dict: dict, headers: dict, update: bool = False) -> None:
+def create_update_delete_workflow(
+    workflow_data_dict: dict,
+    headers: dict,
+    user,
+    update: bool = False,
+) -> None:
     """
     Create or update a workflow based on the update flag.
     """
-    exists, _ = check_workflow_exists(workflow_data_dict["workflow_tag"], headers)
+
     endpoint = "update" if update else "create"
 
-    if exists:
-        if not update:
-            typer.echo(f"Workflow {workflow_data_dict['workflow_tag']} already exists.")
-            return
+    print('workflow_data_dict["workflow_tag"]', workflow_data_dict["workflow_tag"])
 
+    exists, _ = check_workflow_exists(workflow_data_dict["workflow_tag"], headers)
+
+    # Check if the workflow exists
+    if exists:
+        # If the workflow exists, check if there is a conflict with the existing workflow
+        comparison_check = compare_models(workflow_data_dict, _, user)
+        if not comparison_check:
+            if not update:
+                sys.exit(f"Workflow {workflow_data_dict['workflow_tag']} already exists but with different configuration. Please use the --update flag to update the existing workflow.")
+            else:
+                typer.echo(f"Workflow {workflow_data_dict['workflow_tag']} already exists, updating it.")
+                print(send_workflow_request(endpoint, workflow_data_dict, headers))
+                exit()
+                return send_workflow_request(endpoint, workflow_data_dict, headers)
         else:
-            typer.echo(f"Workflow {workflow_data_dict['workflow_tag']} already exists, updating it.")
+            typer.echo(f"Workflow {workflow_data_dict['workflow_tag']} already exists, skipping creation.")
+            print(type(_), _)
+            return_dict = {str(_["_id"]): [str(data_collection["_id"]) for data_collection in _["data_collections"]]}
+            print(return_dict)
+            exit()
+            return return_dict
+    #     print(workflow_data_dict["data_collections"])
+    #     print(_["data_collections"])
+    #     exit()
+
+    #     if not update:
+    #         typer.echo(f"Workflow {workflow_data_dict['workflow_tag']} already exists.")
+    #         return
+
+    #     else:
+    #         typer.echo(f"Workflow {workflow_data_dict['workflow_tag']} already exists, updating it.")
 
     workflow_json = send_workflow_request(endpoint, workflow_data_dict, headers)
     return workflow_json
@@ -235,22 +317,24 @@ def setup(
     # Get the config data (assuming get_config returns a dictionary)
     config_data = get_config(config_path)
 
+    # TODO: select strategy to validate the config data - JSON Schema or Pydantic models or both
+
     # Validate the config data using JSON Schema
     json_schema = load_json_schema("CLI_client/depictio_json_schema.json")
     validate_config_using_jsonschema(config_data, json_schema)
 
+    # Validate the config data using Pydantic models
     config = validate_config(config_data, RootConfig)
-
     validated_config = validate_all_workflows(config, user=user)
 
     # TMP: to print the validated config
-    debug(validated_config)
+    # debug(validated_config)
 
     # Populate DB with the validated config for each workflow
     for workflow in validated_config.workflows:
         workflow_data_raw = workflow.dict(by_alias=True, exclude_none=True)
         workflow_data_dict = convert_objectid_to_str(workflow_data_raw)
-        d = create_update_delete_workflow(workflow_data_dict, headers, update)
+        d = create_update_delete_workflow(workflow_data_dict, headers, user, update)
         print(d)
         for wf, dcs in d.items():
             for dc in dcs:

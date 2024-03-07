@@ -18,9 +18,9 @@ from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user
 workflows_endpoint_router = APIRouter()
 
 
-@workflows_endpoint_router.get("/get")
+@workflows_endpoint_router.get("/get_all_workflows")
 # @workflows_endpoint_router.get("/get_workflows", response_model=List[Workflow])
-async def get_workflows(current_user: str = Depends(get_current_user)):
+async def get_all_workflows(current_user: str = Depends(get_current_user)):
     # Assuming the 'current_user' now holds a 'user_id' as an ObjectId after being parsed in 'get_current_user'
     user_id = current_user.user_id  # This should be the ObjectId
 
@@ -40,7 +40,32 @@ async def get_workflows(current_user: str = Depends(get_current_user)):
     if not workflows:
         raise HTTPException(status_code=404, detail="No workflows found for the current user.")
 
-    return workflows
+    return workflows[0]
+
+@workflows_endpoint_router.get("/get")
+# @workflows_endpoint_router.get("/get_workflows", response_model=List[Workflow])
+async def get_workflow(workflow_tag: str, current_user: str = Depends(get_current_user)):
+    # Assuming the 'current_user' now holds a 'user_id' as an ObjectId after being parsed in 'get_current_user'
+    user_id = current_user.user_id  # This should be the ObjectId
+
+    # Find workflows where current_user is either an owner or a viewer
+    query = {
+        "workflow_tag": workflow_tag,
+        "$or": [
+            {"permissions.owners.user_id": user_id},
+            {"permissions.viewers.user_id": user_id},
+        ]
+    }
+
+    # Retrieve the workflows & convert them to Workflow objects to validate the model
+    workflows_cursor = [Workflow(**w) for w in list(workflows_collection.find(query))]
+
+    workflows = convert_objectid_to_str(list(workflows_cursor))
+
+    if not workflows:
+        raise HTTPException(status_code=404, detail=f"No workflow found for the current user with tag {workflow_tag}.")
+
+    return workflows[0]
 
 
 @workflows_endpoint_router.post("/create")
@@ -87,18 +112,30 @@ async def update_workflow(workflow: Workflow, current_user: str = Depends(get_cu
         }
     )
 
-    if existing_workflow:
-        # Update existing workflow
-        workflow.id = existing_workflow.get("_id")  # Ensure we have the correct ID for updating
-        res = workflows_collection.find_one_and_update({"_id": workflow.id}, {"$set": workflow.mongo()}, return_document=ReturnDocument.AFTER, upsert=True)
-        assert res.get("_id") == workflow.id
-        return_dict = {str(workflow.id): [str(data_collection.id) for data_collection in workflow.data_collections]}
-        return return_dict
-    else:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Workflow with name '{workflow.workflow_tag}' does not exist. Use create option to create it.",
-        )
+    # Preserve existing data collection IDs
+    existing_data_collections = {dc['data_collection_tag']: dc['_id'] for dc in existing_workflow.get('data_collections', [])}
+    for dc in workflow.data_collections:
+        if dc.data_collection_tag in existing_data_collections:
+            # If the data collection exists, preserve its ID
+            dc.id = existing_data_collections[dc.data_collection_tag]
+
+    # Update the workflow with potentially new or modified data collections
+    updated_workflow_data = workflow.mongo()
+    updated_workflow_data['_id'] = existing_workflow['_id']  # Ensure the workflow ID is preserved
+
+    res = workflows_collection.find_one_and_update(
+        {"_id": existing_workflow['_id']},
+        {"$set": updated_workflow_data},
+        return_document=ReturnDocument.AFTER
+    )
+
+    # Verify the update was successful
+    if not res:
+        raise HTTPException(status_code=500, detail="Failed to update the workflow.")
+
+    # Return a mapping of workflow ID to data collection IDs
+    updated_data_collection_ids = [str(dc.id) for dc in workflow.data_collections]
+    return {str(existing_workflow['_id']): updated_data_collection_ids}
 
 
 @workflows_endpoint_router.delete("/delete/{workflow_id}")

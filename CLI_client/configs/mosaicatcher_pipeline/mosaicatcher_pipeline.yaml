@@ -17,7 +17,7 @@ workflows:
     name: "mosaicatcher-pipeline"
 
     # A description of the workflow
-    description: "Strand-Seq SV calling framework"
+    description: "Strand-Seq SV calling framewoaa"
 
     # The URL of the repository that contains the workflow
     repository_url: "https://github.com/friendsofstrandseq/mosaicatcher-pipeline"
