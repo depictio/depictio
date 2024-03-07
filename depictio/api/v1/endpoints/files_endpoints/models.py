@@ -4,6 +4,7 @@ from typing import Optional
 from pydantic import (
     Field,
     FilePath,
+    root_validator,
     validator,
 )
 from depictio.api.v1.endpoints.datacollections_endpoints.models import DataCollection
@@ -26,7 +27,8 @@ def validate_datetime(value):
 
 
 class File(MongoModel):
-    id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
+    # id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
+    id: Optional[PyObjectId] = None
     file_location: FilePath
     S3_location: Optional[str] = None
     filename: str
@@ -37,6 +39,14 @@ class File(MongoModel):
     run_id: Optional[str] = None
     aggregated: Optional[bool] = False
     registration_time: datetime = datetime.now()
+
+
+    @root_validator(pre=True)
+    def set_default_id(cls, values):
+        if values is None or "id" not in values or values["id"] is None:
+            return values  # Ensure we don't proceed if values is None
+        values["id"] = PyObjectId()
+        return values
 
     @validator("S3_location")
     def validate_S3_location(cls, value):

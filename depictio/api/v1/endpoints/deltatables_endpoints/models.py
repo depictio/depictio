@@ -5,6 +5,7 @@ from typing import Dict, List, Optional, Union
 from pydantic import (
     BaseModel,
     Field,
+    root_validator,
     validator,
 )
 
@@ -48,9 +49,18 @@ class DeltaTableQuery(MongoModel):
 
 
 class DeltaTableAggregated(MongoModel):
-    id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
+    # id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
+    id: Optional[PyObjectId] = None
     delta_table_location: Path
     aggregation: List[Aggregation] = []
+
+
+    @root_validator(pre=True)
+    def set_default_id(cls, values):
+        if values is None or "id" not in values or values["id"] is None:
+            return values  # Ensure we don't proceed if values is None
+        values["id"] = PyObjectId()
+        return values
 
     @validator("aggregation")
     def validate_aggregation(cls, value):
