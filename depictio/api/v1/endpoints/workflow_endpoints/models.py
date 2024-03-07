@@ -20,7 +20,7 @@ from depictio.api.v1.endpoints.datacollections_endpoints.models import DataColle
 
 
 class WorkflowConfig(MongoModel):
-    id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
+    # id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
     parent_runs_location: List[DirectoryPath]
     workflow_version: Optional[str]
     config: Optional[Dict]
@@ -160,6 +160,15 @@ class Workflow(MongoModel):
     #     hash_instance = HashModel(hash=computed_hash)
     #     values['hash'] = hash_instance
     #     return values
+
+    def __eq__(self, other):
+        if isinstance(other, Workflow):
+            return all(
+                getattr(self, field) == getattr(other, field)
+                for field in self.__fields__.keys()
+                if field not in ['id', 'registration_time']
+            )
+        return NotImplemented
 
 
     @validator("name", pre=True, always=True)

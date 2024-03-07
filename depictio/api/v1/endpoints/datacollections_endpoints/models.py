@@ -97,3 +97,12 @@ class DataCollection(MongoModel):
         # Strip any HTML tags and attributes
         sanitized = bleach.clean(value, tags=[], attributes={}, strip=True)
         return sanitized
+
+    def __eq__(self, other):
+        if isinstance(other, DataCollection):
+            return all(
+                getattr(self, field) == getattr(other, field)
+                for field in self.__fields__.keys()
+                if field not in ['id', 'registration_time']
+            )
+        return NotImplemented
