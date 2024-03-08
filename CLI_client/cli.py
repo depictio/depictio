@@ -333,24 +333,22 @@ def setup(
     for workflow in validated_config.workflows:
         workflow_data_raw = workflow.dict(by_alias=True, exclude_none=True)
         workflow_data_dict = convert_objectid_to_str(workflow_data_raw)
-        d = create_update_delete_workflow(workflow_data_dict, headers, user, update)
-        print(d)
-        exit()
-        for wf, dcs in d.items():
-            for dc in dcs:
-                dc_object = [e for e in workflow.data_collections if str(e.id) == dc][0]
-                if dc_object.config.type.lower() == "table":
-                    print("scan_files_for_data_collection")
-                    print(wf, dc, headers)
-                    scan_files_for_data_collection(wf, dc, headers)
-                    # TODO: clean & refactor jbrowse part in files endpoint
-                    # TODO: add a jbrowse endpoint to create a TrackSet for each data collection of type Genome Browser
+        response_body = create_update_delete_workflow(workflow_data_dict, headers, user, update)
+        wf_id = response_body["_id"]
+        for dc in response_body["data_collections"]:
+            if dc["config"]["type"].lower() == "table":
+                print("scan_files_for_data_collection")
+                print(wf_id, dc["id"], headers)
+                
+                scan_files_for_data_collection(wf_id, dc["id"], headers)
+                # TODO: clean & refactor jbrowse part in files endpoint
+                # TODO: add a jbrowse endpoint to create a TrackSet for each data collection of type Genome Browser
 
-                    # Retrieve the data collection details
+                # Retrieve the data collection details
 
-                    # print("create_deltatable")
-                    # print(wf, dc, headers)
-                    # create_deltatable_request(wf, dc, headers)
+                # print("create_deltatable")
+                # print(wf, dc, headers)
+                # create_deltatable_request(wf, dc, headers)
 
 
 @app.command()
