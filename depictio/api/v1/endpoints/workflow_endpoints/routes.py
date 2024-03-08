@@ -33,14 +33,14 @@ async def get_all_workflows(current_user: str = Depends(get_current_user)):
     }
 
     # Retrieve the workflows & convert them to Workflow objects to validate the model
-    workflows_cursor = [Workflow(**w) for w in list(workflows_collection.find(query))]
-
+    workflows_cursor = [Workflow(**convert_objectid_to_str(w)) for w in list(workflows_collection.find(query))]
     workflows = convert_objectid_to_str(list(workflows_cursor))
 
     if not workflows:
         raise HTTPException(status_code=404, detail="No workflows found for the current user.")
 
     return workflows[0]
+
 
 @workflows_endpoint_router.get("/get")
 # @workflows_endpoint_router.get("/get_workflows", response_model=List[Workflow])
@@ -54,12 +54,11 @@ async def get_workflow(workflow_tag: str, current_user: str = Depends(get_curren
         "$or": [
             {"permissions.owners.user_id": user_id},
             {"permissions.viewers.user_id": user_id},
-        ]
+        ],
     }
 
     # Retrieve the workflows & convert them to Workflow objects to validate the model
-    workflows_cursor = [Workflow(**w) for w in list(workflows_collection.find(query))]
-
+    workflows_cursor = [Workflow(**convert_objectid_to_str(w)) for w in list(workflows_collection.find(query))]
     workflows = convert_objectid_to_str(list(workflows_cursor))
 
     if not workflows:
@@ -93,22 +92,23 @@ async def create_workflow(workflow: Workflow, current_user: str = Depends(get_cu
             detail=f"Workflow with name '{workflow.workflow_tag}' already exists. Use update option to modify it.",
         )
 
-    else:
-        # Create new workflow
-        print(workflow)
-        
-        # Assign PyObjectId to workflow ID and data collection IDs
-        workflow.id = ObjectId()
-        for data_collection in workflow.data_collections:
-            data_collection.id = ObjectId()
-        print("\n\n\n")
-        print("create_workflow")
-        print(workflow)
-        assert isinstance(workflow.id, ObjectId)
-        res = workflows_collection.insert_one(workflow.mongo())
-        assert res.inserted_id == workflow.id
-        return_dict = {str(workflow.id): [str(data_collection.id) for data_collection in workflow.data_collections]}
-        return return_dict
+    # Create new workflow
+    print(workflow)
+
+    # Assign PyObjectId to workflow ID and data collection IDs
+    workflow.id = ObjectId()
+    for data_collection in workflow.data_collections:
+        data_collection.id = ObjectId()
+    print("\n\n\n")
+    print("create_workflow")
+    print(workflow)
+    assert isinstance(workflow.id, ObjectId)
+    res = workflows_collection.insert_one(workflow.mongo())
+    assert res.inserted_id == workflow.id
+    return_dict = {str(workflow.id): [str(data_collection.id) for data_collection in workflow.data_collections]}
+
+    return_dict = convert_objectid_to_str(workflow)
+    return return_dict
 
 
 # TODO: find a way to update the workflow and data collections by keeping the IDs
@@ -129,7 +129,7 @@ async def update_workflow(workflow: Workflow, current_user: str = Depends(get_cu
     # Preserve existing data collection IDs
     print("existing_workflow")
     print(existing_workflow)
-    existing_data_collections = {dc['data_collection_tag']: dc['id'] for dc in existing_workflow.get('data_collections', [])}
+    existing_data_collections = {dc["data_collection_tag"]: dc["id"] for dc in existing_workflow.get("data_collections", [])}
     for dc in workflow.data_collections:
         if dc.data_collection_tag in existing_data_collections:
             # If the data collection exists, preserve its ID
@@ -137,13 +137,9 @@ async def update_workflow(workflow: Workflow, current_user: str = Depends(get_cu
 
     # Update the workflow with potentially new or modified data collections
     updated_workflow_data = workflow.mongo()
-    updated_workflow_data['_id'] = existing_workflow['_id']  # Ensure the workflow ID is preserved
+    updated_workflow_data["_id"] = existing_workflow["_id"]  # Ensure the workflow ID is preserved
 
-    res = workflows_collection.find_one_and_update(
-        {"_id": existing_workflow['_id']},
-        {"$set": updated_workflow_data},
-        return_document=ReturnDocument.AFTER
-    )
+    res = workflows_collection.find_one_and_update({"_id": existing_workflow["_id"]}, {"$set": updated_workflow_data}, return_document=ReturnDocument.AFTER)
 
     # Verify the update was successful
     if not res:
@@ -151,7 +147,13 @@ async def update_workflow(workflow: Workflow, current_user: str = Depends(get_cu
 
     # Return a mapping of workflow ID to data collection IDs
     updated_data_collection_ids = [str(dc.id) for dc in workflow.data_collections]
-    return {str(existing_workflow['_id']): updated_data_collection_ids}
+    print("upddate")
+    print(updated_workflow_data)
+    return_data = convert_objectid_to_str(updated_workflow_data)
+
+    return return_data
+
+    # return {str(existing_workflow["_id"]): updated_data_collection_ids}
 
 
 @workflows_endpoint_router.delete("/delete/{workflow_id}")
@@ -193,4 +195,3 @@ async def delete_workflow(workflow_id: str, current_user: str = Depends(get_curr
         delete_datatable_message = await delete_deltatable(workflow_id, data_collection["data_collection_id"], current_user)
 
     return {"message": f"Workflow {workflow_tag} with ID '{id}' deleted successfully, as well as all files"}
-

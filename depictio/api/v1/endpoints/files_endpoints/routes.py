@@ -291,8 +291,9 @@ async def scan_data_collection(
     data_collection_id: str,
     current_user: str = Depends(get_current_user),
 ):
-    # print(workflow_id)
-    # print(data_collection_id)
+    print("Scanning data collection")
+    print(workflow_id)
+    print(data_collection_id)
 
     (
         workflow_oid,
@@ -307,7 +308,9 @@ async def scan_data_collection(
         data_collection_id,
     )
 
+    print(current_user)
     user_id = str(current_user.user_id)
+    print(user_id)
 
     # Retrieve the workflow_config from the workflow
     locations = workflow.config.parent_runs_location

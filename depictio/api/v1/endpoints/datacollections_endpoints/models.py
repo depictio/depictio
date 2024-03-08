@@ -93,7 +93,7 @@ class DataCollection(MongoModel):
     # )  # If the field is named differently in MongoDB
     deltaTable: Optional[DeltaTableAggregated] = None
     columns: Optional[List[DataCollectionColumn]] = None
-    registration_time: datetime = datetime.now()
+    # registration_time: datetime = datetime.now()
 
     class Config:
         arbitrary_types_allowed = True

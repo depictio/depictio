@@ -147,7 +147,7 @@ class WorkflowSystem(BaseModel):
 
 class Workflow(MongoModel):
     # id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
-    id: Optional[PyObjectId] = None
+    id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
     # id: Optional[PyObjectId] = Field(default=None, alias='_id')
     name: str
     engine: str
