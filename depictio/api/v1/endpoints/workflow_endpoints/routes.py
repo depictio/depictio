@@ -18,6 +18,15 @@ from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user
 workflows_endpoint_router = APIRouter()
 
 
+
+@workflows_endpoint_router.get("/drop_all_collections")
+async def drop_all_collections():
+    workflows_collection.drop()
+    data_collections_collection.drop()
+    runs_collection.drop()
+    files_collection.drop()
+    return {"message": "All collections dropped"}
+
 @workflows_endpoint_router.get("/get_all_workflows")
 # @workflows_endpoint_router.get("/get_workflows", response_model=List[Workflow])
 async def get_all_workflows(current_user: str = Depends(get_current_user)):
@@ -69,10 +78,10 @@ async def get_workflow(workflow_tag: str, current_user: str = Depends(get_curren
 
 @workflows_endpoint_router.post("/create")
 async def create_workflow(workflow: Workflow, current_user: str = Depends(get_current_user)):
-    # workflows_collection.drop()
-    # data_collections_collection.drop()
-    # runs_collection.drop()
-    # files_collection.drop()
+    workflows_collection.drop()
+    data_collections_collection.drop()
+    runs_collection.drop()
+    files_collection.drop()
     # fschunks_collection.drop()
     # fsfiles_collection.drop()
     # permissions_collection.drop()
@@ -114,10 +123,10 @@ async def create_workflow(workflow: Workflow, current_user: str = Depends(get_cu
 # TODO: find a way to update the workflow and data collections by keeping the IDs
 @workflows_endpoint_router.put("/update")
 async def update_workflow(workflow: Workflow, current_user: str = Depends(get_current_user)):
-    # workflows_collection.drop()
-    # data_collections_collection.drop()
-    # runs_collection.drop()
-    # files_collection.drop()
+    workflows_collection.drop()
+    data_collections_collection.drop()
+    runs_collection.drop()
+    files_collection.drop()
 
     existing_workflow = workflows_collection.find_one(
         {
@@ -126,6 +135,11 @@ async def update_workflow(workflow: Workflow, current_user: str = Depends(get_cu
         }
     )
 
+    if not existing_workflow:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Workflow with name '{workflow.workflow_tag}' does not exist. Use create option to create it.",
+        )
     # Preserve existing data collection IDs
     print("existing_workflow")
     print(existing_workflow)
