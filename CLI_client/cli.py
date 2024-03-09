@@ -297,6 +297,9 @@ def setup(
     """
     # assert workflow_tag is not None
 
+    response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/workflows/drop_all_collections")
+    print(response.json())
+
     if not token:
         typer.echo("A valid token must be provided for authentication.")
         raise typer.Exit(code=1)
@@ -339,7 +342,7 @@ def setup(
             if dc["config"]["type"].lower() == "table":
                 print("scan_files_for_data_collection")
                 print(wf_id, dc["id"], headers)
-                
+
                 scan_files_for_data_collection(wf_id, dc["id"], headers)
                 # TODO: clean & refactor jbrowse part in files endpoint
                 # TODO: add a jbrowse endpoint to create a TrackSet for each data collection of type Genome Browser

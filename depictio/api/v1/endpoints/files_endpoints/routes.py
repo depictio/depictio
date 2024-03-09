@@ -335,9 +335,20 @@ async def scan_data_collection(
                 files = run.pop("files", [])
 
                 # Insert the run into runs_collection and retrieve its id
+                
+                
                 run = WorkflowRun(**run)
-                inserted_run = runs_collection.insert_one(run.mongo())
-                run_id = inserted_run.inserted_id
+
+                existing_run = runs_collection.find_one({"run_tag": run.mongo()["run_tag"]})
+                if existing_run:
+                    print(f"Run already exists: {existing_run}")
+                    run_id = existing_run["_id"]
+                    run = WorkflowRun.from_mongo(existing_run)
+
+                else:
+                    run.id = ObjectId()
+                    inserted_run = runs_collection.insert_one(run.mongo())
+                    run_id = inserted_run.inserted_id
 
                 # Add run_id to each file before inserting
                 for file in sorted(files, key=lambda x: x["file_location"]):
@@ -349,12 +360,18 @@ async def scan_data_collection(
                     #     handle_jbrowse_tracks(file, user_id, workflow.id, data_collection)
 
                     # Check if the file already exists in the database
+
                     existing_file = files_collection.find_one({"file_location": file.mongo()["file_location"]})
                     if not existing_file:
+                        file.id = ObjectId()
                         # If the file does not exist, add it to the database
                         files_collection.insert_one(file.mongo())
                     else:
                         print(f"File already exists: {file.mongo()['file_location']}")
+                        file = File.from_mongo(existing_file)
+
+                    print("File")
+                    print(file)
 
         return {"message": f"Files successfully scanned and created for data_collection: {data_collection.id} of workflow: {workflow.id}"}
     else:
