@@ -1,28 +1,16 @@
-from datetime import datetime
-from pathlib import Path
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional, Union
 import bleach
 import re
 from bson import ObjectId
 from pydantic import (
     BaseModel,
-    Field,
     validator,
-    root_validator,
 )
 from depictio.api.v1.endpoints.deltatables_endpoints.models import DeltaTableAggregated
 
-from depictio.api.v1.models.base import HashModel, MongoModel, PyObjectId
+from depictio.api.v1.models.base import MongoModel, PyObjectId
 from depictio.api.v1.models.data_collections_custom_models.jbrowse_models import DCJBrowse2Config
 from depictio.api.v1.models.data_collections_custom_models.table_models import DCTableConfig
-
-
-###################
-# Data Collection #
-###################
-
-
-
 
 class DataCollectionConfig(BaseModel):
     type: str
@@ -88,9 +76,6 @@ class DataCollection(MongoModel):
     description: str = None  # Optional description
     config: DataCollectionConfig
     # workflow_id: Optional[str]
-    # gridfs_file_id: Optional[str] = Field(
-    #     alias="gridfsId", default=None
-    # )  # If the field is named differently in MongoDB
     deltaTable: Optional[DeltaTableAggregated] = None
     columns: Optional[List[DataCollectionColumn]] = None
     # registration_time: datetime = datetime.now()
@@ -100,13 +85,6 @@ class DataCollection(MongoModel):
         json_encoders = {
             ObjectId: lambda oid: str(oid),  # or `str` for simplicity
         }
-
-    # @root_validator(pre=True)
-    # def set_default_id(cls, values):
-    #     if values is None or "id" not in values or values["id"] is None:
-    #         return values  # Ensure we don't proceed if values is None
-    #     values["id"] = PyObjectId()
-    #     return values
 
     @validator("description", pre=True, always=True)
     def sanitize_description(cls, value):
