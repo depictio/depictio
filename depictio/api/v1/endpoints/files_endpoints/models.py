@@ -2,28 +2,12 @@ from datetime import datetime
 import os
 from typing import Optional
 from pydantic import (
-    Field,
     FilePath,
     root_validator,
     validator,
 )
 from depictio.api.v1.endpoints.datacollections_endpoints.models import DataCollection
-
 from depictio.api.v1.models.base import MongoModel, PyObjectId
-
-
-###################
-# File management #
-###################
-
-
-
-def validate_datetime(value):
-    try:
-        return datetime.fromisoformat(value)
-    except ValueError:
-        raise ValueError("Invalid datetime format")
-
 
 
 class File(MongoModel):
@@ -39,7 +23,6 @@ class File(MongoModel):
     run_id: Optional[str] = None
     aggregated: Optional[bool] = False
     registration_time: datetime = datetime.now()
-
 
     @root_validator(pre=True)
     def set_default_id(cls, values):
@@ -89,6 +72,7 @@ class File(MongoModel):
             raise ValueError(f"'{value}' is not readable.")
         return value
 
+    # TODO: Implement file hashing to ensure file integrity
     # @validator("file_hash")
     # def validate_file_hash(cls, value):
     #     if value is not None:

@@ -15,11 +15,6 @@ from depictio.api.v1.endpoints.user_endpoints.models import Permission
 from depictio.api.v1.models.base import DirectoryPath, HashModel, MongoModel, PyObjectId
 from depictio.api.v1.endpoints.datacollections_endpoints.models import DataCollection
 
-###################
-# Workflows #
-###################
-
-
 class WorkflowConfig(MongoModel):
     # id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
     parent_runs_location: List[DirectoryPath]
@@ -170,12 +165,7 @@ class Workflow(MongoModel):
             ObjectId: lambda oid: str(oid),  # or `str` for simplicity
         }
 
-    # @root_validator(pre=True)
-    # def ensure_id(cls, values):
-    #     """Ensure an ObjectId is set for new documents."""
-    #     if not values.get('id'):
-    #         values['id'] = PyObjectId()
-    #     return values
+
 
 
     @root_validator(pre=True)
@@ -230,21 +220,7 @@ class Workflow(MongoModel):
             values["workflow_tag"] = f"{engine}/{name}"
         return values
 
-    # @root_validator(pre=True)
-    # def populate_data_collection_ids(cls, values):
-    #     workflow_id = values.get("values")
-    #     data_collections = values.get("data_collections", {})
-    #     for collection in data_collections.values():
-    #         collection["values"] = workflow_id
-    #     return values
 
-    # @root_validator(pre=True)
-    # def set_workflow_name(cls, values):
-    #     workflow_engine = values.get("workflow_id").split("/")[0]
-    #     workflow_name = values.get("workflow_id").split("/")[1]
-    #     values["workflow_name"] = f"{workflow_name}"
-    #     values["workflow_engine"] = f"{workflow_engine}"
-    #     return values
 
     @validator("description", pre=True, always=True)
     def sanitize_description(cls, value):
