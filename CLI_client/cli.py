@@ -297,8 +297,11 @@ def setup(
     """
     # assert workflow_tag is not None
 
-    response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/workflows/drop_all_collections")
-    print(response.json())
+    # response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/workflows/drop_all_collections")
+    # print(response.json())
+
+    # response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/workflows/drop_S3_content")
+    # print(response.json())
 
     if not token:
         typer.echo("A valid token must be provided for authentication.")

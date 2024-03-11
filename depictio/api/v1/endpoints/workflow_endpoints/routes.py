@@ -12,12 +12,38 @@ from depictio.api.v1.models.top_structure import (
     Workflow,
 )
 from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user
-
+from depictio.api.v1.s3 import s3_client
 
 # Define the router
 workflows_endpoint_router = APIRouter()
 
+@workflows_endpoint_router.get("/drop_S3_content")
+async def drop_S3_content():
 
+    bucket_name = settings.minio.bucket
+
+    # List and delete all objects in the bucket
+    objects_to_delete = s3_client.list_objects_v2(Bucket=bucket_name)
+    while objects_to_delete.get('Contents'):
+        print(f"Deleting {len(objects_to_delete['Contents'])} objects...")
+        delete_keys = [{'Key': obj['Key']} for obj in objects_to_delete['Contents']]
+        s3_client.delete_objects(Bucket=bucket_name, Delete={'Objects': delete_keys})
+        objects_to_delete = s3_client.list_objects_v2(Bucket=bucket_name)
+
+    print("All objects deleted from the bucket.")
+
+    # # Drop S3 bucket content recursively
+    # bucket = settings.minio.bucket
+    # objects = s3_client.list_objects_v2(Bucket=bucket)
+    # if "Contents" in objects:
+    #     for obj in objects["Contents"]:
+    #         s3_client.delete_object(Bucket=bucket, Key=obj["Key"])
+    # # Delete empty directories
+    # for obj in s3_client.list_objects_v2(Bucket=bucket, Delimiter="/"):
+    #     if "CommonPrefixes" in obj:
+    #         for subdir in obj["CommonPrefixes"]:
+    #             s3_client.delete_object(Bucket=bucket, Key=subdir["Prefix"])
+    return {"message": "S3 bucket content dropped"}
 
 @workflows_endpoint_router.get("/drop_all_collections")
 async def drop_all_collections():
@@ -78,10 +104,10 @@ async def get_workflow(workflow_tag: str, current_user: str = Depends(get_curren
 
 @workflows_endpoint_router.post("/create")
 async def create_workflow(workflow: Workflow, current_user: str = Depends(get_current_user)):
-    workflows_collection.drop()
-    data_collections_collection.drop()
-    runs_collection.drop()
-    files_collection.drop()
+    # workflows_collection.drop()
+    # data_collections_collection.drop()
+    # runs_collection.drop()
+    # files_collection.drop()
     # fschunks_collection.drop()
     # fsfiles_collection.drop()
     # permissions_collection.drop()
@@ -123,10 +149,10 @@ async def create_workflow(workflow: Workflow, current_user: str = Depends(get_cu
 # TODO: find a way to update the workflow and data collections by keeping the IDs
 @workflows_endpoint_router.put("/update")
 async def update_workflow(workflow: Workflow, current_user: str = Depends(get_current_user)):
-    workflows_collection.drop()
-    data_collections_collection.drop()
-    runs_collection.drop()
-    files_collection.drop()
+    # workflows_collection.drop()
+    # data_collections_collection.drop()
+    # runs_collection.drop()
+    # files_collection.drop()
 
     existing_workflow = workflows_collection.find_one(
         {

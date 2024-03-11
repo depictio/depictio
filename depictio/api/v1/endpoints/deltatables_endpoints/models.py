@@ -80,17 +80,18 @@ class DeltaTableAggregated(MongoModel):
     # id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
     id: Optional[PyObjectId] = None
     delta_table_location: Path
+    toto: str = "toto"
     aggregation: List[Aggregation] = []
 
 
-    @validator("aggregation")
-    def validate_aggregation(cls, value):
-        if not isinstance(value, list):
-            raise ValueError("aggregation must be a list")
-        if len(value) > 0:
-            for aggregation in value:
-                if not isinstance(aggregation, Aggregation):
-                    raise ValueError("aggregation Aggregation be a list of FilesAggregation")
-        elif len(value) == 0:
-            raise ValueError("No aggregation found")
-        return value
+    # @validator("aggregation")
+    # def validate_aggregation(cls, value):
+    #     if not isinstance(value, list):
+    #         raise ValueError("aggregation must be a list")
+    #     if len(value) > 0:
+    #         for aggregation in value:
+    #             if not isinstance(aggregation, Aggregation):
+    #                 raise ValueError("aggregation Aggregation be a list of FilesAggregation")
+    #     elif len(value) == 0:
+    #         raise ValueError("No aggregation found")
+    #     return value
