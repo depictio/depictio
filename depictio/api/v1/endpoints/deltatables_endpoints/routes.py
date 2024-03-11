@@ -70,10 +70,10 @@ def read_table_for_DC_table(file_info, data_collection_config, deltaTable):
     """
     Read a table file and return a Polars DataFrame.
     """
-    print("file_info")
-    print(file_info)
-    print("data_collection_config")
-    print(data_collection_config)
+    # print("file_info")
+    # print(file_info)
+    # print("data_collection_config")
+    # print(data_collection_config)
     # if file_info.aggregated == True:
     #     continue  # Skip already processed files
 
@@ -98,7 +98,7 @@ def read_table_for_DC_table(file_info, data_collection_config, deltaTable):
             }
         },
     )
-    print("Updated file_info in MongoDB")
+    # print("Updated file_info in MongoDB")
     return df
 
 
@@ -232,9 +232,14 @@ async def aggregate_data(
     print("dc_config")
     print(dc_config)
 
-    if "deltaTable" in dc_config:
-        deltatable = dc_config["deltaTable"]
+    print("Checking if deltatable exists")
+    print(dc_config["dc_specific_properties"])
+    if "deltaTable" in dc_config["dc_specific_properties"]:
+        print('deltaTable exists')
+        deltatable = dc_config["dc_specific_properties"]["deltaTable"]
         deltatable = DeltaTableAggregated.from_mongo(deltatable)
+        print(deltatable)
+        print(deltatable.aggregation)
         # deltatable.version += 1
         # deltatable.aggregation.append(
         #     Aggregation(
@@ -248,6 +253,7 @@ async def aggregate_data(
         # Create a DeltaTableAggregated object
         deltatable = DeltaTableAggregated(
             delta_table_location=destination_file_name,
+            aggregation=[],
             # aggregation=[
             #     Aggregation(
             #         aggregation_time=datetime.now(),
@@ -274,9 +280,8 @@ async def aggregate_data(
 
     # Aggregate the dataframes
     aggregated_df = pl.concat(data_frames)
-    print("aggregated_df")
-    print(aggregated_df)
 
+    # TODO: remove - just for testing
     # Add timestamp column
     aggregated_df = aggregated_df.with_columns(depictio_aggregation_time=pl.lit(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
 
@@ -313,6 +318,8 @@ async def aggregate_data(
 
     print("hash_str")
     print(hash_str)
+
+    # TODO: fix aggregation list incrementation
 
     version = 1 if not deltatable.aggregation else deltatable.aggregation[-1].aggregation_version + 1
 
