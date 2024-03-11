@@ -3,6 +3,7 @@ from datetime import datetime
 import hashlib
 import os
 from pprint import pprint
+import shutil
 from bson import ObjectId
 from fastapi import HTTPException, Depends, APIRouter
 import deltalake
@@ -63,29 +64,6 @@ async def list_registered_files(
     # print(deltatable)
 
     return convert_objectid_to_str(deltatable)
-
-
-def upload_dir_to_s3(bucket_name, s3_folder, local_dir, s3_client):
-    """
-    Recursively uploads a directory to S3 preserving the directory structure.
-
-    :param bucket_name: Name of the S3 bucket.
-    :param s3_folder: S3 folder path where the directory will be uploaded.
-    :param local_dir: The local directory to upload.
-    :param s3_client: Initialized boto3 S3 client.
-    """
-    for root, dirs, files in os.walk(local_dir):
-        for filename in files:
-            # construct the full local path
-            local_path = os.path.join(root, filename)
-
-            # construct the full S3 path
-            relative_path = os.path.relpath(local_path, local_dir)
-            s3_path = os.path.join(s3_folder, relative_path).replace("\\", "/")
-
-            # upload the file
-            print(f"Uploading {local_path} to {bucket_name}/{s3_path}...")
-            s3_client.upload_file(local_path, bucket_name, s3_path)
 
 
 def read_table_for_DC_table(file_info, data_collection_config, deltaTable):
@@ -156,9 +134,9 @@ def precompute_columns_specs(aggregated_df: pl.DataFrame, agg_functions: dict):
         tmp_dict["name"] = column
         # Identify the column data type
         col_type = str(aggregated_df[column].dtype).lower()
-        print(col_type)
+        # print(col_type)
         tmp_dict["type"] = col_type.lower()
-        print(agg_functions)
+        # print(agg_functions)
         # Check if the type exists in the agg_functions dict
         if col_type in agg_functions:
             methods = agg_functions[col_type]["card_methods"]
@@ -167,21 +145,21 @@ def precompute_columns_specs(aggregated_df: pl.DataFrame, agg_functions: dict):
 
             # For each method in the card_methods
             for method_name, method_info in methods.items():
-                print(column, method_name)
+                # print(column, method_name)
                 pandas_method = method_info["pandas"]
-                print(pandas_method)
+                # print(pandas_method)
                 # Check if the method is callable or a string
                 if callable(pandas_method):
                     result = pandas_method(aggregated_df[column])
-                    print(result)
+                    # print(result)
                 elif isinstance(pandas_method, str):
                     result = getattr(aggregated_df[column], pandas_method)()
-                    print(result)
+                    # print(result)
                 else:
                     continue  # Skip if method is not available
 
                 result = result.values if isinstance(result, np.ndarray) else result
-                print(result)
+                # print(result)
                 if method_name == "mode" and isinstance(result.values, np.ndarray):
                     result = result[0]
                 tmp_dict["specs"][str(method_name)] = numpy_to_python(result)
@@ -238,7 +216,11 @@ async def aggregate_data(
     files = [File.from_mongo(file) for file in files]
 
     # Create a DeltaTableAggregated object
-    destination_file_name = f"./minio_data/{settings.minio.bucket}/{user_oid}/{workflow_oid}/{data_collection_oid}"  # Destination path in MinIO
+    root_dir = "/Users/tweber/Gits/depictio"
+    destination_file_name = f"{root_dir}/minio_data/{settings.minio.bucket}/{user_oid}/{workflow_oid}/{data_collection_oid}/"  # Destination path in MinIO
+    # shutil.rmtree(destination_file_name, ignore_errors=True)
+    os.makedirs(destination_file_name, exist_ok=True)
+
 
     # Get the user object to use as aggregation_by
     user = User.from_mongo(users_collection.find_one({"_id": user_oid}))
@@ -250,12 +232,10 @@ async def aggregate_data(
     print("dc_config")
     print(dc_config)
 
-
-
     if "deltaTable" in dc_config:
         deltatable = dc_config["deltaTable"]
         deltatable = DeltaTableAggregated.from_mongo(deltatable)
-        deltatable.version += 1
+        # deltatable.version += 1
         # deltatable.aggregation.append(
         #     Aggregation(
         #         aggregation_time=datetime.now(),
@@ -266,7 +246,7 @@ async def aggregate_data(
         # )
     else:
         # Create a DeltaTableAggregated object
-        deltaTable = DeltaTableAggregated(
+        deltatable = DeltaTableAggregated(
             delta_table_location=destination_file_name,
             # aggregation=[
             #     Aggregation(
@@ -278,12 +258,12 @@ async def aggregate_data(
             # ],
         )
 
-        deltaTable.id = ObjectId()
+        deltatable.id = ObjectId()
 
     # Read each file and append to data_frames list for futher aggregation
     data_frames = []
     for file_info in files:
-        data_frames.append(read_table_for_DC_table(file_info, dc_config["dc_specific_properties"], deltaTable))
+        data_frames.append(read_table_for_DC_table(file_info, dc_config["dc_specific_properties"], deltatable))
 
     # Aggregate data
     if not data_frames:
@@ -297,21 +277,30 @@ async def aggregate_data(
     print("aggregated_df")
     print(aggregated_df)
 
+    # Add timestamp column
+    aggregated_df = aggregated_df.with_columns(depictio_aggregation_time=pl.lit(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+
+    print("aggregated_df")
+    print(aggregated_df)
+
     # TODO: solve the issue of writing to MinIO using polars
     # TMP solution: write to Delta Lake locally and then upload to MinIO
     # Write aggregated dataframe to Delta Lake
 
-    aggregated_df.write_delta(destination_file_name)
+    # deltalake.write_deltalake(destination_file_name, aggregated_df.to_pandas(), mode="overwrite")
+    # deltalake.write_deltalake(destination_file_name, aggregated_df.to_pandas())
+    # aggregated_df.write_parquet("{destination_file_name}aggregated.parquet")
+    aggregated_df.write_delta(destination_file_name, mode="overwrite", overwrite_schema=True)
 
     # Upload the Delta Lake to MinIO
-    upload_dir_to_s3(
-        settings.minio.bucket,
-        f"{user_oid}/{workflow_oid}/{data_collection_oid}",
-        destination_file_name,
-        s3_client,
-    )
+    # upload_dir_to_s3(
+    #     settings.minio.bucket,
+    #     f"{user_oid}/{workflow_oid}/{data_collection_oid}",
+    #     destination_file_name,
+    #     s3_client,
+    # )
 
-    print("Write complete to MinIO")
+    print("Write complete to MinIO at destination: ", destination_file_name)
 
     # Precompute columns specs
     results = precompute_columns_specs(aggregated_df, agg_functions)
@@ -322,32 +311,37 @@ async def aggregate_data(
     hash_str = hash_str.encode("utf-8")
     hash_str = hashlib.sha256(hash_str).hexdigest()
 
+    print("hash_str")
+    print(hash_str)
+
+    version = 1 if not deltatable.aggregation else deltatable.aggregation[-1].aggregation_version + 1
+
     deltatable.aggregation.append(
         Aggregation(
             aggregation_time=datetime.now(),
             aggregation_by=user,
-            aggregation_version=deltatable.version,
+            aggregation_version=version,
             aggregation_hash=hash_str,
         )
     )
 
     print("DeltaTableAggregated")
-    print(deltaTable)
+    print(deltatable)
 
     # Update the data_collection_config with the DeltaTableAggregated and columns specs
     workflows_collection.update_one(
         {"_id": workflow_oid},
         {
             "$set": {
-                "data_collections.$[elem].deltaTable": deltaTable.mongo(),
-                "data_collections.$[elem].columns": serialize_for_mongo(results),
+                "data_collections.$[elem].config.dc_specific_properties.deltatable": serialize_for_mongo(deltatable),
+                "data_collections.$[elem].config.dc_specific_properties.columns": serialize_for_mongo(results),
             }
         },
-        array_filters=[{"elem._id": data_collection_oid}],
+        array_filters=[{"elem.id": data_collection_oid}],
     )
 
     return {
-        "message": f"Data successfully aggregated and saved for data_collection: {data_collection_id} of workflow: {workflow_id}, aggregation id: {deltaTable.id}",
+        "message": f"Data successfully aggregated and saved for data_collection: {data_collection_id} of workflow: {workflow_id}, aggregation id: {deltatable.id}",
     }
 
 

@@ -24,7 +24,7 @@ class TableJoinConfig(BaseModel):
 
 
 class DCTableConfig(BaseModel):
-    deltaTable: DeltaTableAggregated = None
+    deltatable: DeltaTableAggregated = None
     columns: List[DeltaTableColumn] = []
     format: str
     polars_kwargs: Optional[Dict[str, Any]] = {}
