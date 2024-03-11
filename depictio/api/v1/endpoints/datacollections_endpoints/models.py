@@ -6,7 +6,6 @@ from pydantic import (
     BaseModel,
     validator,
 )
-from depictio.api.v1.endpoints.deltatables_endpoints.models import DeltaTableAggregated
 
 from depictio.api.v1.models.base import MongoModel, PyObjectId
 from depictio.api.v1.models.data_collections_custom_models.jbrowse_models import DCJBrowse2Config
@@ -43,30 +42,6 @@ class DataCollectionConfig(BaseModel):
         raise ValueError("Unsupported type")
 
 
-class DataCollectionColumn(MongoModel):
-    name: str
-    type: str
-    description: Optional[str] = None  # Optional description
-    specs: Optional[Dict] = None
-
-    @validator("type")
-    def validate_column_type(cls, v):
-        allowed_values = [
-            "string",
-            "utf8",
-            "object",
-            "int64",
-            "float64",
-            "bool",
-            "date",
-            "datetime",
-            "time",
-            "category",
-        ]
-        if v.lower() not in allowed_values:
-            raise ValueError(f"column_type must be one of {allowed_values}")
-        return v
-
 
 class DataCollection(MongoModel):
     # id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
@@ -76,8 +51,7 @@ class DataCollection(MongoModel):
     description: str = None  # Optional description
     config: DataCollectionConfig
     # workflow_id: Optional[str]
-    deltaTable: Optional[DeltaTableAggregated] = None
-    columns: Optional[List[DataCollectionColumn]] = None
+
     # registration_time: datetime = datetime.now()
 
     class Config:

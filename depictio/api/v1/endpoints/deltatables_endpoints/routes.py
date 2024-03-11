@@ -1,6 +1,8 @@
 import collections
 from datetime import datetime
+import hashlib
 import os
+from pprint import pprint
 from bson import ObjectId
 from fastapi import HTTPException, Depends, APIRouter
 import deltalake
@@ -16,8 +18,6 @@ from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user
 from depictio.api.v1.endpoints.user_endpoints.models import User
 from depictio.api.v1.endpoints.validators import validate_workflow_and_collection
 from depictio.api.v1.models.base import convert_objectid_to_str
-
-
 
 
 from depictio.api.v1.utils import (
@@ -92,14 +92,17 @@ def read_table_for_DC_table(file_info, data_collection_config, deltaTable):
     """
     Read a table file and return a Polars DataFrame.
     """
+    print("file_info")
     print(file_info)
+    print("data_collection_config")
+    print(data_collection_config)
     # if file_info.aggregated == True:
     #     continue  # Skip already processed files
 
     file_path = file_info.file_location
     df = pl.read_csv(
         file_path,
-        **dict(data_collection_config.polars_kwargs),
+        **dict(data_collection_config["polars_kwargs"]),
     )
     # print(df)
     raw_cols = df.columns
@@ -186,6 +189,7 @@ def precompute_columns_specs(aggregated_df: pl.DataFrame, agg_functions: dict):
     print(results)
     return results
 
+
 @deltatables_endpoint_router.post("/create/{workflow_id}/{data_collection_id}")
 async def aggregate_data(
     # data_collection: DataCollection,
@@ -194,6 +198,8 @@ async def aggregate_data(
     current_user: str = Depends(get_current_user),
 ):
     # data_collections_collection.drop()
+
+    print("Aggregating data...")
 
     # Use the utility function to validate and retrieve necessary info
     (
@@ -219,7 +225,7 @@ async def aggregate_data(
     files = list(
         files_collection.find(
             {
-                "data_collection._id": data_collection_oid,
+                "data_collection.id": data_collection_oid,
             }
         )
     )
@@ -238,32 +244,46 @@ async def aggregate_data(
     user = User.from_mongo(users_collection.find_one({"_id": user_oid}))
 
     # Check if a DeltaTableAggregated already exists in the data_collection
-    query = {"_id": workflow_oid, "data_collections._id": data_collection_oid}
-    deltatable_cursor = workflows_collection.find(query, {"data_collections.$": 1})
-    deltatable = list(deltatable_cursor)[0]["data_collections"][0]["deltaTable"]
-    # if DeltaTableAggregated already exists, version it
-    if deltatable:
-        aggregation_version = deltatable.aggregation[-1].aggregation_version + 1
-    else:
-        aggregation_version = 1
+    query = {"_id": workflow_oid, "data_collections.id": data_collection_oid}
+    dc_cursor = workflows_collection.find(query, {"data_collections.$": 1})
+    dc_config = list(dc_cursor)[0]["data_collections"][0]["config"]
+    print("dc_config")
+    print(dc_config)
 
-    # Create a DeltaTableAggregated object
-    deltaTable = DeltaTableAggregated(
-        delta_table_location=destination_file_name,
-        aggregation=[
-            Aggregation(
-                aggregation_time=datetime.now(),
-                aggregation_by=user,
-                # TODO: Implement versioning if necessary
-                aggregation_version=aggregation_version,
-            )
-        ],
-    )
+
+
+    if "deltaTable" in dc_config:
+        deltatable = dc_config["deltaTable"]
+        deltatable = DeltaTableAggregated.from_mongo(deltatable)
+        deltatable.version += 1
+        # deltatable.aggregation.append(
+        #     Aggregation(
+        #         aggregation_time=datetime.now(),
+        #         aggregation_by=user,
+        #         aggregation_version=deltatable.version,
+        #         aggregation_hash=hash_str,
+        #     )
+        # )
+    else:
+        # Create a DeltaTableAggregated object
+        deltaTable = DeltaTableAggregated(
+            delta_table_location=destination_file_name,
+            # aggregation=[
+            #     Aggregation(
+            #         aggregation_time=datetime.now(),
+            #         aggregation_by=user,
+            #         aggregation_version=1,
+            #         aggregation_hash=hash_str,
+            #     )
+            # ],
+        )
+
+        deltaTable.id = ObjectId()
 
     # Read each file and append to data_frames list for futher aggregation
     data_frames = []
     for file_info in files:
-        data_frames.append(read_table_for_DC_table(file_info, data_collection_config, deltaTable))
+        data_frames.append(read_table_for_DC_table(file_info, dc_config["dc_specific_properties"], deltaTable))
 
     # Aggregate data
     if not data_frames:
@@ -271,16 +291,19 @@ async def aggregate_data(
             status_code=404,
             detail=f"No files found for data_collection: {data_collection_id} of workflow: {workflow_id}.",
         )
-    
+
     # Aggregate the dataframes
     aggregated_df = pl.concat(data_frames)
+    print("aggregated_df")
     print(aggregated_df)
-    
+
     # TODO: solve the issue of writing to MinIO using polars
     # TMP solution: write to Delta Lake locally and then upload to MinIO
     # Write aggregated dataframe to Delta Lake
+
     aggregated_df.write_delta(destination_file_name)
-    # Upload the Delta Lake to MinIO 
+
+    # Upload the Delta Lake to MinIO
     upload_dir_to_s3(
         settings.minio.bucket,
         f"{user_oid}/{workflow_oid}/{data_collection_oid}",
@@ -292,6 +315,24 @@ async def aggregate_data(
 
     # Precompute columns specs
     results = precompute_columns_specs(aggregated_df, agg_functions)
+
+    # Compute the hash of the aggregated data using the filename, time, and size
+    filesize = os.path.getsize(destination_file_name)
+    hash_str = f"{destination_file_name}{datetime.now()}{filesize}"
+    hash_str = hash_str.encode("utf-8")
+    hash_str = hashlib.sha256(hash_str).hexdigest()
+
+    deltatable.aggregation.append(
+        Aggregation(
+            aggregation_time=datetime.now(),
+            aggregation_by=user,
+            aggregation_version=deltatable.version,
+            aggregation_hash=hash_str,
+        )
+    )
+
+    print("DeltaTableAggregated")
+    print(deltaTable)
 
     # Update the data_collection_config with the DeltaTableAggregated and columns specs
     workflows_collection.update_one(

@@ -8,25 +8,53 @@ from pydantic import (
     root_validator,
     validator,
 )
+from depictio.api.v1.endpoints.user_endpoints.models import User
 
 from depictio.api.v1.models.base import MongoModel, PyObjectId
 
 
-class Aggregation(MongoModel):    
-    aggregation_time: datetime
-    # aggregation_by: User
-    aggregation_version: int = 1
 
-    @validator("aggregation_time", pre=True, always=True)
-    def validate_creation_time(cls, value):
-        if type(value) is not datetime:
-            try:
-                dt = datetime.fromisoformat(value)
-                return dt.strftime("%Y-%m-%d %H:%M:%S")
-            except ValueError:
-                raise ValueError("Invalid datetime format")
-        else:
-            return value.strftime("%Y-%m-%d %H:%M:%S")
+
+class DeltaTableColumn(BaseModel):
+    name: str
+    type: str
+    description: Optional[str] = None  # Optional description
+    specs: Optional[Dict] = None
+
+    @validator("type")
+    def validate_column_type(cls, v):
+        allowed_values = [
+            "string",
+            "utf8",
+            "object",
+            "int64",
+            "float64",
+            "bool",
+            "date",
+            "datetime",
+            "time",
+            "category",
+        ]
+        if v.lower() not in allowed_values:
+            raise ValueError(f"column_type must be one of {allowed_values}")
+        return v
+
+class Aggregation(MongoModel):    
+    aggregation_time: datetime = datetime.now()
+    aggregation_by: User
+    aggregation_version: int = 1
+    aggregation_hash : str
+
+    # @validator("aggregation_time", pre=True, always=True)
+    # def validate_creation_time(cls, value):
+    #     if type(value) is not datetime:
+    #         try:
+    #             dt = datetime.fromisoformat(value)
+    #             return dt.strftime("%Y-%m-%d %H:%M:%S")
+    #         except ValueError:
+    #             raise ValueError("Invalid datetime format")
+    #     else:
+    #         return value.strftime("%Y-%m-%d %H:%M:%S")
 
     @validator("aggregation_version")
     def validate_version(cls, value):
@@ -54,13 +82,6 @@ class DeltaTableAggregated(MongoModel):
     delta_table_location: Path
     aggregation: List[Aggregation] = []
 
-
-    @root_validator(pre=True)
-    def set_default_id(cls, values):
-        if values is None or "id" not in values or values["id"] is None:
-            return values  # Ensure we don't proceed if values is None
-        values["id"] = PyObjectId()
-        return values
 
     @validator("aggregation")
     def validate_aggregation(cls, value):
