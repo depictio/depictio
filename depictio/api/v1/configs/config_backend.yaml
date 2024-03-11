@@ -12,7 +12,7 @@ mongodb:
     users_collection: "users"
     # groups_collection: "groups_collection"
     # projects_collection: "projects_collection"
-    # deltatables_collection: "deltatables_collection"
+    deltatables_collection: "deltatables"
     # jbrowse_collection: "jbrowse_collection"
 
 redis: 

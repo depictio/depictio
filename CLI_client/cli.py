@@ -338,7 +338,7 @@ def setup(
         workflow_data_dict = convert_objectid_to_str(workflow_data_raw)
         response_body = create_update_delete_workflow(workflow_data_dict, headers, user, update)
         wf_id = response_body["_id"]
-        for dc in response_body["data_collections"]:
+        for dc in response_body["data_collections"][:1]:
             if dc["config"]["type"].lower() == "table":
                 print("scan_files_for_data_collection")
                 print(wf_id, dc["id"], headers)
@@ -349,9 +349,10 @@ def setup(
 
                 # Retrieve the data collection details
 
-                # print("create_deltatable")
+                print("create_deltatable")
                 # print(wf, dc, headers)
-                # create_deltatable_request(wf, dc, headers)
+                create_deltatable_request(wf_id, dc["id"], headers)
+                
 
 
 @app.command()

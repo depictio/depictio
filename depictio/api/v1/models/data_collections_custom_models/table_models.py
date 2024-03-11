@@ -1,11 +1,11 @@
-
 from typing import Dict, List, Optional, Any
 import re
+import polars
 from pydantic import (
     BaseModel,
     validator,
 )
-
+from depictio.api.v1.endpoints.deltatables_endpoints.models import DeltaTableAggregated, DeltaTableColumn
 
 
 class TableJoinConfig(BaseModel):
@@ -15,7 +15,6 @@ class TableJoinConfig(BaseModel):
     # lsuffix: str
     # rsuffix: str
 
-
     @validator("how")
     def validate_join_how(cls, v):
         allowed_values = ["inner", "outer", "left", "right"]
@@ -24,9 +23,9 @@ class TableJoinConfig(BaseModel):
         return v
 
 
-
-
 class DCTableConfig(BaseModel):
+    deltaTable: DeltaTableAggregated = None
+    columns: List[DeltaTableColumn] = []
     format: str
     polars_kwargs: Optional[Dict[str, Any]] = {}
     keep_columns: Optional[List[str]] = []
@@ -38,7 +37,6 @@ class DCTableConfig(BaseModel):
         if v.lower() not in allowed_values:
             raise ValueError(f"format must be one of {allowed_values}")
         return v
-    
 
     # TODO : check that the columns to keep are in the dataframe
     @validator("keep_columns")
@@ -55,5 +53,3 @@ class DCTableConfig(BaseModel):
             if not isinstance(v, dict):
                 raise ValueError("polars_kwargs must be a dictionary")
         return v
-
-    
