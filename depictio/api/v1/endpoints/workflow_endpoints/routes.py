@@ -17,17 +17,17 @@ from depictio.api.v1.s3 import s3_client
 # Define the router
 workflows_endpoint_router = APIRouter()
 
+
 @workflows_endpoint_router.get("/drop_S3_content")
 async def drop_S3_content():
-
     bucket_name = settings.minio.bucket
 
     # List and delete all objects in the bucket
     objects_to_delete = s3_client.list_objects_v2(Bucket=bucket_name)
-    while objects_to_delete.get('Contents'):
+    while objects_to_delete.get("Contents"):
         print(f"Deleting {len(objects_to_delete['Contents'])} objects...")
-        delete_keys = [{'Key': obj['Key']} for obj in objects_to_delete['Contents']]
-        s3_client.delete_objects(Bucket=bucket_name, Delete={'Objects': delete_keys})
+        delete_keys = [{"Key": obj["Key"]} for obj in objects_to_delete["Contents"]]
+        s3_client.delete_objects(Bucket=bucket_name, Delete={"Objects": delete_keys})
         objects_to_delete = s3_client.list_objects_v2(Bucket=bucket_name)
 
     print("All objects deleted from the bucket.")
@@ -45,6 +45,7 @@ async def drop_S3_content():
     #             s3_client.delete_object(Bucket=bucket, Key=subdir["Prefix"])
     return {"message": "S3 bucket content dropped"}
 
+
 @workflows_endpoint_router.get("/drop_all_collections")
 async def drop_all_collections():
     workflows_collection.drop()
@@ -52,6 +53,7 @@ async def drop_all_collections():
     runs_collection.drop()
     files_collection.drop()
     return {"message": "All collections dropped"}
+
 
 @workflows_endpoint_router.get("/get_all_workflows")
 # @workflows_endpoint_router.get("/get_workflows", response_model=List[Workflow])
@@ -104,16 +106,6 @@ async def get_workflow(workflow_tag: str, current_user: str = Depends(get_curren
 
 @workflows_endpoint_router.post("/create")
 async def create_workflow(workflow: Workflow, current_user: str = Depends(get_current_user)):
-    # workflows_collection.drop()
-    # data_collections_collection.drop()
-    # runs_collection.drop()
-    # files_collection.drop()
-    # fschunks_collection.drop()
-    # fsfiles_collection.drop()
-    # permissions_collection.drop()
-    # workflow_config_collection.drop()
-    # data_collection_config_collection.drop()
-
     existing_workflow = workflows_collection.find_one(
         {
             "workflow_tag": workflow.workflow_tag,
@@ -149,11 +141,6 @@ async def create_workflow(workflow: Workflow, current_user: str = Depends(get_cu
 # TODO: find a way to update the workflow and data collections by keeping the IDs
 @workflows_endpoint_router.put("/update")
 async def update_workflow(workflow: Workflow, current_user: str = Depends(get_current_user)):
-    # workflows_collection.drop()
-    # data_collections_collection.drop()
-    # runs_collection.drop()
-    # files_collection.drop()
-
     existing_workflow = workflows_collection.find_one(
         {
             "workflow_tag": workflow.workflow_tag,
@@ -182,8 +169,8 @@ async def update_workflow(workflow: Workflow, current_user: str = Depends(get_cu
     res = workflows_collection.find_one_and_update({"_id": existing_workflow["_id"]}, {"$set": updated_workflow_data}, return_document=ReturnDocument.AFTER)
 
     # Verify the update was successful
-    if not res:
-        raise HTTPException(status_code=500, detail="Failed to update the workflow.")
+    # if not res:
+    #     raise HTTPException(status_code=500, detail="Failed to update the workflow.")
 
     # Return a mapping of workflow ID to data collection IDs
     updated_data_collection_ids = [str(dc.id) for dc in workflow.data_collections]

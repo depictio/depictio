@@ -11,7 +11,7 @@ from depictio.api.v1.models.base import MongoModel, PyObjectId
 from depictio.api.v1.models.data_collections_custom_models.jbrowse_models import DCJBrowse2Config
 from depictio.api.v1.models.data_collections_custom_models.table_models import DCTableConfig
 
-class DataCollectionConfig(BaseModel):
+class DataCollectionConfig(MongoModel):
     type: str
     files_regex: str
     dc_specific_properties: Union[DCTableConfig, DCJBrowse2Config]

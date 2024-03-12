@@ -20,12 +20,15 @@ def validate_workflow_and_collection(collection, user_id: str, workflow_id: str,
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+
     # Retrieve the workflow
     workflow = collection.find_one(
         {"_id": workflow_oid, "permissions.owners.user_id": user_oid},
     )
-    print("workflow")
+
     print(workflow)
+
+
     
     # Check if the workflow exists
     if not workflow:
@@ -35,11 +38,8 @@ def validate_workflow_and_collection(collection, user_id: str, workflow_id: str,
         )
     
     # Convert the workflow to a Workflow object
-    print("workflow from mongo")
     workflow = convert_objectid_to_str(workflow)
-    print(workflow)
     workflow = Workflow(**workflow)
-    print(workflow)
 
     # If no data collection id is provided, return the workflow and user_oid
     if not data_collection_id:
@@ -50,12 +50,8 @@ def validate_workflow_and_collection(collection, user_id: str, workflow_id: str,
     data_collection = collection.find_one({"_id": workflow_oid, "permissions.owners.user_id": user_oid}, {"data_collections": {"$elemMatch": {"id": data_collection_oid}}})
     data_collection = data_collection.get("data_collections")[0]
 
-    print("data_collection")
-    print(data_collection)
     data_collection = convert_objectid_to_str(data_collection)
-    print(data_collection)
     data_collection = DataCollection(**data_collection)
-    print(data_collection)
 
     # Check if the data collection exists
     if not data_collection:
