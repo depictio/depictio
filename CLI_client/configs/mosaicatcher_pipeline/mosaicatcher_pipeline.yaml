@@ -106,6 +106,9 @@ workflows:
           # The type of the data collection
           type: "JBrowse2"
 
+          # File format of the files in the data collection
+          format: "BED"
+
           # A regular expression that is used to match the files specific of the data collection
           files_regex: "{cell}-SV.bed.gz"
 
@@ -121,11 +124,8 @@ workflows:
                 # The tag defined of the data collection that is used to join the data collection
                 join_data_collection: "mosaicatcher_stats"
 
-          # File format of the files in the data collection
-          format: "BED"
+            # The extension of the index file for the data collection
+            index_extension: "tbi"
 
-          # The extension of the index file for the data collection
-          index_extension: "tbi"
-
-          # The location of the JBrowse template for the data collection
-          jbrowse_template_location: "/Users/tweber/Gits/depictio/CLI_client/configs/mosaicatcher_pipeline/jbrowse2_templates/SV_calls.json"
+            # The location of the JBrowse template for the data collection
+            jbrowse_template_location: "/configs/mosaicatcher_pipeline/jbrowse2_templates/SV_calls.json"

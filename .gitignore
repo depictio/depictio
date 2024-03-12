@@ -165,11 +165,11 @@ diagnostic.data/
 journal/
 *.db
 dump.rdb
-data/
+# data/
 .DS_Store
 data_prepare.json
 data.json
-
+!data/
 # Dev
 *.parquet
 *.gz
@@ -193,3 +193,7 @@ depictio/public_key.pem
 jbrowse2/
 delta_dev/
 dev/dev_minio/
+dev/dev_design_visu/data/
+depictio/jbrowse2_configs/
+jbrowse2_sessions/
+jbrowse2_configs/

@@ -277,6 +277,24 @@ def create_deltatable_request(workflow_id: str, data_collection_id: str, headers
         typer.echo(f"Error for data collection {data_collection_id}: {response.text}")
 
 
+def upload_trackset_to_s3(workflow_id: str, data_collection_id: str, headers: dict) -> None:
+    """
+    Upload the trackset to S3 for a given data collection of a workflow.
+    """
+    response = httpx.post(
+        f"{API_BASE_URL}/depictio/api/v1/jbrowse/create_trackset/{workflow_id}/{data_collection_id}",
+        headers=headers,
+        timeout=60.0 * 5,  # Increase the timeout as needed
+    )
+    if response.status_code == 200:
+        typer.echo(f"Trackset successfully created for data collection {data_collection_id}!")
+    else:
+        typer.echo(f"Error for data collection {data_collection_id}: {response.text}")
+
+    return response
+
+    
+
 @app.command()
 def setup(
     config_path: str = typer.Option(
@@ -287,6 +305,7 @@ def setup(
     # workflow_tag: Optional[str] = typer.Option(None, "--workflow_tag", help="Workflow name to be created"),
     update: Optional[bool] = typer.Option(False, "--update", help="Update the workflow if it already exists"),
     erase_all: Optional[bool] = typer.Option(False, "--erase_all", help="Erase all workflows and data collections"),
+    scan_files: Optional[bool] = typer.Option(False, "--scan_files", help="Scan files for all data collections of the workflow"),
     token: Optional[str] = typer.Option(
         None,  # Default to None (not specified)
         "--token",
@@ -301,12 +320,12 @@ def setup(
     if erase_all:
         
         # Drop all collections
-        response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/workflows/drop_all_collections")
+        response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/utils/drop_all_collections")
         print(response.json())
 
-        # Drop S3 content
-        response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/workflows/drop_S3_content")
-        print(response.json())
+        # # Drop S3 content
+        # response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/utils/drop_S3_content")
+        # print(response.json())
 
     if not token:
         typer.echo("A valid token must be provided for authentication.")
@@ -346,20 +365,21 @@ def setup(
         workflow_data_dict = convert_objectid_to_str(workflow_data_raw)
         response_body = create_update_delete_workflow(workflow_data_dict, headers, user, update)
         wf_id = response_body["_id"]
+
+
         for dc in response_body["data_collections"]:
-            if dc["config"]["type"].lower() == "table":
+            if scan_files:
                 print("scan_files_for_data_collection")
-                print(wf_id, dc["id"], headers)
-
                 scan_files_for_data_collection(wf_id, dc["id"], headers)
-                # TODO: clean & refactor jbrowse part in files endpoint
-                # TODO: add a jbrowse endpoint to create a TrackSet for each data collection of type Genome Browser
+            # if dc["config"]["type"].lower() == "table":
+            #     print(wf_id, dc["id"], headers)
+            #     print("create_deltatable")
+            #     create_deltatable_request(wf_id, dc["id"], headers)
+            # elif dc["config"]["type"].lower() == "jbrowse2":
+            if dc["config"]["type"].lower() == "jbrowse2":
+                print("upload_trackset_to_s3")
+                upload_trackset_to_s3(wf_id, dc["id"], headers)
 
-                # Retrieve the data collection details
-
-                print("create_deltatable")
-                # print(wf, dc, headers)
-                create_deltatable_request(wf_id, dc["id"], headers)
                 
 
 

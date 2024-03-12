@@ -18,42 +18,6 @@ from depictio.api.v1.s3 import s3_client
 workflows_endpoint_router = APIRouter()
 
 
-@workflows_endpoint_router.get("/drop_S3_content")
-async def drop_S3_content():
-    bucket_name = settings.minio.bucket
-
-    # List and delete all objects in the bucket
-    objects_to_delete = s3_client.list_objects_v2(Bucket=bucket_name)
-    while objects_to_delete.get("Contents"):
-        print(f"Deleting {len(objects_to_delete['Contents'])} objects...")
-        delete_keys = [{"Key": obj["Key"]} for obj in objects_to_delete["Contents"]]
-        s3_client.delete_objects(Bucket=bucket_name, Delete={"Objects": delete_keys})
-        objects_to_delete = s3_client.list_objects_v2(Bucket=bucket_name)
-
-    print("All objects deleted from the bucket.")
-
-    # # Drop S3 bucket content recursively
-    # bucket = settings.minio.bucket
-    # objects = s3_client.list_objects_v2(Bucket=bucket)
-    # if "Contents" in objects:
-    #     for obj in objects["Contents"]:
-    #         s3_client.delete_object(Bucket=bucket, Key=obj["Key"])
-    # # Delete empty directories
-    # for obj in s3_client.list_objects_v2(Bucket=bucket, Delimiter="/"):
-    #     if "CommonPrefixes" in obj:
-    #         for subdir in obj["CommonPrefixes"]:
-    #             s3_client.delete_object(Bucket=bucket, Key=subdir["Prefix"])
-    return {"message": "S3 bucket content dropped"}
-
-
-@workflows_endpoint_router.get("/drop_all_collections")
-async def drop_all_collections():
-    workflows_collection.drop()
-    data_collections_collection.drop()
-    runs_collection.drop()
-    files_collection.drop()
-    return {"message": "All collections dropped"}
-
 
 @workflows_endpoint_router.get("/get_all_workflows")
 # @workflows_endpoint_router.get("/get_workflows", response_model=List[Workflow])

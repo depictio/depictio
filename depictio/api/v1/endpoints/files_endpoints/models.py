@@ -21,7 +21,6 @@ class File(MongoModel):
     data_collection: DataCollection
     # file_hash: Optional[str] = None
     run_id: Optional[str] = None
-    aggregated: Optional[bool] = False
     registration_time: datetime = datetime.now()
 
     @root_validator(pre=True)
