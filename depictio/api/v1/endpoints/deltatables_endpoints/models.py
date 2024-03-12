@@ -1,4 +1,3 @@
-
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Union
@@ -11,8 +10,6 @@ from pydantic import (
 from depictio.api.v1.endpoints.user_endpoints.models import User
 
 from depictio.api.v1.models.base import MongoModel, PyObjectId
-
-
 
 
 class DeltaTableColumn(BaseModel):
@@ -39,13 +36,13 @@ class DeltaTableColumn(BaseModel):
             raise ValueError(f"column_type must be one of {allowed_values}")
         return v
 
-class Aggregation(MongoModel):    
+
+class Aggregation(MongoModel):
     aggregation_time: datetime = datetime.now()
     aggregation_by: User
     aggregation_version: int = 1
-    aggregation_hash : str
+    aggregation_hash: str
     aggregation_columns_specs: List[DeltaTableColumn] = []
-
 
     # @validator("aggregation_time", pre=True, always=True)
     # def validate_creation_time(cls, value):
@@ -63,6 +60,7 @@ class Aggregation(MongoModel):
         if not isinstance(value, int):
             raise ValueError("version must be an integer")
         return value
+
 
 class FilterCondition(BaseModel):
     above: Optional[Union[int, float, str]] = None
@@ -84,7 +82,6 @@ class DeltaTableAggregated(MongoModel):
     data_collection_id: PyObjectId
     delta_table_location: Path
     aggregation: List[Aggregation] = []
-
 
     # @validator("aggregation")
     # def validate_aggregation(cls, value):

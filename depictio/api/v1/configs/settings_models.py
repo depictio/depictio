@@ -41,6 +41,7 @@ class MinioConfig(BaseModel):
     secret_key: str
     secure: bool
     bucket: str
+    data_dir: str
 
 
 class JbrowseConfig(BaseModel):

@@ -7,6 +7,7 @@ from depictio.api.v1.endpoints.files_endpoints.routes import files_endpoint_rout
 from depictio.api.v1.endpoints.deltatables_endpoints.routes import deltatables_endpoint_router
 from depictio.api.v1.endpoints.user_endpoints.auth import auth_endpoint_router
 from depictio.api.v1.endpoints.jbrowse_endpoints.routes import jbrowse_endpoints_router
+from depictio.api.v1.endpoints.utils_endpoints.routes import utils_endpoint_router
 
 router = APIRouter()
 
@@ -41,4 +42,10 @@ router.include_router(
     auth_endpoint_router,
     prefix="/auth",
     tags=["Authentication"],
+)
+
+router.include_router(
+    utils_endpoint_router,
+    prefix="/utils",
+    tags=["Utils"],
 )
