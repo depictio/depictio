@@ -286,6 +286,7 @@ def setup(
     ),
     # workflow_tag: Optional[str] = typer.Option(None, "--workflow_tag", help="Workflow name to be created"),
     update: Optional[bool] = typer.Option(False, "--update", help="Update the workflow if it already exists"),
+    erase_all: Optional[bool] = typer.Option(False, "--erase_all", help="Erase all workflows and data collections"),
     token: Optional[str] = typer.Option(
         None,  # Default to None (not specified)
         "--token",
@@ -297,11 +298,15 @@ def setup(
     """
     # assert workflow_tag is not None
 
-    # response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/workflows/drop_all_collections")
-    # print(response.json())
+    if erase_all:
+        
+        # Drop all collections
+        response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/workflows/drop_all_collections")
+        print(response.json())
 
-    # response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/workflows/drop_S3_content")
-    # print(response.json())
+        # Drop S3 content
+        response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/workflows/drop_S3_content")
+        print(response.json())
 
     if not token:
         typer.echo("A valid token must be provided for authentication.")
@@ -341,7 +346,7 @@ def setup(
         workflow_data_dict = convert_objectid_to_str(workflow_data_raw)
         response_body = create_update_delete_workflow(workflow_data_dict, headers, user, update)
         wf_id = response_body["_id"]
-        for dc in response_body["data_collections"][:1]:
+        for dc in response_body["data_collections"]:
             if dc["config"]["type"].lower() == "table":
                 print("scan_files_for_data_collection")
                 print(wf_id, dc["id"], headers)

@@ -214,8 +214,8 @@ async def aggregate_data(
     files = [File.from_mongo(file) for file in files]
 
     # Create a DeltaTableAggregated object
-    # root_dir = "/Users/tweber/Gits/depictio"
-    destination_file_name = f"minio_data/{settings.minio.bucket}/{user_oid}/{workflow_oid}/{data_collection_oid}/"  # Destination path in MinIO
+    # TODO: fix the data_dir - not working without due to Docker volumes
+    destination_file_name = f"{settings.minio.data_dir}/{settings.minio.bucket}/{user_oid}/{workflow_oid}/{data_collection_oid}/"  # Destination path in MinIO
     os.makedirs(destination_file_name, exist_ok=True)
 
     # Get the user object to use as aggregation_by
