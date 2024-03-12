@@ -11,7 +11,7 @@ import polars as pl
 import numpy as np
 
 from depictio.api.v1.configs.config import settings
-from depictio.api.v1.db import db, workflows_collection, files_collection, users_collection
+from depictio.api.v1.db import db, workflows_collection, files_collection, users_collection, deltatables_collection
 from depictio.api.v1.s3 import s3_client
 from depictio.api.v1.endpoints.deltatables_endpoints.models import Aggregation, DeltaTableAggregated
 from depictio.api.v1.endpoints.files_endpoints.models import File
@@ -60,7 +60,7 @@ async def list_registered_files(
     # Query to find deltatable associated with the data collection
     query = {"_id": workflow_oid, "data_collections._id": data_collection_oid}
     deltatable_cursor = workflows_collection.find(query, {"data_collections.$": 1})
-    deltatable = list(deltatable_cursor)[0]["data_collections"][0]["deltaTable"]
+    deltatable = list(deltatable_cursor)[0]["data_collections"][0]["deltatable"]
     # print(deltatable)
 
     return convert_objectid_to_str(deltatable)
@@ -94,7 +94,7 @@ def read_table_for_DC_table(file_info, data_collection_config, deltaTable):
         {
             "$set": {
                 "aggregated": True,
-                "data_collection.deltaTable": deltaTable.mongo(),
+                "data_collection.deltatable": deltaTable.mongo(),
             }
         },
     )
@@ -170,13 +170,10 @@ def precompute_columns_specs(aggregated_df: pl.DataFrame, agg_functions: dict):
 
 @deltatables_endpoint_router.post("/create/{workflow_id}/{data_collection_id}")
 async def aggregate_data(
-    # data_collection: DataCollection,
     workflow_id: str,
     data_collection_id: str,
     current_user: str = Depends(get_current_user),
 ):
-    # data_collections_collection.drop()
-
     print("Aggregating data...")
 
     # Use the utility function to validate and retrieve necessary info
@@ -194,12 +191,13 @@ async def aggregate_data(
     )
 
     # Extract the data_collection_config from the workflow
-    data_collection_config = data_collection.config
+    dc_config = data_collection.config
 
     # Assert type of data_collection_config is Table
-    assert data_collection_config.type == "Table", "Data collection type must be Table"
+    assert dc_config.type == "Table", "Data collection type must be Table"
+    dc_config = convert_objectid_to_str(dc_config.mongo())
 
-    # Using the config, find relevant files
+    # Using the config, find files associated with the data collection
     files = list(
         files_collection.find(
             {
@@ -216,54 +214,27 @@ async def aggregate_data(
     files = [File.from_mongo(file) for file in files]
 
     # Create a DeltaTableAggregated object
-    root_dir = "/Users/tweber/Gits/depictio"
-    destination_file_name = f"{root_dir}/minio_data/{settings.minio.bucket}/{user_oid}/{workflow_oid}/{data_collection_oid}/"  # Destination path in MinIO
-    # shutil.rmtree(destination_file_name, ignore_errors=True)
+    # root_dir = "/Users/tweber/Gits/depictio"
+    destination_file_name = f"minio_data/{settings.minio.bucket}/{user_oid}/{workflow_oid}/{data_collection_oid}/"  # Destination path in MinIO
     os.makedirs(destination_file_name, exist_ok=True)
-
 
     # Get the user object to use as aggregation_by
     user = User.from_mongo(users_collection.find_one({"_id": user_oid}))
 
-    # Check if a DeltaTableAggregated already exists in the data_collection
-    query = {"_id": workflow_oid, "data_collections.id": data_collection_oid}
-    dc_cursor = workflows_collection.find(query, {"data_collections.$": 1})
-    dc_config = list(dc_cursor)[0]["data_collections"][0]["config"]
-    print("dc_config")
-    print(dc_config)
+    # Check if a DeltaTableAggregated already exists in the deltatables_collection
+    query_dt = deltatables_collection.find_one({"data_collection_id": data_collection_oid})
 
+    # Check if the DeltaTableAggregated exists, if not create a new one, else update the existing one
     print("Checking if deltatable exists")
-    print(dc_config["dc_specific_properties"])
-    if "deltaTable" in dc_config["dc_specific_properties"]:
-        print('deltaTable exists')
-        deltatable = dc_config["dc_specific_properties"]["deltaTable"]
-        deltatable = DeltaTableAggregated.from_mongo(deltatable)
-        print(deltatable)
-        print(deltatable.aggregation)
-        # deltatable.version += 1
-        # deltatable.aggregation.append(
-        #     Aggregation(
-        #         aggregation_time=datetime.now(),
-        #         aggregation_by=user,
-        #         aggregation_version=deltatable.version,
-        #         aggregation_hash=hash_str,
-        #     )
-        # )
+    if query_dt:
+        print("DeltaTable exists")
+        deltatable = DeltaTableAggregated.from_mongo(query_dt)
     else:
-        # Create a DeltaTableAggregated object
+        print("DeltaTable does not exist")
         deltatable = DeltaTableAggregated(
             delta_table_location=destination_file_name,
-            aggregation=[],
-            # aggregation=[
-            #     Aggregation(
-            #         aggregation_time=datetime.now(),
-            #         aggregation_by=user,
-            #         aggregation_version=1,
-            #         aggregation_hash=hash_str,
-            #     )
-            # ],
+            data_collection_id=data_collection_oid,
         )
-
         deltatable.id = ObjectId()
 
     # Read each file and append to data_frames list for futher aggregation
@@ -291,10 +262,6 @@ async def aggregate_data(
     # TODO: solve the issue of writing to MinIO using polars
     # TMP solution: write to Delta Lake locally and then upload to MinIO
     # Write aggregated dataframe to Delta Lake
-
-    # deltalake.write_deltalake(destination_file_name, aggregated_df.to_pandas(), mode="overwrite")
-    # deltalake.write_deltalake(destination_file_name, aggregated_df.to_pandas())
-    # aggregated_df.write_parquet("{destination_file_name}aggregated.parquet")
     aggregated_df.write_delta(destination_file_name, mode="overwrite", overwrite_schema=True)
 
     # Upload the Delta Lake to MinIO
@@ -316,11 +283,6 @@ async def aggregate_data(
     hash_str = hash_str.encode("utf-8")
     hash_str = hashlib.sha256(hash_str).hexdigest()
 
-    print("hash_str")
-    print(hash_str)
-
-    # TODO: fix aggregation list incrementation
-
     version = 1 if not deltatable.aggregation else deltatable.aggregation[-1].aggregation_version + 1
 
     deltatable.aggregation.append(
@@ -329,23 +291,27 @@ async def aggregate_data(
             aggregation_by=user,
             aggregation_version=version,
             aggregation_hash=hash_str,
+            aggregation_columns_specs=results,
         )
     )
 
     print("DeltaTableAggregated")
     print(deltatable)
 
-    # Update the data_collection_config with the DeltaTableAggregated and columns specs
-    workflows_collection.update_one(
-        {"_id": workflow_oid},
-        {
-            "$set": {
-                "data_collections.$[elem].config.dc_specific_properties.deltatable": serialize_for_mongo(deltatable),
-                "data_collections.$[elem].config.dc_specific_properties.columns": serialize_for_mongo(results),
-            }
-        },
-        array_filters=[{"elem.id": data_collection_oid}],
-    )
+    if query_dt:
+        print("Updating existing DeltaTableAggregated")
+        deltatables_collection.update_one(
+            {"data_collection_id": data_collection_oid},
+            {
+                "$set": {
+                    "delta_table_location": destination_file_name,
+                    "aggregation": serialize_for_mongo(deltatable.aggregation),
+                }
+            },
+        )
+    else:
+        print("Inserting new DeltaTableAggregated")
+        deltatables_collection.insert_one(deltatable.mongo())
 
     return {
         "message": f"Data successfully aggregated and saved for data_collection: {data_collection_id} of workflow: {workflow_id}, aggregation id: {deltatable.id}",

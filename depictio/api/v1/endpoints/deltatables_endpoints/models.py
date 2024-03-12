@@ -44,6 +44,8 @@ class Aggregation(MongoModel):
     aggregation_by: User
     aggregation_version: int = 1
     aggregation_hash : str
+    aggregation_columns_specs: List[DeltaTableColumn] = []
+
 
     # @validator("aggregation_time", pre=True, always=True)
     # def validate_creation_time(cls, value):
@@ -79,8 +81,8 @@ class DeltaTableQuery(MongoModel):
 class DeltaTableAggregated(MongoModel):
     # id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
     id: Optional[PyObjectId] = None
+    data_collection_id: PyObjectId
     delta_table_location: Path
-    toto: str = "toto"
     aggregation: List[Aggregation] = []
 
 

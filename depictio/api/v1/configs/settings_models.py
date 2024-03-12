@@ -10,6 +10,7 @@ class Collections(BaseModel):
     runs_collection: str
     files_collection: str
     users_collection: str
+    deltatables_collection: str
 
 
 class MongoConfig(BaseModel):
