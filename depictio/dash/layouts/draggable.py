@@ -1089,39 +1089,39 @@ def register_callbacks_draggable(app):
 
 def design_draggable(data, init_layout, init_children):
 
-    # Generate core layout based on data availability
-    if not data:
-        core = html.Div(
-            [
-                html.Hr(),
-                dmc.Center(dmc.Group(
-                    [
-                        DashIconify(icon="feather:info", color="orange", width=45),
-                        dmc.Text(
-                            "No data available.",
-                            variant="gradient",
-                            gradient={"from": "red", "to": "yellow", "deg": 45},
-                            style={"fontSize": 40, "textAlign": "center"},
-                        ),
-                    ]
-                )),
-                dmc.Text(
-                    "Please first register workflows and data using Depictio CLI.",
-                    variant="gradient",
-                    gradient={"from": "red", "to": "yellow", "deg": 45},
-                    style={"fontSize": 30, "textAlign": "center"},
-                ),
-            ]
-        )
-    else:
-        core = (
-            dash_draggable.ResponsiveGridLayout(
-                id="draggable",
-                clearSavedLayout=True,
-                layouts=init_layout,
-                children=init_children,
-                isDraggable=True,
-                isResizable=True,
-            ),
-        )
+    # # Generate core layout based on data availability
+    # if not data:
+    #     core = html.Div(
+    #         [
+    #             html.Hr(),
+    #             dmc.Center(dmc.Group(
+    #                 [
+    #                     DashIconify(icon="feather:info", color="orange", width=45),
+    #                     dmc.Text(
+    #                         "No data available.",
+    #                         variant="gradient",
+    #                         gradient={"from": "red", "to": "yellow", "deg": 45},
+    #                         style={"fontSize": 40, "textAlign": "center"},
+    #                     ),
+    #                 ]
+    #             )),
+    #             dmc.Text(
+    #                 "Please first register workflows and data using Depictio CLI.",
+    #                 variant="gradient",
+    #                 gradient={"from": "red", "to": "yellow", "deg": 45},
+    #                 style={"fontSize": 30, "textAlign": "center"},
+    #             ),
+    #         ]
+    #     )
+    # else:
+    core = html.Div(
+        dash_draggable.ResponsiveGridLayout(
+            id="draggable",
+            clearSavedLayout=True,
+            layouts=init_layout,
+            children=init_children,
+            isDraggable=True,
+            isResizable=True,
+        ),
+    )
     return core

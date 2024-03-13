@@ -1,6 +1,4 @@
 import json
-import dash_core_components as dcc
-import dash_html_components as html
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 from dash import html, dcc, Input, Output, State, ALL, MATCH
@@ -150,8 +148,8 @@ def design_header(data):
 
     # Check if data is available, if not set the buttons to disabled
     disabled = False
-    if not data:
-        disabled = True
+    # if not data:
+    #     disabled = True
 
     # Backend components - dcc.Store for storing children and layout - memory storage
     # https://dash.plotly.com/dash-core-components/store
@@ -207,16 +205,16 @@ def design_header(data):
     button_style = {"margin": "0 10px", "fontWeight": "500"}
     
     # Right side of the header - Edit dashboard mode button
-    if data:
-        edit_switch = dbc.Checklist(
-                    id="edit-dashboard-mode-button",
-                    style={"fontSize": "22px"},
-                    options=[{"label": "Edit dashboard", "value": 0}],
-                    value=init_nclicks_edit_dashboard_mode_button,
-                    switch=True,
-        )
-    else:       
-        edit_switch = html.Div()
+    # if data:
+    edit_switch = dbc.Checklist(
+                id="edit-dashboard-mode-button",
+                style={"fontSize": "22px"},
+                options=[{"label": "Edit dashboard", "value": 0}],
+                value=init_nclicks_edit_dashboard_mode_button,
+                switch=True,
+    )
+    # else:       
+    #     edit_switch = html.Div()
 
 
     header = html.Div(
