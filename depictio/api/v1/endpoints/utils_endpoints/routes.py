@@ -36,9 +36,9 @@ async def drop_S3_content():
 
 @utils_endpoint_router.get("/drop_all_collections")
 async def drop_all_collections():
-    # workflows_collection.drop()
-    # data_collections_collection.drop()
-    # runs_collection.drop()
+    workflows_collection.drop()
+    data_collections_collection.drop()
+    runs_collection.drop()
     files_collection.drop()
-    # deltatables_collection.drop()
+    deltatables_collection.drop()
     return {"message": "All collections dropped"}

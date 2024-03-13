@@ -36,11 +36,12 @@ async def get_all_workflows(current_user: str = Depends(get_current_user)):
     # Retrieve the workflows & convert them to Workflow objects to validate the model
     workflows_cursor = [Workflow(**convert_objectid_to_str(w)) for w in list(workflows_collection.find(query))]
     workflows = convert_objectid_to_str(list(workflows_cursor))
+    print(workflows)
 
     if not workflows:
         raise HTTPException(status_code=404, detail="No workflows found for the current user.")
 
-    return workflows[0]
+    return workflows
 
 
 @workflows_endpoint_router.get("/get")
@@ -120,7 +121,7 @@ async def update_workflow(workflow: Workflow, current_user: str = Depends(get_cu
     # Preserve existing data collection IDs
     print("existing_workflow")
     print(existing_workflow)
-    existing_data_collections = {dc["data_collection_tag"]: dc["id"] for dc in existing_workflow.get("data_collections", [])}
+    existing_data_collections = {dc["data_collection_tag"]: dc["_id"] for dc in existing_workflow.get("data_collections", [])}
     for dc in workflow.data_collections:
         if dc.data_collection_tag in existing_data_collections:
             # If the data collection exists, preserve its ID

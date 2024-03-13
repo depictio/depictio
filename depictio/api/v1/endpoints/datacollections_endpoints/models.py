@@ -4,6 +4,7 @@ import re
 from bson import ObjectId
 from pydantic import (
     BaseModel,
+    Field,
     validator,
 )
 
@@ -44,8 +45,8 @@ class DataCollectionConfig(MongoModel):
 
 
 class DataCollection(MongoModel):
-    # id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
-    id: Optional[PyObjectId] = None
+    id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
+    # _id: Optional[PyObjectId] = None
     # id: Optional[PyObjectId] = Field(default=None, alias='_id')
     data_collection_tag: str
     description: str = None  # Optional description
