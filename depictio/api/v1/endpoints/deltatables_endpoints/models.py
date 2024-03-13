@@ -1,6 +1,7 @@
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Union
+from bson import ObjectId
 from pydantic import (
     BaseModel,
     Field,
@@ -77,11 +78,27 @@ class DeltaTableQuery(MongoModel):
 
 
 class DeltaTableAggregated(MongoModel):
-    # id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
     id: Optional[PyObjectId] = None
+    # id: Optional[PyObjectId] = None
     data_collection_id: PyObjectId
     delta_table_location: Path
     aggregation: List[Aggregation] = []
+
+    class Config:
+        arbitrary_types_allowed = True
+        json_encoders = {
+            ObjectId: lambda oid: str(oid),  # or `str` for simplicity
+        }
+
+
+    def __eq__(self, other):
+        if isinstance(other, DeltaTableAggregated):
+            return all(
+                getattr(self, field) == getattr(other, field)
+                for field in self.__fields__.keys()
+                if field not in ['id']
+            )
+        return NotImplemented
 
     # @validator("aggregation")
     # def validate_aggregation(cls, value):
