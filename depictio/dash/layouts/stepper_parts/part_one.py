@@ -9,7 +9,7 @@ import httpx
 import yaml
 import dash_ag_grid as dag
 
-from depictio.dash.utils import list_workflows, load_deltatable, get_columns_from_data_collection
+from depictio.dash.utils import list_workflows, load_deltatable, get_columns_from_data_collection, load_deltatable_lite
 from depictio.api.v1.configs.config import API_BASE_URL, TOKEN
 
 def register_callbacks_stepper_part_one(app):
@@ -119,7 +119,9 @@ def register_callbacks_stepper_part_one(app):
 
             layout = [dc_main_info, html.Hr(), main_info, html.Hr()]
             if dc_specs["config"]["type"] == "Table":
-                df = load_deltatable(workflow_selection, data_collection_selection, raw=True)
+                
+                
+                df = load_deltatable_lite(workflow_id, data_collection_id, raw=True)
                 cols = get_columns_from_data_collection(workflow_selection, data_collection_selection)
                 # print(cols)
                 columnDefs = [{"field": c, "headerTooltip": f"Column type: {e['type']}"} for c, e in cols.items()]
