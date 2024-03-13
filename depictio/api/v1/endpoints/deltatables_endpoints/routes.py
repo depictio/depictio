@@ -58,12 +58,12 @@ async def list_registered_files(
     )
 
     # Query to find deltatable associated with the data collection
-    query = {"_id": workflow_oid, "data_collections._id": data_collection_oid}
-    deltatable_cursor = workflows_collection.find(query, {"data_collections.$": 1})
-    deltatable = list(deltatable_cursor)[0]["data_collections"][0]["deltatable"]
+    query = {"data_collection_id": data_collection_oid}
+    deltatable_cursor = deltatables_collection.find(query)
+    deltatables = list(deltatable_cursor)[0]
     # print(deltatable)
 
-    return convert_objectid_to_str(deltatable)
+    return convert_objectid_to_str(deltatables)
 
 
 def read_table_for_DC_table(file_info, data_collection_config, deltaTable):
@@ -168,6 +168,73 @@ def precompute_columns_specs(aggregated_df: pl.DataFrame, agg_functions: dict):
     return results
 
 
+
+@deltatables_endpoint_router.get("/specs/{workflow_id}/{data_collection_id}")
+# @workflows_endpoint_router.get("/get_workflows", response_model=List[Workflow])
+async def specs(
+    workflow_id: str,
+    data_collection_id: str,
+    current_user: str = Depends(get_current_user),
+):
+    # Assuming the 'current_user' now holds a 'user_id' as an ObjectId after being parsed in 'get_current_user'
+    # workflow_oid = ObjectId(workflow_id)
+    # data_collection_oid = ObjectId(data_collection_id)
+    # user_oid = ObjectId(current_user.user_id)  # This should be the ObjectId
+    # assert isinstance(workflow_oid, ObjectId)
+    # assert isinstance(data_collection_oid, ObjectId)
+    # assert isinstance(user_oid, ObjectId)
+
+    # # Construct the query
+    # query = {
+    #     "_id": workflow_oid,
+    #     "permissions.owners.user_id": user_oid,
+    #     "data_collections._id": data_collection_oid,
+    # }
+    # print(query)
+
+    # workflow_cursor = workflows_collection.find_one(query)
+    # print(workflow_cursor)
+
+    # if not workflow_cursor:
+    #     raise HTTPException(
+    #         status_code=404,
+    #         detail=f"No workflows with id {workflow_id} found for the current user.",
+    #     )
+
+    # workflow = Workflow.from_mongo(workflow_cursor)
+    # print(workflow)
+    # # retrieve data collection from workflow where data_collection_id matches
+    # data_collection = [
+    #     dc for dc in workflow.data_collections if dc.id == data_collection_oid
+    # ][0]
+
+    # Use the utility function to validate and retrieve necessary info
+    (
+        workflow_oid,
+        data_collection_oid,
+        workflow,
+        data_collection,
+        user_oid,
+    ) = validate_workflow_and_collection(
+         workflows_collection, current_user.user_id, workflow_id, data_collection_id, 
+    )
+
+    # Query to find deltatable associated with the data collection
+    query = {"data_collection_id": data_collection_oid}
+    deltatable_cursor = deltatables_collection.find(query)
+    deltatables = list(deltatable_cursor)[0]
+
+    # TODO - fix with versioning
+    column_specs = deltatables["aggregation"][-1]["aggregation_columns_specs"]
+
+    if not data_collection:
+        raise HTTPException(
+            status_code=404, detail="No workflows found for the current user."
+        )
+
+    return column_specs
+
+
 @deltatables_endpoint_router.post("/create/{workflow_id}/{data_collection_id}")
 async def aggregate_data(
     workflow_id: str,
@@ -215,8 +282,8 @@ async def aggregate_data(
 
     # Create a DeltaTableAggregated object
     # TODO: fix the data_dir - not working without due to Docker volumes
-    destination_file_name = f"/minio_data/{settings.minio.bucket}/{user_oid}/{workflow_oid}/{data_collection_oid}/"  # Destination path in MinIO
-    # destination_file_name = f"{settings.minio.data_dir}/{settings.minio.bucket}/{user_oid}/{workflow_oid}/{data_collection_oid}/"  # Destination path in MinIO
+    # destination_file_name = f"/minio_data/{settings.minio.bucket}/{user_oid}/{workflow_oid}/{data_collection_oid}/"  # Destination path in MinIO
+    destination_file_name = f"{settings.minio.data_dir}/{settings.minio.bucket}/{user_oid}/{workflow_oid}/{data_collection_oid}/"  # Destination path in MinIO
     os.makedirs(destination_file_name, exist_ok=True)
 
     # Get the user object to use as aggregation_by
@@ -236,7 +303,7 @@ async def aggregate_data(
             delta_table_location=destination_file_name,
             data_collection_id=data_collection_oid,
         )
-        deltatable.id = ObjectId()
+        # deltatable.id = ObjectId()
 
     # Read each file and append to data_frames list for futher aggregation
     data_frames = []
@@ -312,7 +379,9 @@ async def aggregate_data(
         )
     else:
         print("Inserting new DeltaTableAggregated")
-        deltatables_collection.insert_one(deltatable.mongo())
+        # TODO: fix id & _id issue
+        print(serialize_for_mongo(deltatable))
+        deltatables_collection.insert_one(serialize_for_mongo(deltatable))
 
     return {
         "message": f"Data successfully aggregated and saved for data_collection: {data_collection_id} of workflow: {workflow_id}, aggregation id: {deltatable.id}",
