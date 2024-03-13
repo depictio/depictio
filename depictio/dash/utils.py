@@ -7,18 +7,17 @@ import bson
 import collections
 import httpx
 import jwt
-import os, json
+import os
+import json
 import pandas as pd
 import polars as pl
 import sys
-
-sys.path.append("/Users/tweber/Gits/depictio")
 
 
 from depictio.api.v1.endpoints.user_endpoints.auth import (
     ALGORITHM,
     PUBLIC_KEY,
-    fetch_user_from_id,
+    fetch_user_from_token,
 )
 
 
@@ -48,42 +47,38 @@ def load_depictio_data():
     return None
 
 
-
 def return_user_from_token(token: str) -> dict:
-    # print(token)
-    # print(PUBLIC_KEY)
-    # print(ALGORITHM)
-    try:
-        payload = jwt.decode(token, PUBLIC_KEY, algorithms=[ALGORITHM])
-        user_id = payload.get("sub")
-        if user_id is None:
-            print("Token is invalid or expired.")
-            raise sys.exit(code=1)
-        # Fetch user from the database or wherever it is stored
-        user = fetch_user_from_id(user_id)
-        return user
-    except JWTError as e:
-        print(f"Token verification failed: {e}")
-        raise sys.exit(code=1)
+    # call API to get user from token without using PUBLIC KEY
+    response = httpx.get(
+        f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    if response.status_code == 200:
+        return response.json()
+    else:
+        print("Error fetching user from token")
+        return None
 
 
 def list_workflows(token: str = None):
+    print("list_workflows")
+    print(token)
+
     if not token:
         print("A valid token must be provided for authentication.")
-        raise sys.exit(code=1)
+        return None
 
-    # print(token)
-    user = return_user_from_token(token)  # Decode the token to get the user information
-    if not user:
-        print("Invalid token or unable to decode user information.")
-        raise sys.exit(code=1)
+    # # print(token)
+    # user = return_user_from_token(token)  # Decode the token to get the user information
+    # if not user:
+    #     print("Invalid token or unable to decode user information.")
+    #     return None
 
-    # Set permissions with the user as both owner and viewer
+    # # Set permissions with the user as both owner and viewer
     headers = {"Authorization": f"Bearer {token}"}  # Token is now mandatory
 
-
     # print(token)
-    workflows = httpx.get(f"{API_BASE_URL}/depictio/api/v1/workflows/get", headers=headers)
+    workflows = httpx.get(f"{API_BASE_URL}/depictio/api/v1/workflows/get_all_workflows", headers=headers)
     workflows_json = workflows.json()
     # pretty_workflows = json.dumps(workflows_json, indent=4)
     # typer.echo(pretty_workflows)
@@ -92,6 +87,7 @@ def list_workflows(token: str = None):
 
 def list_workflows_for_dropdown():
     workflows_model_list = list_workflows(TOKEN)
+    print(workflows_model_list)
     workflows = [wf["workflow_tag"] for wf in workflows_model_list]
     workflows_dict_for_dropdown = [{"label": wf, "value": wf} for wf in workflows]
     return workflows_dict_for_dropdown
@@ -101,15 +97,8 @@ def list_data_collections_for_dropdown(workflow_tag: str = None):
     if workflow_tag is None:
         return []
     else:
-        data_collections = [
-            dc["data_collection_tag"]
-            for wf in list_workflows(TOKEN)
-            for dc in wf["data_collections"]
-            if wf["workflow_tag"] == workflow_tag
-        ]
-        data_collections_dict_for_dropdown = [
-            {"label": dc, "value": dc} for dc in data_collections
-        ]
+        data_collections = [dc["data_collection_tag"] for wf in list_workflows(TOKEN) for dc in wf["data_collections"] if wf["workflow_tag"] == workflow_tag]
+        data_collections_dict_for_dropdown = [{"label": dc, "value": dc} for dc in data_collections]
         return data_collections_dict_for_dropdown
 
 
@@ -125,26 +114,21 @@ def get_columns_from_data_collection(
 
     workflows = list_workflows(TOKEN)
     workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_id][0]["_id"]
-    data_collection_id = [
-        f
-        for e in workflows
-        if e["_id"] == workflow_id
-        for f in e["data_collections"]
-        if f["data_collection_tag"] == data_collection_id
-    ][0]["_id"]
+    data_collection_id = [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["data_collection_tag"] == data_collection_id][0]["_id"]
 
     if workflow_id is not None and data_collection_id is not None:
         response = httpx.get(
-            f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
+            f"{API_BASE_URL}/depictio/api/v1/deltatables/specs/{workflow_id}/{data_collection_id}",
             headers={
                 "Authorization": f"Bearer {TOKEN}",
             },
         )
         # print(response)
         if response.status_code == 200:
-            json = response.json()
-
-            json_cols = json["columns"]
+            json_cols = response.json()
+            print("get_columns_from_data_collection")
+            print(json_cols)
+            # json_cols = json["columns"]
             reformat_cols = collections.defaultdict(dict)
             # print(json_cols)
             for c in json_cols:
@@ -155,6 +139,57 @@ def get_columns_from_data_collection(
         else:
             print("No workflows found")
             return None
+
+
+
+def load_deltatable_lite(workflow_id: ObjectId, data_collection_id: ObjectId,cols: list = None,  raw: bool = False):
+
+    print("load_deltatable_lite")
+
+    # Turn objectid to string
+    workflow_id = str(workflow_id)
+    data_collection_id = str(data_collection_id)
+
+    response = httpx.get(
+        f"{API_BASE_URL}/depictio/api/v1/deltatables/get/{workflow_id}/{data_collection_id}",
+        headers={
+            "Authorization": f"Bearer {TOKEN}",
+        },
+    )
+    print(response)
+    print("load_deltatable")
+    print(response.status_code)
+    print(response.json())
+
+
+
+
+    if response.status_code == 200:
+        file_id = response.json()["delta_table_location"]
+
+        print("file_id")
+        print(file_id)
+
+        if redis_cache.exists(file_id):
+            # print("Loading from redis cache")
+            data_stream = BytesIO(redis_cache.get(file_id))
+            data_stream.seek(0)  # Important: reset stream position to the beginning
+            df = pl.read_parquet(data_stream, columns=cols if cols else None)
+            # print(df)
+        else:
+            # print("Loading from DeltaTable")
+            df = pl.read_delta(file_id, columns=cols if cols else None)
+
+            # Convert DataFrame to parquet and then to bytes
+            output_stream = BytesIO()
+            df.write_parquet(output_stream)
+            output_stream.seek(0)  # Reset stream position after writing
+            redis_cache.set(file_id, output_stream.read())
+        # TODO: move to polars
+        df = df.to_pandas()
+        return df
+    else:
+        raise Exception("Error loading deltatable")
 
 
 def load_deltatable(workflow_id: str = None, data_collection_id: str = None, cols: list = None, raw: bool = False):
@@ -189,19 +224,10 @@ def load_deltatable(workflow_id: str = None, data_collection_id: str = None, col
             #         if e["_id"] == workflow_id
             #     ]
             # ), "Data collection ID not found"
-            
 
         except:
-            workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_id][0][
-                "_id"
-            ]
-            data_collection_id = [
-                f
-                for e in workflows
-                if e["_id"] == workflow_id
-                for f in e["data_collections"]
-                if f["data_collection_tag"] == data_collection_id
-            ][0]["_id"]
+            workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_id][0]["_id"]
+            data_collection_id = [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["data_collection_tag"] == data_collection_id][0]["_id"]
 
         # Check if there is join defined in config
         # if so, load the joined data collection
@@ -211,81 +237,31 @@ def load_deltatable(workflow_id: str = None, data_collection_id: str = None, col
             "Authorization": f"Bearer {TOKEN}",
         }
 
+        print("load_deltatable")
+        print("workflow_id")
+        print(workflow_id)
+        print("data_collection_id")
+        print(data_collection_id)
 
+        assert type(workflow_id) is ObjectId 
+        assert type(data_collection_id) is ObjectId
 
-
-
-
-        def tmp_load_deltatable(workflow_id: str, data_collection_id: str):
-            
-            # Get data_collection_id from data_collection_tag
-            # print('tmp_load_deltatable')
-            # print("workflow_id", workflow_id)
-            # print("data_collection_tag", data_collection_tag)
-            # data_collection_id = [
-            #     f
-            #     for e in workflows
-            #     if e["_id"] == workflow_id
-            #     for f in e["data_collections"]
-            #     if f["data_collection_tag"] == data_collection_tag
-            # ][0]["_id"]
-
-            response = httpx.get(
-                f"{API_BASE_URL}/depictio/api/v1/deltatables/get/{workflow_id}/{data_collection_id}",
-                headers={
-                    "Authorization": f"Bearer {TOKEN}",
-                },
-            )
-
-            if response.status_code == 200:
-                file_id = response.json()["delta_table_location"]
-                # print(file_id)
-
-
-                if redis_cache.exists(file_id):
-                    # print("Loading from redis cache")
-                    data_stream = BytesIO(redis_cache.get(file_id))
-                    data_stream.seek(0)  # Important: reset stream position to the beginning
-                    df = pl.read_parquet(data_stream, columns=cols if cols else None)
-                    # print(df)
-                else:
-                    # print("Loading from DeltaTable")
-                    df = pl.read_delta(file_id, columns=cols if cols else None)
-
-                    # Convert DataFrame to parquet and then to bytes
-                    output_stream = BytesIO()
-                    df.write_parquet(output_stream)
-                    output_stream.seek(0)  # Reset stream position after writing
-                    redis_cache.set(file_id, output_stream.read())
-                # TODO: move to polars
-                df = df.to_pandas()
-                return df
-            else:
-                raise Exception("Error loading deltatable")
-
-
-
-        main_data_collection_df = tmp_load_deltatable(workflow_id, data_collection_id)
+        main_data_collection_df = load_deltatable_lite(workflow_id, data_collection_id)
 
         # print("main_data_collection_df")
         # print(main_data_collection_df)
 
-
         if raw == True:
             # print("Raw data = TRUE")
             return main_data_collection_df
-        
+
         else:
             # print("Raw data = FALSE")
-
 
             # print(main_data_collection_df)
             # TODO: URGENT: remove this - used for debugging
             if "cell" in main_data_collection_df.columns:
                 main_data_collection_df["cell"] = main_data_collection_df["cell"].str.replace(".sort.mdup.bam", "")
-
-
-
 
             # print("\n\n\n")
             # print("JOIN TABLES")
@@ -295,7 +271,6 @@ def load_deltatable(workflow_id: str = None, data_collection_id: str = None, col
                 headers=headers,
             )
 
-        
             if join_tables_for_wf.status_code == 200:
                 # print(join_tables_for_wf.json())
                 if str(data_collection_id) in join_tables_for_wf.json():
@@ -308,7 +283,7 @@ def load_deltatable(workflow_id: str = None, data_collection_id: str = None, col
                             # check if tmp_dc_tag is str or pyobjectid
                             # if str, retrieve pyobjectid
                             # else skip
-                            if not bson.objectid.ObjectId.is_valid(tmp_dc_tag): 
+                            if not bson.objectid.ObjectId.is_valid(tmp_dc_tag):
                                 print("tmp_dc_tag is not valid pyobjectid")
                                 print(tmp_dc_tag)
                                 print("workflow_id")
@@ -330,7 +305,7 @@ def load_deltatable(workflow_id: str = None, data_collection_id: str = None, col
                                             print(f["_id"])
                                             tmp_dc_id = f["_id"]
                                             break
-                                        
+
                             else:
                                 tmp_dc_id = tmp_dc_tag
                             tmp_df = tmp_load_deltatable(str(workflow_id), str(tmp_dc_id))
@@ -346,9 +321,7 @@ def load_deltatable(workflow_id: str = None, data_collection_id: str = None, col
 
             return main_data_collection_df
 
-                        
-                    
-        #             tmp_df = 
+        #             tmp_df =
         #             print(tmp_df)
 
         # print(join_tables_for_wf.json())
@@ -413,14 +386,11 @@ def load_deltatable(workflow_id: str = None, data_collection_id: str = None, col
     #     return df
 
 
-
 # DeltaTable load
 # def return_deltatable(workflow_id: str = None, data_collection_id: str = None, raw=False):
 #     df = load_deltatable(workflow_id, data_collection_id, raw=raw)
 #     # print(df)
 #     return df
-        
-
 
 
 def analyze_structure(struct, depth=0):
