@@ -26,7 +26,6 @@ def validate_workflow_and_collection(collection, user_id: str, workflow_id: str,
         {"_id": workflow_oid, "permissions.owners.user_id": user_oid},
     )
 
-    print(workflow)
 
 
     
