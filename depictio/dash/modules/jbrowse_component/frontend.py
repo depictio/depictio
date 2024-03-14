@@ -118,11 +118,11 @@ def design_jbrowse(id):
 def create_stepper_jbrowse_button(n, disabled=False):
     button = dbc.Col(
         dmc.Button(
-            "Genome browser",
+            "JBrowse2",
             id={
                 "type": "btn-option",
                 "index": n,
-                "value": "Genome browser",
+                "value": "JBrowse2",
             },
             n_clicks=0,
             style=UNSELECTED_STYLE,
@@ -138,7 +138,7 @@ def create_stepper_jbrowse_button(n, disabled=False):
         id={
             "type": "store-btn-option",
             "index": n,
-            "value": "Genome browser",
+            "value": "JBrowse2",
         },
         data=0,
         storage_type="memory",

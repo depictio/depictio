@@ -143,15 +143,28 @@ def export_track_config_to_file(track_config, track_id, workflow_id, data_collec
 
 
 def upload_file_to_s3(s3_client, bucket_name, file_location, s3_key):
-    try:
-        with open(file_location, "rb") as data:
-            s3_client.upload_fileobj(data, bucket_name, s3_key)
-        print(f"File {file_location} uploaded to {s3_key}")
-    except NoCredentialsError:
-        return {"error": "S3 credentials not available"}
-    except Exception as e:
-        print(f"Error uploading {file_location}: {e}")
-        return {"error": f"Failed to upload {file_location}"}
+    # check if the file exists
+    if not os.path.exists(file_location):
+        print(f"File {file_location} does not exist.")
+        return {"error": f"File {file_location} does not exist."}
+
+
+    # check if file already exists in S3
+    skip_upload = False
+    if s3_client.list_objects_v2(Bucket=bucket_name, Prefix=s3_key).get("Contents"):
+        print(f"File {s3_key} already exists in S3.")
+        skip_upload = True
+
+    if skip_upload is False:
+        try:
+            with open(file_location, "rb") as data:
+                s3_client.upload_fileobj(data, bucket_name, s3_key)
+            print(f"File {file_location} uploaded to {s3_key}")
+        except NoCredentialsError:
+            return {"error": "S3 credentials not available"}
+        except Exception as e:
+            print(f"Error uploading {file_location}: {e}")
+            return {"error": f"Failed to upload {file_location}"}
 
 
 def handle_jbrowse_tracks(file, user_id, workflow_id, data_collection):
@@ -169,10 +182,11 @@ def handle_jbrowse_tracks(file, user_id, workflow_id, data_collection):
 
     # Construct the S3 key respecting the structure
     s3_key = f"{user_id}/{workflow_id}/{data_collection.id}/{run_id}/{path_suffix}"
+    trackid = f"{endpoint_url}:{port}/{bucket_name}/{s3_key}"
 
     # Prepare the track details
     track_details = {
-        "trackId": f"{endpoint_url}:{port}/{bucket_name}/{s3_key}",
+        "trackId": trackid,
         "name": file.filename,
         "uri": f"{endpoint_url}:{port}/{bucket_name}/{s3_key}",
         "indexUri": f"{endpoint_url}:{port}/{bucket_name}/{s3_key}.tbi",
@@ -199,7 +213,14 @@ def handle_jbrowse_tracks(file, user_id, workflow_id, data_collection):
     file_index = data_collection.config.dc_specific_properties.index_extension
 
     # Upload the file to S3
-    # upload_file_to_s3(s3_client, bucket_name, file_location, s3_key)
+    upload_file_to_s3(s3_client, bucket_name, file_location, s3_key)
+
+    # Update the file mongo document with the S3 key
+    # FIXME: find another way to access internally and externally (jbrowse) files registered
+    file.S3_location = trackid.replace("host.docker.internal", "0.0.0.0")
+    # Update into the database
+    files_collection.update_one({"_id": file.mongo()["_id"]}, {"$set": file.mongo()})
+
 
 
     # Check if the file is an index and skip if it is
@@ -270,7 +291,7 @@ async def create_trackset(
 
     # Retrieve the files associated with the data collection
     query_files = {
-        "data_collection.id": data_collection_oid,
+        "data_collection._id": data_collection_oid,
     }
     files = list(files_collection.find(query_files))
 
@@ -304,11 +325,12 @@ async def create_trackset(
 @jbrowse_endpoints_router.post("/log")
 async def log_message(log_data: LogData):
     print(datetime.now(), log_data)  # Or store it in a database/file
+    print(settings)
 
-    base_url = f"{settings.jbrowse.instance.host}:{settings.jbrowse.instance.port}"
+    base_url = f"{settings.jbrowse.instance['host']}:{settings.jbrowse.instance['port']}"
 
     # TODO: create a config.json for each dashboard and update the URL accordingly
-    config_url = f"{settings.jbrowse.watcher_plugin.host}:{settings.jbrowse.watcher_plugin.port}/jbrowse2_bak/config.json"
+    config_url = f"{settings.jbrowse.watcher_plugin['host']}:{settings.jbrowse.watcher_plugin['port']}/jbrowse2_bak/config.json"
 
     if log_data.coarseDynamicBlocks and log_data.selectedTracks:
         # Extract the first block and tracks

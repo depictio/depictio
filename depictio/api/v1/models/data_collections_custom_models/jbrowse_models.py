@@ -83,7 +83,7 @@ class DCJBrowse2Config(BaseModel):
         # Use the 'type' to determine allowed formats
         data_type = values.get("type", "").lower()  # Ensuring type is accessed in lowercase
         if data_type:  # Check if 'type' is available
-            allowed_values = {"table": allowed_values_for_table, "genome browser": allowed_values_for_genome_browser}.get(
+            allowed_values = {"table": allowed_values_for_table, "jbrowse2": allowed_values_for_genome_browser}.get(
                 data_type, []
             )  # Default to empty list if type is not recognized
 

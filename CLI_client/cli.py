@@ -324,7 +324,7 @@ def setup(
         print(response.json())
 
         # # Drop S3 content
-        # response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/utils/drop_S3_content")
+        # response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/utils/drop_S3_content", timeout=60.0 * 5)
         # print(response.json())
 
     if not token:
@@ -333,7 +333,7 @@ def setup(
 
     user = return_user_from_token(token)  # Decode the token to get the user information
     if not user:
-        typer.echo("Invalid token or unable to decode user information.")
+        typer.echo("Invalid token or unable to decode^ user information.")
         raise typer.Exit(code=1)
 
     # Set permissions with the user as both owner and viewer
@@ -368,19 +368,19 @@ def setup(
 
 
         for dc in response_body["data_collections"]:
-            # if scan_files:
-            #     print("scan_files_for_data_collection")
-            #     scan_files_for_data_collection(wf_id, dc["_id"], headers)
+            if scan_files:
+                print("scan_files_for_data_collection")
+                scan_files_for_data_collection(wf_id, dc["_id"], headers)
             if dc["config"]["type"].lower() == "table":
-                if scan_files:
-                    print("scan_files_for_data_collection")
-                    scan_files_for_data_collection(wf_id, dc["_id"], headers) 
+                # if scan_files:
+                #     print("scan_files_for_data_collection")
+                #     scan_files_for_data_collection(wf_id, dc["_id"], headers) 
                 print("create_deltatable")
                 create_deltatable_request(wf_id, dc["_id"], headers)
-            # elif dc["config"]["type"].lower() == "jbrowse2":
+            elif dc["config"]["type"].lower() == "jbrowse2":
             # if dc["config"]["type"].lower() == "jbrowse2":
-            #     print("upload_trackset_to_s3")
-            #     upload_trackset_to_s3(wf_id, dc["_id"], headers)
+                print("upload_trackset_to_s3")
+                upload_trackset_to_s3(wf_id, dc["_id"], headers)
 
                 
 

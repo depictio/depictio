@@ -42,7 +42,7 @@ def register_callbacks_stepper_part_three(app):
             "Figure",
             "Card",
             "Interactive",
-            "Genome browser",
+            "JBrowse2",
             "Graph",
             "Map",
         ]
@@ -55,7 +55,7 @@ def register_callbacks_stepper_part_three(app):
                 component_selected = components_list[btn_index[0]]
                 id = ids[btn_index[0]]
 
-                if component_selected not in ["Genome browser", "Graph", "Map"]:
+                if component_selected not in ["JBrowse2", "Graph", "Map"]:
 
                     df = load_deltatable(workflow_selection, data_collection_selection, raw=True)
 
@@ -65,7 +65,7 @@ def register_callbacks_stepper_part_three(app):
                     return design_card(id, df), btn_component
                 elif component_selected == "Interactive":
                     return design_interactive(id, df), btn_component
-                elif component_selected == "Genome browser":
+                elif component_selected == "JBrowse2":
                     return design_jbrowse(id), btn_component
                 # TODO: implement the following components
                 elif component_selected == "Graph":
