@@ -70,6 +70,7 @@ services:
       # - /Users/tweber/Gits/depictio/CLI_client:/app/CLI_client
       # - /Users:/Users # TMP - Mount the local Users directory
       - ./minio_data:/Users/tweber/Gits/depictio/minio_data
+      - ./CLI_client/configs:/Users/tweber/Gits/depictio/CLI_client/configs
     user: "${UID}:${GID}"
     command: ["python", "depictio/dash/app.py"]
     depends_on:
@@ -91,7 +92,7 @@ services:
       - ./data:/app/data
       - ./depictio:/app/depictio
       - ./jbrowse2_sessions:/config/jbrowse2
-      - ./CLI_client/configs:/configs
+      - ./CLI_client/configs:/Users/tweber/Gits/depictio/CLI_client/configs
       - ./minio_data:/Users/tweber/Gits/depictio/minio_data
       # - /Users/tweber/Gits/depictio/CLI_client:/app/CLI_client
       # - /Users:/Users # TMP - Mount the local Users directory 
