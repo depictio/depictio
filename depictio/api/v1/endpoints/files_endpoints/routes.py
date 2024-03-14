@@ -151,7 +151,7 @@ async def scan_data_collection(
                     file = File(**file)
                     # print(data_collection.config.type)
 
-                    # if data_collection.config.type == "Genome Browser":
+                    # if data_collection.config.type == "JBrowse2":
                     #     # print(data_collection.config)
                     #     handle_jbrowse_tracks(file, user_id, workflow.id, data_collection)
 

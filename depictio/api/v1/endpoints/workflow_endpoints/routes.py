@@ -103,7 +103,6 @@ async def create_workflow(workflow: Workflow, current_user: str = Depends(get_cu
     return return_dict
 
 
-# TODO: find a way to update the workflow and data collections by keeping the IDs
 @workflows_endpoint_router.put("/update")
 async def update_workflow(workflow: Workflow, current_user: str = Depends(get_current_user)):
     existing_workflow = workflows_collection.find_one(

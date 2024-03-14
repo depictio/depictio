@@ -83,7 +83,7 @@ def register_callbacks_stepper_part_two(app):
             ]
             special_components = [jbrowse_stepper_button]
 
-        elif data_collection_type == "Genome Browser":
+        elif data_collection_type == "JBrowse2":
             (
                 figure_stepper_button,
                 figure_stepper_button_store,

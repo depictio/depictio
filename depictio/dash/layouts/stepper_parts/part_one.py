@@ -173,9 +173,9 @@ def register_callbacks_stepper_part_one(app):
                     # buttons_list
                 ]
 
-            elif dc_specs["config"]["type"] == "Genome Browser":
-                if dc_specs["config"]["jbrowse_template_location"]:
-                    template_json = json.load(open(dc_specs["config"]["jbrowse_template_location"]))
+            elif dc_specs["config"]["type"] == "JBrowse2":
+                if dc_specs["config"]["dc_specific_properties"]["jbrowse_template_location"]:
+                    template_json = json.load(open(dc_specs["config"]["dc_specific_properties"]["jbrowse_template_location"]))
                     print(template_json)
                     template_title = dmc.Title("JBrowse template", order=3, align="left", weight=500)
                     prism_template = dbc.Col(

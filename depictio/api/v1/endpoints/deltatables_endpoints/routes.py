@@ -294,12 +294,12 @@ async def aggregate_data(
 
     # TODO: remove - just for testing
     # Add timestamp column
-    aggregated_df = aggregated_df.with_columns(depictio_aggregation_time=pl.lit(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+    # aggregated_df = aggregated_df.with_columns(depictio_aggregation_time=pl.lit(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
 
     print("aggregated_df")
     print(aggregated_df)
 
-    # TODO: solve the issue of writing to MinIO using polars
+    # FIXME: solve the issue of writing to MinIO using polars
     # TMP solution: write to Delta Lake locally and then upload to MinIO
     # Write aggregated dataframe to Delta Lake
     aggregated_df.write_delta(destination_file_name, mode="overwrite", overwrite_schema=True)
@@ -351,7 +351,7 @@ async def aggregate_data(
         )
     else:
         print("Inserting new DeltaTableAggregated")
-        # TODO: fix id & _id issue
+        # FIXME: fix id & _id issue
         print(serialize_for_mongo(deltatable))
         deltatables_collection.insert_one(serialize_for_mongo(deltatable))
 
