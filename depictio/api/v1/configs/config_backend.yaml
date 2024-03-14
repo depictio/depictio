@@ -48,7 +48,7 @@ jbrowse:
     host: "http://localhost"
     port: 9010
   data_dir: "/data"
-  config_dir: "/config/jbrowse2"
+  config_dir: "/Users/tweber/Gits/jbrowse-watcher-plugin/sessions"
 
 auth:
   tmp_token: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2NWU1ZjAwN2JhZDMyZGY4NTdhNTNjZjIiLCJleHAiOjE3ODczMzE0MDR9.TLZYSuZVFfXwWUMyIaC9G3-IzvsdCfT2aMHwX4rLFO0NLQRo4dCI-rEB_fImzj_ee184EfvMLVwSKePaVOJVfqNGNalrmzArhscHIa4Gsrq6OlL2yfFc6EaQd_ql9CtpLLVCeQYHWs_Dd7SIA20UJ1L-C6sqbxo7G8HBIjWCROTGErvf4mo24diPxNqOQ92u3pNxfYYRQh10lNRDXqledEsO3STxBy0wEMGCI5DqY-B8YgMpPX8RJg_Fm0xlJvdjd9BBkMqtC7N4ciBqRMqbFG0yISqWFVJ0GZJkqjOklzQeQbf48j3yY7HzLdkzzBeZwD7YEj6aj_J-LaS7V_PA2A
