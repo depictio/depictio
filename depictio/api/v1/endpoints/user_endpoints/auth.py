@@ -122,11 +122,13 @@ async def fetch_user_from_token(token: str = Depends(oauth2_scheme)) -> User:
     user_document = users_collection.find_one({"_id": ObjectId(str(user_id))})
     if not user_document:
         raise HTTPException(status_code=404, detail="User not found")
-    return User(
+    user = User(
         user_id=user_document["_id"],
         username=user_document["username"],
         email=user_document["email"],
     )
+    print(user)
+    return user
 
 
 async def get_current_user(token: str = Depends(oauth2_scheme)) -> TokenData:

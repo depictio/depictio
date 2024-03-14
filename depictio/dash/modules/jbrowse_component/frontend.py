@@ -28,6 +28,7 @@ from depictio.dash.utils import (
 )
 from depictio.api.v1.configs.config import API_BASE_URL, TOKEN
 
+
 def register_callbacks_jbrowse_component(app):
     @app.callback(
         Output({"type": "jbrowse-body", "index": MATCH}, "children"),
@@ -42,17 +43,10 @@ def register_callbacks_jbrowse_component(app):
     def update_jbrowse(wf_id, dc_id, n_clicks, id):
         print("update_jbrowse", wf_id, dc_id, n_clicks)
 
-
         workflows = list_workflows(TOKEN)
 
         workflow_id = [e for e in workflows if e["workflow_tag"] == wf_id][0]["_id"]
-        data_collection_id = [
-            f
-            for e in workflows
-            if e["_id"] == workflow_id
-            for f in e["data_collections"]
-            if f["data_collection_tag"] == dc_id
-        ][0]["_id"]
+        data_collection_id = [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["data_collection_tag"] == dc_id][0]["_id"]
 
         import httpx
 
@@ -69,26 +63,49 @@ def register_callbacks_jbrowse_component(app):
         ).json()
         print(dc_specs)
 
-        iframe = html.Iframe(
-            src="http://localhost:3000?config=http://localhost:9010/config.json&loc=chr1:1-248956422&assembly=hg38",
-            width="100%",
-            height="1000px",
+        response = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user",
+            headers={
+                "Authorization": f"Bearer {TOKEN}",
+            }
         )
-        print("iframe")
-        print(iframe)
-        store_component = dcc.Store(
-            id={"type": "store-jbrowse", "index": id["index"], "value": "jbrowse"},
-            data={
-                "index": id["index"],
-                "wf_id": workflow_id,
-                "dc_id": data_collection_id,
-                "dc_config": dc_specs["config"],
-            },
-            storage_type="memory",
-        )
+        print("\n\n\n")
+        print("update_jbrowse")
+        print(response.status_code)
+        print(response.json())
+        if response.status_code != 200:
+            raise Exception("Error fetching user")
 
-        print(html.Div([iframe, store_component]))
-        return html.Div([iframe, store_component])
+        elif response.status_code == 200:
+            # Session to define based on User ID & Dashboard ID
+            # TODO: define dashboard ID
+
+            print(response.json())
+
+            user_id = response.json()["user_id"]
+            dashboard_id = "1"
+            session = f"{user_id}_{dashboard_id}.json"
+
+            iframe = html.Iframe(
+                src=f"http://localhost:3000?config=http://localhost:9010/sessions/{session}&loc=chr1:1-248956422&assembly=hg38",
+                width="100%",
+                height="1000px",
+            )
+            print("iframe")
+            print(iframe)
+            store_component = dcc.Store(
+                id={"type": "store-jbrowse", "index": id["index"], "value": "jbrowse"},
+                data={
+                    "index": id["index"],
+                    "wf_id": workflow_id,
+                    "dc_id": data_collection_id,
+                    "dc_config": dc_specs["config"],
+                },
+                storage_type="memory",
+            )
+
+            print(html.Div([iframe, store_component]))
+            return html.Div([iframe, store_component])
 
 
 def design_jbrowse(id):
@@ -101,9 +118,7 @@ def design_jbrowse(id):
             style=UNSELECTED_STYLE,
             size="xl",
             color="yellow",
-            leftIcon=DashIconify(
-                icon="material-symbols:table-rows-narrow-rounded", color="white"
-            ),
+            leftIcon=DashIconify(icon="material-symbols:table-rows-narrow-rounded", color="white"),
         ),
         # )
         html.Div(
@@ -128,9 +143,7 @@ def create_stepper_jbrowse_button(n, disabled=False):
             style=UNSELECTED_STYLE,
             size="xl",
             color="yellow",
-            leftIcon=DashIconify(
-                icon="material-symbols:table-rows-narrow-rounded", color="white"
-            ),
+            leftIcon=DashIconify(icon="material-symbols:table-rows-narrow-rounded", color="white"),
             disabled=disabled,
         )
     )

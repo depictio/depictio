@@ -27,6 +27,10 @@ jbrowse_endpoints_router = APIRouter()
 
 
 def generate_track_config(track_type, track_details, data_collection_config):
+
+
+    # NOTE: 
+
     # Extract common JBrowse parameters from data collection config
     category = data_collection_config.get("jbrowse_params", {}).get("category", "Uncategorized")
     assemblyName = data_collection_config.get("jbrowse_params", {}).get("assemblyName", "hg38")
@@ -118,6 +122,9 @@ def update_jbrowse_config(config_path, new_tracks=[]):
 
     try:
         print("updating config...")
+        pprint(config)
+        print(config_path)
+
         with open(config_path, "w") as file:
             json.dump(config, file, indent=4)
         return {"message": f"JBrowse config updated successfully.", "type": "success"}
@@ -128,16 +135,16 @@ def update_jbrowse_config(config_path, new_tracks=[]):
         return {"message": f"Failed to save JBrowse config: {e}", "type": "error"}
 
 
-def export_track_config_to_file(track_config, track_id, workflow_id, data_collection_id):
-    # Define a directory where you want to save the track configuration files
-    config_dir = f"jbrowse2/configs/{workflow_id}/{data_collection_id}"  # Ensure this directory exists
-    os.makedirs(config_dir, exist_ok=True)
-    file_path = os.path.join(config_dir, f"{track_id}.json")
+# def export_track_config_to_file(track_config, track_id, workflow_id, data_collection_id):
+#     # Define a directory where you want to save the track configuration files
+#     config_dir = f"jbrowse2/configs/{workflow_id}/{data_collection_id}"  # Ensure this directory exists
+#     os.makedirs(config_dir, exist_ok=True)
+#     file_path = os.path.join(config_dir, f"{track_id}.json")
 
-    with open(file_path, "w") as f:
-        json.dump(track_config, f, indent=4)
+#     with open(file_path, "w") as f:
+#         json.dump(track_config, f, indent=4)
 
-    return file_path
+#     return file_path
 
 
 
@@ -170,7 +177,8 @@ def upload_file_to_s3(s3_client, bucket_name, file_location, s3_key):
 def handle_jbrowse_tracks(file, user_id, workflow_id, data_collection):
     
     
-    endpoint_url = settings.minio.endpoint
+    endpoint_url = "http://0.0.0.0"
+    # endpoint_url = settings.minio.endpoint
     port = settings.minio.port
     bucket_name = settings.minio.bucket
 
@@ -213,7 +221,8 @@ def handle_jbrowse_tracks(file, user_id, workflow_id, data_collection):
     file_index = data_collection.config.dc_specific_properties.index_extension
 
     # Upload the file to S3
-    upload_file_to_s3(s3_client, bucket_name, file_location, s3_key)
+    # TODO -  uncomment this line
+    # upload_file_to_s3(s3_client, bucket_name, file_location, s3_key)
 
     # Update the file mongo document with the S3 key
     # FIXME: find another way to access internally and externally (jbrowse) files registered
@@ -297,10 +306,13 @@ async def create_trackset(
 
     new_tracks = list()
 
-    for file in files:
+    for file in files[:10]:
         file = File(**file)
+        print(file)
+
         track_config = handle_jbrowse_tracks(file, current_user.user_id, workflow_id, data_collection)
-        new_tracks.append(track_config)
+        if track_config:
+            new_tracks.append(track_config)
 
 
     # Update the JBrowse configuration

@@ -91,7 +91,7 @@ services:
       - /Users/tweber/Data:/Users/tweber/Data
       - ./data:/app/data
       - ./depictio:/app/depictio
-      - ./jbrowse2_sessions:/config/jbrowse2
+      - /Users/tweber/Gits/jbrowse-watcher-plugin/sessions:/Users/tweber/Gits/jbrowse-watcher-plugin/sessions
       - ./CLI_client/configs:/Users/tweber/Gits/depictio/CLI_client/configs
       - ./minio_data:/Users/tweber/Gits/depictio/minio_data
       # - /Users/tweber/Gits/depictio/CLI_client:/app/CLI_client
