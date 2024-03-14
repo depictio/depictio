@@ -243,8 +243,8 @@ def load_deltatable(workflow_id: str = None, data_collection_id: str = None, col
         print("data_collection_id")
         print(data_collection_id)
 
-        assert type(workflow_id) is ObjectId 
-        assert type(data_collection_id) is ObjectId
+        # assert type(workflow_id) is ObjectId 
+        # assert type(data_collection_id) is ObjectId
 
         main_data_collection_df = load_deltatable_lite(workflow_id, data_collection_id)
 
@@ -308,7 +308,7 @@ def load_deltatable(workflow_id: str = None, data_collection_id: str = None, col
 
                             else:
                                 tmp_dc_id = tmp_dc_tag
-                            tmp_df = tmp_load_deltatable(str(workflow_id), str(tmp_dc_id))
+                            tmp_df = load_deltatable_lite(str(workflow_id), str(tmp_dc_id))
                             # TODO: remove this - used for debugging
                             tmp_df["cell"] = tmp_df["cell"].str.replace(".sort.mdup.bam", "")
                             # print("tmp_df")

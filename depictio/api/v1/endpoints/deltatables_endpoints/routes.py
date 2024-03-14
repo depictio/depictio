@@ -176,38 +176,10 @@ async def specs(
     data_collection_id: str,
     current_user: str = Depends(get_current_user),
 ):
-    # Assuming the 'current_user' now holds a 'user_id' as an ObjectId after being parsed in 'get_current_user'
-    # workflow_oid = ObjectId(workflow_id)
-    # data_collection_oid = ObjectId(data_collection_id)
-    # user_oid = ObjectId(current_user.user_id)  # This should be the ObjectId
-    # assert isinstance(workflow_oid, ObjectId)
-    # assert isinstance(data_collection_oid, ObjectId)
-    # assert isinstance(user_oid, ObjectId)
-
-    # # Construct the query
-    # query = {
-    #     "_id": workflow_oid,
-    #     "permissions.owners.user_id": user_oid,
-    #     "data_collections._id": data_collection_oid,
-    # }
-    # print(query)
-
-    # workflow_cursor = workflows_collection.find_one(query)
-    # print(workflow_cursor)
-
-    # if not workflow_cursor:
-    #     raise HTTPException(
-    #         status_code=404,
-    #         detail=f"No workflows with id {workflow_id} found for the current user.",
-    #     )
-
-    # workflow = Workflow.from_mongo(workflow_cursor)
-    # print(workflow)
-    # # retrieve data collection from workflow where data_collection_id matches
-    # data_collection = [
-    #     dc for dc in workflow.data_collections if dc.id == data_collection_oid
-    # ][0]
-
+    """
+    Fetch columns list and specs from data collection
+    # TODO: currently returns the last aggregation, need to fix with versioning
+    """
     # Use the utility function to validate and retrieve necessary info
     (
         workflow_oid,
