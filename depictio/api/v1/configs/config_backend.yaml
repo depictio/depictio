@@ -32,7 +32,7 @@ dash:
 
 minio:
   data_dir: "/Users/tweber/Gits/depictio/minio_data"
-  endpoint: "http://localhost"
+  endpoint: "http://host.docker.internal"
   port: 9000
   access_key: "minio"
   secret_key: "minio123"
