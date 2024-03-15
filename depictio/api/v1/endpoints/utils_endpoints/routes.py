@@ -27,7 +27,7 @@ async def drop_S3_content():
 
     print("All objects deleted from the bucket.")
 
-    # TODO: remove this - only for testing purposes
+    # FIXME: remove this - only for testing purposes
     # Delete directory content directly from the file system
     shutil.rmtree(settings.minio.data_dir)
 
