@@ -196,13 +196,13 @@ def register_callbacks_draggable(app):
             )
 
         elif "interactive-component" in triggered_input and check_value:
-            # print("\n\n\n")
-            # print("\n\n\n")
-            # print("\n\n\n")
-            # print("================")
-            # print("================")
-            # print("================")
-            # print("interactive-component PART")
+            print("\n\n\n")
+            print("\n\n\n")
+            print("\n\n\n")
+            print("================")
+            print("================")
+            print("================")
+            print("interactive-component PART")
 
             # Retrieve index of the interactive component that was clicked
             # triggered_input_eval = ast.literal_eval(triggered_input)
@@ -217,10 +217,10 @@ def register_callbacks_draggable(app):
             for j, e in enumerate(stored_metadata):
                 print(j, e)
                 if e["component_type"] != "interactive_component":
-                    # print("\n\n\n")
-                    # print("\n\n\n")
-                    # print("J : " + str(j))
-                    # print(e)
+                    print("\n\n\n")
+                    print("\n\n\n")
+                    print("J : " + str(j))
+                    print(e)
                     new_df = load_deltatable(e["wf_id"], e["dc_id"])
                     # print(new_df)
                     # print("\n\n\n")

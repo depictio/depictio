@@ -4,6 +4,7 @@ import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import pandas as pd
 from dash_iconify import DashIconify
+import httpx
 
 
 import dash_jbrowse
@@ -41,19 +42,11 @@ def register_callbacks_jbrowse_component(app):
         prevent_initial_call=True,
     )
     def update_jbrowse(wf_id, dc_id, n_clicks, id):
-        print("update_jbrowse", wf_id, dc_id, n_clicks)
 
         workflows = list_workflows(TOKEN)
 
         workflow_id = [e for e in workflows if e["workflow_tag"] == wf_id][0]["_id"]
         data_collection_id = [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["data_collection_tag"] == dc_id][0]["_id"]
-
-        import httpx
-
-        # API_BASE_URL = "http://localhost:8058"
-        # API_BASE_URL = "http://host.docker.internal:8058"
-
-        print(workflow_id, data_collection_id)
 
         dc_specs = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
@@ -61,7 +54,6 @@ def register_callbacks_jbrowse_component(app):
                 "Authorization": f"Bearer {TOKEN}",
             },
         ).json()
-        print(dc_specs)
 
         response = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user",
@@ -69,10 +61,7 @@ def register_callbacks_jbrowse_component(app):
                 "Authorization": f"Bearer {TOKEN}",
             }
         )
-        print("\n\n\n")
-        print("update_jbrowse")
-        print(response.status_code)
-        print(response.json())
+        
         if response.status_code != 200:
             raise Exception("Error fetching user")
 
@@ -80,7 +69,6 @@ def register_callbacks_jbrowse_component(app):
             # Session to define based on User ID & Dashboard ID
             # TODO: define dashboard ID
 
-            print(response.json())
 
             user_id = response.json()["user_id"]
             dashboard_id = "1"
@@ -104,7 +92,6 @@ def register_callbacks_jbrowse_component(app):
                 storage_type="memory",
             )
 
-            print(html.Div([iframe, store_component]))
             return html.Div([iframe, store_component])
 
 
