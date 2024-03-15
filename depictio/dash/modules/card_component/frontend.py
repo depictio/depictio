@@ -94,7 +94,6 @@ def register_callbacks_card_component(app):
         
 
         workflows = list_workflows(TOKEN)
-
         workflow_id = [e for e in workflows if e["workflow_tag"] == wf_id][0]["_id"]
         data_collection_id = [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["data_collection_tag"] == dc_id][0]["_id"]
 

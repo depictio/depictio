@@ -149,7 +149,7 @@ def update_jbrowse_config(config_path, new_tracks=[]):
 
 
 
-def upload_file_to_s3(s3_client, bucket_name, file_location, s3_key):
+def upload_file_to_s3(bucket_name, file_location, s3_key):
     # check if the file exists
     if not os.path.exists(file_location):
         print(f"File {file_location} does not exist.")
@@ -222,7 +222,7 @@ def handle_jbrowse_tracks(file, user_id, workflow_id, data_collection):
 
     # Upload the file to S3
     # TODO -  uncomment this line
-    # upload_file_to_s3(s3_client, bucket_name, file_location, s3_key)
+    # upload_file_to_s3(bucket_name, file_location, s3_key)
 
     # Update the file mongo document with the S3 key
     # FIXME: find another way to access internally and externally (jbrowse) files registered
@@ -258,14 +258,14 @@ def handle_jbrowse_tracks(file, user_id, workflow_id, data_collection):
 
 
 
-def construct_jbrowse_url(base_url, config_url, block, tracks):
+def construct_jbrowse_url(block, tracks):
     assembly_name = block.assemblyName
     ref_name = block.refName
     start = int(block.start)
     end = int(block.end)
     track_list = ",".join(tracks)
 
-    url = f"{base_url}?config={config_url}&assembly={assembly_name}&" f"loc={ref_name}:{start}..{end}&tracks={track_list}"
+    url = f"assembly={assembly_name}&loc={ref_name}:{start}..{end}&tracks={track_list}"
     return url
 
 
@@ -339,17 +339,12 @@ async def log_message(log_data: LogData):
     print(datetime.now(), log_data)  # Or store it in a database/file
     print(settings)
 
-    base_url = f"{settings.jbrowse.instance['host']}:{settings.jbrowse.instance['port']}"
-
-    # TODO: create a config.json for each dashboard and update the URL accordingly
-    config_url = f"{settings.jbrowse.watcher_plugin['host']}:{settings.jbrowse.watcher_plugin['port']}/jbrowse2_bak/config.json"
-
     if log_data.coarseDynamicBlocks and log_data.selectedTracks:
         # Extract the first block and tracks
         block = log_data.coarseDynamicBlocks[0][0]  # Assuming the first block of the first array
         tracks = [t for track in log_data.selectedTracks for t in track.tracks]  # Flatten track list
 
-        jbrowse_url = construct_jbrowse_url(base_url, config_url, block, tracks)
-        print("JBrowse URL:", jbrowse_url)
+        jbrowse_url_args = construct_jbrowse_url(block, tracks)
+        print(jbrowse_url_args)
 
-    return {"jbrowse_url": jbrowse_url}
+    return {"jbrowse_url_args": jbrowse_url_args}
