@@ -12,7 +12,7 @@ import plotly.express as px
 import re
 from dash_iconify import DashIconify
 import ast
-from depictio.dash.utils import join_deltatables, list_workflows
+from depictio.dash.utils import join_deltatables, list_workflows, load_deltatable_lite, return_mongoid
 from depictio.dash.utils import (
     SELECTED_STYLE,
     UNSELECTED_STYLE,
@@ -35,6 +35,7 @@ from depictio.dash.utils import (
     get_columns_from_data_collection,
 )
 from depictio.api.v1.configs.config import API_BASE_URL, TOKEN
+
 
 def register_callbacks_figure_component(app):
     # Define the callback to update the specific parameters dropdowns
@@ -480,8 +481,6 @@ def register_callbacks_figure_component(app):
         # API_BASE_URL = "http://localhost:8058"
         # API_BASE_URL = "http://host.docker.internal:8058"
 
-
-
         workflows = list_workflows(TOKEN)
         # print("workflows")
         # print(workflows)
@@ -537,7 +536,8 @@ def register_callbacks_figure_component(app):
 
         # print(dict_kwargs)
         dict_kwargs = {k: v for k, v in dict_kwargs.items() if v is not None}
-        df = join_deltatables(workflow, data_collection)
+        wf_id, dc_id = return_mongoid(workflow_tag=workflow, data_collection_tag=data_collection)
+        df = load_deltatable_lite(wf_id, dc_id)
 
         print("df")
         print(df)

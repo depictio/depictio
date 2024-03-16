@@ -103,13 +103,21 @@ def list_data_collections_for_dropdown(workflow_tag: str = None):
 
 
 def return_mongoid(workflow_tag: str = None, workflow_id: ObjectId = None, data_collection_tag: str = None, data_collection_id: ObjectId = None):
-
+    print("\n\n\n")
+    print("return_mongoid")
     workflows = list_workflows(TOKEN)
+
+    print(workflow_id, data_collection_id, workflow_tag, data_collection_tag)
+    print(workflows)
     if workflow_tag is not None and data_collection_tag is not None:
+        print("workflow_tag and data_collection_tag")
         workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_tag][0]["_id"]
+        print("workflow_id", workflow_id)
         data_collection_id = [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["data_collection_tag"] == data_collection_tag][0]["_id"]
+        print("data_collection_id", data_collection_id)
     elif workflow_id is not None and data_collection_tag is not None:
-        workflow_id = workflow_id
+        print("workflow_id and data_collection_tag")
+        workflow_id = str(workflow_id)
         data_collection_id = [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["data_collection_tag"] == data_collection_tag][0]["_id"]
     else:
         print("Invalid input")
@@ -211,6 +219,8 @@ def join_deltatables(workflow_id: str, data_collection_id: str):
 
     # Load the main data collection
     main_data_collection_df = load_deltatable_lite(workflow_id, data_collection_id)
+    print("initial df")
+    print(main_data_collection_df)
 
     print("\n\n\n")
     print("JOIN TABLES")
@@ -222,7 +232,7 @@ def join_deltatables(workflow_id: str, data_collection_id: str):
             "Authorization": f"Bearer {TOKEN}",
         },
     )
-    print(join_tables_for_wf.status_code())
+    print(join_tables_for_wf.status_code)
     print(join_tables_for_wf.json())
 
     # Check if the response is not successful
@@ -248,7 +258,8 @@ def join_deltatables(workflow_id: str, data_collection_id: str):
                     # Merge the main data collection with the join data collection on the specified columns
                     # NOTE: hard-coded join for depictio_run_id currently (defined when creating the DeltaTable)
                     main_data_collection_df = pd.merge(main_data_collection_df, tmp_df, on=["depictio_run_id"] + join["on_columns"])
-
+        print("final df")
+        print(main_data_collection_df)
         return main_data_collection_df
 
 
