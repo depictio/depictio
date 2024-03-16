@@ -234,6 +234,10 @@ async def delete_datacollection(
 
 @datacollections_endpoint_router.get("/get_join_tables/{workflow_id}")
 async def get_join_tables(workflow_id: str, current_user: str = Depends(get_current_user)):
+    """
+    Retrieve join details for the data collections in a workflow. 
+    """
+    
     # Find the workflow by ID
     workflow_oid = ObjectId(workflow_id)
     assert isinstance(workflow_oid, ObjectId)
@@ -244,17 +248,26 @@ async def get_join_tables(workflow_id: str, current_user: str = Depends(get_curr
 
     data_collections = existing_workflow["data_collections"]
 
-    # Initialize a map to track join details
+    # Initialize dict of list to retrieve join details
     join_details_map = collections.defaultdict(list)
     for data_collection in data_collections:
-        if "join" in data_collection["config"]:
-            dc_id = str(data_collection["_id"])
-            join_details_map[dc_id].append(data_collection["config"]["join"].copy())
-            for sub_dc_id in data_collection["config"]["join"]["with_dc"]:
-                tmp_dict = data_collection["config"]["join"]
-                tmp_dict["with_dc"] = [e for e in tmp_dict["with_dc"] if e != dc_id and e != sub_dc_id]
-                tmp_dict["with_dc"].append(dc_id)
-                join_details_map[sub_dc_id].append(tmp_dict)
 
+        # Check if the data collection is of type Table
+        if data_collection["config"]["type"].lower() == "table":
+
+            # If the data collection has a join config, add it to the join_details_map
+            if "table_join" in data_collection["config"]["dc_specific_properties"]:
+                dc_id = str(data_collection["_id"])
+                join_details_map[dc_id].append(data_collection["config"]["dc_specific_properties"]["table_join"].copy())
+
+                # Iterate over the data collections that this data collection is joined with to have symmetric join details
+                for sub_dc_id in data_collection["config"]["dc_specific_properties"]["table_join"]["with_dc"]:
+                    tmp_dict = data_collection["config"]["dc_specific_properties"]["table_join"]
+
+                    # Retrieve the join details from the sub data collection except the current data collection
+                    tmp_dict["with_dc"] = [e for e in tmp_dict["with_dc"] if e != dc_id and e != sub_dc_id]
+                    tmp_dict["with_dc"].append(dc_id)
+                    join_details_map[sub_dc_id].append(tmp_dict)
+                    
     print(join_details_map)
     return join_details_map

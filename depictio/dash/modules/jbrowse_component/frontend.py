@@ -25,7 +25,6 @@ from depictio.dash.utils import (
     list_data_collections_for_dropdown,
     list_workflows_for_dropdown,
     get_columns_from_data_collection,
-    load_deltatable,
 )
 from depictio.api.v1.configs.config import API_BASE_URL, TOKEN
 
@@ -42,7 +41,6 @@ def register_callbacks_jbrowse_component(app):
         prevent_initial_call=True,
     )
     def update_jbrowse(wf_id, dc_id, n_clicks, id):
-
         workflows = list_workflows(TOKEN)
 
         workflow_id = [e for e in workflows if e["workflow_tag"] == wf_id][0]["_id"]
@@ -59,16 +57,15 @@ def register_callbacks_jbrowse_component(app):
             f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user",
             headers={
                 "Authorization": f"Bearer {TOKEN}",
-            }
+            },
         )
-        
+
         if response.status_code != 200:
             raise Exception("Error fetching user")
 
         elif response.status_code == 200:
             # Session to define based on User ID & Dashboard ID
             # TODO: define dashboard ID
-
 
             user_id = response.json()["user_id"]
             dashboard_id = "1"

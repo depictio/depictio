@@ -5,7 +5,7 @@ import dash_mantine_components as dmc
 from dash_iconify import DashIconify
 
 # Depictio imports
-from depictio.dash.utils import list_workflows
+from depictio.dash.utils import list_workflows, return_mongoid
 from depictio.api.v1.configs.config import API_BASE_URL, TOKEN
 
 from depictio.dash.modules.card_component.utils import (
@@ -32,11 +32,11 @@ def register_callbacks_card_component(app):
         ],
         prevent_initial_call=True,
     )
-    def update_aggregation_options(column_value, wf_id, dc_id):
+    def update_aggregation_options(column_value, wf_tag, dc_tag):
         # print("update_aggregation_options", column_value)
         # print("\n\n")
 
-        cols_json = get_columns_from_data_collection(wf_id, dc_id)
+        cols_json = get_columns_from_data_collection(wf_tag, dc_tag)
 
         if column_value is None:
             return []
@@ -77,11 +77,11 @@ def register_callbacks_card_component(app):
         ],
         prevent_initial_call=True,
     )
-    def design_card_body(input_value, column_value, aggregation_value, wf_id, dc_id, id):
-        if input_value is None or column_value is None or aggregation_value is None or wf_id is None or dc_id is None:
+    def design_card_body(input_value, column_value, aggregation_value, wf_tag, dc_tag, id):
+        if input_value is None or column_value is None or aggregation_value is None or wf_tag is None or dc_tag is None:
             return []
 
-        cols_json = get_columns_from_data_collection(wf_id, dc_id)
+        cols_json = get_columns_from_data_collection(wf_tag, dc_tag)
 
         import httpx
 
@@ -93,11 +93,13 @@ def register_callbacks_card_component(app):
 
         
 
-        workflows = list_workflows(TOKEN)
-        workflow_id = [e for e in workflows if e["workflow_tag"] == wf_id][0]["_id"]
-        data_collection_id = [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["data_collection_tag"] == dc_id][0]["_id"]
+        # workflows = list_workflows(TOKEN)
+        # workflow_id = [e for e in workflows if e["workflow_tag"] == wf_id][0]["_id"]
+        # data_collection_id = [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["data_collection_tag"] == dc_id][0]["_id"]
 
-        import httpx
+        workflow_id, data_collection_id = return_mongoid(workflow_tag=wf_tag, data_collection_tag=dc_tag)
+
+
         # API_BASE_URL = "http://localhost:8058"
         # API_BASE_URL = "http://host.docker.internal:8058"
 

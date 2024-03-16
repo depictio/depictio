@@ -12,7 +12,7 @@ import plotly.express as px
 import re
 from dash_iconify import DashIconify
 import ast
-from depictio.dash.utils import list_workflows
+from depictio.dash.utils import join_deltatables, list_workflows
 from depictio.dash.utils import (
     SELECTED_STYLE,
     UNSELECTED_STYLE,
@@ -33,7 +33,6 @@ from depictio.dash.modules.figure_component.utils import (
 )
 from depictio.dash.utils import (
     get_columns_from_data_collection,
-    load_deltatable,
 )
 from depictio.api.v1.configs.config import API_BASE_URL, TOKEN
 
@@ -520,10 +519,10 @@ def register_callbacks_figure_component(app):
 
         # v = cols_json[column_value]["specs"][aggregation_value]
 
-        try:
-            v = round(float(v), 2)
-        except:
-            pass
+        # try:
+        #     v = round(float(v), 2)
+        # except:
+        #     pass
 
         store_component_data = {
             "index": id["index"],
@@ -538,7 +537,7 @@ def register_callbacks_figure_component(app):
 
         # print(dict_kwargs)
         dict_kwargs = {k: v for k, v in dict_kwargs.items() if v is not None}
-        df = load_deltatable(workflow, data_collection)
+        df = join_deltatables(workflow, data_collection)
 
         print("df")
         print(df)

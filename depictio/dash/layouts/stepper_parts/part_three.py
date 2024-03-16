@@ -15,7 +15,7 @@ from depictio.dash.modules.figure_component.frontend import design_figure
 from depictio.dash.modules.jbrowse_component.frontend import design_jbrowse
 
 # Depictio utils imports
-from depictio.dash.utils import load_deltatable
+from depictio.dash.utils import join_deltatables, return_mongoid
 
 
 def register_callbacks_stepper_part_three(app):
@@ -56,8 +56,10 @@ def register_callbacks_stepper_part_three(app):
                 id = ids[btn_index[0]]
 
                 if component_selected not in ["JBrowse2", "Graph", "Map"]:
-
-                    df = load_deltatable(workflow_selection, data_collection_selection, raw=True)
+                    
+                    # Retrive wf id and dc id
+                    wf_id, dc_id = return_mongoid(workflow_tag=workflow_selection, data_collection_tag=data_collection_selection)
+                    df = join_deltatables(wf_id, dc_id)
 
                 if component_selected == "Figure":
                     return design_figure(id, df), btn_component

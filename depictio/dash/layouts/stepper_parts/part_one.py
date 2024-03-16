@@ -1,4 +1,3 @@
-
 import json
 from dash import html, Input, Output, State, ALL, MATCH, ctx
 import dash
@@ -9,11 +8,11 @@ import httpx
 import yaml
 import dash_ag_grid as dag
 
-from depictio.dash.utils import list_workflows, load_deltatable, get_columns_from_data_collection, load_deltatable_lite
+from depictio.dash.utils import list_workflows, join_deltatables, get_columns_from_data_collection, load_deltatable_lite, return_mongoid
 from depictio.api.v1.configs.config import API_BASE_URL, TOKEN
 
-def register_callbacks_stepper_part_one(app):
 
+def register_callbacks_stepper_part_one(app):
     @app.callback(
         Output({"type": "dropdown-output", "index": MATCH}, "children"),
         Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
@@ -21,10 +20,11 @@ def register_callbacks_stepper_part_one(app):
         prevent_initial_call=True,
     )
     def update_step_2(workflow_selection, data_collection_selection):
-        workflows = list_workflows(TOKEN)
+        workflow_id, data_collection_id = return_mongoid(workflow_tag=workflow_selection, data_collection_tag=data_collection_selection)
+        # workflows = list_workflows(TOKEN)
 
-        workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_selection][0]["_id"]
-        data_collection_id = [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["data_collection_tag"] == data_collection_selection][0]["_id"]
+        # workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_selection][0]["_id"]
+        # data_collection_id = [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["data_collection_tag"] == data_collection_selection][0]["_id"]
 
         # print(data_collection_selection)
 
@@ -119,8 +119,6 @@ def register_callbacks_stepper_part_one(app):
 
             layout = [dc_main_info, html.Hr(), main_info, html.Hr()]
             if dc_specs["config"]["type"] == "Table":
-                
-                
                 df = load_deltatable_lite(workflow_id, data_collection_id, raw=True)
                 cols = get_columns_from_data_collection(workflow_selection, data_collection_selection)
                 # print(cols)

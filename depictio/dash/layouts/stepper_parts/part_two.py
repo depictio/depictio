@@ -9,7 +9,7 @@ from dash_iconify import DashIconify
 import httpx
 import yaml
 
-from depictio.dash.utils import list_workflows, load_deltatable, get_columns_from_data_collection
+from depictio.dash.utils import list_workflows, get_columns_from_data_collection
 from depictio.api.v1.configs.config import API_BASE_URL, TOKEN
 
 # Depictio components imports - button step
