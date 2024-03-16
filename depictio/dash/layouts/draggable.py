@@ -11,16 +11,11 @@ from depictio.dash.layouts.draggable_scenarios.add_component import add_new_comp
 from depictio.dash.layouts.stepper import create_stepper_output
 from depictio.dash.utils import (
     analyze_structure_and_get_deepest_type,
-    load_deltatable,
+    join_deltatables,
     load_depictio_data,
 )
 
-# Depictio utils imports
-from depictio.dash.utils import (
-    analyze_structure_and_get_deepest_type,
-    load_depictio_data,
-    load_deltatable,
-)
+
 
 # Depictio layout imports for stepper
 from depictio.dash.layouts.stepper import (
@@ -221,7 +216,7 @@ def register_callbacks_draggable(app):
                     print("\n\n\n")
                     print("J : " + str(j))
                     print(e)
-                    new_df = load_deltatable(e["wf_id"], e["dc_id"])
+                    new_df = join_deltatables(e["wf_id"], e["dc_id"])
                     # print(new_df)
                     # print("\n\n\n")
 

@@ -1,10 +1,12 @@
 # Import necessary libraries
+import httpx
+
 from dash import html, dcc, Input, Output, State, ALL, MATCH
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import pandas as pd
 from dash_iconify import DashIconify
-from depictio.dash.utils import list_workflows
+from depictio.dash.utils import join_deltatables, list_workflows, return_mongoid
 
 # Depictio imports
 from depictio.dash.modules.interactive_component.utils import (
@@ -16,9 +18,9 @@ from depictio.dash.utils import (
     list_data_collections_for_dropdown,
     list_workflows_for_dropdown,
     get_columns_from_data_collection,
-    load_deltatable,
 )
 from depictio.api.v1.configs.config import API_BASE_URL, TOKEN
+
 
 def register_callbacks_interactive_component(app):
     # Callback to update aggregation dropdown options based on the selected column
@@ -31,8 +33,8 @@ def register_callbacks_interactive_component(app):
         ],
         prevent_initial_call=True,
     )
-    def update_aggregation_options(column_value, wf_id, dc_id):
-        cols_json = get_columns_from_data_collection(wf_id, dc_id)
+    def update_aggregation_options(column_value, wf_tag, dc_tag):
+        cols_json = get_columns_from_data_collection(wf_tag, dc_tag)
         # print(cols_json)
 
         if column_value is None:
@@ -82,58 +84,21 @@ def register_callbacks_interactive_component(app):
             Input({"type": "input-dropdown-method", "index": MATCH}, "value"),
             State({"type": "workflow-selection-label", "index": MATCH}, "value"),
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
-            State({"type": "input-dropdown-method", "index": MATCH}, "id")
+            State({"type": "input-dropdown-method", "index": MATCH}, "id"),
             # Input("interval", "n_intervals"),
         ],
         prevent_initial_call=True,
     )
-    def update_card_body(
-        input_value, column_value, aggregation_value, wf_id, dc_id, id
-    ):
-        if (
-            input_value is None
-            or column_value is None
-            or aggregation_value is None
-            or wf_id is None
-            or dc_id is None
-        ):
+    def update_card_body(input_value, column_value, aggregation_value, wf_tag, dc_tag, id):
+        if input_value is None or column_value is None or aggregation_value is None or wf_tag is None or dc_tag is None:
             return []
 
-
-        print("update_card_body")
-        df = load_deltatable(wf_id, dc_id)
-        print(df)
-        cols_json = get_columns_from_data_collection(wf_id, dc_id)
-        print("cols_json")
-        print(cols_json)
+        df = join_deltatables(wf_tag, dc_tag)
+        cols_json = get_columns_from_data_collection(wf_tag, dc_tag)
         column_type = cols_json[column_value]["type"]
-        print("column_type")
-        print(column_type)
-        func_name = agg_functions[column_type]["input_methods"][aggregation_value][
-            "component"
-        ]
+        func_name = agg_functions[column_type]["input_methods"][aggregation_value]["component"]
 
-
-        workflows = list_workflows(TOKEN)
-
-
-        workflow_id = [e for e in workflows if e["workflow_tag"] == wf_id][0][
-            "_id"
-        ]
-        data_collection_id = [
-            f
-            for e in workflows
-            if e["_id"] == workflow_id
-            for f in e["data_collections"]
-            if f["data_collection_tag"] == dc_id
-        ][0]["_id"]
-
-        import httpx
-
-        # API_BASE_URL = "http://localhost:8058"
-        # API_BASE_URL = "http://host.docker.internal:8058"
-
-
+        workflow_id, data_collection_id = return_mongoid(workflow_tag=wf_tag, data_collection_tag=dc_tag)
 
         dc_specs = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
@@ -142,12 +107,9 @@ def register_callbacks_interactive_component(app):
             },
         ).json()
 
-
-
         headers = {
             "Authorization": f"Bearer {TOKEN}",
         }
-
 
         join_tables_for_wf = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/workflows/get_join_tables/{workflow_id}",
@@ -158,9 +120,6 @@ def register_callbacks_interactive_component(app):
             if data_collection_id in join_tables_for_wf:
                 join_details = join_tables_for_wf[data_collection_id]
                 dc_specs["config"]["join"] = join_details
-                
-
-
 
         # Common Store Component
         store_component = dcc.Store(
@@ -171,7 +130,7 @@ def register_callbacks_interactive_component(app):
                 "index": id["index"],
                 "wf_id": workflow_id,
                 "dc_id": data_collection_id,
-                "dc_config" : dc_specs["config"],
+                "dc_config": dc_specs["config"],
                 "column_value": column_value,
                 "type": column_type,
             },
@@ -181,9 +140,7 @@ def register_callbacks_interactive_component(app):
         # Handling different aggregation values
         if aggregation_value in ["Select", "MultiSelect", "SegmentedControl"]:
             data = sorted(df[column_value].dropna().unique())
-            interactive_component = func_name(
-                data=data, id={"type": "interactive-component", "index": id["index"]}
-            )
+            interactive_component = func_name(data=data, id={"type": "interactive-component", "index": id["index"]})
             if aggregation_value == "MultiSelect":
                 kwargs = {"searchable": True, "clearable": True}
                 interactive_component = func_name(
@@ -209,11 +166,7 @@ def register_callbacks_interactive_component(app):
                 "id": {"type": "interactive-component", "index": id["index"]},
             }
             if aggregation_value == "Slider":
-                marks = (
-                    {str(elem): str(elem) for elem in df[column_value].unique()}
-                    if df[column_value].nunique() < 30
-                    else {}
-                )
+                marks = {str(elem): str(elem) for elem in df[column_value].unique()} if df[column_value].nunique() < 30 else {}
                 kwargs.update({"marks": marks, "step": None, "included": False})
             interactive_component = func_name(**kwargs)
 
@@ -249,10 +202,7 @@ def design_interactive(id, df):
                                                 "type": "input-dropdown-column",
                                                 "index": id["index"],
                                             },
-                                            data=[
-                                                {"label": e, "value": e}
-                                                for e in df.columns
-                                            ],
+                                            data=[{"label": e, "value": e} for e in df.columns],
                                             value=None,
                                         ),
                                         dmc.Select(
