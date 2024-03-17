@@ -1,9 +1,5 @@
-from dash_iconify import DashIconify
-from dash import html, dcc, Input, Output, State, ALL, MATCH
-import dash
-import dash_bootstrap_components as dbc
-import dash_mantine_components as dmc
-
+# List of all the possible aggregation methods for each data type
+# TODO: reference in the documentation
 
 agg_functions = {
     "int64": {
