@@ -10,6 +10,7 @@ from depictio.dash.modules.card_component.frontend import register_callbacks_car
 from depictio.dash.modules.interactive_component.frontend import register_callbacks_interactive_component
 from depictio.dash.modules.figure_component.frontend import register_callbacks_figure_component
 from depictio.dash.modules.jbrowse_component.frontend import register_callbacks_jbrowse_component
+from depictio.dash.modules.table_component.frontend import register_callbacks_table_component
 
 # Depictio layout imports
 from depictio.dash.layouts.stepper import register_callbacks_stepper
@@ -59,6 +60,7 @@ register_callbacks_card_component(app)
 register_callbacks_interactive_component(app)
 register_callbacks_figure_component(app)
 register_callbacks_jbrowse_component(app)
+register_callbacks_table_component(app)
 
 
 # Load depictio data from JSON

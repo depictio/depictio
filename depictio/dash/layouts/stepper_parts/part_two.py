@@ -9,6 +9,7 @@ from dash_iconify import DashIconify
 import httpx
 import yaml
 
+from depictio.dash.modules.table_component.frontend import create_stepper_table_button
 from depictio.dash.utils import list_workflows, get_columns_from_data_collection
 from depictio.api.v1.configs.config import API_BASE_URL, TOKEN
 
@@ -71,6 +72,8 @@ def register_callbacks_stepper_part_two(app):
                 interactive_stepper_button_store,
             ) = create_stepper_interactive_button(n, disabled=False)
 
+            (table_stepper_button, table_stepper_button_store) = create_stepper_table_button(n, disabled=False)
+
             (
                 jbrowse_stepper_button,
                 jbrowse_stepper_button_store,
@@ -80,6 +83,7 @@ def register_callbacks_stepper_part_two(app):
                 figure_stepper_button,
                 card_stepper_button,
                 interactive_stepper_button,
+                table_stepper_button
             ]
             special_components = [jbrowse_stepper_button]
 
@@ -94,6 +98,8 @@ def register_callbacks_stepper_part_two(app):
                 interactive_stepper_button,
                 interactive_stepper_button_store,
             ) = create_stepper_interactive_button(n, disabled=True)
+            (table_stepper_button, table_stepper_button_store) = create_stepper_table_button(n, disabled=True)
+
 
             (
                 jbrowse_stepper_button,
@@ -104,6 +110,7 @@ def register_callbacks_stepper_part_two(app):
                 figure_stepper_button,
                 card_stepper_button,
                 interactive_stepper_button,
+                table_stepper_button
             ]
             special_components = [jbrowse_stepper_button]
 
@@ -123,6 +130,7 @@ def register_callbacks_stepper_part_two(app):
             figure_stepper_button_store,
             card_stepper_button_store,
             interactive_stepper_button_store,
+            table_stepper_button_store,
             jbrowse_stepper_button_store,
         ]
         return buttons_list, store_list

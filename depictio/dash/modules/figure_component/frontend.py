@@ -559,7 +559,7 @@ def register_callbacks_figure_component(app):
         # accordion_specific_params = args[0][3]
 
 
-def design_figure(id, wfs_list):
+def design_figure(id):
     figure_row = [
         dbc.Row(
             [
