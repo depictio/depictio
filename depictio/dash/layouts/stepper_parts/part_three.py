@@ -15,7 +15,8 @@ from depictio.dash.modules.figure_component.frontend import design_figure
 from depictio.dash.modules.jbrowse_component.frontend import design_jbrowse
 
 # Depictio utils imports
-from depictio.dash.utils import join_deltatables, return_mongoid
+from depictio.dash.modules.table_component.frontend import design_table
+from depictio.dash.utils import join_deltatables, load_deltatable_lite, return_mongoid
 
 
 def register_callbacks_stepper_part_three(app):
@@ -42,6 +43,7 @@ def register_callbacks_stepper_part_three(app):
             "Figure",
             "Card",
             "Interactive",
+            "Table", 
             "JBrowse2",
             "Graph",
             "Map",
@@ -59,16 +61,18 @@ def register_callbacks_stepper_part_three(app):
                     
                     # Retrive wf id and dc id
                     wf_id, dc_id = return_mongoid(workflow_tag=workflow_selection, data_collection_tag=data_collection_selection)
-                    df = join_deltatables(wf_id, dc_id)
+                    df = load_deltatable_lite(wf_id, dc_id)
 
                 if component_selected == "Figure":
-                    return design_figure(id, df), btn_component
+                    return design_figure(id), btn_component
                 elif component_selected == "Card":
                     return design_card(id, df), btn_component
                 elif component_selected == "Interactive":
                     return design_interactive(id, df), btn_component
                 elif component_selected == "JBrowse2":
                     return design_jbrowse(id), btn_component
+                elif component_selected == "Table":
+                    return design_table(id), btn_component
                 # TODO: implement the following components
                 elif component_selected == "Graph":
                     return dash.no_update, dash.no_update

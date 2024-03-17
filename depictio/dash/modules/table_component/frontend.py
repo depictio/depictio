@@ -1,0 +1,174 @@
+# Import necessary libraries
+from dash import html, dcc, Input, Output, State, MATCH
+import dash_bootstrap_components as dbc
+import dash_mantine_components as dmc
+from dash_iconify import DashIconify
+import httpx
+import dash_ag_grid as dag
+
+# Depictio imports
+from depictio.dash.utils import load_deltatable_lite, return_mongoid
+from depictio.api.v1.configs.config import API_BASE_URL, TOKEN
+
+from depictio.dash.utils import (
+    UNSELECTED_STYLE,
+    get_columns_from_data_collection,
+)
+
+
+def register_callbacks_table_component(app):
+    # Callback to update card body based on the selected column and aggregation
+    @app.callback(
+        Output({"type": "table-body", "index": MATCH}, "children"),
+        [
+            Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
+            Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+            Input({"type": "btn-table", "index": MATCH}, "n_clicks"),
+            Input({"type": "btn-table", "index": MATCH}, "id"),
+        ],
+        prevent_initial_call=True,
+    )
+    def design_table_component(wf_tag, dc_tag, n_clicks, id):
+        """
+        Callback to update card body based on the selected column and aggregation
+        """
+
+        # FIXME: This is a temporary solution to get the token
+        headers = {
+            "Authorization": f"Bearer {TOKEN}",
+        }
+
+        # Get the workflow and data collection ids from the tags selected
+        workflow_id, data_collection_id = return_mongoid(workflow_tag=wf_tag, data_collection_tag=dc_tag)
+
+        # Get the data collection specs
+        dc_specs = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
+            headers=headers,
+        ).json()
+
+        # Get the join tables for the selected workflow - used in store for metadata management
+        join_tables_for_wf = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/workflows/get_join_tables/{workflow_id}",
+            headers=headers,
+        )
+
+        # If the request is successful, get the join details for the selected data collection
+        if join_tables_for_wf.status_code == 200:
+            join_tables_for_wf = join_tables_for_wf.json()
+            if data_collection_id in join_tables_for_wf:
+                join_details = join_tables_for_wf[data_collection_id]
+                dc_specs["config"]["join"] = join_details
+
+        # Load deltatable from the selected data collection
+        df = load_deltatable_lite(workflow_id, data_collection_id)
+        cols = get_columns_from_data_collection(wf_tag, dc_tag)
+        # print(cols)
+        columnDefs = [{"field": c, "headerTooltip": f"Column type: {e['type']}"} for c, e in cols.items()]
+
+        print("\n\n\n")
+        print("Table component")
+        print(df)
+
+        # Prepare ag grid table
+        table_aggrid = dag.AgGrid(
+            id="get-started-example-basic",
+            rowData=df.head(2000).to_dict("records"),
+            columnDefs=columnDefs,
+            dashGridOptions={
+                "tooltipShowDelay": 500,
+                "pagination": True,
+                # "paginationAutoPageSize": False,
+                # "animateRows": False,
+            },
+            # columnSize="sizeToFit",
+            defaultColDef={"resizable": True, "sortable": True, "filter": True},
+            # use the parameters above
+        )
+
+        # Metadata management - Create a store component to store the metadata of the card
+        store_component = dcc.Store(
+            id={
+                "type": "stored-metadata-component",
+                "index": id["index"],
+            },
+            data={
+                "index": id["index"],
+                "component_type": "table",
+                "wf_id": workflow_id,
+                "dc_id": data_collection_id,
+                "dc_config": dc_specs["config"],
+            },
+        )
+
+        # Create the card body - default title is the aggregation value on the selected column
+
+        # Create the card body
+        new_card_body = [
+            table_aggrid,
+            store_component,
+        ]
+
+        return new_card_body
+
+
+def design_table(id):
+    row = [
+        dmc.Button(
+            "Display Table",
+            id={"type": "btn-table", "index": id["index"]},
+            n_clicks=0,
+            style=UNSELECTED_STYLE,
+            size="xl",
+            color="green",
+            leftIcon=DashIconify(icon="material-symbols:table-rows-narrow-rounded", color="white"),
+        ),
+        html.Div(
+            html.Div(
+                id={
+                    "type": "table-body",
+                    "index": id["index"],
+                }
+            ),
+            id={
+                "type": "test-container",
+                "index": id["index"],
+            },
+        ),
+    ]
+    return row
+
+
+def create_stepper_table_button(n, disabled=False):
+    """
+    Create the stepper table button
+    """
+
+    # Create the table button
+    button = dbc.Col(
+        dmc.Button(
+            "Table",
+            id={
+                "type": "btn-option",
+                "index": n,
+                "value": "Table",
+            },
+            n_clicks=0,
+            style=UNSELECTED_STYLE,
+            size="xl",
+            color="green",
+            leftIcon=DashIconify(icon="octicon:table-24", color="white"),
+            disabled=disabled,
+        )
+    )
+    store = dcc.Store(
+        id={
+            "type": "store-btn-option",
+            "index": n,
+            "value": "Table",
+        },
+        data=0,
+        storage_type="memory",
+    )
+
+    return button, store
