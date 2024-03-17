@@ -1,6 +1,5 @@
-import sys
-
-sys.path.append("/Users/tweber/Gits/depictio")
+# List of all the possible aggregation methods for each data type and their corresponding input methods
+# TODO: reference in the documentation
 
 from dash import dcc
 import dash_mantine_components as dmc
