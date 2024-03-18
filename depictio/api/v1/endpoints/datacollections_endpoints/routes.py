@@ -258,7 +258,11 @@ async def get_join_tables(workflow_id: str, current_user: str = Depends(get_curr
             # If the data collection has a join config, add it to the join_details_map
             if "table_join" in data_collection["config"]["dc_specific_properties"]:
                 dc_id = str(data_collection["_id"])
+                print(data_collection["config"]["dc_specific_properties"]["table_join"])
+
                 join_details_map[dc_id].append(data_collection["config"]["dc_specific_properties"]["table_join"].copy())
+                
+                # FIXME: fix symetrical join details + add dc id 
 
                 # Iterate over the data collections that this data collection is joined with to have symmetric join details
                 for sub_dc_id in data_collection["config"]["dc_specific_properties"]["table_join"]["with_dc"]:
@@ -268,6 +272,8 @@ async def get_join_tables(workflow_id: str, current_user: str = Depends(get_curr
                     tmp_dict["with_dc"] = [e for e in tmp_dict["with_dc"] if e != dc_id and e != sub_dc_id]
                     tmp_dict["with_dc"].append(dc_id)
                     join_details_map[sub_dc_id].append(tmp_dict)
+    
+    print("get_join_tables")
                     
     print(join_details_map)
     return join_details_map

@@ -105,10 +105,10 @@ def list_data_collections_for_dropdown(workflow_tag: str = None):
 def return_mongoid(workflow_tag: str = None, workflow_id: ObjectId = None, data_collection_tag: str = None, data_collection_id: ObjectId = None):
     print("\n\n\n")
     print("return_mongoid")
+    print(workflow_id, data_collection_id, workflow_tag, data_collection_tag)
+
     workflows = list_workflows(TOKEN)
 
-    print(workflow_id, data_collection_id, workflow_tag, data_collection_tag)
-    print(workflows)
     if workflow_tag is not None and data_collection_tag is not None:
         print("workflow_tag and data_collection_tag")
         workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_tag][0]["_id"]
