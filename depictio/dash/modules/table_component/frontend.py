@@ -19,7 +19,7 @@ from depictio.dash.utils import (
 def register_callbacks_table_component(app):
     # Callback to update card body based on the selected column and aggregation
     @app.callback(
-        Output({"type": "table-body", "index": MATCH}, "children"),
+        Output({"type": "table-grid", "index": MATCH}, "children"),
         [
             Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
             Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
@@ -63,17 +63,24 @@ def register_callbacks_table_component(app):
         # Load deltatable from the selected data collection
         df = load_deltatable_lite(workflow_id, data_collection_id)
         cols = get_columns_from_data_collection(wf_tag, dc_tag)
-        # print(cols)
-        columnDefs = [{"field": c, "headerTooltip": f"Column type: {e['type']}"} for c, e in cols.items()]
 
-        print("\n\n\n")
-        print("Table component")
-        print(df)
+        # Add dah aggrid filters to the columns
+        for c in cols:
+            print(c, cols[c]["type"])
+            if cols[c]["type"] == "object":
+                cols[c]["filter"] = "agTextColumnFilter"
+            elif cols[c]["type"] in ["int64", "float64"]:
+                cols[c]["filter"] = "agNumberColumnFilter"
+            elif cols[c]["type"] == "datetime":
+                cols[c]["filter"] = "agDateColumnFilter"
+
+        # print(cols)
+        columnDefs = [{"field": c, "headerTooltip": f"Column type: {e['type']}", "filter": e["filter"]} for c, e in cols.items()]
 
         # Prepare ag grid table
         table_aggrid = dag.AgGrid(
             id="get-started-example-basic",
-            rowData=df.head(2000).to_dict("records"),
+            rowData=df.to_dict("records"),
             columnDefs=columnDefs,
             dashGridOptions={
                 "tooltipShowDelay": 500,
@@ -114,26 +121,33 @@ def register_callbacks_table_component(app):
 
 def design_table(id):
     row = [
-        dmc.Button(
-            "Display Table",
-            id={"type": "btn-table", "index": id["index"]},
-            n_clicks=0,
-            style=UNSELECTED_STYLE,
-            size="xl",
-            color="green",
-            leftIcon=DashIconify(icon="material-symbols:table-rows-narrow-rounded", color="white"),
-        ),
-        html.Div(
-            html.Div(
-                id={
-                    "type": "table-body",
-                    "index": id["index"],
-                }
+        dbc.Row(
+            dmc.Center(
+                dmc.Button(
+                    "Display Table",
+                    id={"type": "btn-table", "index": id["index"]},
+                    n_clicks=1,
+                    style=UNSELECTED_STYLE,
+                    size="xl",
+                    color="green",
+                    leftIcon=DashIconify(icon="material-symbols:table-rows-narrow-rounded", color="white"),
+                )
             ),
-            id={
-                "type": "test-container",
-                "index": id["index"],
-            },
+        ),
+        dbc.Row(
+            dbc.Card(
+                dbc.CardBody(
+                    html.Div(id={"type": "table-grid", "index": id["index"]}),
+                    id={
+                        "type": "card-body",
+                        "index": id["index"],
+                    },
+                ),
+                id={
+                    "type": "test-container",
+                    "index": id["index"],
+                },
+            )
         ),
     ]
     return row
