@@ -58,7 +58,7 @@ def register_callbacks_table_component(app):
             join_tables_for_wf = join_tables_for_wf.json()
             if data_collection_id in join_tables_for_wf:
                 join_details = join_tables_for_wf[data_collection_id]
-                dc_specs["config"]["join"] = join_details
+                dc_specs["config"]["dc_specific_properties"]["table_join"] = join_details
 
         # Load deltatable from the selected data collection
         df = load_deltatable_lite(workflow_id, data_collection_id)
@@ -71,12 +71,14 @@ def register_callbacks_table_component(app):
                 cols[c]["filter"] = "agTextColumnFilter"
             elif cols[c]["type"] in ["int64", "float64"]:
                 cols[c]["filter"] = "agNumberColumnFilter"
+            # FIXME: use properly this: https://dash.plotly.com/dash-ag-grid/date-filters
             elif cols[c]["type"] == "datetime":
                 cols[c]["filter"] = "agDateColumnFilter"
 
         # print(cols)
         columnDefs = [{"field": c, "headerTooltip": f"Column type: {e['type']}", "filter": e["filter"]} for c, e in cols.items()]
 
+        # TODO: use other properties of Dash AgGrid
         # Prepare ag grid table
         table_aggrid = dag.AgGrid(
             id="get-started-example-basic",
