@@ -294,7 +294,7 @@ async def aggregate_data(
 
     # TODO: remove - just for testing
     # Add timestamp column
-    # aggregated_df = aggregated_df.with_columns(depictio_aggregation_time=pl.lit(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+    aggregated_df = aggregated_df.with_columns(depictio_aggregation_time=pl.lit(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
 
     print("aggregated_df")
     print(aggregated_df)
