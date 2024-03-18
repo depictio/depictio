@@ -1,30 +1,17 @@
 # Import necessary libraries
-from dash import html, dcc, Input, Output, State, ALL, MATCH
+from dash import html, dcc, Input, Output, MATCH
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
-import pandas as pd
 from dash_iconify import DashIconify
 import httpx
 
 
-import dash_jbrowse
 from depictio.dash.utils import list_workflows
 
 # Depictio imports
-from depictio.dash.modules.jbrowse_component.utils import (
-    my_assembly,
-    my_tracks,
-    my_location,
-    # my_aggregate_text_search_adapters,
-    # my_theme,
-)
 
 from depictio.dash.utils import (
-    SELECTED_STYLE,
     UNSELECTED_STYLE,
-    list_data_collections_for_dropdown,
-    list_workflows_for_dropdown,
-    get_columns_from_data_collection,
 )
 from depictio.api.v1.configs.config import API_BASE_URL, TOKEN
 
@@ -93,24 +80,36 @@ def register_callbacks_jbrowse_component(app):
 
 
 def design_jbrowse(id):
-    print("design_jbrowse", id)
     row = [
-        dmc.Button(
-            "Display JBrowse",
-            id={"type": "btn-jbrowse", "index": id["index"]},
-            n_clicks=0,
-            style=UNSELECTED_STYLE,
-            size="xl",
-            color="yellow",
-            leftIcon=DashIconify(icon="material-symbols:table-rows-narrow-rounded", color="white"),
+        dbc.Row(
+            dmc.Center(
+                dmc.Button(
+                    "Display JBrowse",
+                    id={"type": "btn-jbrowse", "index": id["index"]},
+                    n_clicks=0,
+                    style=UNSELECTED_STYLE,
+                    size="xl",
+                    color="yellow",
+                    leftIcon=DashIconify(icon="material-symbols:table-rows-narrow-rounded", color="white"),
+                ),
+            ),
         ),
-        # )
-        html.Div(
-            html.Div(id={"type": "jbrowse-body", "index": id["index"]}),
-            id={"type": "test-container", "index": id["index"]},
+        dbc.Row(
+            dbc.Card(
+                dbc.CardBody(
+                    html.Div(id={"type": "jbrowse-body", "index": id["index"]}),
+                    id={
+                        "type": "card-body",
+                        "index": id["index"],
+                    },
+                ),
+                id={
+                    "type": "test-container",
+                    "index": id["index"],
+                },
+            )
         ),
     ]
-    # print(row)
     return row
 
 

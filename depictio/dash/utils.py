@@ -219,11 +219,6 @@ def join_deltatables(workflow_id: str, data_collection_id: str):
 
     # Load the main data collection
     main_data_collection_df = load_deltatable_lite(workflow_id, data_collection_id)
-    print("initial df")
-    print(main_data_collection_df)
-
-    print("\n\n\n")
-    print("JOIN TABLES")
 
     # Get join tables for the workflow
     join_tables_for_wf = httpx.get(
@@ -232,7 +227,7 @@ def join_deltatables(workflow_id: str, data_collection_id: str):
             "Authorization": f"Bearer {TOKEN}",
         },
     )
-    print(join_tables_for_wf.status_code)
+    print("join_tables_for_wf")
     print(join_tables_for_wf.json())
 
     # Check if the response is not successful
@@ -240,11 +235,13 @@ def join_deltatables(workflow_id: str, data_collection_id: str):
         raise Exception("Error loading join tables")
 
     elif join_tables_for_wf.status_code == 200:
-        # Extract the join tables for the current data collection
-        join_tables_dict = join_tables_for_wf.json()[str(data_collection_id)]
 
         # Check if the data collection is present in the join config of other data collections
         if str(data_collection_id) in join_tables_for_wf.json():
+
+            # Extract the join tables for the current data collection
+            join_tables_dict = join_tables_for_wf.json()[str(data_collection_id)]
+
             # Iterate over the join config of the data collection dict
             for join in join_tables_dict:
                 # Iterate over the data collections that the current data collection is joined with
@@ -258,8 +255,6 @@ def join_deltatables(workflow_id: str, data_collection_id: str):
                     # Merge the main data collection with the join data collection on the specified columns
                     # NOTE: hard-coded join for depictio_run_id currently (defined when creating the DeltaTable)
                     main_data_collection_df = pd.merge(main_data_collection_df, tmp_df, on=["depictio_run_id"] + join["on_columns"])
-        print("final df")
-        print(main_data_collection_df)
         return main_data_collection_df
 
 

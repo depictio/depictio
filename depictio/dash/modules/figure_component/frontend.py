@@ -61,25 +61,20 @@ def register_callbacks_figure_component(app):
         data_collection,
         edit_button_id,
     ):
-        # print("update_specific_params")
-        # print(app._callback_list)
-
-        # print(n_clicks, edit_button_id)
-        # print("\n\n\n")
-        # print("update_specific_params")
-        # print(n_clicks, visu_type, edit_button_id, workflow, data_collection)
-
+        """
+        Compute the specific parameters dropdowns based on the selected visualisation type
+        """
+        # Retrieve the columns from the selected data collection
         columns_json = get_columns_from_data_collection(workflow, data_collection)
-        # print(columns_json)
-
         columns = list(columns_json.keys())
 
-        # print(columns)
-        # print("\n\n\n")
-
+        # Get the value of the segmented control
         value = visu_type.lower()
-        # value = "scatter"
-        if value is not None:
+
+        if value is None:
+            return html.Div()
+
+        elif value is not None:
             specific_params_options = [{"label": param_name, "value": param_name} for param_name in specific_params[value]]
 
             specific_params_dropdowns = list()
@@ -508,7 +503,7 @@ def register_callbacks_figure_component(app):
             join_tables_for_wf = join_tables_for_wf.json()
             if data_collection_id in join_tables_for_wf:
                 join_details = join_tables_for_wf[data_collection_id]
-                dc_specs["config"]["join"] = join_details
+                dc_specs["config"]["dc_specific_properties"]["table_join"] = join_details
         # print("dc_specs")
         # print(dc_specs)
         print(visu_type)
@@ -575,6 +570,7 @@ def design_figure(id):
                     },
                     persistence=True,
                     persistence_type="memory",
+                    # FIXME: the default value is not the first element of the list - set to scatter plot (last element)
                     value=[e.capitalize() for e in sorted(plotly_vizu_dict.keys())][-1],
                 ),
             ],

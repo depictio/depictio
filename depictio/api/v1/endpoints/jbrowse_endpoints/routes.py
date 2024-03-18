@@ -28,9 +28,6 @@ jbrowse_endpoints_router = APIRouter()
 
 def generate_track_config(track_type, track_details, data_collection_config):
 
-
-    # NOTE: 
-
     # Extract common JBrowse parameters from data collection config
     category = data_collection_config.get("jbrowse_params", {}).get("category", "Uncategorized")
     assemblyName = data_collection_config.get("jbrowse_params", {}).get("assemblyName", "hg38")
