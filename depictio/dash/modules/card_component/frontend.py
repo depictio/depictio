@@ -108,7 +108,7 @@ def register_callbacks_card_component(app):
             join_tables_for_wf = join_tables_for_wf.json()
             if data_collection_id in join_tables_for_wf:
                 join_details = join_tables_for_wf[data_collection_id]
-                dc_specs["config"]["join"] = join_details
+                dc_specs["config"]["dc_specific_properties"]["table_join"] = join_details
 
         # Get the type of the selected column and the value for the selected aggregation
         column_type = cols_json[column_value]["type"]

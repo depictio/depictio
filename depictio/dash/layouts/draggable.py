@@ -207,16 +207,18 @@ def register_callbacks_draggable(app):
 
                         # Retrieve the join data collection if it exists
                         if n_dict["metadata"]["dc_config"]["dc_specific_properties"]["table_join"]:
-                            n_join_dc = n_dict["metadata"]["dc_config"]["dc_specific_properties"]["table_join"]
+                            n_join_dc = n_dict["metadata"]["dc_config"]["dc_specific_properties"]["table_join"]["with_dc"]
                         else:
                             n_join_dc = []
 
                         # Check if interactive component is part of the join data collection of standard component
-                        check_join = [e["dc_id"] for sub_join in n_join_dc if e["dc_id"] in sub_join["with_dc"]]
+                        # check_join = [e["dc_id"] for sub_join in n_join_dc if e["dc_id"] in sub_join["with_dc"]]
+                        check_join = e["dc_id"] in n_join_dc
 
                         # Check if the workflow id and the data collection id are matching
                         if e["wf_id"] == n_dict["metadata"]["wf_id"]:
-                            if (e["dc_id"] == n_dict["metadata"]["dc_id"]) or (len(check_join) > 0):
+                            if (e["dc_id"] == n_dict["metadata"]["dc_id"]) or (check_join):
+                            # if (e["dc_id"] == n_dict["metadata"]["dc_id"]) or (len(check_join) > 0):
                                 ## filter based on the column and the interactive component handle if the column is categorical or numerical
 
                                 # if the value is None or an empty list, do not filter
