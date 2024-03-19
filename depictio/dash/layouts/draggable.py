@@ -192,22 +192,26 @@ def register_callbacks_draggable(app):
 
             # Iterate over the stored metadata (all components) to retrieve the corresponding data
             # e - all components
+            print(stored_metadata)
+            print(interactive_components_dict)
             for j, e in enumerate(stored_metadata):
+                print(j, e)
+
                 # Check if the component type is not an interactive component in order to update its content
                 if e["component_type"] != "interactive_component":
-                    print(e)
                     # FIXME: find a more efficient way to update than loading the data again
                     new_df = join_deltatables(e["wf_id"], e["dc_id"])
-
+                    print(new_df)
                     # Iterate over the interactive components to filter the data (new_df)
                     # n - interactive components
                     for i, n in enumerate(list(interactive_components_dict.keys())):
+                        print(i, n)
                         # Retrieve corresponding metadata
                         n_dict = interactive_components_dict[n]
 
                         # Retrieve the join data collection if it exists
                         if n_dict["metadata"]["dc_config"]["dc_specific_properties"]["table_join"]:
-                            n_join_dc = n_dict["metadata"]["dc_config"]["dc_specific_properties"]["table_join"]["with_dc"]
+                            n_join_dc = n_dict["metadata"]["dc_config"]["dc_specific_properties"]["table_join"]["with_dc_id"]
                         else:
                             n_join_dc = []
 

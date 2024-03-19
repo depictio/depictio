@@ -260,16 +260,18 @@ def join_deltatables(workflow_id: str, data_collection_id: str):
             join_tables_dict = join_tables_for_wf.json()[str(data_collection_id)]
 
             # Iterate over the data collections that the current data collection is joined with
-            for tmp_dc_tag in join_tables_dict["with_dc"]:
-                _, tmp_dc_id = return_mongoid(workflow_id=workflow_id, data_collection_tag=tmp_dc_tag)
-
+            for tmp_dc_id in join_tables_dict["with_dc_id"]:
+                print(tmp_dc_id)
                 # Load the deltable from the join data collection
                 tmp_df = load_deltatable_lite(str(workflow_id), str(tmp_dc_id))
 
                 # Merge the main data collection with the join data collection on the specified columns
                 # NOTE: hard-coded join for depictio_run_id currently (defined when creating the DeltaTable)
                 main_data_collection_df = pd.merge(main_data_collection_df, tmp_df, on=["depictio_run_id"] + join_tables_dict["on_columns"])
-        return main_data_collection_df
+                print(main_data_collection_df.columns)
+
+    print(main_data_collection_df)
+    return main_data_collection_df
 
 
 def analyze_structure(struct, depth=0):
