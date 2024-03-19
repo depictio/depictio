@@ -4,84 +4,55 @@ import inspect
 import plotly.express as px
 import re
 
-######################
-# Plotly doc parsing #
-######################
-
-
-def get_common_params(plotly_vizu_list):
-    common_params = set.intersection(
-        *[set(inspect.signature(func).parameters.keys()) for func in plotly_vizu_list]
-    )
-    common_param_names = [p for p in list(common_params)]
-    common_param_names.sort(
-        key=lambda x: list(inspect.signature(plotly_vizu_list[0]).parameters).index(x)
-    )
-    return common_params, common_param_names
-
-
-def get_specific_params(plotly_vizu_list, common_params):
-    specific_params = {}
-    for vizu_func in plotly_vizu_list:
-        func_params = inspect.signature(vizu_func).parameters
-        param_names = list(func_params.keys())
-        common_params_tmp = (
-            common_params.intersection(func_params.keys())
-            if common_params
-            else set(func_params.keys())
-        )
-        specific_params[vizu_func.__name__] = [
-            p for p in param_names if p not in common_params_tmp
-        ]
-    return specific_params
 
 
 def extract_info_from_docstring(docstring):
+    """
+    Extract information from a docstring and return a dictionary with the parameters and their types
+    """ 
     lines = docstring.split("\n")
-    # print(lines)
     parameters_section = False
     result = {}
 
+    # Iterate over the lines in the docstring
     for line in lines:
-        # print(line)
+        # Check if the line starts with 'Parameters'
         if line.startswith("Parameters"):
             parameters_section = True
             continue
+        # Check if the line starts with 'Returns'
         if parameters_section:
-            # if line.startswith("----------"):
-            #     break
             if line.startswith("    ") is False:
-                # print(line.split(': '))
                 line_processed = line.split(": ")
-                # print(line_processed)
+                # Check if the line contains a parameter and a type
                 if len(line_processed) == 2:
+                    # Get the parameter and the type and add them to the result dictionary
                     parameter, type = line_processed[0], line_processed[1]
                     result[parameter] = {"type": type, "description": list()}
                 else:
                     continue
-
+            # If the line starts with 4 spaces, it is a description of the parameter
             elif line.startswith("    ") is True:
-                # result[-1] += " " + line.strip()
-                # print(line.strip())
                 result[parameter]["description"].append(line.strip())
 
     return result
 
 
 def process_json_from_docstring(data):
+    """
+    Process the JSON data extracted from the docstring to add the processed type and options
+    """
     for key, value in data.items():
         # Get the type associated with the field
         field_type = value.get("type")
-        # field_type = value.get('type')
         description = " ".join(value.get("description"))
 
         # Check if there are any options available for the field
         options = []
-        # for description in value.get('description', []):
+        # Check if the description contains 'One of'
         if "One of" in description:
             # The options are usually listed after 'One of'
             option_str = description.split("One of")[-1].split(".")[0]
-
             options = list(set(re.findall("`'(.*?)'`", option_str)))
         elif "one of" in data[key]["type"]:
             option_str = data[key]["type"].split("one of")[-1]
@@ -97,7 +68,7 @@ def process_json_from_docstring(data):
     return data
 
 
-def get_param_info(plotly_vizu_list):
+def get_param_info(plotly_vizu_list): 
     # Code for extract_info_from_docstring and process_json_from_docstring...
     # ...
     param_info = {}
@@ -107,6 +78,46 @@ def get_param_info(plotly_vizu_list):
             param_info[func.__name__]
         )
     return param_info
+
+
+# FIXME: find another way than inspect.signature to get the parameters, not stable enough for long term support
+# TODO: export this to a separate file in order to be used in the frontend
+
+def get_common_params(plotly_vizu_list):
+    """
+    Get the common parameters between a list of Plotly visualizations
+    """
+    # Iterate over the list of visualizations and get the parameters, then get the common ones
+    common_params = set.intersection(
+        *[set(inspect.signature(func).parameters.keys()) for func in plotly_vizu_list]
+    )
+    # Sort the common parameters based on the order of the first visualization
+    common_param_names = [p for p in list(common_params)]
+    common_param_names.sort(
+        key=lambda x: list(inspect.signature(plotly_vizu_list[0]).parameters).index(x)
+    )
+    return common_params, common_param_names
+
+
+def get_specific_params(plotly_vizu_list, common_params):
+    """
+    Get the specific parameters for each visualization in a list of Plotly visualizations
+    """
+    # Iterate over the list of visualizations and get the specific parameters
+    specific_params = {}
+    for vizu_func in plotly_vizu_list:
+        func_params = inspect.signature(vizu_func).parameters
+        param_names = list(func_params.keys())
+        common_params_tmp = (
+            common_params.intersection(func_params.keys())
+            if common_params
+            else set(func_params.keys())
+        )
+        specific_params[vizu_func.__name__] = [
+            p for p in param_names if p not in common_params_tmp
+        ]
+    return specific_params
+
 
 
 ########################################

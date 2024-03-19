@@ -36,6 +36,8 @@ async def get_all_workflows(current_user: str = Depends(get_current_user)):
     # Retrieve the workflows & convert them to Workflow objects to validate the model
     workflows_cursor = [Workflow(**convert_objectid_to_str(w)) for w in list(workflows_collection.find(query))]
     workflows = convert_objectid_to_str(list(workflows_cursor))
+    print("\n\n\n")
+    print("get_all_workflows - ENDPOINT")
     print(workflows)
 
     if not workflows:

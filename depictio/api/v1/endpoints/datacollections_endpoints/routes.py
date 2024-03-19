@@ -8,18 +8,20 @@ import re
 from bson import ObjectId
 from deltalake import DeltaTable
 from fastapi import HTTPException, Depends, APIRouter
-from typing import List
+from typing import Dict, List
 
+import httpx
 import pandas as pd
 import polars as pl
 import numpy as np
 from pydantic import BaseModel
 
-from depictio.api.v1.configs.config import settings
+from depictio.api.v1.configs.config import TOKEN, settings, API_BASE_URL
 from depictio.api.v1.db import db
 from depictio.api.v1.endpoints.files_endpoints.routes import delete_files
 from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user
 from depictio.api.v1.endpoints.validators import validate_workflow_and_collection
+from depictio.api.v1.endpoints.workflow_endpoints.routes import get_all_workflows
 from depictio.api.v1.models.base import convert_objectid_to_str
 
 
@@ -31,6 +33,7 @@ from depictio.api.v1.utils import (
     serialize_for_mongo,
     agg_functions,
 )
+from depictio.dash.utils import return_dc_tag_from_id, return_mongoid, return_wf_tag_from_id
 
 
 datacollections_endpoint_router = APIRouter()
@@ -90,23 +93,21 @@ async def specs(
         data_collection,
         user_oid,
     ) = validate_workflow_and_collection(
-         workflows_collection, current_user.user_id, workflow_id, data_collection_id, 
+        workflows_collection,
+        current_user.user_id,
+        workflow_id,
+        data_collection_id,
     )
 
     data_collection = convert_objectid_to_str(data_collection)
 
     if not data_collection:
-        raise HTTPException(
-            status_code=404, detail="No workflows found for the current user."
-        )
+        raise HTTPException(status_code=404, detail="No workflows found for the current user.")
 
     return data_collection
 
 
-
-@datacollections_endpoint_router.delete(
-    "/delete/{workflow_id}/{data_collection_id}"
-)
+@datacollections_endpoint_router.delete("/delete/{workflow_id}/{data_collection_id}")
 async def delete_datacollection(
     workflow_id: str,
     data_collection_id: str,
@@ -150,7 +151,10 @@ async def delete_datacollection(
         data_collection,
         user_oid,
     ) = validate_workflow_and_collection(
-         workflows_collection, current_user.user_id, workflow_id, data_collection_id, 
+        workflows_collection,
+        current_user.user_id,
+        workflow_id,
+        data_collection_id,
     )
 
     # delete the data collection from the workflow
@@ -158,9 +162,7 @@ async def delete_datacollection(
         {"_id": workflow_oid},
         {"$pull": {"data_collections": data_collection}},
     )
-    delete_files_message = await delete_files(
-        workflow_id, data_collection_id, current_user
-    )
+    delete_files_message = await delete_files(workflow_id, data_collection_id, current_user)
     return delete_files_message
 
     # delete corresponding files from files_collection
@@ -185,7 +187,6 @@ async def delete_datacollection(
     # assert workflows_collection.find_one({"_id": id}) is None
 
     # return {"message": f"Workflow {workflow_tag} with ID '{id}' deleted successfully"}
-
 
 
 # @datacollections_endpoint_router.get(
@@ -232,48 +233,99 @@ async def delete_datacollection(
 #     }
 
 
+def symmetrize_join_details(join_details_map: Dict[str, List[dict]]):
+    """Ensure symmetric join details across all related data collections."""
+    # Create a list of items to iterate over, so the original dict can be modified
+    items = list(join_details_map.items())
+    for dc_id, joins in items:
+        for join in joins:
+            for related_dc_id in join["with_dc"]:
+                # Initialize related_dc_join list if not already present
+                if related_dc_id not in join_details_map:
+                    join_details_map[related_dc_id] = []
+
+                # Check if related data collection already has symmetric join details with the current one
+                related_joins = join_details_map[related_dc_id]
+                symmetric_join_exists = any(dc_id in join_detail["with_dc"] for join_detail in related_joins)
+
+                if not symmetric_join_exists:
+                    # Create symmetric join detail for related data collection
+                    symmetric_join = {
+                        "on_columns": join["on_columns"],
+                        "how": join["how"],
+                        "with_dc": [dc_id],  # Link back to the current data collection
+                    }
+                    join_details_map[related_dc_id].append(symmetric_join)
+
+
+def normalize_join_details(join_details):
+    normalized_details = {}
+
+    # Initialize entries for all DCs
+    for dc_id, joins in join_details.items():
+        for join in joins:
+            if dc_id not in normalized_details:
+                normalized_details[dc_id] = {
+                    "on_columns": join["on_columns"],
+                    "how": join["how"],
+                    "with_dc": set(join.get("with_dc", [])),  # Use set for unique elements
+                    "with_dc_id": set(join.get("with_dc_id", [])),  # Use set for unique elements
+                }
+
+    # Update relationships
+    for dc_id, joins in join_details.items():
+        for join in joins:
+            # Update related by ID
+            for related_dc_id in join.get("with_dc_id", []):
+                # Ensure reciprocal relationship exists
+                normalized_details[dc_id]["with_dc_id"].add(related_dc_id)
+                if related_dc_id not in normalized_details:
+                    normalized_details[related_dc_id] = {"on_columns": join["on_columns"], "how": join["how"], "with_dc": set(), "with_dc_id": set()}
+                normalized_details[related_dc_id]["with_dc_id"].add(dc_id)
+
+            # Update related by Tag
+            for related_dc_tag in join.get("with_dc", []):
+                normalized_details[dc_id]["with_dc"].add(related_dc_tag)
+                # This assumes tags to IDs resolution happens elsewhere or they're handled as equivalent identifiers
+                # If 'related_dc_tag' could also appear in 'normalized_details', consider adding reciprocal logic here
+
+    # Convert sets back to lists for the final output
+    for dc_id in normalized_details:
+        normalized_details[dc_id]["with_dc"] = list(normalized_details[dc_id]["with_dc"])
+        normalized_details[dc_id]["with_dc_id"] = list(normalized_details[dc_id]["with_dc_id"])
+
+    return normalized_details
+
+
 @datacollections_endpoint_router.get("/get_join_tables/{workflow_id}")
 async def get_join_tables(workflow_id: str, current_user: str = Depends(get_current_user)):
     """
-    Retrieve join details for the data collections in a workflow. 
+    Retrieve join details for the data collections in a workflow.
     """
-    
-    # Find the workflow by ID
-    workflow_oid = ObjectId(workflow_id)
-    assert isinstance(workflow_oid, ObjectId)
-    existing_workflow = workflows_collection.find_one({"_id": workflow_oid})
 
-    if not existing_workflow:
-        raise HTTPException(status_code=404, detail=f"Workflow with ID '{workflow_id}' does not exist.")
+    # Retrieve all workflows
+    workflows = await get_all_workflows(current_user=current_user)
+    workflows = [convert_objectid_to_str(workflow.mongo()) for workflow in workflows]
 
-    data_collections = existing_workflow["data_collections"]
+    # Retrieve the workflow corresponding to the given ID and extract its data collections
+    workflow = [e for e in workflows if e["_id"] == workflow_id][0]
+    data_collections = workflow.get("data_collections", [])
 
-    # Initialize dict of list to retrieve join details
+    # Extract join details for each data collection
     join_details_map = collections.defaultdict(list)
-    for data_collection in data_collections:
+    for dc in data_collections:
+        if dc["config"]["type"].lower() == "table" and "table_join" in dc["config"]["dc_specific_properties"]:
+            dc_id = str(dc["_id"])
+            join_config = dc["config"]["dc_specific_properties"]["table_join"]
+            zip_ids_list = [return_mongoid(workflow_id=workflow_id, data_collection_tag=dc_tag, workflows=workflows)[1] for dc_tag in join_config["with_dc"]]
+            join_config["with_dc_id"] = zip_ids_list
+            if join_config:
+                join_details_map[dc_id].append(join_config)
 
-        # Check if the data collection is of type Table
-        if data_collection["config"]["type"].lower() == "table":
+    # Ensure symmetric join details across all related data collections
+    join_details_map = normalize_join_details(join_details_map)
+    # Map the IDs back to tags
+    for dc_id in join_details_map:
+        join_details_map[dc_id]["with_dc"] = [return_dc_tag_from_id(workflow_id, dc_id, workflows) for dc_id in join_details_map[dc_id]["with_dc_id"]]
 
-            # If the data collection has a join config, add it to the join_details_map
-            if "table_join" in data_collection["config"]["dc_specific_properties"]:
-                dc_id = str(data_collection["_id"])
-                print(data_collection["config"]["dc_specific_properties"]["table_join"])
-
-                join_details_map[dc_id].append(data_collection["config"]["dc_specific_properties"]["table_join"].copy())
-                
-                # FIXME: fix symetrical join details + add dc id 
-
-                # Iterate over the data collections that this data collection is joined with to have symmetric join details
-                for sub_dc_id in data_collection["config"]["dc_specific_properties"]["table_join"]["with_dc"]:
-                    tmp_dict = data_collection["config"]["dc_specific_properties"]["table_join"]
-
-                    # Retrieve the join details from the sub data collection except the current data collection
-                    tmp_dict["with_dc"] = [e for e in tmp_dict["with_dc"] if e != dc_id and e != sub_dc_id]
-                    tmp_dict["with_dc"].append(dc_id)
-                    join_details_map[sub_dc_id].append(tmp_dict)
-    
-    print("get_join_tables")
-                    
-    print(join_details_map)
     return join_details_map
