@@ -81,7 +81,7 @@ def register_callbacks_table_component(app):
         # TODO: use other properties of Dash AgGrid
         # Prepare ag grid table
         table_aggrid = dag.AgGrid(
-            id="get-started-example-basic",
+            id = {"type": "table-aggrid", "index": id["index"]},
             rowData=df.to_dict("records"),
             columnDefs=columnDefs,
             dashGridOptions={
@@ -114,8 +114,9 @@ def register_callbacks_table_component(app):
 
         # Create the card body
         new_card_body = [
-            table_aggrid,
             store_component,
+            table_aggrid,
+
         ]
 
         return new_card_body

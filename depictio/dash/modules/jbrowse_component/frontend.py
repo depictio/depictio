@@ -62,6 +62,7 @@ def register_callbacks_jbrowse_component(app):
                 src=f"http://localhost:3000?config=http://localhost:9010/sessions/{session}&loc=chr1:1-248956422&assembly=hg38",
                 width="100%",
                 height="1000px",
+                id={"type": "iframe-jbrowse", "index": id["index"]},
             )
             print("iframe")
             print(iframe)
@@ -76,7 +77,7 @@ def register_callbacks_jbrowse_component(app):
                 storage_type="memory",
             )
 
-            return html.Div([iframe, store_component])
+            return html.Div([store_component, iframe])
 
 
 def design_jbrowse(id):

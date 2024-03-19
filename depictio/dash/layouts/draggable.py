@@ -277,6 +277,9 @@ def register_callbacks_draggable(app):
                                         max_depth,
                                         deepest_element_type,
                                     ) = analyze_structure_and_get_deepest_type(child)
+                                    print("\n")
+                                    print("analyze_structure_and_get_deepest_type")
+                                    print(max_depth, deepest_element_type)
 
                                     # If the deepest element type is a card, update the content of the card
                                     if deepest_element_type == "card-value":
@@ -303,6 +306,18 @@ def register_callbacks_draggable(app):
 
                                                     new_figure = plotly_vizu_dict[e["visu_type"].lower()](new_df, **e["dict_kwargs"])
                                                     sub_child["props"]["figure"] = new_figure
+                                    # If the deepest element type is a graph, update the content of the graph
+                                    elif deepest_element_type == "table-aggrid":
+                                        if int(child["props"]["id"]) == int(e["index"]):
+                                            for k, sub_child in enumerate(
+                                                child["props"]["children"][0]["props"]["children"]["props"]["children"][-1]["props"]["children"]["props"]["children"]
+                                            ):
+                                                if sub_child["props"]["id"]["type"] == "table-aggrid":
+                                                    
+                                                    print("\ntable-aggrid")
+                                                    sub_child["props"]["rowData"] = new_df.to_dict("records")
+                                                    # new_figure = plotly_vizu_dict[e["visu_type"].lower()](new_df, **e["dict_kwargs"])
+                                                    # sub_child["props"]["figure"] = new_figure
 
                                     else:
                                         pass
