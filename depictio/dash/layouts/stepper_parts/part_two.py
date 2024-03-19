@@ -136,38 +136,3 @@ def register_callbacks_stepper_part_two(app):
         return buttons_list, store_list
 
 
-
-    # @app.callback(
-    #     [
-    #         Output({"type": "btn-option", "index": MATCH, "value": "Figure"}, "style"),
-    #         Output({"type": "btn-option", "index": MATCH, "value": "Card"}, "style"),
-    #         Output({"type": "btn-option", "index": MATCH, "value": "Interactive"}, "style"),
-    #     ],
-    #     [
-    #         Input({"type": "btn-option", "index": MATCH, "value": "Figure"}, "n_clicks"),
-    #         Input({"type": "btn-option", "index": MATCH, "value": "Card"}, "n_clicks"),
-    #         Input({"type": "btn-option", "index": MATCH, "value": "Interactive"}, "n_clicks"),
-    #     ],
-    #     prevent_initial_call=True,
-    # )
-    # def update_button_style(figure_clicks, card_clicks, interactive_clicks):
-    #     ctx_triggered = dash.callback_context.triggered
-
-    #     # Reset all buttons to unselected style
-    #     figure_style = UNSELECTED_STYLE
-    #     card_style = UNSELECTED_STYLE
-    #     interactive_style = UNSELECTED_STYLE
-
-    #     # Check which button was clicked and update its style
-    #     if ctx_triggered:
-    #         button_id = ctx_triggered[0]["prop_id"].split(".")[0]
-    #         button_value = eval(button_id)["value"]
-
-    #         if button_value == "Figure":
-    #             figure_style = SELECTED_STYLE
-    #         elif button_value == "Card":
-    #             card_style = SELECTED_STYLE
-    #         elif button_value == "Interactive":
-    #             interactive_style = SELECTED_STYLE
-
-    #     return figure_style, card_style, interactive_style
