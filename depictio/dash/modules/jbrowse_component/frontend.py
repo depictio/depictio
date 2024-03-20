@@ -64,11 +64,11 @@ def register_callbacks_jbrowse_component(app):
                 height="1000px",
                 id={"type": "iframe-jbrowse", "index": id["index"]},
             )
-            print("iframe")
-            print(iframe)
             store_component = dcc.Store(
-                id={"type": "store-jbrowse", "index": id["index"], "value": "jbrowse"},
+                id={"type": "stored-metadata-component", "index": id["index"]},
                 data={
+                    "component_type": "jbrowse",
+                    "current_url": f"http://localhost:3000?config=http://localhost:9010/sessions/{session}&loc=chr1:1-248956422&assembly=hg38",
                     "index": id["index"],
                     "wf_id": workflow_id,
                     "dc_id": data_collection_id,

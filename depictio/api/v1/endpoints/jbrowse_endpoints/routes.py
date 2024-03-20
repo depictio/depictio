@@ -200,7 +200,7 @@ def handle_jbrowse_tracks(file, user_id, workflow_id, data_collection):
 
     # Prepare the regex wildcards
     regex_wildcards_list = [e.dict() for e in data_collection.config.dc_specific_properties.regex_wildcards]
-    full_regex = construct_full_regex(data_collection.config.files_regex, regex_wildcards_list)
+    full_regex = construct_full_regex(data_collection.config.regex.pattern, regex_wildcards_list)
 
     # Extract the wildcards from the file name
     wildcards_dict = dict()
@@ -218,8 +218,7 @@ def handle_jbrowse_tracks(file, user_id, workflow_id, data_collection):
     file_index = data_collection.config.dc_specific_properties.index_extension
 
     # Upload the file to S3
-    # TODO -  uncomment this line
-    # upload_file_to_s3(bucket_name, file_location, s3_key)
+    upload_file_to_s3(bucket_name, file_location, s3_key)
 
     # Update the file mongo document with the S3 key
     # FIXME: find another way to access internally and externally (jbrowse) files registered
