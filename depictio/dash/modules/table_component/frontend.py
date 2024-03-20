@@ -58,7 +58,7 @@ def register_callbacks_table_component(app):
             join_tables_for_wf = join_tables_for_wf.json()
             if data_collection_id in join_tables_for_wf:
                 join_details = join_tables_for_wf[data_collection_id]
-                dc_specs["config"]["dc_specific_properties"]["join"] = join_details
+                dc_specs["config"]["join"] = join_details
 
         # Load deltatable from the selected data collection
         df = load_deltatable_lite(workflow_id, data_collection_id)

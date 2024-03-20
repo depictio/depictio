@@ -314,9 +314,9 @@ async def get_join_tables(workflow_id: str, current_user: str = Depends(get_curr
     # Extract join details for each data collection
     join_details_map = collections.defaultdict(list)
     for dc in data_collections:
-        if dc["config"]["type"].lower() == "table" and "table_join" in dc["config"]["dc_specific_properties"]:
+        if dc["config"]["type"].lower() == "table" and "join" in dc["config"]:
             dc_id = str(dc["_id"])
-            join_config = dc["config"]["dc_specific_properties"]["table_join"]
+            join_config = dc["config"]["join"]
             zip_ids_list = [return_mongoid(workflow_id=workflow_id, data_collection_tag=dc_tag, workflows=workflows)[1] for dc_tag in join_config["with_dc"]]
             join_config["with_dc_id"] = zip_ids_list
             if join_config:
