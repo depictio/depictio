@@ -368,19 +368,19 @@ def setup(
 
 
         for dc in response_body["data_collections"]:
-            # if scan_files:
-            #     print("scan_files_for_data_collection")
-            #     scan_files_for_data_collection(wf_id, dc["_id"], headers)
-            # if dc["config"]["type"].lower() == "table":
+            if scan_files:
+                print("scan_files_for_data_collection")
+                scan_files_for_data_collection(wf_id, dc["_id"], headers)
+            if dc["config"]["type"].lower() == "table":
                 # if scan_files:
                 #     print("scan_files_for_data_collection")
                 #     scan_files_for_data_collection(wf_id, dc["_id"], headers) 
-                # print("create_deltatable")
-                # create_deltatable_request(wf_id, dc["_id"], headers)
-            # elif dc["config"]["type"].lower() == "jbrowse2":
-            if dc["config"]["type"].lower() == "jbrowse2":
-                print("scan_files_for_data_collection")
-                scan_files_for_data_collection(wf_id, dc["_id"], headers)
+                print("create_deltatable")
+                create_deltatable_request(wf_id, dc["_id"], headers)
+            elif dc["config"]["type"].lower() == "jbrowse2":
+            # if dc["config"]["type"].lower() == "jbrowse2":
+                # print("scan_files_for_data_collection")
+                # scan_files_for_data_collection(wf_id, dc["_id"], headers)
                 print("upload_trackset_to_s3")
                 upload_trackset_to_s3(wf_id, dc["_id"], headers)
 

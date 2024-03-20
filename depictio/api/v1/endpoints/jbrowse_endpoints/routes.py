@@ -198,20 +198,20 @@ def handle_jbrowse_tracks(file, user_id, workflow_id, data_collection):
         "run_id": run_id,
     }
 
-    # Prepare the regex wildcards
-    regex_wildcards_list = [e.dict() for e in data_collection.config.dc_specific_properties.regex_wildcards]
-    full_regex = construct_full_regex(data_collection.config.regex.pattern, regex_wildcards_list)
+    # # Prepare the regex wildcards
+    # regex_wildcards_list = data_collection.config.dc_specific_properties.regex.wildcards_regex
+    # full_regex = construct_full_regex(data_collection.config.regex.pattern, regex_wildcards_list)
 
-    # Extract the wildcards from the file name
-    wildcards_dict = dict()
-    if regex_wildcards_list:
-        for i, wc in enumerate(data_collection.config.dc_specific_properties.regex_wildcards):
-            match = re.match(full_regex, file.filename).group(i + 1)
-            wildcards_dict[regex_wildcards_list[i]["name"]] = match
+    # # Extract the wildcards from the file name
+    # wildcards_dict = dict()
+    # if regex_wildcards_list:
+    #     for i, wc in enumerate(data_collection.config.dc_specific_properties.regex_wildcards):
+    #         match = re.match(full_regex, file.filename).group(i + 1)
+    #         wildcards_dict[regex_wildcards_list[i]["name"]] = match
 
-    # Update the track details with the wildcards if any
-    if wildcards_dict:
-        track_details.update(wildcards_dict)
+    # # Update the track details with the wildcards if any
+    # if wildcards_dict:
+    #     track_details.update(wildcards_dict)
 
 
 

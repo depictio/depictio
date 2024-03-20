@@ -15,6 +15,7 @@ from depictio.api.v1.models.data_collections_custom_models.table_models import D
 class Regex(BaseModel):
     pattern: str
     type: str 
+    wildcard_regex: Optional[Dict[str, str]] = None
 
     @validator("pattern")
     def validate_files_regex(cls, v):
@@ -24,6 +25,7 @@ class Regex(BaseModel):
         except re.error:
             raise ValueError("Invalid regex pattern")
 
+
     @validator("type")
     def validate_type(cls, v):
         allowed_values = ["file-based", "path-based"]
@@ -31,10 +33,26 @@ class Regex(BaseModel):
             raise ValueError(f"type must be one of {allowed_values}")
         return v
 
+class TableJoinConfig(BaseModel):
+    on_columns: List[str]
+    how: Optional[str]
+    with_dc: List[str]
+    # lsuffix: str
+    # rsuffix: str
+
+    @validator("how")
+    def validate_join_how(cls, v):
+        allowed_values = ["inner", "outer", "left", "right"]
+        if v.lower() not in allowed_values:
+            raise ValueError(f"join_how must be one of {allowed_values}")
+        return v
+
+
 class DataCollectionConfig(MongoModel):
     type: str
     regex: Regex
     dc_specific_properties: Union[DCTableConfig, DCJBrowse2Config]
+    join: Optional[TableJoinConfig] = None
 
 
     # @validator("files_regex")

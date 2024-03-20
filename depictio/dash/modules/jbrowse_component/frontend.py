@@ -6,7 +6,7 @@ from dash_iconify import DashIconify
 import httpx
 
 
-from depictio.dash.utils import list_workflows
+from depictio.dash.utils import list_workflows, return_mongoid
 
 # Depictio imports
 
@@ -39,6 +39,13 @@ def register_callbacks_jbrowse_component(app):
                 "Authorization": f"Bearer {TOKEN}",
             },
         ).json()
+
+        # Get DC ID that are joined 
+        if "join" in dc_specs["config"]:
+            dc_specs["config"]["join"]["with_dc_id"] = list()
+            for dc_tag in dc_specs["config"]["join"]["with_dc"]:
+                _, dc_id = return_mongoid(workflow_id=workflow_id, data_collection_tag=dc_tag)
+                dc_specs["config"]["join"]["with_dc_id"].append(dc_id)
 
         response = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user",

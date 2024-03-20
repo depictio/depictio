@@ -4,6 +4,7 @@ import json
 from pathlib import Path, PosixPath
 import dash_mantine_components as dmc
 from dash import dcc
+
 # import jsonschema
 import numpy as np
 from jose import jwt, JWTError
@@ -34,8 +35,6 @@ from depictio.api.v1.models.top_structure import RootConfig
 #     except JWTError as e:
 #         typer.echo(f"Token verification failed: {e}")
 #         raise typer.Exit(code=1)
-
-
 
 
 def get_config(filename: str):
@@ -132,15 +131,33 @@ def calculate_file_hash(file_path: str) -> str:
         return hashlib.md5(f.read()).hexdigest()
 
 
-def construct_full_regex(files_regex, regex_wildcards):
+def construct_full_regex(files_regex, regex_config):
     """
     Construct the full regex using the wildcards defined in the config.
     """
-    for wildcard in regex_wildcards:
-        placeholder = f"{{{wildcard['name']}}}"  # e.g. {date}
-        regex_pattern = wildcard["regex"]
+    print("construct_full_regex INSIDE")
+    print(files_regex, regex_config)
+    for name, regex in dict(regex_config.wildcard_regex).items():
+        placeholder = f"{{{name}}}"  # e.g. {date}
+        regex_pattern = regex
         files_regex = files_regex.replace(placeholder, f"({regex_pattern})")
     return files_regex
+
+
+def regex_match(root, file, full_regex, data_collection):
+    # Normalize the regex pattern to match both types of path separators
+    normalized_regex = full_regex.replace("/", "\/")
+
+    # If regex pattern is file-based, match the file name directly
+    if data_collection.config.regex.type.lower() == "file-based":
+        if re.match(normalized_regex, file):
+            return True
+    elif data_collection.config.regex.type.lower() == "path-based":
+        # If regex pattern is path-based, match the full path
+        file_location = os.path.join(root, file)
+        if re.match(normalized_regex, file_location):
+            return True
+    return False
 
 
 def scan_files(run_location: str, run_id: str, data_collection: DataCollection) -> List[File]:
@@ -156,38 +173,21 @@ def scan_files(run_location: str, run_id: str, data_collection: DataCollection) 
 
     file_list = list()
 
-    # Construct the full regex using the wildcards defined in the config if the data collection is JBrowse2
-    if data_collection.config.type.lower() == "jbrowse2":
-        # Get the regex wildcards
-        regex_wildcards_list = [e.dict() for e in data_collection.config.dc_specific_properties.regex_wildcards]
+    # Construct the full regex using the wildcards defined in the config
+    if data_collection.config.regex.wildcard_regex:
+        print("data_collection.config.regex.wildcard_regex")
+        print(data_collection.config.regex.wildcard_regex)
+    
 
-        # Construct the full regex using the wildcards defined in the config
-        if data_collection.config.dc_specific_properties.regex_wildcards:
-            full_regex = construct_full_regex(data_collection.config.regex.pattern, regex_wildcards_list)
+        full_regex = construct_full_regex(data_collection.config.regex.pattern, data_collection.config.regex)
     else:
         full_regex = data_collection.config.regex.pattern
-
-    def regex_match(root, file, full_regex, data_collection):
-        # Normalize the regex pattern to match both types of path separators
-        normalized_regex = full_regex.replace("/", "\/")
-        
-        # If regex pattern is file-based, match the file name directly
-        if data_collection.config.regex.type.lower() == "file-based":
-            if re.match(normalized_regex, file):
-                return True
-        elif data_collection.config.regex.type.lower() == "path-based":
-            # If regex pattern is path-based, match the full path
-            file_location = os.path.join(root, file)
-            if re.match(normalized_regex, file_location):
-                return True
-        return False
 
     # Scan the files
     print("full_regex", full_regex)
     for root, dirs, files in os.walk(run_location):
         for file in files:
             if regex_match(root, file, full_regex, data_collection):
-            
                 file_location = os.path.join(root, file)
                 filename = file
                 creation_time_float = os.path.getctime(file_location)
