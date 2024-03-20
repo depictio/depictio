@@ -1,14 +1,18 @@
 from datetime import datetime
 import os
-from typing import Optional
+from typing import List, Optional
 from pydantic import (
     Field,
     FilePath,
     root_validator,
     validator,
 )
-from depictio.api.v1.endpoints.datacollections_endpoints.models import DataCollection
+from depictio.api.v1.endpoints.datacollections_endpoints.models import DataCollection, WildcardRegexBase
 from depictio.api.v1.models.base import MongoModel, PyObjectId
+
+
+class WildcardRegex(WildcardRegexBase):
+    value: str
 
 
 class File(MongoModel):
@@ -23,6 +27,7 @@ class File(MongoModel):
     # file_hash: Optional[str] = None
     run_id: Optional[str] = None
     registration_time: datetime = datetime.now()
+    wildcards: Optional[List[WildcardRegex]]
 
     @root_validator(pre=True)
     def set_default_id(cls, values):

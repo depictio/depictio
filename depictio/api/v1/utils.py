@@ -130,34 +130,37 @@ def calculate_file_hash(file_path: str) -> str:
     with open(file_path, "rb") as f:
         return hashlib.md5(f.read()).hexdigest()
 
-# FIXME: updat model & function using a list of dict instead of a dict 
+
+# FIXME: updat model & function using a list of dict instead of a dict
 def construct_full_regex(files_regex, regex_config):
     """
     Construct the full regex using the wildcards defined in the config.
     """
-    print("construct_full_regex INSIDE")
-    print(files_regex, regex_config)
-    for name, regex in dict(regex_config.wildcard_regex).items():
-        placeholder = f"{{{name}}}"  # e.g. {date}
-        regex_pattern = regex
+    for wildcard in regex_config.wildcards:
+        print("wildcard", wildcard)
+        placeholder = f"{{{wildcard.name}}}"  # e.g. {date}
+        regex_pattern = wildcard.wildcard_regex
         files_regex = files_regex.replace(placeholder, f"({regex_pattern})")
+        print("files_regex", files_regex)
     return files_regex
 
 
 def regex_match(root, file, full_regex, data_collection):
     # Normalize the regex pattern to match both types of path separators
     normalized_regex = full_regex.replace("/", "\/")
-
+    print("normalized_regex")
+    print(root, file, full_regex, data_collection, data_collection.config.regex.type.lower())
     # If regex pattern is file-based, match the file name directly
     if data_collection.config.regex.type.lower() == "file-based":
         if re.match(normalized_regex, file):
-            return True
+            print("MATCH - file-based")
+            return True, re.match(normalized_regex, file)
     elif data_collection.config.regex.type.lower() == "path-based":
         # If regex pattern is path-based, match the full path
         file_location = os.path.join(root, file)
         if re.match(normalized_regex, file_location):
-            return True
-    return False
+            return True, re.match(normalized_regex, file)
+    return False, None
 
 
 def scan_files(run_location: str, run_id: str, data_collection: DataCollection) -> List[File]:
@@ -174,20 +177,16 @@ def scan_files(run_location: str, run_id: str, data_collection: DataCollection) 
     file_list = list()
 
     # Construct the full regex using the wildcards defined in the config
-    if data_collection.config.regex.wildcard_regex:
-        print("data_collection.config.regex.wildcard_regex")
-        print(data_collection.config.regex.wildcard_regex)
-    
-
+    if data_collection.config.regex.wildcards:
         full_regex = construct_full_regex(data_collection.config.regex.pattern, data_collection.config.regex)
     else:
         full_regex = data_collection.config.regex.pattern
 
     # Scan the files
-    print("full_regex", full_regex)
     for root, dirs, files in os.walk(run_location):
         for file in files:
-            if regex_match(root, file, full_regex, data_collection):
+            match, result = regex_match(root, file, full_regex, data_collection)
+            if match:
                 file_location = os.path.join(root, file)
                 filename = file
                 creation_time_float = os.path.getctime(file_location)
@@ -201,8 +200,6 @@ def scan_files(run_location: str, run_id: str, data_collection: DataCollection) 
                 creation_time_iso = creation_time_dt.strftime("%Y-%m-%d %H:%M:%S")
                 modification_time_iso = modification_time_dt.strftime("%Y-%m-%d %H:%M:%S")
 
-                # FIXME: update entry to add value corresponding to wildcards
-                # NOTE: idea to allow a direct mapping between Tables & wildcards referenced
                 file_instance = File(
                     filename=filename,
                     file_location=file_location,
@@ -211,6 +208,12 @@ def scan_files(run_location: str, run_id: str, data_collection: DataCollection) 
                     data_collection=data_collection,
                     run_id=run_id,
                 )
+                if data_collection.config.regex.wildcards and data_collection.config.type == "JBrowse2":
+                    wildcards_list = list()
+                    for j, wildcard in enumerate(data_collection.config.regex.wildcards, start=1):
+                        wildcards_list.append({"name": wildcard.name, "value": result.group(j), "wildcard_regex": wildcard.wildcard_regex})
+                    file_instance.wildcards = wildcards_list
+
                 # print(file_instance)
                 file_list.append(file_instance)
     return file_list

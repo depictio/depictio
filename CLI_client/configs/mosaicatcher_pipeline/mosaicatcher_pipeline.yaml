@@ -116,8 +116,10 @@ workflows:
           # A regular expression that is used to match the files specific of the data collection
           regex: 
             pattern: "{cell}-SV.bed.gz"
-            wildcard_regex: 
-              "cell": ".*"
+            wildcards: 
+              - name: "cell"
+                wildcard_regex: ".*"
+              # - value: ...
             type: "file-based"
 
           join:
