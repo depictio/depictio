@@ -1,3 +1,4 @@
+import collections
 import numpy as np
 from depictio.dash.utils import analyze_structure_and_get_deepest_type
 
@@ -75,11 +76,11 @@ def update_interactive_component(stored_metadata, interactive_components_dict, p
 
     # Sort sorted_metadata by component type using that order: graph, card, table & exclude interactive components
     stored_metadata = sorted(stored_metadata, key=lambda x: x["component_type"])
-    stored_metadata_table_components = [e for e in stored_metadata if e["component_type"] in ["figure", "card", "table-aggrid"]]
+    stored_metadata_table_components = [e for e in stored_metadata if e["component_type"] in ["graph", "card", "table-aggrid"]]
     stored_metadata_jbrowse_components = [e for e in stored_metadata if e["component_type"] in ["jbrowse"]]
 
     # Create a dict to store which new_df is related to jbrowse components, if dc_config["dc_specific_properties"]["regex_wildcars"]["join_data_collection"]
-    
+    jbrowse_df_mapping_dict = collections.defaultdict(dict)
 
     for j, e in enumerate(stored_metadata_table_components):
         print(j, e)
@@ -100,8 +101,8 @@ def update_interactive_component(stored_metadata, interactive_components_dict, p
                 n_dict = interactive_components_dict[n]
 
                 # Retrieve the join data collection if it exists
-                if n_dict["metadata"]["dc_config"]["dc_specific_properties"]["join"]:
-                    n_join_dc = n_dict["metadata"]["dc_config"]["dc_specific_properties"]["join"]["with_dc_id"]
+                if n_dict["metadata"]["dc_config"]["join"]:
+                    n_join_dc = n_dict["metadata"]["dc_config"]["join"]["with_dc_id"]
                 else:
                     n_join_dc = []
 
@@ -125,10 +126,16 @@ def update_interactive_component(stored_metadata, interactive_components_dict, p
 
                             # Check if e is part of a join with a jbrowse collection
                             for jbrowse in stored_metadata_jbrowse_components:
-                                if e["dc_id"] == jbrowse:
+                                if e["dc_id"] in jbrowse["dc_config"]["join"]["with_dc_id"]:
                                     print("JBROWSE")
                                     print(e["dc_id"])
                                     print(new_df)
+                                    for col in jbrowse["dc_config"]["join"]["on_columns"]:
+                                        jbrowse_df_mapping_dict[jbrowse["index"]][col] = new_df[col].unique().tolist()
+                        
+                        print("\n")
+                        print("jbrowse_df_mapping_dict")
+                        print(jbrowse_df_mapping_dict)
 
                         # Iterate over the current draggable children to update the content of the components
                         for child in current_draggable_children:

@@ -130,7 +130,7 @@ def calculate_file_hash(file_path: str) -> str:
     with open(file_path, "rb") as f:
         return hashlib.md5(f.read()).hexdigest()
 
-
+# FIXME: updat model & function using a list of dict instead of a dict 
 def construct_full_regex(files_regex, regex_config):
     """
     Construct the full regex using the wildcards defined in the config.
@@ -201,6 +201,8 @@ def scan_files(run_location: str, run_id: str, data_collection: DataCollection) 
                 creation_time_iso = creation_time_dt.strftime("%Y-%m-%d %H:%M:%S")
                 modification_time_iso = modification_time_dt.strftime("%Y-%m-%d %H:%M:%S")
 
+                # FIXME: update entry to add value corresponding to wildcards
+                # NOTE: idea to allow a direct mapping between Tables & wildcards referenced
                 file_instance = File(
                     filename=filename,
                     file_location=file_location,
