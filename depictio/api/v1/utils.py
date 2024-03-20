@@ -163,16 +163,32 @@ def scan_files(run_location: str, run_id: str, data_collection: DataCollection) 
 
         # Construct the full regex using the wildcards defined in the config
         if data_collection.config.dc_specific_properties.regex_wildcards:
-            full_regex = construct_full_regex(data_collection.config.files_regex, regex_wildcards_list)
+            full_regex = construct_full_regex(data_collection.config.regex.pattern, regex_wildcards_list)
     else:
-        full_regex = data_collection.config.files_regex
+        full_regex = data_collection.config.regex.pattern
+
+    def regex_match(root, file, full_regex, data_collection):
+        # Normalize the regex pattern to match both types of path separators
+        normalized_regex = full_regex.replace("/", "\/")
+        
+        # If regex pattern is file-based, match the file name directly
+        if data_collection.config.regex.type.lower() == "file-based":
+            if re.match(normalized_regex, file):
+                return True
+        elif data_collection.config.regex.type.lower() == "path-based":
+            # If regex pattern is path-based, match the full path
+            file_location = os.path.join(root, file)
+            if re.match(normalized_regex, file_location):
+                return True
+        return False
 
     # Scan the files
+    print("full_regex", full_regex)
     for root, dirs, files in os.walk(run_location):
         for file in files:
-            if re.match(full_regex, file):
+            if regex_match(root, file, full_regex, data_collection):
+            
                 file_location = os.path.join(root, file)
-
                 filename = file
                 creation_time_float = os.path.getctime(file_location)
                 modification_time_float = os.path.getmtime(file_location)

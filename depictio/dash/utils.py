@@ -239,6 +239,9 @@ def join_deltatables(workflow_id: str, data_collection_id: str):
     # Load the main data collection
     main_data_collection_df = load_deltatable_lite(workflow_id, data_collection_id)
 
+    # FIXME: remove the column "Depictio_aggregation_time" from the main data collection
+    main_data_collection_df = main_data_collection_df.drop(["depictio_aggregation_time"], axis=1)
+
     # Get join tables for the workflow
     join_tables_for_wf = httpx.get(
         f"{API_BASE_URL}/depictio/api/v1/datacollections/get_join_tables/{workflow_id}",
@@ -246,6 +249,8 @@ def join_deltatables(workflow_id: str, data_collection_id: str):
             "Authorization": f"Bearer {TOKEN}",
         },
     )
+    print("main_data_collection_df")
+    print(main_data_collection_df)
     print("join_tables_for_wf")
     print(join_tables_for_wf.json())
 
@@ -259,6 +264,8 @@ def join_deltatables(workflow_id: str, data_collection_id: str):
             # Extract the join tables for the current data collection
             join_tables_dict = join_tables_for_wf.json()[str(data_collection_id)]
 
+            print('join_tables_dict["with_dc_id"]')
+            print(join_tables_dict["with_dc_id"])
             # Iterate over the data collections that the current data collection is joined with
             for tmp_dc_id in join_tables_dict["with_dc_id"]:
                 print(tmp_dc_id)
@@ -267,7 +274,13 @@ def join_deltatables(workflow_id: str, data_collection_id: str):
 
                 # Merge the main data collection with the join data collection on the specified columns
                 # NOTE: hard-coded join for depictio_run_id currently (defined when creating the DeltaTable)
+                tmp_df = tmp_df.drop(["depictio_aggregation_time"], axis=1)
+                print("tmp_df")
+                print(tmp_df)
+
                 main_data_collection_df = pd.merge(main_data_collection_df, tmp_df, on=["depictio_run_id"] + join_tables_dict["on_columns"])
+                print("main_data_collection_df AFTER MERGE")
+                print(main_data_collection_df)
                 print(main_data_collection_df.columns)
 
     print(main_data_collection_df)

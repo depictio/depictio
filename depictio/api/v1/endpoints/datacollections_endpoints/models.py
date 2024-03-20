@@ -12,19 +12,38 @@ from depictio.api.v1.models.base import MongoModel, PyObjectId
 from depictio.api.v1.models.data_collections_custom_models.jbrowse_models import DCJBrowse2Config
 from depictio.api.v1.models.data_collections_custom_models.table_models import DCTableConfig
 
-class DataCollectionConfig(MongoModel):
-    type: str
-    files_regex: str
-    dc_specific_properties: Union[DCTableConfig, DCJBrowse2Config]
+class Regex(BaseModel):
+    pattern: str
+    type: str 
 
-
-    @validator("files_regex")
+    @validator("pattern")
     def validate_files_regex(cls, v):
         try:
             re.compile(v)
             return v
         except re.error:
             raise ValueError("Invalid regex pattern")
+
+    @validator("type")
+    def validate_type(cls, v):
+        allowed_values = ["file-based", "path-based"]
+        if v.lower() not in allowed_values:
+            raise ValueError(f"type must be one of {allowed_values}")
+        return v
+
+class DataCollectionConfig(MongoModel):
+    type: str
+    regex: Regex
+    dc_specific_properties: Union[DCTableConfig, DCJBrowse2Config]
+
+
+    # @validator("files_regex")
+    # def validate_files_regex(cls, v):
+    #     try:
+    #         re.compile(v)
+    #         return v
+    #     except re.error:
+    #         raise ValueError("Invalid regex pattern")
 
     @validator("type")
     def validate_type(cls, v):
