@@ -198,9 +198,15 @@ def register_callbacks_draggable(app):
                 print(j, e)
 
                 # Check if the component type is not an interactive component in order to update its content
-                if e["component_type"] != "interactive_component":
+                if e["component_type"] not in ["interactive_component"]:
                     # FIXME: find a more efficient way to update than loading the data again
                     new_df = join_deltatables(e["wf_id"], e["dc_id"])
+
+# NOTE: order stored_metadata in a way that the components impacted by new_df are at the end, then find a way to give new_df/related list to that category
+                        
+
+
+
                     print(new_df)
                     # Iterate over the interactive components to filter the data (new_df)
                     # n - interactive components
@@ -280,6 +286,7 @@ def register_callbacks_draggable(app):
                                     print("\n")
                                     print("analyze_structure_and_get_deepest_type")
                                     print(max_depth, deepest_element_type)
+                                    print(child["props"]["id"], e["index"])
 
                                     # If the deepest element type is a card, update the content of the card
                                     if deepest_element_type == "card-value":
@@ -306,6 +313,7 @@ def register_callbacks_draggable(app):
 
                                                     new_figure = plotly_vizu_dict[e["visu_type"].lower()](new_df, **e["dict_kwargs"])
                                                     sub_child["props"]["figure"] = new_figure
+
                                     # If the deepest element type is a graph, update the content of the graph
                                     elif deepest_element_type == "table-aggrid":
                                         if int(child["props"]["id"]) == int(e["index"]):
@@ -318,6 +326,23 @@ def register_callbacks_draggable(app):
                                                     sub_child["props"]["rowData"] = new_df.to_dict("records")
                                                     # new_figure = plotly_vizu_dict[e["visu_type"].lower()](new_df, **e["dict_kwargs"])
                                                     # sub_child["props"]["figure"] = new_figure
+
+                                    # If the deepest element type is a graph, update the content of the graph
+                                    elif deepest_element_type == "iframe-jbrowse":
+                                        print("\nIFRAME-JBROWSE")
+                                        print(child["props"]["id"], e["index"])
+                                        if int(child["props"]["id"]) == int(e["index"]):
+                                            for k, sub_child in enumerate(
+                                                child["props"]["children"][0]["props"]["children"]["props"]["children"][-1]["props"]["children"]["props"]["children"]
+                                            ):
+                                                print("\niframe-jbrowse")
+                                                print(sub_child)
+                                                # if sub_child["props"]["id"]["type"] == "table-aggrid":
+                                                    
+                                                #     print("\ntable-aggrid")
+                                                #     sub_child["props"]["rowData"] = new_df.to_dict("records")
+                                                #     # new_figure = plotly_vizu_dict[e["visu_type"].lower()](new_df, **e["dict_kwargs"])
+                                                #     # sub_child["props"]["figure"] = new_figure
 
                                     else:
                                         pass

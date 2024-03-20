@@ -324,8 +324,8 @@ def setup(
         print(response.json())
 
         # # Drop S3 content
-        # response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/utils/drop_S3_content", timeout=60.0 * 5)
-        # print(response.json())
+        response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/utils/drop_S3_content", timeout=60.0 * 5)
+        print(response.json())
 
     if not token:
         typer.echo("A valid token must be provided for authentication.")
@@ -371,16 +371,18 @@ def setup(
             # if scan_files:
             #     print("scan_files_for_data_collection")
             #     scan_files_for_data_collection(wf_id, dc["_id"], headers)
-            if dc["config"]["type"].lower() == "table":
-                if scan_files:
-                    print("scan_files_for_data_collection")
-                    scan_files_for_data_collection(wf_id, dc["_id"], headers) 
-                print("create_deltatable")
-                create_deltatable_request(wf_id, dc["_id"], headers)
+            # if dc["config"]["type"].lower() == "table":
+                # if scan_files:
+                #     print("scan_files_for_data_collection")
+                #     scan_files_for_data_collection(wf_id, dc["_id"], headers) 
+                # print("create_deltatable")
+                # create_deltatable_request(wf_id, dc["_id"], headers)
             # elif dc["config"]["type"].lower() == "jbrowse2":
-            # # if dc["config"]["type"].lower() == "jbrowse2":
-            #     print("upload_trackset_to_s3")
-            #     upload_trackset_to_s3(wf_id, dc["_id"], headers)
+            if dc["config"]["type"].lower() == "jbrowse2":
+                print("scan_files_for_data_collection")
+                scan_files_for_data_collection(wf_id, dc["_id"], headers)
+                print("upload_trackset_to_s3")
+                upload_trackset_to_s3(wf_id, dc["_id"], headers)
 
                 
 
