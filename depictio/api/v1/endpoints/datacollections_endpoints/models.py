@@ -12,10 +12,22 @@ from depictio.api.v1.models.base import MongoModel, PyObjectId
 from depictio.api.v1.models.data_collections_custom_models.jbrowse_models import DCJBrowse2Config
 from depictio.api.v1.models.data_collections_custom_models.table_models import DCTableConfig
 
+class WildcardRegexBase(BaseModel):
+    name: str
+    wildcard_regex: str
+
+    @validator("wildcard_regex")
+    def validate_files_regex(cls, v):
+        try:
+            re.compile(v)
+            return v
+        except re.error:
+            raise ValueError("Invalid regex pattern")
+
 class Regex(BaseModel):
     pattern: str
     type: str 
-    wildcard_regex: Optional[Dict[str, str]] = None
+    wildcards: Optional[List[WildcardRegexBase]] = None
 
     @validator("pattern")
     def validate_files_regex(cls, v):

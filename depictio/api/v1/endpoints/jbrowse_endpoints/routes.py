@@ -214,7 +214,6 @@ def handle_jbrowse_tracks(file, user_id, workflow_id, data_collection):
     #     track_details.update(wildcards_dict)
 
 
-
     file_index = data_collection.config.dc_specific_properties.index_extension
 
     # Upload the file to S3
