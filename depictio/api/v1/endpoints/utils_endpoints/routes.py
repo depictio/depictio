@@ -29,7 +29,7 @@ async def drop_S3_content():
 
     # FIXME: remove this - only for testing purposes
     # Delete directory content directly from the file system
-    shutil.rmtree(settings.minio.data_dir)
+    # shutil.rmtree(settings.minio.data_dir)
 
     return {"message": "S3 bucket content dropped"}
 

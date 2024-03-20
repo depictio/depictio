@@ -7,48 +7,13 @@ from pydantic import (
 )
 
 
-class Wildcard(BaseModel):
-    name: str
-    regex: str
-    join_with: Optional[str] = None
 
-    @validator("regex")
-    def validate_regex(cls, v):
-        try:
-            re.compile(v)
-            return v
-        except re.error:
-            raise ValueError("Invalid regex pattern")
-
-    @validator("join_with")
-    def validate_join_with(cls, v):
-        if v is not None:
-            if not isinstance(v, str):
-                raise ValueError("join_with must be a string")
-        return v
 
 
 class DCJBrowse2Config(BaseModel):
     index_extension: Optional[str] = None
-    regex_wildcards: Optional[List[Wildcard]] = []
     jbrowse_template_location: Optional[str] = None
-    jbrowse_config_location: Optional[str] = None
 
-
-    @root_validator
-    def check_wildcards_defined(cls, values):
-        files_regex = values.get("files_regex")
-        regex_wildcards = values.get("regex_wildcards", [])
-
-        if files_regex:
-            wildcards = re.findall(r"\{(\w+)\}", files_regex)
-            defined_wildcards = {wc.name for wc in regex_wildcards}
-
-            undefined_wildcards = set(wildcards) - defined_wildcards
-            if undefined_wildcards:
-                raise ValueError(f"Undefined wildcards in files_regex: {', '.join(undefined_wildcards)}")
-
-        return values
 
     @validator("format", check_fields=False)
     def validate_format(cls, v, values, **kwargs):
