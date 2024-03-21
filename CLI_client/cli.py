@@ -277,7 +277,7 @@ def create_deltatable_request(workflow_id: str, data_collection_id: str, headers
         typer.echo(f"Error for data collection {data_collection_id}: {response.text}")
 
 
-def upload_trackset_to_s3(workflow_id: str, data_collection_id: str, headers: dict) -> None:
+def create_trackset(workflow_id: str, data_collection_id: str, headers: dict) -> None:
     """
     Upload the trackset to S3 for a given data collection of a workflow.
     """
@@ -371,18 +371,19 @@ def setup(
             # if scan_files:
             #     print("scan_files_for_data_collection")
             #     scan_files_for_data_collection(wf_id, dc["_id"], headers)
-            # if dc["config"]["type"].lower() == "table":
-            #     # if scan_files:
-            #     #     print("scan_files_for_data_collection")
-            #     #     scan_files_for_data_collection(wf_id, dc["_id"], headers) 
-            #     print("create_deltatable")
-            #     create_deltatable_request(wf_id, dc["_id"], headers)
+            if dc["config"]["type"].lower() == "table":
+                if scan_files:
+                    print("scan_files_for_data_collection")
+                    scan_files_for_data_collection(wf_id, dc["_id"], headers) 
+                print("create_deltatable")
+                create_deltatable_request(wf_id, dc["_id"], headers)
             # elif dc["config"]["type"].lower() == "jbrowse2":
-            if dc["config"]["type"].lower() == "jbrowse2":
-                print("scan_files_for_data_collection")
-                scan_files_for_data_collection(wf_id, dc["_id"], headers)
-                # print("upload_trackset_to_s3")
-                # upload_trackset_to_s3(wf_id, dc["_id"], headers)
+            # if dc["config"]["type"].lower() == "jbrowse2":
+            #     if scan_files:
+            #         print("scan_files_for_data_collection")
+            #         scan_files_for_data_collection(wf_id, dc["_id"], headers)
+            #     # print("upload_trackset_to_s3")
+            #     create_trackset(wf_id, dc["_id"], headers)
 
                 
 

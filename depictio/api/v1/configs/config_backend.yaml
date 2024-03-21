@@ -13,7 +13,14 @@ mongodb:
     # groups_collection: "groups_collection"
     # projects_collection: "projects_collection"
     deltatables_collection: "deltatables"
-    # jbrowse_collection: "jbrowse_collection"
+    jbrowse_collection: "jbrowse_collection"
+
+rabbitmq:
+  host: "host.docker.internal"
+  port: 5672
+  exchange: "direct"
+  routing_key: "depictio_key"
+  queue: "jbrowse_logs"
 
 redis: 
   host: host.docker.internal

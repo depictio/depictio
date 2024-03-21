@@ -4,6 +4,8 @@ from pydantic import BaseModel
 import yaml
 
 
+
+
 class Collections(BaseModel):
     data_collection: str
     workflow_collection: str
@@ -11,6 +13,8 @@ class Collections(BaseModel):
     files_collection: str
     users_collection: str
     deltatables_collection: str
+    jbrowse_collection: str
+
 
 
 class MongoConfig(BaseModel):
@@ -25,6 +29,14 @@ class RedisConfig(BaseModel):
     db: int
     cache_ttl: int
     user_secret_key: str
+
+
+class RabbitMQConfig(BaseModel):
+    host: str
+    port: int
+    exchange: str
+    routing_key: str
+    queue: str
 
 class FastAPIConfig(BaseModel):
     host: str
@@ -61,6 +73,7 @@ class Auth(BaseModel):
 class Settings(BaseModel):
     mongodb: MongoConfig
     redis: RedisConfig
+    rabbitmq: RabbitMQConfig
     fastapi: FastAPIConfig
     dash: DashConfig
     minio: MinioConfig

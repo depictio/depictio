@@ -1,4 +1,5 @@
 from datetime import datetime
+import hashlib
 import json
 import os
 from pprint import pprint
@@ -7,11 +8,12 @@ import subprocess
 from bson import ObjectId
 from fastapi import HTTPException, Depends, APIRouter
 import boto3
+import pika
+
 from botocore.exceptions import NoCredentialsError
 from depictio.api.v1.endpoints.files_endpoints.models import File
 
 from depictio.api.v1.endpoints.jbrowse_endpoints.models import LogData
-
 from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user
 from depictio.api.v1.endpoints.validators import validate_workflow_and_collection
 from depictio.api.v1.endpoints.workflow_endpoints.models import Workflow
@@ -20,14 +22,13 @@ from depictio.api.v1.utils import construct_full_regex, scan_runs
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.s3 import s3_client
 
-from depictio.api.v1.db import workflows_collection, files_collection
+from depictio.api.v1.db import workflows_collection, files_collection, jbrowse_collection
 
 
 jbrowse_endpoints_router = APIRouter()
 
 
 def generate_track_config(track_type, track_details, data_collection_config):
-
     # Extract common JBrowse parameters from data collection config
     category = data_collection_config.get("jbrowse_params", {}).get("category", "Uncategorized")
     assemblyName = data_collection_config.get("jbrowse_params", {}).get("assemblyName", "hg38")
@@ -49,7 +50,7 @@ def generate_track_config(track_type, track_details, data_collection_config):
 
         track_config.update(
             {
-                "type": "FeatureTrack", 
+                "type": "FeatureTrack",
                 "adapter": {
                     "type": adapter_type,
                     "bedGzLocation" if adapter_type == "BedTabixAdapter" else "location": {"locationType": "UriLocation", "uri": uri},
@@ -107,7 +108,6 @@ def update_jbrowse_config(config_path, new_tracks=[]):
 
     except json.JSONDecodeError:
         print(f"Error decoding JSON from {config_path}.")
-    
 
     if "tracks" not in config:
         config["tracks"] = []
@@ -144,14 +144,11 @@ def update_jbrowse_config(config_path, new_tracks=[]):
 #     return file_path
 
 
-
-
 def upload_file_to_s3(bucket_name, file_location, s3_key):
     # check if the file exists
     if not os.path.exists(file_location):
         print(f"File {file_location} does not exist.")
         return {"error": f"File {file_location} does not exist."}
-
 
     # check if file already exists in S3
     skip_upload = False
@@ -172,8 +169,6 @@ def upload_file_to_s3(bucket_name, file_location, s3_key):
 
 
 def handle_jbrowse_tracks(file, user_id, workflow_id, data_collection):
-    
-    
     endpoint_url = "http://0.0.0.0"
     # endpoint_url = settings.minio.endpoint
     port = settings.minio.port
@@ -185,17 +180,30 @@ def handle_jbrowse_tracks(file, user_id, workflow_id, data_collection):
     # Extract the path suffix from the file location
     path_suffix = file_location.split(f"{run_id}/")[1]
 
+    # Get workflow tag from workflow_id
+    wf_tag = workflows_collection.find_one({"_id": ObjectId(workflow_id)})["workflow_tag"]
+
     # Construct the S3 key respecting the structure
     s3_key = f"{user_id}/{workflow_id}/{data_collection.id}/{run_id}/{path_suffix}"
     trackid = f"{endpoint_url}:{port}/{bucket_name}/{s3_key}"
 
+    # NOTE: trial using hash instead of path to avoid long path - 16 characters using sha256
+    s3_key_hash = hashlib.sha256(s3_key.encode("utf-8")).hexdigest()[:16]
+
+    # Design categories
+    categories = [
+        f"{wf_tag} - {workflow_id}",
+        f"{data_collection.data_collection_tag} - {data_collection.id}",
+    ]
+
     # Prepare the track details
     track_details = {
-        "trackId": trackid,
+        "trackId": s3_key_hash,
         "name": file.filename,
         "uri": f"{endpoint_url}:{port}/{bucket_name}/{s3_key}",
         "indexUri": f"{endpoint_url}:{port}/{bucket_name}/{s3_key}.tbi",
         "run_id": run_id,
+        "category": categories,
     }
 
     # # Prepare the regex wildcards
@@ -213,7 +221,6 @@ def handle_jbrowse_tracks(file, user_id, workflow_id, data_collection):
     # if wildcards_dict:
     #     track_details.update(wildcards_dict)
 
-
     file_index = data_collection.config.dc_specific_properties.index_extension
 
     # Upload the file to S3
@@ -222,15 +229,13 @@ def handle_jbrowse_tracks(file, user_id, workflow_id, data_collection):
     # Update the file mongo document with the S3 key
     # FIXME: find another way to access internally and externally (jbrowse) files registered
     file.S3_location = trackid.replace("host.docker.internal", "0.0.0.0")
+    file.trackId = s3_key_hash
+
     # Update into the database
     files_collection.update_one({"_id": file.mongo()["_id"]}, {"$set": file.mongo()})
 
-
-
     # Check if the file is an index and skip if it is
     if not file_location.endswith(file_index):
-
-
         # Generate the track configuration
         track_config = generate_track_config(
             "FeatureTrack",
@@ -241,16 +246,13 @@ def handle_jbrowse_tracks(file, user_id, workflow_id, data_collection):
         # Prepare the JBrowse template
         jbrowse_template_location = data_collection.config.dc_specific_properties.jbrowse_template_location
         jbrowse_template_json = json.load(open(jbrowse_template_location))
+
         track_config = populate_template_recursive(jbrowse_template_json, track_details)
-        track_config["category"] = track_config["category"] + [run_id]
+        track_config["category"] = track_details["category"] + [run_id]
         return track_config
-    
+
     else:
         return
-
-
-
-
 
 
 def construct_jbrowse_url(block, tracks):
@@ -262,8 +264,6 @@ def construct_jbrowse_url(block, tracks):
 
     url = f"assembly={assembly_name}&loc={ref_name}:{start}..{end}&tracks={track_list}"
     return url
-
-
 
 
 @jbrowse_endpoints_router.post("/create_trackset/{workflow_id}/{data_collection_id}")
@@ -278,7 +278,6 @@ async def create_trackset(
     assert isinstance(workflow_oid, ObjectId)
     assert isinstance(data_collection_oid, ObjectId)
     assert isinstance(user_oid, ObjectId)
-
 
     (
         workflow_oid,
@@ -301,14 +300,12 @@ async def create_trackset(
 
     new_tracks = list()
 
-    for file in files[:10]:
+    for file in files:
         file = File(**file)
-        print(file)
 
         track_config = handle_jbrowse_tracks(file, current_user.user_id, workflow_id, data_collection)
         if track_config:
             new_tracks.append(track_config)
-
 
     # Update the JBrowse configuration
     jbrowse_config_dir = settings.jbrowse.config_dir
@@ -319,15 +316,12 @@ async def create_trackset(
     dashboard_id = "1"  # Replace with actual dashboard ID
     config_path = os.path.join(jbrowse_config_dir, f"{current_user.user_id}_{dashboard_id}.json")
 
-
     payload = update_jbrowse_config(config_path, new_tracks)
     if payload["type"] == "error":
-        raise HTTPException(
-            status_code=404,
-            detail=f"{payload['message']}"
-        ) 
+        raise HTTPException(status_code=404, detail=f"{payload['message']}")
     print("JBrowse configuration updated.")
     return {"message": "JBrowse configuration updated."}
+
 
 @jbrowse_endpoints_router.post("/log")
 async def log_message(log_data: LogData):
@@ -340,6 +334,113 @@ async def log_message(log_data: LogData):
         tracks = [t for track in log_data.selectedTracks for t in track.tracks]  # Flatten track list
 
         jbrowse_url_args = construct_jbrowse_url(block, tracks)
-        print(jbrowse_url_args)
+        # print(jbrowse_url_args)
 
-    return {"jbrowse_url_args": jbrowse_url_args}
+        dict_jbrowse_url_args = {
+            "assembly": block.assemblyName,
+            "loc": f"{block.refName}:{block.start}..{block.end}",
+            "tracks": tracks,
+        }
+
+        connection = pika.BlockingConnection(pika.ConnectionParameters(settings.rabbitmq.host))
+        channel = connection.channel()
+
+        # Declare a topic exchange
+        channel.exchange_declare(exchange=settings.rabbitmq.exchange, exchange_type="topic", durable=True)
+
+        # Declare a queue named 'my_queue' with a message TTL of 300000 milliseconds (5 minutes)
+        args = {"x-message-ttl": 30000}
+        channel.queue_declare(queue=settings.rabbitmq.queue, durable=True, arguments=args)
+
+        # Bind the queue to the exchange with the routing key 'latest_status'
+        channel.queue_bind(exchange=settings.rabbitmq.exchange, queue=settings.rabbitmq.queue, routing_key=settings.rabbitmq.routing_key)
+
+        # Fetch the current timestamp
+        current_timestamp = int(datetime.now().timestamp() * 1000)  # Current time in milliseconds
+
+        # Publish the message to the exchange with the 'latest_status' routing key
+        channel.basic_publish(
+            exchange=settings.rabbitmq.exchange,
+            routing_key=settings.rabbitmq.routing_key,
+            body=json.dumps(dict_jbrowse_url_args),
+            properties=pika.BasicProperties(
+                delivery_mode=2,  # make message persistent
+                timestamp=current_timestamp,  # set timestamp
+            ),
+        )
+
+        # Write the message to mongoDB
+        dict_jbrowse_url_args["timestamp"] = current_timestamp
+        dict_jbrowse_url_args["dashboard_id"] = "1"  # Replace with actual dashboard ID
+        # Update or insert the message into the database
+        if jbrowse_collection.find_one():
+            document = jbrowse_collection.find_one({"dashboard_id": "1"})
+            document.update(dict_jbrowse_url_args)
+            jbrowse_collection.update_one({"_id": ObjectId(document["_id"])}, {"$set": document}, upsert=True)
+
+        else:
+            jbrowse_collection.insert_one(dict_jbrowse_url_args)
+
+        return {"Status": "Logged successfully."}
+    else:
+        return {"Status": "No data to log."}
+
+
+@jbrowse_endpoints_router.get("/get_jbrowse_logs")
+async def get_jbrowse_logs():
+
+    # Check if message exists in the queue
+    connection = pika.BlockingConnection(pika.ConnectionParameters(settings.rabbitmq.host))
+    channel = connection.channel()
+
+    # Fetch the message without auto acknowledgment
+    method_frame, header_frame, body = channel.basic_get(queue=settings.rabbitmq.queue, auto_ack=False)
+    
+    if method_frame:
+        # Extract the timestamp from the header frame
+        timestamp = header_frame.timestamp
+        human_readable_timestamp = datetime.datetime.fromtimestamp(timestamp / 1000.0).strftime("%Y-%m-%d %H:%M:%S")
+
+        # # Acknowledge the message after processing
+        channel.basic_nack(delivery_tag=method_frame.delivery_tag, requeue=True)
+        connection.close()
+        data = json.loads(body.decode("utf-8"))
+        if data == {}:
+            return {"message": "RabbitMQ queue empty and DB is empty"}
+        else:
+            print("RabbitMQ queue NOT empty and message is NOT empty")
+            return data
+
+    # Else if no message in the queue, check the database
+    else:
+        if jbrowse_collection.find_one():
+            log = jbrowse_collection.find_one()
+            log.pop("_id", None)
+            return log
+        else:
+            return {"message": "No logs available."}
+
+@jbrowse_endpoints_router.post("/map_tracks_using_wildcards/{workflow_id}/{data_collection_id}")
+async def map_tracks_using_wildcards(
+    workflow_id: str,
+    data_collection_id: str,
+    # current_user: str = Depends(get_current_user),
+):
+    workflow_oid = ObjectId(workflow_id)
+    data_collection_oid = ObjectId(data_collection_id)
+
+    # Constructing the nested dictionary
+    import collections
+
+    nested_dict = collections.defaultdict(lambda: collections.defaultdict(dict))
+
+    files = files_collection.find({"data_collection._id": data_collection_oid})
+    for file in files:
+        # print(file)
+        if file["filename"].endswith(file["data_collection"]["config"]["dc_specific_properties"]["index_extension"]):
+            continue
+        for wildcard in file["wildcards"]:
+            if file["trackId"]:
+                nested_dict[file["data_collection"]["_id"]][wildcard["name"]][wildcard["value"]] = file["trackId"]
+
+    return nested_dict

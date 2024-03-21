@@ -38,7 +38,11 @@ services:
       - "9000:9000"
       - "9001:9001"
 
-
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
 
 
   jbrowse2:
@@ -62,7 +66,7 @@ services:
     # build:
     #   context: .
     #   dockerfile: docker-images/Dockerfile_depictio.dockerfile
-    image: depictio_container
+    image: depictio:dev
     ports:
       - "5080:5080" # Assuming frontend runs on 5080. Adjust if needed.
     volumes:
@@ -78,13 +82,14 @@ services:
       - redis
       - minio
       - depictio_backend
+      - rabbitmq
 
 
   depictio_backend:
     # build:
     #   context: .
     #   dockerfile: docker-images/Dockerfile_depictio.dockerfile
-    image: depictio_container
+    image: depictio:dev
     ports:
       - "8058:8058"
     volumes:
@@ -102,6 +107,7 @@ services:
       - mongo
       - redis
       - minio
+      - rabbitmq
 
 
 
