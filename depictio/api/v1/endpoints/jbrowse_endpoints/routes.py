@@ -386,7 +386,7 @@ async def log_message(log_data: LogData):
         return {"Status": "No data to log."}
 
 
-@jbrowse_endpoints_router.get("/get_jbrowse_logs")
+@jbrowse_endpoints_router.get("/last_status")
 async def get_jbrowse_logs():
 
     # Check if message exists in the queue
@@ -398,8 +398,6 @@ async def get_jbrowse_logs():
     
     if method_frame:
         # Extract the timestamp from the header frame
-        timestamp = header_frame.timestamp
-        human_readable_timestamp = datetime.datetime.fromtimestamp(timestamp / 1000.0).strftime("%Y-%m-%d %H:%M:%S")
 
         # # Acknowledge the message after processing
         channel.basic_nack(delivery_tag=method_frame.delivery_tag, requeue=True)

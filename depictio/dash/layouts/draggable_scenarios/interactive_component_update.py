@@ -233,9 +233,40 @@ def update_interactive_component(stored_metadata, interactive_components_dict, p
 
 
                             mapping_dict = httpx.get(f"{API_BASE_URL}/depictio/api/v1/jbrowse/map_tracks_using_wildcards/{e['wf_id']}/{e['dc_id']}")
-                            pprint(mapping_dict.json())
+                            mapping_dict = mapping_dict.json()
+                            print("mapping_dict", mapping_dict)
 
-                            sub_child["props"]["src"] = f"http://localhost:3000?config=http://localhost:9010/sessions/{session}&loc=chr1:1-248956422&assembly=hg38&tracks="
+                            last_jbrowse_status = httpx.get(f"{API_BASE_URL}/depictio/api/v1/jbrowse/last_status")
+                            print("last_jbrowse_status", last_jbrowse_status)
+                            last_jbrowse_status = last_jbrowse_status.json()
+                            print("last_jbrowse_status", last_jbrowse_status)
+
+
+                            # Cross jbrowse_df_mapping_dict and mapping_dict to update the jbrowse iframe
+                            col = "cell"
+                            track_ids = list()
+                            print('jbrowse_df_mapping_dict[e["index"]][col]')
+                            print(jbrowse_df_mapping_dict)
+                            print(jbrowse_df_mapping_dict[e["index"]][col])
+                            print("mapping_dict[e['dc_id']]")
+                            print(mapping_dict[e["dc_id"]])
+                            for elem in jbrowse_df_mapping_dict[e["index"]][col]:
+                                if elem in mapping_dict:
+                                    track_ids.append(mapping_dict[e["dc_id"]][elem])
+                            
+                            if len(track_ids) > 500:
+                                track_ids = track_ids[:500]
+                            print("track_ids", track_ids)
+
+
+
+                            updated_jbrowse_config = f'assembly={last_jbrowse_status["assembly"]}&loc={last_jbrowse_status["loc"]}&tracks={",".join(track_ids)}'
+
+                            session = "65e5f007bad32df857a53cf2_1.json"
+
+                            new_url = f"http://localhost:3000?config=http://localhost:9010/sessions/{session}&{updated_jbrowse_config}"
+                            print("new_url", new_url)
+                            sub_child["props"]["src"] = new_url
 
                         # print(sub_child["props"]["id"]["type"])
 
