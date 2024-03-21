@@ -1,4 +1,4 @@
-name: depictio_dev
+name: depictio_dev_test
 channels:
   - conda-forge
   - plotly
@@ -15,6 +15,7 @@ dependencies:
   - httpx
   - numpy
   - pandas
+  - pika # RabbitMQ
   - plotly_express=0.4.1
   - polars
   - pydantic==1.10.10
@@ -28,7 +29,7 @@ dependencies:
   - uvicorn
   # - deltalake
   - pip:  
-    - deltalake
+    - deltalake==0.15.3
     - pydantic[email]==1.10.10
     - dash-mantine-components==0.12.1
     - dash-jbrowse==1.2.0

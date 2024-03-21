@@ -20,6 +20,8 @@ class File(MongoModel):
     # id: Optional[PyObjectId] = None
     file_location: FilePath
     S3_location: Optional[str] = None
+    S3_key_hash: Optional[str] = None
+    trackId: Optional[str] = None
     filename: str
     creation_time: datetime
     modification_time: datetime

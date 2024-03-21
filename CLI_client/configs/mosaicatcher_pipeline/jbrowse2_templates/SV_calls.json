@@ -1,13 +1,12 @@
 {
     "type": "FeatureTrack",
-    "name": "{cell}-SV",
+    "name": "{name}",
+    "wildcard": "{wildcard}",
     "trackId": "{trackId}",
     "assemblyNames": [
       "hg38"
     ],
-    "category": [
-        "SV calls"
-      ],
+    "category": [],
     "adapter": {
       "type": "BedTabixAdapter",
       "bedGzLocation": {
