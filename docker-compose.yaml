@@ -75,7 +75,6 @@ services:
       # - /Users:/Users # TMP - Mount the local Users directory
       - ./minio_data:/Users/tweber/Gits/depictio/minio_data
       - ./CLI_client/configs:/Users/tweber/Gits/depictio/CLI_client/configs
-    user: "${UID}:${GID}"
     command: ["python", "depictio/dash/app.py"]
     depends_on:
       - mongo
@@ -101,7 +100,6 @@ services:
       - ./minio_data:/Users/tweber/Gits/depictio/minio_data
       # - /Users/tweber/Gits/depictio/CLI_client:/app/CLI_client
       # - /Users:/Users # TMP - Mount the local Users directory 
-    user: "${UID}:${GID}"
     command: ["python", "depictio/api/run.py"]
     depends_on:
       - mongo
@@ -109,6 +107,25 @@ services:
       - minio
       - rabbitmq
 
+  depictio_nb:
+    image: depictio_nb:dev
+    ports:
+      - "8888:8888"
+    volumes:
+      - /Users/tweber/Data:/Users/tweber/Data
+      - ./data:/app/data
+      - ./depictio:/app/depictio
+      - ./dev:/app/dev
+      - /Users/tweber/Gits/jbrowse-watcher-plugin/sessions:/Users/tweber/Gits/jbrowse-watcher-plugin/sessions
+      - ./CLI_client/configs:/Users/tweber/Gits/depictio/CLI_client/configs
+      - ./minio_data:/Users/tweber/Gits/depictio/minio_data
+    depends_on:
+      - mongo
+      - redis
+      - minio
+      - depictio_backend
+      - rabbitmq
+    command: ["jupyter", "lab", "--ip=0.0.0.0", "--allow-root"]
 
 
   # openldap:
