@@ -145,6 +145,11 @@ def update_jbrowse_config(config_path, new_tracks=[]):
 
 
 def upload_file_to_s3(bucket_name, file_location, s3_key):
+    print(s3_client)
+    print(s3_client.list_buckets())
+    print(s3_client.list_objects_v2(Bucket=bucket_name, Prefix=s3_key))
+    print(file_location, bucket_name, s3_key)
+
     # check if the file exists
     if not os.path.exists(file_location):
         print(f"File {file_location} does not exist.")
@@ -169,8 +174,8 @@ def upload_file_to_s3(bucket_name, file_location, s3_key):
 
 
 def handle_jbrowse_tracks(file, user_id, workflow_id, data_collection):
-    endpoint_url = "http://0.0.0.0"
-    # endpoint_url = settings.minio.endpoint
+    # endpoint_url = "http://0.0.0.0"
+    endpoint_url = settings.minio.external_endpoint
     port = settings.minio.port
     bucket_name = settings.minio.bucket
 
@@ -228,7 +233,7 @@ def handle_jbrowse_tracks(file, user_id, workflow_id, data_collection):
 
     # Update the file mongo document with the S3 key
     # FIXME: find another way to access internally and externally (jbrowse) files registered
-    file.S3_location = trackid.replace("host.docker.internal", "0.0.0.0")
+    file.S3_location = trackid
     file.trackId = s3_key_hash
 
     # Update into the database
@@ -336,9 +341,12 @@ async def log_message(log_data: LogData):
         jbrowse_url_args = construct_jbrowse_url(block, tracks)
         # print(jbrowse_url_args)
 
+        start = round(int(block.start),0)
+        end = round(int(block.end),0)
+
         dict_jbrowse_url_args = {
             "assembly": block.assemblyName,
-            "loc": f"{block.refName}:{block.start}..{block.end}",
+            "loc": f"chr{block.refName}:{start}-{end}",
             "tracks": tracks,
         }
 
@@ -418,7 +426,7 @@ async def get_jbrowse_logs():
         else:
             return {"message": "No logs available."}
 
-@jbrowse_endpoints_router.post("/map_tracks_using_wildcards/{workflow_id}/{data_collection_id}")
+@jbrowse_endpoints_router.get("/map_tracks_using_wildcards/{workflow_id}/{data_collection_id}")
 async def map_tracks_using_wildcards(
     workflow_id: str,
     data_collection_id: str,
@@ -438,7 +446,6 @@ async def map_tracks_using_wildcards(
         if file["filename"].endswith(file["data_collection"]["config"]["dc_specific_properties"]["index_extension"]):
             continue
         for wildcard in file["wildcards"]:
-            if file["trackId"]:
-                nested_dict[file["data_collection"]["_id"]][wildcard["name"]][wildcard["value"]] = file["trackId"]
-
+            # if file["trackId"]:
+            nested_dict[data_collection_id][wildcard["name"]][wildcard["value"]] = file["trackId"]
     return nested_dict

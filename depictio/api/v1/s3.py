@@ -6,5 +6,5 @@ s3_client = boto3.client(
     "s3",
     aws_access_key_id=settings.minio.access_key,
     aws_secret_access_key=settings.minio.secret_key,
-    endpoint_url=f"{settings.minio.endpoint}:{settings.minio.port}",
+    endpoint_url=f"{settings.minio.internal_endpoint}:{settings.minio.port}",
 )
