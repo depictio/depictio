@@ -47,7 +47,8 @@ class DashConfig(BaseModel):
     port: int
 
 class MinioConfig(BaseModel):
-    endpoint: str
+    internal_endpoint: str
+    external_endpoint: str
     port: int
     access_key: str
     secret_key: str

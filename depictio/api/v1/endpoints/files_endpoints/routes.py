@@ -37,7 +37,7 @@ files_collection = db[settings.mongodb.collections.files_collection]
 users_collection = db["users"]
 
 # Define the MinIO endpoint and bucket name from the settings
-endpoint_url = settings.minio.endpoint
+endpoint_url = settings.minio.internal_endpoint
 bucket_name = settings.minio.bucket
 
 

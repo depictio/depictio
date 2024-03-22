@@ -37,10 +37,12 @@ dash:
   host: "0.0.0.0"
   port: 5080
 
-minio:
 # FIXME : 
+minio:
   data_dir: "/Users/tweber/Gits/depictio/minio_data"
-  endpoint: "http://host.docker.internal"
+  internal_endpoint: "http://minio"
+  external_endpoint: "http://localhost"
+  # endpoint: "http://host.docker.internal"
   port: 9000
   access_key: "minio"
   secret_key: "minio123"
