@@ -135,9 +135,9 @@ def update_interactive_component(stored_metadata, interactive_components_dict, p
                                     for col in jbrowse["dc_config"]["join"]["on_columns"]:
                                         jbrowse_df_mapping_dict[jbrowse["index"]][col] = new_df[col].unique().tolist()
                     
-                    print("\n")
-                    print("jbrowse_df_mapping_dict")
-                    print(jbrowse_df_mapping_dict)
+                    # print("\n")
+                    # print("jbrowse_df_mapping_dict")
+                    # print(jbrowse_df_mapping_dict)
 
                     # Iterate over the current draggable children to update the content of the components
                     for child in current_draggable_children:
@@ -234,33 +234,36 @@ def update_interactive_component(stored_metadata, interactive_components_dict, p
 
                             mapping_dict = httpx.get(f"{API_BASE_URL}/depictio/api/v1/jbrowse/map_tracks_using_wildcards/{e['wf_id']}/{e['dc_id']}")
                             mapping_dict = mapping_dict.json()
-                            print("mapping_dict", mapping_dict)
+                            # print("mapping_dict", mapping_dict)
 
                             last_jbrowse_status = httpx.get(f"{API_BASE_URL}/depictio/api/v1/jbrowse/last_status")
-                            print("last_jbrowse_status", last_jbrowse_status)
+                            # print("last_jbrowse_status", last_jbrowse_status)
                             last_jbrowse_status = last_jbrowse_status.json()
-                            print("last_jbrowse_status", last_jbrowse_status)
+                            # print("last_jbrowse_status", last_jbrowse_status)
 
 
                             # Cross jbrowse_df_mapping_dict and mapping_dict to update the jbrowse iframe
                             col = "cell"
                             track_ids = list()
                             print('jbrowse_df_mapping_dict[e["index"]][col]')
-                            print(jbrowse_df_mapping_dict)
-                            print(jbrowse_df_mapping_dict[e["index"]][col])
-                            print("mapping_dict[e['dc_id']]")
-                            print(mapping_dict[e["dc_id"]])
+                            # print(jbrowse_df_mapping_dict)
+                            # print(jbrowse_df_mapping_dict[e["index"]][col])
+                            # print("mapping_dict[e['dc_id']]")
+                            # print(mapping_dict[e["dc_id"]][:10])
+
                             for elem in jbrowse_df_mapping_dict[e["index"]][col]:
-                                if elem in mapping_dict:
+                                if elem in mapping_dict[e["dc_id"]]:
                                     track_ids.append(mapping_dict[e["dc_id"]][elem])
                             
-                            if len(track_ids) > 500:
-                                track_ids = track_ids[:500]
+                            if len(track_ids) > 50:
+                                track_ids = track_ids[:50]
                             print("track_ids", track_ids)
 
 
 
-                            updated_jbrowse_config = f'assembly={last_jbrowse_status["assembly"]}&loc={last_jbrowse_status["loc"]}&tracks={",".join(track_ids)}'
+                            updated_jbrowse_config = f'assembly={last_jbrowse_status["assembly"]}&loc={last_jbrowse_status["loc"]}'
+                            if track_ids:
+                                updated_jbrowse_config += f'&tracks={",".join(track_ids)}'
 
                             session = "65e5f007bad32df857a53cf2_1.json"
 
