@@ -441,6 +441,8 @@ async def map_tracks_using_wildcards(
     nested_dict = collections.defaultdict(lambda: collections.defaultdict(dict))
 
     files = files_collection.find({"data_collection._id": data_collection_oid})
+    print("len", files_collection.count_documents({"data_collection._id": data_collection_oid}))
+
     for file in files:
         # print(file)
         if file["filename"].endswith(file["data_collection"]["config"]["dc_specific_properties"]["index_extension"]):
@@ -448,4 +450,17 @@ async def map_tracks_using_wildcards(
         for wildcard in file["wildcards"]:
             # if file["trackId"]:
             nested_dict[data_collection_id][wildcard["name"]][wildcard["value"]] = file["trackId"]
+    print(len(nested_dict[data_collection_id]["cell"]))
     return nested_dict
+
+@jbrowse_endpoints_router.post("/dynamic_mapping_dict")
+async def dynamic_mapping_dict(
+    mapping_dict: dict,
+    # current_user: str = Depends(get_current_user),
+):
+    mapping_dict = mapping_dict
+    print(mapping_dict)
+
+
+    # Constructing the nested dictionary
+    return {"message": "Mapping dictionary received."}

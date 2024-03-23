@@ -1,4 +1,6 @@
 import collections
+import json
+import os
 from pprint import pprint
 from bson import ObjectId
 import httpx
@@ -133,7 +135,14 @@ def update_interactive_component(stored_metadata, interactive_components_dict, p
                                     print(e["dc_id"])
                                     print(new_df)
                                     for col in jbrowse["dc_config"]["join"]["on_columns"]:
-                                        jbrowse_df_mapping_dict[jbrowse["index"]][col] = new_df[col].unique().tolist()
+                                        jbrowse_df_mapping_dict[int(jbrowse["index"])][col] = new_df[col].unique().tolist()
+                            # save to a json file
+                            print("\nSAVE TO JSON FILE")
+                            os.makedirs("data", exist_ok=True)
+                            json.dump(jbrowse_df_mapping_dict, open("data/jbrowse_df_mapping_dict.json", "w"), indent=4)
+
+                                    
+                            # httpx.post("{API_BASE_URL}/depictio/api/v1/jbrowse/dynamic_mapping_dict", json=jbrowse_df_mapping_dict)
                     
                     # print("\n")
                     # print("jbrowse_df_mapping_dict")
@@ -247,13 +256,15 @@ def update_interactive_component(stored_metadata, interactive_components_dict, p
                             track_ids = list()
                             print('jbrowse_df_mapping_dict[e["index"]][col]')
                             # print(jbrowse_df_mapping_dict)
-                            # print(jbrowse_df_mapping_dict[e["index"]][col])
+                            # print(jbrowse_df_mapping_dict[e["index"]][col][:10])
                             # print("mapping_dict[e['dc_id']]")
                             # print(mapping_dict[e["dc_id"]][:10])
 
-                            for elem in jbrowse_df_mapping_dict[e["index"]][col]:
-                                if elem in mapping_dict[e["dc_id"]]:
-                                    track_ids.append(mapping_dict[e["dc_id"]][elem])
+                            for elem in jbrowse_df_mapping_dict[int(e["index"])][col]:
+                                print(elem)
+                                if elem in mapping_dict[e["dc_id"]][col]:
+                                    print("elem", elem, "is in mapping_dict[e['dc_id']]")
+                                    track_ids.append(mapping_dict[e["dc_id"]][col][elem])
                             
                             if len(track_ids) > 50:
                                 track_ids = track_ids[:50]
