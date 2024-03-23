@@ -349,82 +349,85 @@ async def log_message(log_data: LogData):
             "loc": f"chr{block.refName}:{start}-{end}",
             "tracks": tracks,
         }
-
-        connection = pika.BlockingConnection(pika.ConnectionParameters(settings.rabbitmq.host))
-        channel = connection.channel()
-
-        # Declare a topic exchange
-        channel.exchange_declare(exchange=settings.rabbitmq.exchange, exchange_type="topic", durable=True)
-
-        # Declare a queue named 'my_queue' with a message TTL of 300000 milliseconds (5 minutes)
-        args = {"x-message-ttl": 30000}
-        channel.queue_declare(queue=settings.rabbitmq.queue, durable=True, arguments=args)
-
-        # Bind the queue to the exchange with the routing key 'latest_status'
-        channel.queue_bind(exchange=settings.rabbitmq.exchange, queue=settings.rabbitmq.queue, routing_key=settings.rabbitmq.routing_key)
-
-        # Fetch the current timestamp
         current_timestamp = int(datetime.now().timestamp() * 1000)  # Current time in milliseconds
 
-        # Publish the message to the exchange with the 'latest_status' routing key
-        channel.basic_publish(
-            exchange=settings.rabbitmq.exchange,
-            routing_key=settings.rabbitmq.routing_key,
-            body=json.dumps(dict_jbrowse_url_args),
-            properties=pika.BasicProperties(
-                delivery_mode=2,  # make message persistent
-                timestamp=current_timestamp,  # set timestamp
-            ),
-        )
-
-        # Write the message to mongoDB
-        dict_jbrowse_url_args["timestamp"] = current_timestamp
-        dict_jbrowse_url_args["dashboard_id"] = "1"  # Replace with actual dashboard ID
-        # Update or insert the message into the database
-        if jbrowse_collection.find_one():
-            document = jbrowse_collection.find_one({"dashboard_id": "1"})
-            document.update(dict_jbrowse_url_args)
-            jbrowse_collection.update_one({"_id": ObjectId(document["_id"])}, {"$set": document}, upsert=True)
-
-        else:
-            jbrowse_collection.insert_one(dict_jbrowse_url_args)
-
-        return {"Status": "Logged successfully."}
     else:
-        return {"Status": "No data to log."}
+        dict_jbrowse_url_args = {}
+
+        # connection = pika.BlockingConnection(pika.ConnectionParameters(settings.rabbitmq.host))
+        # channel = connection.channel()
+
+        # # Declare a topic exchange
+        # channel.exchange_declare(exchange=settings.rabbitmq.exchange, exchange_type="topic", durable=True)
+
+        # # Declare a queue named 'my_queue' with a message TTL of 300000 milliseconds (5 minutes)
+        # args = {"x-message-ttl": 30000}
+        # channel.queue_declare(queue=settings.rabbitmq.queue, durable=True, arguments=args)
+
+        # # Bind the queue to the exchange with the routing key 'latest_status'
+        # channel.queue_bind(exchange=settings.rabbitmq.exchange, queue=settings.rabbitmq.queue, routing_key=settings.rabbitmq.routing_key)
+
+        # # Fetch the current timestamp
+
+        # # Publish the message to the exchange with the 'latest_status' routing key
+        # channel.basic_publish(
+        #     exchange=settings.rabbitmq.exchange,
+        #     routing_key=settings.rabbitmq.routing_key,
+        #     body=json.dumps(dict_jbrowse_url_args),
+        #     properties=pika.BasicProperties(
+        #         delivery_mode=2,  # make message persistent
+        #         timestamp=current_timestamp,  # set timestamp
+        #     ),
+        # )
+
+    # Write the message to mongoDB
+    dict_jbrowse_url_args["timestamp"] = current_timestamp
+    dict_jbrowse_url_args["dashboard_id"] = "1"  # Replace with actual dashboard ID
+    # Update or insert the message into the database
+    if jbrowse_collection.find_one():
+        document = jbrowse_collection.find_one({"dashboard_id": "1"})
+        document.update(dict_jbrowse_url_args)
+        jbrowse_collection.update_one({"_id": ObjectId(document["_id"])}, {"$set": document}, upsert=True)
+
+    else:
+        jbrowse_collection.insert_one(dict_jbrowse_url_args)
+
+    return {"Status": "Logged successfully."}
+    # else:
+    #     return {"Status": "No data to log."}
 
 
 @jbrowse_endpoints_router.get("/last_status")
 async def get_jbrowse_logs():
 
     # Check if message exists in the queue
-    connection = pika.BlockingConnection(pika.ConnectionParameters(settings.rabbitmq.host))
-    channel = connection.channel()
+    # connection = pika.BlockingConnection(pika.ConnectionParameters(settings.rabbitmq.host))
+    # channel = connection.channel()
 
-    # Fetch the message without auto acknowledgment
-    method_frame, header_frame, body = channel.basic_get(queue=settings.rabbitmq.queue, auto_ack=False)
+    # # Fetch the message without auto acknowledgment
+    # method_frame, header_frame, body = channel.basic_get(queue=settings.rabbitmq.queue, auto_ack=False)
     
-    if method_frame:
-        # Extract the timestamp from the header frame
+    # if method_frame:
+    #     # Extract the timestamp from the header frame
 
-        # # Acknowledge the message after processing
-        channel.basic_nack(delivery_tag=method_frame.delivery_tag, requeue=True)
-        connection.close()
-        data = json.loads(body.decode("utf-8"))
-        if data == {}:
-            return {"message": "RabbitMQ queue empty and DB is empty"}
-        else:
-            print("RabbitMQ queue NOT empty and message is NOT empty")
-            return data
+    #     # # Acknowledge the message after processing
+    #     channel.basic_nack(delivery_tag=method_frame.delivery_tag, requeue=True)
+    #     connection.close()
+    #     data = json.loads(body.decode("utf-8"))
+    #     if data == {}:
+    #         return {"message": "RabbitMQ queue empty and DB is empty"}
+    #     else:
+    #         print("RabbitMQ queue NOT empty and message is NOT empty")
+    #         return data
 
-    # Else if no message in the queue, check the database
+    # # Else if no message in the queue, check the database
+    # else:
+    if jbrowse_collection.find_one():
+        log = jbrowse_collection.find_one()
+        log.pop("_id", None)
+        return log
     else:
-        if jbrowse_collection.find_one():
-            log = jbrowse_collection.find_one()
-            log.pop("_id", None)
-            return log
-        else:
-            return {"message": "No logs available."}
+        return {"message": "No logs available."}
 
 @jbrowse_endpoints_router.get("/map_tracks_using_wildcards/{workflow_id}/{data_collection_id}")
 async def map_tracks_using_wildcards(
