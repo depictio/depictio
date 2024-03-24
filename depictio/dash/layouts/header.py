@@ -217,6 +217,8 @@ def design_header(data):
     #     edit_switch = html.Div()
 
 
+    # TODO: toggle interactivity button
+
     header = html.Div(
         [
             # html.H1("Depictio", style=title_style),

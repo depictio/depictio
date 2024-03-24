@@ -96,6 +96,7 @@ def populate_template_recursive(template, values):
 
 
 def update_jbrowse_config(config_path, new_tracks=[]):
+    # TODO: output a complete and a light minimal config + add a "load full data" to speed up the process
     try:
         with open(config_path, "r") as file:
             config = json.load(file)

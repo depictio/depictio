@@ -15,6 +15,7 @@ from depictio.dash.utils import (
     get_columns_from_data_collection,
 )
 
+# TODO: interactivity when selecting table rows 
 
 def register_callbacks_table_component(app):
     # Callback to update card body based on the selected column and aggregation

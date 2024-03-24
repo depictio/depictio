@@ -11,6 +11,9 @@ from depictio.dash.modules.interactive_component.frontend import register_callba
 from depictio.dash.modules.figure_component.frontend import register_callbacks_figure_component
 from depictio.dash.modules.jbrowse_component.frontend import register_callbacks_jbrowse_component
 from depictio.dash.modules.table_component.frontend import register_callbacks_table_component
+# TODO: markdown component 
+
+
 
 # Depictio layout imports
 from depictio.dash.layouts.stepper import register_callbacks_stepper
