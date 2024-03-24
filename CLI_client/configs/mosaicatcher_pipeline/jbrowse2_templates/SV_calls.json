@@ -25,6 +25,7 @@
         "type": "LinearBasicDisplay",
         "displayId": "{trackId}-LinearBasicDisplay",
         "height": 20,
+        "trackDisplayMode": "collapse", 
         "renderer": {
           "type": "SvgFeatureRenderer",
           "color1": "jexl:get(feature,\"field4\")",

@@ -88,134 +88,134 @@ def update_interactive_component(stored_metadata, interactive_components_dict, p
     # Create a dict to store which new_df is related to jbrowse components, if dc_config["dc_specific_properties"]["regex_wildcars"]["join_data_collection"]
     jbrowse_df_mapping_dict = collections.defaultdict(dict)
 
-    for j, e in enumerate(stored_metadata_table_components):
+    for j, e in enumerate(stored_metadata):
         print(j, e)
 
         # Check if the component type is not an interactive component in order to update its content
-        # if e["component_type"] not in ["interactive_component"]:
-        # FIXME: find a more efficient way to update than loading the data again
-        new_df = join_deltatables(e["wf_id"], e["dc_id"])
+        if e["component_type"] not in ["jbrowse"]:
+            # FIXME: find a more efficient way to update than loading the data again
+            new_df = join_deltatables(e["wf_id"], e["dc_id"])
 
-        # Iterate over the interactive components to filter the data (new_df)
-        # n - interactive components
-        for i, n in enumerate(list(interactive_components_dict.keys())):
-            print(i, n)
-            # Retrieve corresponding metadata
-            n_dict = interactive_components_dict[n]
+            # Iterate over the interactive components to filter the data (new_df)
+            # n - interactive components
+            for i, n in enumerate(list(interactive_components_dict.keys())):
+                print(i, n)
+                # Retrieve corresponding metadata
+                n_dict = interactive_components_dict[n]
 
-            # Retrieve the join data collection if it exists
-            if n_dict["metadata"]["dc_config"]["join"]:
-                n_join_dc = n_dict["metadata"]["dc_config"]["join"]["with_dc_id"]
-            else:
-                n_join_dc = []
+                # Retrieve the join data collection if it exists
+                if n_dict["metadata"]["dc_config"]["join"]:
+                    n_join_dc = n_dict["metadata"]["dc_config"]["join"]["with_dc_id"]
+                else:
+                    n_join_dc = []
 
-            # Check if interactive component is part of the join data collection of standard component
-            # check_join = [e["dc_id"] for sub_join in n_join_dc if e["dc_id"] in sub_join["with_dc"]]
-            check_join = e["dc_id"] in n_join_dc
+                # Check if interactive component is part of the join data collection of standard component
+                # check_join = [e["dc_id"] for sub_join in n_join_dc if e["dc_id"] in sub_join["with_dc"]]
+                check_join = e["dc_id"] in n_join_dc
 
-            # Check if the workflow id and the data collection id are matching
-            if e["wf_id"] == n_dict["metadata"]["wf_id"]:
-                if (e["dc_id"] == n_dict["metadata"]["dc_id"]) or (check_join):
-                    # if (e["dc_id"] == n_dict["metadata"]["dc_id"]) or (len(check_join) > 0):
-                    ## filter based on the column and the interactive component handle if the column is categorical or numerical
+                # Check if the workflow id and the data collection id are matching
+                if e["wf_id"] == n_dict["metadata"]["wf_id"]:
+                    if (e["dc_id"] == n_dict["metadata"]["dc_id"]) or (check_join):
+                        # if (e["dc_id"] == n_dict["metadata"]["dc_id"]) or (len(check_join) > 0):
+                        ## filter based on the column and the interactive component handle if the column is categorical or numerical
 
-                    # if the value is None or an empty list, do not filter
-                    if n_dict["value"] is None or n_dict["value"] == []:
-                        pass
-                    else:
-                        # filter the data based on the interactive component type and the selected value
-                        # NOTE - iterative filtering
-                        new_df = filter_data(new_df, n_dict)
-
-                        # Check if e is part of a join with a jbrowse collection
-                        if stored_metadata_jbrowse_components:
-                            for jbrowse in stored_metadata_jbrowse_components:
-                                if e["dc_id"] in jbrowse["dc_config"]["join"]["with_dc_id"]:
-                                    print("JBROWSE")
-                                    print(e["dc_id"])
-                                    print(new_df)
-                                    for col in jbrowse["dc_config"]["join"]["on_columns"]:
-                                        jbrowse_df_mapping_dict[int(jbrowse["index"])][col] = new_df[col].unique().tolist()
-                            # save to a json file
-                            print("\nSAVE TO JSON FILE")
-                            os.makedirs("data", exist_ok=True)
-                            json.dump(jbrowse_df_mapping_dict, open("data/jbrowse_df_mapping_dict.json", "w"), indent=4)
-
-                                    
-                            # httpx.post("{API_BASE_URL}/depictio/api/v1/jbrowse/dynamic_mapping_dict", json=jbrowse_df_mapping_dict)
-                    
-                    # print("\n")
-                    # print("jbrowse_df_mapping_dict")
-                    # print(jbrowse_df_mapping_dict)
-
-                    # Iterate over the current draggable children to update the content of the components
-                    for child in current_draggable_children:
-                        # Get the deepest element type
-                        (
-                            max_depth,
-                            deepest_element_type,
-                        ) = analyze_structure_and_get_deepest_type(child)
-                        print("\n")
-                        print("analyze_structure_and_get_deepest_type")
-                        print(max_depth, deepest_element_type)
-                        print(child["props"]["id"], e["index"])
-
-                        # If the deepest element type is a card, update the content of the card
-                        if deepest_element_type == "card-value":
-                            if int(child["props"]["id"]) == int(e["index"]):
-                                for k, sub_child in enumerate(
-                                    child["props"]["children"][0]["props"]["children"]["props"]["children"][-1]["props"]["children"]["props"]["children"]
-                                ):
-                                    if "id" in sub_child["props"]:
-                                        if sub_child["props"]["id"]["type"] == "card-value":
-                                            aggregation = e["aggregation"]
-                                            new_value = new_df[e["column_value"]].agg(aggregation)
-                                            if type(new_value) is np.float64:
-                                                new_value = round(new_value, 2)
-                                            sub_child["props"]["children"] = new_value
-                                            continue
-
-                        # If the deepest element type is a graph, update the content of the graph
-                        elif deepest_element_type == "graph":
-                            if int(child["props"]["id"]) == int(e["index"]):
-                                for k, sub_child in enumerate(
-                                    child["props"]["children"][0]["props"]["children"]["props"]["children"][-1]["props"]["children"]["props"]["children"]
-                                ):
-                                    if sub_child["props"]["id"]["type"] == "graph":
-                                        new_figure = plotly_vizu_dict[e["visu_type"].lower()](new_df, **e["dict_kwargs"])
-                                        sub_child["props"]["figure"] = new_figure
-
-                        # If the deepest element type is a graph, update the content of the graph
-                        elif deepest_element_type == "table-aggrid":
-                            if int(child["props"]["id"]) == int(e["index"]):
-                                for k, sub_child in enumerate(
-                                    child["props"]["children"][0]["props"]["children"]["props"]["children"][-1]["props"]["children"]["props"]["children"]
-                                ):
-                                    if sub_child["props"]["id"]["type"] == "table-aggrid":
-                                        print("\ntable-aggrid")
-                                        sub_child["props"]["rowData"] = new_df.to_dict("records")
-                                        # new_figure = plotly_vizu_dict[e["visu_type"].lower()](new_df, **e["dict_kwargs"])
-                                        # sub_child["props"]["figure"] = new_figure
-
-                        # If the deepest element type is a graph, update the content of the graph
-                        # elif deepest_element_type == "iframe-jbrowse":
-                        #     print("\nIFRAME-JBROWSE")
-                        #     print(child["props"]["id"], e["index"])
-                        #     if int(child["props"]["id"]) == int(e["index"]):
-                        #         for k, sub_child in enumerate(
-                        #             child["props"]["children"][0]["props"]["children"]["props"]["children"][-1]["props"]["children"]["props"]["children"]
-                        #         ):
-                        #             print("\niframe-jbrowse")
-                        #             print(sub_child)
-                        #             # if sub_child["props"]["id"]["type"] == "table-aggrid":
-
-                        #             #     print("\ntable-aggrid")
-                        #             #     sub_child["props"]["rowData"] = new_df.to_dict("records")
-                        #             #     # new_figure = plotly_vizu_dict[e["visu_type"].lower()](new_df, **e["dict_kwargs"])
-                        #             #     # sub_child["props"]["figure"] = new_figure
-
-                        else:
+                        # if the value is None or an empty list, do not filter
+                        if n_dict["value"] is None or n_dict["value"] == []:
                             pass
+                        else:
+                            # filter the data based on the interactive component type and the selected value
+                            # NOTE - iterative filtering
+                            new_df = filter_data(new_df, n_dict)
+
+                            # Check if e is part of a join with a jbrowse collection
+                            if stored_metadata_jbrowse_components:
+                                for jbrowse in stored_metadata_jbrowse_components:
+                                    if e["dc_id"] in jbrowse["dc_config"]["join"]["with_dc_id"]:
+                                        print("JBROWSE")
+                                        print(e["dc_id"])
+                                        print(new_df)
+                                        for col in jbrowse["dc_config"]["join"]["on_columns"]:
+                                            jbrowse_df_mapping_dict[int(jbrowse["index"])][col] = new_df[col].unique().tolist()
+                                # save to a json file
+                                print("\nSAVE TO JSON FILE")
+                                os.makedirs("data", exist_ok=True)
+                                json.dump(jbrowse_df_mapping_dict, open("data/jbrowse_df_mapping_dict.json", "w"), indent=4)
+
+                                        
+                                # httpx.post("{API_BASE_URL}/depictio/api/v1/jbrowse/dynamic_mapping_dict", json=jbrowse_df_mapping_dict)
+                        
+                        # print("\n")
+                        # print("jbrowse_df_mapping_dict")
+                        # print(jbrowse_df_mapping_dict)
+
+                        # Iterate over the current draggable children to update the content of the components
+                        for child in current_draggable_children:
+                            # Get the deepest element type
+                            (
+                                max_depth,
+                                deepest_element_type,
+                            ) = analyze_structure_and_get_deepest_type(child)
+                            print("\n")
+                            print("analyze_structure_and_get_deepest_type")
+                            print(max_depth, deepest_element_type)
+                            print(child["props"]["id"], e["index"])
+
+                            # If the deepest element type is a card, update the content of the card
+                            if deepest_element_type == "card-value":
+                                if int(child["props"]["id"]) == int(e["index"]):
+                                    for k, sub_child in enumerate(
+                                        child["props"]["children"][0]["props"]["children"]["props"]["children"][-1]["props"]["children"]["props"]["children"]
+                                    ):
+                                        if "id" in sub_child["props"]:
+                                            if sub_child["props"]["id"]["type"] == "card-value":
+                                                aggregation = e["aggregation"]
+                                                new_value = new_df[e["column_value"]].agg(aggregation)
+                                                if type(new_value) is np.float64:
+                                                    new_value = round(new_value, 2)
+                                                sub_child["props"]["children"] = new_value
+                                                continue
+
+                            # If the deepest element type is a graph, update the content of the graph
+                            elif deepest_element_type == "graph":
+                                if int(child["props"]["id"]) == int(e["index"]):
+                                    for k, sub_child in enumerate(
+                                        child["props"]["children"][0]["props"]["children"]["props"]["children"][-1]["props"]["children"]["props"]["children"]
+                                    ):
+                                        if sub_child["props"]["id"]["type"] == "graph":
+                                            new_figure = plotly_vizu_dict[e["visu_type"].lower()](new_df, **e["dict_kwargs"])
+                                            sub_child["props"]["figure"] = new_figure
+
+                            # If the deepest element type is a graph, update the content of the graph
+                            elif deepest_element_type == "table-aggrid":
+                                if int(child["props"]["id"]) == int(e["index"]):
+                                    for k, sub_child in enumerate(
+                                        child["props"]["children"][0]["props"]["children"]["props"]["children"][-1]["props"]["children"]["props"]["children"]
+                                    ):
+                                        if sub_child["props"]["id"]["type"] == "table-aggrid":
+                                            print("\ntable-aggrid")
+                                            sub_child["props"]["rowData"] = new_df.to_dict("records")
+                                            # new_figure = plotly_vizu_dict[e["visu_type"].lower()](new_df, **e["dict_kwargs"])
+                                            # sub_child["props"]["figure"] = new_figure
+
+                            # If the deepest element type is a graph, update the content of the graph
+                            # elif deepest_element_type == "iframe-jbrowse":
+                            #     print("\nIFRAME-JBROWSE")
+                            #     print(child["props"]["id"], e["index"])
+                            #     if int(child["props"]["id"]) == int(e["index"]):
+                            #         for k, sub_child in enumerate(
+                            #             child["props"]["children"][0]["props"]["children"]["props"]["children"][-1]["props"]["children"]["props"]["children"]
+                            #         ):
+                            #             print("\niframe-jbrowse")
+                            #             print(sub_child)
+                            #             # if sub_child["props"]["id"]["type"] == "table-aggrid":
+
+                            #             #     print("\ntable-aggrid")
+                            #             #     sub_child["props"]["rowData"] = new_df.to_dict("records")
+                            #             #     # new_figure = plotly_vizu_dict[e["visu_type"].lower()](new_df, **e["dict_kwargs"])
+                            #             #     # sub_child["props"]["figure"] = new_figure
+
+                            else:
+                                pass
 
 
     for j, e in enumerate(stored_metadata_jbrowse_components):
@@ -248,7 +248,7 @@ def update_interactive_component(stored_metadata, interactive_components_dict, p
                             last_jbrowse_status = httpx.get(f"{API_BASE_URL}/depictio/api/v1/jbrowse/last_status")
                             # print("last_jbrowse_status", last_jbrowse_status)
                             last_jbrowse_status = last_jbrowse_status.json()
-                            # print("last_jbrowse_status", last_jbrowse_status)
+                            print("last_jbrowse_status", last_jbrowse_status)
 
 
                             # Cross jbrowse_df_mapping_dict and mapping_dict to update the jbrowse iframe
@@ -261,9 +261,7 @@ def update_interactive_component(stored_metadata, interactive_components_dict, p
                             # print(mapping_dict[e["dc_id"]][:10])
 
                             for elem in jbrowse_df_mapping_dict[int(e["index"])][col]:
-                                print(elem)
                                 if elem in mapping_dict[e["dc_id"]][col]:
-                                    print("elem", elem, "is in mapping_dict[e['dc_id']]")
                                     track_ids.append(mapping_dict[e["dc_id"]][col][elem])
                             
                             if len(track_ids) > 50:
