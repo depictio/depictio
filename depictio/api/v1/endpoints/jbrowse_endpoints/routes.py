@@ -125,6 +125,14 @@ def update_jbrowse_config(config_path, new_tracks=[]):
 
         with open(config_path, "w") as file:
             json.dump(config, file, indent=4)
+        
+        # FIXME: create a lite version of the config
+        lite_config = config.copy()
+        lite_config["tracks"] = lite_config["tracks"][:5]
+
+        with open(config_path.replace(".json", "_lite.json"), "w") as file:
+            json.dump(lite_config, file, indent=4)
+
         return {"message": f"JBrowse config updated successfully.", "type": "success"}
     except Exception as e:
         # Log the error
