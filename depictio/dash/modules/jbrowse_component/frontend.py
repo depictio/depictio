@@ -63,7 +63,7 @@ def register_callbacks_jbrowse_component(app):
 
             user_id = response.json()["user_id"]
             dashboard_id = "1"
-            session = f"{user_id}_{dashboard_id}.json"
+            session = f"{user_id}_{dashboard_id}_lite.json"
 
             iframe = html.Iframe(
                 src=f"http://localhost:3000?config=http://localhost:9010/sessions/{session}&loc=chr1:1-248956422&assembly=hg38",

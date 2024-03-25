@@ -252,18 +252,18 @@ def update_interactive_component(stored_metadata, interactive_components_dict, p
 
 
                             # Cross jbrowse_df_mapping_dict and mapping_dict to update the jbrowse iframe
-                            col = "cell"
+                            # col = "cell"
                             track_ids = list()
                             print('jbrowse_df_mapping_dict[e["index"]][col]')
                             # print(jbrowse_df_mapping_dict)
                             # print(jbrowse_df_mapping_dict[e["index"]][col][:10])
                             # print("mapping_dict[e['dc_id']]")
                             # print(mapping_dict[e["dc_id"]][:10])
-
-                            for elem in jbrowse_df_mapping_dict[int(e["index"])][col]:
-                                if elem in mapping_dict[e["dc_id"]][col]:
-                                    track_ids.append(mapping_dict[e["dc_id"]][col][elem])
-                            
+                            for col in e["dc_config"]["join"]["on_columns"]:
+                                for elem in jbrowse_df_mapping_dict[int(e["index"])][col]:
+                                    if elem in mapping_dict[e["dc_id"]][col]:
+                                        track_ids.append(mapping_dict[e["dc_id"]][col][elem])
+                                
                             if len(track_ids) > 50:
                                 track_ids = track_ids[:50]
                             print("track_ids", track_ids)
