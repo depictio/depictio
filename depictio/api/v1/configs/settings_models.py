@@ -1,9 +1,6 @@
-
 from typing import Dict, Union
 from pydantic import BaseModel
 import yaml
-
-
 
 
 class Collections(BaseModel):
@@ -14,7 +11,7 @@ class Collections(BaseModel):
     users_collection: str
     deltatables_collection: str
     jbrowse_collection: str
-
+    dashboard_collection: str
 
 
 class MongoConfig(BaseModel):
@@ -22,6 +19,7 @@ class MongoConfig(BaseModel):
     port: int
     db_name: str
     collections: Collections
+
 
 class RedisConfig(BaseModel):
     host: str
@@ -38,13 +36,16 @@ class RabbitMQConfig(BaseModel):
     routing_key: str
     queue: str
 
+
 class FastAPIConfig(BaseModel):
     host: str
     port: int
 
+
 class DashConfig(BaseModel):
     host: str
     port: int
+
 
 class MinioConfig(BaseModel):
     internal_endpoint: str
@@ -63,6 +64,7 @@ class JbrowseConfig(BaseModel):
     watcher_plugin: Dict[str, Union[str, int]]
     data_dir: str
     config_dir: str
+
 
 class Auth(BaseModel):
     tmp_token: str
