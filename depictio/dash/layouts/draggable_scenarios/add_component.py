@@ -2,6 +2,7 @@
 import dash
 
 from depictio.dash.layouts.stepper import create_stepper_output
+from depictio.dash.utils import analyze_structure_and_get_deepest_type
 
 
 def add_new_component(
@@ -30,7 +31,6 @@ def add_new_component(
         current_draggable_children.append(stepper_output)
         stored_add_button["count"] += 1
 
-        
         # TODO: update based on the component type
         # Define the default size and position for the new plot
         new_layout_item = {
@@ -48,13 +48,12 @@ def add_new_component(
                 current_layouts[size] = []
             current_layouts[size] = current_layouts[size] + [new_layout_item]
 
+
+
         # Update the stored layout data
         return (
             current_draggable_children,
             current_layouts,
-            current_layouts,
-            current_draggable_children,
-            stored_edit_dashboard,
             stored_add_button,
         )
     else:

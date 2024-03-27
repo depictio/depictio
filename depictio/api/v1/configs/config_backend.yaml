@@ -14,6 +14,7 @@ mongodb:
     # projects_collection: "projects_collection"
     deltatables_collection: "deltatables"
     jbrowse_collection: "jbrowse_collection"
+    dashboard_collection: "dashboard_collection"
 
 rabbitmq:
   host: "host.docker.internal"

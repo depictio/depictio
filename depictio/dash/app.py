@@ -67,7 +67,8 @@ register_callbacks_table_component(app)
 
 
 # Load depictio data from JSON
-data = load_depictio_data()
+# data = load_depictio_data()
+data = None
 
 
 # Init layout and children if data is available, else set to empty
