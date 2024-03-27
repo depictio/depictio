@@ -1,13 +1,16 @@
 import json
+import sys
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 from dash import html, dcc, Input, Output, State, ALL, MATCH
 import dash
 
+from depictio.dash.utils import analyze_structure_and_get_deepest_type, get_size
+
 
 def register_callbacks_header(app):
     @app.callback(
-        Output("save-button-dashboard", "n_clicks"),
+        Output("dummy-output", "children"),
         Input("save-button-dashboard", "n_clicks"),
         State("stored-layout", "data"),
         State("stored-children", "data"),
@@ -23,16 +26,45 @@ def register_callbacks_header(app):
         add_button,
     ):
         if n_clicks > 0:
-            data = {
-                "stored_layout_data": stored_layout_data,
-                "stored_children_data": stored_children_data,
-                "stored_edit_dashboard_mode_button": edit_dashboard_mode_button,
-                "stored_add_button": add_button,
-            }
-            with open("depictio_data.json", "w") as file:
-                json.dump(data, file)
-            return n_clicks
-        return n_clicks
+            print("\n\n\n")
+            print("save_data_dashboard INSIDE")
+
+            print("stored_layout_data", type(stored_layout_data), get_size(stored_layout_data))
+            print("stored_children_data", type(stored_children_data), get_size(stored_children_data))
+            print("edit_dashboard_mode_button", type(edit_dashboard_mode_button), get_size(edit_dashboard_mode_button))
+            print("add_button", type(add_button), get_size(add_button))
+
+            (
+                max_depth,
+                deepest_element_type,
+            ) = analyze_structure_and_get_deepest_type(stored_children_data)
+            print("\n")
+            print("Max depth:", max_depth)
+            print("Deepest element type:", deepest_element_type)
+
+            for child in stored_children_data:
+                for sub_child in child["props"]["children"]:
+                    if sub_child["props"]["id"]["type"] == "add-content":
+                        child["props"]["children"] = [sub_child]
+                        continue
+            (
+                max_depth,
+                deepest_element_type,
+            ) = analyze_structure_and_get_deepest_type(stored_children_data)
+            print("\n")
+            print("Max depth:", max_depth)
+            print("Deepest element type:", deepest_element_type)
+
+            # data = {
+            #     "stored_layout_data": stored_layout_data,
+            #     "stored_children_data": stored_children_data,
+            #     "stored_edit_dashboard_mode_button": edit_dashboard_mode_button,
+            #     "stored_add_button": add_button,
+            # }
+            # with open("/Users/tweber/Gits/depictio/data/depictio_data.json", "w") as file:
+            #     json.dump(data, file)
+            return []
+        return dash.no_update
 
     @app.callback(
         Output("success-modal-dashboard", "is_open"),
@@ -67,9 +99,7 @@ def register_callbacks_header(app):
 
     @app.callback(
         Output({"type": "add-content", "index": MATCH}, "children"),
-        Output(
-            {"type": "test-container", "index": MATCH}, "children", allow_duplicate=True
-        ),
+        Output({"type": "test-container", "index": MATCH}, "children", allow_duplicate=True),
         [
             Input({"type": "btn-done", "index": MATCH}, "n_clicks"),
         ],
@@ -142,9 +172,7 @@ def design_header(data):
     Design the header of the dashboard
     """
     init_nclicks_add_button = data["stored_add_button"] if data else {"count": 0}
-    init_nclicks_edit_dashboard_mode_button = (
-        data["stored_edit_dashboard_mode_button"] if data else [int(0)]
-    )
+    init_nclicks_edit_dashboard_mode_button = data["stored_edit_dashboard_mode_button"] if data else [int(0)]
 
     # Check if data is available, if not set the buttons to disabled
     disabled = False
@@ -203,26 +231,27 @@ def design_header(data):
 
     title_style = {"fontWeight": "bold", "fontSize": "24px", "color": "#333"}
     button_style = {"margin": "0 10px", "fontWeight": "500"}
-    
+
     # Right side of the header - Edit dashboard mode button
     # if data:
     edit_switch = dbc.Checklist(
-                id="edit-dashboard-mode-button",
-                style={"fontSize": "22px"},
-                options=[{"label": "Edit dashboard", "value": 0}],
-                value=init_nclicks_edit_dashboard_mode_button,
-                switch=True,
+        id="edit-dashboard-mode-button",
+        style={"fontSize": "22px"},
+        options=[{"label": "Edit dashboard", "value": 0}],
+        value=init_nclicks_edit_dashboard_mode_button,
+        switch=True,
     )
-    # else:       
+    # else:
     #     edit_switch = html.Div()
-
 
     # TODO: toggle interactivity button
 
     header = html.Div(
         [
             # html.H1("Depictio", style=title_style),
-            html.Img(src=dash.get_asset_url('logo.png')), 
+            # Invisible div to store the test data
+            html.Div(id="dummy-output", style={"display": "none"}),
+            html.Img(src=dash.get_asset_url("logo.png")),
             html.Div(
                 [
                     # Left side of the header - Add new component button
@@ -325,14 +354,8 @@ def enable_box_edit_mode_dev(sub_child, switch_state=True):
         print("List")
 
         # Identify if edit and remove buttons are present
-        edit_button_exists = any(
-            child.get("props", {}).get("id", {}).get("type") == "edit-box-button"
-            for child in box["props"]["children"]
-        )
-        remove_button_exists = any(
-            child.get("props", {}).get("id", {}).get("type") == "remove-box-button"
-            for child in box["props"]["children"]
-        )
+        edit_button_exists = any(child.get("props", {}).get("id", {}).get("type") == "edit-box-button" for child in box["props"]["children"])
+        remove_button_exists = any(child.get("props", {}).get("id", {}).get("type") == "remove-box-button" for child in box["props"]["children"])
 
         print(switch_state, edit_button_exists, remove_button_exists)
 
@@ -360,9 +383,7 @@ def enable_box_edit_mode_dev(sub_child, switch_state=True):
             )
 
             # Place buttons at the beginning of the children list
-            box["props"]["children"] = [remove_button, edit_button] + box["props"][
-                "children"
-            ]
+            box["props"]["children"] = [remove_button, edit_button] + box["props"]["children"]
 
         # If switch_state is false and buttons are present, remove them
         elif not switch_state and edit_button_exists and remove_button_exists:

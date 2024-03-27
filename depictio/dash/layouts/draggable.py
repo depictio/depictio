@@ -177,13 +177,28 @@ def register_callbacks_draggable(app):
 
         # Add a new box to the dashboard
         if triggered_input == "add-button":
-            return add_new_component(
+            current_draggable_children, current_layouts, stored_add_button = add_new_component(
                 add_button_nclicks,
                 stored_add_button,
                 current_draggable_children,
                 current_layouts,
                 stored_edit_dashboard,
                 ctx,
+            )
+            print("\nadd-button")
+            max_depth, deepest_element_type = analyze_structure_and_get_deepest_type(
+                current_draggable_children
+            )
+            print("\n")
+            print("Max depth:", max_depth)
+            print("Deepest element type:", deepest_element_type)
+            return (
+                current_draggable_children,
+                current_layouts,
+                current_layouts,
+                current_draggable_children,
+                stored_edit_dashboard,
+                stored_add_button,
             )
 
         elif "interactive-component" in triggered_input and check_value:
@@ -497,37 +512,38 @@ def register_callbacks_draggable(app):
             #     updated_draggable_children,
             # )
 
-        elif triggered_input == "stored-layout" or triggered_input == "stored-children":
-            if stored_layout_data and stored_children_data:
-                return (
-                    stored_children_data,
-                    stored_layout_data,
-                    stored_layout_data,
-                    stored_children_data,
-                    stored_edit_dashboard,
-                    stored_add_button,
-                )
-            else:
-                # Load data from the file if it exists
-                loaded_data = load_depictio_data()
-                if loaded_data:
-                    return (
-                        loaded_data["stored_children_data"],
-                        loaded_data["stored_layout_data"],
-                        loaded_data["stored_layout_data"],
-                        loaded_data["stored_children_data"],
-                        stored_edit_dashboard,
-                        stored_add_button,
-                    )
-                else:
-                    return (
-                        current_draggable_children,
-                        {},
-                        stored_layout,
-                        stored_figures,
-                        stored_edit_dashboard,
-                        stored_add_button,
-                    )
+        # elif triggered_input == "stored-layout" or triggered_input == "stored-children":
+        #     if stored_layout_data and stored_children_data:
+        #         return (
+        #             stored_children_data,
+        #             stored_layout_data,
+        #             stored_layout_data,
+        #             stored_children_data,
+        #             stored_edit_dashboard,
+        #             stored_add_button,
+        #         )
+        #     else:
+        #         # Load data from the file if it exists
+        #         loaded_data = None
+        #         # loaded_data = load_depictio_data()
+        #         if loaded_data:
+        #             return (
+        #                 loaded_data["stored_children_data"],
+        #                 loaded_data["stored_layout_data"],
+        #                 loaded_data["stored_layout_data"],
+        #                 loaded_data["stored_children_data"],
+        #                 stored_edit_dashboard,
+        #                 stored_add_button,
+        #             )
+        #         else:
+        #             return (
+        #                 current_draggable_children,
+        #                 {},
+        #                 stored_layout,
+        #                 stored_figures,
+        #                 stored_edit_dashboard,
+        #                 stored_add_button,
+        #             )
 
         elif triggered_input == "draggable":
             # for child in current_draggable_children:

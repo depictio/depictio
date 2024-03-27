@@ -40,6 +40,27 @@ UNSELECTED_STYLE = {
 }
 
 
+def get_size(obj, seen=None):
+    """Recursively finds size of objects"""
+    size = sys.getsizeof(obj)
+    if seen is None:
+        seen = set()
+    obj_id = id(obj)
+    if obj_id in seen:
+        return 0
+    # Important mark as seen *before* entering recursion to gracefully handle
+    # self-referential objects
+    seen.add(obj_id)
+    if isinstance(obj, dict):
+        size += sum([get_size(v, seen) for v in obj.values()])
+        size += sum([get_size(k, seen) for k in obj.keys()])
+    elif hasattr(obj, '__dict__'):
+        size += get_size(obj.__dict__, seen)
+    elif hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes, bytearray)):
+        size += sum([get_size(i, seen) for i in obj])
+    return size        
+
+
 def load_depictio_data():
     if os.path.exists("depictio_data.json"):
         with open("depictio_data.json", "r") as file:
@@ -327,7 +348,6 @@ def analyze_structure(struct, depth=0):
             # Recursive call
             analyze_structure(child, depth=depth + 1)
 
-
 def analyze_structure_and_get_deepest_type(struct, depth=0, max_depth=0, deepest_type=None):
     """
     Recursively analyze a nested plotly dash structure and return the type of the deepest element (excluding 'stored-metadata-component').
@@ -342,25 +362,32 @@ def analyze_structure_and_get_deepest_type(struct, depth=0, max_depth=0, deepest
     - tuple: (Maximum depth of the structure, Type of the deepest element)
     """
 
+    print(f"\nAnalyzing level: {depth}")  # Debug print
+
     # Update the maximum depth and deepest type if the current depth is greater
     current_type = None
     if isinstance(struct, dict):
         id_value = struct.get("props", {}).get("id", None)
         if isinstance(id_value, dict) and id_value.get("type") != "stored-metadata-component":
             current_type = id_value.get("type")
+            print(f"Found component of type: {current_type} at depth: {depth}")  # Debug print
 
     if depth > max_depth:
         max_depth = depth
         deepest_type = current_type
+        print(f"Updated max_depth to {max_depth} with deepest_type: {deepest_type}")  # Debug print
     elif depth == max_depth and current_type is not None:
         deepest_type = current_type
+        print(f"Updated deepest_type to {deepest_type} at same max_depth: {max_depth}")  # Debug print
 
     if isinstance(struct, list):
         for child in struct:
+            print(f"Descending into list at depth: {depth}")  # Debug print
             max_depth, deepest_type = analyze_structure_and_get_deepest_type(child, depth=depth + 1, max_depth=max_depth, deepest_type=deepest_type)
     elif isinstance(struct, dict):
         children = struct.get("props", {}).get("children", None)
         if isinstance(children, (list, dict)):
+            print(f"Descending into dict at depth: {depth}")  # Debug print
             max_depth, deepest_type = analyze_structure_and_get_deepest_type(
                 children,
                 depth=depth + 1,
