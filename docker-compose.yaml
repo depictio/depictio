@@ -71,6 +71,8 @@ services:
       - "5080:5080" # Assuming frontend runs on 5080. Adjust if needed.
     volumes:
       - ./depictio:/app/depictio # Mount the local depictio directory
+      - ./data:/app/data
+
       # - /Users/tweber/Gits/depictio/CLI_client:/app/CLI_client
       # - /Users:/Users # TMP - Mount the local Users directory
       - ./minio_data:/Users/tweber/Gits/depictio/minio_data
