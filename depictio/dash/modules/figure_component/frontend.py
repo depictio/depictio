@@ -430,25 +430,25 @@ def register_callbacks_figure_component(app):
         # prevent_initial_call=True,
     )
     def update_figure(*args):
-        print("\n\n\n")
-        print("update_figure")
+        # print("\n\n\n")
+        # print("update_figure")
         dict_kwargs = args[0]
 
         visu_type = args[1]
         workflow = args[2]
         data_collection = args[3]
         id = args[4]
-        print(args)
-        print(id)
-        print("\n\n\n")
+        # print(args)
+        # print(id)
+        # print("\n\n\n")
 
         columns_json = get_columns_from_data_collection(workflow, data_collection)
-        print(columns_json, type(columns_json))
+        # print(columns_json, type(columns_json))
 
         columns_specs_reformatted = collections.defaultdict(list)
         {columns_specs_reformatted[v["type"]].append(k) for k, v in columns_json.items()}
-        print("columns_specs_reformatted")
-        print(columns_specs_reformatted)
+        # print("columns_specs_reformatted")
+        # print(columns_specs_reformatted)
 
         x_col, color_col, y_col = None, None, None
 
@@ -466,9 +466,9 @@ def register_callbacks_figure_component(app):
             dict_kwargs = {"x": x_col, "y": y_col, "color": color_col}
             # print(dict_kwargs)
 
-        print("update figure 2")
-        print(dict_kwargs)
-        print(visu_type)
+        # print("update figure 2")
+        # print(dict_kwargs)
+        # print(visu_type)
         # # print(app._callback_list)
 
         import httpx
@@ -506,7 +506,7 @@ def register_callbacks_figure_component(app):
                 dc_specs["config"]["join"] = join_details
         # print("dc_specs")
         # print(dc_specs)
-        print(visu_type)
+        # print(visu_type)
 
         # # Get the type of the selected column
         # column_type = cols_json[column_value]["type"]
@@ -527,15 +527,15 @@ def register_callbacks_figure_component(app):
             "dc_id": data_collection_id,
             "dc_config": dc_specs["config"],
         }
-        print(store_component_data)
+        # print(store_component_data)
 
         # print(dict_kwargs)
         dict_kwargs = {k: v for k, v in dict_kwargs.items() if v is not None}
         wf_id, dc_id = return_mongoid(workflow_tag=workflow, data_collection_tag=data_collection)
         df = load_deltatable_lite(wf_id, dc_id)
 
-        print("df")
-        print(df)
+        # print("df")
+        # print(df)
         # print("\n\n\n")
         # print(dict_kwargs)
         if dict_kwargs:

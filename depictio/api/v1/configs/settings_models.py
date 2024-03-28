@@ -11,7 +11,7 @@ class Collections(BaseModel):
     users_collection: str
     deltatables_collection: str
     jbrowse_collection: str
-    dashboard_collection: str
+    dashboards_collection: str
 
 
 class MongoConfig(BaseModel):

@@ -32,11 +32,11 @@ def register_callbacks_stepper_part_two(app):
         prevent_initial_call=True,
     )
     def update_button_list(workflow_selection, data_collection_selection, n):
-        print("\n\n\n")
-        print("update_button_list")
-        print(n)
-        print(workflow_selection, data_collection_selection)
-        print("\n\n\n")
+        # print("\n\n\n")
+        # print("update_button_list")
+        # print(n)
+        # print(workflow_selection, data_collection_selection)
+        # print("\n\n\n")
 
         workflows = list_workflows(TOKEN)
 

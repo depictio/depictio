@@ -1,4 +1,5 @@
 from bson import ObjectId
+import numpy as np
 from depictio.api.v1.configs.config import API_BASE_URL, TOKEN
 from depictio.api.v1.db import redis_cache
 from io import BytesIO
@@ -84,8 +85,8 @@ def return_user_from_token(token: str) -> dict:
 
 
 def list_workflows(token: str = None):
-    print("list_workflows")
-    print(token)
+    # print("list_workflows")
+    # print(token)
 
     if not token:
         print("A valid token must be provided for authentication.")
@@ -110,7 +111,7 @@ def list_workflows(token: str = None):
 
 def list_workflows_for_dropdown():
     workflows_model_list = list_workflows(TOKEN)
-    print(workflows_model_list)
+    # print(workflows_model_list)
     workflows = [wf["workflow_tag"] for wf in workflows_model_list]
     workflows_dict_for_dropdown = [{"label": wf, "value": wf} for wf in workflows]
     return workflows_dict_for_dropdown
@@ -139,7 +140,7 @@ def return_dc_tag_from_id(workflow_id: ObjectId, data_collection_id: ObjectId, w
         workflows = list_workflows(TOKEN)
     # else:
         # workflows = [convert_objectid_to_str(workflow.mongo()) for workflow in workflows]
-    print("data_collection_id", data_collection_id)
+    # print("data_collection_id", data_collection_id)
     return [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["_id"] == data_collection_id][0]["data_collection_tag"]
 
 
@@ -150,17 +151,17 @@ def return_mongoid(workflow_tag: str = None, workflow_id: ObjectId = None, data_
     #     workflows = [convert_objectid_to_str(workflow.mongo()) for workflow in workflows]
 
     if workflow_tag is not None and data_collection_tag is not None:
-        print("workflow_tag and data_collection_tag")
+        # print("workflow_tag and data_collection_tag")
         workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_tag][0]["_id"]
-        print("workflow_id", workflow_id)
+        # print("workflow_id", workflow_id)
         data_collection_id = [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["data_collection_tag"] == data_collection_tag][0]["_id"]
-        print("data_collection_id", data_collection_id)
+        # print("data_collection_id", data_collection_id)
     elif workflow_id is not None and data_collection_tag is not None:
-        print("workflow_id and data_collection_tag")
+        # print("workflow_id and data_collection_tag")
         workflow_id = str(workflow_id)
         data_collection_id = [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["data_collection_tag"] == data_collection_tag][0]["_id"]
     else:
-        print("Invalid input")
+        # print("Invalid input")
         return None, None
 
     return workflow_id, data_collection_id
@@ -191,8 +192,8 @@ def get_columns_from_data_collection(
         # print(response)
         if response.status_code == 200:
             json_cols = response.json()
-            print("get_columns_from_data_collection")
-            print(json_cols)
+            # print("get_columns_from_data_collection")
+            # print(json_cols)
             # json_cols = json["columns"]
             reformat_cols = collections.defaultdict(dict)
             # print(json_cols)
@@ -207,7 +208,7 @@ def get_columns_from_data_collection(
 
 
 def load_deltatable_lite(workflow_id: ObjectId, data_collection_id: ObjectId, cols: list = None, raw: bool = False):
-    print("load_deltatable_lite")
+    # print("load_deltatable_lite")
 
     # Turn objectid to string
     workflow_id = str(workflow_id)
@@ -270,10 +271,10 @@ def join_deltatables(workflow_id: str, data_collection_id: str):
             "Authorization": f"Bearer {TOKEN}",
         },
     )
-    print("main_data_collection_df")
-    print(main_data_collection_df)
-    print("join_tables_for_wf")
-    print(join_tables_for_wf.json())
+    # print("main_data_collection_df")
+    # print(main_data_collection_df)
+    # print("join_tables_for_wf")
+    # print(join_tables_for_wf.json())
 
     # Check if the response is not successful
     if join_tables_for_wf.status_code != 200:
@@ -285,8 +286,8 @@ def join_deltatables(workflow_id: str, data_collection_id: str):
             # Extract the join tables for the current data collection
             join_tables_dict = join_tables_for_wf.json()[str(data_collection_id)]
 
-            print('join_tables_dict["with_dc_id"]')
-            print(join_tables_dict["with_dc_id"])
+            # print('join_tables_dict["with_dc_id"]')
+            # print(join_tables_dict["with_dc_id"])
             # Iterate over the data collections that the current data collection is joined with
             for tmp_dc_id in join_tables_dict["with_dc_id"]:
                 print(tmp_dc_id)
@@ -296,16 +297,35 @@ def join_deltatables(workflow_id: str, data_collection_id: str):
                 # Merge the main data collection with the join data collection on the specified columns
                 # NOTE: hard-coded join for depictio_run_id currently (defined when creating the DeltaTable)
                 tmp_df = tmp_df.drop(["depictio_aggregation_time"], axis=1)
-                print("tmp_df")
-                print(tmp_df)
+                # print("tmp_df")
+                # print(tmp_df)
 
                 main_data_collection_df = pd.merge(main_data_collection_df, tmp_df, on=["depictio_run_id"] + join_tables_dict["on_columns"])
-                print("main_data_collection_df AFTER MERGE")
-                print(main_data_collection_df)
-                print(main_data_collection_df.columns)
+                # print("main_data_collection_df AFTER MERGE")
+                # print(main_data_collection_df)
+                # print(main_data_collection_df.columns)
 
-    print(main_data_collection_df)
+    # print(main_data_collection_df)
     return main_data_collection_df
+
+
+def serialize_dash_component(obj):
+    # If the object is a NumPy array, convert it to a list
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {k: serialize_dash_component(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [serialize_dash_component(v) for v in obj]
+    elif hasattr(obj, 'to_dict'):
+        # If the object is a Dash component with a to_dict method
+        return obj.to_dict()
+    elif hasattr(obj, '__dict__'):
+        # Attempt to serialize objects by converting their __dict__ attribute
+        return serialize_dash_component(obj.__dict__)
+    else:
+        # Return the object as is if none of the above conditions are met
+        return obj
 
 
 def analyze_structure(struct, depth=0):
@@ -362,7 +382,7 @@ def analyze_structure_and_get_deepest_type(struct, depth=0, max_depth=0, deepest
     - tuple: (Maximum depth of the structure, Type of the deepest element)
     """
 
-    print(f"\nAnalyzing level: {depth}")  # Debug print
+    # print(f"\nAnalyzing level: {depth}")  # Debug print
 
     # Update the maximum depth and deepest type if the current depth is greater
     current_type = None
@@ -370,24 +390,24 @@ def analyze_structure_and_get_deepest_type(struct, depth=0, max_depth=0, deepest
         id_value = struct.get("props", {}).get("id", None)
         if isinstance(id_value, dict) and id_value.get("type") != "stored-metadata-component":
             current_type = id_value.get("type")
-            print(f"Found component of type: {current_type} at depth: {depth}")  # Debug print
+            # print(f"Found component of type: {current_type} at depth: {depth}")  # Debug print
 
     if depth > max_depth:
         max_depth = depth
         deepest_type = current_type
-        print(f"Updated max_depth to {max_depth} with deepest_type: {deepest_type}")  # Debug print
+        # print(f"Updated max_depth to {max_depth} with deepest_type: {deepest_type}")  # Debug print
     elif depth == max_depth and current_type is not None:
         deepest_type = current_type
-        print(f"Updated deepest_type to {deepest_type} at same max_depth: {max_depth}")  # Debug print
+        # print(f"Updated deepest_type to {deepest_type} at same max_depth: {max_depth}")  # Debug print
 
     if isinstance(struct, list):
         for child in struct:
-            print(f"Descending into list at depth: {depth}")  # Debug print
+            # print(f"Descending into list at depth: {depth}")  # Debug print
             max_depth, deepest_type = analyze_structure_and_get_deepest_type(child, depth=depth + 1, max_depth=max_depth, deepest_type=deepest_type)
     elif isinstance(struct, dict):
         children = struct.get("props", {}).get("children", None)
         if isinstance(children, (list, dict)):
-            print(f"Descending into dict at depth: {depth}")  # Debug print
+            # print(f"Descending into dict at depth: {depth}")  # Debug print
             max_depth, deepest_type = analyze_structure_and_get_deepest_type(
                 children,
                 depth=depth + 1,

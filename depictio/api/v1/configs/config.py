@@ -1,19 +1,13 @@
+import logging
+
 from depictio.api.v1.configs.settings_models import Settings
 from depictio.api.v1.utils import get_config, validate_config
 
-settings = validate_config(
-    get_config("depictio/api/v1/configs/config_backend.yaml"), Settings
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(filename)s - %(funcName)s - line %(lineno)d - %(message)s")
+logger = logging.getLogger("depictio")
 
-import logging
-logging.basicConfig(level=logging.INFO)
-# Create logger
-logger = logging.getLogger(__name__)
-
-
+settings = validate_config(get_config("depictio/api/v1/configs/config_backend.yaml"), Settings)
 
 API_BASE_URL = f"http://{settings.fastapi.host}:{settings.fastapi.port}"
 MONGODB_URL = f"mongodb://{settings.mongodb.host}:{settings.mongodb.port}/"
-print("MONGODB_URL: ", MONGODB_URL)
 TOKEN = settings.auth.tmp_token
-
