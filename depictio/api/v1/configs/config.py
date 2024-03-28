@@ -5,6 +5,10 @@ settings = validate_config(
     get_config("depictio/api/v1/configs/config_backend.yaml"), Settings
 )
 
+import logging
+logging.basicConfig(level=logging.INFO)
+# Create logger
+logger = logging.getLogger(__name__)
 
 
 
