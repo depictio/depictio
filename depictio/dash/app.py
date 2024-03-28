@@ -1,6 +1,11 @@
+
+
+import os
 from dash import html
 import dash
 import dash_bootstrap_components as dbc
+
+
 
 # Depictio imports
 from depictio.api.v1.configs.config import settings
@@ -29,9 +34,12 @@ from depictio.dash.layouts.draggable import (
 
 # Depictio utils imports
 from depictio.dash.utils import load_depictio_data
+from depictio.api.v1.configs.config import logger
 
 
 # TODO: move to depictio.dash.utils or somewhere else
+
+
 
 
 # Start the app
@@ -46,8 +54,14 @@ app = dash.Dash(
     ],
     suppress_callback_exceptions=True,
     title="Depictio",
+    
 )
 
+server = app.server  # This is the Flask server instance
+
+# Configure Flask's logger to use your logging settings
+server.logger.handlers = logger.handlers
+server.logger.setLevel(logger.level)
 
 # Register callbacks for layout
 register_callbacks_stepper(app)

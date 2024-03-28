@@ -44,9 +44,9 @@ def register_callbacks_stepper(app):
         Returns:
             _type_: _description_
         """
-        print("\n\n\n")
-        print("set_workflow_options")
-        print(n_clicks)
+        # print("\n\n\n")
+        # print("set_workflow_options")
+        # print(n_clicks)
         if int(n_clicks) > 0:
             # print(id)
             tmp_data = list_workflows_for_dropdown()

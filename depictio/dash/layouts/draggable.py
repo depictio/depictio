@@ -1,4 +1,8 @@
+
 import ast
+from copy import deepcopy
+import json
+import os
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 from dash_iconify import DashIconify
@@ -7,6 +11,8 @@ from dash import html, dcc, Input, Output, State, ALL, MATCH
 import dash
 import numpy as np
 from depictio.dash.layouts.draggable_scenarios.add_component import add_new_component
+
+from depictio.api.v1.configs.config import logger
 
 from depictio.dash.layouts.draggable_scenarios.interactive_component_update import update_interactive_component
 from depictio.dash.layouts.stepper import create_stepper_output
@@ -56,11 +62,18 @@ def register_callbacks_draggable(app):
             Output("draggable", "children"),
             Output("draggable", "layouts"),
             Output("stored-layout", "data"),
-            Output("stored-children", "data"),
+            # Output("stored-children", "data"),
             Output("stored-edit-dashboard-mode-button", "data"),
             Output("stored-add-button", "data"),
         ],
         [
+            Input(
+                {
+                    "type": "btn-done",
+                    "index": dash.dependencies.ALL,
+                },
+                "n_clicks",
+            ),
             State(
                 {
                     "type": "interactive-component",
@@ -90,14 +103,14 @@ def register_callbacks_draggable(app):
                 "value",
             ),
             Input("stored-layout", "data"),
-            Input("stored-children", "data"),
+            # Input("stored-children", "data"),
             Input("draggable", "layouts"),
         ],
         [
             State("draggable", "children"),
             State("draggable", "layouts"),
             State("stored-layout", "data"),
-            State("stored-children", "data"),
+            # State("stored-children", "data"),
             State("stored-edit-dashboard-mode-button", "data"),
         ],
         prevent_initial_call=True,
@@ -107,29 +120,31 @@ def register_callbacks_draggable(app):
     ):
         # Getting the arguments
 
-        interactive_component_ids = args[-15]
-        stored_metadata = args[-14]
-        add_button_nclicks = args[-13]
-        switch_state = args[-12]
-        stored_add_button = args[-11]
-        remove_box_button_values = args[-10]
-        interactive_component_values = args[-9]
-        stored_layout_data = args[-8]
-        stored_children_data = args[-7]
-        new_layouts = args[-6]
-        current_draggable_children = args[-5]
-        current_layouts = args[-4]
-        stored_layout = args[-3]
-        stored_figures = args[-2]
-        stored_edit_dashboard = args[-1]
+        btn_done = args[0]
+        interactive_component_ids = args[1]
+        stored_metadata = args[2]
+        add_button_nclicks = args[3]
+        switch_state = args[4]
+        stored_add_button = args[5]
+        remove_box_button_values = args[6]
+        interactive_component_values = args[7]
+        stored_layout_data = args[8]
+        # stored_children_data = args[9]  # Commented out, adjust if including it again
+        new_layouts = args[9]
+        current_draggable_children = args[10]
+        current_layouts = args[11]
+        stored_layout = args[12]
+        # stored_figures = args[13]  # Commented out, adjust if including it again
+        stored_edit_dashboard = args[13]
 
         # Check if the callback was triggered by an input or a state
         ctx = dash.callback_context
         ctx_triggered = ctx.triggered
-        print("CTX triggered: ")
-        print(ctx_triggered)
+        logger.info("\n\n")
+        logger.info("CTX triggered: {}".format(ctx_triggered))
         triggered_input = ctx.triggered[0]["prop_id"].split(".")[0]
-        print(triggered_input)
+        logger.info("triggered_input : {}".format(triggered_input))
+
 
         # Set the switch state index to 0 if switch_state is True, else set it to -1
         switch_state_index = -1 if switch_state is True else -1
@@ -144,6 +159,11 @@ def register_callbacks_draggable(app):
                 stored_metadata_interactive,
             )
         }
+
+
+
+
+
 
         # Check if the value of the interactive component is not None
         check_value = False
@@ -175,6 +195,24 @@ def register_callbacks_draggable(app):
                     child["props"]["children"] = [sub_child]
                     continue
 
+        max_depth, deepest_type = analyze_structure_and_get_deepest_type(
+            current_draggable_children
+        )
+        logger.info("\n\n")
+        logger.info(f"Max depth: {max_depth}")
+        logger.info(f"Deepest type: {deepest_type}")
+
+        # if triggered_input.startswith("{"):
+        #     triggered_input_literal = ast.literal_eval(triggered_input)
+
+        #     folder_path = "/app/data/update_draggable_children/"
+        #     os.makedirs(folder_path, exist_ok=True)
+        #     full_path = os.path.join(folder_path, f"{triggered_input_literal['type']}_{triggered_input_literal['index']}.json")
+        #     with open(full_path, "w") as file:
+        #         json.dump(serialize_dash_component(current_draggable_children), file, indent=4)
+
+
+
         # Add a new box to the dashboard
         if triggered_input == "add-button":
             current_draggable_children, current_layouts, stored_add_button = add_new_component(
@@ -185,30 +223,47 @@ def register_callbacks_draggable(app):
                 stored_edit_dashboard,
                 ctx,
             )
-            print("\nadd-button")
-            max_depth, deepest_element_type = analyze_structure_and_get_deepest_type(
-                current_draggable_children
-            )
-            print("\n")
-            print("Max depth:", max_depth)
-            print("Deepest element type:", deepest_element_type)
+
+
             return (
                 current_draggable_children,
                 current_layouts,
                 current_layouts,
-                current_draggable_children,
+                # current_draggable_children,
                 stored_edit_dashboard,
                 stored_add_button,
             )
 
+        # elif "btn-done" in triggered_input:
+        #     logger.info("\n\n\n")
+        #     logger.info(f"btn-done {btn_done}")
+
+        #     max_depth, deepest_type = analyze_structure_and_get_deepest_type(
+
+            
+
+        #     return (
+        #         current_draggable_children,
+        #         current_layouts,
+        #         stored_layout,
+        #         stored_figures,
+        #         stored_edit_dashboard,
+        #         stored_add_button,
+        #     )
+
         elif "interactive-component" in triggered_input and check_value:
             updated_draggable_children = update_interactive_component(stored_metadata, interactive_components_dict, plotly_vizu_dict, join_deltatables, current_draggable_children)
+
+            # output_children = deepcopy(updated_draggable_children)
+
+            # with open("/app/data/interactive-component.json", "w") as file:
+            #     json.dump(serialize_dash_component(output_children), file, indent=4)
 
             return (
                 updated_draggable_children,
                 current_layouts,
                 current_layouts,
-                updated_draggable_children,
+                # updated_draggable_children,
                 stored_edit_dashboard,
                 stored_add_button,
             )
@@ -500,7 +555,7 @@ def register_callbacks_draggable(app):
                 new_layouts,
                 # selected_year,
                 new_layouts,
-                current_draggable_children,
+                # current_draggable_children,
                 stored_edit_dashboard,
                 stored_add_button,
                 # selected_year,
@@ -554,7 +609,7 @@ def register_callbacks_draggable(app):
                 new_layouts,
                 # selected_year,
                 new_layouts,
-                dash.no_update,
+                # dash.no_update,
                 # current_draggable_children,
                 stored_edit_dashboard,
                 stored_add_button,
@@ -770,7 +825,7 @@ def register_callbacks_draggable(app):
                 new_layouts,
                 # selected_year,
                 new_layouts,
-                updated_draggable_children,
+                # updated_draggable_children,
                 stored_edit_dashboard,
                 stored_add_button,
                 # selected_year,

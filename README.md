@@ -2,15 +2,14 @@
 
 ## Project Overview
 
-Depictio is an innovative web-based platform currently under development, aimed at facilitating downstream analysis in bioinformatics. It provides a dynamic and interactive dashboard experience for quality control (QC) metrics monitoring and result exploration in genomic studies. The platform is tailored towards large-scale studies and research facilities, offering support for various data formats and interactive data visualization tools.
+Depictio is an innovative web-based platform currently under development, aimed at facilitating downstream analysis in bioinformatics. It provides a dynamic and interactive dashboard experience for quality control (QC) metrics monitoring and result exploration in omics. The platform is tailored towards large-scale studies and research facilities, offering support for various data formats and interactive data visualization tools.
 
 ## Features
 
 * Dynamic Dashboards: Real-time data interaction, customizable views, and user-driven exploration features.
-* Diverse Data Format Support: Handles standard formats like CSV, TSV, XLSX, Parquet, and specialized genomic files like BED, BigBed, BigWig, BAM/CRAM, VCF.
-* AI-Assisted Dashboard Generation: Future plans include implementing AI templates for automatic data-driven dashboard creation.
+* Diverse Data Format Support: Handles standard formats like CSV, TSV, XLSX, Parquet, and omics files like BED, BigBed, BigWig, BAM/CRAM, VCF.
 * Robust Backend Technologies: Utilizes FastAPI, MongoDB, and Redis cache for high-performance data management and processing.
-* Intuitive Frontend: Built on Plotly Dash, a ReactJS-based framework, complemented by visualization tools like JBrowse and Cytoscape.
+* Intuitive Frontend: Built on Plotly Dash, a ReactJS-based framework
 
 ## Current Status
 
@@ -18,20 +17,17 @@ Depictio is currently in the development phase and is not yet available for gene
 
 ## Architecture
 
-![Depictio architecture](./docs/images/excalidraw.png "Depictio architecture")
+![Depictio architecture](./docs/images/main.png "Depictio architecture")
 
-### Kubernetes 
+Depictio architecture is currently composed of two main aspects: a microservices architecture (to be executed into a docker-compose and late on in a kubernetes cluster) and a CLI client to be installed locally on-premise where the data to be scanned is located. 
+There are currently 6 main microservices running:
+- 1. FastAPI instance
+- 2. mongoDB database
+- 3. redis cache system
+- 4. JBrowse on-premise genome browser
+- 5. MinIO S3 bucket management instance
+- 6. Plotly Dash server
 
-- API (FastAPI)
-- NoSQL database (MongoDB)
-- Interactive Frontend (plotly Dash)
-- Caching mechanism (redis)
-- S3 bucket system (MinIO)
-- Genome browser (Jbrowse)
-
-### Local
-
-- CLI client
 
 ## Installation
 

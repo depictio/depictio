@@ -4,8 +4,10 @@ import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 from dash import html, dcc, Input, Output, State, ALL, MATCH
 import dash
+import httpx
 
 from depictio.dash.utils import analyze_structure_and_get_deepest_type, get_size
+from depictio.api.v1.configs.config import API_BASE_URL, logger
 
 
 def register_callbacks_header(app):
@@ -13,7 +15,13 @@ def register_callbacks_header(app):
         Output("dummy-output", "children"),
         Input("save-button-dashboard", "n_clicks"),
         State("stored-layout", "data"),
-        State("stored-children", "data"),
+        State(
+            {
+                "type": "stored-metadata-component",
+                "index": dash.dependencies.ALL,
+            },
+            "data",
+        ),
         State("stored-edit-dashboard-mode-button", "data"),
         State("stored-add-button", "data"),
         prevent_initial_call=True,
@@ -21,46 +29,41 @@ def register_callbacks_header(app):
     def save_data_dashboard(
         n_clicks,
         stored_layout_data,
-        stored_children_data,
+        stored_metadata,
         edit_dashboard_mode_button,
         add_button,
     ):
         if n_clicks > 0:
-            print("\n\n\n")
-            print("save_data_dashboard INSIDE")
+            logger.info("\n\n\n")
+            logger.info(f"save_data_dashboard INSIDE")
 
-            print("stored_layout_data", type(stored_layout_data), get_size(stored_layout_data))
-            print("stored_children_data", type(stored_children_data), get_size(stored_children_data))
-            print("edit_dashboard_mode_button", type(edit_dashboard_mode_button), get_size(edit_dashboard_mode_button))
-            print("add_button", type(add_button), get_size(add_button))
+            logger.info(f"stored_layout_data: {type(stored_layout_data)} {get_size(stored_layout_data)}")
+            logger.info(f"stored_metadata: {type(stored_metadata)} {get_size(stored_metadata)}")
+            logger.info(f"edit_dashboard_mode_button: {type(edit_dashboard_mode_button)} {get_size(edit_dashboard_mode_button)}")
+            logger.info(f"add_button: {type(add_button)} {get_size(add_button)}")
+            logger.info(f"n_clicks: {n_clicks}")
 
-            (
-                max_depth,
-                deepest_element_type,
-            ) = analyze_structure_and_get_deepest_type(stored_children_data)
-            print("\n")
-            print("Max depth:", max_depth)
-            print("Deepest element type:", deepest_element_type)
 
-            for child in stored_children_data:
-                for sub_child in child["props"]["children"]:
-                    if sub_child["props"]["id"]["type"] == "add-content":
-                        child["props"]["children"] = [sub_child]
-                        continue
-            (
-                max_depth,
-                deepest_element_type,
-            ) = analyze_structure_and_get_deepest_type(stored_children_data)
-            print("\n")
-            print("Max depth:", max_depth)
-            print("Deepest element type:", deepest_element_type)
+            dashboard_data = {
+                "stored_layout_data": stored_layout_data,
+                "stored_metadata": stored_metadata,
+                "stored_edit_dashboard_mode_button": edit_dashboard_mode_button,
+                "stored_add_button": add_button,
+                "version": "1",
+            }
+            dashboard_id = "1"
+            dashboard_data["dashboard_id"] = dashboard_id
+            logger.info("Dashboard data:")
+            logger.info(dashboard_data)
 
-            # data = {
-            #     "stored_layout_data": stored_layout_data,
-            #     "stored_children_data": stored_children_data,
-            #     "stored_edit_dashboard_mode_button": edit_dashboard_mode_button,
-            #     "stored_add_button": add_button,
-            # }
+
+            response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/dashboards/save/{dashboard_id}", json=dashboard_data)
+            if response.status_code == 200:
+                logger.warn("Dashboard data saved successfully.")
+            else:
+                logger.warn(f"Failed to save dashboard data: {response.json()}")
+
+
             # with open("/Users/tweber/Gits/depictio/data/depictio_data.json", "w") as file:
             #     json.dump(data, file)
             return []
@@ -81,7 +84,7 @@ def register_callbacks_header(app):
             raise dash.exceptions.PreventUpdate
 
         trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
-        # print(trigger_id, n_save, n_close)
+        # logger.info(trigger_id, n_save, n_close)
 
         if trigger_id == "save-button-dashboard":
             if n_save is None or n_save == 0:
@@ -112,11 +115,11 @@ def register_callbacks_header(app):
         prevent_initial_call=True,
     )
     def update_button(n_clicks, children, btn_id, switch_state):
-        print("\n\n\n")
-        print("update_button")
-        # print(children)
-        # print(analyze_structure(children))
-        # print(len(children))
+        # logger.info("\n\n\n")
+        # logger.info("update_button")
+        # logger.info(children)
+        # logger.info(analyze_structure(children))
+        # logger.info(len(children))
 
         # Depth 0 ID: {'type': 'graph', 'index': 32}
 
@@ -143,13 +146,13 @@ def register_callbacks_header(app):
         # Element 1 ID: {'type': 'graph', 'index': 33}
         #   Depth 1 ID: {'type': 'graph', 'index': 33}
 
-        # print(children["props"]["id"])
+        # logger.info(children["props"]["id"])
         # children = [children[4]]
-        # print(len(children))
-        # print(children)
+        # logger.info(len(children))
+        # logger.info(children)
 
         children["props"]["id"]["type"] = "updated-" + children["props"]["id"]["type"]
-        # print(children)
+        # logger.info(children)
 
         btn_index = btn_id["index"]  # Extracting index from btn_id dict
 
@@ -183,7 +186,7 @@ def design_header(data):
     # https://dash.plotly.com/dash-core-components/store
     backend_components = html.Div(
         [
-            dcc.Store(id="stored-children", storage_type="memory"),
+            # dcc.Store(id="stored-children", storage_type="memory"),
             dcc.Store(id="stored-layout", storage_type="memory"),
         ]
     )
@@ -327,7 +330,8 @@ def enable_box_edit_mode(box, switch_state=True):
     # )
 
     if switch_state:
-        box_components_list = [remove_button, edit_button, box]
+        box_components_list = [remove_button, box]
+        # box_components_list = [remove_button, edit_button, box]
         # if box["props"]["children"]["props"]["children"][1]["props"]["id"]["type"] == "interactive-component":
         #     box_components_list.append(reset_button)
     else:
@@ -342,29 +346,29 @@ def enable_box_edit_mode(box, switch_state=True):
 
 
 def enable_box_edit_mode_dev(sub_child, switch_state=True):
-    print("enable_box_edit_mode_dev")
-    print(switch_state)
+    logger.info("enable_box_edit_mode_dev")
+    logger.info(switch_state)
 
     # Extract the required substructure based on the depth analysis
     box = sub_child["props"]["children"]
-    print(box)
+    logger.info(box)
 
     # Check if the children attribute is a list
     if isinstance(box["props"]["children"], list):
-        print("List")
+        logger.info("List")
 
         # Identify if edit and remove buttons are present
         edit_button_exists = any(child.get("props", {}).get("id", {}).get("type") == "edit-box-button" for child in box["props"]["children"])
         remove_button_exists = any(child.get("props", {}).get("id", {}).get("type") == "remove-box-button" for child in box["props"]["children"])
 
-        print(switch_state, edit_button_exists, remove_button_exists)
+        logger.info(switch_state, edit_button_exists, remove_button_exists)
 
         # If switch_state is true and buttons are not yet added, add them
         if switch_state and not (edit_button_exists and remove_button_exists):
             # Assuming that the ID for box is structured like: {'type': '...', 'index': 1}
-            print("\n\n\n")
-            print("Adding buttons")
-            print(box["props"]["id"])
+            logger.info("\n\n\n")
+            logger.info("Adding buttons")
+            logger.info(box["props"]["id"])
             btn_index = box["props"]["id"]["index"]
 
             edit_button = dbc.Button(
@@ -387,16 +391,16 @@ def enable_box_edit_mode_dev(sub_child, switch_state=True):
 
         # If switch_state is false and buttons are present, remove them
         elif not switch_state and edit_button_exists and remove_button_exists:
-            # print("Removing buttons")
+            # logger.info("Removing buttons")
             # Assuming the last element is the main content box
-            # print(analyze_structure(box))
-            # print(box)
+            # logger.info(analyze_structure(box))
+            # logger.info(box)
             content_box = box["props"]["children"][-1]
-            # print(content_box)
+            # logger.info(content_box)
             box["props"]["children"] = [content_box]
-            # print(box)
+            # logger.info(box)
 
     sub_child["props"]["children"] = box
-    # print(sub_child)
+    # logger.info(sub_child)
     # Return the modified sub_child structure
     return sub_child
