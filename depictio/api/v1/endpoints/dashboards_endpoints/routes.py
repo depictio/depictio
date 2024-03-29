@@ -9,19 +9,21 @@ from depictio.api.v1.models.base import convert_objectid_to_str
 dashboards_endpoint_router = APIRouter()
 
 
-@dashboards_endpoint_router.get("/get/{dashboard_id}")
-async def list_versions(
-    dashboard_id: str,
-    # current_user: str = Depends(get_current_user),
-):
+@dashboards_endpoint_router.get("/get/{dashboard_id}", response_model=DashboardData)
+async def get_dashboard(dashboard_id: str):
     """
-    Fetch all entries related to a dashboard ID
+    Fetch dashboard data related to a dashboard ID.
     """
-    dashboard_id = ObjectId(dashboard_id)
-    # Get all entries related to a dashboard ID
-    entries = dashboards_collection.find({"dashboard_id": dashboard_id})
-    entries = [convert_objectid_to_str(entry) for entry in entries]
-    return entries
+    # Find the document in the collection that matches the provided dashboard_id
+    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+
+    if not dashboard_data:
+        raise HTTPException(status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found.")
+
+    # Remove the MongoDB '_id' field from the response (optional, based on your need)
+    dashboard_data.pop("_id", None)
+    
+    return dashboard_data
 
 
 @dashboards_endpoint_router.post("/save/{dashboard_id}")
