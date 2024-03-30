@@ -64,8 +64,10 @@ def register_callbacks_header(app):
                 logger.warn(f"Failed to save dashboard data: {response.json()}")
 
 
-            # with open("/Users/tweber/Gits/depictio/data/depictio_data.json", "w") as file:
-            #     json.dump(data, file)
+
+
+            with open("/Users/tweber/Gits/depictio/data/depictio_data.json", "w") as file:
+                json.dump(dashboard_data, file)
             return []
         return dash.no_update
 
