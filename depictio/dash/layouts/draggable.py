@@ -111,6 +111,7 @@ def register_callbacks_draggable(app):
             State("stored-layout", "data"),
             State("stored-children", "data"),
             State("stored-edit-dashboard-mode-button", "data"),
+            State("toggle-interactivity-button", "checked"),
             Input("remove-all-components-button", "n_clicks"),
         ],
         prevent_initial_call=True,
@@ -136,7 +137,8 @@ def register_callbacks_draggable(app):
         stored_layout = args[13]
         stored_figures = args[14]  # Commented out, adjust if including it again
         stored_edit_dashboard = args[15]
-        remove_all_components_button = args[16]
+        toggle_interactivity_button = args[16]
+        remove_all_components_button = args[17]
 
         # Check if the callback was triggered by an input or a state
         ctx = dash.callback_context
@@ -239,7 +241,7 @@ def register_callbacks_draggable(app):
         #         stored_add_button,
         #     )
 
-        elif "interactive-component" in triggered_input and check_value:
+        elif "interactive-component" in triggered_input and check_value and toggle_interactivity_button:
             updated_draggable_children = update_interactive_component(stored_metadata, interactive_components_dict, plotly_vizu_dict, join_deltatables, current_draggable_children)
 
             # output_children = deepcopy(updated_draggable_children)
@@ -436,7 +438,7 @@ def register_callbacks_draggable(app):
 
         # if the remove button was clicked, return an empty list to remove all the plots
 
-        elif "remove-" in triggered_input and [e for e in args[-11] if e]:
+        elif "remove-" in triggered_input and [e for e in remove_box_button_values if e]:
             print("\nREMOVE")
             print("Triggered Input:", triggered_input)
 
