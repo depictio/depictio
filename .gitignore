@@ -197,3 +197,5 @@ dev/dev_design_visu/data/
 depictio/jbrowse2_configs/
 jbrowse2_sessions/
 jbrowse2_configs/
+data/depictio_data.json
+data/jbrowse_df_mapping_dict.json
