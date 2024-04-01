@@ -112,6 +112,7 @@ def register_callbacks_draggable(app):
             State("stored-layout", "data"),
             State("stored-children", "data"),
             State("stored-edit-dashboard-mode-button", "data"),
+            Input("remove-all-components-button", "n_clicks"),
         ],
         prevent_initial_call=True,
     )
@@ -136,6 +137,7 @@ def register_callbacks_draggable(app):
         stored_layout = args[13]
         stored_figures = args[14]  # Commented out, adjust if including it again
         stored_edit_dashboard = args[15]
+        remove_all_components_button = args[16]
 
         # Check if the callback was triggered by an input or a state
         ctx = dash.callback_context
@@ -448,6 +450,8 @@ def register_callbacks_draggable(app):
 
         # if the remove button was clicked, return an empty list to remove all the plots
 
+
+
         elif "remove-" in triggered_input and [e for e in args[-10] if e]:
             print("\nREMOVE")
             print("Triggered Input:", triggered_input)
@@ -566,6 +570,16 @@ def register_callbacks_draggable(app):
             #     current_layouts,
             #     updated_draggable_children,
             # )
+
+        elif "remove-all-components-button" in triggered_input:
+            return (
+                [],
+                {},
+                {},
+                [],
+                stored_edit_dashboard,
+                stored_add_button,
+            )
 
         elif triggered_input == "stored-layout" or triggered_input == "stored-children":
             if stored_layout_data and stored_children_data:

@@ -15,8 +15,8 @@ min_step = 0
 max_step = 3
 active = 0
 
-def register_callbacks_stepper(app):
 
+def register_callbacks_stepper(app):
     @app.callback(
         Output({"type": "modal", "index": MATCH}, "is_open"),
         [Input({"type": "btn-done", "index": MATCH}, "n_clicks")],
@@ -102,10 +102,6 @@ def register_callbacks_stepper(app):
         else:
             raise dash.exceptions.PreventUpdate
 
-
-
-
-
     @app.callback(
         Output({"type": "stepper-basic-usage", "index": MATCH}, "active"),
         Output({"type": "next-basic-usage", "index": MATCH}, "disabled"),
@@ -118,9 +114,6 @@ def register_callbacks_stepper(app):
         prevent_initial_call=True,
     )
     def update(back, next_, workflow_selection, data_selection, btn_component, current):
-
-
-
         if back is None and next_ is None:
             if workflow_selection is not None and data_selection is not None:
                 disable_next = False
@@ -233,7 +226,6 @@ def register_callbacks_stepper(app):
 
 
 def create_stepper_output(n, active, new_plot_id, data_collection_type=None):
-
     stepper_dropdowns = html.Div(
         [
             html.Hr(),
@@ -366,12 +358,13 @@ def create_stepper_output(n, active, new_plot_id, data_collection_type=None):
                                                         },
                                                         n_clicks=0,
                                                         size="xl",
-                                                        color="grape",
+                                                        # color="grape",
                                                         style={
                                                             "display": "block",
                                                             "align": "center",
                                                             "height": "100px",
                                                         },
+                                                        leftIcon=DashIconify(icon="bi:check-circle", width=30, color="white"),
                                                     ),
                                                 ]
                                             ),

@@ -166,10 +166,21 @@ def register_callbacks_header(app):
 
         return new_draggable_child, []
 
-    # @app.callback(
-    #     Output({"type": "add-button", "index": MATCH}, "disabled"),
-    #     Output({"type": "save-button", "index": MATCH}, "disabled"),
-    #     Input()
+    @app.callback(
+        Output("add-button", "disabled"),
+        Output("save-button-dashboard", "disabled"),
+        Output("remove-all-components-button", "disabled"),
+        Output("toggle-interactivity-button", "disabled"),
+        Output("dashboard-version", "disabled"),
+        Input("edit-dashboard-mode-button", "checked"),
+        prevent_initial_call=True,
+    )
+    def toggle_buttons(switch_state):
+        logger.info("\n\n\n")
+        logger.info("toggle_buttons")
+        logger.info(switch_state)
+
+        return [not switch_state] * 5
 
 
 def design_header(data):
@@ -278,48 +289,15 @@ def design_header(data):
                 width=2,
             ),
             dbc.Col(
-                [
-                    dbc.Row(
-                        [
-                            dmc.FloatingTooltip(
-                                label=f"Time: {current_time}",
-                                color="gray",
-                                children=[
-                                    dmc.Badge(
-                                        "v0.1.0",
-                                        leftSection=DashIconify(
-                                            icon="mdi:information-outline",
-                                            width=24,
-                                            # radius="xl",
-                                            # mr=5,
-                                        ),
-                                        sx={"paddingLeft": 0},
-                                        size="lg",
-                                        radius="xl",
-                                        color="blue",
-                                    )
-                                ],
-                            )
-                        ]
-                    ),
-                    # dbc.Row(
-                    #     [
-                    #         dmc.Badge(
-                    #             current_time,
-                    #             leftSection=DashIconify(
-                    #                 icon="mdi:clock-time-four-outline",
-                    #                 width=24,
-                    #                 # radius="xl",
-                    #                 # mr=5,
-                    #             ),
-                    #             sx={"paddingLeft": 0,},
-                    #             size="lg",
-                    #             radius="xl",
-                    #             color="blue",
-                    #         )
-                    #     ], style={"paddingTop": "5px"}
-                    # )
-                ],
+                dmc.Select(
+                    id="dashboard-version",
+                    data=["v1", "v2"],
+                    value="v2",
+                    label="Dashboard version",
+                    style={"width": 150},
+                    icon=DashIconify(icon="mdi:format-list-bulleted-square", width=16, color=dmc.theme.DEFAULT_COLORS["blue"][5]),
+                    rightSection=DashIconify(icon="radix-icons:chevron-down"),
+                ),
                 width=1,
             ),
             dbc.Col(width=1),
@@ -337,6 +315,7 @@ def design_header(data):
                                 n_clicks=init_nclicks_add_button["count"],
                                 style=button_style,
                                 disabled=disabled,
+                                leftIcon=DashIconify(icon="mdi:plus", width=16, color="white"),
                             ),
                             # Center part of the header - Save button + related modal
                             modal_save_button,
@@ -349,12 +328,26 @@ def design_header(data):
                                 gradient={"from": "teal", "to": "lime", "deg": 105},
                                 n_clicks=0,
                                 disabled=disabled,
+                                leftIcon=DashIconify(icon="mdi:content-save", width=16, color="white"),
+                                # width of the button
+                                style={"width": "200px"},
+                            ),
+                            dmc.Button(
+                                "Remove all components",
+                                id="remove-all-components-button",
+                                leftIcon=DashIconify(icon="mdi:trash-can-outline", width=16, color="white"),
+                                size="lg",
+                                radius="xl",
+                                variant="gradient",
+                                gradient={"from": "red", "to": "pink", "deg": 105},
+                                style=button_style,
+                                disabled=disabled,
                             ),
                         ],
                         style={"display": "flex", "alignItems": "center"},
                     )
                 ],
-                width=5,
+                width=7,
             ),
             dbc.Col([dbc.Row(edit_switch), dbc.Row(toggle_interactivity, style={"paddingTop": "5px"})], width=2, style={"justifyContent": "flex-end"}),
             # Store the number of clicks for the add button and edit dashboard mode button
@@ -389,11 +382,19 @@ def enable_box_edit_mode(box, switch_state=True):
         style={"margin-left": "12px"},
         # size="lg",
     )
-    remove_button = dbc.Button(
+    from dash_iconify import DashIconify
+
+    remove_button = dmc.Button(
         "Remove",
         id={"type": "remove-box-button", "index": f"{btn_index}"},
-        color="danger",
+        color="red",
+        leftIcon=DashIconify(icon="mdi:trash-can-outline", width=16, color="white"),
     )
+    # remove_button = dbc.Button(
+    #     "Remove",
+    #     id={"type": "remove-box-button", "index": f"{btn_index}"},
+    #     color="danger",
+    # )
 
     # reset_button = dbc.Button(
     #     "Reset",
