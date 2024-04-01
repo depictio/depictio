@@ -62,7 +62,7 @@ def register_callbacks_draggable(app):
             Output("draggable", "children"),
             Output("draggable", "layouts"),
             Output("stored-layout", "data"),
-            # Output("stored-children", "data"),
+            Output("stored-children", "data"),
             Output("stored-edit-dashboard-mode-button", "data"),
             Output("stored-add-button", "data"),
         ],
@@ -103,14 +103,14 @@ def register_callbacks_draggable(app):
                 "value",
             ),
             Input("stored-layout", "data"),
-            # Input("stored-children", "data"),
+            Input("stored-children", "data"),
             Input("draggable", "layouts"),
         ],
         [
             State("draggable", "children"),
             State("draggable", "layouts"),
             State("stored-layout", "data"),
-            # State("stored-children", "data"),
+            State("stored-children", "data"),
             State("stored-edit-dashboard-mode-button", "data"),
         ],
         prevent_initial_call=True,
@@ -129,13 +129,13 @@ def register_callbacks_draggable(app):
         remove_box_button_values = args[6]
         interactive_component_values = args[7]
         stored_layout_data = args[8]
-        # stored_children_data = args[9]  # Commented out, adjust if including it again
-        new_layouts = args[9]
-        current_draggable_children = args[10]
-        current_layouts = args[11]
-        stored_layout = args[12]
-        # stored_figures = args[13]  # Commented out, adjust if including it again
-        stored_edit_dashboard = args[13]
+        stored_children_data = args[9]  # Commented out, adjust if including it again
+        new_layouts = args[10]
+        current_draggable_children = args[11]
+        current_layouts = args[12]
+        stored_layout = args[13]
+        stored_figures = args[14]  # Commented out, adjust if including it again
+        stored_edit_dashboard = args[15]
 
         # Check if the callback was triggered by an input or a state
         ctx = dash.callback_context
@@ -229,7 +229,7 @@ def register_callbacks_draggable(app):
                 current_draggable_children,
                 current_layouts,
                 current_layouts,
-                # current_draggable_children,
+                current_draggable_children,
                 stored_edit_dashboard,
                 stored_add_button,
             )
@@ -263,7 +263,7 @@ def register_callbacks_draggable(app):
                 updated_draggable_children,
                 current_layouts,
                 current_layouts,
-                # updated_draggable_children,
+                updated_draggable_children,
                 stored_edit_dashboard,
                 stored_add_button,
             )
@@ -555,7 +555,7 @@ def register_callbacks_draggable(app):
                 new_layouts,
                 # selected_year,
                 new_layouts,
-                # current_draggable_children,
+                current_draggable_children,
                 stored_edit_dashboard,
                 stored_add_button,
                 # selected_year,
@@ -567,38 +567,38 @@ def register_callbacks_draggable(app):
             #     updated_draggable_children,
             # )
 
-        # elif triggered_input == "stored-layout" or triggered_input == "stored-children":
-        #     if stored_layout_data and stored_children_data:
-        #         return (
-        #             stored_children_data,
-        #             stored_layout_data,
-        #             stored_layout_data,
-        #             stored_children_data,
-        #             stored_edit_dashboard,
-        #             stored_add_button,
-        #         )
-        #     else:
-        #         # Load data from the file if it exists
-        #         loaded_data = None
-        #         # loaded_data = load_depictio_data()
-        #         if loaded_data:
-        #             return (
-        #                 loaded_data["stored_children_data"],
-        #                 loaded_data["stored_layout_data"],
-        #                 loaded_data["stored_layout_data"],
-        #                 loaded_data["stored_children_data"],
-        #                 stored_edit_dashboard,
-        #                 stored_add_button,
-        #             )
-        #         else:
-        #             return (
-        #                 current_draggable_children,
-        #                 {},
-        #                 stored_layout,
-        #                 stored_figures,
-        #                 stored_edit_dashboard,
-        #                 stored_add_button,
-        #             )
+        elif triggered_input == "stored-layout" or triggered_input == "stored-children":
+            if stored_layout_data and stored_children_data:
+                return (
+                    stored_children_data,
+                    stored_layout_data,
+                    stored_layout_data,
+                    stored_children_data,
+                    stored_edit_dashboard,
+                    stored_add_button,
+                )
+            else:
+                # Load data from the file if it exists
+                # loaded_data = None
+                loaded_data = load_depictio_data()
+                if loaded_data:
+                    return (
+                        loaded_data["stored_children_data"],
+                        loaded_data["stored_layout_data"],
+                        loaded_data["stored_layout_data"],
+                        loaded_data["stored_children_data"],
+                        stored_edit_dashboard,
+                        stored_add_button,
+                    )
+                else:
+                    return (
+                        current_draggable_children,
+                        {},
+                        stored_layout,
+                        stored_figures,
+                        stored_edit_dashboard,
+                        stored_add_button,
+                    )
 
         elif triggered_input == "draggable":
             # for child in current_draggable_children:
@@ -609,7 +609,7 @@ def register_callbacks_draggable(app):
                 new_layouts,
                 # selected_year,
                 new_layouts,
-                # dash.no_update,
+                dash.no_update,
                 # current_draggable_children,
                 stored_edit_dashboard,
                 stored_add_button,
@@ -825,7 +825,7 @@ def register_callbacks_draggable(app):
                 new_layouts,
                 # selected_year,
                 new_layouts,
-                # updated_draggable_children,
+                updated_draggable_children,
                 stored_edit_dashboard,
                 stored_add_button,
                 # selected_year,
