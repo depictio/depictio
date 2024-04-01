@@ -1,4 +1,3 @@
-
 import ast
 from copy import deepcopy
 import json
@@ -89,7 +88,7 @@ def register_callbacks_draggable(app):
                 "data",
             ),
             Input("add-button", "n_clicks"),
-            Input("edit-dashboard-mode-button", "value"),
+            Input("edit-dashboard-mode-button", "checked"),
             State("stored-add-button", "data"),
             Input(
                 {"type": "remove-box-button", "index": dash.dependencies.ALL},
@@ -146,10 +145,9 @@ def register_callbacks_draggable(app):
         logger.info("CTX triggered: {}".format(ctx_triggered))
         triggered_input = ctx.triggered[0]["prop_id"].split(".")[0]
         logger.info("triggered_input : {}".format(triggered_input))
-
-
+        logger.info("Switch state: {}".format(switch_state))
         # Set the switch state index to 0 if switch_state is True, else set it to -1
-        switch_state_index = -1 if switch_state is True else -1
+        
 
         # Create a dictionary to store the values of the interactive components
         stored_metadata_interactive = [e for e in stored_metadata if e["component_type"] == "interactive_component"]
@@ -161,11 +159,6 @@ def register_callbacks_draggable(app):
                 stored_metadata_interactive,
             )
         }
-
-
-
-
-
 
         # Check if the value of the interactive component is not None
         check_value = False
@@ -197,9 +190,7 @@ def register_callbacks_draggable(app):
                     child["props"]["children"] = [sub_child]
                     continue
 
-        max_depth, deepest_type = analyze_structure_and_get_deepest_type(
-            current_draggable_children
-        )
+        max_depth, deepest_type = analyze_structure_and_get_deepest_type(current_draggable_children)
         logger.info("\n\n")
         logger.info(f"Max depth: {max_depth}")
         logger.info(f"Deepest type: {deepest_type}")
@@ -213,8 +204,6 @@ def register_callbacks_draggable(app):
         #     with open(full_path, "w") as file:
         #         json.dump(serialize_dash_component(current_draggable_children), file, indent=4)
 
-
-
         # Add a new box to the dashboard
         if triggered_input == "add-button":
             current_draggable_children, current_layouts, stored_add_button = add_new_component(
@@ -225,7 +214,6 @@ def register_callbacks_draggable(app):
                 stored_edit_dashboard,
                 ctx,
             )
-
 
             return (
                 current_draggable_children,
@@ -241,8 +229,6 @@ def register_callbacks_draggable(app):
         #     logger.info(f"btn-done {btn_done}")
 
         #     max_depth, deepest_type = analyze_structure_and_get_deepest_type(
-
-            
 
         #     return (
         #         current_draggable_children,
@@ -450,9 +436,7 @@ def register_callbacks_draggable(app):
 
         # if the remove button was clicked, return an empty list to remove all the plots
 
-
-
-        elif "remove-" in triggered_input and [e for e in args[-10] if e]:
+        elif "remove-" in triggered_input and [e for e in args[-11] if e]:
             print("\nREMOVE")
             print("Triggered Input:", triggered_input)
 
@@ -688,6 +672,45 @@ def register_callbacks_draggable(app):
         # )
 
         elif triggered_input == "edit-dashboard-mode-button":
+
+            for child in current_draggable_children:
+                # Get the deepest element type
+                (
+                    max_depth,
+                    deepest_element_type,
+                ) = analyze_structure_and_get_deepest_type(child)
+                print("\n")
+                print("analyze_structure_and_get_deepest_type")
+                print(max_depth, deepest_element_type)
+
+                if deepest_element_type in ["graph", "table-aggrid", "card-value", "interactive-component", "iframe-jbrowse"]:
+                    if not switch_state:
+                        child["props"]["children"][0]["props"]["children"]["props"]["children"] = [child["props"]["children"][0]["props"]["children"]["props"]["children"][-1]]
+                    else:
+                        child["props"]["children"][0]["props"]["children"]["props"]["children"] = [
+                            dmc.Button(
+                                "Remove",
+                                id={"type": "remove-box-button", "index": str(child["props"]["children"][0]["props"]["children"]["props"]["children"][-1]["props"]["id"]["index"])},
+                                color="red",
+                                leftIcon=DashIconify(icon="mdi:trash-can-outline", width=16, color="white"),
+                            ),
+                            child["props"]["children"][0]["props"]["children"]["props"]["children"][-1],
+                        ]
+                # elif deepest_element_type == "iframe-jbrowse":
+                #     if not switch_state:
+                #         child["props"]["children"][0]["props"]["children"]["props"]["children"] = [child["props"]["children"][0]["props"]["children"]["props"]["children"][-1]]
+                #     else:
+                #         child["props"]["children"][0]["props"]["children"]["props"]["children"] = [
+                #             dmc.Button(
+                #                 "Remove",
+                #                 id={"type": "remove-box-button", "index": str(child["props"]["children"][0]["props"]["children"]["props"]["children"][-1]["props"]["id"]["index"])},
+                #                 color="red",
+                #                 leftIcon=DashIconify(icon="mdi:trash-can-outline", width=16, color="white"),
+                #             ),
+                #             child["props"]["children"][0]["props"]["children"]["props"]["children"][-1],
+                #         ]
+
+
             # print("\n\n")
 
             # switch_state = True if len(ctx.triggered[0]["value"]) > 0 else False
@@ -696,7 +719,7 @@ def register_callbacks_draggable(app):
             # print(current_draggable_children)
             # assuming the switch state is added as the first argument in args
             # updated_draggable_children = []
-            updated_draggable_children = current_draggable_children
+            # updated_draggable_children = current_draggable_children
             # print("\n\n")
             # print("edit-dashboard-mode-button")
             # print(switch_state)
@@ -835,11 +858,11 @@ def register_callbacks_draggable(app):
             # updated_draggable_children.append(child)
 
             return (
-                updated_draggable_children,
+                current_draggable_children,
                 new_layouts,
                 # selected_year,
                 new_layouts,
-                updated_draggable_children,
+                current_draggable_children,
                 stored_edit_dashboard,
                 stored_add_button,
                 # selected_year,
