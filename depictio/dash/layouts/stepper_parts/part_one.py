@@ -59,6 +59,19 @@ def register_callbacks_stepper_part_one(app):
                     html.Tr(
                         [
                             html.Td(
+                                "Workflow ID:",
+                                style={
+                                    "font-weight": "bold",
+                                    "text-align": "left",
+                                    "width": "20%",
+                                },
+                            ),
+                            html.Td(workflow_id, style={"text-align": "left"}),
+                        ]
+                    ),                    
+                    html.Tr(
+                        [
+                            html.Td(
                                 "Type:",
                                 style={
                                     "font-weight": "bold",
@@ -111,6 +124,20 @@ def register_callbacks_stepper_part_one(app):
                             html.Td(dc_specs["_id"], style={"text-align": "left"}),
                         ]
                     ),
+                    html.Tr(
+                        [
+                            html.Td(
+                                "Delta Table version:",
+                                style={
+                                    "font-weight": "bold",
+                                    "text-align": "left",
+                                    "width": "20%",
+                                },
+                            ),
+                            html.Td("v1", style={"text-align": "left"}),
+                        ]
+                    ),
+
                 ],
                 style={"width": "100%", "table-layout": "fixed"},
             )

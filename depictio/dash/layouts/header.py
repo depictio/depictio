@@ -1,3 +1,4 @@
+import datetime
 import json
 import sys
 import dash_bootstrap_components as dbc
@@ -22,6 +23,7 @@ def register_callbacks_header(app):
             },
             "data",
         ),
+        State("stored-children", "data"),
         State("stored-edit-dashboard-mode-button", "data"),
         State("stored-add-button", "data"),
         prevent_initial_call=True,
@@ -30,6 +32,7 @@ def register_callbacks_header(app):
         n_clicks,
         stored_layout_data,
         stored_metadata,
+        children,
         edit_dashboard_mode_button,
         add_button,
     ):
@@ -43,7 +46,6 @@ def register_callbacks_header(app):
             logger.info(f"add_button: {type(add_button)} {get_size(add_button)}")
             logger.info(f"n_clicks: {n_clicks}")
 
-
             dashboard_data = {
                 "stored_layout_data": stored_layout_data,
                 "stored_metadata": stored_metadata,
@@ -56,17 +58,15 @@ def register_callbacks_header(app):
             logger.info("Dashboard data:")
             logger.info(dashboard_data)
 
-
             response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/dashboards/save/{dashboard_id}", json=dashboard_data)
             if response.status_code == 200:
                 logger.warn("Dashboard data saved successfully.")
             else:
                 logger.warn(f"Failed to save dashboard data: {response.json()}")
 
+            dashboard_data["stored_children_data"] = children
 
-
-
-            with open("/Users/tweber/Gits/depictio/data/depictio_data.json", "w") as file:
+            with open("/app/data/depictio_data.json", "w") as file:
                 json.dump(dashboard_data, file)
             return []
         return dash.no_update
@@ -188,7 +188,7 @@ def design_header(data):
     # https://dash.plotly.com/dash-core-components/store
     backend_components = html.Div(
         [
-            # dcc.Store(id="stored-children", storage_type="memory"),
+            dcc.Store(id="stored-children", storage_type="memory"),
             dcc.Store(id="stored-layout", storage_type="memory"),
         ]
     )
@@ -221,6 +221,7 @@ def design_header(data):
         id="success-modal-dashboard",
         centered=True,
     )
+    from dash_iconify import DashIconify
 
     # APP Header
 
@@ -229,7 +230,7 @@ def design_header(data):
         "alignItems": "center",
         "justifyContent": "space-between",
         "padding": "10px 20px",
-        "backgroundColor": "#f5f5f5",
+        "backgroundColor": "#FCFCFC",
         "borderBottom": "1px solid #eaeaea",
         "fontFamily": "'Open Sans', sans-serif",
     }
@@ -239,53 +240,123 @@ def design_header(data):
 
     # Right side of the header - Edit dashboard mode button
     # if data:
-    edit_switch = dbc.Checklist(
+    edit_switch = dmc.Switch(
+        # edit_switch = dbc.Checklist(
         id="edit-dashboard-mode-button",
+        label="Edit dashboard",
+        thumbIcon=DashIconify(icon="mdi:lead-pencil", width=16, color=dmc.theme.DEFAULT_COLORS["teal"][5]),
         style={"fontSize": "22px"},
-        options=[{"label": "Edit dashboard", "value": 0}],
-        value=init_nclicks_edit_dashboard_mode_button,
-        switch=True,
+        # options=[{"label": "Edit dashboard", "value": 0}],
+        # value=init_nclicks_edit_dashboard_mode_button,
+        # switch=True,
+        checked=True,
+        color="teal",
+    )
+    toggle_interactivity = dmc.Switch(
+        label="Toggle interactivity",
+        id="toggle-interactivity-button",
+        thumbIcon=DashIconify(icon="mdi:gesture-tap", width=16, color=dmc.theme.DEFAULT_COLORS["orange"][5]),
+        style={"fontSize": "22px"},
+        # options=[{"label": "Toggle interactivity", "value": 0}],
+        # value=0,
+        checked=True,
+        # switch=True,
+        color="orange",
     )
     # else:
     #     edit_switch = html.Div()
 
     # TODO: toggle interactivity button
 
+    current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     header = html.Div(
         [
             # html.H1("Depictio", style=title_style),
             # Invisible div to store the test data
-            html.Div(id="dummy-output", style={"display": "none"}),
-            html.Img(src=dash.get_asset_url("logo.png")),
-            html.Div(
-                [
-                    # Left side of the header - Add new component button
-                    dmc.Button(
-                        "Add new component",
-                        id="add-button",
-                        size="lg",
-                        radius="xl",
-                        variant="gradient",
-                        n_clicks=init_nclicks_add_button["count"],
-                        style=button_style,
-                        disabled=disabled,
-                    ),
-                    # Center part of the header - Save button + related modal
-                    modal_save_button,
-                    dmc.Button(
-                        "Save",
-                        id="save-button-dashboard",
-                        size="lg",
-                        radius="xl",
-                        variant="gradient",
-                        gradient={"from": "teal", "to": "lime", "deg": 105},
-                        n_clicks=0,
-                        disabled=disabled,
-                    ),
-                ],
-                style={"display": "flex", "alignItems": "center"},
+            dbc.Col(
+                [html.Div(id="dummy-output", style={"display": "none"}), html.Img(src=dash.get_asset_url("logo.png"), height=50)],
+                width=2,
             ),
-            edit_switch,
+            dbc.Col(
+                [
+                    dbc.Row(
+                        [
+                            dmc.FloatingTooltip(
+                                label=f"Time: {current_time}",
+                                color="gray",
+                                children=[
+                                    dmc.Badge(
+                                        "v0.1.0",
+                                        leftSection=DashIconify(
+                                            icon="mdi:information-outline",
+                                            width=24,
+                                            # radius="xl",
+                                            # mr=5,
+                                        ),
+                                        sx={"paddingLeft": 0},
+                                        size="lg",
+                                        radius="xl",
+                                        color="blue",
+                                    )
+                                ],
+                            )
+                        ]
+                    ),
+                    # dbc.Row(
+                    #     [
+                    #         dmc.Badge(
+                    #             current_time,
+                    #             leftSection=DashIconify(
+                    #                 icon="mdi:clock-time-four-outline",
+                    #                 width=24,
+                    #                 # radius="xl",
+                    #                 # mr=5,
+                    #             ),
+                    #             sx={"paddingLeft": 0,},
+                    #             size="lg",
+                    #             radius="xl",
+                    #             color="blue",
+                    #         )
+                    #     ], style={"paddingTop": "5px"}
+                    # )
+                ],
+                width=1,
+            ),
+            dbc.Col(width=1),
+            dbc.Col(
+                [
+                    html.Div(
+                        [
+                            # Left side of the header - Add new component button
+                            dmc.Button(
+                                "Add new component",
+                                id="add-button",
+                                size="lg",
+                                radius="xl",
+                                variant="gradient",
+                                n_clicks=init_nclicks_add_button["count"],
+                                style=button_style,
+                                disabled=disabled,
+                            ),
+                            # Center part of the header - Save button + related modal
+                            modal_save_button,
+                            dmc.Button(
+                                "Save",
+                                id="save-button-dashboard",
+                                size="lg",
+                                radius="xl",
+                                variant="gradient",
+                                gradient={"from": "teal", "to": "lime", "deg": 105},
+                                n_clicks=0,
+                                disabled=disabled,
+                            ),
+                        ],
+                        style={"display": "flex", "alignItems": "center"},
+                    )
+                ],
+                width=5,
+            ),
+            dbc.Col([dbc.Row(edit_switch), dbc.Row(toggle_interactivity, style={"paddingTop": "5px"})], width=2, style={"justifyContent": "flex-end"}),
             # Store the number of clicks for the add button and edit dashboard mode button
             dcc.Store(
                 id="stored-add-button",
