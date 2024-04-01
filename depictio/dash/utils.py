@@ -63,12 +63,26 @@ def get_size(obj, seen=None):
 
 
 def load_depictio_data():
-    if os.path.exists("depictio_data.json"):
-        with open("depictio_data.json", "r") as file:
+    if os.path.exists("/app/data/depictio_data.json"):
+        with open("/app/data/depictio_data.json", "r") as file:
             data = json.load(file)
             # print(data.keys())
         return data
     return None
+
+def load_depictio_data_mongo(dashboard_id: str):
+    url = f"{API_BASE_URL}/depictio/api/v1/dashboards/get/{dashboard_id}"
+    try:
+        response = httpx.get(url)
+        if response.status_code == 200:
+            response = response.json()
+            return response
+        else:
+            print(f"Failed to load dashboard data. Status code: {response.status_code}")
+            return None
+    except Exception as e:
+        print(f"An error occurred while trying to fetch dashboard data: {e}")
+        return None
 
 
 def return_user_from_token(token: str) -> dict:
