@@ -172,6 +172,8 @@ def register_callbacks_header(app):
         Output("remove-all-components-button", "disabled"),
         Output("toggle-interactivity-button", "disabled"),
         Output("dashboard-version", "disabled"),
+        Output("draggable", "isDraggable"),
+        Output("draggable", "isResizable"),
         Input("edit-dashboard-mode-button", "checked"),
         prevent_initial_call=True,
     )
@@ -180,7 +182,7 @@ def register_callbacks_header(app):
         logger.info("toggle_buttons")
         logger.info(switch_state)
 
-        return [not switch_state] * 5
+        return [not switch_state] * 5 + [switch_state] * 2
 
 
 def design_header(data):
@@ -256,7 +258,7 @@ def design_header(data):
         id="edit-dashboard-mode-button",
         label="Edit dashboard",
         thumbIcon=DashIconify(icon="mdi:lead-pencil", width=16, color=dmc.theme.DEFAULT_COLORS["teal"][5]),
-        style={"fontSize": "22px"},
+        style={"fontSize": "28x"},
         # options=[{"label": "Edit dashboard", "value": 0}],
         # value=init_nclicks_edit_dashboard_mode_button,
         # switch=True,
@@ -267,7 +269,7 @@ def design_header(data):
         label="Toggle interactivity",
         id="toggle-interactivity-button",
         thumbIcon=DashIconify(icon="mdi:gesture-tap", width=16, color=dmc.theme.DEFAULT_COLORS["orange"][5]),
-        style={"fontSize": "22px"},
+        style={"fontSize": "28px"},
         # options=[{"label": "Toggle interactivity", "value": 0}],
         # value=0,
         checked=True,
@@ -285,22 +287,24 @@ def design_header(data):
             # html.H1("Depictio", style=title_style),
             # Invisible div to store the test data
             dbc.Col(
-                [html.Div(id="dummy-output", style={"display": "none"}), html.Img(src=dash.get_asset_url("logo.png"), height=50)],
+                [html.Div(id="dummy-output", style={"display": "none"}), html.Img(src=dash.get_asset_url("logo.png"), height=40, style={"margin-left": "0px"})],
                 width=2,
             ),
             dbc.Col(
-                dmc.Select(
-                    id="dashboard-version",
-                    data=["v1", "v2"],
-                    value="v2",
-                    label="Dashboard version",
-                    style={"width": 150},
-                    icon=DashIconify(icon="mdi:format-list-bulleted-square", width=16, color=dmc.theme.DEFAULT_COLORS["blue"][5]),
-                    rightSection=DashIconify(icon="radix-icons:chevron-down"),
-                ),
+                [
+                    dmc.Select(
+                        id="dashboard-version",
+                        data=["v1", "v2"],
+                        value="v2",
+                        label="Dashboard version",
+                        style={"width": 150, "padding": "0 10px"},
+                        icon=DashIconify(icon="mdi:format-list-bulleted-square", width=16, color=dmc.theme.DEFAULT_COLORS["blue"][5]),
+                        rightSection=DashIconify(icon="radix-icons:chevron-down"),
+                    ),
+                ],
                 width=1,
             ),
-            dbc.Col(width=1),
+            # dbc.Col(width=1),
             dbc.Col(
                 [
                     html.Div(
@@ -347,9 +351,28 @@ def design_header(data):
                         style={"display": "flex", "alignItems": "center"},
                     )
                 ],
-                width=7,
+                width=6,
             ),
-            dbc.Col([dbc.Row(edit_switch), dbc.Row(toggle_interactivity, style={"paddingTop": "5px"})], width=2, style={"justifyContent": "flex-end"}),
+            html.Div(
+                [
+                    dbc.Col([dbc.Row(edit_switch), dbc.Row(toggle_interactivity, style={"paddingTop": "5px"})], width=3, style={"justifyContent": "flex-end"}),
+                    dbc.Col(
+                        [
+                            dmc.ActionIcon(
+                                DashIconify(icon="mdi:share-variant", width=32, color="white"),
+                                id="share-button",
+                                size="xl",
+                                radius="xl",
+                                color="grey",
+                                variant="filled",
+                                style=button_style,
+                            ),
+                        ],
+                        width=1,
+                    ),
+                ],
+                style={"display": "flex", "alignItems": "center", "justifyContent": "space-between", "padding": "0 50px 0 0"},
+            ),
             # Store the number of clicks for the add button and edit dashboard mode button
             dcc.Store(
                 id="stored-add-button",
