@@ -117,41 +117,6 @@ def register_callbacks_header(app):
         prevent_initial_call=True,
     )
     def update_button(n_clicks, children, btn_id, switch_state):
-        # logger.info("\n\n\n")
-        # logger.info("update_button")
-        # logger.info(children)
-        # logger.info(analyze_structure(children))
-        # logger.info(len(children))
-
-        # Depth 0 ID: {'type': 'graph', 'index': 32}
-
-        # Element 0 ID: {'type': 'stored-metadata-component', 'index': 33}
-        # Depth 1 ID: {'type': 'stored-metadata-component', 'index': 33}
-        # Element 1 ID: {'type': 'graph', 'index': 33}
-        # Depth 1 ID: {'type': 'graph', 'index': 33}
-
-        # Depth 0 ID: {'type': 'interactive', 'index': 33}
-        # Depth 0 Type: Dict
-        #   Depth 1 ID: {'type': 'card-body', 'index': 33}
-        #   Depth 1 Type: List with 3 elements
-        #   Element 0 ID: None
-        #     Depth 2 ID: None
-        #   Element 1 ID: {'type': 'card-value', 'index': 33}
-        #     Depth 2 ID: {'type': 'card-value', 'index': 33}
-        #   Element 2 ID: {'type': 'stored-metadata-component', 'index': 33}
-        #     Depth 2 ID: {'type': 'stored-metadata-component', 'index': 33}
-
-        # Depth 0 ID: None
-        # Depth 0 Type: List with 2 elements
-        # Element 0 ID: {'type': 'stored-metadata-component', 'index': 33}
-        #   Depth 1 ID: {'type': 'stored-metadata-component', 'index': 33}
-        # Element 1 ID: {'type': 'graph', 'index': 33}
-        #   Depth 1 ID: {'type': 'graph', 'index': 33}
-
-        # logger.info(children["props"]["id"])
-        # children = [children[4]]
-        # logger.info(len(children))
-        # logger.info(children)
 
         children["props"]["id"]["type"] = "updated-" + children["props"]["id"]["type"]
         # logger.info(children)
@@ -183,6 +148,39 @@ def register_callbacks_header(app):
         logger.info(switch_state)
 
         return [not switch_state] * 5 + [switch_state] * 2
+    
+
+    @app.callback(
+        Output("share-modal-dashboard", "is_open"),
+        [
+            Input("share-button", "n_clicks"),
+            Input("share-modal-close", "n_clicks"),
+        ],
+        [State("share-modal-dashboard", "is_open")],
+        prevent_initial_call=True,
+    )
+    def toggle_share_modal_dashboard(n_share, n_close, is_open):
+        ctx = dash.callback_context
+
+        if not ctx.triggered:
+            raise dash.exceptions.PreventUpdate
+
+        trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
+        # logger.info(trigger_id, n_save, n_close)
+
+        if trigger_id == "share-button":
+            if n_share is None or n_share == 0:
+                raise dash.exceptions.PreventUpdate
+            else:
+                return True
+
+        elif trigger_id == "share-modal-close":
+            if n_close is None or n_close == 0:
+                raise dash.exceptions.PreventUpdate
+            else:
+                return False
+
+        return is_open
 
 
 def design_header(data):
@@ -235,6 +233,44 @@ def design_header(data):
         centered=True,
     )
     from dash_iconify import DashIconify
+
+    modal_share_dashboard = dbc.Modal(
+        [
+            dbc.ModalHeader(
+                html.H1(
+                    "Share dashboard",
+                    className="text-primary",
+                )
+            ),
+            dbc.ModalBody(
+                [
+                    html.H5(
+                        "Share this dashboard with others by copying the link below:",
+                        className="text-primary",
+                    ),
+                    dmc.TextInput(
+                        type="text",
+                        value="https://depict.io/dashboard/1",
+                        style={"width": "100%"},
+                        icon=DashIconify(icon="mdi:link", width=16, color="grey")
+                    ),
+                ],
+                style={"background-color": "#F0F8FF"},
+            ),
+            dbc.ModalFooter(
+                dbc.Button(
+                    "Close",
+                    id="share-modal-close",
+                    className="ml-auto",
+                    color="primary",
+                )
+            ),
+        ],
+        id="share-modal-dashboard",
+        centered=True,
+    )
+
+
 
     # APP Header
 
@@ -366,7 +402,10 @@ def design_header(data):
                                 color="grey",
                                 variant="filled",
                                 style=button_style,
+                                disabled=disabled,
+                                n_clicks=0,
                             ),
+                            modal_share_dashboard,
                         ],
                         width=1,
                     ),

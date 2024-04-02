@@ -33,7 +33,7 @@ from depictio.dash.layouts.stepper import (
 from depictio.dash.layouts.header import (
     design_header,
     enable_box_edit_mode,
-    enable_box_edit_mode_dev,
+    # enable_box_edit_mode_dev,
 )
 
 from depictio.dash.modules.figure_component.utils import plotly_vizu_dict
