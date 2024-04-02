@@ -72,11 +72,6 @@ def register_callbacks_stepper_part_three(app):
                 elif component_selected == "JBrowse2":
                     return design_jbrowse(id), btn_component
                 elif component_selected == "Table":
-                    print("\n\n\n")
-                    print("Step 3")
-                    print("Table")
-                    print(id)
-                    print("\n\n\n")
                     return design_table(id), btn_component
                 # TODO: implement the following components
                 elif component_selected == "Graph":
