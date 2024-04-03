@@ -14,7 +14,7 @@ import pandas as pd
 import polars as pl
 import sys
 
-
+from depictio.api.v1.configs.config import logger
 from depictio.api.v1.endpoints.user_endpoints.auth import (
     ALGORITHM,
     PUBLIC_KEY,
@@ -55,11 +55,11 @@ def get_size(obj, seen=None):
     if isinstance(obj, dict):
         size += sum([get_size(v, seen) for v in obj.values()])
         size += sum([get_size(k, seen) for k in obj.keys()])
-    elif hasattr(obj, '__dict__'):
+    elif hasattr(obj, "__dict__"):
         size += get_size(obj.__dict__, seen)
-    elif hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes, bytearray)):
+    elif hasattr(obj, "__iter__") and not isinstance(obj, (str, bytes, bytearray)):
         size += sum([get_size(i, seen) for i in obj])
-    return size        
+    return size
 
 
 def load_depictio_data():
@@ -69,6 +69,7 @@ def load_depictio_data():
             # print(data.keys())
         return data
     return None
+
 
 def load_depictio_data_mongo(dashboard_id: str):
     url = f"{API_BASE_URL}/depictio/api/v1/dashboards/get/{dashboard_id}"
@@ -153,7 +154,7 @@ def return_dc_tag_from_id(workflow_id: ObjectId, data_collection_id: ObjectId, w
     if not workflows:
         workflows = list_workflows(TOKEN)
     # else:
-        # workflows = [convert_objectid_to_str(workflow.mongo()) for workflow in workflows]
+    # workflows = [convert_objectid_to_str(workflow.mongo()) for workflow in workflows]
     # print("data_collection_id", data_collection_id)
     return [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["_id"] == data_collection_id][0]["data_collection_tag"]
 
@@ -286,9 +287,12 @@ def join_deltatables(workflow_id: str, data_collection_id: str):
         },
     )
     # print("main_data_collection_df")
-    # print(main_data_collection_df)
+    print(main_data_collection_df)
     # print("join_tables_for_wf")
     # print(join_tables_for_wf.json())
+
+    logger.info("Join tables for workflow")
+    logger.info(join_tables_for_wf.json())
 
     # Check if the response is not successful
     if join_tables_for_wf.status_code != 200:
@@ -304,17 +308,25 @@ def join_deltatables(workflow_id: str, data_collection_id: str):
             # print(join_tables_dict["with_dc_id"])
             # Iterate over the data collections that the current data collection is joined with
             for tmp_dc_id in join_tables_dict["with_dc_id"]:
-                print(tmp_dc_id)
+                logger.info(tmp_dc_id)
                 # Load the deltable from the join data collection
                 tmp_df = load_deltatable_lite(str(workflow_id), str(tmp_dc_id))
 
+                print(tmp_df)
                 # Merge the main data collection with the join data collection on the specified columns
                 # NOTE: hard-coded join for depictio_run_id currently (defined when creating the DeltaTable)
                 tmp_df = tmp_df.drop(["depictio_aggregation_time"], axis=1)
+                if "Metadata" in tmp_df["depictio_run_id"].values.tolist():
+                    tmp_df = tmp_df.drop(["depictio_run_id"], axis=1)
+
+                join_columns = join_tables_dict["on_columns"]
+                if ("depictio_run_id" in main_data_collection_df.columns) and ("depictio_run_id" in tmp_df.columns):
+                    join_columns = ["depictio_run_id"] + join_columns
+
                 # print("tmp_df")
                 # print(tmp_df)
-
-                main_data_collection_df = pd.merge(main_data_collection_df, tmp_df, on=["depictio_run_id"] + join_tables_dict["on_columns"])
+                print(main_data_collection_df)
+                main_data_collection_df = pd.merge(main_data_collection_df, tmp_df, on=join_columns)
                 # print("main_data_collection_df AFTER MERGE")
                 # print(main_data_collection_df)
                 # print(main_data_collection_df.columns)
@@ -331,10 +343,10 @@ def serialize_dash_component(obj):
         return {k: serialize_dash_component(v) for k, v in obj.items()}
     elif isinstance(obj, list):
         return [serialize_dash_component(v) for v in obj]
-    elif hasattr(obj, 'to_dict'):
+    elif hasattr(obj, "to_dict"):
         # If the object is a Dash component with a to_dict method
         return obj.to_dict()
-    elif hasattr(obj, '__dict__'):
+    elif hasattr(obj, "__dict__"):
         # Attempt to serialize objects by converting their __dict__ attribute
         return serialize_dash_component(obj.__dict__)
     else:
@@ -352,9 +364,9 @@ def analyze_structure(struct, depth=0):
     """
 
     if isinstance(struct, list):
-        # print("  " * depth + f"Depth {depth} Type: List with {len(struct)} elements")
+        logger.info("  " * depth + f"Depth {depth} Type: List with {len(struct)} elements")
         for idx, child in enumerate(struct):
-            print("  " * depth + f"Element {idx} ID: {child.get('props', {}).get('id', None)}")
+            logger.info("  " * depth + f"Element {idx} ID: {child.get('props', {}).get('id', None)}")
             analyze_structure(child, depth=depth + 1)
         return
 
@@ -368,21 +380,22 @@ def analyze_structure(struct, depth=0):
     children = struct.get("props", {}).get("children", None)
 
     # Printing the id value
-    print("  " * depth + f"Depth {depth} ID: {id_value}")
+    logger.info("  " * depth + f"Depth {depth} ID: {id_value}")
 
     if isinstance(children, dict):
-        print("  " * depth + f"Depth {depth} Type: Dict")
+        logger.info("  " * depth + f"Depth {depth} Type: Dict")
         # Recursive call
         analyze_structure(children, depth=depth + 1)
 
     elif isinstance(children, list):
-        print("  " * depth + f"Depth {depth} Type: List with {len(children)} elements")
+        logger.info("  " * depth + f"Depth {depth} Type: List with {len(children)} elements")
         for idx, child in enumerate(children):
-            print("  " * depth + f"Element {idx} ID: {child.get('props', {}).get('id', None)}")
+            logger.info("  " * depth + f"Element {idx} ID: {child.get('props', {}).get('id', None)}")
             # Recursive call
             analyze_structure(child, depth=depth + 1)
 
-def analyze_structure_and_get_deepest_type(struct, depth=0, max_depth=0, deepest_type=None):
+
+def analyze_structure_and_get_deepest_type(struct, depth=0, max_depth=0, deepest_type=None, print=False):
     """
     Recursively analyze a nested plotly dash structure and return the type of the deepest element (excluding 'stored-metadata-component').
 
@@ -396,7 +409,8 @@ def analyze_structure_and_get_deepest_type(struct, depth=0, max_depth=0, deepest
     - tuple: (Maximum depth of the structure, Type of the deepest element)
     """
 
-    # print(f"\nAnalyzing level: {depth}")  # Debug print
+    if print:
+        logger.info(f"Analyzing level: {depth}")  # Debug print
 
     # Update the maximum depth and deepest type if the current depth is greater
     current_type = None
@@ -404,24 +418,29 @@ def analyze_structure_and_get_deepest_type(struct, depth=0, max_depth=0, deepest
         id_value = struct.get("props", {}).get("id", None)
         if isinstance(id_value, dict) and id_value.get("type") != "stored-metadata-component":
             current_type = id_value.get("type")
-            # print(f"Found component of type: {current_type} at depth: {depth}")  # Debug print
+            if print:
+                logger.info(f"Found component of type: {current_type} at depth: {depth}")  # Debug print
 
     if depth > max_depth:
         max_depth = depth
         deepest_type = current_type
-        # print(f"Updated max_depth to {max_depth} with deepest_type: {deepest_type}")  # Debug print
+        if print:
+            logger.info(f"Updated max_depth to {max_depth} with deepest_type: {deepest_type}")  # Debug print
     elif depth == max_depth and current_type is not None:
         deepest_type = current_type
-        # print(f"Updated deepest_type to {deepest_type} at same max_depth: {max_depth}")  # Debug print
+        if print:
+            logger.info(f"Updated deepest_type to {deepest_type} at same max_depth: {max_depth}")  # Debug print
 
     if isinstance(struct, list):
         for child in struct:
-            # print(f"Descending into list at depth: {depth}")  # Debug print
+            if print:
+                logger.info(f"Descending into list at depth: {depth}")  # Debug print
             max_depth, deepest_type = analyze_structure_and_get_deepest_type(child, depth=depth + 1, max_depth=max_depth, deepest_type=deepest_type)
     elif isinstance(struct, dict):
         children = struct.get("props", {}).get("children", None)
         if isinstance(children, (list, dict)):
-            # print(f"Descending into dict at depth: {depth}")  # Debug print
+            if print:
+                logger.info(f"Descending into dict at depth: {depth}")  # Debug print
             max_depth, deepest_type = analyze_structure_and_get_deepest_type(
                 children,
                 depth=depth + 1,
