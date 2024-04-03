@@ -73,6 +73,13 @@ workflows:
               - "dupl"
               - "pass1"
               - "good"
+            columns_description:
+              sample: "Sample ID"
+              cell: "Cell ID"
+              mapped: "Total number of reads seen"
+              dupl: "Reads filtered out as PCR duplicates"
+              pass1: "Coverage compliant cells (binary)"
+              good: "Reads used for counting"
 
           # Allow to join the data collections - used for table join
           join:
@@ -85,6 +92,7 @@ workflows:
             # The list of data collections that are used to join the data collection
             with_dc:
               - "ashleys_labels"
+              - "mosaicatcher_samples_metadata"
 
       # Other data collections of type Table
       - data_collection_tag: "ashleys_labels"
@@ -98,6 +106,20 @@ workflows:
             format: "TSV"
             polars_kwargs:
               separator: "\t"
+      
+      - data_collection_tag: "mosaicatcher_samples_metadata"
+        description: "Metadata file for MosaiCatcher samples"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          regex: 
+            pattern: "mosaicatcher_samples_metadata.csv"
+            type: "file-based"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ";"
+
 
       # Data collections of type JBrowse2
       - data_collection_tag: "SV_calls"
