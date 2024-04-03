@@ -16,7 +16,7 @@ import polars as pl
 import numpy as np
 from pydantic import BaseModel
 
-from depictio.api.v1.configs.config import TOKEN, settings, API_BASE_URL
+from depictio.api.v1.configs.config import TOKEN, settings, API_BASE_URL, logger
 from depictio.api.v1.db import db
 from depictio.api.v1.endpoints.files_endpoints.routes import delete_files
 from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user
@@ -327,5 +327,8 @@ async def get_join_tables(workflow_id: str, current_user: str = Depends(get_curr
     # Map the IDs back to tags
     for dc_id in join_details_map:
         join_details_map[dc_id]["with_dc"] = [return_dc_tag_from_id(workflow_id, dc_id, workflows) for dc_id in join_details_map[dc_id]["with_dc_id"]]
+
+
+    logger.info(f"Join details: {join_details_map}")    
 
     return join_details_map

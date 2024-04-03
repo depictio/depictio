@@ -62,6 +62,7 @@ class TableJoinConfig(BaseModel):
 
 class DataCollectionConfig(MongoModel):
     type: str
+    metatype: Optional[str]
     regex: Regex
     dc_specific_properties: Union[DCTableConfig, DCJBrowse2Config]
     join: Optional[TableJoinConfig] = None

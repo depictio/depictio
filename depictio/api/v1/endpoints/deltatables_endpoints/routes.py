@@ -78,10 +78,23 @@ def read_table_for_DC_table(file_info, data_collection_config, deltaTable):
     #     continue  # Skip already processed files
 
     file_path = file_info.file_location
-    df = pl.read_csv(
-        file_path,
-        **dict(data_collection_config["polars_kwargs"]),
-    )
+
+    if data_collection_config["format"].lower() in ["csv", "tsv", "txt"]:
+            # Read the file using polars
+
+        df = pl.read_csv(
+            file_path,
+            **dict(data_collection_config["polars_kwargs"]),
+        )
+    elif data_collection_config["format"].lower() in ["parquet"]:
+        df = pl.read_parquet(file_path, **dict(data_collection_config["polars_kwargs"]))
+    
+    elif data_collection_config["format"].lower() in ["feather"]:
+        df = pl.read_feather(file_path, **dict(data_collection_config["polars_kwargs"]))
+    
+    elif data_collection_config["format"].lower() in ["xls", "xlsx"]:
+        df = pl.read_excel(file_path, **dict(data_collection_config["polars_kwargs"]))
+
     # print(df)
     raw_cols = df.columns
     df = df.with_columns(pl.lit(file_info.run_id).alias("depictio_run_id"))
@@ -302,7 +315,8 @@ async def aggregate_data(
     # FIXME: solve the issue of writing to MinIO using polars
     # TMP solution: write to Delta Lake locally and then upload to MinIO
     # Write aggregated dataframe to Delta Lake
-    aggregated_df.write_delta(destination_file_name, mode="overwrite", overwrite_schema=True)
+
+    aggregated_df.write_delta(destination_file_name, mode="overwrite", overwrite_schema=False)
 
     # Upload the Delta Lake to MinIO
     # upload_dir_to_s3(
