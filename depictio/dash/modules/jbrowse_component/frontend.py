@@ -40,7 +40,7 @@ def register_callbacks_jbrowse_component(app):
             },
         ).json()
 
-        # Get DC ID that are joined 
+        # Get DC ID that are joined
         if "join" in dc_specs["config"]:
             dc_specs["config"]["join"]["with_dc_id"] = list()
             for dc_tag in dc_specs["config"]["join"]["with_dc"]:
@@ -69,6 +69,11 @@ def register_callbacks_jbrowse_component(app):
                 src=f"http://localhost:3000?config=http://localhost:9010/sessions/{session}&loc=chr1:1-248956422&assembly=hg38",
                 width="100%",
                 height="1000px",
+                style={
+                    "transform": "scale(0.8)",
+                    "transform-origin": "0 0",  # Adjust as needed to change the scaling origin
+                    "width": "125%",  # Increase width to compensate for the scale down
+                },
                 id={"type": "iframe-jbrowse", "index": id["index"]},
             )
             store_component = dcc.Store(

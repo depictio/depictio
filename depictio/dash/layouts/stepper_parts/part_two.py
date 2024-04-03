@@ -43,7 +43,7 @@ def register_callbacks_stepper_part_two(app):
         workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_selection][0]["_id"]
         data_collection_id = [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["data_collection_tag"] == data_collection_selection][0]["_id"]
 
-        print(data_collection_selection)
+        # print(data_collection_selection)
 
         dc_specs = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
@@ -52,8 +52,6 @@ def register_callbacks_stepper_part_two(app):
             },
         ).json()
 
-        print("dc_specs")
-        print(dc_specs)
 
         data_collection_type = dc_specs["config"]["type"]
 

@@ -601,7 +601,7 @@ def design_figure(id):
                                             dcc.Graph(
                                                 # figure=figure,
                                                 id={"type": "graph", "index": id["index"]},
-                                                config={"editable": True},
+                                                config={"editable": True, "scrollZoom": True},
                                             ),
                                         ],
                                         id={

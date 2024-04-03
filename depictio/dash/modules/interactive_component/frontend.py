@@ -148,11 +148,14 @@ def register_callbacks_interactive_component(app):
         # If the aggregation value is Select, MultiSelect or SegmentedControl
         if aggregation_value in ["Select", "MultiSelect", "SegmentedControl"]:
             data = sorted(df[column_value].dropna().unique())
-            interactive_component = func_name(data=data, id={"type": "interactive-component", "index": id["index"]})
+            # NOTE: persistence_type is set to memory for now, but can be changed to local
+
+            interactive_component = func_name(data=data, id={"type": "interactive-component", "index": id["index"], "persistence_type": "local"})
 
             # If the aggregation value is MultiSelect, make the component searchable and clearable
             if aggregation_value == "MultiSelect":
-                kwargs = {"searchable": True, "clearable": True, "clearSearchOnChange": False}
+                # NOTE: persistence_type is set to memory for now, but can be changed to local
+                kwargs = {"searchable": True, "clearable": True, "clearSearchOnChange": False, "persistence_type": "local"}
                 interactive_component = func_name(
                     data=data,
                     id={"type": "interactive-component", "index": id["index"]},
@@ -164,6 +167,7 @@ def register_callbacks_interactive_component(app):
             interactive_component = func_name(
                 placeholder="Your selected value",
                 id={"type": "interactive-component", "index": id["index"]},
+                kwargs={"persistence_type": "local"},
             )
 
         ## Numerical data
@@ -178,6 +182,7 @@ def register_callbacks_interactive_component(app):
                 "min": min_value,
                 "max": max_value,
                 "id": {"type": "interactive-component", "index": id["index"]},
+                "persistence_type": "local",
             }
             # If the number of unique values is less than 30, use the unique values as marks
             if aggregation_value == "Slider":

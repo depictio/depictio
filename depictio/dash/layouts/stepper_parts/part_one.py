@@ -9,7 +9,7 @@ import yaml
 import dash_ag_grid as dag
 
 from depictio.dash.utils import list_workflows, join_deltatables, get_columns_from_data_collection, load_deltatable_lite, return_mongoid
-from depictio.api.v1.configs.config import API_BASE_URL, TOKEN
+from depictio.api.v1.configs.config import API_BASE_URL, TOKEN, logger
 
 
 def register_callbacks_stepper_part_one(app):
@@ -148,9 +148,10 @@ def register_callbacks_stepper_part_one(app):
             if dc_specs["config"]["type"] == "Table":
                 df = load_deltatable_lite(workflow_id, data_collection_id, raw=True)
                 cols = get_columns_from_data_collection(workflow_selection, data_collection_selection)
-                # print(cols)
+                logger.info(cols)
                 columnDefs = [{"field": c, "headerTooltip": f"Column type: {e['type']}"} for c, e in cols.items()]
-                # print(columnDefs)
+                logger.info(columnDefs)
+                
 
                 run_nb = cols["depictio_run_id"]["specs"]["nunique"]
                 run_nb_title = dmc.Title(f"Run Nb : {run_nb}", order=3, align="left", weight=500)
