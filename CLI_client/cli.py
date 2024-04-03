@@ -247,12 +247,13 @@ def create_update_delete_workflow(
 
 
 # TODO: change logic to just initiate the scan and not wait for the completion (thousands of files can take a long time)
-def scan_files_for_data_collection(workflow_id: str, data_collection_id: str, headers: dict) -> None:
+def scan_files_for_data_collection(workflow_id: str, data_collection_id: str, headers: dict, scan_type: str = "scan") -> None:
     """
     Scan files for a given data collection of a workflow.
     """
+
     response = httpx.post(
-        f"{API_BASE_URL}/depictio/api/v1/files/scan/{workflow_id}/{data_collection_id}",
+        f"{API_BASE_URL}/depictio/api/v1/files/{scan_type}/{workflow_id}/{data_collection_id}",
         headers=headers,
         timeout=5 * 60,  # Increase the timeout as needed
     )
@@ -371,19 +372,21 @@ def setup(
             # if scan_files:
             #     print("scan_files_for_data_collection")
             #     scan_files_for_data_collection(wf_id, dc["_id"], headers)
-            # if dc["config"]["type"].lower() == "table":
-            #     if scan_files:
-            #         print("scan_files_for_data_collection")
-            #         scan_files_for_data_collection(wf_id, dc["_id"], headers) 
+            if dc["config"]["type"].lower() == "table":
+                print(dc)
+                if dc["data_collection_tag"] == "mosaicatcher_samples_metadata":
+                    if scan_files:
+                        print("scan_files_for_data_collection")
+                        scan_files_for_data_collection(wf_id, dc["_id"], headers, scan_type="scan_metadata") 
             #     print("create_deltatable")
-            #     create_deltatable_request(wf_id, dc["_id"], headers)
+                    create_deltatable_request(wf_id, dc["_id"], headers)
             # elif dc["config"]["type"].lower() == "jbrowse2":
-            if dc["config"]["type"].lower() == "jbrowse2":
+            # if dc["config"]["type"].lower() == "jbrowse2":
                 # if scan_files:
                 #     print("scan_files_for_data_collection")
                 #     scan_files_for_data_collection(wf_id, dc["_id"], headers)
-                print("upload_trackset_to_s3")
-                create_trackset(wf_id, dc["_id"], headers)
+                # print("upload_trackset_to_s3")
+                # create_trackset(wf_id, dc["_id"], headers)
 
                 
 
