@@ -5,7 +5,8 @@ from pprint import pprint
 from bson import ObjectId
 import httpx
 import numpy as np
-from depictio.api.v1.configs.config import API_BASE_URL
+import pandas as pd
+from depictio.api.v1.configs.config import API_BASE_URL, logger
 from depictio.dash.utils import analyze_structure_and_get_deepest_type
 
 
@@ -53,6 +54,9 @@ def filter_data(new_df, n_dict):
     """
     Filter the data based on the interactive component type and the selected value
     """
+    pd.set_option("display.max_columns", None)
+    logger.info(f"{new_df}")
+    logger.info(f"n_dict - {n_dict}")
 
     # Handles the case of the object type
     if n_dict["metadata"]["type"] == "object":
@@ -72,13 +76,12 @@ def filter_data(new_df, n_dict):
 
 
 def update_interactive_component(stored_metadata, interactive_components_dict, plotly_vizu_dict, join_deltatables, current_draggable_children):
-    print("\n\n\n")
-    print("INTERACTIVE COMPONENT")
+    logger.info("INTERACTIVE COMPONENT")
 
     # Iterate over the stored metadata (all components) to retrieve the corresponding data
     # e - all components
-    print(stored_metadata)
-    print(interactive_components_dict)
+    logger.info(stored_metadata)
+    logger.info(interactive_components_dict)
 
     # Sort sorted_metadata by component type using that order: graph, card, table & exclude interactive components
     stored_metadata = sorted(stored_metadata, key=lambda x: x["component_type"])
@@ -89,7 +92,7 @@ def update_interactive_component(stored_metadata, interactive_components_dict, p
     jbrowse_df_mapping_dict = collections.defaultdict(dict)
 
     for j, e in enumerate(stored_metadata):
-        print(j, e)
+        logger.info(f"{j} - {e}")
 
         # Check if the component type is not an interactive component in order to update its content
         if e["component_type"] not in ["jbrowse"]:
@@ -99,13 +102,15 @@ def update_interactive_component(stored_metadata, interactive_components_dict, p
             # Iterate over the interactive components to filter the data (new_df)
             # n - interactive components
             for i, n in enumerate(list(interactive_components_dict.keys())):
-                print(i, n)
                 # Retrieve corresponding metadata
                 n_dict = interactive_components_dict[n]
+                logger.info(f"{i} - {n} - {n_dict}")
+
 
                 # Retrieve the join data collection if it exists
                 if n_dict["metadata"]["dc_config"]["join"]:
                     n_join_dc = n_dict["metadata"]["dc_config"]["join"]["with_dc_id"]
+                    # n_join_dc = list(set([sub_e for e in n_dict["metadata"]["dc_config"]["join"] for sub_e in e["with_dc_id"]]))
                 else:
                     n_join_dc = []
 
@@ -137,7 +142,7 @@ def update_interactive_component(stored_metadata, interactive_components_dict, p
                                         for col in jbrowse["dc_config"]["join"]["on_columns"]:
                                             jbrowse_df_mapping_dict[int(jbrowse["index"])][col] = new_df[col].unique().tolist()
                                 # save to a json file
-                                print("\nSAVE TO JSON FILE")
+                                logger.info("\nSAVE TO JSON FILE")
                                 os.makedirs("data", exist_ok=True)
                                 json.dump(jbrowse_df_mapping_dict, open("data/jbrowse_df_mapping_dict.json", "w"), indent=4)
 
@@ -155,10 +160,10 @@ def update_interactive_component(stored_metadata, interactive_components_dict, p
                                 max_depth,
                                 deepest_element_type,
                             ) = analyze_structure_and_get_deepest_type(child)
-                            print("\n")
-                            print("analyze_structure_and_get_deepest_type")
-                            print(max_depth, deepest_element_type)
-                            print(child["props"]["id"], e["index"])
+                            # print("\n")
+                            # print("analyze_structure_and_get_deepest_type")
+                            # print(max_depth, deepest_element_type)
+                            # print(child["props"]["id"], e["index"])
 
                             # If the deepest element type is a card, update the content of the card
                             if deepest_element_type == "card-value":
@@ -219,25 +224,25 @@ def update_interactive_component(stored_metadata, interactive_components_dict, p
 
 
     for j, e in enumerate(stored_metadata_jbrowse_components):
-        print(j, e)
+        # print(j, e)
         for child in current_draggable_children:
             # Get the deepest element type
             (
                 max_depth,
                 deepest_element_type,
             ) = analyze_structure_and_get_deepest_type(child)
-            print("\n")
-            print("analyze_structure_and_get_deepest_type")
-            print(max_depth, deepest_element_type)
-            print(child["props"]["id"], e["index"])
+            # print("\n")
+            # print("analyze_structure_and_get_deepest_type")
+            # print(max_depth, deepest_element_type)
+            # print(child["props"]["id"], e["index"])
             if deepest_element_type == "iframe-jbrowse":
                 if int(child["props"]["id"]) == int(e["index"]):
                     for k, sub_child in enumerate(
                         child["props"]["children"][0]["props"]["children"]["props"]["children"][-1]["props"]["children"]["props"]["children"]["props"]["children"]
                     ):
                         if sub_child["props"]["id"]["type"] == "iframe-jbrowse":
-                            print("\niframe-jbrowse")
-                            print(sub_child)
+                            # print("\niframe-jbrowse")
+                            # print(sub_child)
                             # print(sub_child["props"]["id"]["type"])
 
 
@@ -254,7 +259,7 @@ def update_interactive_component(stored_metadata, interactive_components_dict, p
                             # Cross jbrowse_df_mapping_dict and mapping_dict to update the jbrowse iframe
                             # col = "cell"
                             track_ids = list()
-                            print('jbrowse_df_mapping_dict[e["index"]][col]')
+                            # print('jbrowse_df_mapping_dict[e["index"]][col]')
                             # print(jbrowse_df_mapping_dict)
                             # print(jbrowse_df_mapping_dict[e["index"]][col][:10])
                             # print("mapping_dict[e['dc_id']]")
@@ -266,7 +271,7 @@ def update_interactive_component(stored_metadata, interactive_components_dict, p
                                 
                             if len(track_ids) > 50:
                                 track_ids = track_ids[:50]
-                            print("track_ids", track_ids)
+                            # print("track_ids", track_ids)
 
 
 
@@ -277,7 +282,7 @@ def update_interactive_component(stored_metadata, interactive_components_dict, p
                             session = "65e5f007bad32df857a53cf2_1.json"
 
                             new_url = f"http://localhost:3000?config=http://localhost:9010/sessions/{session}&{updated_jbrowse_config}"
-                            print("new_url", new_url)
+                            # print("new_url", new_url)
                             sub_child["props"]["src"] = new_url
 
                         # print(sub_child["props"]["id"]["type"])
