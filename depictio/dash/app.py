@@ -26,6 +26,7 @@ from depictio.dash.layouts.stepper_parts.part_one import register_callbacks_step
 from depictio.dash.layouts.stepper_parts.part_two import register_callbacks_stepper_part_two
 from depictio.dash.layouts.stepper_parts.part_three import register_callbacks_stepper_part_three
 from depictio.dash.layouts.header import design_header, register_callbacks_header
+from depictio.dash.layouts.draggable_scenarios.add_component import register_callbacks_add_component
 from depictio.dash.layouts.draggable import (
     design_draggable,
     register_callbacks_draggable,
@@ -79,6 +80,8 @@ register_callbacks_figure_component(app)
 register_callbacks_jbrowse_component(app)
 register_callbacks_table_component(app)
 
+# Register callbacks for draggable layout
+register_callbacks_add_component(app)
 
 # Load depictio data from JSON
 data = load_depictio_data()
