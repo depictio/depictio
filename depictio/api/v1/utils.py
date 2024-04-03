@@ -21,7 +21,6 @@ from depictio.api.v1.endpoints.user_endpoints.models import Permission, User
 from depictio.api.v1.endpoints.workflow_endpoints.models import Workflow, WorkflowConfig, WorkflowRun
 from depictio.api.v1.models.top_structure import RootConfig
 
-
 # def return_user_from_id(token: str) -> dict:
 #     try:
 #         payload = jwt.decode(token, PUBLIC_KEY, algorithms=[ALGORITHM])
@@ -169,6 +168,8 @@ def scan_files(run_location: str, run_id: str, data_collection: DataCollection) 
     """
     # Get the workflow's parent_runs_location
 
+    print(f"Scanning files in {run_location}")
+
     if not os.path.exists(run_location):
         raise ValueError(f"The directory '{run_location}' does not exist.")
     if not os.path.isdir(run_location):
@@ -185,7 +186,9 @@ def scan_files(run_location: str, run_id: str, data_collection: DataCollection) 
     # Scan the files
     for root, dirs, files in os.walk(run_location):
         for file in files:
+            print("root", root, "file", file, "full_regex", full_regex, "data_collection", data_collection)
             match, result = regex_match(root, file, full_regex, data_collection)
+            print("match", match, "result", result)
             if match:
                 file_location = os.path.join(root, file)
                 filename = file
@@ -216,6 +219,7 @@ def scan_files(run_location: str, run_id: str, data_collection: DataCollection) 
 
                 # print(file_instance)
                 file_list.append(file_instance)
+    print("file_list", file_list)
     return file_list
 
 
@@ -236,20 +240,21 @@ def scan_runs(
     runs = list()
 
     for run in os.listdir(parent_runs_location):
-        if re.match(workflow_config.runs_regex, run):
-            run_location = os.path.join(parent_runs_location, run)
-            files = scan_files(run_location=run_location, run_id=run, data_collection=data_collection)
-            execution_time = datetime.fromtimestamp(os.path.getctime(run_location))
+        if os.path.isdir(os.path.join(parent_runs_location, run)):
+            if re.match(workflow_config.runs_regex, run):
+                run_location = os.path.join(parent_runs_location, run)
+                files = scan_files(run_location=run_location, run_id=run, data_collection=data_collection)
+                execution_time = datetime.fromtimestamp(os.path.getctime(run_location))
 
-            workflow_run = WorkflowRun(
-                run_tag=run,
-                files=files,
-                workflow_config=workflow_config,
-                run_location=run_location,
-                execution_time=execution_time,
-                execution_profile=None,
-            )
-            runs.append(workflow_run)
+                workflow_run = WorkflowRun(
+                    run_tag=run,
+                    files=files,
+                    workflow_config=workflow_config,
+                    run_location=run_location,
+                    execution_time=execution_time,
+                    execution_profile=None,
+                )
+                runs.append(workflow_run)
     return runs
 
 
