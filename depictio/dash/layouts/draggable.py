@@ -681,9 +681,9 @@ def register_callbacks_draggable(app):
                     max_depth,
                     deepest_element_type,
                 ) = analyze_structure_and_get_deepest_type(child)
-                print("\n")
-                print("analyze_structure_and_get_deepest_type")
-                print(max_depth, deepest_element_type)
+                # print("\n")
+                # print("analyze_structure_and_get_deepest_type")
+                # print(max_depth, deepest_element_type)
 
                 if deepest_element_type in ["graph", "table-aggrid", "card-value", "interactive-component", "iframe-jbrowse"]:
                     if not switch_state:
