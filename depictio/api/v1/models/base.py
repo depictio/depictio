@@ -1,7 +1,7 @@
 from datetime import datetime
 import hashlib
 import os
-from pathlib import Path
+from pathlib import Path, PosixPath
 from typing import Type, Dict, List, Tuple, Optional, Any, Set
 import bleach
 from bson import ObjectId
@@ -63,6 +63,7 @@ class MongoModel(BaseModel):
         json_encoders = {
             datetime: lambda dt: dt.isoformat(),
             ObjectId: lambda oid: str(oid),
+            PosixPath: lambda path: str(path),
         }
 
     @classmethod
