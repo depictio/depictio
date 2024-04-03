@@ -22,6 +22,7 @@ from depictio.api.v1.utils import (
     # decode_token,
     # public_key_path,
     construct_full_regex,
+    scan_files,
     scan_runs,
     serialize_for_mongo,
 )
@@ -78,6 +79,52 @@ async def list_registered_files(
     files = list(files_collection.find(query_files))
     return convert_objectid_to_str(files)
 
+
+@files_endpoint_router.post("/scan_metadata/{workflow_id}/{data_collection_id}")
+async def scan_metadata(
+    workflow_id: str,
+    data_collection_id: str,
+    current_user: str = Depends(get_current_user),
+):
+    """
+    Scan the files and retrieve metadata.
+    """
+    print("Scanning data collection")
+    print(workflow_id)
+    print(data_collection_id)
+
+    (
+        workflow_oid,
+        data_collection_oid,
+        workflow,
+        data_collection,
+        user_oid,
+    ) = validate_workflow_and_collection(
+        workflows_collection,
+        current_user.user_id,
+        workflow_id,
+        data_collection_id,
+    )
+
+    print(current_user)
+    user_id = str(current_user.user_id)
+    print(user_id)
+
+    for location in workflow.config.parent_runs_location:
+        files = scan_files(run_location=location, run_id="Metadata", data_collection=data_collection)
+        for file in files:
+            file = file.mongo()
+            existing_file = files_collection.find_one({"file_location": file["file_location"]})
+            if not existing_file:
+                file = File(**file)
+                file.id = ObjectId()
+                files_collection.insert_one(file.mongo())
+            else:
+                print(f"File already exists: {file['file_location']}")
+                file = File.from_mongo(existing_file)
+                print("from mongo", file)
+    
+    return {"message": f"Files successfully scanned and created for data_collection: {data_collection.id} of workflow: {workflow.id}"}
 
 
 
