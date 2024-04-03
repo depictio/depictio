@@ -103,35 +103,6 @@ def register_callbacks_header(app):
         return is_open
 
     @app.callback(
-        Output({"type": "add-content", "index": MATCH}, "children"),
-        Output({"type": "test-container", "index": MATCH}, "children", allow_duplicate=True),
-        [
-            Input({"type": "btn-done", "index": MATCH}, "n_clicks"),
-        ],
-        [
-            State({"type": "test-container", "index": MATCH}, "children"),
-            State({"type": "btn-done", "index": MATCH}, "id"),
-            State("stored-edit-dashboard-mode-button", "data"),
-            # State({"type": "graph", "index": MATCH}, "figure"),
-        ],
-        prevent_initial_call=True,
-    )
-    def update_button(n_clicks, children, btn_id, switch_state):
-
-        children["props"]["id"]["type"] = "updated-" + children["props"]["id"]["type"]
-        # logger.info(children)
-
-        btn_index = btn_id["index"]  # Extracting index from btn_id dict
-
-        # switch_state_bool = True if len(switch_state) > 0 else False
-
-        # new_draggable_child = children
-        new_draggable_child = enable_box_edit_mode(children, switch_state)
-        # new_draggable_child = enable_box_edit_mode(children, btn_index, switch_state_bool)
-
-        return new_draggable_child, []
-
-    @app.callback(
         Output("add-button", "disabled"),
         Output("save-button-dashboard", "disabled"),
         Output("remove-all-components-button", "disabled"),
@@ -148,7 +119,6 @@ def register_callbacks_header(app):
         logger.info(switch_state)
 
         return [not switch_state] * 5 + [switch_state] * 2
-    
 
     @app.callback(
         Output("share-modal-dashboard", "is_open"),
@@ -245,15 +215,10 @@ def design_header(data):
             dbc.ModalBody(
                 [
                     html.H5(
-                        "Share this dashboard with others by copying the link below:",
+                        "Share this dashboard by copying the link below:",
                         className="text-primary",
                     ),
-                    dmc.TextInput(
-                        type="text",
-                        value="https://depict.io/dashboard/1",
-                        style={"width": "100%"},
-                        icon=DashIconify(icon="mdi:link", width=16, color="grey")
-                    ),
+                    dmc.TextInput(type="text", value="https://depict.io/dashboard/1", style={"width": "100%"}, icon=DashIconify(icon="mdi:link", width=16, color="grey")),
                 ],
                 style={"background-color": "#F0F8FF"},
             ),
@@ -269,8 +234,6 @@ def design_header(data):
         id="share-modal-dashboard",
         centered=True,
     )
-
-
 
     # APP Header
 
@@ -289,6 +252,45 @@ def design_header(data):
 
     # Right side of the header - Edit dashboard mode button
     # if data:
+
+    add_new_component_button = dmc.Button(
+        "Add new component",
+        id="add-button",
+        size="lg",
+        radius="xl",
+        variant="gradient",
+        n_clicks=init_nclicks_add_button["count"],
+        style=button_style,
+        disabled=disabled,
+        leftIcon=DashIconify(icon="mdi:plus", width=16, color="white"),
+    )
+
+    save_button = dmc.Button(
+        "Save",
+        id="save-button-dashboard",
+        size="lg",
+        radius="xl",
+        variant="gradient",
+        gradient={"from": "teal", "to": "lime", "deg": 105},
+        n_clicks=0,
+        disabled=disabled,
+        leftIcon=DashIconify(icon="mdi:content-save", width=16, color="white"),
+        # width of the button
+        style={"width": "200px"},
+    )
+
+    remove_all_components_button = dmc.Button(
+        "Remove all components",
+        id="remove-all-components-button",
+        leftIcon=DashIconify(icon="mdi:trash-can-outline", width=16, color="white"),
+        size="lg",
+        radius="xl",
+        variant="gradient",
+        gradient={"from": "red", "to": "pink", "deg": 105},
+        style=button_style,
+        disabled=disabled,
+    )
+
     edit_switch = dmc.Switch(
         # edit_switch = dbc.Checklist(
         id="edit-dashboard-mode-button",
@@ -312,77 +314,94 @@ def design_header(data):
         # switch=True,
         color="orange",
     )
-    # else:
-    #     edit_switch = html.Div()
 
-    # TODO: toggle interactivity button
+    share_actionicon = dmc.ActionIcon(
+        DashIconify(icon="mdi:share-variant", width=32, color="white"),
+        id="share-button",
+        size="xl",
+        radius="xl",
+        color="grey",
+        variant="filled",
+        style=button_style,
+        disabled=disabled,
+        n_clicks=0,
+    )
+
+    dashboard_version_select = dmc.Select(
+        id="dashboard-version",
+        data=["v1", "v2"],
+        value="v2",
+        label="Dashboard version",
+        style={"width": 150, "padding": "0 10px"},
+        icon=DashIconify(icon="mdi:format-list-bulleted-square", width=16, color=dmc.theme.DEFAULT_COLORS["blue"][5]),
+        # rightSection=DashIconify(icon="radix-icons:chevron-down"),
+    )
+
+    dummy_output = html.Div(id="dummy-output", style={"display": "none"})
+
+    depictio_logo = html.Img(src=dash.get_asset_url("logo.png"), height=40, style={"margin-left": "0px"})
+
+    # Store the number of clicks for the add button and edit dashboard mode button
+    stores_add_edit = [
+        dcc.Store(
+            id="stored-add-button",
+            storage_type="memory",
+            # storage_type="session",
+            data=init_nclicks_add_button,
+        ),
+        dcc.Store(
+            id="stored-edit-dashboard-mode-button",
+            storage_type="memory",
+            # storage_type="session",
+            data=init_nclicks_edit_dashboard_mode_button,
+        ),
+    ]
 
     current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     header = html.Div(
         [
-            # html.H1("Depictio", style=title_style),
-            # Invisible div to store the test data
+            dummy_output,
+            html.Div(children=stores_add_edit),
             dbc.Col(
-                [html.Div(id="dummy-output", style={"display": "none"}), html.Img(src=dash.get_asset_url("logo.png"), height=40, style={"margin-left": "0px"})],
-                width=2,
+                [depictio_logo, dashboard_version_select],
+                width=1,
             ),
             dbc.Col(
                 [
-                    dmc.Select(
-                        id="dashboard-version",
-                        data=["v1", "v2"],
-                        value="v2",
-                        label="Dashboard version",
-                        style={"width": 150, "padding": "0 10px"},
-                        icon=DashIconify(icon="mdi:format-list-bulleted-square", width=16, color=dmc.theme.DEFAULT_COLORS["blue"][5]),
-                        rightSection=DashIconify(icon="radix-icons:chevron-down"),
+                    dbc.Row(),
+                    dbc.Row(
+                        [
+                            dmc.Card(
+                                [
+                                    dmc.CardSection(
+                                        [
+                                            dmc.Badge("User: Paul Cézanne", color="blue", leftSection=DashIconify(icon="mdi:account", width=16, color="grey")),
+                                            dmc.Badge(f"Last updated: {current_time}", color="green", leftSection=DashIconify(icon="mdi:clock-time-four-outline", width=16, color="grey")),
+                                        ]
+                                    ),
+                                ],
+                                # style={"width": "200px"},
+                                # align to bottom
+                               
+                            ),
+                        ],
+                        # justify="start"
                     ),
                 ],
-                width=1,
+                width=2,
+                         align="end",
+
+                style={"paddingLeft": "10px"},
             ),
             # dbc.Col(width=1),
             dbc.Col(
                 [
                     html.Div(
                         [
-                            # Left side of the header - Add new component button
-                            dmc.Button(
-                                "Add new component",
-                                id="add-button",
-                                size="lg",
-                                radius="xl",
-                                variant="gradient",
-                                n_clicks=init_nclicks_add_button["count"],
-                                style=button_style,
-                                disabled=disabled,
-                                leftIcon=DashIconify(icon="mdi:plus", width=16, color="white"),
-                            ),
-                            # Center part of the header - Save button + related modal
+                            add_new_component_button,
                             modal_save_button,
-                            dmc.Button(
-                                "Save",
-                                id="save-button-dashboard",
-                                size="lg",
-                                radius="xl",
-                                variant="gradient",
-                                gradient={"from": "teal", "to": "lime", "deg": 105},
-                                n_clicks=0,
-                                disabled=disabled,
-                                leftIcon=DashIconify(icon="mdi:content-save", width=16, color="white"),
-                                # width of the button
-                                style={"width": "200px"},
-                            ),
-                            dmc.Button(
-                                "Remove all components",
-                                id="remove-all-components-button",
-                                leftIcon=DashIconify(icon="mdi:trash-can-outline", width=16, color="white"),
-                                size="lg",
-                                radius="xl",
-                                variant="gradient",
-                                gradient={"from": "red", "to": "pink", "deg": 105},
-                                style=button_style,
-                                disabled=disabled,
-                            ),
+                            save_button,
+                            remove_all_components_button,
                         ],
                         style={"display": "flex", "alignItems": "center"},
                     )
@@ -391,39 +410,24 @@ def design_header(data):
             ),
             html.Div(
                 [
-                    dbc.Col([dbc.Row(edit_switch), dbc.Row(toggle_interactivity, style={"paddingTop": "5px"})], width=3, style={"justifyContent": "flex-end"}),
                     dbc.Col(
                         [
-                            dmc.ActionIcon(
-                                DashIconify(icon="mdi:share-variant", width=32, color="white"),
-                                id="share-button",
-                                size="xl",
-                                radius="xl",
-                                color="grey",
-                                variant="filled",
-                                style=button_style,
-                                disabled=disabled,
-                                n_clicks=0,
+                            dbc.Row(edit_switch, style={"paddingBottom": "15px"}),
+                            dbc.Row(
+                                toggle_interactivity,
                             ),
+                        ],
+                        width="auto",
+                    ),
+                    dbc.Col(
+                        [
+                            share_actionicon,
                             modal_share_dashboard,
                         ],
                         width=1,
                     ),
                 ],
                 style={"display": "flex", "alignItems": "center", "justifyContent": "space-between", "padding": "0 50px 0 0"},
-            ),
-            # Store the number of clicks for the add button and edit dashboard mode button
-            dcc.Store(
-                id="stored-add-button",
-                storage_type="memory",
-                # storage_type="session",
-                data=init_nclicks_add_button,
-            ),
-            dcc.Store(
-                id="stored-edit-dashboard-mode-button",
-                storage_type="memory",
-                # storage_type="session",
-                data=init_nclicks_edit_dashboard_mode_button,
             ),
         ],
         style=header_style,
