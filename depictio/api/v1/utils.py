@@ -1,3 +1,6 @@
+
+
+# FIXME: fix ciruclar import between utils & config related to logger load
 from datetime import datetime
 import hashlib
 import json
@@ -128,6 +131,8 @@ def calculate_file_hash(file_path: str) -> str:
     # Implementation of hashing function
     with open(file_path, "rb") as f:
         return hashlib.md5(f.read()).hexdigest()
+
+
 
 
 # FIXME: updat model & function using a list of dict instead of a dict
