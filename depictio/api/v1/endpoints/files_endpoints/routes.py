@@ -8,7 +8,7 @@ import subprocess
 
 from botocore.exceptions import NoCredentialsError
 
-from depictio.api.v1.configs.config import settings
+from depictio.api.v1.configs.config import settings, logger
 from depictio.api.v1.db import db
 from depictio.api.v1.s3 import s3_client
 from depictio.api.v1.endpoints.files_endpoints.models import File
@@ -66,7 +66,7 @@ async def list_registered_files(
         "permissions.owners.user_id": user_oid,
         "data_collections._id": data_collection_oid,
     }
-    print(query)
+    logger.info(query)
     if not workflows_collection.find_one(query):
         raise HTTPException(
             status_code=404,
@@ -89,9 +89,9 @@ async def scan_metadata(
     """
     Scan the files and retrieve metadata.
     """
-    print("Scanning data collection")
-    print(workflow_id)
-    print(data_collection_id)
+    logger.info("Scanning data collection")
+    logger.info(workflow_id)
+    logger.info(data_collection_id)
 
     (
         workflow_oid,
@@ -106,9 +106,9 @@ async def scan_metadata(
         data_collection_id,
     )
 
-    print(current_user)
+    logger.info(current_user)
     user_id = str(current_user.user_id)
-    print(user_id)
+    logger.info(user_id)
 
     for location in workflow.config.parent_runs_location:
         files = scan_files(run_location=location, run_id="Metadata", data_collection=data_collection)
@@ -120,9 +120,9 @@ async def scan_metadata(
                 file.id = ObjectId()
                 files_collection.insert_one(file.mongo())
             else:
-                print(f"File already exists: {file['file_location']}")
+                logger.info(f"File already exists: {file['file_location']}")
                 file = File.from_mongo(existing_file)
-                print("from mongo", file)
+                logger.info("from mongo", file)
     
     return {"message": f"Files successfully scanned and created for data_collection: {data_collection.id} of workflow: {workflow.id}"}
 
@@ -134,9 +134,9 @@ async def scan_data_collection(
     data_collection_id: str,
     current_user: str = Depends(get_current_user),
 ):
-    print("Scanning data collection")
-    print(workflow_id)
-    print(data_collection_id)
+    logger.info("Scanning data collection")
+    logger.info(workflow_id)
+    logger.info(data_collection_id)
 
     (
         workflow_oid,
@@ -151,21 +151,21 @@ async def scan_data_collection(
         data_collection_id,
     )
 
-    print(current_user)
+    logger.info(current_user)
     user_id = str(current_user.user_id)
-    print(user_id)
+    logger.info(user_id)
 
     # Retrieve the workflow_config from the workflow
     locations = workflow.config.parent_runs_location
 
-    print(locations)
+    logger.info(locations)
 
     # Scan the runs and retrieve the files
 
     new_tracks = []
 
     for location in locations:
-        print(location)
+        logger.info(location)
         runs_and_content = scan_runs(location, workflow.config, data_collection)
         runs_and_content = serialize_for_mongo(runs_and_content)
 
@@ -184,7 +184,7 @@ async def scan_data_collection(
 
                 existing_run = runs_collection.find_one({"run_tag": run.mongo()["run_tag"]})
                 if existing_run:
-                    print(f"Run already exists: {existing_run}")
+                    logger.info(f"Run already exists: {existing_run}")
                     run_id = existing_run["_id"]
                     run = WorkflowRun.from_mongo(existing_run)
 
@@ -196,10 +196,10 @@ async def scan_data_collection(
                 # Add run_id to each file before inserting
                 for file in sorted(files, key=lambda x: x["file_location"]):
                     file = File(**file)
-                    # print(data_collection.config.type)
+                    # logger.info(data_collection.config.type)
 
                     # if data_collection.config.type == "JBrowse2":
-                    #     # print(data_collection.config)
+                    #     # logger.info(data_collection.config)
                     #     handle_jbrowse_tracks(file, user_id, workflow.id, data_collection)
 
                     # Check if the file already exists in the database
@@ -210,11 +210,11 @@ async def scan_data_collection(
                         # If the file does not exist, add it to the database
                         files_collection.insert_one(file.mongo())
                     else:
-                        print(f"File already exists: {file.mongo()['file_location']}")
+                        logger.info(f"File already exists: {file.mongo()['file_location']}")
                         file = File.from_mongo(existing_file)
 
-                    print("File")
-                    print(file)
+                    logger.info("File")
+                    logger.info(file)
 
         return {"message": f"Files successfully scanned and created for data_collection: {data_collection.id} of workflow: {workflow.id}"}
     else:
@@ -245,7 +245,7 @@ async def delete_files(
         "permissions.owners.user_id": user_oid,
         "data_collections._id": data_collection_oid,
     }
-    print(query)
+    logger.info(query)
     if not workflows_collection.find_one(query):
         raise HTTPException(
             status_code=404,
