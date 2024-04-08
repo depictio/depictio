@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 # from werkzeug.security import check_password_hash, generate_password_hash
 from depictio.api.v1.endpoints.user_endpoints.models import User, Token, TokenData
 from depictio.api.v1.models.base import PyObjectId
-
+from depictio.api.v1.configs.config import logger
 
 from depictio.api.v1.db import db
 
@@ -62,9 +62,9 @@ def register_user(username: str, email: str, password: str):
 
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
-    print("\n\n\n")
-    print("create_access_token")
-    print(data)
+    logger.info("\n\n\n")
+    logger.info("create_access_token")
+    logger.info(data)
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
@@ -72,7 +72,7 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
         expire = datetime.utcnow() + timedelta(minutes=15)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, PRIVATE_KEY, algorithm=ALGORITHM)
-    print(encoded_jwt)
+    logger.info(encoded_jwt)
     return encoded_jwt
 
 
@@ -87,10 +87,10 @@ def authenticate_user(username: str, password: str):
 @auth_endpoint_router.post("/token", response_model=Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
     user = authenticate_user(form_data.username, form_data.password)
-    print("\n\n\n")
-    print("login_for_access_token")
-    print(form_data.username)
-    print(user)
+    logger.info("\n\n\n")
+    logger.info("login_for_access_token")
+    logger.info(form_data.username)
+    logger.info(user)
 
     if not user:
         raise HTTPException(status_code=400, detail="Incorrect username or password")
@@ -111,12 +111,12 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 
 @auth_endpoint_router.get("/fetch_user", response_model=User)
 async def fetch_user_from_token(token: str = Depends(oauth2_scheme)) -> User:
-    print("\n\n\n")
-    print("fetch_user_from_token")
+    logger.info("\n\n\n")
+    logger.info("fetch_user_from_token")
     payload = jwt.decode(token, PUBLIC_KEY, algorithms=[ALGORITHM])
     user_id = payload.get("sub")
     if user_id is None:
-        print("Token is invalid or expired.")
+        logger.info("Token is invalid or expired.")
         sys.exit(code=1)
     # Fetch user from the database or wherever it is stored
     user_document = users_collection.find_one({"_id": ObjectId(str(user_id))})
@@ -127,7 +127,7 @@ async def fetch_user_from_token(token: str = Depends(oauth2_scheme)) -> User:
         username=user_document["username"],
         email=user_document["email"],
     )
-    print(user)
+    logger.info(user)
     return user
 
 
