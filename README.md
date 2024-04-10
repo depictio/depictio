@@ -21,7 +21,9 @@ Depictio is an innovative web-based platform currently under development, aimed 
 
 ## Modularity
 
-Depictio is designed with a modular architecture, allowing for easy integration of new features and functionalities. The frontend and backend components are decoupled, enabling independent development and deployment of each module. The platform is built to be scalable and adaptable to various research needs, with a focus on user-friendly interfaces and interactive data visualization tools. 
+Depictio is designed with a modular architecture, allowing for easy integration of new features and functionalities. The frontend and backend components are decoupled, enabling independent development and deployment of each module. The platform is built to be scalable and adaptable to various needs, with a focus on user-friendly interfaces and interactive data visualization tools. 
+
+The code organisation clearly separates each of the frontend components and the API endpoints, making it easy to understand and extend the platform.
 
 ### Dashboard components
 
@@ -43,6 +45,14 @@ There are currently 4 main components supported to build your dashboard:
 
 ### API
 
+Depictio API is built on top of FastAPI, a modern, fast (high-performance), web framework for building APIs with Python 3.6+ based on standard Python type hints. It is designed to be easy to use and understand, with a focus on performance and scalability. 
+
+Each category of endpoints is structured 
+The API's categories are the following:
+- Dashboards endpoints: to manage the dashboards and their components.
+  - GET /dashboards
+  - 
+
 
 ## Architecture
 
@@ -51,7 +61,7 @@ There are currently 4 main components supported to build your dashboard:
 Depictio architecture is currently composed of two main aspects: a microservices architecture (to be executed into a docker-compose and late on in a kubernetes cluster) and a CLI client to be installed locally on-premise where the data to be scanned is located. 
 There are currently 6 main microservices running:
 - 1. FastAPI instance
-- 2. mongoDB database
+- 2. mongoDB **database**
 - 3. redis cache system
 - 4. JBrowse on-premise genome browser
 - 5. MinIO S3 bucket management instance
