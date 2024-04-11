@@ -86,6 +86,7 @@ git clone https://github.com/weber8thomas/depictio.git
 docker-compose up -d
 ```
 
+### jbrowse plugin 
 
 
 ### Kubernetes
