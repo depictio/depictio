@@ -88,7 +88,7 @@ git clone https://github.com/weber8thomas/depictio-data.git
 ```
 
 
-Modify the `.env` file to update the environment variables:
+Modify the `.env` file to update the environment variables. The following variables are mandatory to be set:
 
 
 ```
