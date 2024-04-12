@@ -120,7 +120,7 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-.env
+# .env
 .venv
 env/
 venv/
@@ -180,7 +180,7 @@ dev/jbrowse_dev/assets/
 
 wf_data/
 
-.env
+# .env
 
 ldap_config/
 ldap_db/
@@ -199,3 +199,4 @@ jbrowse2_sessions/
 jbrowse2_configs/
 data/depictio_data.json
 data/jbrowse_df_mapping_dict.json
+dev/flask-login/.env
