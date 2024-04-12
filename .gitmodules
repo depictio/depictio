@@ -1,0 +1,3 @@
+[submodule "jbrowse-watcher-plugin"]
+	path = jbrowse-watcher-plugin
+	url = https://github.com/weber8thomas/jbrowse-watcher-plugin

@@ -34,25 +34,19 @@ Each of the components is designed to be modular and can be easily integrated in
 
 #### Generic components (Data collection Table)
 There are currently 4 main components supported to build your dashboard:
-- 1. Figures: Bar, Line, Scatter, Box and Histogram plots.
-- 2. Metrics cards: Cards displaying metrics values.
-- 3. Interactive components: (slider, dropdown, input text, etc.)
-- 4. Tables: Interactive tables with sorting, filtering and searching functionalities.
+- Figures: Bar, Line, Scatter, Box and Histogram plots.
+- Metrics cards: Cards displaying metrics values.
+- Interactive components: (slider, dropdown, input text, etc.)
+- Tables: Interactive tables with sorting, filtering and searching functionalities.
 
 #### Specific components
-- 1. JBrowse: Genome browser to visualize genomic data.
-- 
+- JBrowse: Genome browser to visualize genomic data.
+- Graphs: Network graphs to visualize interactions between entities.
+- Geomap: Geographical map.
 
 ### API
 
 Depictio API is built on top of FastAPI, a modern, fast (high-performance), web framework for building APIs with Python 3.6+ based on standard Python type hints. It is designed to be easy to use and understand, with a focus on performance and scalability. 
-
-Each category of endpoints is structured 
-The API's categories are the following:
-- Dashboards endpoints: to manage the dashboards and their components.
-  - GET /dashboards
-  - 
-
 
 ## Architecture
 
@@ -81,12 +75,32 @@ Clone the repo:
 git clone https://github.com/weber8thomas/depictio.git
 ```
 
+Or if you want to use the jbrowse submodule:
 
 ```
-docker-compose up -d
+git clone --recurse-submodules https://github.com/weber8thomas/depictio.git
 ```
 
-### jbrowse plugin 
+If needed, example data can be downloaded by cloning the following repo:
+
+```
+git clone https://github.com/weber8thomas/depictio-data.git
+```
+
+
+Modify the `.env` file to update the environment variables:
+
+
+```
+DEPICTIO_BACKEND_DATA_VOLUME_HOST=<path_to_your_data_folder>
+```
+
+
+Start the docker-compose services:
+
+```
+docker compose up -d --build
+```
 
 
 ### Kubernetes

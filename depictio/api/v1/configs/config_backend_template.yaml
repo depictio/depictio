@@ -1,0 +1,59 @@
+mongodb:
+  host: "host.docker.internal"
+  port: "$MONGO_PORT"
+  db_name: "depictioDB"
+  collections: 
+    data_collection: "data_collections"
+    workflow_collection: "workflows"
+    runs_collection: "runs"
+    files_collection: "files"
+    users_collection: "users"
+    deltatables_collection: "deltatables"
+    jbrowse_collection: "jbrowse_collection"
+    dashboards_collection: "dashboards_collection"
+
+rabbitmq:
+  host: "host.docker.internal"
+  port: "$RABBITMQ_PORT"
+  exchange: "direct"
+  routing_key: "depictio_key"
+  queue: "jbrowse_logs"
+
+redis: 
+  host: "host.docker.internal"
+  port: "$REDIS_PORT"
+  db: 0
+  cache_ttl: 300
+  user_secret_key: "mysecretkey"
+
+fastapi:
+  host: "host.docker.internal"
+  port: "$DEPICTIO_BACKEND_PORT"
+
+dash:
+  host: "0.0.0.0"
+  port: "$DEPICTIO_FRONTEND_PORT"
+
+minio:
+  data_dir: "$DEPICTIO_MINIO_DATA"
+  internal_endpoint: "http://minio"
+  external_endpoint: "http://localhost"
+  port: "$MINIO_SERVER_PORT"
+  access_key: "$MINIO_ACCESS_KEY"
+  secret_key: "$MINIO_SECRET_KEY"
+  secure: False
+  bucket: "depictio-bucket"
+
+jbrowse:
+  enabled: True
+  instance:
+    host: "http://localhost"
+    port: "$JBROWSE2_INSTANCE_PORT"
+  watcher_plugin:
+    host: "http://localhost"
+    port: "$JBROWSE2_PLUGIN_PORT"
+  data_dir: "/data"
+  config_dir: "$JBROWSE2_PLUGIN_VOLUME_HOST/sessions"
+
+auth:
+  tmp_token: "your_token_here"
