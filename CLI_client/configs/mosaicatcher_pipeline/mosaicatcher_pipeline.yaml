@@ -154,18 +154,6 @@ workflows:
           # The specific properties of the data collection - is related to the type of the data collection (JBrowse2 here)
           dc_specific_properties:
 
-            
-
-            # # A list of wildcards that are used to match the files in the data collection - used for regex matching based on file name - must correspond to the regex in files_regex
-            # regex_wildcards:
-            #   # The name/ID of the wildcard
-            #   - name: "cell"
-            #     # The regular expression that is used to match the wildcard
-            #     regex: ".*"
-
-            #     # The tag defined of the data collection that is used to join the data collection
-            #     join_data_collection: "mosaicatcher_stats"
-
             # The extension of the index file for the data collection
             index_extension: "tbi"
 
