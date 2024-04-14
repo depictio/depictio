@@ -4,14 +4,19 @@
 This document guides users on customizing the YAML configuration for the MosaiCatcher pipeline, detailing workflows and data collections.
 
 ## Contents
-- [Version Specification](#version-specification)
-- [Defining Workflows](#defining-workflows)
-  - [Workflow Engine](#workflow-engine)
-  - [Workflow Details](#workflow-details)
-  - [Workflow Data Configuration](#workflow-data-configuration)
-- [Data Collections](#data-collections)
-  - [Table Type Collections](#table-type-collections)
-  - [JBrowse2 Type Collections](#jbrowse2-type-collections)
+- [MosaiCatcher Pipeline Configuration Documentation](#mosaicatcher-pipeline-configuration-documentation)
+  - [General Overview](#general-overview)
+  - [Contents](#contents)
+  - [Version Specification](#version-specification)
+  - [Defining Workflows](#defining-workflows)
+    - [Workflow Engine](#workflow-engine)
+    - [Workflow Details](#workflow-details)
+    - [Workflow Data Configuration](#workflow-data-configuration)
+  - [Data Collections](#data-collections)
+    - [Table Type Collections](#table-type-collections)
+    - [JBrowse2 Type Collections](#jbrowse2-type-collections)
+    - [Joining Data Collections](#joining-data-collections)
+- [TODO: Look on how hassio and similar companies are defining YAML validation and docdumentation.](#todo-look-on-how-hassio-and-similar-companies-are-defining-yaml-validation-and-docdumentation)
 
 ## Version Specification
 - `depictio_version`: "0.1.0"
@@ -49,3 +54,5 @@ This document guides users on customizing the YAML configuration for the MosaiCa
   - `how`: Type of join (e.g., "inner").
   - `with_dc`: Data collections to join.
 
+
+# TODO: Look on how hassio and similar companies are defining YAML validation and docdumentation.
