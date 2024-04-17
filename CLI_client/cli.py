@@ -417,10 +417,10 @@ def list_workflows(
     headers = {"Authorization": f"Bearer {token}"}  # Token is now mandatory
 
     # print(token)
-    workflows = httpx.get(f"{API_BASE_URL}/depictio/api/v1/workflows/get", headers=headers)
+    workflows = httpx.get(f"{API_BASE_URL}/depictio/api/v1/workflows/get_all_workflows", headers=headers)
     workflows_json = workflows.json()
     pretty_workflows = json.dumps(workflows_json, indent=4)
-    # typer.echo(pretty_workflows)
+    typer.echo(pretty_workflows)
     return workflows_json
 
 
