@@ -200,3 +200,5 @@ jbrowse2_configs/
 data/depictio_data.json
 data/jbrowse_df_mapping_dict.json
 dev/flask-login/.env
+dev/dev_delta/data/
+*.bak
