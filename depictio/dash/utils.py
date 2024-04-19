@@ -22,7 +22,7 @@ from depictio.api.v1.endpoints.user_endpoints.auth import (
 )
 from depictio.api.v1.endpoints.workflow_endpoints.models import Workflow
 from depictio.api.v1.models.base import convert_objectid_to_str
-
+from depictio.api.v1.s3 import s3_client, minio_storage_options
 
 SELECTED_STYLE = {
     "display": "inline-block",
@@ -261,7 +261,8 @@ def load_deltatable_lite(workflow_id: ObjectId, data_collection_id: ObjectId, co
         #     redis_cache.set(file_id, output_stream.read())
 
         # Read the file from DeltaTable using polars and convert to pandas
-        df = pl.read_delta(file_id, columns=cols if cols else None)
+
+        df = pl.read_delta(file_id, columns=cols if cols else None, storage_options=minio_storage_options)
 
         # TODO: move to polars
         df = df.to_pandas()

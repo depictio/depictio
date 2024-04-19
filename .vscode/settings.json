@@ -5,5 +5,6 @@
   "python.testing.pytestEnabled": true,
   "cmake.configureOnOpen": false,
   "restructuredtext.preview.docutils.disabled": true,
-  "restructuredtext.syntaxHighlighting.disabled": true
+  "restructuredtext.syntaxHighlighting.disabled": true,
+  "restructuredtext.pythonRecommendation.disabled": true
 }

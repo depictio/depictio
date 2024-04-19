@@ -11,7 +11,7 @@ import numpy as np
 
 from depictio.api.v1.configs.config import settings, logger
 from depictio.api.v1.db import db, workflows_collection, files_collection, users_collection, deltatables_collection
-from depictio.api.v1.s3 import s3_client
+from depictio.api.v1.s3 import s3_client, minio_storage_options
 from depictio.api.v1.endpoints.deltatables_endpoints.models import Aggregation, DeltaTableAggregated
 from depictio.api.v1.endpoints.files_endpoints.models import File
 from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user
@@ -266,8 +266,8 @@ async def aggregate_data(
 
     # Create a DeltaTableAggregated object
     # TODO: fix the data_dir - not working without due to Docker volumes
-    # destination_file_name = f"/minio_data/{settings.minio.bucket}/{user_oid}/{workflow_oid}/{data_collection_oid}/"  # Destination path in MinIO
-    destination_file_name = f"{settings.minio.data_dir}/{settings.minio.bucket}/{user_oid}/{workflow_oid}/{data_collection_oid}/"  # Destination path in MinIO
+    destination_file_name = f"s3://{settings.minio.bucket}/{user_oid}/{workflow_oid}/{data_collection_oid}/"  # Destination path in MinIO
+    # destination_file_name = f"{settings.minio.data_dir}/{settings.minio.bucket}/{user_oid}/{workflow_oid}/{data_collection_oid}/"  # Destination path in MinIO
     os.makedirs(destination_file_name, exist_ok=True)
 
     # Get the user object to use as aggregation_by
@@ -315,7 +315,8 @@ async def aggregate_data(
     # TMP solution: write to Delta Lake locally and then upload to MinIO
     # Write aggregated dataframe to Delta Lake
 
-    aggregated_df.write_delta(destination_file_name, mode="overwrite", overwrite_schema=False)
+    aggregated_df.write_delta(destination_file_name, mode="overwrite", storage_options=minio_storage_options, delta_write_options={"overwrite_schema": "True"})
+    # aggregated_df.write_delta(destination_file_name, mode="overwrite", overwrite_schema=True, storage_options=minio_storage_options)
 
     # Upload the Delta Lake to MinIO
     # upload_dir_to_s3(
