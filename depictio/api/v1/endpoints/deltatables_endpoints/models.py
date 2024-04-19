@@ -81,7 +81,7 @@ class DeltaTableAggregated(MongoModel):
     id: Optional[PyObjectId] = None
     # id: Optional[PyObjectId] = None
     data_collection_id: PyObjectId
-    delta_table_location: Path
+    delta_table_location: str
     aggregation: List[Aggregation] = []
 
     class Config:
