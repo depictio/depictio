@@ -1,0 +1,16 @@
+# FIXME: try to harmonise pydantic version
+name: depictio-CLI-condaenv
+channels:
+  - conda-forge
+  - anaconda
+dependencies:
+  - bleach
+  - bson
+  - httpx
+  - pydantic==1.10.10
+  - python-devtools
+  - python-jose
+  - pyyaml
+  - typer
+  - pip:  
+    - pydantic[email]==1.10.10
