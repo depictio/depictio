@@ -204,3 +204,13 @@ data/jbrowse_df_mapping_dict.json
 dev/flask-login/.env
 dev/dev_delta/data/
 *.bak
+=======
+data/depictio_data.json.bak
+dev/dev_delta/
+dev/dev_delta/.DS_Store
+.DS_Store
+<<<<<<< HEAD
+dev/dev_delta/.DS_Store
+>>>>>>> cf13dd2 (Updating fonts & logo)
+=======
+>>>>>>> 37834d0 (Updating fonts & logo)
