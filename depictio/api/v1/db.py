@@ -7,7 +7,7 @@ from depictio.api.v1.configs.config import settings, MONGODB_URL
 client = pymongo.MongoClient(MONGODB_URL)
 db = client[settings.mongodb.db_name]
 redis_cache = redis.Redis(
-    host=settings.redis.host, port=settings.redis.port, db=settings.redis.db
+    host=settings.redis.service_name, port=settings.redis.port, db=settings.redis.db
 )
 
 # Define the collections
