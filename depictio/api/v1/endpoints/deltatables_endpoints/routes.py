@@ -266,7 +266,7 @@ async def aggregate_data(
 
     # Create a DeltaTableAggregated object
     # TODO: fix the data_dir - not working without due to Docker volumes
-    destination_file_name = f"s3://{settings.minio.bucket}/TEST_S3/{user_oid}/{workflow_oid}/{data_collection_oid}/"  # Destination path in MinIO
+    destination_file_name = f"s3://{settings.minio.bucket}/{user_oid}/{workflow_oid}/{data_collection_oid}/"  # Destination path in MinIO
     # destination_file_name = f"{settings.minio.data_dir}/{settings.minio.bucket}/{user_oid}/{workflow_oid}/{data_collection_oid}/"  # Destination path in MinIO
     os.makedirs(destination_file_name, exist_ok=True)
 
