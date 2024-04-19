@@ -3,17 +3,17 @@ version: '3.8'
 services:
   mongo:
     image: mongo:latest
-    command: --dbpath ${MONGO_DBPATH} --port ${MONGO_PORT}
+    command: --dbpath /data/depictioDB --port 27018
     ports:
-      - "${MONGO_PORT}:${MONGO_PORT}"
+      - 27018:27018
     volumes:
-      - "${MONGO_VOLUME_HOST}:${MONGO_VOLUME_CONTAINER}"
+      - ./depictioDB:/data/depictioDB
 
   redis:
     image: redis:latest
     command: redis-server
     ports:
-      - "${REDIS_PORT}:${REDIS_PORT}"
+      - 6379:6379
 
   redis-cli-monitor:
     image: redis:latest
@@ -24,42 +24,44 @@ services:
   minio:
     image: minio/minio:latest
     volumes:
-      - "${MINIO_VOLUME}:${MINIO_VOLUME}"
+      - "./minio_data:/minio_data"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
-    command: server /data --console-address :${MINIO_CONSOLE_PORT}
+    command: server /data --console-address :9001
     ports:
-      - "${MINIO_SERVER_PORT}:${MINIO_SERVER_PORT}"
-      - "${MINIO_CONSOLE_PORT}:${MINIO_CONSOLE_PORT}"
+      - "9000:9000"
+      - "9001:9001"
 
   rabbitmq:
     image: rabbitmq:3-management
     ports:
-      - "${RABBITMQ_PORT}:${RABBITMQ_PORT}"
-      - "${RABBITMQ_MANAGEMENT_PORT}:${RABBITMQ_MANAGEMENT_PORT}"
+      - "5672:5672"
+      - "15672:15672"
 
   jbrowse2:
     image: jbrowse2:latest
     build:
       dockerfile: docker-images/Dockerfile_jbrowse.dev.plugin.dockerfile
     ports: 
-      - "${JBROWSE2_PORT1}:${JBROWSE2_PORT1}"
-      - "${JBROWSE2_PORT2}:${JBROWSE2_PORT2}"
+      - 3000:3000
+      - 9010:9010
     volumes:
-      - "${JBROWSE2_PLUGIN_VOLUME_HOST}:${JBROWSE2_PLUGIN_VOLUME_CONTAINER}"
+      - "./jbrowse-watcher-plugin:/usr/src/plugin"
 
   depictio_frontend:
     image: depictio:dev
+    build:
+      dockerfile: docker-images/Dockerfile_depictio.dockerfile
     ports:
-      - "${DEPICTIO_FRONTEND_PORT}:${DEPICTIO_FRONTEND_PORT}"
+      - 5080:5080
     volumes:
-      - "${DEPICTIO_FRONTEND_VOLUME}:${DEPICTIO_FRONTEND_VOLUME}"
-      - "${DEPICTIO_DATA_VOLUME}:${DEPICTIO_DATA_VOLUME}"
-      - "${DEPICTIO_MINIO_DATA}:${DEPICTIO_MINIO_DATA}"
-      - "${DEPICTIO_CLI_CONFIGS}:${DEPICTIO_CLI_CONFIGS}"
+      - ./depictio:/app/depictio
+      - ./data:/app/data
+      - ./minio_data:/minio_data
+      - ./CLI_client/configs:/CLI_client/configs
     command: ["python", "depictio/dash/app.py"]
     depends_on:
       - mongo
@@ -70,14 +72,18 @@ services:
 
   depictio_backend:
     image: depictio:dev
+    build:
+      dockerfile: docker-images/Dockerfile_depictio.dockerfile
     ports:
-      - "${DEPICTIO_BACKEND_PORT}:${DEPICTIO_BACKEND_PORT}"
+      - 8058:8058
     volumes:
       - "${DEPICTIO_BACKEND_DATA_VOLUME_HOST}:${DEPICTIO_BACKEND_DATA_VOLUME_HOST}"
-      - "${DEPICTIO_DATA_VOLUME}:${DEPICTIO_DATA_VOLUME}"
-      - "${DEPICTIO_BACKEND_SESSIONS_HOST}:${DEPICTIO_BACKEND_SESSIONS_HOST}"
-      - "${DEPICTIO_MINIO_DATA}:${DEPICTIO_MINIO_DATA}"
-      - "${DEPICTIO_CLI_CONFIGS}:${DEPICTIO_CLI_CONFIGS}"
+      - ./depictio:/app/depictio
+      - ./data:/app/data
+      - ./minio_data:/minio_data
+      - ./jbrowse-watcher-plugin/sessions:/jbrowse-watcher-plugin/sessions
+      - ./CLI_client/configs:/CLI_client/configs
+      - ./.env:/app/.env
     command: ["python", "depictio/api/run.py"]
     depends_on:
       - mongo
@@ -87,15 +93,18 @@ services:
 
   depictio_nb:
     image: depictio_nb:dev
+    build:
+      dockerfile: docker-images/Dockerfile_depictio_nb_debug.dockerfile
     ports:
-      - "${DEPICTIO_NB_PORT}:${DEPICTIO_NB_PORT}"
+      - 8888:8888
     volumes:
       - "${DEPICTIO_BACKEND_DATA_VOLUME_HOST}:${DEPICTIO_BACKEND_DATA_VOLUME_HOST}"
-      - "${DEPICTIO_DATA_VOLUME}:${DEPICTIO_DATA_VOLUME}"
-      - "${DEPICTIO_NB_DEV}:${DEPICTIO_NB_DEV}"
-      - "${DEPICTIO_BACKEND_SESSIONS_HOST}:${DEPICTIO_BACKEND_SESSIONS_HOST}"
-      - "${DEPICTIO_MINIO_DATA}:${DEPICTIO_MINIO_DATA}"
-      - "${DEPICTIO_CLI_CONFIGS}:${DEPICTIO_CLI_CONFIGS}"
+      - ./depictio:/app/depictio
+      - ./data:/app/data
+      - ./minio_data:/minio_data
+      - ./jbrowse-watcher-plugin/sessions:/jbrowse-watcher-plugin/sessions
+      - ./CLI_client/configs:/CLI_client/configs
+      - ./dev:/app/dev
     depends_on:
       - mongo
       - redis

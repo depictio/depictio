@@ -1,66 +1,9 @@
-mongodb:
-  # host: "localhost"
-  host: "host.docker.internal"
-  port: "27018"
-  # mongo_url: "mongodb://localhost:27018/"
-  db_name: "depictioDB"
-  collections: 
-    data_collection: "data_collections"
-    workflow_collection: "workflows"
-    runs_collection: "runs"
-    files_collection: "files"
-    users_collection: "users"
-    # groups_collection: "groups_collection"
-    # projects_collection: "projects_collection"
-    deltatables_collection: "deltatables"
-    jbrowse_collection: "jbrowse_collection"
-    dashboards_collection: "dashboards_collection"
-
-rabbitmq:
-  host: "host.docker.internal"
-  port: 5672
-  exchange: "direct"
-  routing_key: "depictio_key"
-  queue: "jbrowse_logs"
-
-redis: 
-  host: host.docker.internal
-  port: 6379
-  db: 0
-  cache_ttl: 300
-  user_secret_key: mysecretkey
-
 fastapi:
-  host: "host.docker.internal"
   port: 8058
 
 dash:
-  host: "0.0.0.0"
   port: 5080
 
-# FIXME : 
-minio:
-  data_dir: "/Users/tweber/Gits/depictio/minio_data"
-  internal_endpoint: "http://minio"
-  external_endpoint: "http://localhost"
-  # endpoint: "http://host.docker.internal"
-  port: 9000
-  access_key: "minio"
-  secret_key: "minio123"
-  secure: False
-  bucket: "depictio-bucket"
-
 jbrowse:
-  enabled: True
-  instance:
-    host: "http://localhost"
-    port: 3000
-  watcher_plugin:
-    host: "http://localhost"
-    port: 9010
   data_dir: "/data"
-  config_dir: "/Users/tweber/Gits/jbrowse-watcher-plugin/sessions"
-
-auth:
-  tmp_token: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2NWU1ZjAwN2JhZDMyZGY4NTdhNTNjZjIiLCJleHAiOjE3ODczMzE0MDR9.TLZYSuZVFfXwWUMyIaC9G3-IzvsdCfT2aMHwX4rLFO0NLQRo4dCI-rEB_fImzj_ee184EfvMLVwSKePaVOJVfqNGNalrmzArhscHIa4Gsrq6OlL2yfFc6EaQd_ql9CtpLLVCeQYHWs_Dd7SIA20UJ1L-C6sqbxo7G8HBIjWCROTGErvf4mo24diPxNqOQ92u3pNxfYYRQh10lNRDXqledEsO3STxBy0wEMGCI5DqY-B8YgMpPX8RJg_Fm0xlJvdjd9BBkMqtC7N4ciBqRMqbFG0yISqWFVJ0GZJkqjOklzQeQbf48j3yY7HzLdkzzBeZwD7YEj6aj_J-LaS7V_PA2A
-  # tmp_token: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2NGE4NDI4NDJiZjRmYTdkZWFhM2RiZWQiLCJleHAiOjE3ODQ5ODY3ODV9.a5bkSctoCNYXVh035g_wt-bio3iC3uuM9anFKiJOKrmBHDH0tmcL2O9Rc1HIQtAxCH-mc1K4q4aJsAO8oeayuPyA3w7FPIUnLsZGRHB8aBoDCoxEIpmACi0nEH8hF9xd952JuBt6ggchyMyrnxHC65Qc8mHC9PeylWonHvNl5jGZqi-uhbeLpsjuPcsyg76X2aqu_fip67eJ8mdr6yuII6DLykpfbzALpn0k66j79YzOzDuyn4IjBfBPWiqZzl_9oDMLK7ODebu6FTDmQL0ZGto_dxyIJtkf1CdxPaYkgiXVOh00Y6sXJ24jHSqfNP-dqvAQ3G8izuurq6B4SNgtDw
+  config_dir: "/jbrowse-watcher-plugin/sessions"

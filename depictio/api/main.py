@@ -2,9 +2,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from depictio.api.v1.endpoints.routers import router
+from depictio import BASE_PATH
 
 # from db import initialize_db
-from depictio.api.v1.configs.config import settings
+from dotenv import load_dotenv
+load_dotenv(BASE_PATH.parent / ".env")
 
 app = FastAPI(title="Depictio API", version="0.1.0")
 
