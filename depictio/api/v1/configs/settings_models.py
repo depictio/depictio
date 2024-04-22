@@ -1,90 +1,106 @@
 from typing import Dict, Union
-from pydantic import BaseModel
-import yaml
+from pydantic import BaseSettings, Field
+
+class Collections(BaseSettings):
+    """Collections names in MongoDB."""
+    data_collection: str = "data_collections"
+    workflow_collection: str = "workflows"
+    runs_collection: str = "runs"
+    files_collection: str = "files"
+    users_collection: str = "users"
+    deltatables_collection: str = "deltatables"
+    jbrowse_collection: str = "jbrowse_collection"
+    dashboards_collection: str = "dashboards_collection"
 
 
-class Collections(BaseModel):
-    data_collection: str
-    workflow_collection: str
-    runs_collection: str
-    files_collection: str
-    users_collection: str
-    deltatables_collection: str
-    jbrowse_collection: str
-    dashboards_collection: str
+class MongoConfig(BaseSettings):
+    """MongoDB configuration."""
+    service_name: str = "mongo"
+    port: int = 27018
+    db_name: str = "depictioDB"
+    collections: Collections = Collections()
+    class Config:
+        env_prefix = 'MONGO_'
 
 
-class MongoConfig(BaseModel):
-    host: str
-    port: int
-    db_name: str
-    collections: Collections
+class RedisConfig(BaseSettings):
+    """Redis configuration."""
+    service_name: str = "redis"
+    port: int = 6379
+    db: int = 0
+    cache_ttl: int = 300
+    user_secret_key: str = Field(default="mysecretkey")
+    class Config:
+        env_prefix = 'REDIS_'
 
 
-class RedisConfig(BaseModel):
-    host: str
-    port: int
-    db: int
-    cache_ttl: int
-    user_secret_key: str
+class RabbitMQConfig(BaseSettings):
+    """RabbitMQ configuration."""
+    service_name: str = "rabbitmq"
+    port: int = 5672
+    exchange: str = "direct"
+    routing_key: str = Field(default="depictio_key")
+    queue: str = "jbrowse_logs"
+    class Config:
+        env_prefix = 'RABBITMQ_'
 
 
-class RabbitMQConfig(BaseModel):
-    host: str
-    port: int
-    exchange: str
-    routing_key: str
-    queue: str
+class FastAPIConfig(BaseSettings):
+    """Backend configuration."""
+    host: str = "0.0.0.0"
+    service_name: str = "depictio_backend"
+    port: int = 8058
+    class Config:
+        env_prefix = 'DEPICTIO_BACKEND_'
+
+class DashConfig(BaseSettings):
+    """Frontend configuration."""
+    host: str = "0.0.0.0"
+    service_name: str = "depictio_frontend"
+    port: int = 5080
 
 
-class FastAPIConfig(BaseModel):
-    host: str
-    port: int
+class MinioConfig(BaseSettings):
+    """Minio configuration."""
+    internal_endpoint: str = "http://minio"
+    external_endpoint: str = "http://localhost"
+    port: int = 9000
+    access_key: str = Field(default="minio")
+    secret_key: str = Field(default="minio123")
+    secure: bool = False
+    bucket: str = "depictio-bucket"
+    data_dir: str = "/depictio/minio_data"
+    class Config:
+        env_prefix = 'MINIO_'
 
 
-class DashConfig(BaseModel):
-    host: str
-    port: int
+class JbrowseConfig(BaseSettings):
+    """Jbrowse configuration."""
+    enabled: bool = True
+    instance: Dict[str, Union[str, int]] = {'host': "http://localhost", 'port': 3000}
+    watcher_plugin: Dict[str, Union[str, int]] = {'host': "http://localhost", 'port': 9010}
+    data_dir: str = "/data"
+    config_dir: str = "/jbrowse-watcher-plugin/sessions"
+    class Config:
+        env_prefix = 'JBROWSE_'
 
 
-class MinioConfig(BaseModel):
-    internal_endpoint: str
-    external_endpoint: str
-    port: int
-    access_key: str
-    secret_key: str
-    secure: bool
-    bucket: str
-    data_dir: str
-
-
-class JbrowseConfig(BaseModel):
-    enabled: bool
-    instance: Dict[str, Union[str, int]]
-    watcher_plugin: Dict[str, Union[str, int]]
-    data_dir: str
-    config_dir: str
-
-
-class Auth(BaseModel):
-    tmp_token: str
+class Auth(BaseSettings):
+    """Authentication configuration."""
+    tmp_token: str = Field(default="eyJhb...")
 
     class Config:
+        env_prefix = 'AUTH_'
         arbitrary_types_allowed = True
 
 
-class Settings(BaseModel):
-    mongodb: MongoConfig
-    redis: RedisConfig
-    rabbitmq: RabbitMQConfig
-    fastapi: FastAPIConfig
-    dash: DashConfig
-    minio: MinioConfig
-    jbrowse: JbrowseConfig
-    auth: Auth
-
-    @classmethod
-    def from_yaml(cls, path: str):
-        with open(path, "r") as f:
-            data = yaml.safe_load(f)
-        return cls(**data)
+class Settings(BaseSettings):
+    """Joint settings."""
+    mongodb: MongoConfig = MongoConfig()
+    redis: RedisConfig = RedisConfig()
+    rabbitmq: RabbitMQConfig = RabbitMQConfig()
+    fastapi: FastAPIConfig = FastAPIConfig()
+    dash: DashConfig = DashConfig()
+    minio: MinioConfig = MinioConfig()
+    jbrowse: JbrowseConfig = JbrowseConfig()
+    auth: Auth = Auth()

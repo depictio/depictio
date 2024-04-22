@@ -3,19 +3,17 @@ version: '3.8'
 services:
   mongo:
     image: mongo:latest
-    # image: mongodb/mongodb-community-server:latest
     command: --dbpath /data/depictioDB --port 27018
     ports:
-      - "27018:27018"
+      - 27018:27018
     volumes:
-      - /Users/tweber/Gits/depictio/depictioDB:/data/depictioDB
-    # user: "999:999"
+      - ./depictioDB:/data/depictioDB
 
   redis:
     image: redis:latest
     command: redis-server
     ports:
-      - "6379:6379"
+      - 6379:6379
 
   redis-cli-monitor:
     image: redis:latest
@@ -27,12 +25,12 @@ services:
   minio:
     image: minio/minio:latest
     volumes:
-      - ./minio_data:/data
+      - "./minio_data:/minio_data"
     environment:
-      MINIO_ROOT_USER: minio
-      MINIO_ROOT_PASSWORD: minio123
-      MINIO_ACCESS_KEY: minio
-      MINIO_SECRET_KEY: minio123
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
     command: server /data --console-address :9001
     ports:
       - "9000:9000"
@@ -44,39 +42,30 @@ services:
       - "5672:5672"
       - "15672:15672"
 
-
   jbrowse2:
     image: jbrowse2:latest
     build:
       dockerfile: docker-images/Dockerfile_jbrowse.dev.plugin.dockerfile
     ports: 
-      - "3000:3000"
-      - "9010:9010"
+      - 3000:3000
+      - 9010:9010
     volumes:
-      - "/Users/tweber/Gits/jbrowse-watcher-plugin:/usr/src/plugin"
-      # - "/Users/tweber/Gits/depictio/jbrowse2:/config/jbrowse2"
-      # - "/Users/tweber/Gits/jbrowse2_config/jbrowse2_bak:/usr/src/plugin"
-
-
-
-
-# Uncomment and configure the below services as per your application requirement
+      - "./jbrowse-watcher-plugin:/usr/src/plugin"
 
   depictio_frontend:
     # build:
     #   context: .
     #   dockerfile: docker-images/Dockerfile_depictio.dockerfile
     image: depictio:dev
+    build:
+      dockerfile: docker-images/Dockerfile_depictio.dockerfile
     ports:
-      - "5080:5080" # Assuming frontend runs on 5080. Adjust if needed.
+      - 5080:5080
     volumes:
-      - ./depictio:/app/depictio # Mount the local depictio directory
+      - ./depictio:/app/depictio
       - ./data:/app/data
-
-      # - /Users/tweber/Gits/depictio/CLI_client:/app/CLI_client
-      # - /Users:/Users # TMP - Mount the local Users directory
-      - ./minio_data:/Users/tweber/Gits/depictio/minio_data
-      - ./configs:/Users/tweber/Gits/depictio/configs
+      - ./minio_data:/minio_data
+      - ./CLI_client/configs:/CLI_client/configs
     command: ["python", "depictio/dash/app.py"]
     depends_on:
       - mongo
@@ -91,17 +80,18 @@ services:
     #   context: .
     #   dockerfile: docker-images/Dockerfile_depictio.dockerfile
     image: depictio:dev
+    build:
+      dockerfile: docker-images/Dockerfile_depictio.dockerfile
     ports:
-      - "8058:8058"
+      - 8058:8058
     volumes:
-      - /Users/tweber/Data:/Users/tweber/Data
-      - ./data:/app/data
+      - "${DEPICTIO_BACKEND_DATA_VOLUME_HOST}:${DEPICTIO_BACKEND_DATA_VOLUME_HOST}"
       - ./depictio:/app/depictio
-      - /Users/tweber/Gits/jbrowse-watcher-plugin/sessions:/Users/tweber/Gits/jbrowse-watcher-plugin/sessions
-      - ./configs:/Users/tweber/Gits/depictio/configs
-      - ./minio_data:/Users/tweber/Gits/depictio/minio_data
-      # - /Users/tweber/Gits/depictio/CLI_client:/app/CLI_client
-      # - /Users:/Users # TMP - Mount the local Users directory 
+      - ./data:/app/data
+      - ./minio_data:/minio_data
+      - ./jbrowse-watcher-plugin/sessions:/jbrowse-watcher-plugin/sessions
+      - ./CLI_client/configs:/CLI_client/configs
+      - ./.env:/app/.env
     command: ["python", "depictio/api/run.py"]
     depends_on:
       - mongo
@@ -111,16 +101,18 @@ services:
 
   depictio_nb:
     image: depictio_nb:dev
+    build:
+      dockerfile: docker-images/Dockerfile_depictio_nb_debug.dockerfile
     ports:
-      - "8888:8888"
+      - 8888:8888
     volumes:
-      - /Users/tweber/Data:/Users/tweber/Data
-      - ./data:/app/data
+      - "${DEPICTIO_BACKEND_DATA_VOLUME_HOST}:${DEPICTIO_BACKEND_DATA_VOLUME_HOST}"
       - ./depictio:/app/depictio
+      - ./data:/app/data
+      - ./minio_data:/minio_data
+      - ./jbrowse-watcher-plugin/sessions:/jbrowse-watcher-plugin/sessions
+      - ./CLI_client/configs:/CLI_client/configs
       - ./dev:/app/dev
-      - /Users/tweber/Gits/jbrowse-watcher-plugin/sessions:/Users/tweber/Gits/jbrowse-watcher-plugin/sessions
-      - ./configs:/Users/tweber/Gits/depictio/configs
-      - ./minio_data:/Users/tweber/Gits/depictio/minio_data
     depends_on:
       - mongo
       - redis
