@@ -13,3 +13,5 @@ settings = validate_config(get_config("depictio/api/v1/configs/config_backend.ya
 API_BASE_URL = f"http://{settings.fastapi.service_name}:{settings.fastapi.port}"
 MONGODB_URL = f"mongodb://{settings.mongodb.service_name}:{settings.mongodb.port}/"
 TOKEN = settings.auth.tmp_token
+
+

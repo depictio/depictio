@@ -21,6 +21,7 @@ services:
     depends_on:
       - redis
 
+
   minio:
     image: minio/minio:latest
     volumes:
@@ -32,6 +33,8 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
     command: server /data --console-address :9001
     ports:
+      - "9000:9000"
+      - "9001:9001"
       - "9000:9000"
       - "9001:9001"
 
@@ -52,6 +55,9 @@ services:
       - "./jbrowse-watcher-plugin:/usr/src/plugin"
 
   depictio_frontend:
+    # build:
+    #   context: .
+    #   dockerfile: docker-images/Dockerfile_depictio.dockerfile
     image: depictio:dev
     build:
       dockerfile: docker-images/Dockerfile_depictio.dockerfile
@@ -70,7 +76,11 @@ services:
       - depictio_backend
       - rabbitmq
 
+
   depictio_backend:
+    # build:
+    #   context: .
+    #   dockerfile: docker-images/Dockerfile_depictio.dockerfile
     image: depictio:dev
     build:
       dockerfile: docker-images/Dockerfile_depictio.dockerfile
@@ -112,3 +122,39 @@ services:
       - depictio_backend
       - rabbitmq
     command: ["jupyter", "lab", "--ip=0.0.0.0", "--allow-root"]
+
+
+  # openldap:
+  #   image: osixia/openldap:1.5.0
+  #   environment:
+  #     LDAP_ORGANISATION: "Depictio"
+  #     LDAP_DOMAIN: "depictio.local"
+  #     LDAP_ADMIN_PASSWORD: "admin"
+  #   ports:
+  #     - "389:389"
+  #     - "636:636"
+  #   volumes:
+  #     - ./ldap_db:/var/lib/ldap
+  #     - ./ldap_config:/etc/ldap/slapd.d
+
+  # phpldapadmin:
+  #   image: osixia/phpldapadmin:latest
+  #   environment:
+  #     PHPLDAPADMIN_LDAP_HOSTS: openldap
+  #   ports:
+  #     - "6443:443"
+  #   depends_on:
+  #     - openldap
+
+  # keycloak:
+  #   image: quay.io/keycloak/keycloak:22.0.5
+  #   command: start-dev
+  #   environment:
+  #     KEYCLOAK_USER: user
+  #     KEYCLOAK_PASSWORD: test
+  #     KEYCLOAK_ADMIN: admin
+  #     KEYCLOAK_ADMIN_PASSWORD: admin
+  #   ports:
+  #     - "8080:8080"
+  #   depends_on:
+  #     - openldap
