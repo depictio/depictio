@@ -19,6 +19,8 @@ class MongoConfig(BaseSettings):
     port: int = 27018
     db_name: str = "depictioDB"
     collections: Collections = Collections()
+    class Config:
+        env_prefix = 'MONGO_'
 
 
 class RedisConfig(BaseSettings):
@@ -79,6 +81,8 @@ class JbrowseConfig(BaseSettings):
     watcher_plugin: Dict[str, Union[str, int]] = {'host': "http://localhost", 'port': 9010}
     data_dir: str = "/data"
     config_dir: str = "/jbrowse-watcher-plugin/sessions"
+    class Config:
+        env_prefix = 'JBROWSE_'
 
 
 class Auth(BaseSettings):
