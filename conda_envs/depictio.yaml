@@ -23,6 +23,7 @@ dependencies:
   - python
   - python-jose
   - python-multipart
+  - python-dotenv
   - pyyaml
   - redis-py
   - typer
@@ -39,3 +40,4 @@ dependencies:
     - dash-auth==2.0.0
     - dash-ag-grid==2.2.0
     - pyjwt
+
