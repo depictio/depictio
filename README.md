@@ -1,6 +1,6 @@
 
 <p align="center">
-  <img src="https://depictio.github.io/depictio-docs/images/logo/logo.png" alt="Depictio logo" width=300>
+  <img src="https://depictio.github.io/depictio-docs/images/logo/logo_hd.png" alt="Depictio logo" width=300>
 </p>
 
 # 📊 Depictio 
