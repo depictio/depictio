@@ -11,7 +11,7 @@ WORKDIR /usr/src/jbrowse/jbrowse2
 
 # Clone and set up the plugin in a separate directory
 WORKDIR /usr/src/plugin
-RUN git clone https://github.com/weber8thomas/jbrowse-watcher-plugin.git .
+RUN git clone https://github.com/depictio/jbrowse-watcher-plugin.git .
 RUN npm install --force
 # Uncomment if a build step is required for your plugin
 # RUN npm run build

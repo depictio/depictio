@@ -45,7 +45,7 @@ services:
   jbrowse2:
     image: jbrowse2:latest
     build:
-      dockerfile: docker-images/Dockerfile_jbrowse.dev.plugin.dockerfile
+      dockerfile: docker-images/Dockerfile_jbrowse.dev.240424.dockerfile
     ports: 
       - 3000:3000
       - 9010:9010
