@@ -3,7 +3,7 @@ from bson import ObjectId
 from fastapi import HTTPException, Depends, APIRouter
 from pymongo import ReturnDocument
 
-from depictio.api.v1.configs.config import settings
+from depictio.api.v1.configs.config import settings, logger
 from depictio.api.v1.db import workflows_collection, data_collections_collection, runs_collection, files_collection
 from depictio.api.v1.endpoints.deltatables_endpoints.routes import delete_deltatable
 from depictio.api.v1.endpoints.files_endpoints.routes import delete_files
@@ -34,13 +34,13 @@ async def get_all_workflows(current_user: str = Depends(get_current_user)):
     }
 
     # Retrieve the workflows & convert them to Workflow objects to validate the model
-    workflows_cursor = [Workflow(**convert_objectid_to_str(w)) for w in list(workflows_collection.find(query))]
-    workflows = convert_objectid_to_str(list(workflows_cursor))
-
-    if not workflows:
-        raise HTTPException(status_code=404, detail="No workflows found for the current user.")
-
+    workflows_cursor = list(workflows_collection.find(query))
+    logger.info(f"workflows_cursor: {workflows_cursor}")
+    if not workflows_cursor or len(workflows_cursor) == 0:
+        return []
+    workflows = [Workflow(**convert_objectid_to_str(w)) for w in workflows_cursor]
     return workflows
+
 
 
 @workflows_endpoint_router.get("/get")
