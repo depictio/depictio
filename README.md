@@ -3,7 +3,6 @@
   <img src="https://depictio.github.io/depictio-docs/images/logo/logo_hd.png" alt="Depictio logo" width=300>
 </p>
 
-# 📊 Depictio 
 
 ![](./docs/images/Demo.gif)
 
