@@ -42,3 +42,7 @@ async def drop_all_collections():
     files_collection.drop()
     deltatables_collection.drop()
     return {"message": "All collections dropped"}
+
+@utils_endpoint_router.get("/status")
+async def status():
+    return {"status": "ok"}
