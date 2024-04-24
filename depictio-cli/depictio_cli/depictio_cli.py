@@ -1,14 +1,12 @@
 import getpass
 import json
-from pprint import pprint
 import sys
 
 # from pprint import pprint
 import httpx
-import jsonschema
 import typer
 from typing import Dict, Optional, Tuple
-from jose import JWTError, jwt  # Use python-jose to decode JWT tokens
+from jose import JWTError
 from devtools import debug
 from depictio.api.v1.endpoints.datacollections_endpoints.models import DataCollection
 from depictio.api.v1.endpoints.workflow_endpoints.models import Workflow
@@ -16,22 +14,14 @@ from depictio.api.v1.endpoints.workflow_endpoints.models import Workflow
 
 from depictio.api.v1.models.base import convert_objectid_to_str
 
-# from depictio.api.v1.endpoints.user_endpoints.auth import (
-#     ALGORITHM,
-#     PUBLIC_KEY,
-#     fetch_user_from_id,
-# )
 from depictio.api.v1.models.top_structure import RootConfig
 import httpx
 
 
-from depictio.api.v1.utils import (
+from depictio.api.v1.models_utils import (
     get_config,
-    # load_json_schema,
     validate_all_workflows,
     validate_config,
-    validate_worfklow,
-    # validate_config_using_jsonschema,
 )
 
 
@@ -46,15 +36,6 @@ def load_json_schema(schema_path):
     """Load JSON Schema."""
     with open(schema_path, "r") as f:
         return json.load(f)
-
-
-def validate_config_using_jsonschema(config, schema):
-    """Validate YAML configuration against the JSON Schema."""
-    try:
-        jsonschema.validate(instance=config, schema=schema)
-        print("Validation successful. The configuration is valid.")
-    except jsonschema.ValidationError as e:
-        sys.exit(f"{e}")
 
 
 def return_user_from_token(token: str) -> dict:

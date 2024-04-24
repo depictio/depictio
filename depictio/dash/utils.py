@@ -30,6 +30,7 @@ SELECTED_STYLE = {
     "height": "100px",
     "border": "3px solid",
     "opacity": 1,
+    "fontFamily": "Virgil",
 }
 
 UNSELECTED_STYLE = {
@@ -38,6 +39,7 @@ UNSELECTED_STYLE = {
     "height": "100px",
     "border": "3px solid",
     "opacity": 1,
+    "fontFamily": "Virgil",
 }
 
 

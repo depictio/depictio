@@ -2,27 +2,22 @@
 
 # FIXME: fix ciruclar import between utils & config related to logger load
 from datetime import datetime
-import hashlib
-import json
-from pathlib import Path, PosixPath
+from pathlib import PosixPath
 import dash_mantine_components as dmc
 from dash import dcc
 
 # import jsonschema
 import numpy as np
-from jose import jwt, JWTError
 
 import os
 import re
-from typing import Dict, Type, List, Tuple, Optional, Any
-from pydantic import BaseModel, ValidationError
-import yaml
+from typing import List
 
 from depictio.api.v1.endpoints.datacollections_endpoints.models import DataCollection
 from depictio.api.v1.endpoints.files_endpoints.models import File
-from depictio.api.v1.endpoints.user_endpoints.models import Permission, User
-from depictio.api.v1.endpoints.workflow_endpoints.models import Workflow, WorkflowConfig, WorkflowRun
+from depictio.api.v1.endpoints.workflow_endpoints.models import WorkflowConfig, WorkflowRun
 from depictio.api.v1.models.top_structure import RootConfig
+from depictio.api.v1.models_utils import get_config, validate_all_workflows, validate_config
 
 # def return_user_from_id(token: str) -> dict:
 #     try:
@@ -39,103 +34,9 @@ from depictio.api.v1.models.top_structure import RootConfig
 #         raise typer.Exit(code=1)
 
 
-def get_config(filename: str):
-    """
-    Get the config file.
-    """
-    if not filename.endswith(".yaml"):
-        raise ValueError("Invalid config file. Must be a YAML file.")
-    if not os.path.exists(filename):
-        raise ValueError(f"The file '{filename}' does not exist.")
-    if not os.path.isfile(filename):
-        raise ValueError(f"'{filename}' is not a file.")
-    else:
-        with open(filename, "r") as f:
-            yaml_data = yaml.safe_load(f)
-        return yaml_data
 
 
-def validate_config(config: Dict, pydantic_model: Type[BaseModel]) -> BaseModel:
-    """
-    Load and validate the YAML configuration
-    """
-    if not isinstance(config, dict):
-        raise ValueError("Invalid config. Must be a dictionary.")
-    try:
-        data = pydantic_model(**config)
-    except ValidationError as e:
-        raise ValueError(f"Invalid config: {e}")
-    return data
-
-
-def populate_file_models(workflow: Workflow) -> List[DataCollection]:
-    """
-    Returns a list of DataCollection models for a given workflow.
-    """
-
-    datacollections_models = []
-    for metadata in workflow.data_collections:
-        data_collection_tag = metadata.data_collection_tag
-        datacollection_instance = DataCollection(
-            data_collection_tag=data_collection_tag,
-            description=metadata.description,
-            config=metadata.config,
-            workflow_tag=workflow.workflow_tag,
-        )
-        # datacollection_instance.config.data_collection_id = datacollection_id
-        # datacollection_instance.config.workflow_id = workflow.workflow_id
-        datacollections_models.append(datacollection_instance)
-
-    return datacollections_models
-
-
-def validate_worfklow(workflow: Workflow, config: RootConfig, user: User) -> dict:
-    """
-    Validate the workflow.
-    """
-    # workflow_config = config.workflows[workflow_name]
-    # print(workflow_config)
-
-    # datacollection_models = populate_file_models(workflow)
-
-    # Create a dictionary of validated datacollections with datacollection_id as the key
-    # validated_datacollections = {
-    #     datacollection.data_collection_tag: datacollection
-    #     for datacollection in datacollection_models
-    # }
-
-    # # print(validated_datacollections)
-    # # Update the workflow's files attribute in the main config
-    # workflow.data_collections = validated_datacollections
-    # workflow.runs = {}
-
-    # Create the permissions using the decoded user
-    permissions = Permission(owners=[user])
-    workflow.permissions = permissions
-
-    return workflow
-
-
-def validate_all_workflows(config: RootConfig, user: User) -> RootConfig:
-    """
-    Validate all workflows in the config.
-    """
-    for workflow in config.workflows:
-        validate_worfklow(workflow, config, user)
-
-    return config
-
-
-def calculate_file_hash(file_path: str) -> str:
-    """Calculate a unique hash for a file based on its content."""
-    # Implementation of hashing function
-    with open(file_path, "rb") as f:
-        return hashlib.md5(f.read()).hexdigest()
-
-
-
-
-# FIXME: updat model & function using a list of dict instead of a dict
+# FIXME: update model & function using a list of dict instead of a dict
 def construct_full_regex(files_regex, regex_config):
     """
     Construct the full regex using the wildcards defined in the config.
