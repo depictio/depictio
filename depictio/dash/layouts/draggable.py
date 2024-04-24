@@ -8,10 +8,11 @@ from dash_iconify import DashIconify
 import dash_draggable
 from dash import html, dcc, Input, Output, State, ALL, MATCH
 import dash
+import httpx
 import numpy as np
 from depictio.dash.layouts.draggable_scenarios.add_component import add_new_component
 
-from depictio.api.v1.configs.config import logger
+from depictio.api.v1.configs.config import API_BASE_URL, TOKEN, logger
 
 from depictio.dash.layouts.draggable_scenarios.interactive_component_update import update_interactive_component
 from depictio.dash.layouts.stepper import create_stepper_output
@@ -149,7 +150,6 @@ def register_callbacks_draggable(app):
         logger.info("triggered_input : {}".format(triggered_input))
         logger.info("Switch state: {}".format(switch_state))
         # Set the switch state index to 0 if switch_state is True, else set it to -1
-        
 
         # Create a dictionary to store the values of the interactive components
         stored_metadata_interactive = [e for e in stored_metadata if e["component_type"] == "interactive_component"]
@@ -674,7 +674,6 @@ def register_callbacks_draggable(app):
         # )
 
         elif triggered_input == "edit-dashboard-mode-button":
-
             for child in current_draggable_children:
                 # Get the deepest element type
                 (
@@ -711,7 +710,6 @@ def register_callbacks_draggable(app):
                 #             ),
                 #             child["props"]["children"][0]["props"]["children"]["props"]["children"][-1],
                 #         ]
-
 
             # print("\n\n")
 
@@ -875,6 +873,9 @@ def register_callbacks_draggable(app):
             raise dash.exceptions.PreventUpdate
 
 
+
+
+
 def design_draggable(data, init_layout, init_children):
     # # Generate core layout based on data availability
     # if not data:
@@ -901,14 +902,62 @@ def design_draggable(data, init_layout, init_children):
     #         ]
     #     )
     # else:
-    core = html.Div(
-        dash_draggable.ResponsiveGridLayout(
-            id="draggable",
-            clearSavedLayout=True,
-            layouts=init_layout,
-            children=init_children,
-            isDraggable=True,
-            isResizable=True,
-        ),
+
+
+    workflows = httpx.get(
+        f"{API_BASE_URL}/depictio/api/v1/workflows/get_all_workflows",
+        headers={"Authorization": f"Bearer {TOKEN}"},
+    ).json()
+
+
+    if not workflows:
+        # When there are no workflows, log information and prepare a message
+        logger.info(f"init_children {init_children}")
+        logger.info(f"init_layout {init_layout}")
+        # message = html.Div(["No workflows available."])
+        message = html.Div(
+            [
+                html.Hr(),
+                dmc.Center(dmc.Group(
+                    [
+                        DashIconify(icon="feather:info", color="red", width=40),
+                        dmc.Text(
+                            "No data available.",
+                            variant="gradient",
+                            gradient={"from": "red", "to": "orange", "deg": 45},
+                            style={"fontSize": 30, "textAlign": "center"},
+                        ),
+                    ]
+                )),
+                dmc.Text(
+                    "Please first register workflows and data using Depictio CLI.",
+                    variant="gradient",
+                    gradient={"from": "red", "to": "orange", "deg": 45},
+                    style={"fontSize": 25, "textAlign": "center"},
+                ),
+            ]
+        )
+        display_style = "none"  # Hide the draggable layout
+        core_children = [message]
+    else:
+        display_style = "block"  # Show the draggable layout
+        core_children = []
+
+    # Create the draggable layout outside of the if-else to keep it in the DOM
+    draggable = dash_draggable.ResponsiveGridLayout(
+        id="draggable",
+        clearSavedLayout=True,
+        layouts=init_layout,
+        children=init_children,
+        isDraggable=True,
+        isResizable=True,
+        style={"display": display_style},
     )
+
+    # Add draggable to the core children list whether it's visible or not
+    core_children.append(draggable)
+
+    # The core Div contains all elements, managing visibility as needed
+    core = html.Div(core_children)
+
     return core
