@@ -83,20 +83,21 @@ register_callbacks_table_component(app)
 # Register callbacks for draggable layout
 register_callbacks_add_component(app)
 
-# Load depictio data from JSON
-data = load_depictio_data()
-# data = None
+# Load depictio depictio_dash_data from JSON
+depictio_dash_data = load_depictio_data()
+logger.info(f"Loaded depictio depictio_dash_data: {depictio_dash_data}")
+# depictio_dash_data = None
 
 
-# Init layout and children if data is available, else set to empty
-init_layout = data["stored_layout_data"] if data else {}
-init_children = data["stored_children_data"] if data else list()
+# Init layout and children if depictio_dash_data is available, else set to empty
+init_layout = depictio_dash_data["stored_layout_data"] if depictio_dash_data else {}
+init_children = depictio_dash_data["stored_children_data"] if depictio_dash_data else list()
 
 # Generate header and backend components
-header, backend_components = design_header(data)
+header, backend_components = design_header(depictio_dash_data)
 
 # Generate draggable layout
-core = design_draggable(data, init_layout, init_children)
+core = design_draggable(depictio_dash_data, init_layout, init_children)
 
 
 # APP Layout

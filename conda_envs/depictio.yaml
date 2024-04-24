@@ -1,9 +1,10 @@
-name: depictio_dev_test
+name: depictio-condaenv
 channels:
   - conda-forge
   - plotly
   - anaconda
 dependencies:
+  - curl
   - bleach
   - boto3
   - bson
@@ -30,7 +31,6 @@ dependencies:
   - uvicorn
   # - deltalake
   - pip:  
-    - deltalake==0.15.3
     - pydantic[email]==1.10.10
     - dash-mantine-components==0.12.1
     - dash-jbrowse==1.2.0
