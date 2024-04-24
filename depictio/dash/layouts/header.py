@@ -248,7 +248,7 @@ def design_header(data):
     }
 
     title_style = {"fontWeight": "bold", "fontSize": "24px", "color": "#333"}
-    button_style = {"margin": "0 10px", "fontWeight": "500"}
+    button_style = {"margin": "0 10px", "fontFamily": "Virgil"}
 
     # Right side of the header - Edit dashboard mode button
     # if data:
@@ -276,7 +276,7 @@ def design_header(data):
         disabled=disabled,
         leftIcon=DashIconify(icon="mdi:content-save", width=16, color="white"),
         # width of the button
-        style={"width": "200px"},
+        style={"width": "200px", "fontFamily": "Virgil"},
     )
 
     remove_all_components_button = dmc.Button(
@@ -296,10 +296,11 @@ def design_header(data):
         id="edit-dashboard-mode-button",
         label="Edit dashboard",
         thumbIcon=DashIconify(icon="mdi:lead-pencil", width=16, color=dmc.theme.DEFAULT_COLORS["teal"][5]),
-        style={"fontSize": "28x"},
+        style={"fontFamily": "Virgil"},
         # options=[{"label": "Edit dashboard", "value": 0}],
         # value=init_nclicks_edit_dashboard_mode_button,
         # switch=True,
+        size="md",
         checked=True,
         color="teal",
     )
@@ -307,7 +308,8 @@ def design_header(data):
         label="Toggle interactivity",
         id="toggle-interactivity-button",
         thumbIcon=DashIconify(icon="mdi:gesture-tap", width=16, color=dmc.theme.DEFAULT_COLORS["orange"][5]),
-        style={"fontSize": "28px"},
+        style={"fontFamily": "Virgil"},
+        size="md",
         # options=[{"label": "Toggle interactivity", "value": 0}],
         # value=0,
         checked=True,
