@@ -8,7 +8,7 @@ import dash
 import httpx
 
 from depictio.dash.utils import analyze_structure_and_get_deepest_type, get_size
-from depictio.api.v1.configs.config import API_BASE_URL, logger
+from depictio.api.v1.configs.config import API_BASE_URL, TOKEN, logger
 
 
 def register_callbacks_header(app):
@@ -108,17 +108,41 @@ def register_callbacks_header(app):
         Output("remove-all-components-button", "disabled"),
         Output("toggle-interactivity-button", "disabled"),
         Output("dashboard-version", "disabled"),
+        Output("share-button", "disabled"),
         Output("draggable", "isDraggable"),
         Output("draggable", "isResizable"),
         Input("edit-dashboard-mode-button", "checked"),
-        prevent_initial_call=True,
+        # prevent_initial_call=True,
     )
     def toggle_buttons(switch_state):
         logger.info("\n\n\n")
         logger.info("toggle_buttons")
         logger.info(switch_state)
+        logger.info("TOKEN: " + str(TOKEN))
+        logger.info("API_BASE_URL: " + str(API_BASE_URL))
 
-        return [not switch_state] * 5 + [switch_state] * 2
+
+        workflows = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/workflows/get_all_workflows",
+            headers={"Authorization": f"Bearer {TOKEN}"},
+        ).json()
+        if not workflows:
+            switch_state = False
+            return [True] * 8
+
+        # # Check if data is available in the backend
+        # workflows_data = httpx.get(
+        #     f"{API_BASE_URL}/depictio/api/v1/workflows/get_all_workflows",
+        #     headers={
+        #         "Authorization": f"Bearer {TOKEN}",
+        #     },
+        # )
+        # # print("workflows_data: ", workflows_data)
+        # # workflows_data = workflows_data.json()
+
+        # # print("workflows_data 2:",  workflows_data, type(workflows_data))
+
+        return [not switch_state] * 6 + [switch_state] * 2
 
     @app.callback(
         Output("share-modal-dashboard", "is_open"),
@@ -376,21 +400,21 @@ def design_header(data):
                                     dmc.CardSection(
                                         [
                                             dmc.Badge("User: Paul Cézanne", color="blue", leftSection=DashIconify(icon="mdi:account", width=16, color="grey")),
-                                            dmc.Badge(f"Last updated: {current_time}", color="green", leftSection=DashIconify(icon="mdi:clock-time-four-outline", width=16, color="grey")),
+                                            dmc.Badge(
+                                                f"Last updated: {current_time}", color="green", leftSection=DashIconify(icon="mdi:clock-time-four-outline", width=16, color="grey")
+                                            ),
                                         ]
                                     ),
                                 ],
                                 # style={"width": "200px"},
                                 # align to bottom
-                               
                             ),
                         ],
                         # justify="start"
                     ),
                 ],
                 width=2,
-                         align="end",
-
+                align="end",
                 style={"paddingLeft": "10px"},
             ),
             # dbc.Col(width=1),
