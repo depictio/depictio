@@ -1,0 +1,7 @@
+/* assets/style.css */
+@font-face {
+    font-family: 'Virgil';
+    src: url('Virgil.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+}
