@@ -907,10 +907,15 @@ def design_draggable(data, init_layout, init_children):
     workflows = httpx.get(
         f"{API_BASE_URL}/depictio/api/v1/workflows/get_all_workflows",
         headers={"Authorization": f"Bearer {TOKEN}"},
-    ).json()
+    )
+    logger.info("Code: %s", workflows.status_code)
+
+    workflows = workflows.json()
+
+    logger.info(f"workflows {workflows}")
 
 
-    if not workflows:
+    if not workflows or len(workflows) == 0:
         # When there are no workflows, log information and prepare a message
         logger.info(f"init_children {init_children}")
         logger.info(f"init_layout {init_layout}")
