@@ -84,6 +84,26 @@ def authenticate_user(username: str, password: str):
     return None
 
 
+# FIXME: remove this - only for testing purposes
+@auth_endpoint_router.post("/create_user")
+async def create_user():
+
+
+    # delete the user
+    users_collection.drop()
+
+    user = {
+        "username": "cezanne",
+        "password": "paul",
+        "email": "paul.cezanne@embl.de",
+    }
+
+    users_collection.insert_one(user)
+
+    return {"message": "User created"}
+
+
+
 @auth_endpoint_router.post("/token", response_model=Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
     user = authenticate_user(form_data.username, form_data.password)
