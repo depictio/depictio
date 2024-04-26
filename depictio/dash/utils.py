@@ -88,9 +88,10 @@ def load_depictio_data():
         logger.info(child)
         children.append(child)
     from dash import html
-    dashboard_data["stored_children_data"] = html.Div(children)
-    logger.info(f"dashboard_data : {dashboard_data}")
-    # return dashboard_data
+    dashboard_data["stored_children_data"] = html.Div(child)
+    # logger.info(f"dashboard_data : {dashboard_data}")
+    logger.info(f"dashboard_data['stored_children_data'] : {dashboard_data['stored_children_data']}")
+    return dashboard_data
     return None
 
 
