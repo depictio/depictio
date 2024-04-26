@@ -9,18 +9,23 @@ services:
     volumes:
       - ./depictioDB:/data/depictioDB
 
-  redis:
-    image: redis:latest
-    command: redis-server
-    ports:
-      - 6379:6379
+  # redis:
+  #   image: redis:latest
+  #   command: redis-server
+  #   ports:
+  #     - 6379:6379
 
-  redis-cli-monitor:
-    image: redis:latest
-    command: redis-cli -h redis monitor
-    depends_on:
-      - redis
+  # redis-cli-monitor:
+  #   image: redis:latest
+  #   command: redis-cli -h redis monitor
+  #   depends_on:
+  #     - redis
 
+  # rabbitmq:
+  #   image: rabbitmq:3-management
+  #   ports:
+  #     - "5672:5672"
+  #     - "15672:15672"
 
   minio:
     image: minio/minio:latest
@@ -36,11 +41,7 @@ services:
       - "9000:9000"
       - "9001:9001"
 
-  rabbitmq:
-    image: rabbitmq:3-management
-    ports:
-      - "5672:5672"
-      - "15672:15672"
+
 
   jbrowse2:
     image: jbrowse2:latest
@@ -69,10 +70,10 @@ services:
     command: ["python", "depictio/dash/app.py"]
     depends_on:
       - mongo
-      - redis
       - minio
       - depictio_backend
-      - rabbitmq
+      # - redis
+      # - rabbitmq
 
 
   depictio_backend:
@@ -95,9 +96,9 @@ services:
     command: ["python", "depictio/api/run.py"]
     depends_on:
       - mongo
-      - redis
       - minio
-      - rabbitmq
+      # - redis
+      # - rabbitmq
 
   depictio_nb:
     image: depictio_nb:dev
@@ -115,9 +116,9 @@ services:
       - ./dev:/app/dev
     depends_on:
       - mongo
-      - redis
       - minio
       - depictio_backend
-      - rabbitmq
+      # - redis
+      # - rabbitmq
     command: ["jupyter", "lab", "--ip=0.0.0.0", "--allow-root"]
 

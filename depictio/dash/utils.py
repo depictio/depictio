@@ -23,6 +23,7 @@ from depictio.api.v1.endpoints.user_endpoints.auth import (
 from depictio.api.v1.endpoints.workflow_endpoints.models import Workflow
 from depictio.api.v1.models.base import convert_objectid_to_str
 from depictio.api.v1.s3 import s3_client, minio_storage_options
+from depictio.dash.modules.card_component.utils import build_card
 
 SELECTED_STYLE = {
     "display": "inline-block",
@@ -65,12 +66,42 @@ def get_size(obj, seen=None):
 
 
 def load_depictio_data():
-    if os.path.exists("/app/data/depictio_data.json"):
-        with open("/app/data/depictio_data.json", "r") as file:
-            data = json.load(file)
-            # print(data.keys())
-        return data
+    from depictio.api.v1.db import dashboards_collection
+    dashboard_id = "1"
+    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    logger.info("load_depictio_data")
+    logger.info(f"dashboard_data : {dashboard_data}")
+    children = list()
+    for child_metadata in dashboard_data["stored_metadata"]:
+        logger.info(child_metadata)
+        child = build_card(
+            index=child_metadata["index"],
+            title=child_metadata["title"],
+            wf_id=child_metadata["wf_id"],
+            dc_id=child_metadata["dc_id"],
+            dc_config=child_metadata["dc_config"],
+            column_name=child_metadata["column_name"],
+            column_type=child_metadata["column_type"],
+            aggregation=child_metadata["aggregation"],
+            v=child_metadata["value"],
+        )
+        logger.info(child)
+        children.append(child)
+    from dash import html
+    dashboard_data["stored_children_data"] = html.Div(children)
+    logger.info(f"dashboard_data : {dashboard_data}")
+    # return dashboard_data
     return None
+
+
+
+
+    # if os.path.exists("/app/data/depictio_data.json"):
+    #     with open("/app/data/depictio_data.json", "r") as file:
+    #         data = json.load(file)
+    #         # print(data.keys())
+    #     return data
+    # return None
 
 
 def load_depictio_data_mongo(dashboard_id: str):

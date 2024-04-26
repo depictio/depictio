@@ -186,6 +186,9 @@ def register_callbacks_draggable(app):
         }
 
         new_draggable_children = []
+
+        # logger.info(f"current_draggable_children: {current_draggable_children}")
+
         for child in current_draggable_children:
             for sub_child in child["props"]["children"]:
                 if sub_child["props"]["id"]["type"] == "add-content":
