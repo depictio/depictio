@@ -187,13 +187,15 @@ def register_callbacks_draggable(app):
 
         new_draggable_children = []
 
-        # logger.info(f"current_draggable_children: {current_draggable_children}")
+        logger.info(f"current_draggable_children: {current_draggable_children}")
+        logger.info(f"type of current_draggable_children: {type(current_draggable_children)}")
 
-        for child in current_draggable_children:
-            for sub_child in child["props"]["children"]:
-                if sub_child["props"]["id"]["type"] == "add-content":
-                    child["props"]["children"] = [sub_child]
-                    continue
+        if type(current_draggable_children) is list:
+            for child in current_draggable_children:
+                for sub_child in child["props"]["children"]:
+                    if sub_child["props"]["id"]["type"] == "add-content":
+                        child["props"]["children"] = [sub_child]
+                        continue
 
         max_depth, deepest_type = analyze_structure_and_get_deepest_type(current_draggable_children)
         logger.info("\n\n")
@@ -605,6 +607,7 @@ def register_callbacks_draggable(app):
 
         elif triggered_input == "draggable":
             # for child in current_draggable_children:
+            logger.info(f"current_draggable_children: {current_draggable_children}")
             #     print(child)
             return (
                 dash.no_update,
