@@ -66,8 +66,8 @@ def register_callbacks_header(app):
 
             dashboard_data["stored_children_data"] = children
 
-            with open("/app/data/depictio_data.json", "w") as file:
-                json.dump(dashboard_data, file)
+            # with open("/app/data/depictio_data.json", "w") as file:
+            #     json.dump(dashboard_data, file)
             return []
         return dash.no_update
 
