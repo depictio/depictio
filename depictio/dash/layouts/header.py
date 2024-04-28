@@ -463,6 +463,8 @@ def design_header(data):
 
 
 def enable_box_edit_mode(box, switch_state=True):
+    logger.info(box)
+    logger.info(box["props"])
     btn_index = box["props"]["id"]["index"]
     edit_button = dbc.Button(
         "Edit",

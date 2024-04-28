@@ -91,8 +91,9 @@ logger.info(f"Loaded depictio depictio_dash_data: {depictio_dash_data}")
 
 # Init layout and children if depictio_dash_data is available, else set to empty
 init_layout = depictio_dash_data["stored_layout_data"] if depictio_dash_data else {}
+logger.info(f"Loaded depictio init_layout: {init_layout}")
 init_children = depictio_dash_data["stored_children_data"] if depictio_dash_data else list()
-
+logger.info(f"Loaded depictio init_children: {init_children}")
 # Generate header and backend components
 header, backend_components = design_header(depictio_dash_data)
 

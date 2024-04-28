@@ -4,17 +4,7 @@
 from dash import html, dcc
 
 
-def build_card(
-    index,
-    title,
-    wf_id,
-    dc_id,
-    dc_config,
-    column_name,
-    column_type,
-    aggregation,
-    v
-):
+def build_card(index, title, wf_id, dc_id, dc_config, column_name, column_type, aggregation, v):
 
     try:
         v = round(float(v), 2)
@@ -25,10 +15,10 @@ def build_card(
     store_component = dcc.Store(
         id={
             "type": "stored-metadata-component",
-            "index": index,
+            "index": str(index),
         },
         data={
-            "index": index,
+            "index": str(index),
             "component_type": "card",
             "title": title,
             "wf_id": wf_id,
@@ -48,17 +38,23 @@ def build_card(
         card_title = html.H5(f"{title}")
 
     # Create the card body
-    new_card_body = [
-        card_title,
-        html.P(
-            f"{v}",
-            id={
-                "type": "card-value",
-                "index": index,
-            },
-        ),
-        store_component,
-    ]
+    new_card_body = html.Div(
+        [
+            card_title,
+            html.P(
+                f"{v}",
+                id={
+                    "type": "card-value",
+                    "index": str(index),
+                },
+            ),
+            store_component,
+        ],
+        id={
+            "type": "card",
+            "index": str(index),
+        },
+    )
     return new_card_body
 
 
