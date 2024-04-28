@@ -187,8 +187,8 @@ def register_callbacks_draggable(app):
 
         new_draggable_children = []
 
-        logger.info(f"current_draggable_children: {current_draggable_children}")
-        logger.info(f"type of current_draggable_children: {type(current_draggable_children)}")
+        # logger.info(f"current_draggable_children: {current_draggable_children}")
+        # logger.info(f"type of current_draggable_children: {type(current_draggable_children)}")
 
         if type(current_draggable_children) is list:
             for child in current_draggable_children:
@@ -608,6 +608,7 @@ def register_callbacks_draggable(app):
         elif triggered_input == "draggable":
             # for child in current_draggable_children:
             logger.info(f"current_draggable_children: {current_draggable_children}")
+            logger.info(f"current_layout: {current_layouts}")
             #     print(child)
             return (
                 dash.no_update,
