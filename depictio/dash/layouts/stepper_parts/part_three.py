@@ -17,6 +17,7 @@ from depictio.dash.modules.jbrowse_component.frontend import design_jbrowse
 # Depictio utils imports
 from depictio.dash.modules.table_component.frontend import design_table
 from depictio.dash.utils import join_deltatables, load_deltatable_lite, return_mongoid
+from depictio.api.v1.configs.config import logger
 
 
 def register_callbacks_stepper_part_three(app):
@@ -31,13 +32,20 @@ def register_callbacks_stepper_part_three(app):
         State({"type": "btn-option", "index": MATCH, "value": ALL}, "id"),
         # prevent_initial_call=True,
     )
-    def update_step_2(
+    def update_step_3(
         workflow_selection,
         data_collection_selection,
         btn_component,
         store_btn_component,
         ids,
     ):
+
+        logger.info(f"workflow_selection: {workflow_selection}")
+        logger.info(f"data_collection_selection: {data_collection_selection}")
+        logger.info(f"btn_component: {btn_component}")
+        logger.info(f"store_btn_component: {store_btn_component}")
+        logger.info(f"ids: {ids}")
+
 
         components_list = [
             "Figure",

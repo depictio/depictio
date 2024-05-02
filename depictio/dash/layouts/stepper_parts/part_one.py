@@ -19,7 +19,7 @@ def register_callbacks_stepper_part_one(app):
         Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
         prevent_initial_call=True,
     )
-    def update_step_2(workflow_selection, data_collection_selection):
+    def update_step_1(workflow_selection, data_collection_selection):
         workflow_id, data_collection_id = return_mongoid(workflow_tag=workflow_selection, data_collection_tag=data_collection_selection)
         # workflows = list_workflows(TOKEN)
 
@@ -177,6 +177,8 @@ def register_callbacks_stepper_part_one(app):
                 # layout += [run_nb_title, html.Hr(), data_previz_title, html.Hr(), grid]
                 # print(layout)
 
+                logger.info(f"dc_specs: {dc_specs}")
+
                 layout += [
                     dmc.Accordion(
                         children=[
@@ -237,6 +239,7 @@ def register_callbacks_stepper_part_one(app):
                         # ,buttons_list
                     ]
 
+            logger.info("TEST")
         else:
             layout = html.Div("No data to display")
 

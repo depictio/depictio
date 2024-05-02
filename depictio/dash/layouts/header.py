@@ -15,7 +15,7 @@ def register_callbacks_header(app):
     @app.callback(
         Output("dummy-output", "children"),
         Input("save-button-dashboard", "n_clicks"),
-        State("stored-layout", "data"),
+        State("draggable", "layouts"),
         State(
             {
                 "type": "stored-metadata-component",
@@ -23,7 +23,7 @@ def register_callbacks_header(app):
             },
             "data",
         ),
-        State("stored-children", "data"),
+        State("draggable", "children"),
         State("stored-edit-dashboard-mode-button", "data"),
         State("stored-add-button", "data"),
         prevent_initial_call=True,
@@ -40,6 +40,7 @@ def register_callbacks_header(app):
             logger.info("\n\n\n")
             logger.info(f"save_data_dashboard INSIDE")
 
+            logger.info(f"stored_children: {type(children)} {get_size(children)}")
             logger.info(f"stored_layout_data: {type(stored_layout_data)} {get_size(stored_layout_data)}")
             logger.info(f"stored_metadata: {type(stored_metadata)} {get_size(stored_metadata)}")
             logger.info(f"edit_dashboard_mode_button: {type(edit_dashboard_mode_button)} {get_size(edit_dashboard_mode_button)}")
@@ -47,6 +48,7 @@ def register_callbacks_header(app):
             logger.info(f"n_clicks: {n_clicks}")
 
             dashboard_data = {
+                "tmp_children_data": children,
                 "stored_layout_data": stored_layout_data,
                 "stored_metadata": stored_metadata,
                 "stored_edit_dashboard_mode_button": edit_dashboard_mode_button,
@@ -121,7 +123,6 @@ def register_callbacks_header(app):
         logger.info("TOKEN: " + str(TOKEN))
         logger.info("API_BASE_URL: " + str(API_BASE_URL))
 
-
         workflows = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/workflows/get_all_workflows",
             headers={"Authorization": f"Bearer {TOKEN}"},
@@ -193,8 +194,8 @@ def design_header(data):
     # https://dash.plotly.com/dash-core-components/store
     backend_components = html.Div(
         [
-            dcc.Store(id="stored-children", storage_type="memory"),
-            dcc.Store(id="stored-layout", storage_type="memory"),
+            dcc.Store(id="stored-draggable-children", storage_type="session"),
+            dcc.Store(id="stored-draggable-layouts", storage_type="session"),
         ]
     )
 
@@ -364,6 +365,7 @@ def design_header(data):
     )
 
     dummy_output = html.Div(id="dummy-output", style={"display": "none"})
+    stepper_output = html.Div(id="stepper-output", style={"display": "none"})
 
     depictio_logo = html.Img(src=dash.get_asset_url("logo.png"), height=40, style={"margin-left": "0px"})
 
@@ -371,14 +373,14 @@ def design_header(data):
     stores_add_edit = [
         dcc.Store(
             id="stored-add-button",
-            storage_type="memory",
-            # storage_type="session",
+            # storage_type="memory",
+            storage_type="session",
             data=init_nclicks_add_button,
         ),
         dcc.Store(
             id="stored-edit-dashboard-mode-button",
-            storage_type="memory",
-            # storage_type="session",
+            # storage_type="memory",
+            storage_type="session",
             data=init_nclicks_edit_dashboard_mode_button,
         ),
     ]
@@ -387,6 +389,7 @@ def design_header(data):
     header = html.Div(
         [
             dummy_output,
+            stepper_output,
             html.Div(children=stores_add_edit),
             dbc.Col(
                 [depictio_logo, dashboard_version_select],
@@ -507,7 +510,7 @@ def enable_box_edit_mode(box, switch_state=True):
 
     new_draggable_child = html.Div(
         box_components_list,
-        id={"type": f"draggable-{btn_index}", "index": btn_index},
+        id=f"box-{str(btn_index)}",
     )
 
     return new_draggable_child

@@ -9,6 +9,7 @@ from depictio.dash.utils import (
     list_data_collections_for_dropdown,
     list_workflows_for_dropdown,
 )
+from depictio.api.v1.configs.config import logger
 
 
 min_step = 0
@@ -31,9 +32,6 @@ def register_callbacks_stepper(app):
         Output({"type": "workflow-selection-label", "index": MATCH}, "data"),
         Output({"type": "workflow-selection-label", "index": MATCH}, "value"),
         Input("add-button", "n_clicks"),
-        # State("stored-add-button", "data"),
-        # Input("interval_long", "n_intervals"),
-        # prevent_initial_call=True,
     )
     def set_workflow_options(n_clicks):
         """Define the options for the workflow dropdown
@@ -60,7 +58,7 @@ def register_callbacks_stepper(app):
             if tmp_data:
                 return tmp_data, tmp_data[0]["value"]
             else:
-                return dash.no_update
+                return dash.no_update, dash.no_update
         else:
             raise dash.exceptions.PreventUpdate
 
@@ -89,6 +87,8 @@ def register_callbacks_stepper(app):
         # print(selected_workflow)
         # print(id)
         # print("\n\n\n")
+        from depictio.api.v1.configs.config import logger
+        logger.info("ID: {}".format(id))
         if not selected_workflow:
             raise dash.exceptions.PreventUpdate
 
@@ -291,6 +291,7 @@ def create_stepper_output(n, active, new_plot_id, data_collection_type=None):
         },
     )
 
+
     buttons_list = html.Div(
         [
             html.Div(
@@ -310,7 +311,7 @@ def create_stepper_output(n, active, new_plot_id, data_collection_type=None):
 
     new_element = html.Div(
         [
-            html.Div(id={"type": "add-content", "index": n}),
+            # html.Div(id={"type": "add-content", "index": n}),
             dbc.Modal(
                 id={"type": "modal", "index": n},
                 children=[
@@ -414,4 +415,6 @@ def create_stepper_output(n, active, new_plot_id, data_collection_type=None):
         ],
         id=new_plot_id,
     )
+
+
     return new_element

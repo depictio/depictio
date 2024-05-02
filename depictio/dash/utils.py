@@ -65,44 +65,71 @@ def get_size(obj, seen=None):
     return size
 
 
+def tmp_transform_component(component, index):
+    from dash import html
+    import dash_bootstrap_components as dbc
+
+    new_component = dbc.Card(
+        dbc.CardBody(
+            children=component,
+            id={
+                "type": "card-body",
+                "index": index,
+            },
+        ),
+        style={"width": "100%"},
+        id={
+            "type": "interactive",
+            "index": index,
+        },
+    )
+    return new_component
+
+
 def load_depictio_data():
     from depictio.api.v1.db import dashboards_collection
+
     dashboard_id = "1"
     dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
     logger.info("load_depictio_data")
     logger.info(f"dashboard_data : {dashboard_data}")
-    children = list()
-    for child_metadata in dashboard_data["stored_metadata"]:
-        logger.info(child_metadata)
-        child = build_card(
-            index=child_metadata["index"],
-            title=child_metadata["title"],
-            wf_id=child_metadata["wf_id"],
-            dc_id=child_metadata["dc_id"],
-            dc_config=child_metadata["dc_config"],
-            column_name=child_metadata["column_name"],
-            column_type=child_metadata["column_type"],
-            aggregation=child_metadata["aggregation"],
-            v=child_metadata["value"],
-        )
-        logger.info(child)
-        children.append(child)
-    
-    if children:
-        child = child.to_plotly_json()
+    if dashboard_data:
+        children = list()
+        for child_metadata in dashboard_data["stored_metadata"]:
+            logger.info(child_metadata)
+            child = build_card(
+                index=child_metadata["index"],
+                title=child_metadata["title"],
+                wf_id=child_metadata["wf_id"],
+                dc_id=child_metadata["dc_id"],
+                dc_config=child_metadata["dc_config"],
+                column_name=child_metadata["column_name"],
+                column_type=child_metadata["column_type"],
+                aggregation=child_metadata["aggregation"],
+                v=child_metadata["value"],
+            )
+            logger.info(child)
+            children.append(child)
 
-        from dash import html
-        from depictio.dash.layouts.header import enable_box_edit_mode
-        dashboard_data["stored_children_data"] = enable_box_edit_mode(child, switch_state=True)
-        # logger.info(f"dashboard_data : {dashboard_data}")
-        logger.info(f"dashboard_data['stored_children_data'] : {dashboard_data['stored_children_data']}")
-        logger.info(f"dashboard_data['stored_layout_data'] : {dashboard_data['stored_layout_data']}")
-        return dashboard_data
+        if children:
+            
+            logger.info(f"BEFORE child : {child}")
+
+            child = child.to_plotly_json()
+            logger.info(f"AFTER child : {child}")
+
+            from dash import html
+            from depictio.dash.layouts.header import enable_box_edit_mode
+
+            dashboard_data["stored_children_data"] = enable_box_edit_mode(child, switch_state=True)
+            # logger.info(f"dashboard_data : {dashboard_data}")
+            logger.info(f"dashboard_data['stored_children_data'] : {dashboard_data['stored_children_data']}")
+            logger.info(f"dashboard_data['stored_layout_data'] : {dashboard_data['stored_layout_data']}")
+            return dashboard_data
+        else:
+            return None
     else:
         return None
-
-
-
 
     # if os.path.exists("/app/data/depictio_data.json"):
     #     with open("/app/data/depictio_data.json", "r") as file:
