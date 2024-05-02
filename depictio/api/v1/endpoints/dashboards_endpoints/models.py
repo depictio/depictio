@@ -14,6 +14,7 @@ class DashboardData(MongoModel):
     dashboard_id: str
     # id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
     version: str
+    tmp_children_data: List
     stored_layout_data: Dict
     stored_metadata: List
     stored_edit_dashboard_mode_button: List
