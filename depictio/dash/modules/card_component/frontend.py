@@ -99,17 +99,17 @@ def register_callbacks_card_component(app):
         ).json()
 
         # Get the join tables for the selected workflow - used in store for metadata management
-        join_tables_for_wf = httpx.get(
-            f"{API_BASE_URL}/depictio/api/v1/workflows/get_join_tables/{workflow_id}",
-            headers=headers,
-        )
+        # join_tables_for_wf = httpx.get(
+        #     f"{API_BASE_URL}/depictio/api/v1/workflows/get_join_tables/{workflow_id}",
+        #     headers=headers,
+        # )
 
-        # If the request is successful, get the join details for the selected data collection
-        if join_tables_for_wf.status_code == 200:
-            join_tables_for_wf = join_tables_for_wf.json()
-            if data_collection_id in join_tables_for_wf:
-                join_details = join_tables_for_wf[data_collection_id]
-                dc_specs["config"]["join"] = join_details
+        # # If the request is successful, get the join details for the selected data collection
+        # if join_tables_for_wf.status_code == 200:
+        #     join_tables_for_wf = join_tables_for_wf.json()
+        #     if data_collection_id in join_tables_for_wf:
+        #         join_details = join_tables_for_wf[data_collection_id]
+        #         dc_specs["config"]["join"] = join_details
 
         # Get the type of the selected column and the value for the selected aggregation
         column_type = cols_json[column_name]["type"]
@@ -117,7 +117,7 @@ def register_callbacks_card_component(app):
 
 
         new_card_body = build_card(
-            index=id["index"],
+            index=int(id["index"]),
             title=input_value,
             wf_id=workflow_id,
             dc_id=data_collection_id,
@@ -143,7 +143,7 @@ def design_card(id, df):
                             label="Card title",
                             id={
                                 "type": "card-input",
-                                "index": id["index"],
+                                "index": int(id["index"]),
                             },
                         ),
                         # Dropdown for the column selection
@@ -151,7 +151,7 @@ def design_card(id, df):
                             label="Select your column",
                             id={
                                 "type": "card-dropdown-column",
-                                "index": id["index"],
+                                "index": int(id["index"]),
                             },
                             data=[{"label": e, "value": e} for e in df.columns],
                             value=None,
@@ -161,21 +161,21 @@ def design_card(id, df):
                             label="Select your aggregation method",
                             id={
                                 "type": "card-dropdown-aggregation",
-                                "index": id["index"],
+                                "index": int(id["index"]),
                             },
                             value=None,
                         ),
                         html.Div(
                             id={
                                 # "type": "debug-print",
-                                "index": id["index"],
+                                "index": int(id["index"]),
                             },
                         ),
                     ],
                 ),
                 id={
                     "type": "card",
-                    "index": id["index"],
+                    "index": int(id["index"]),
                 },
                 style={"width": "100%"},
             ),
@@ -191,18 +191,18 @@ def design_card(id, df):
                         dbc.CardBody(
                             id={
                                 "type": "card-body",
-                                "index": id["index"],
+                                "index": int(id["index"]),
                             }
                         ),
                         style={"width": "100%"},
                         id={
-                            "type": "interactive",
-                            "index": id["index"],
+                            "type": "card-component",
+                            "index": int(id["index"]),
                         },
                     ),
                     id={
-                        "type": "test-container",
-                        "index": id["index"],
+                        "type": "component-container",
+                        "index": int(id["index"]),
                     },
                 )
             ),
@@ -226,7 +226,7 @@ def create_stepper_card_button(n, disabled=False):
             "Card",
             id={
                 "type": "btn-option",
-                "index": n,
+                "index": int(n),
                 "value": "Card",
             },
             n_clicks=0,
@@ -240,7 +240,7 @@ def create_stepper_card_button(n, disabled=False):
     store = dcc.Store(
         id={
             "type": "store-btn-option",
-            "index": n,
+            "index": int(n),
             "value": "Card",
         },
         data=0,

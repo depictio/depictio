@@ -611,11 +611,11 @@ def design_figure(id):
                                     ),
                                     style={"width": "100%"},
                                     id={
-                                        "type": "interactive",
+                                        "type": "graph-component",
                                         "index": id["index"],
                                     },
                                 ),
-                                id={"type": "test-container", "index": id["index"]},
+                                id={"type": "component-container", "index": id["index"]},
                             )
                         ),
                     ],
