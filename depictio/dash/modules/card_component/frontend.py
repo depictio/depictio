@@ -117,7 +117,7 @@ def register_callbacks_card_component(app):
 
 
         new_card_body = build_card(
-            index=int(id["index"]),
+            index=id["index"],
             title=input_value,
             wf_id=workflow_id,
             dc_id=data_collection_id,
@@ -143,7 +143,7 @@ def design_card(id, df):
                             label="Card title",
                             id={
                                 "type": "card-input",
-                                "index": int(id["index"]),
+                                "index": id["index"],
                             },
                         ),
                         # Dropdown for the column selection
@@ -151,7 +151,7 @@ def design_card(id, df):
                             label="Select your column",
                             id={
                                 "type": "card-dropdown-column",
-                                "index": int(id["index"]),
+                                "index": id["index"],
                             },
                             data=[{"label": e, "value": e} for e in df.columns],
                             value=None,
@@ -161,21 +161,21 @@ def design_card(id, df):
                             label="Select your aggregation method",
                             id={
                                 "type": "card-dropdown-aggregation",
-                                "index": int(id["index"]),
+                                "index": id["index"],
                             },
                             value=None,
                         ),
                         html.Div(
                             id={
                                 # "type": "debug-print",
-                                "index": int(id["index"]),
+                                "index": id["index"],
                             },
                         ),
                     ],
                 ),
                 id={
                     "type": "card",
-                    "index": int(id["index"]),
+                    "index": id["index"],
                 },
                 style={"width": "100%"},
             ),
@@ -191,18 +191,18 @@ def design_card(id, df):
                         dbc.CardBody(
                             id={
                                 "type": "card-body",
-                                "index": int(id["index"]),
+                                "index": id["index"],
                             }
                         ),
                         style={"width": "100%"},
                         id={
                             "type": "card-component",
-                            "index": int(id["index"]),
+                            "index": id["index"],
                         },
                     ),
                     id={
                         "type": "component-container",
-                        "index": int(id["index"]),
+                        "index": id["index"],
                     },
                 )
             ),
@@ -226,7 +226,7 @@ def create_stepper_card_button(n, disabled=False):
             "Card",
             id={
                 "type": "btn-option",
-                "index": int(n),
+                "index": n,
                 "value": "Card",
             },
             n_clicks=0,
@@ -240,7 +240,7 @@ def create_stepper_card_button(n, disabled=False):
     store = dcc.Store(
         id={
             "type": "store-btn-option",
-            "index": int(n),
+            "index": n,
             "value": "Card",
         },
         data=0,

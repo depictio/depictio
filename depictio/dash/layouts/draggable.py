@@ -41,29 +41,25 @@ from depictio.dash.modules.figure_component.utils import plotly_vizu_dict
 
 
 # Mapping of component types to their respective dimensions (width and height)
-component_dimensions = {
-    'card-component': {'w': 3, 'h': 4},
-    'interactive-component': {'w': 6, 'h': 6},
-    'graph-component': {'w': 9, 'h': 8}
-}
+component_dimensions = {"card-component": {"w": 3, "h": 4}, "interactive-component": {"w": 6, "h": 6}, "graph-component": {"w": 9, "h": 8}}
 
 
 def calculate_new_layout_position(child_type, existing_layouts, child_id, n):
-    """ Calculate position for new layout item based on existing ones and type."""
+    """Calculate position for new layout item based on existing ones and type."""
     # Get the default dimensions from the type
-    dimensions = component_dimensions.get(child_type, {'w': 6, 'h': 5})  # Default if type not found
+    dimensions = component_dimensions.get(child_type, {"w": 6, "h": 5})  # Default if type not found
 
     # Simple positioning logic: place items in rows based on their index
     columns_per_row = 12  # Assuming a 12-column layout grid
-    row = n // (columns_per_row // dimensions['w'])  # Integer division to find row based on how many fit per row
-    col_position = (n % (columns_per_row // dimensions['w'])) * dimensions['w']  # Modulo for column position
+    row = n // (columns_per_row // dimensions["w"])  # Integer division to find row based on how many fit per row
+    col_position = (n % (columns_per_row // dimensions["w"])) * dimensions["w"]  # Modulo for column position
 
     return {
-        'x': col_position,
-        'y': row * dimensions['h'],  # Stacking rows based on height of each component
-        'w': dimensions['w'],
-        'h': dimensions['h'],
-        'i': child_id
+        "x": col_position,
+        "y": row * dimensions["h"],  # Stacking rows based on height of each component
+        "w": dimensions["w"],
+        "h": dimensions["h"],
+        "i": child_id,
     }
 
 
@@ -103,10 +99,11 @@ def register_callbacks_draggable(app):
         State("stored-draggable-layouts", "data"),
         Input("stored-draggable-children", "data"),
         Input("stored-draggable-layouts", "data"),
-                    Input(
-                {"type": "remove-box-button", "index": dash.dependencies.ALL},
-                "n_clicks",
-            ),
+        Input(
+            {"type": "remove-box-button", "index": dash.dependencies.ALL},
+            "n_clicks",
+        ),
+        Input("remove-all-components-button", "n_clicks"),
         prevent_initial_call=True,
     )
     def populate_draggable(
@@ -122,6 +119,7 @@ def register_callbacks_draggable(app):
         input_stored_draggable_children,
         input_stored_draggable_layouts,
         remove_box_button_values,
+        remove_all_components_button,
     ):
         logger.info("btn_done_clicks: {}".format(btn_done_clicks))
         logger.info("stored_add_button: {}".format(stored_add_button))
@@ -186,9 +184,9 @@ def register_callbacks_draggable(app):
 
                     # Calculate layout item position and size based on type
                     new_layout_item = calculate_new_layout_position(child_type, draggable_layouts, child_id, n)
-                    
+
                     # Update necessary breakpoints, this example only updates 'lg' for simplicity
-                    draggable_layouts['lg'].append(new_layout_item)
+                    draggable_layouts["lg"].append(new_layout_item)
 
                     # new_layout_item = {
                     #     "i": child_id,
@@ -209,7 +207,7 @@ def register_callbacks_draggable(app):
         #         return dash.no_update, dash.no_update, dash.no_update, dash.no_update
         # # elif triggered_input == "draggable":
         # #     return draggable_children, draggable_layouts
-       
+
         elif triggered_input == "draggable":
             ctx_triggered_props_id = ctx.triggered_prop_ids
             if "draggable.layouts" in ctx_triggered_props_id:
@@ -231,7 +229,6 @@ def register_callbacks_draggable(app):
                 return dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
         elif triggered_input == "remove-box-button":
-            
             logger.info("Remove box button clicked")
             input_id = ctx.triggered_id["index"]
             logger.info("Input ID: {}".format(input_id))
@@ -241,10 +238,12 @@ def register_callbacks_draggable(app):
             updated_children = [child for child in draggable_children if child["props"]["id"] != f"box-{input_id}"]
             logger.info("Updated draggable children: {}".format(updated_children))
 
-
             return updated_children, draggable_layouts, updated_children, draggable_layouts
 
-       
+        elif triggered_input == "remove-all-components-button":
+            logger.info("Remove all components button clicked")
+            return [], {}, [], {}
+
         else:
             return dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
@@ -253,6 +252,7 @@ def register_callbacks_draggable(app):
         Output("stored-add-button", "data"),
         Input("add-button", "n_clicks"),
         State("stored-add-button", "data"),
+        prevent_initial_call=True,
     )
     def trigger_modal(add_button_nclicks, stored_add_button):
         logger.info("\n\n")
@@ -260,20 +260,12 @@ def register_callbacks_draggable(app):
         logger.info("n_clicks: {}".format(add_button_nclicks))
         logger.info("stored_add_button: {}".format(stored_add_button))
         # update the stored add button count using current value + n_clicks - warning: do not reuse the same n_clicks value multiple times
-        # stored_add_button["count"] += 1
+        stored_add_button["count"] += 1
         logger.info("Updated stored_add_button: {}".format(stored_add_button))
         index = stored_add_button["count"]
         # Generate index from the number of clicks
-        index = add_button_nclicks
-        current_draggable_children = add_new_component(
-            add_button_nclicks,
-            stored_add_button,
-            [],
-            index,
-            # {},
-            # stored_edit_dashboard,
-            # ctx,
-        )
+        # index = add_button_nclicks
+        current_draggable_children = add_new_component(str(index))
 
         return current_draggable_children, stored_add_button
 
