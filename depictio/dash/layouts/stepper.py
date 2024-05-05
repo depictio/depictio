@@ -1,16 +1,17 @@
 import ast
-from dash import html, Input, Output, State, ALL, MATCH
+from dash import html, Input, Output, State, ALL, MATCH, ctx
 import dash
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 from dash_iconify import DashIconify
+import httpx
 
 # Depictio imports
 from depictio.dash.utils import (
     list_data_collections_for_dropdown,
     list_workflows_for_dropdown,
 )
-from depictio.api.v1.configs.config import logger
+from depictio.api.v1.configs.config import API_BASE_URL, TOKEN, logger
 
 
 min_step = 0
@@ -32,75 +33,88 @@ def register_callbacks_stepper(app):
     @app.callback(
         Output({"type": "workflow-selection-label", "index": MATCH}, "data"),
         Output({"type": "workflow-selection-label", "index": MATCH}, "value"),
-        Input("stored-add-button", "data"),
+        Input({"type": "btn-option", "index": MATCH, "value": ALL}, "n_clicks"),
     )
-    def set_workflow_options(data):
-        """Define the options for the workflow dropdown
+    def set_workflow_options(n_clicks):
+        logger.info(f"CTX Triggered ID: {ctx.triggered_id}")
+        logger.info(f"CTX triggered: {ctx.triggered}")
 
-        Args:
-            n_intervals (_type_): _description_
+        if isinstance(ctx.triggered_id, dict):
+            if ctx.triggered_id["type"] == "btn-option":
+                component_selected = ctx.triggered_id["value"]
 
-        Returns:
-            _type_: _description_
-        """
-        # print("\n\n\n")
-        # print("set_workflow_options")
-        # print(n_clicks)
-        # if int(n_clicks) > 0:
-        # print(id)
-        tmp_data = list_workflows_for_dropdown()
-        # print("\n\n\n")
-        # print("set_workflow_options")
+        else:
+            component_selected = "None"
 
-        # print(tmp_data)
-        # print("\n\n\n")
+        all_wf_dc = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/workflows/get_all_workflows",
+            headers={
+                "Authorization": f"Bearer {TOKEN}",
+            },
+        ).json()
+
+        mapping_component_data_collection = {
+            "Table": ["Figure", "Card", "Interactive", "Table"],
+            "JBrowse2": ["JBrowse2"],
+        }
+
+        logger.info(f"Component selected: {component_selected}")
+        valid_wfs = sorted({wf["workflow_tag"] for wf in all_wf_dc for dc in wf["data_collections"] if component_selected in mapping_component_data_collection[dc["config"]["type"]]})
+        logger.info(f"valid_wfs: {valid_wfs}")
 
         # Return the data and the first value if the data is not empty
-        if tmp_data:
-            return tmp_data, tmp_data[0]["value"]
+        if valid_wfs:
+            return valid_wfs, valid_wfs[0]
         else:
             return dash.no_update, dash.no_update
-        # else:
-        #     raise dash.exceptions.PreventUpdate
 
     @app.callback(
         Output({"type": "datacollection-selection-label", "index": MATCH}, "data"),
         Output({"type": "datacollection-selection-label", "index": MATCH}, "value"),
         Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
         State({"type": "workflow-selection-label", "index": MATCH}, "id"),
+        Input({"type": "btn-option", "index": MATCH, "value": ALL}, "n_clicks")
         # prevent_initial_call=True,
     )
-    def set_datacollection_options(selected_workflow, id):
-        """Define the options for the data collection dropdown
+    def set_datacollection_options(selected_workflow, id, n_clicks):
+        logger.info(f"CTX Triggered ID: {ctx.triggered_id}")
+        logger.info(f"CTX triggered: {ctx.triggered}")
 
-        Args:
-            selected_workflow (_type_): _description_
+        if isinstance(ctx.triggered_id, dict):
+            if ctx.triggered_id["type"] == "btn-option":
+                component_selected = ctx.triggered_id["value"]
 
-        Raises:
-            dash.exceptions.PreventUpdate: _description_
-            dash.exceptions.PreventUpdate: _description_
+        else:
+            component_selected = "None"
 
-        Returns:
-            _type_: _description_
-        """
-        # print("\n\n\n")
-        # print("set_datacollection_options")
-        # print(selected_workflow)
-        # print(id)
-        # print("\n\n\n")
-        from depictio.api.v1.configs.config import logger
+        all_wf_dc = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/workflows/get_all_workflows",
+            headers={
+                "Authorization": f"Bearer {TOKEN}",
+            },
+        ).json()
+        selected_wf_data = [wf for wf in all_wf_dc if wf["workflow_tag"] == selected_workflow][0]
+
+        mapping_component_data_collection = {
+            "Table": ["Figure", "Card", "Interactive", "Table"],
+            "JBrowse2": ["JBrowse2"],
+        }
+
+        logger.info(f"Component selected: {component_selected}")
+        valid_dcs = sorted({dc["data_collection_tag"] for dc in selected_wf_data["data_collections"] if component_selected in mapping_component_data_collection[dc["config"]["type"]]})
+        logger.info(f"valid_dcs: {valid_dcs}")
+
+
 
         logger.info("ID: {}".format(id))
         if not selected_workflow:
             raise dash.exceptions.PreventUpdate
 
-        tmp_data = list_data_collections_for_dropdown(selected_workflow)
-        # print("set_datacollection_options")
-        # print(tmp_data)
+        # tmp_data = list_data_collections_for_dropdown(selected_workflow)
 
         # Return the data and the first value if the data is not empty
-        if tmp_data:
-            return tmp_data, tmp_data[0]["value"]
+        if valid_dcs:
+            return valid_dcs, valid_dcs[0]
         else:
             raise dash.exceptions.PreventUpdate
 
@@ -194,7 +208,13 @@ def create_stepper_output(n, active):
     stepper_dropdowns = html.Div(
         [
             html.Hr(),
-            dbc.Row([dbc.Col(dmc.Title("Component selected:", order=3, align="left", weight=500), width=4), dbc.Col(dmc.Text("None", id={"type": "component-selected", "index": n}, size="xl", align="left", weight=500), width=8)], style={"align-items": "center"}),
+            dbc.Row(
+                [
+                    dbc.Col(dmc.Title("Component selected:", order=3, align="left", weight=500), width=4),
+                    dbc.Col(dmc.Text("None", id={"type": "component-selected", "index": n}, size="xl", align="left", weight=500), width=8),
+                ],
+                style={"align-items": "center"},
+            ),
             html.Hr(),
             dbc.Row(
                 [
@@ -302,11 +322,13 @@ def create_stepper_output(n, active):
                 label="Data selection",
                 description="Select your workflow and data collection",
                 children=stepper_dropdowns,
+                # loading=True,
                 id={"type": "stepper-step-1", "index": n},
             ),
             dmc.StepperStep(
                 label="Design your component",
                 description="Customize your component as you wish",
+                # loading=True,
                 children=html.Div(
                     id={
                         "type": "output-stepper-step-3",

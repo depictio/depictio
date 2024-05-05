@@ -409,10 +409,64 @@ def register_callbacks_figure_component(app):
 
             # accordion_specific_params = args[0][3]
 
+    # @app.callback(
+    #     [
+    #         Output({"type": "figure-body", "index": MATCH}, "children"),
+    #     ],
+    #     [
+    #         Input({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
+    #         State({"type": "workflow-selection-label", "index": MATCH}, "value"),
+    #         State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+    #         State({"type": "segmented-control-visu-graph", "index": MATCH}, "id"),
+    #     ],
+    #     prevent_initial_call=True,
+    # )
+    # def test(input_segmented_control, workflow_id, data_collection_id, id):
+    #     from depictio.api.v1.configs.config import logger
+
+    #     logger.info(f"input_segmented_control: {input_segmented_control}")
+    #     logger.info(f"workflow: {workflow_id}")
+    #     logger.info(f"data_collection: {data_collection_id}")
+    #     logger.info(f"id: {id}")
+
+    #     store_component_data = {
+    #         "index": id["index"],
+    #         "component_type": "graph",
+    #         # "dict_kwargs": dict_kwargs,
+    #         "input_segmented_control": input_segmented_control,
+    #         "wf_id": workflow_id,
+    #         "dc_id": data_collection_id,
+    #         # "dc_config": dc_specs["config"],
+    #     }
+
+    #     output_div = dcc.Graph(
+    #                 figure=px.scatter(x=np.random.rand(10), y=np.random.rand(10)),
+    #                 id={"type": "graph", "index": id["index"]},
+    #             )
+
+    #     # html.Div(
+    #     #     [
+    #     #         dcc.Graph(
+    #     #             figure=px.scatter(x=np.random.rand(10), y=np.random.rand(10)),
+    #     #             id={"type": "graph", "index": id["index"]},
+    #     #         ),
+    #     #         dcc.Store(
+    #     #             data=store_component_data,
+    #     #             id={
+    #     #                 "type": "stored-metadata-component",
+    #     #                 "index": id["index"],
+    #     #             },
+    #     #         ),
+    #     #     ]
+    #     # )
+
+    #     return [output_div]
+
     @app.callback(
         [
-            Output({"type": "graph", "index": MATCH}, "figure"),
-            Output({"type": "stored-metadata-component", "index": MATCH}, "data"),
+            # Output({"type": "graph", "index": MATCH}, "figure"),
+            # Output({"type": "stored-metadata-component", "index": MATCH}, "data"),
+            Output({"type": "figure-body", "index": MATCH}, "children"),
         ],
         [
             Input({"type": "dict_kwargs", "index": MATCH}, "data"),
@@ -427,7 +481,7 @@ def register_callbacks_figure_component(app):
             # ],
             # Input("interval", "n_intervals"),
         ],
-        # prevent_initial_call=True,
+        prevent_initial_call=True,
     )
     def update_figure(*args):
         # print("\n\n\n")
@@ -546,12 +600,30 @@ def register_callbacks_figure_component(app):
             # print("TOTO")
 
             # return [figure]
-            return figure, store_component_data
+
+            return [html.Div([
+                dcc.Graph(
+                    # figure,
+                    figure=figure,
+                    id={"type": "graph", "index": id["index"]},
+                    config={"editable": True, "scrollZoom": True},
+                ),
+                # f"TEST-GRAPH-{id['index']}",
+                dcc.Store(
+                    data=store_component_data,
+                    id={
+                        "type": "stored-metadata-component",
+                        "index": id["index"],
+                    },
+                ),
+            ])]
         # else:
         #     raise dash.exceptions.PreventUpdate
         # print("\n")
 
         # accordion_specific_params = args[0][3]
+        else:
+            return dash.no_update, dash.no_update
 
 
 def design_figure(id):
@@ -590,33 +662,41 @@ def design_figure(id):
                         html.Div(
                             dbc.Card(
                                 dbc.CardBody(
-                                    html.Div(
-                                        children=[
-                                            dcc.Store(
-                                                id={
-                                                    "type": "stored-metadata-component",
-                                                    "index": id["index"],
-                                                }
-                                            ),
-                                            dcc.Graph(
-                                                # figure=figure,
-                                                id={"type": "graph", "index": id["index"]},
-                                                config={"editable": True, "scrollZoom": True},
-                                            ),
-                                        ],
-                                        id={
-                                            "type": "card-body",
-                                            "index": id["index"],
-                                        },
-                                    ),
-                                    style={"width": "100%"},
                                     id={
-                                        "type": "graph-component",
+                                        "type": "figure-body",
                                         "index": id["index"],
-                                    },
+                                    }
                                 ),
-                                id={"type": "component-container", "index": id["index"]},
-                            )
+                                style={"width": "100%"},
+                                id={
+                                    "type": "figure-component",
+                                    "index": id["index"],
+                                },
+                            ),
+                            id={
+                                "type": "component-container",
+                                "index": id["index"],
+                            },
+                            # html.Div(
+                            #     children=[
+                            #         dcc.Store(
+                            #             id={
+                            #                 "type": "stored-metadata-component",
+                            #                 "index": id["index"],
+                            #             }
+                            #         ),
+                            #         dcc.Graph(
+                            #             id={"type": "graph", "index": id["index"]},
+                            #             config={"editable": True, "scrollZoom": True},
+                            #         ),
+                            #     ],
+                            #     style={"width": "100%"},
+                            #     id={
+                            #         "type": "graph-component",
+                            #         "index": id["index"],
+                            #     },
+                            # ),
+                            # id={"type": "component-container", "index": id["index"]},
                         ),
                     ],
                     width="auto",
