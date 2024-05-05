@@ -1,5 +1,5 @@
 import json
-from dash import html, Input, Output, State, ALL, MATCH, ctx
+from dash import html, Input, Output, State, ALL, MATCH, ctx, dcc
 import dash
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
@@ -83,5 +83,33 @@ def register_callbacks_stepper_part_two(app):
             interactive_stepper_button_store,
             table_stepper_button_store,
             jbrowse_stepper_button_store,
+            dcc.Store(id={"type": "last-button", "index": n}, data="None", storage_type="session"),
         ]
+
         return buttons_list, store_list
+
+    @app.callback(
+        Output({"type": "last-button", "index": MATCH}, "data"),
+        Input({"type": "btn-option", "index": ALL, "value": ALL}, "n_clicks"),
+        State({"type": "last-button", "index": MATCH}, "data"),
+        prevent_initial_call=True,
+    )
+    def update_last_button_using_btn_option_value(n_clicks, last_button):
+        logger.info(f"n_clicks: {n_clicks}")
+        logger.info(f"last_button: {last_button}")
+        if ctx.triggered_id:
+            if "value" in ctx.triggered_id:
+                logger.info(f"{ctx.triggered}")
+                logger.info(f"ctx.triggered_id: {ctx.triggered_id}")
+                id = ctx.triggered_id["value"]
+                logger.info(f"Triggered id: {id}")
+                logger.info(f"Last button: {last_button}")
+                return id
+        else:
+            return last_button
+        # logger.info(f"{ctx.triggered}")
+        # logger.info(f"ctx.triggered_id: {ctx.triggered_id}")
+        # id = ctx.triggered_id["type"]
+        # logger.info(f"Triggered id: {id}")
+        # logger.info(f"Last button: {last_button}")
+        # return id

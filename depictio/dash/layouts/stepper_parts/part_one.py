@@ -20,20 +20,22 @@ def register_callbacks_stepper_part_one(app):
         Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
         Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
         Input({"type": "btn-option", "index": MATCH, "value": ALL}, "n_clicks"),
+        State({"type": "last-button", "index": MATCH}, "data"),
         prevent_initial_call=True,
     )
-    def update_step_1(workflow_selection, data_collection_selection, input_btn_values):
+    def update_step_1(workflow_selection, data_collection_selection, input_btn_values, component_selected):
         # Use dcc.Store in store-list to get the latest button clicked using timestamps
 
         logger.info(f"CTX Triggered ID: {ctx.triggered_id}")
         logger.info(f"CTX triggered: {ctx.triggered}")
 
-        if isinstance(ctx.triggered_id, dict):
-            if ctx.triggered_id["type"] == "btn-option":
-                component_selected = ctx.triggered_id["value"]
+        # if (isinstance(ctx.triggered_id, dict)) and (ctx.triggered_id["type"] == "btn-option"):
+        #     # component_selected = ctx.triggered_id["value"]
+        #     component_selected = component_selected
 
-        else:
-            component_selected = "None"
+        # else:
+        #     # component_selected = "None"
+        #     component_selected = input_last_component
 
         component_metadata_dict = {
             "Card": {"color": "violet", "icon": "formkit:number"},
