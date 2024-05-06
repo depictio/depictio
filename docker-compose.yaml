@@ -62,7 +62,7 @@ services:
       - ./configs:/configs
       - ./data:/app/data
       - ./minio_data:/minio_data
-      - ./env:/app/.env
+      - ./.env:/app/.env
     command: ["python", "depictio/dash/app.py"]
     depends_on:
       - mongo
