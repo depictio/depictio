@@ -1,6 +1,63 @@
 # List of all the possible aggregation methods for each data type
 # TODO: reference in the documentation
 
+from dash import html, dcc
+
+
+def build_card(index, title, wf_id, dc_id, dc_config, column_name, column_type, aggregation, v):
+
+    try:
+        v = round(float(v), 2)
+    except:
+        pass
+
+    # Metadata management - Create a store component to store the metadata of the card
+    store_component = dcc.Store(
+        id={
+            "type": "stored-metadata-component",
+            "index": str(index),
+        },
+        data={
+            "index": str(index),
+            "component_type": "card",
+            "title": title,
+            "wf_id": wf_id,
+            "dc_id": dc_id,
+            "dc_config": dc_config,
+            "aggregation": aggregation,
+            "column_type": column_type,
+            "column_name": column_name,
+            "value": v,
+        },
+    )
+
+    # Create the card body - default title is the aggregation value on the selected column
+    if not title:
+        card_title = html.H5(f"{aggregation} on {column_name}")
+    else:
+        card_title = html.H5(f"{title}")
+
+    # Create the card body
+    new_card_body = html.Div(
+        [
+            card_title,
+            html.P(
+                f"{v}",
+                id={
+                    "type": "card-value",
+                    "index": str(index),
+                },
+            ),
+            store_component,
+        ],
+        id={
+            "type": "card",
+            "index": str(index),
+        },
+    )
+    return new_card_body
+
+
 agg_functions = {
     "int64": {
         "title": "Integer",

@@ -11,6 +11,7 @@ from depictio.api.v1.configs.config import API_BASE_URL, TOKEN
 
 from depictio.dash.modules.card_component.utils import (
     agg_functions,
+    build_card,
 )
 from depictio.dash.utils import (
     UNSELECTED_STYLE,
@@ -28,18 +29,18 @@ def register_callbacks_card_component(app):
         ],
         prevent_initial_call=True,
     )
-    def update_aggregation_options(column_value, wf_tag, dc_tag):
+    def update_aggregation_options(column_name, wf_tag, dc_tag):
         """
         Callback to update aggregation dropdown options based on the selected column
         """
         # Get the columns from the selected data collection
         cols_json = get_columns_from_data_collection(wf_tag, dc_tag)
 
-        if column_value is None:
+        if column_name is None:
             return []
 
         # Get the type of the selected column
-        column_type = cols_json[column_value]["type"]
+        column_type = cols_json[column_name]["type"]
 
         # Get the aggregation functions available for the selected column type
         agg_functions_tmp_methods = agg_functions[str(column_type)]["card_methods"]
@@ -55,7 +56,7 @@ def register_callbacks_card_component(app):
         Input({"type": "card-dropdown-column", "index": MATCH}, "value"),
         prevent_initial_call=True,
     )
-    def reset_aggregation_value(column_value):
+    def reset_aggregation_value(column_name):
         return None
 
     # Callback to update card body based on the selected column and aggregation
@@ -71,7 +72,7 @@ def register_callbacks_card_component(app):
         ],
         prevent_initial_call=True,
     )
-    def design_card_body(input_value, column_value, aggregation_value, wf_tag, dc_tag, id):
+    def design_card_body(input_value, column_name, aggregation_value, wf_tag, dc_tag, id):
         """
         Callback to update card body based on the selected column and aggregation
         """
@@ -82,7 +83,7 @@ def register_callbacks_card_component(app):
         }
 
         # If any of the input values are None, return an empty list
-        if input_value is None or column_value is None or aggregation_value is None or wf_tag is None or dc_tag is None:
+        if input_value is None or column_name is None or aggregation_value is None or wf_tag is None or dc_tag is None:
             return []
 
         # Get the columns from the selected data collection
@@ -98,64 +99,34 @@ def register_callbacks_card_component(app):
         ).json()
 
         # Get the join tables for the selected workflow - used in store for metadata management
-        join_tables_for_wf = httpx.get(
-            f"{API_BASE_URL}/depictio/api/v1/workflows/get_join_tables/{workflow_id}",
-            headers=headers,
-        )
+        # join_tables_for_wf = httpx.get(
+        #     f"{API_BASE_URL}/depictio/api/v1/workflows/get_join_tables/{workflow_id}",
+        #     headers=headers,
+        # )
 
-        # If the request is successful, get the join details for the selected data collection
-        if join_tables_for_wf.status_code == 200:
-            join_tables_for_wf = join_tables_for_wf.json()
-            if data_collection_id in join_tables_for_wf:
-                join_details = join_tables_for_wf[data_collection_id]
-                dc_specs["config"]["join"] = join_details
+        # # If the request is successful, get the join details for the selected data collection
+        # if join_tables_for_wf.status_code == 200:
+        #     join_tables_for_wf = join_tables_for_wf.json()
+        #     if data_collection_id in join_tables_for_wf:
+        #         join_details = join_tables_for_wf[data_collection_id]
+        #         dc_specs["config"]["join"] = join_details
 
         # Get the type of the selected column and the value for the selected aggregation
-        column_type = cols_json[column_value]["type"]
-        v = cols_json[column_value]["specs"][aggregation_value]
+        column_type = cols_json[column_name]["type"]
+        v = cols_json[column_name]["specs"][aggregation_value]
 
-        try:
-            v = round(float(v), 2)
-        except:
-            pass
 
-        # Metadata management - Create a store component to store the metadata of the card
-        store_component = dcc.Store(
-            id={
-                "type": "stored-metadata-component",
-                "index": id["index"],
-            },
-            data={
-                "index": id["index"],
-                "component_type": "card",
-                "title": input_value,
-                "wf_id": workflow_id,
-                "dc_id": data_collection_id,
-                "dc_config": dc_specs["config"],
-                "column_value": column_value,
-                "aggregation": aggregation_value,
-                "type": column_type,
-            },
+        new_card_body = build_card(
+            index=id["index"],
+            title=input_value,
+            wf_id=workflow_id,
+            dc_id=data_collection_id,
+            dc_config=dc_specs["config"],
+            column_name=column_name,
+            column_type=column_type,
+            aggregation=aggregation_value,
+            v=v,
         )
-
-        # Create the card body - default title is the aggregation value on the selected column
-        if not input_value:
-            card_title = html.H5(f"{aggregation_value} on {column_value}")
-        else:
-            card_title = html.H5(f"{input_value}")
-
-        # Create the card body
-        new_card_body = [
-            card_title,
-            html.P(
-                f"{v}",
-                id={
-                    "type": "card-value",
-                    "index": id["index"],
-                },
-            ),
-            store_component,
-        ]
 
         return new_card_body
 
@@ -225,12 +196,12 @@ def design_card(id, df):
                         ),
                         style={"width": "100%"},
                         id={
-                            "type": "interactive",
+                            "type": "card-component",
                             "index": id["index"],
                         },
                     ),
                     id={
-                        "type": "test-container",
+                        "type": "component-container",
                         "index": id["index"],
                     },
                 )

@@ -117,7 +117,7 @@ def design_jbrowse(id):
                     },
                 ),
                 id={
-                    "type": "test-container",
+                    "type": "component-container",
                     "index": id["index"],
                 },
             )
