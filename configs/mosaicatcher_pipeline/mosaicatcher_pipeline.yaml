@@ -27,7 +27,7 @@ workflows:
       # TODO: to turn into a dict (location - regex)
       # The location of the runs - multiple locations can be specified
       parent_runs_location:
-        - "/Users/tweber/Data/mosaicatcher-pipeline"
+        - "/Users/tweber/Gits/depictio-data/StrandSeq/HGSVC"
 
       # Regular expression to match the runs
       runs_regex: ".*"
@@ -107,18 +107,18 @@ workflows:
             polars_kwargs:
               separator: "\t"
       
-      - data_collection_tag: "mosaicatcher_samples_metadata"
-        description: "Metadata file for MosaiCatcher samples"
-        config:
-          type: "Table"
-          metatype: "Metadata"
-          regex: 
-            pattern: "mosaicatcher_samples_metadata.csv"
-            type: "file-based"
-          dc_specific_properties:
-            format: "CSV"
-            polars_kwargs:
-              separator: ";"
+      # - data_collection_tag: "mosaicatcher_samples_metadata"
+      #   description: "Metadata file for MosaiCatcher samples"
+      #   config:
+      #     type: "Table"
+      #     metatype: "Metadata"
+      #     regex: 
+      #       pattern: "mosaicatcher_samples_metadata.csv"
+      #       type: "file-based"
+      #     dc_specific_properties:
+      #       format: "CSV"
+      #       polars_kwargs:
+      #         separator: ";"
 
 
       # Data collections of type JBrowse2
@@ -158,4 +158,4 @@ workflows:
             index_extension: "tbi"
 
             # The location of the JBrowse template for the data collection
-            jbrowse_template_location: "/Users/tweber/Gits/depictio/configs/mosaicatcher_pipeline/jbrowse2_templates/SV_calls.json"
+            jbrowse_template_location: "/configs/mosaicatcher_pipeline/jbrowse2_templates/SV_calls.json"

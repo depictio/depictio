@@ -2,7 +2,7 @@ import shutil
 from fastapi import APIRouter, Depends
 
 from depictio.api.v1.configs.config import settings
-from depictio.api.v1.db import workflows_collection, data_collections_collection, runs_collection, files_collection, deltatables_collection
+from depictio.api.v1.db import workflows_collection, data_collections_collection, runs_collection, files_collection, deltatables_collection, users_collection
 from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user
 from depictio.api.v1.s3 import s3_client
 
@@ -10,9 +10,21 @@ from depictio.api.v1.s3 import s3_client
 utils_endpoint_router = APIRouter()
 
 
+@utils_endpoint_router.get("/create_bucket")
+async def create_bucket():
+    bucket_name = settings.minio.bucket
+    # check if the bucket already exists
+    try:
+        s3_client.head_bucket(Bucket=bucket_name)
+        return {"message": "Bucket already exists"}
+    except Exception as e:
+        # Create a new bucket
+        s3_client.create_bucket(Bucket=bucket_name)
+        return {"message": "Bucket created"}
+    else:
+        return {"message": "Bucket creation failed"}
+    
 # TODO - remove this endpoint - only for testing purposes in order to drop the S3 bucket content & the DB collections
-
-
 @utils_endpoint_router.get("/drop_S3_content")
 async def drop_S3_content():
     bucket_name = settings.minio.bucket
