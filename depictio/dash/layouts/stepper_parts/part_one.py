@@ -15,11 +15,43 @@ from depictio.api.v1.configs.config import API_BASE_URL, TOKEN, logger
 def register_callbacks_stepper_part_one(app):
     @app.callback(
         Output({"type": "dropdown-output", "index": MATCH}, "children"),
+        Output({"type": "component-selected", "index": MATCH}, "children"),
+        # Output({"type": "component-selected", "index": MATCH}, "color"),
         Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
         Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+        Input({"type": "btn-option", "index": MATCH, "value": ALL}, "n_clicks"),
+        State({"type": "last-button", "index": MATCH}, "data"),
         prevent_initial_call=True,
     )
-    def update_step_2(workflow_selection, data_collection_selection):
+    def update_step_1(workflow_selection, data_collection_selection, input_btn_values, component_selected):
+        # Use dcc.Store in store-list to get the latest button clicked using timestamps
+
+        logger.info(f"CTX Triggered ID: {ctx.triggered_id}")
+        logger.info(f"CTX triggered: {ctx.triggered}")
+
+        # if (isinstance(ctx.triggered_id, dict)) and (ctx.triggered_id["type"] == "btn-option"):
+        #     # component_selected = ctx.triggered_id["value"]
+        #     component_selected = component_selected
+
+        # else:
+        #     # component_selected = "None"
+        #     component_selected = input_last_component
+
+        component_metadata_dict = {
+            "Card": {"color": "violet", "icon": "formkit:number"},
+            "Figure": {"color": "grape", "icon": "mdi:graph-box"},
+            "Interactive": {"color": "indigo", "icon": "bx:slider-alt"},
+            "Table": {"color": "green", "icon": "octicon:table-24"},
+            "JBrowse2": {"color": "yellow", "icon": "material-symbols:table-rows-narrow-rounded"},
+            "None": {"color": "gray", "icon": "ph:circle"},
+        }
+
+        # Determine the index of the most recently modified (clicked) button
+        # latest_index = store_btn_ts.index(max(store_btn_ts))
+        # component_selected = components_list[latest_index]
+
+        # logger.info(f"component_selected: {component_selected}")
+
         workflow_id, data_collection_id = return_mongoid(workflow_tag=workflow_selection, data_collection_tag=data_collection_selection)
         # workflows = list_workflows(TOKEN)
 
@@ -36,6 +68,8 @@ def register_callbacks_stepper_part_one(app):
         ).json()
 
         if workflow_selection is not None and data_collection_selection is not None:
+            # component_selected = html.Div(f"{component_selected}")
+
             config_title = dmc.Title("Data collection config", order=3, align="left", weight=500)
             json_formatted = yaml.dump(dc_specs["config"], indent=2)
             prism = dbc.Col(
@@ -68,7 +102,7 @@ def register_callbacks_stepper_part_one(app):
                             ),
                             html.Td(workflow_id, style={"text-align": "left"}),
                         ]
-                    ),                    
+                    ),
                     html.Tr(
                         [
                             html.Td(
@@ -137,7 +171,6 @@ def register_callbacks_stepper_part_one(app):
                             html.Td("v1", style={"text-align": "left"}),
                         ]
                     ),
-
                 ],
                 style={"width": "100%", "table-layout": "fixed"},
             )
@@ -148,10 +181,7 @@ def register_callbacks_stepper_part_one(app):
             if dc_specs["config"]["type"] == "Table":
                 df = load_deltatable_lite(workflow_id, data_collection_id, raw=True)
                 cols = get_columns_from_data_collection(workflow_selection, data_collection_selection)
-                logger.info(cols)
                 columnDefs = [{"field": c, "headerTooltip": f"Column type: {e['type']}"} for c, e in cols.items()]
-                logger.info(columnDefs)
-                
 
                 run_nb = cols["depictio_run_id"]["specs"]["nunique"]
                 run_nb_title = dmc.Title(f"Run Nb : {run_nb}", order=3, align="left", weight=500)
@@ -202,7 +232,6 @@ def register_callbacks_stepper_part_one(app):
             elif dc_specs["config"]["type"] == "JBrowse2":
                 if dc_specs["config"]["dc_specific_properties"]["jbrowse_template_location"]:
                     template_json = json.load(open(dc_specs["config"]["dc_specific_properties"]["jbrowse_template_location"]))
-                    print(template_json)
                     template_title = dmc.Title("JBrowse template", order=3, align="left", weight=500)
                     prism_template = dbc.Col(
                         [
@@ -240,4 +269,10 @@ def register_callbacks_stepper_part_one(app):
         else:
             layout = html.Div("No data to display")
 
-        return layout
+        return layout, dmc.Badge(
+            component_selected,
+            size="xl",
+            radius="xl",
+            color=component_metadata_dict[component_selected]["color"],
+            leftSection=DashIconify(icon=component_metadata_dict[component_selected]["icon"], width=15, color=component_metadata_dict[component_selected]["color"]),
+        )

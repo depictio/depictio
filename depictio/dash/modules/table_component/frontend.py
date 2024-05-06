@@ -148,7 +148,7 @@ def design_table(id):
                     },
                 ),
                 id={
-                    "type": "test-container",
+                    "type": "component-container",
                     "index": id["index"],
                 },
             )

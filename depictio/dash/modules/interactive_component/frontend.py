@@ -254,12 +254,12 @@ def design_interactive(id, df):
                     ),
                     style={"width": "600px"},
                     id={
-                        "type": "card",
+                        "type": "interactive-component",
                         "index": id["index"],
                     },
                 ),
                 id={
-                    "type": "test-container",
+                    "type": "component-container",
                     "index": id["index"],
                 },
             ),
