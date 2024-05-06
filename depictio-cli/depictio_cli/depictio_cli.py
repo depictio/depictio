@@ -1,5 +1,6 @@
 import getpass
 import json
+import os
 import sys
 
 # from pprint import pprint
@@ -8,6 +9,7 @@ import typer
 from typing import Dict, Optional, Tuple
 from jose import JWTError
 from devtools import debug
+import yaml
 from depictio.api.v1.endpoints.datacollections_endpoints.models import DataCollection
 from depictio.api.v1.endpoints.workflow_endpoints.models import Workflow
 
@@ -27,9 +29,10 @@ from depictio.api.v1.models_utils import (
 
 app = typer.Typer()
 
-cli_config = get_config("CLI_client/CLI_config.yaml")
+cli_config = get_config("depictio-cli/CLI_config.yaml")
 
 API_BASE_URL = cli_config["DEPICTIO_API"]
+print(API_BASE_URL)
 
 
 def load_json_schema(schema_path):
@@ -275,7 +278,65 @@ def create_trackset(workflow_id: str, data_collection_id: str, headers: dict) ->
 
     return response
 
-    
+
+def load_depictio_config():
+    """
+    Load the Depict.io configuration file.
+    """
+    try:
+        with open(os.path.expanduser("~/.depictio/config.yaml"), "r") as f:
+            config = yaml.safe_load(f)
+            return config
+    except FileNotFoundError:
+        typer.echo("Depict.io configuration file not found. Please create a new user and generate a token.")
+        raise typer.Exit(code=1)
+
+@app.command()
+def create_user_and_return_token(
+    # username: str = typer.Option(
+    #     ...,
+    #     "--username",
+    #     help="Username to be used for authentication",
+    # ),
+    # password: str = typer.Option(
+    #     ...,
+    #     "--password",
+    #     help="Password to be used for authentication",
+    # ),
+    overwrite: Optional[bool] = typer.Option(False, "--overwrite", help="Overwrite the existing token"),
+):
+    """
+    Create a new user with the given username and password.
+    """
+    # Data to be sent to the endpoint
+    # form_data = {
+    #     "username": username,
+    #     "password": password,
+    # }
+
+    default_user = {"username": "cezanne", "password": "paul", "email": "paul.cezanne@embl.de"}
+
+    # Make the HTTP POST request
+    response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/auth/create_user", json=default_user)
+    print(response.json())
+    response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/auth/token", data=default_user)
+    print(response.json())
+
+    # Check if the request was successful
+    if response.status_code == 200:
+        # If not existing, create a .depictio folder in the user's home directory, and store the token there as well as metadata
+        # Parse the token from the response
+        token_data = response.json()
+        access_token = token_data["access_token"]
+        print("Access token retrieved successfully!")
+        print(f"Token: {access_token}")
+        if overwrite or not os.path.exists(os.path.expanduser("~/.depictio/config.yaml")):
+            os.makedirs(os.path.expanduser("~/.depictio"), exist_ok=True)
+            f = os.path.expanduser("~/.depictio/config.yaml")
+            output_dict = {"token": access_token, "user": default_user, "email": default_user["email"], "DEPICTIO_API": API_BASE_URL}
+            print(output_dict)
+            yaml.dump(output_dict, open(f, "w"))
+
 
 @app.command()
 def setup(
@@ -299,8 +360,19 @@ def setup(
     """
     # assert workflow_tag is not None
 
+    if not token:
+        # check if token exists in the config file
+        config = load_depictio_config()
+        token = config.get("token")
+        if not token:
+            typer.echo("A valid token must be provided for authentication.")
+            raise typer.Exit(code=1)
+
+    # Create bucket if not exists
+    response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/utils/create_bucket")
+    print(response.json())
+
     if erase_all:
-        
         # Drop all collections
         response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/utils/drop_all_collections")
         print(response.json())
@@ -348,7 +420,6 @@ def setup(
         response_body = create_update_delete_workflow(workflow_data_dict, headers, user, update)
         wf_id = response_body["_id"]
 
-
         for dc in response_body["data_collections"]:
             print(dc)
 
@@ -359,15 +430,13 @@ def setup(
                 # if dc["data_collection_tag"] == "mosaicatcher_samples_metadata":
                 print("create_deltatable")
                 create_deltatable_request(wf_id, dc["_id"], headers)
-            # elif dc["config"]["type"].lower() == "jbrowse2":
-            # # if dc["config"]["type"].lower() == "jbrowse2":
-            #     # if scan_files:
-            #     #     print("scan_files_for_data_collection")
-            #     #     scan_files_for_data_collection(wf_id, dc["_id"], headers)
-            #     print("upload_trackset_to_s3")
-            #     create_trackset(wf_id, dc["_id"], headers)
-
-                
+            elif dc["config"]["type"].lower() == "jbrowse2":
+                # # if dc["config"]["type"].lower() == "jbrowse2":
+                #     # if scan_files:
+                #     #     print("scan_files_for_data_collection")
+                #     #     scan_files_for_data_collection(wf_id, dc["_id"], headers)
+                print("upload_trackset_to_s3")
+                create_trackset(wf_id, dc["_id"], headers)
 
 
 @app.command()
