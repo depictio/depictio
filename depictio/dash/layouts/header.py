@@ -23,7 +23,7 @@ def register_callbacks_header(app):
             },
             "data",
         ),
-        State("draggable", "children"),
+        # State("draggable", "children"),
         State("stored-edit-dashboard-mode-button", "data"),
         State("stored-add-button", "data"),
         prevent_initial_call=True,
@@ -32,7 +32,7 @@ def register_callbacks_header(app):
         n_clicks,
         stored_layout_data,
         stored_metadata,
-        children,
+        # children,
         edit_dashboard_mode_button,
         add_button,
     ):
@@ -40,7 +40,7 @@ def register_callbacks_header(app):
             logger.info("\n\n\n")
             logger.info(f"save_data_dashboard INSIDE")
 
-            logger.info(f"stored_children: {type(children)} {get_size(children)}")
+            # logger.info(f"stored_children: {type(children)} {get_size(children)}")
             logger.info(f"stored_layout_data: {type(stored_layout_data)} {get_size(stored_layout_data)}")
             logger.info(f"stored_metadata: {type(stored_metadata)} {get_size(stored_metadata)}")
             logger.info(f"edit_dashboard_mode_button: {type(edit_dashboard_mode_button)} {get_size(edit_dashboard_mode_button)}")
@@ -48,7 +48,7 @@ def register_callbacks_header(app):
             logger.info(f"n_clicks: {n_clicks}")
 
             dashboard_data = {
-                "tmp_children_data": children,
+                # "tmp_children_data": children,
                 "stored_layout_data": stored_layout_data,
                 "stored_metadata": stored_metadata,
                 "stored_edit_dashboard_mode_button": edit_dashboard_mode_button,
@@ -66,7 +66,7 @@ def register_callbacks_header(app):
             else:
                 logger.warn(f"Failed to save dashboard data: {response.json()}")
 
-            dashboard_data["stored_children_data"] = children
+            # dashboard_data["stored_children_data"] = children
 
             # with open("/app/data/depictio_data.json", "w") as file:
             #     json.dump(dashboard_data, file)
