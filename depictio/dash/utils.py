@@ -107,6 +107,7 @@ def load_depictio_data():
                 column_type=child_metadata["column_type"],
                 aggregation=child_metadata["aggregation"],
                 v=child_metadata["value"],
+                build_frame=True
             )
             logger.info(child)
             children.append(child)
