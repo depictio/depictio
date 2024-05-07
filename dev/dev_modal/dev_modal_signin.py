@@ -171,6 +171,36 @@ def show_landing_page(data):
     return {"display": "none"}  # Hide landing page
 
 
+
+def render_modal_delete(index):
+    modal_view = dmc.Modal(
+        opened=False,
+        id={"type": "delete-confirmation-modal", "index": index},
+        centered=True,
+        # title="Confirm Deletion",
+        children=[
+            dmc.Title("Are you sure you want to delete this dashboard?", order=3, color="black", style={"marginBottom": 20}),
+            dmc.Button("Delete", id="confirm-delete", color="red", style={"marginRight": 10}),
+            dmc.Button("Cancel", id="cancel-delete", color="grey"),
+        ],
+    )
+    return modal_view
+
+# Callback to open the deletion confirmation modal and store the dashboard index
+@app.callback(
+    Output({"type": "delete-confirmation-modal", "index": MATCH}, "opened"),
+    [Input({"type": "delete-dashboard-button", "index": MATCH}, "n_clicks")],
+    [State({"type": "delete-dashboard-button", "index": MATCH}, "id")],
+    prevent_initial_call=True
+)
+def open_delete_modal(n_clicks, button_id):
+    if n_clicks:
+        return True
+    return False
+
+
+
+
 @app.callback(
     [Output({"type": "dashboard-list", "index": MATCH}, "children"), Output({"type": "dashboard-index-store", "index": MATCH}, "data")],
     [
@@ -188,9 +218,7 @@ def create_dashboard(n_clicks, id, index_data):
     # Assuming index_data also stores a list of dashboards
     dashboards = index_data.get("dashboards", [])
 
-
     if n_clicks:
-
         next_index = index_data.get("next_index", 1)  # Default to 1 if not found
 
         # Creating a new dashboard entry
@@ -201,7 +229,6 @@ def create_dashboard(n_clicks, id, index_data):
             "owner": id["index"],
             "index": next_index,
         }
-
 
         dashboards.append(new_dashboard)
 
@@ -231,6 +258,8 @@ def create_dashboard(n_clicks, id, index_data):
                         color="dark",
                         style={"marginRight": 20},
                     ),
+                    dmc.Button("Delete", id={"type": "delete-dashboard-button", "index": dashboard["index"]}, variant="outline", color="red", style={"marginRight": 20}),
+                    render_modal_delete(dashboard["index"]),
                 ],
                 align="center",
                 position="apart",
@@ -310,6 +339,8 @@ def render_data_collection_item(data_collection):
     )
 
 
+
+
 def render_workflow_item(workflow):
     return dmc.AccordionItem(
         [
@@ -335,6 +366,7 @@ def render_workflows_section(workflows):
 
 
 from dash import no_update
+
 
 
 @app.callback(Output("landing-page", "children"), [Input("url", "pathname"), Input("modal-store", "data")])
