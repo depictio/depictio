@@ -116,17 +116,19 @@ def register_callbacks_card_component(app):
         column_type = cols_json[column_name]["type"]
         v = cols_json[column_name]["specs"][aggregation_value]
 
-        new_card_body = build_card(
-            index=id["index"],
-            title=input_value,
-            wf_id=workflow_id,
-            dc_id=data_collection_id,
-            dc_config=dc_specs["config"],
-            column_name=column_name,
-            column_type=column_type,
-            aggregation=aggregation_value,
-            v=v,
-        )
+        card_kwargs = {
+            "index": id["index"],
+            "title": input_value,
+            "wf_id": workflow_id,
+            "dc_id": data_collection_id,
+            "dc_config": dc_specs["config"],
+            "column_name": column_name,
+            "column_type": column_type,
+            "aggregation": aggregation_value,
+            "value": v,
+        }
+
+        new_card_body = build_card(**card_kwargs)
 
         return new_card_body
 

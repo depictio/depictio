@@ -89,6 +89,10 @@ def tmp_transform_component(component, index):
 def load_depictio_data():
     from depictio.api.v1.db import dashboards_collection
 
+    helpers_mapping = {
+        "card": build_card,
+    }
+
     dashboard_id = "1"
     dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
     logger.info("load_depictio_data")
@@ -96,24 +100,32 @@ def load_depictio_data():
     if dashboard_data:
         children = list()
         for child_metadata in dashboard_data["stored_metadata"]:
+            child_metadata["build_frame"] = True
             logger.info(child_metadata)
-            child = build_card(
-                index=child_metadata["index"],
-                title=child_metadata["title"],
-                wf_id=child_metadata["wf_id"],
-                dc_id=child_metadata["dc_id"],
-                dc_config=child_metadata["dc_config"],
-                column_name=child_metadata["column_name"],
-                column_type=child_metadata["column_type"],
-                aggregation=child_metadata["aggregation"],
-                v=child_metadata["value"],
-                build_frame=True
-            )
+            component_type = child_metadata.get("component_type")  # Default to 'card' if type is not specified
+            if component_type not in helpers_mapping:
+                logger.warning(f"Unsupported component type specified: {component_type}")
+                raise ValueError(f"Unsupported component type specified: {component_type}")
+
+            builder_function = helpers_mapping[component_type]
+            child = builder_function(**child_metadata)  # Pass all metadata as arguments
+
+            # child = build_card(
+            #     index=child_metadata["index"],
+            #     title=child_metadata["title"],
+            #     wf_id=child_metadata["wf_id"],
+            #     dc_id=child_metadata["dc_id"],
+            #     dc_config=child_metadata["dc_config"],
+            #     column_name=child_metadata["column_name"],
+            #     column_type=child_metadata["column_type"],
+            #     aggregation=child_metadata["aggregation"],
+            #     v=child_metadata["value"],
+            #     build_frame=True,
+            # )
             logger.info(child)
             children.append(child)
 
         if children:
-            
             logger.info(f"BEFORE child : {child}")
 
             child = child.to_plotly_json()
