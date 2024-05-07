@@ -172,55 +172,80 @@ def show_landing_page(data):
 
 
 @app.callback(
-    Output({"type": "dashboard-list", "index": MATCH}, "children"),
-    [Input({"type": "create-dashboard-button", "index": MATCH}, "n_clicks"), Input({"type": "create-dashboard-button", "index": MATCH}, "id")],
+    [Output({"type": "dashboard-list", "index": MATCH}, "children"), Output({"type": "dashboard-index-store", "index": MATCH}, "data")],
+    [
+        Input({"type": "create-dashboard-button", "index": MATCH}, "n_clicks"),
+        State({"type": "create-dashboard-button", "index": MATCH}, "id"),
+        State({"type": "dashboard-index-store", "index": MATCH}, "data"),
+        # Input({"type": "dashboard-index-store", "index": MATCH}, "data"),
+    ],
+    # prevent_initial_call=True
 )
-def create_dashboard(n_clicks, id):
-    print(n_clicks, id)
+def create_dashboard(n_clicks, id, index_data):
+    # if not n_clicks:
+    #     return dash.no_update, dash.no_update
+
+    # Assuming index_data also stores a list of dashboards
+    dashboards = index_data.get("dashboards", [])
+
+
     if n_clicks:
-        dashboards.append(
-            {
-                "title": f"Dashboard {n_clicks}",
-                "last_modified": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "status": "Completed",
-                "owner": id["index"],
-                "index": n_clicks,
-            }
+
+        next_index = index_data.get("next_index", 1)  # Default to 1 if not found
+
+        # Creating a new dashboard entry
+        new_dashboard = {
+            "title": f"Dashboard {next_index}",
+            "last_modified": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "status": "Completed",
+            "owner": id["index"],
+            "index": next_index,
+        }
+
+
+        dashboards.append(new_dashboard)
+
+        # Updating the store data to include the new list of dashboards and the incremented index
+        new_index_data = {"next_index": next_index + 1, "dashboards": dashboards}
+    else:
+        new_index_data = index_data
+
+    # Creating views for each dashboard
+    dashboards_view = [
+        dmc.Paper(
+            dmc.Group(
+                [
+                    html.Div(
+                        [
+                            dmc.Title(dashboard["title"], order=5),
+                            dmc.Text(f"Last Modified: {dashboard['last_modified']}"),
+                            dmc.Text(f"Status: {dashboard['status']}"),
+                            dmc.Text(f"Owner: {dashboard['owner']}"),
+                        ],
+                        style={"flex": "1"},
+                    ),
+                    dmc.Button(
+                        f"View Dashboard {dashboard['index']}",
+                        id={"type": "view-dashboard-button", "value": dashboard["owner"], "index": dashboard["index"]},
+                        variant="outline",
+                        color="dark",
+                        style={"marginRight": 20},
+                    ),
+                ],
+                align="center",
+                position="apart",
+                grow=False,
+                noWrap=False,
+                style={"width": "100%"},
+            ),
+            shadow="xs",
+            p="md",
+            style={"marginBottom": 20},
         )
-    if dashboards:
-        return [
-            dmc.Paper(
-                dmc.Group(
-                    [
-                        html.Div(
-                            [
-                                dmc.Title(d["title"], order=5),
-                                dmc.Text(f"Last Modified: {d['last_modified']}"),
-                                dmc.Text(f"Status: {d['status']}"),
-                                dmc.Text(f"Owner: {d['owner']}"),
-                            ],
-                            style={"flex": "1"},
-                        ),
-                        dmc.Button(
-                            f"View Dashboard {d['index']}",
-                            id={"type": "view-dashboard-button", "value": d["owner"], "index": d["index"]},
-                            variant="outline",
-                            color="dark",
-                            style={"marginRight": 20},
-                        ),
-                    ],
-                    align="center",
-                    position="apart",
-                    grow=False,
-                    noWrap=False,
-                    style={"width": "100%"},
-                ),
-                shadow="xs",
-                p="md",
-                style={"marginBottom": 20},
-            )
-            for d in dashboards
-        ]
+        for dashboard in dashboards
+    ]
+
+    return dashboards_view, new_index_data
 
 
 def render_welcome_section(email):
@@ -238,6 +263,8 @@ def render_welcome_section(email):
                     size="xl",
                 )
             ),
+            dcc.Store(id={"type": "dashboard-index-store", "index": email}, storage_type="session", data={"next_index": 1}),  # Store for dashboard index management
+            # dcc.Store(id={"type": "dashboards-store", "index": email}, storage_type="session", data={"dashboards": []}),  # Store to cache workflows
             dmc.Divider(style={"margin": "20px 0"}),
         ]
     )
@@ -305,6 +332,7 @@ def render_workflow_item(workflow):
 
 def render_workflows_section(workflows):
     return dmc.Accordion(children=[render_workflow_item(workflow) for workflow in workflows])
+
 
 from dash import no_update
 
