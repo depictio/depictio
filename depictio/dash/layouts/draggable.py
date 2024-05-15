@@ -146,7 +146,7 @@ def register_callbacks_draggable(app):
         ctx = dash.callback_context
 
         logger.info("CTX: {}".format(ctx))
-        logger.info("CTX triggered: {}".format(ctx.triggered))
+        # logger.info("CTX triggered: {}".format(ctx.triggered))
         logger.info("CTX triggered_id: {}".format(ctx.triggered_id))
         logger.info("TYPE CTX triggered_id: {}".format(type(ctx.triggered_id)))
         logger.info("CTX triggered_props_id: {}".format(ctx.triggered_prop_ids))
@@ -213,8 +213,8 @@ def register_callbacks_draggable(app):
             logger.info("Populate draggable")
 
             logger.info("stored_metadata: {}".format(stored_metadata))
-            logger.info("stored_children: {}".format(test_container))
-            logger.info("draggable_children: {}".format(draggable_children))
+            # logger.info("stored_children: {}".format(test_container))
+            # logger.info("draggable_children: {}".format(draggable_children))
             logger.info("draggable_layouts: {}".format(draggable_layouts))
 
             existing_ids = {child["props"]["id"] for child in draggable_children}
@@ -230,7 +230,7 @@ def register_callbacks_draggable(app):
                     draggable_layouts[bp] = []
 
             for child in test_container:
-                logger.info(f"Child: {child}")
+                # logger.info(f"Child: {child}")
                 child_index = int(child["props"]["id"]["index"])
                 child_type = child["props"]["id"]["type"]
                 logger.info(f"Child index: {child_index}")
@@ -259,7 +259,7 @@ def register_callbacks_draggable(app):
                         draggable_layouts[key].append(new_layout_item)
                     n += 1
 
-            logger.info(f"Updated draggable children: {draggable_children}")
+            # logger.info(f"Updated draggable children: {draggable_children}")
             logger.info(f"Updated draggable layouts: {draggable_layouts}")
             return draggable_children, draggable_layouts, draggable_children, draggable_layouts
         #     else:
@@ -1013,7 +1013,7 @@ def design_draggable(data, init_layout, init_children):
 
     if not workflows:
         # When there are no workflows, log information and prepare a message
-        logger.info(f"init_children {init_children}")
+        # logger.info(f"init_children {init_children}")
         logger.info(f"init_layout {init_layout}")
         # message = html.Div(["No workflows available."])
         message = html.Div(

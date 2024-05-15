@@ -26,6 +26,7 @@ def register_callbacks_header(app):
         # State("draggable", "children"),
         State("stored-edit-dashboard-mode-button", "data"),
         State("stored-add-button", "data"),
+        State({"type": "interactive-component-value", "index": ALL}, "value"),
         prevent_initial_call=True,
     )
     def save_data_dashboard(
@@ -35,6 +36,7 @@ def register_callbacks_header(app):
         # children,
         edit_dashboard_mode_button,
         add_button,
+        interactive_component_values,
     ):
         if n_clicks > 0:
             logger.info("\n\n\n")
@@ -46,6 +48,15 @@ def register_callbacks_header(app):
             logger.info(f"edit_dashboard_mode_button: {type(edit_dashboard_mode_button)} {get_size(edit_dashboard_mode_button)}")
             logger.info(f"add_button: {type(add_button)} {get_size(add_button)}")
             logger.info(f"n_clicks: {n_clicks}")
+
+            logger.info(f"interactive_component_values: {interactive_component_values}")
+            # interactive_component_values = [value for value in interactive_component_values if value is not None]
+            # logger.info(f"interactive_component_values EDITED: {interactive_component_values}")
+
+            # for value, component in stored_metadata.items():
+            #     if component["component_type"] == "interactive":
+            #         logger.info(component)
+
 
             dashboard_data = {
                 # "tmp_children_data": children,

@@ -281,6 +281,7 @@ def register_callbacks_stepper_part_one(app):
             component_selected,
             size="xl",
             radius="xl",
+            style={"fontFamily": "Virgil"},
             color=component_metadata_dict[component_selected]["color"],
             leftSection=DashIconify(icon=component_metadata_dict[component_selected]["icon"], width=15, color=component_metadata_dict[component_selected]["color"]),
         )
