@@ -80,14 +80,14 @@ def register_callbacks_draggable(app):
         ),
         State(
             {
-                "type": "interactive-component",
+                "type": "interactive-component-value",
                 "index": ALL,
             },
             "id",
         ),
         Input(
             {
-                "type": "interactive-component",
+                "type": "interactive-component-value",
                 "index": ALL,
             },
             "value",

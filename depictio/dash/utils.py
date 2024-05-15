@@ -66,27 +66,6 @@ def get_size(obj, seen=None):
     return size
 
 
-def tmp_transform_component(component, index):
-    from dash import html
-    import dash_bootstrap_components as dbc
-
-    new_component = dbc.Card(
-        dbc.CardBody(
-            children=component,
-            id={
-                "type": "card-body",
-                "index": index,
-            },
-        ),
-        style={"width": "100%"},
-        id={
-            "type": "interactive",
-            "index": index,
-        },
-    )
-    return new_component
-
-
 def load_depictio_data():
     from depictio.api.v1.db import dashboards_collection
 
