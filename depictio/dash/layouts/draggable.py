@@ -17,10 +17,11 @@ from depictio.api.v1.configs.config import API_BASE_URL, TOKEN, logger
 from depictio.dash.layouts.draggable_scenarios.interactive_component_update import update_interactive_component
 from depictio.dash.layouts.stepper import create_stepper_output
 from depictio.dash.utils import (
-    analyze_structure_and_get_deepest_type,
-    join_deltatables,
-    load_depictio_data,
+    analyze_structure_and_get_deepest_type
+    # load_depictio_data,
 )
+from depictio.dash.layouts.draggable_scenarios.restore_dashboard import load_depictio_data
+
 
 
 # Depictio layout imports for stepper
@@ -77,6 +78,20 @@ def register_callbacks_draggable(app):
             },
             "n_clicks",
         ),
+        State(
+            {
+                "type": "interactive-component",
+                "index": ALL,
+            },
+            "id",
+        ),
+        Input(
+            {
+                "type": "interactive-component",
+                "index": ALL,
+            },
+            "value",
+        ),
         State("stored-add-button", "data"),
         State(
             {
@@ -100,14 +115,17 @@ def register_callbacks_draggable(app):
         Input("stored-draggable-children", "data"),
         Input("stored-draggable-layouts", "data"),
         Input(
-            {"type": "remove-box-button", "index": dash.dependencies.ALL},
+            {"type": "remove-box-button", "index": ALL},
             "n_clicks",
         ),
         Input("remove-all-components-button", "n_clicks"),
+        State("toggle-interactivity-button", "checked"),
         prevent_initial_call=True,
     )
     def populate_draggable(
         btn_done_clicks,
+        interactive_component_ids,
+        interactive_component_values,
         stored_add_button,
         stored_metadata,
         test_container,
@@ -120,6 +138,7 @@ def register_callbacks_draggable(app):
         input_stored_draggable_layouts,
         remove_box_button_values,
         remove_all_components_button,
+        toggle_interactivity_button,
     ):
         logger.info("btn_done_clicks: {}".format(btn_done_clicks))
         logger.info("stored_add_button: {}".format(stored_add_button))
@@ -131,18 +150,58 @@ def register_callbacks_draggable(app):
         logger.info("CTX triggered_id: {}".format(ctx.triggered_id))
         logger.info("TYPE CTX triggered_id: {}".format(type(ctx.triggered_id)))
         logger.info("CTX triggered_props_id: {}".format(ctx.triggered_prop_ids))
-        logger.info("CTX args_grouping: {}".format(ctx.args_grouping))
-        logger.info("CTX inputs: {}".format(ctx.inputs))
-        logger.info("CTX inputs_list: {}".format(ctx.inputs_list))
-        logger.info("CTX states: {}".format(ctx.states))
-        logger.info("CTX states_list: {}".format(ctx.states_list))
+        # logger.info("CTX args_grouping: {}".format(ctx.args_grouping))
+        # logger.info("CTX inputs: {}".format(ctx.inputs))
+        # logger.info("CTX inputs_list: {}".format(ctx.inputs_list))
+        # logger.info("CTX states: {}".format(ctx.states))
+        # logger.info("CTX states_list: {}".format(ctx.states_list))
 
         if isinstance(ctx.triggered_id, dict):
             triggered_input = ctx.triggered_id["type"]
+            triggered_input_dict = ctx.triggered_id
         elif isinstance(ctx.triggered_id, str):
             triggered_input = ctx.triggered_id
         logger.info("triggered_input : {}".format(triggered_input))
         logger.info("type of triggered_input: {}".format(type(triggered_input)))
+
+
+
+        # Check if the value of the interactive component is not None
+        check_value = False
+        logger.info("Stored metadata: {}".format(stored_metadata))
+
+        if triggered_input == "interactive-component":
+            
+            interactive_component_values = [e for e in interactive_component_values if e is not None]
+
+            logger.info("Interactive component values: {}".format(interactive_component_values))
+            logger.info("Interactive component ids: {}".format(interactive_component_ids))
+            stored_metadata_interactive = [e for e in stored_metadata if e["component_type"] == "interactive_component"]
+
+            interactive_components_dict = {
+                id["index"]: {"value": value, "metadata": metadata}
+                for (id, value, metadata) in zip(
+                    interactive_component_ids,
+                    interactive_component_values,
+                    stored_metadata_interactive,
+                )
+            }
+            logger.info(f"Interactive components dict: {interactive_components_dict}")
+            if interactive_components_dict:
+
+                logger.info(f"Interactive component triggered input: {triggered_input}")
+                logger.info(f"Interactive components dict: {interactive_components_dict}")
+                triggered_input_eval_index = int(triggered_input_dict["index"])
+                logger.info(f"Triggered input eval index: {triggered_input_eval_index}")
+                if triggered_input_eval_index in interactive_components_dict:
+                    value = interactive_components_dict[triggered_input_eval_index]["value"]
+                    logger.info(f"Value: {value}")
+                    # Handle the case of the TextInput component
+                    if interactive_components_dict[triggered_input_eval_index]["metadata"]["interactive_component_type"] != "TextInput":
+                        check_value = True if value is not None else False
+                    else:
+                        check_value = True if value is not "" else False
+                    logger.info(f"Check value: {check_value}")
 
         # # if triggered_input["type"] == "btn-done":
         if triggered_input == "btn-done":
@@ -215,6 +274,9 @@ def register_callbacks_draggable(app):
                 return draggable_children, new_layouts, draggable_children, new_layouts
             else:
                 return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+        # elif "interactive-component" in triggered_input and check_value and toggle_interactivity_button:
+        #     pass
 
         elif triggered_input == "stored-draggable-children":
             if state_stored_draggable_layouts and state_stored_draggable_children:

@@ -356,8 +356,8 @@ def design_header(data):
 
     dashboard_version_select = dmc.Select(
         id="dashboard-version",
-        data=["v1", "v2"],
-        value="v2",
+        data=["v1"],
+        value="v1",
         label="Dashboard version",
         style={"width": 150, "padding": "0 10px"},
         icon=DashIconify(icon="mdi:format-list-bulleted-square", width=16, color=dmc.theme.DEFAULT_COLORS["blue"][5]),
@@ -466,8 +466,8 @@ def design_header(data):
 
 
 def enable_box_edit_mode(box, switch_state=True):
-    logger.info(box)
-    logger.info(box["props"])
+    # logger.info(box)
+    # logger.info(box["props"])
     btn_index = box["props"]["id"]["index"]
     edit_button = dbc.Button(
         "Edit",
