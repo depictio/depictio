@@ -84,7 +84,7 @@ register_callbacks_table_component(app)
 def create_app_layout():
     # Load depictio depictio_dash_data from JSON
     depictio_dash_data = load_depictio_data()
-    logger.info(f"Loaded depictio depictio_dash_data: {depictio_dash_data}")
+    # logger.info(f"Loaded depictio depictio_dash_data: {depictio_dash_data}")
     # depictio_dash_data = None
 
 
@@ -98,7 +98,7 @@ def create_app_layout():
     logger.info(f"Loaded depictio init_layout: {init_layout}")
     init_children = depictio_dash_data["stored_children_data"] if depictio_dash_data else list()
     # init_children = [html.Div("test", id="1")]
-    logger.info(f"Loaded depictio init_children: {init_children}")
+    # logger.info(f"Loaded depictio init_children: {init_children}")
     # Generate header and backend components
     header, backend_components = design_header(depictio_dash_data)
 

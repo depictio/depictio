@@ -51,6 +51,7 @@ def build_interactive(**kwargs):
     column_type = kwargs.get("column_type")
     interactive_component_type = kwargs.get("interactive_component_type")
     cols_json = kwargs.get("cols_json")
+    value = kwargs.get("value", None)
     build_frame = kwargs.get("build_frame", False)
 
     func_name = agg_functions[column_type]["input_methods"][interactive_component_type]["component"]
@@ -68,6 +69,7 @@ def build_interactive(**kwargs):
             "column_name": column_name,
             "column_type": column_type,
             "cols_json": cols_json,
+            "value": value,
         },
         storage_type="memory",
     )
@@ -90,6 +92,9 @@ def build_interactive(**kwargs):
         if interactive_component_type == "MultiSelect":
             # NOTE: persistence_type is set to memory for now, but can be changed to local
             kwargs = {"searchable": True, "clearable": True, "clearSearchOnChange": False, "persistence_type": "local"}
+            if not value:
+                value = []
+            kwargs.update({"value": value})
             interactive_component = func_name(
                 data=data,
                 id={"type": "interactive-component-value", "index": str(index)},
@@ -98,10 +103,14 @@ def build_interactive(**kwargs):
 
     # If the aggregation value is TextInput
     elif interactive_component_type == "TextInput":
+        kwargs = ({"persistence_type": "local"},)
+        if not value:
+            value = ""
+        kwargs.update({"value": value})
         interactive_component = func_name(
             placeholder="Your selected value",
             id={"type": "interactive-component-value", "index": str(index)},
-            kwargs={"persistence_type": "local"},
+            **kwargs,
         )
 
     ## Numerical data
@@ -118,6 +127,14 @@ def build_interactive(**kwargs):
             "id": {"type": "interactive-component-value", "index": str(index)},
             "persistence_type": "local",
         }
+        if interactive_component_type == "RangeSlider":
+            if not value:
+                value = [min_value, max_value]
+            kwargs.update({"value": value})
+        elif interactive_component_type == "Slider":
+            if not value:
+                value = min_value
+        kwargs.update({"value": value})
         # If the number of unique values is less than 30, use the unique values as marks
         if interactive_component_type == "Slider":
             marks = {str(elem): str(elem) for elem in df[column_name].unique()} if df[column_name].nunique() < 30 else {}

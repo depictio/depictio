@@ -5,6 +5,7 @@ from dash import html
 from depictio.dash.layouts.header import enable_box_edit_mode
 from depictio.api.v1.configs.config import logger
 from depictio.dash.modules.interactive_component.utils import build_interactive
+from depictio.dash.modules.table_component.utils import build_table
 
 
 def load_depictio_data():
@@ -12,7 +13,7 @@ def load_depictio_data():
         "card": build_card,
         "graph": build_figure,
         "interactive": build_interactive,
-        # "table": build_table,
+        "table": build_table,
         # "jbrowse": build_jbrowse,
     }
 
@@ -41,16 +42,17 @@ def load_depictio_data():
 
             # Build the child using the appropriate function and kwargs
             child = build_function(**child_metadata)
+            logger.info(f"child : ")
             # logger.info(child)
             children.append(child)
 
         if children:
-            # logger.info(f"BEFORE child : {children}")
+            logger.info(f"BEFORE child :")
 
             # Convert children to their plotly JSON representation
             children = [enable_box_edit_mode(child.to_plotly_json(), switch_state=True) for child in children]
             # children = enable_box_edit_mode(children[0].to_plotly_json(), switch_state=True)
-            logger.info(f"AFTER child : {children}")
+            # logger.info(f"AFTER child : {children}")
 
             dashboard_data["stored_children_data"] = children
             # logger.info(f"dashboard_data['stored_children_data'] : {dashboard_data['stored_children_data']}")
