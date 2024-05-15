@@ -7,7 +7,9 @@ import httpx
 import dash_ag_grid as dag
 
 # Depictio imports
-from depictio.dash.utils import load_deltatable_lite, return_mongoid
+from depictio.dash.utils import return_mongoid
+from depictio.api.v1.deltatables_utils import load_deltatable_lite, join_deltatables
+
 from depictio.api.v1.configs.config import API_BASE_URL, TOKEN
 
 from depictio.dash.utils import (

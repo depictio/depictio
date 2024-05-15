@@ -6,7 +6,8 @@ import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import pandas as pd
 from dash_iconify import DashIconify
-from depictio.dash.utils import join_deltatables, list_workflows, return_mongoid, load_deltatable_lite
+from depictio.dash.utils import list_workflows, return_mongoid
+from depictio.api.v1.deltatables_utils import load_deltatable_lite, join_deltatables
 
 # Depictio imports
 from depictio.dash.modules.interactive_component.utils import (
@@ -20,6 +21,8 @@ from depictio.dash.utils import (
     get_columns_from_data_collection,
 )
 from depictio.api.v1.configs.config import API_BASE_URL, TOKEN
+
+
 
 
 def register_callbacks_interactive_component(app):
