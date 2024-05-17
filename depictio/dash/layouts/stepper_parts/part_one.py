@@ -180,7 +180,7 @@ def register_callbacks_stepper_part_one(app):
 
             layout = [dc_main_info, html.Hr(), main_info, html.Hr()]
             if dc_specs["config"]["type"] == "Table":
-                df = load_deltatable_lite(workflow_id, data_collection_id, raw=True)
+                df = load_deltatable_lite(workflow_id, data_collection_id)
                 cols = get_columns_from_data_collection(workflow_selection, data_collection_selection)
                 logger.info(f"Columns: {cols}")
                 columnDefs = [{"field": c, "headerTooltip": f"Type: {e['type']}"} for c, e in cols.items()]
@@ -200,7 +200,8 @@ def register_callbacks_stepper_part_one(app):
                 # cellClicked, cellDoubleClicked, cellRendererData, cellValueChanged, className, columnDefs, columnSize, columnSizeOptions, columnState, csvExportParams, dangerously_allow_code, dashGridOptions, defaultColDef, deleteSelectedRows, deselectAll, detailCellRendererParams, enableEnterpriseModules, exportDataAsCsv, filterModel, getDetailRequest, getDetailResponse, getRowId, getRowStyle, getRowsRequest, getRowsResponse, id, licenseKey, masterDetail, paginationGoTo, paginationInfo, persisted_props, persistence, persistence_type, resetColumnState, rowClass, rowClassRules, rowData, rowModelType, rowStyle, rowTransaction, scrollTo, selectAll, selectedRows, style, suppressDragLeaveHidesColumns, updateColumnState, virtualRowData
                 grid = dag.AgGrid(
                     id="get-started-example-basic",
-                    rowData=df.head(2000).to_dict("records"),
+                    # FIXME : full polars
+                    rowData=df.head(2000).to_pandas().to_dict("records"),
                     columnDefs=columnDefs,
                     dashGridOptions={
                         "tooltipShowDelay": 500,
