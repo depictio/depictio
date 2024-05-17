@@ -7,7 +7,10 @@ import httpx
 import dash_ag_grid as dag
 
 # Depictio imports
-from depictio.dash.utils import load_deltatable_lite, return_mongoid
+from depictio.dash.modules.table_component.utils import build_table, build_table_frame
+from depictio.dash.utils import return_mongoid
+from depictio.api.v1.deltatables_utils import load_deltatable_lite, join_deltatables
+
 from depictio.api.v1.configs.config import API_BASE_URL, TOKEN
 
 from depictio.dash.utils import (
@@ -15,12 +18,13 @@ from depictio.dash.utils import (
     get_columns_from_data_collection,
 )
 
-# TODO: interactivity when selecting table rows 
+# TODO: interactivity when selecting table rows
+
 
 def register_callbacks_table_component(app):
     # Callback to update card body based on the selected column and aggregation
     @app.callback(
-        Output({"type": "table-grid", "index": MATCH}, "children"),
+        Output({"type": "table-body", "index": MATCH}, "children"),
         [
             Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
             Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
@@ -48,79 +52,30 @@ def register_callbacks_table_component(app):
             headers=headers,
         ).json()
 
+        cols_json = get_columns_from_data_collection(wf_tag, dc_tag)
+
         # Get the join tables for the selected workflow - used in store for metadata management
-        join_tables_for_wf = httpx.get(
-            f"{API_BASE_URL}/depictio/api/v1/workflows/get_join_tables/{workflow_id}",
-            headers=headers,
-        )
+        # join_tables_for_wf = httpx.get(
+        #     f"{API_BASE_URL}/depictio/api/v1/workflows/get_join_tables/{workflow_id}",
+        #     headers=headers,
+        # )
 
-        # If the request is successful, get the join details for the selected data collection
-        if join_tables_for_wf.status_code == 200:
-            join_tables_for_wf = join_tables_for_wf.json()
-            if data_collection_id in join_tables_for_wf:
-                join_details = join_tables_for_wf[data_collection_id]
-                dc_specs["config"]["join"] = join_details
+        # # If the request is successful, get the join details for the selected data collection
+        # if join_tables_for_wf.status_code == 200:
+        #     join_tables_for_wf = join_tables_for_wf.json()
+        #     if data_collection_id in join_tables_for_wf:
+        #         join_details = join_tables_for_wf[data_collection_id]
+        #         dc_specs["config"]["join"] = join_details
 
-        # Load deltatable from the selected data collection
-        df = load_deltatable_lite(workflow_id, data_collection_id)
-        cols = get_columns_from_data_collection(wf_tag, dc_tag)
-
-        # Add dah aggrid filters to the columns
-        for c in cols:
-            print(c, cols[c]["type"])
-            if cols[c]["type"] == "object":
-                cols[c]["filter"] = "agTextColumnFilter"
-            elif cols[c]["type"] in ["int64", "float64"]:
-                cols[c]["filter"] = "agNumberColumnFilter"
-            # FIXME: use properly this: https://dash.plotly.com/dash-ag-grid/date-filters
-            elif cols[c]["type"] == "datetime":
-                cols[c]["filter"] = "agDateColumnFilter"
-
-        # print(cols)
-        columnDefs = [{"field": c, "headerTooltip": f"Column type: {e['type']}", "filter": e["filter"]} for c, e in cols.items()]
-
-        # TODO: use other properties of Dash AgGrid
-        # Prepare ag grid table
-        table_aggrid = dag.AgGrid(
-            id = {"type": "table-aggrid", "index": id["index"]},
-            rowData=df.to_dict("records"),
-            columnDefs=columnDefs,
-            dashGridOptions={
-                "tooltipShowDelay": 500,
-                "pagination": True,
-                # "paginationAutoPageSize": False,
-                # "animateRows": False,
-            },
-            # columnSize="sizeToFit",
-            defaultColDef={"resizable": True, "sortable": True, "filter": True},
-            # use the parameters above
-        )
-
-        # Metadata management - Create a store component to store the metadata of the card
-        store_component = dcc.Store(
-            id={
-                "type": "stored-metadata-component",
-                "index": id["index"],
-            },
-            data={
-                "index": id["index"],
-                "component_type": "table",
-                "wf_id": workflow_id,
-                "dc_id": data_collection_id,
-                "dc_config": dc_specs["config"],
-            },
-        )
-
-        # Create the card body - default title is the aggregation value on the selected column
-
-        # Create the card body
-        new_card_body = [
-            store_component,
-            table_aggrid,
-
-        ]
-
-        return new_card_body
+        table_kwargs = {
+            "index": id["index"],
+            "wf_id": workflow_id,
+            "dc_id": data_collection_id,
+            "dc_config": dc_specs["config"],
+            "cols_json": cols_json,
+        }
+        new_table = build_table(**table_kwargs)
+        return new_table
 
 
 def design_table(id):
@@ -139,22 +94,50 @@ def design_table(id):
             ),
         ),
         dbc.Row(
-            dbc.Card(
-                dbc.CardBody(
-                    html.Div(id={"type": "table-grid", "index": id["index"]}),
-                    id={
-                        "type": "card-body",
-                        "index": id["index"],
-                    },
-                ),
+            html.Div(
+                build_table_frame(index=id["index"]),
+                # dbc.CardBody(
+                #     html.Div(id={"type": "table-grid", "index": id["index"]}),
+                #     id={
+                #         "type": "card-body",
+                #         "index": id["index"],
+                #     },
+                # ),
                 id={
                     "type": "component-container",
                     "index": id["index"],
                 },
-            )
+            ),
+            # dbc.Card(
+            #     dbc.CardBody(
+            #         html.Div(id={"type": "table-grid", "index": id["index"]}),
+            #         id={
+            #             "type": "card-body",
+            #             "index": id["index"],
+            #         },
+            #     ),
+            #     id={
+            #         "type": "component-container",
+            #         "index": id["index"],
+            #     },
+            # )
         ),
     ]
     return row
+    # return html.Div(
+    #             build_table_frame(index=id["index"]),
+    #             # dbc.CardBody(
+    #             #     html.Div(id={"type": "table-grid", "index": id["index"]}),
+    #             #     id={
+    #             #         "type": "card-body",
+    #             #         "index": id["index"],
+    #             #     },
+    #             # ),
+    #             id={
+    #                 "type": "component-container",
+    #                 "index": id["index"],
+    #             },
+    #         )
 
 
 def create_stepper_table_button(n, disabled=False):

@@ -84,10 +84,12 @@ def build_interactive(**kwargs):
     # If the aggregation value is Select, MultiSelect or SegmentedControl
     if interactive_component_type in ["Select", "MultiSelect", "SegmentedControl"]:
         data = sorted(df[column_name].dropna().unique())
+
         interactive_component = func_name(data=data, id={"type": "interactive-component-value", "index": str(index), "persistence_type": "local"})
 
         # If the aggregation value is MultiSelect, make the component searchable and clearable
         if interactive_component_type == "MultiSelect":
+
             kwargs = {"searchable": True, "clearable": True, "clearSearchOnChange": False, "persistence_type": "local"}
             if not value:
                 value = []
