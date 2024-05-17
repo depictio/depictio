@@ -2,9 +2,78 @@
 # TODO: reference in the documentation
 
 from dash import html, dcc
+import dash_bootstrap_components as dbc
+import numpy as np
+from depictio.api.v1.configs.config import logger
+
+def compute_value(data, column_name, aggregation):
+    logger.info(f'data: {data}')
+    logger.info(f"type of data: {type(data)}")
+    # FIXME : optimisation
+    data = data.to_pandas()
+    new_value = data[column_name].agg(aggregation)
+    if type(new_value) is np.float64:
+        new_value = round(new_value, 2)
+    logger.info(f"new_value: {new_value}")
+    return new_value
 
 
-def build_card(index, title, wf_id, dc_id, dc_config, column_name, column_type, aggregation, v):
+def build_card_frame(index, children=None):
+    if not children:
+        return dbc.Card(
+            dbc.CardBody(
+                id={
+                    "type": "card-body",
+                    "index": index,
+                }
+            ),
+            style={"width": "100%"},
+            id={
+                "type": "card-component",
+                "index": index,
+            },
+        )
+    else:
+        return dbc.Card(
+            dbc.CardBody(
+                children=children,
+                id={
+                    "type": "card-body",
+                    "index": index,
+                },
+            ),
+            style={"width": "100%"},
+            id={
+                "type": "card-component",
+                "index": index,
+            },
+        )
+
+
+def build_card(**kwargs):
+    # def build_card(index, title, wf_id, dc_id, dc_config, column_name, column_type, aggregation, v, build_frame=False):
+    index = kwargs.get("index")
+    title = kwargs.get("title", "Default Title")  # Example of default parameter
+    wf_id = kwargs.get("wf_id")
+    dc_id = kwargs.get("dc_id")
+    dc_config = kwargs.get("dc_config")
+    column_name = kwargs.get("column_name")
+    column_type = kwargs.get("column_type")
+    aggregation = kwargs.get("aggregation")
+    v = kwargs.get("value")
+    build_frame = kwargs.get("build_frame", False)
+    refresh = kwargs.get("refresh", False)
+
+    logger.info(f"index: {index}")
+    logger.info(f"v: {v}")
+
+    if refresh:
+        data = kwargs.get("df")
+        v = compute_value(data, column_name, aggregation)
+    logger.info(f"v: {v}")
+
+    
+
 
     try:
         v = round(float(v), 2)
@@ -55,7 +124,10 @@ def build_card(index, title, wf_id, dc_id, dc_config, column_name, column_type, 
             "index": str(index),
         },
     )
-    return new_card_body
+    if not build_frame:
+        return new_card_body
+    else:
+        return build_card_frame(index=index, children=new_card_body)
 
 
 agg_functions = {

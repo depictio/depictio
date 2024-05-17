@@ -1,4 +1,5 @@
 import collections
+import copy
 from datetime import datetime
 from io import BytesIO
 import json
@@ -21,7 +22,7 @@ from depictio.api.v1.db import db
 from depictio.api.v1.endpoints.files_endpoints.routes import delete_files
 from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user
 from depictio.api.v1.endpoints.validators import validate_workflow_and_collection
-from depictio.api.v1.endpoints.workflow_endpoints.routes import get_all_workflows
+from depictio.api.v1.endpoints.workflow_endpoints.routes import get_all_workflows, get_workflow
 from depictio.api.v1.models.base import convert_objectid_to_str
 
 
@@ -258,6 +259,40 @@ def symmetrize_join_details(join_details_map: Dict[str, List[dict]]):
                     join_details_map[related_dc_id].append(symmetric_join)
 
 
+def generate_join_dict(workflow):
+    join_dict = {}
+
+    wf_id = str(workflow["_id"])
+    join_dict[wf_id] = {}
+
+    dc_ids = {str(dc["_id"]): dc for dc in workflow["data_collections"] if dc["config"]["type"].lower() == "table"}
+    visited = set()
+
+    def find_joins(dc_id, join_configs):
+        if dc_id in visited:
+            return
+        visited.add(dc_id)
+        if "join" in dc_ids[dc_id]["config"]:
+            join_info = dc_ids[dc_id]["config"]["join"]
+            for related_dc_tag in join_info.get("with_dc", []):
+                related_dc_id = next((str(dc["_id"]) for dc in workflow["data_collections"] if dc["data_collection_tag"] == related_dc_tag), None)
+                if related_dc_id:
+                    join_configs[f"{dc_id}--{related_dc_id}"] = {
+                        "how": join_info["how"],
+                        "on_columns": join_info["on_columns"],
+                        "dc_tags": [dc_ids[dc_id]["data_collection_tag"], dc_ids[related_dc_id]["data_collection_tag"]],
+                    }
+                    find_joins(related_dc_id, join_configs)
+
+    for dc_id in dc_ids:
+        if dc_id not in visited:
+            join_configs = {}
+            find_joins(dc_id, join_configs)
+            join_dict[wf_id].update(join_configs)
+
+    return join_dict
+
+
 def normalize_join_details(join_details):
     normalized_details = {}
 
@@ -297,8 +332,8 @@ def normalize_join_details(join_details):
     return normalized_details
 
 
-@datacollections_endpoint_router.get("/get_join_tables/{workflow_id}")
-async def get_join_tables(workflow_id: str, current_user: str = Depends(get_current_user)):
+@datacollections_endpoint_router.get("/get_join_tables/{workflow_id}/{data_collection_id}")
+async def get_join_tables(workflow_id: str, data_collection_id: str, current_user: str = Depends(get_current_user)):
     """
     Retrieve join details for the data collections in a workflow.
     """
@@ -314,12 +349,15 @@ async def get_join_tables(workflow_id: str, current_user: str = Depends(get_curr
     # Extract join details for each data collection
     join_details_map = collections.defaultdict(list)
     for dc in data_collections:
+        logger.info(f"Data collection: {dc}")
         if dc["config"]["type"].lower() == "table" and "join" in dc["config"]:
             dc_id = str(dc["_id"])
             join_config = dc["config"]["join"]
             zip_ids_list = [return_mongoid(workflow_id=workflow_id, data_collection_tag=dc_tag, workflows=workflows)[1] for dc_tag in join_config["with_dc"]]
             join_config["with_dc_id"] = zip_ids_list
+            logger.info(f"Join config: {join_config}")
             if join_config:
+                logger.info(f"IN : Join config: {join_config}")
                 join_details_map[dc_id].append(join_config)
 
     # Ensure symmetric join details across all related data collections
@@ -328,7 +366,25 @@ async def get_join_tables(workflow_id: str, current_user: str = Depends(get_curr
     for dc_id in join_details_map:
         join_details_map[dc_id]["with_dc"] = [return_dc_tag_from_id(workflow_id, dc_id, workflows) for dc_id in join_details_map[dc_id]["with_dc_id"]]
 
+    logger.info(f"Join details: {join_details_map}")
 
-    logger.info(f"Join details: {join_details_map}")    
+    return join_details_map
+
+
+@datacollections_endpoint_router.get("/get_dc_joined/{workflow_id}")
+async def get_dc_joined(workflow_id: str, current_user: str = Depends(get_current_user)):
+    """
+    Retrieve join details for the data collections in a workflow.
+    """
+
+    # Retrieve workflow
+    workflow = await get_workflow(workflow_id, current_user=current_user)
+    workflow = workflow.mongo()
+    logger.info(f"Workflow: {workflow}")
+    logger.info(f"type(workflow): {type(workflow)}")
+
+    join_details_map = generate_join_dict(workflow)
+
+    logger.info(f"Join details: {join_details_map}")
 
     return join_details_map
