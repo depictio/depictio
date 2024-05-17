@@ -7,7 +7,6 @@ import dash_mantine_components as dmc
 import pandas as pd
 from dash_iconify import DashIconify
 from depictio.dash.utils import list_workflows, return_mongoid
-from depictio.api.v1.deltatables_utils import load_deltatable_lite, join_deltatables
 
 # Depictio imports
 from depictio.dash.modules.interactive_component.utils import (

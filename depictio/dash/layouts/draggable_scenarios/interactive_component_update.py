@@ -164,9 +164,12 @@ def update_interactive_component(stored_metadata, interactive_components_dict, c
             component["df"] = df_dict_processed[component["wf_id"], component["dc_id"]]
             component["refresh"] = True
             component["build_frame"] = True
+            logger.info(f"component type - {component['component_type']}")
             child = helpers_mapping[component["component_type"]](**component)
-            child = enable_box_edit_mode(child.to_plotly_json(), switch_state=switch_state)
             logger.info(f"child - {child}")
+
+            child = enable_box_edit_mode(child.to_plotly_json(), switch_state=switch_state)
+            logger.info(f"EDIT child - {child}")
             children.append(child)
         else:
             

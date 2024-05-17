@@ -9,7 +9,7 @@ import yaml
 import dash_ag_grid as dag
 
 from depictio.dash.utils import list_workflows, get_columns_from_data_collection, return_mongoid
-from depictio.api.v1.deltatables_utils import load_deltatable_lite, join_deltatables
+from depictio.api.v1.deltatables_utils import load_deltatable_lite
 from depictio.api.v1.configs.config import API_BASE_URL, TOKEN, logger
 
 
