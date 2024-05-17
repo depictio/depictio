@@ -24,6 +24,7 @@ from depictio.api.v1.endpoints.workflow_endpoints.models import Workflow
 from depictio.api.v1.models.base import convert_objectid_to_str
 from depictio.api.v1.s3 import s3_client, minio_storage_options
 from depictio.dash.modules.card_component.utils import build_card
+from depictio.dash.modules.figure_component.utils import build_figure
 
 SELECTED_STYLE = {
     "display": "inline-block",
@@ -65,29 +66,12 @@ def get_size(obj, seen=None):
     return size
 
 
-def tmp_transform_component(component, index):
-    from dash import html
-    import dash_bootstrap_components as dbc
-
-    new_component = dbc.Card(
-        dbc.CardBody(
-            children=component,
-            id={
-                "type": "card-body",
-                "index": index,
-            },
-        ),
-        style={"width": "100%"},
-        id={
-            "type": "interactive",
-            "index": index,
-        },
-    )
-    return new_component
-
-
 def load_depictio_data():
     from depictio.api.v1.db import dashboards_collection
+
+    helpers_mapping = {
+        "card": build_card,
+    }
 
     dashboard_id = "1"
     dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
@@ -96,23 +80,32 @@ def load_depictio_data():
     if dashboard_data:
         children = list()
         for child_metadata in dashboard_data["stored_metadata"]:
+            child_metadata["build_frame"] = True
             logger.info(child_metadata)
-            child = build_card(
-                index=child_metadata["index"],
-                title=child_metadata["title"],
-                wf_id=child_metadata["wf_id"],
-                dc_id=child_metadata["dc_id"],
-                dc_config=child_metadata["dc_config"],
-                column_name=child_metadata["column_name"],
-                column_type=child_metadata["column_type"],
-                aggregation=child_metadata["aggregation"],
-                v=child_metadata["value"],
-            )
+            component_type = child_metadata.get("component_type")  # Default to 'card' if type is not specified
+            if component_type not in helpers_mapping:
+                logger.warning(f"Unsupported component type specified: {component_type}")
+                raise ValueError(f"Unsupported component type specified: {component_type}")
+
+            builder_function = helpers_mapping[component_type]
+            child = builder_function(**child_metadata)  # Pass all metadata as arguments
+
+            # child = build_card(
+            #     index=child_metadata["index"],
+            #     title=child_metadata["title"],
+            #     wf_id=child_metadata["wf_id"],
+            #     dc_id=child_metadata["dc_id"],
+            #     dc_config=child_metadata["dc_config"],
+            #     column_name=child_metadata["column_name"],
+            #     column_type=child_metadata["column_type"],
+            #     aggregation=child_metadata["aggregation"],
+            #     v=child_metadata["value"],
+            #     build_frame=True,
+            # )
             logger.info(child)
             children.append(child)
 
         if children:
-            
             logger.info(f"BEFORE child : {child}")
 
             child = child.to_plotly_json()
@@ -289,119 +282,6 @@ def get_columns_from_data_collection(
             print("No workflows found")
             return None
 
-
-def load_deltatable_lite(workflow_id: ObjectId, data_collection_id: ObjectId, cols: list = None, raw: bool = False):
-    # print("load_deltatable_lite")
-
-    # Turn objectid to string
-    workflow_id = str(workflow_id)
-    data_collection_id = str(data_collection_id)
-
-    # Get file location corresponding to Dfrom API
-    response = httpx.get(
-        f"{API_BASE_URL}/depictio/api/v1/deltatables/get/{workflow_id}/{data_collection_id}",
-        headers={
-            "Authorization": f"Bearer {TOKEN}",
-        },
-    )
-
-    # Check if the response is successful
-    if response.status_code == 200:
-        file_id = response.json()["delta_table_location"]
-
-        ### FIXME: not-delete below - optimise and benchmark to check if redis is useful or if optimised polars read is more eficient
-
-        # if redis_cache.exists(file_id):
-        #     # print("Loading from redis cache")
-        #     data_stream = BytesIO(redis_cache.get(file_id))
-        #     data_stream.seek(0)  # Important: reset stream position to the beginning
-        #     df = pl.read_parquet(data_stream, columns=cols if cols else None)
-        #     # print(df)
-        # else:
-        #     # print("Loading from DeltaTable")
-
-        #     # Convert DataFrame to parquet and then to bytes
-        #     output_stream = BytesIO()
-        #     df.write_parquet(output_stream)
-        #     output_stream.seek(0)  # Reset stream position after writing
-        #     redis_cache.set(file_id, output_stream.read())
-
-        # Read the file from DeltaTable using polars and convert to pandas
-
-        df = pl.read_delta(file_id, columns=cols if cols else None, storage_options=minio_storage_options)
-
-        # TODO: move to polars
-        df = df.to_pandas()
-        return df
-    else:
-        raise Exception("Error loading deltatable")
-
-
-def join_deltatables(workflow_id: str, data_collection_id: str):
-    # Turn str to objectid
-    workflow_id = ObjectId(workflow_id)
-    data_collection_id = ObjectId(data_collection_id)
-
-    # Load the main data collection
-    main_data_collection_df = load_deltatable_lite(workflow_id, data_collection_id)
-
-    # FIXME: remove the column "Depictio_aggregation_time" from the main data collection
-    main_data_collection_df = main_data_collection_df.drop(["depictio_aggregation_time"], axis=1)
-
-    # Get join tables for the workflow
-    join_tables_for_wf = httpx.get(
-        f"{API_BASE_URL}/depictio/api/v1/datacollections/get_join_tables/{workflow_id}",
-        headers={
-            "Authorization": f"Bearer {TOKEN}",
-        },
-    )
-    # print("main_data_collection_df")
-    print(main_data_collection_df)
-    # print("join_tables_for_wf")
-    # print(join_tables_for_wf.json())
-
-    logger.info("Join tables for workflow")
-    logger.info(join_tables_for_wf.json())
-
-    # Check if the response is not successful
-    if join_tables_for_wf.status_code != 200:
-        raise Exception("Error loading join tables")
-
-    elif join_tables_for_wf.status_code == 200:
-        # Check if the data collection is present in the join config of other data collections
-        if str(data_collection_id) in join_tables_for_wf.json():
-            # Extract the join tables for the current data collection
-            join_tables_dict = join_tables_for_wf.json()[str(data_collection_id)]
-
-            # print('join_tables_dict["with_dc_id"]')
-            # print(join_tables_dict["with_dc_id"])
-            # Iterate over the data collections that the current data collection is joined with
-            for tmp_dc_id in join_tables_dict["with_dc_id"]:
-                logger.info(tmp_dc_id)
-                # Load the deltable from the join data collection
-                tmp_df = load_deltatable_lite(str(workflow_id), str(tmp_dc_id))
-
-                print(tmp_df)
-                # Merge the main data collection with the join data collection on the specified columns
-                # NOTE: hard-coded join for depictio_run_id currently (defined when creating the DeltaTable)
-                tmp_df = tmp_df.drop(["depictio_aggregation_time"], axis=1)
-                if "Metadata" in tmp_df["depictio_run_id"].values.tolist():
-                    tmp_df = tmp_df.drop(["depictio_run_id"], axis=1)
-
-                join_columns = join_tables_dict["on_columns"]
-                if ("depictio_run_id" in main_data_collection_df.columns) and ("depictio_run_id" in tmp_df.columns):
-                    join_columns = ["depictio_run_id"] + join_columns
-
-                # print("tmp_df")
-                # print(tmp_df)
-                print(main_data_collection_df)
-                main_data_collection_df = pd.merge(main_data_collection_df, tmp_df, on=join_columns)
-                # print("main_data_collection_df AFTER MERGE")
-                # print(main_data_collection_df)
-                # print(main_data_collection_df.columns)
-
-    # print(main_data_collection_df)
-    return main_data_collection_df
 
 
 def serialize_dash_component(obj):
