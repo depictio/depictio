@@ -12,7 +12,8 @@ from depictio.dash.layouts.header import enable_box_edit_mode
 from depictio.dash.modules.card_component.utils import build_card, compute_value
 from depictio.dash.modules.figure_component.utils import build_figure
 from depictio.dash.modules.interactive_component.utils import build_interactive
-# from depictio.dash.modules.table_component.utils import build_table
+
+from depictio.dash.modules.table_component.utils import build_table
 from depictio.dash.utils import analyze_structure_and_get_deepest_type
 
 
@@ -113,19 +114,11 @@ def group_interactive_components(interactive_components_dict):
 
 
 def update_interactive_component(stored_metadata, interactive_components_dict, current_draggable_children, switch_state):
-    logger.info("INTERACTIVE COMPONENT")
-    logger.info(f"stored_metadata - {stored_metadata}")
-    logger.info(f"len(stored_metadata) - {len(stored_metadata)}")
-    logger.info(f"interactive_components_dict - {interactive_components_dict}")
-    logger.info(f"len(interactive_components_dict) - {len(interactive_components_dict)}")
-    logger.info(f"current_draggable_children - {current_draggable_children}")
-    logger.info(interactive_components_dict)
-
     helpers_mapping = {
         "card": build_card,
         "figure": build_figure,
         "interactive": build_interactive,
-        # "table": build_table,
+        "table": build_table,
     }
 
     children = list()
@@ -139,13 +132,9 @@ def update_interactive_component(stored_metadata, interactive_components_dict, c
 
     for wf in workflow_ids:
         join_tables_for_wf = get_join_tables(wf, TOKEN)
-        logger.info(f"join_tables_for_wf - {join_tables_for_wf}")
 
         for wf_dc, interactive_components in interactive_components_dict_grouped.items():
             joins = [{j: join_tables_for_wf[wf_dc[0]][j]} for j in join_tables_for_wf[wf_dc[0]].keys() if wf_dc[1] in j]
-            logger.info(f"joins - {joins}")
-            logger.info(f"wf_dc - {wf_dc}")
-            logger.info(f"interactive_components - {interactive_components}")
 
             if joins:
                 for key, df in process_joins(wf, wf_dc, joins, interactive_components):
@@ -154,33 +143,25 @@ def update_interactive_component(stored_metadata, interactive_components_dict, c
                 df = process_individual_df(wf_dc, interactive_components)
                 df_dict_processed[wf_dc] = df
 
-        logger.info(f"df_dict_processed - {df_dict_processed}")
+    # Initialize the children list with the interactive components
+    children = [
+        child
+        for child in current_draggable_children
+        if any(child["props"]["id"] == f'box-{component["index"]}' for component in stored_metadata if component["component_type"] == "interactive")
+    ]
 
-
+    # Add or update the non-interactive components
     for component in stored_metadata:
-        logger.info(f"component - {component}")
-
         if component["component_type"] not in ["interactive"]:
             component["df"] = df_dict_processed[component["wf_id"], component["dc_id"]]
             component["refresh"] = True
             component["build_frame"] = True
-            logger.info(f"component type - {component['component_type']}")
             child = helpers_mapping[component["component_type"]](**component)
-            logger.info(f"child - {child}")
-
             child = enable_box_edit_mode(child.to_plotly_json(), switch_state=switch_state)
-            logger.info(f"EDIT child - {child}")
             children.append(child)
-        else:
-            
-            # do not update the interactive components, pick the corresponding child from the current_draggable_children
-            children.extend([child for child in current_draggable_children if child["props"]["id"] == f'box-{component["index"]}'])
 
-
+    logger.info(f"Len children - {len(children)}")
     return children
-
-            
-
 
     # for wf_dc, interactive_components in interactive_components_dict_grouped.items():
     #     # TODO: optimise by checking if wf & dc are used by another component non interactive
