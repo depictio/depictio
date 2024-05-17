@@ -18,9 +18,10 @@ from depictio.api.v1.configs.config import API_BASE_URL, TOKEN, logger
 from depictio.dash.layouts.draggable_scenarios.interactive_component_update import update_interactive_component
 from depictio.dash.layouts.stepper import create_stepper_output
 from depictio.dash.utils import (
-    analyze_structure_and_get_deepest_type,
-    # load_depictio_data,
+    analyze_structure_and_get_deepest_type
 )
+from depictio.dash.layouts.draggable_scenarios.restore_dashboard import load_depictio_data
+
 
 # Depictio layout imports for stepper
 from depictio.dash.layouts.stepper import (
@@ -76,6 +77,20 @@ def register_callbacks_draggable(app):
             },
             "n_clicks",
         ),
+        State(
+            {
+                "type": "interactive-component-value",
+                "index": ALL,
+            },
+            "id",
+        ),
+        Input(
+            {
+                "type": "interactive-component-value",
+                "index": ALL,
+            },
+            "value",
+        ),
         State("stored-add-button", "data"),
         State(
             {
@@ -101,7 +116,7 @@ def register_callbacks_draggable(app):
         Input("stored-draggable-children", "data"),
         Input("stored-draggable-layouts", "data"),
         Input(
-            {"type": "remove-box-button", "index": dash.dependencies.ALL},
+            {"type": "remove-box-button", "index": ALL},
             "n_clicks",
         ),
         Input("remove-all-components-button", "n_clicks"),
@@ -111,6 +126,8 @@ def register_callbacks_draggable(app):
     )
     def populate_draggable(
         btn_done_clicks,
+        interactive_component_ids,
+        interactive_component_values,
         stored_add_button,
         stored_metadata,
         test_container,
@@ -134,22 +151,24 @@ def register_callbacks_draggable(app):
         ctx = dash.callback_context
 
         logger.info("CTX: {}".format(ctx))
-        logger.info("CTX triggered: {}".format(ctx.triggered))
+        # logger.info("CTX triggered: {}".format(ctx.triggered))
         logger.info("CTX triggered_id: {}".format(ctx.triggered_id))
         logger.info("TYPE CTX triggered_id: {}".format(type(ctx.triggered_id)))
         logger.info("CTX triggered_props_id: {}".format(ctx.triggered_prop_ids))
-        logger.info("CTX args_grouping: {}".format(ctx.args_grouping))
-        logger.info("CTX inputs: {}".format(ctx.inputs))
-        logger.info("CTX inputs_list: {}".format(ctx.inputs_list))
-        logger.info("CTX states: {}".format(ctx.states))
-        logger.info("CTX states_list: {}".format(ctx.states_list))
+        # logger.info("CTX args_grouping: {}".format(ctx.args_grouping))
+        # logger.info("CTX inputs: {}".format(ctx.inputs))
+        # logger.info("CTX inputs_list: {}".format(ctx.inputs_list))
+        # logger.info("CTX states: {}".format(ctx.states))
+        # logger.info("CTX states_list: {}".format(ctx.states_list))
 
         if isinstance(ctx.triggered_id, dict):
             triggered_input = ctx.triggered_id["type"]
+            triggered_input_dict = ctx.triggered_id
         elif isinstance(ctx.triggered_id, str):
             triggered_input = ctx.triggered_id
         logger.info("triggered_input : {}".format(triggered_input))
         logger.info("type of triggered_input: {}".format(type(triggered_input)))
+
 
         # Check if the value of the interactive component is not None
         check_value = False
@@ -171,6 +190,7 @@ def register_callbacks_draggable(app):
 
         if triggered_input == "interactive-component":
             if interactive_components_dict:
+
                 logger.info(f"Interactive component triggered input: {triggered_input}")
                 logger.info(f"Interactive components dict: {interactive_components_dict}")
                 triggered_input_eval_index = int(triggered_input_dict["index"])
@@ -195,8 +215,8 @@ def register_callbacks_draggable(app):
             logger.info("Populate draggable")
 
             logger.info("stored_metadata: {}".format(stored_metadata))
-            logger.info("stored_children: {}".format(test_container))
-            logger.info("draggable_children: {}".format(draggable_children))
+            # logger.info("stored_children: {}".format(test_container))
+            # logger.info("draggable_children: {}".format(draggable_children))
             logger.info("draggable_layouts: {}".format(draggable_layouts))
 
             existing_ids = {child["props"]["id"] for child in draggable_children}
@@ -212,7 +232,7 @@ def register_callbacks_draggable(app):
                     draggable_layouts[bp] = []
 
             for child in test_container:
-                logger.info(f"Child: {child}")
+                # logger.info(f"Child: {child}")
                 child_index = int(child["props"]["id"]["index"])
                 child_type = child["props"]["id"]["type"]
                 logger.info(f"Child index: {child_index}")
@@ -241,7 +261,7 @@ def register_callbacks_draggable(app):
                         draggable_layouts[key].append(new_layout_item)
                     n += 1
 
-            logger.info(f"Updated draggable children: {draggable_children}")
+            # logger.info(f"Updated draggable children: {draggable_children}")
             logger.info(f"Updated draggable layouts: {draggable_layouts}")
             return draggable_children, draggable_layouts, draggable_children, draggable_layouts
         #     else:
@@ -263,6 +283,7 @@ def register_callbacks_draggable(app):
 
             new_children = update_interactive_component(stored_metadata, interactive_components_dict, draggable_children, switch_state=edit_dashboard_mode_button)
             return new_children, dash.no_update, new_children, dash.no_update
+
 
         elif triggered_input == "stored-draggable-children":
             if state_stored_draggable_layouts and state_stored_draggable_children:
@@ -999,7 +1020,7 @@ def design_draggable(data, init_layout, init_children):
 
     if not workflows:
         # When there are no workflows, log information and prepare a message
-        logger.info(f"init_children {init_children}")
+        # logger.info(f"init_children {init_children}")
         logger.info(f"init_layout {init_layout}")
         # message = html.Div(["No workflows available."])
         message = html.Div(

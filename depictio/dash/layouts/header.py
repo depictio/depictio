@@ -23,18 +23,20 @@ def register_callbacks_header(app):
             },
             "data",
         ),
-        State("draggable", "children"),
+        # State("draggable", "children"),
         State("stored-edit-dashboard-mode-button", "data"),
         State("stored-add-button", "data"),
+        State({"type": "interactive-component-value", "index": ALL}, "value"),
         prevent_initial_call=True,
     )
     def save_data_dashboard(
         n_clicks,
         stored_layout_data,
         stored_metadata,
-        children,
+        # children,
         edit_dashboard_mode_button,
         add_button,
+        interactive_component_values,
     ):
         if n_clicks > 0:
             logger.info("\n\n\n")
@@ -49,6 +51,7 @@ def register_callbacks_header(app):
                     stored_metadata_indexes.append(elem["index"])
                 
 
+
             # logger.info(f"stored_children: {type(children)} {get_size(children)}")
             logger.info(f"stored_layout_data: {type(stored_layout_data)} {get_size(stored_layout_data)}")
             logger.info(f"stored_metadata: {type(stored_metadata)} {get_size(stored_metadata)}")
@@ -56,8 +59,17 @@ def register_callbacks_header(app):
             logger.info(f"add_button: {type(add_button)} {get_size(add_button)}")
             logger.info(f"n_clicks: {n_clicks}")
 
+            logger.info(f"interactive_component_values: {interactive_component_values}")
+            # interactive_component_values = [value for value in interactive_component_values if value is not None]
+            # logger.info(f"interactive_component_values EDITED: {interactive_component_values}")
+
+            # for value, component in stored_metadata.items():
+            #     if component["component_type"] == "interactive":
+            #         logger.info(component)
+
+
             dashboard_data = {
-                "tmp_children_data": children,
+                # "tmp_children_data": children,
                 "stored_layout_data": stored_layout_data,
                 "stored_metadata": stored_metadata,
                 "stored_edit_dashboard_mode_button": edit_dashboard_mode_button,
@@ -75,7 +87,7 @@ def register_callbacks_header(app):
             else:
                 logger.warn(f"Failed to save dashboard data: {response.json()}")
 
-            dashboard_data["stored_children_data"] = children
+            # dashboard_data["stored_children_data"] = children
 
             # with open("/app/data/depictio_data.json", "w") as file:
             #     json.dump(dashboard_data, file)
@@ -365,8 +377,8 @@ def design_header(data):
 
     dashboard_version_select = dmc.Select(
         id="dashboard-version",
-        data=["v1", "v2"],
-        value="v2",
+        data=["v1"],
+        value="v1",
         label="Dashboard version",
         style={"width": 150, "padding": "0 10px"},
         icon=DashIconify(icon="mdi:format-list-bulleted-square", width=16, color=dmc.theme.DEFAULT_COLORS["blue"][5]),
@@ -475,8 +487,8 @@ def design_header(data):
 
 
 def enable_box_edit_mode(box, switch_state=True):
-    logger.info(box)
-    logger.info(box["props"])
+    # logger.info(box)
+    # logger.info(box["props"])
     btn_index = box["props"]["id"]["index"]
     edit_button = dbc.Button(
         "Edit",

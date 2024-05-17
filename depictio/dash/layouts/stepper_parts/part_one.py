@@ -8,7 +8,8 @@ import httpx
 import yaml
 import dash_ag_grid as dag
 
-from depictio.dash.utils import list_workflows, join_deltatables, get_columns_from_data_collection, load_deltatable_lite, return_mongoid
+from depictio.dash.utils import list_workflows, get_columns_from_data_collection, return_mongoid
+from depictio.api.v1.deltatables_utils import load_deltatable_lite, join_deltatables
 from depictio.api.v1.configs.config import API_BASE_URL, TOKEN, logger
 
 
@@ -181,7 +182,14 @@ def register_callbacks_stepper_part_one(app):
             if dc_specs["config"]["type"] == "Table":
                 df = load_deltatable_lite(workflow_id, data_collection_id)
                 cols = get_columns_from_data_collection(workflow_selection, data_collection_selection)
-                columnDefs = [{"field": c, "headerTooltip": f"Column type: {e['type']}"} for c, e in cols.items()]
+                logger.info(f"Columns: {cols}")
+                columnDefs = [{"field": c, "headerTooltip": f"Type: {e['type']}"} for c, e in cols.items()]
+                
+                # if description in col sub dict, update headerTooltip
+                for col in columnDefs:
+                    if "description" in cols[col["field"]] and cols[col["field"]]["description"] is not None:
+                        col["headerTooltip"] = f"{col['headerTooltip']}\nDescription: {cols[col['field']]['description']}"
+
 
                 run_nb = cols["depictio_run_id"]["specs"]["nunique"]
                 run_nb_title = dmc.Title(f"Run Nb : {run_nb}", order=3, align="left", weight=500)
@@ -274,6 +282,7 @@ def register_callbacks_stepper_part_one(app):
             component_selected,
             size="xl",
             radius="xl",
+            style={"fontFamily": "Virgil"},
             color=component_metadata_dict[component_selected]["color"],
             leftSection=DashIconify(icon=component_metadata_dict[component_selected]["icon"], width=15, color=component_metadata_dict[component_selected]["color"]),
         )

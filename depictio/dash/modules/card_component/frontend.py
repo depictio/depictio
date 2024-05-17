@@ -12,6 +12,7 @@ from depictio.api.v1.configs.config import API_BASE_URL, TOKEN
 from depictio.dash.modules.card_component.utils import (
     agg_functions,
     build_card,
+    build_card_frame,
 )
 from depictio.dash.utils import (
     UNSELECTED_STYLE,
@@ -115,18 +116,19 @@ def register_callbacks_card_component(app):
         column_type = cols_json[column_name]["type"]
         v = cols_json[column_name]["specs"][aggregation_value]
 
+        card_kwargs = {
+            "index": id["index"],
+            "title": input_value,
+            "wf_id": workflow_id,
+            "dc_id": data_collection_id,
+            "dc_config": dc_specs["config"],
+            "column_name": column_name,
+            "column_type": column_type,
+            "aggregation": aggregation_value,
+            "value": v,
+        }
 
-        new_card_body = build_card(
-            index=id["index"],
-            title=input_value,
-            wf_id=workflow_id,
-            dc_id=data_collection_id,
-            dc_config=dc_specs["config"],
-            column_name=column_name,
-            column_type=column_type,
-            aggregation=aggregation_value,
-            v=v,
-        )
+        new_card_body = build_card(**card_kwargs)
 
         return new_card_body
 
@@ -187,19 +189,20 @@ def design_card(id, df):
             html.H5("Resulting card"),
             html.Div(
                 html.Div(
-                    dbc.Card(
-                        dbc.CardBody(
-                            id={
-                                "type": "card-body",
-                                "index": id["index"],
-                            }
-                        ),
-                        style={"width": "100%"},
-                        id={
-                            "type": "card-component",
-                            "index": id["index"],
-                        },
-                    ),
+                    build_card_frame(index=id["index"]),
+                    # dbc.Card(
+                    #     dbc.CardBody(
+                    #         id={
+                    #             "type": "card-body",
+                    #             "index": id["index"],
+                    #         }
+                    #     ),
+                    #     style={"width": "100%"},
+                    #     id={
+                    #         "type": "card-component",
+                    #         "index": id["index"],
+                    #     },
+                    # ),
                     id={
                         "type": "component-container",
                         "index": id["index"],

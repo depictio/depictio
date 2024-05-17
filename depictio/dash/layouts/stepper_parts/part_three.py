@@ -17,9 +17,9 @@ from depictio.dash.modules.jbrowse_component.frontend import design_jbrowse
 
 # Depictio utils imports
 from depictio.dash.modules.table_component.frontend import design_table
-from depictio.dash.utils import join_deltatables, load_deltatable_lite, return_mongoid
+from depictio.dash.utils import return_mongoid
 from depictio.api.v1.configs.config import logger
-
+from depictio.api.v1.deltatables_utils import load_deltatable_lite, join_deltatables
 
 def register_callbacks_stepper_part_three(app):
     @app.callback(
