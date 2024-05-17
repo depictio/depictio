@@ -45,25 +45,28 @@ async def get_all_workflows(current_user: str = Depends(get_current_user)):
 
 @workflows_endpoint_router.get("/get")
 # @workflows_endpoint_router.get("/get_workflows", response_model=List[Workflow])
-async def get_workflow(workflow_tag: str, current_user: str = Depends(get_current_user)):
+async def get_workflow(workflow_id: str, current_user: str = Depends(get_current_user)):
+    logger.info(f"workflow_id: {workflow_id}")
     # Assuming the 'current_user' now holds a 'user_id' as an ObjectId after being parsed in 'get_current_user'
     user_id = current_user.user_id  # This should be the ObjectId
 
     # Find workflows where current_user is either an owner or a viewer
     query = {
-        "workflow_tag": workflow_tag,
+        "_id": ObjectId(workflow_id),
         "$or": [
             {"permissions.owners.user_id": user_id},
             {"permissions.viewers.user_id": user_id},
         ],
     }
+    logger.info(f"query: {query}")
 
     # Retrieve the workflows & convert them to Workflow objects to validate the model
     workflows_cursor = [Workflow(**convert_objectid_to_str(w)) for w in list(workflows_collection.find(query))]
     workflows = convert_objectid_to_str(list(workflows_cursor))
+    logger.info(f"workflows: {workflows}")
 
     if not workflows:
-        raise HTTPException(status_code=404, detail=f"No workflow found for the current user with tag {workflow_tag}.")
+        raise HTTPException(status_code=404, detail=f"No workflow found for the current user with ID {workflow_id}.")
 
     return workflows[0]
 

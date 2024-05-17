@@ -40,7 +40,16 @@ def register_callbacks_header(app):
             logger.info("\n\n\n")
             logger.info(f"save_data_dashboard INSIDE")
 
-            logger.info(f"stored_children: {type(children)} {get_size(children)}")
+            # FIXME: check if some component are duplicated based on index value, if yes, remove them
+            stored_metadata_indexes = list()
+            for elem in stored_metadata:
+                if elem["index"] in stored_metadata_indexes:
+                    stored_metadata.remove(elem)
+                else:
+                    stored_metadata_indexes.append(elem["index"])
+                
+
+            # logger.info(f"stored_children: {type(children)} {get_size(children)}")
             logger.info(f"stored_layout_data: {type(stored_layout_data)} {get_size(stored_layout_data)}")
             logger.info(f"stored_metadata: {type(stored_metadata)} {get_size(stored_metadata)}")
             logger.info(f"edit_dashboard_mode_button: {type(edit_dashboard_mode_button)} {get_size(edit_dashboard_mode_button)}")
