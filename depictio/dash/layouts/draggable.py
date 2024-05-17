@@ -10,7 +10,6 @@ from dash import html, dcc, Input, Output, State, ALL, MATCH
 import dash
 import httpx
 import numpy as np
-from depictio.api.v1.deltatables_utils import join_deltatables, load_deltatable_lite
 from depictio.dash.layouts.draggable_scenarios.add_component import add_new_component
 
 from depictio.api.v1.configs.config import API_BASE_URL, TOKEN, logger
@@ -106,8 +105,6 @@ def register_callbacks_draggable(app):
             },
             "children",
         ),
-        State({"type": "interactive-component", "index": ALL}, "value"),
-        State({"type": "interactive-component", "index": ALL}, "id"),
         State("draggable", "children"),
         State("draggable", "layouts"),
         Input("draggable", "layouts"),
@@ -131,8 +128,6 @@ def register_callbacks_draggable(app):
         stored_add_button,
         stored_metadata,
         test_container,
-        interactive_component_values,
-        interactive_component_ids,
         draggable_children,
         draggable_layouts,
         input_draggable_layouts,
