@@ -107,6 +107,7 @@ services:
       - ./jbrowse-watcher-plugin/sessions:/jbrowse-watcher-plugin/sessions
       - ./CLI_client/configs:/CLI_client/configs
       - ./dev:/app/dev
+      - ./.env:/app/.env
     depends_on:
       - mongo
       - minio

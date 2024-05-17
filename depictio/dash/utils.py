@@ -25,6 +25,8 @@ from depictio.api.v1.models.base import convert_objectid_to_str
 from depictio.api.v1.s3 import s3_client, minio_storage_options
 from depictio.dash.modules.card_component.utils import build_card
 from depictio.dash.modules.figure_component.utils import build_figure
+from depictio.dash.modules.interactive_component.utils import build_interactive
+
 
 SELECTED_STYLE = {
     "display": "inline-block",
@@ -71,6 +73,10 @@ def load_depictio_data():
 
     helpers_mapping = {
         "card": build_card,
+        "figure": build_figure,
+        "interactive": build_interactive,
+        # "table": build_table,
+
     }
 
     dashboard_id = "1"
@@ -90,18 +96,7 @@ def load_depictio_data():
             builder_function = helpers_mapping[component_type]
             child = builder_function(**child_metadata)  # Pass all metadata as arguments
 
-            # child = build_card(
-            #     index=child_metadata["index"],
-            #     title=child_metadata["title"],
-            #     wf_id=child_metadata["wf_id"],
-            #     dc_id=child_metadata["dc_id"],
-            #     dc_config=child_metadata["dc_config"],
-            #     column_name=child_metadata["column_name"],
-            #     column_type=child_metadata["column_type"],
-            #     aggregation=child_metadata["aggregation"],
-            #     v=child_metadata["value"],
-            #     build_frame=True,
-            # )
+
             logger.info(child)
             children.append(child)
 
