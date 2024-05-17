@@ -11,7 +11,7 @@ from depictio.dash.modules.table_component.utils import build_table
 def load_depictio_data():
     build_functions = {
         "card": build_card,
-        "graph": build_figure,
+        "figure": build_figure,
         "interactive": build_interactive,
         "table": build_table,
         # "jbrowse": build_jbrowse,

@@ -61,6 +61,14 @@ def calculate_new_layout_position(child_type, existing_layouts, child_id, n):
         "i": child_id,
     }
 
+def remove_duplicates_by_index(components):
+    unique_components = {}
+    for component in components:
+        index = component["index"]
+        if index not in unique_components:
+            unique_components[index] = component
+    return list(unique_components.values())
+
 
 def register_callbacks_draggable(app):
     @app.callback(
@@ -119,6 +127,7 @@ def register_callbacks_draggable(app):
         Input("remove-all-components-button", "n_clicks"),
         State("toggle-interactivity-button", "checked"),
         State("edit-dashboard-mode-button", "checked"),
+        Input("edit-dashboard-mode-button", "checked"),
         prevent_initial_call=True,
     )
     def populate_draggable(
@@ -139,6 +148,7 @@ def register_callbacks_draggable(app):
         remove_all_components_button,
         toggle_interactivity_button,
         edit_dashboard_mode_button,
+        input_edit_dashboard_mode_button,
     ):
         logger.info("btn_done_clicks: {}".format(btn_done_clicks))
         logger.info("stored_add_button: {}".format(stored_add_button))
@@ -167,7 +177,18 @@ def register_callbacks_draggable(app):
 
         # Check if the value of the interactive component is not None
         check_value = False
+        # remove duplicate of stored_metadata based on index  
+        index_list = []
+
+        # FIXME: Remove duplicates from stored_metadata
+        # Remove duplicates from stored_metadata
         logger.info("Stored metadata: {}".format(stored_metadata))
+        logger.info(f"Length of stored metadata: {len(stored_metadata)}")
+        stored_metadata = remove_duplicates_by_index(stored_metadata)
+        logger.info("CLEANED Stored metadata: {}".format(stored_metadata))
+        logger.info(f"Length of cleaned stored metadata: {len(stored_metadata)}")
+
+
 
         logger.info("Interactive component values: {}".format(interactive_component_values))
         logger.info("Interactive component ids: {}".format(interactive_component_ids))
@@ -279,6 +300,15 @@ def register_callbacks_draggable(app):
             new_children = update_interactive_component(stored_metadata, interactive_components_dict, draggable_children, switch_state=edit_dashboard_mode_button)
             return new_children, dash.no_update, new_children, dash.no_update
 
+        elif "edit-dashboard-mode-button" in triggered_input:
+            logger.info(f"Edit dashboard mode button triggered: {edit_dashboard_mode_button}")
+            new_children = list()
+            logger.info("Current draggable children: {}".format(draggable_children))
+            logger.info("Len Current draggable children: {}".format(len(draggable_children)))
+            for child in draggable_children:
+                child = enable_box_edit_mode(child["props"]["children"][-1], edit_dashboard_mode_button)
+                new_children.append(child)
+            return new_children, dash.no_update, new_children, dash.no_update
 
         elif triggered_input == "stored-draggable-children":
             if state_stored_draggable_layouts and state_stored_draggable_children:
@@ -298,9 +328,9 @@ def register_callbacks_draggable(app):
             logger.info("Input ID: {}".format(input_id))
 
             # Use list comprehension to filter
-            logger.info("Current draggable children: {}".format(draggable_children))
+            # logger.info("Current draggable children: {}".format(draggable_children))
             updated_children = [child for child in draggable_children if child["props"]["id"] != f"box-{input_id}"]
-            logger.info("Updated draggable children: {}".format(updated_children))
+            # logger.info("Updated draggable children: {}".format(updated_children))
 
             return updated_children, draggable_layouts, updated_children, draggable_layouts
 

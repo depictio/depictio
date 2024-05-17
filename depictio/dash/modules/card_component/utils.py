@@ -8,14 +8,11 @@ from depictio.api.v1.configs.config import logger
 
 
 def compute_value(data, column_name, aggregation):
-    logger.info(f'data: {data}')
-    logger.info(f"type of data: {type(data)}")
     # FIXME : optimisation
     data = data.to_pandas()
     new_value = data[column_name].agg(aggregation)
     if type(new_value) is np.float64:
         new_value = round(new_value, 2)
-    logger.info(f"new_value: {new_value}")
     return new_value
 
 
@@ -101,13 +98,10 @@ def build_card(**kwargs):
     build_frame = kwargs.get("build_frame", False)
     refresh = kwargs.get("refresh", False)
 
-    logger.info(f"index: {index}")
-    logger.info(f"v: {v}")
 
     if refresh:
         data = kwargs.get("df")
         v = compute_value(data, column_name, aggregation)
-    logger.info(f"v: {v}")
 
 
     try:

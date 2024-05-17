@@ -39,6 +39,15 @@ def build_figure_frame(index, children=None):
             },
         )
 
+def render_figure(dict_kwargs, visu_type, df):
+    if dict_kwargs and visu_type.lower() in plotly_vizu_dict and df is not None:
+        figure = plotly_vizu_dict[visu_type.lower()](df, **dict_kwargs)
+        return figure
+    else:
+        # return empty figure
+        raise ValueError("Error in render_figure")
+        return px.scatter()
+
 def build_figure(**kwargs):
     index = kwargs.get("index")
     dict_kwargs = kwargs.get("dict_kwargs")
@@ -47,40 +56,27 @@ def build_figure(**kwargs):
     dc_id = kwargs.get("dc_id")
     dc_config = kwargs.get("dc_config")
     build_frame = kwargs.get("build_frame", False)
+    import polars as pl
+    df = kwargs.get("df", pl.DataFrame())
+
 
 
     store_component_data = {
         "index": str(index),
-        "component_type": "graph",
+        "component_type": "figure",
         "dict_kwargs": dict_kwargs,
         "visu_type": visu_type,
         "wf_id": wf_id,
         "dc_id": dc_id,
         "dc_config": dc_config,
     }
-    # print(store_component_data)
-
-    # print(dict_kwargs)
     dict_kwargs = {k: v for k, v in dict_kwargs.items() if v is not None}
-    logger.info(f"dict_kwargs: {dict_kwargs}")
-    logger.info(f"visu_type: {visu_type}")
-    logger.info(f"wf_id: {wf_id}")
-    logger.info(f"dc_id: {dc_id}")
+
     # wf_id, dc_id = return_mongoid(workflow_id=wf_id, data_collection_id=dc_id)
-    df = load_deltatable_lite(wf_id, dc_id)
+    if df.is_empty():
+        df = load_deltatable_lite(wf_id, dc_id)
 
-    # print("df")
-    # print(df)
-    # print("\n\n\n")
-    # print(dict_kwargs)
-    if dict_kwargs:
-        figure = plotly_vizu_dict[visu_type.lower()](df, **dict_kwargs)
-        # figure = px.scatter(df, **dict_kwargs)
-        # print(figure)
-        # figure.update_layout(uirevision=1)
-        # print("TOTO")
-
-        # return [figure]
+    figure = render_figure(dict_kwargs, visu_type, df)
 
     figure_div = html.Div(
         [
