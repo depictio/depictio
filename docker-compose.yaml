@@ -28,7 +28,7 @@ services:
   minio:
     image: minio/minio:latest
     volumes:
-      - "./minio_data:/minio_data"
+      - "./minio_data:/data"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}

@@ -6,11 +6,14 @@ import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import pandas as pd
 from dash_iconify import DashIconify
-from depictio.dash.utils import join_deltatables, list_workflows, return_mongoid, load_deltatable_lite
+from depictio.dash.utils import list_workflows, return_mongoid
+from depictio.api.v1.deltatables_utils import load_deltatable_lite, join_deltatables
 
 # Depictio imports
 from depictio.dash.modules.interactive_component.utils import (
     agg_functions,
+    build_interactive,
+    build_interactive_frame,
 )
 from depictio.dash.utils import (
     SELECTED_STYLE,
@@ -19,7 +22,7 @@ from depictio.dash.utils import (
     list_workflows_for_dropdown,
     get_columns_from_data_collection,
 )
-from depictio.api.v1.configs.config import API_BASE_URL, TOKEN
+from depictio.api.v1.configs.config import API_BASE_URL, TOKEN, logger
 
 
 def register_callbacks_interactive_component(app):
@@ -99,104 +102,45 @@ def register_callbacks_interactive_component(app):
 
         # Get the type of the selected column, the aggregation method and the function name
         cols_json = get_columns_from_data_collection(wf_tag, dc_tag)
+        logger.info(f"Wf tag : {wf_tag}")
+        logger.info(f"Dc tag : {dc_tag}")
+        logger.info(f"Cols json : {cols_json}")
         column_type = cols_json[column_value]["type"]
-        func_name = agg_functions[column_type]["input_methods"][aggregation_value]["component"]
 
         # Get the workflow and data collection IDs from the tags
         workflow_id, data_collection_id = return_mongoid(workflow_tag=wf_tag, data_collection_tag=dc_tag)
-
-        # Load the delta table & get the specs
-        df = load_deltatable_lite(workflow_id, data_collection_id)
 
         dc_specs = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
             headers=headers,
         ).json()
 
-        join_tables_for_wf = httpx.get(
-            f"{API_BASE_URL}/depictio/api/v1/datacollections/get_join_tables/{workflow_id}",
-            headers=headers,
-        )
+        # join_tables_for_wf = httpx.get(
+        #     f"{API_BASE_URL}/depictio/api/v1/datacollections/get_join_tables/{workflow_id}",
+        #     headers=headers,
+        # )
 
-        # Get the join tables for the selected workflow - used in store for metadata management
-        if join_tables_for_wf.status_code == 200:
-            join_tables_for_wf = join_tables_for_wf.json()
-            if data_collection_id in join_tables_for_wf:
-                join_details = join_tables_for_wf[data_collection_id]
-                dc_specs["config"]["join"] = join_details
+        # # Get the join tables for the selected workflow - used in store for metadata management
+        # if join_tables_for_wf.status_code == 200:
+        #     join_tables_for_wf = join_tables_for_wf.json()
+        #     if data_collection_id in join_tables_for_wf:
+        #         join_details = join_tables_for_wf[data_collection_id]
+        #         dc_specs["config"]["join"] = join_details
 
-        # Common Store Component
-        store_component = dcc.Store(
-            id={"type": "stored-metadata-component", "index": id["index"]},
-            data={
-                "component_type": "interactive_component",
-                "interactive_component_type": aggregation_value,
-                "index": id["index"],
-                "wf_id": workflow_id,
-                "dc_id": data_collection_id,
-                "dc_config": dc_specs["config"],
-                "column_value": column_value,
-                "type": column_type,
-            },
-            storage_type="memory",
-        )
+        interactive_kwargs = {
+            "index": id["index"],
+            "title": input_value,
+            "wf_id": workflow_id,
+            "dc_id": data_collection_id,
+            "dc_config": dc_specs["config"],
+            "column_name": column_value,
+            "column_type": column_type,
+            "interactive_component_type": aggregation_value,
+            "cols_json": cols_json,
+        }
+        new_interactive_component = build_interactive(**interactive_kwargs)
 
-        # Handling different aggregation values
-
-        ## Categorical data
-
-        # If the aggregation value is Select, MultiSelect or SegmentedControl
-        if aggregation_value in ["Select", "MultiSelect", "SegmentedControl"]:
-            data = sorted(df[column_value].dropna().unique())
-            # NOTE: persistence_type is set to memory for now, but can be changed to local
-
-            interactive_component = func_name(data=data, id={"type": "interactive-component", "index": id["index"], "persistence_type": "local"})
-
-            # If the aggregation value is MultiSelect, make the component searchable and clearable
-            if aggregation_value == "MultiSelect":
-                # NOTE: persistence_type is set to memory for now, but can be changed to local
-                kwargs = {"searchable": True, "clearable": True, "clearSearchOnChange": False, "persistence_type": "local"}
-                interactive_component = func_name(
-                    data=data,
-                    id={"type": "interactive-component", "index": id["index"]},
-                    **kwargs,
-                )
-
-        # If the aggregation value is TextInput
-        elif aggregation_value == "TextInput":
-            interactive_component = func_name(
-                placeholder="Your selected value",
-                id={"type": "interactive-component", "index": id["index"]},
-                kwargs={"persistence_type": "local"},
-            )
-
-        ## Numerical data
-
-        # If the aggregation value is Slider or RangeSlider
-        elif aggregation_value in ["Slider", "RangeSlider"]:
-            min_value, max_value = (
-                cols_json[column_value]["specs"]["min"],
-                cols_json[column_value]["specs"]["max"],
-            )
-            kwargs = {
-                "min": min_value,
-                "max": max_value,
-                "id": {"type": "interactive-component", "index": id["index"]},
-                "persistence_type": "local",
-            }
-            # If the number of unique values is less than 30, use the unique values as marks
-            if aggregation_value == "Slider":
-                marks = {str(elem): str(elem) for elem in df[column_value].unique()} if df[column_value].nunique() < 30 else {}
-                kwargs.update({"marks": marks, "step": None, "included": False})
-            interactive_component = func_name(**kwargs)
-
-        # If no title is provided, use the aggregation value on the selected column
-        if not input_value:
-            card_title = html.H5(f"{aggregation_value} on {column_value}")
-        else:
-            card_title = html.H5(f"{input_value}")
-
-        return [card_title, interactive_component, store_component]
+        return new_interactive_component
 
 
 def design_interactive(id, df):
@@ -244,20 +188,21 @@ def design_interactive(id, df):
         [
             html.H5("Resulting interactive component"),
             html.Div(
-                dbc.Card(
-                    dbc.CardBody(
-                        id={
-                            "type": "input-body",
-                            "index": id["index"],
-                        },
-                        style={"width": "100%"},
-                    ),
-                    style={"width": "600px"},
-                    id={
-                        "type": "interactive-component",
-                        "index": id["index"],
-                    },
-                ),
+                build_interactive_frame(index=id["index"]),
+                # dbc.Card(
+                #     dbc.CardBody(
+                #         id={
+                #             "type": "input-body",
+                #             "index": id["index"],
+                #         },
+                #         style={"width": "100%"},
+                #     ),
+                #     style={"width": "600px"},
+                #     id={
+                #         "type": "interactive-component",
+                #         "index": id["index"],
+                #     },
+                # ),
                 id={
                     "type": "component-container",
                     "index": id["index"],
