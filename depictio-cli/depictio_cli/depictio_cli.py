@@ -266,6 +266,9 @@ def create_trackset(workflow_id: str, data_collection_id: str, headers: dict) ->
     """
     Upload the trackset to S3 for a given data collection of a workflow.
     """
+    print("creating trackset")
+    print("workflow_id", workflow_id)
+    print("data_collection_id", data_collection_id)
     response = httpx.post(
         f"{API_BASE_URL}/depictio/api/v1/jbrowse/create_trackset/{workflow_id}/{data_collection_id}",
         headers=headers,
@@ -290,6 +293,7 @@ def load_depictio_config():
     except FileNotFoundError:
         typer.echo("Depict.io configuration file not found. Please create a new user and generate a token.")
         raise typer.Exit(code=1)
+
 
 @app.command()
 def create_user_and_return_token(
@@ -349,6 +353,7 @@ def setup(
     update: Optional[bool] = typer.Option(False, "--update", help="Update the workflow if it already exists"),
     erase_all: Optional[bool] = typer.Option(False, "--erase_all", help="Erase all workflows and data collections"),
     scan_files: Optional[bool] = typer.Option(False, "--scan_files", help="Scan files for all data collections of the workflow"),
+    data_collection_tag: Optional[str] = typer.Option(None, "--data_collection_tag", help="Data collection tag to be scanned"),
     token: Optional[str] = typer.Option(
         None,  # Default to None (not specified)
         "--token",
@@ -413,6 +418,27 @@ def setup(
     # TMP: to print the validated config
     debug(validated_config)
 
+    def process(wf_id, dc, headers):
+
+        if scan_files:
+            print("scan_files_for_data_collection")
+            scan_type = "scan"
+            if "metatype" in dc["config"]:
+                if dc["config"]["metatype"].lower() == "metadata":
+                    scan_type = "scan_metadata"
+            scan_files_for_data_collection(wf_id, dc["_id"], headers, scan_type)
+        if dc["config"]["type"].lower() == "table":
+            # if dc["data_collection_tag"] == "mosaicatcher_samples_metadata":
+            print("create_deltatable")
+            create_deltatable_request(wf_id, dc["_id"], headers)
+        elif dc["config"]["type"].lower() == "jbrowse2":
+            # # if dc["config"]["type"].lower() == "jbrowse2":
+            #     # if scan_files:
+            #     #     print("scan_files_for_data_collection")
+            #     #     scan_files_for_data_collection(wf_id, dc["_id"], headers)
+            print("upload_trackset_to_s3")
+            create_trackset(wf_id, dc["_id"], headers)
+
     # Populate DB with the validated config for each workflow
     for workflow in validated_config.workflows:
         workflow_data_raw = workflow.dict(by_alias=True, exclude_none=True)
@@ -421,22 +447,13 @@ def setup(
         wf_id = response_body["_id"]
 
         for dc in response_body["data_collections"]:
-            print(dc)
 
-            if scan_files:
-                print("scan_files_for_data_collection")
-                scan_files_for_data_collection(wf_id, dc["_id"], headers)
-            if dc["config"]["type"].lower() == "table":
-                # if dc["data_collection_tag"] == "mosaicatcher_samples_metadata":
-                print("create_deltatable")
-                create_deltatable_request(wf_id, dc["_id"], headers)
-            elif dc["config"]["type"].lower() == "jbrowse2":
-                # # if dc["config"]["type"].lower() == "jbrowse2":
-                #     # if scan_files:
-                #     #     print("scan_files_for_data_collection")
-                #     #     scan_files_for_data_collection(wf_id, dc["_id"], headers)
-                print("upload_trackset_to_s3")
-                create_trackset(wf_id, dc["_id"], headers)
+            print(dc)
+            if data_collection_tag:
+                if dc["data_collection_tag"] == data_collection_tag:
+                    process(wf_id, dc, headers)
+            else:
+                process(wf_id, dc, headers)
 
 
 @app.command()
