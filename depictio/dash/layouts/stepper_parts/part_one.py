@@ -190,9 +190,11 @@ def register_callbacks_stepper_part_one(app):
                     if "description" in cols[col["field"]] and cols[col["field"]]["description"] is not None:
                         col["headerTooltip"] = f"{col['headerTooltip']}\nDescription: {cols[col['field']]['description']}"
 
-
-                run_nb = cols["depictio_run_id"]["specs"]["nunique"]
-                run_nb_title = dmc.Title(f"Run Nb : {run_nb}", order=3, align="left", weight=500)
+                if "depictio_run_id" in cols:
+                    run_nb = cols["depictio_run_id"]["specs"]["nunique"]
+                    run_nb_title = dmc.Title(f"Run Nb : {run_nb}", order=3, align="left", weight=500)
+                else:
+                    run_nb_title = dmc.Title("Run Nb : 0", order=3, align="left", weight=500)
 
                 data_previz_title = dmc.Title("Data previsualization", order=3, align="left", weight=500)
                 config_title = dmc.Title("Data collection configuration", order=3, align="left", weight=500)

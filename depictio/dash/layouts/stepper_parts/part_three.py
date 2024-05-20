@@ -41,6 +41,7 @@ def return_design_component(component_selected, id, df, btn_component):
     else:
         return html.Div("Not implemented yet"), btn_component
 
+
 def register_callbacks_stepper_part_three(app):
     @app.callback(
         Output({"type": "output-stepper-step-3", "index": MATCH}, "children"),
@@ -85,9 +86,6 @@ def register_callbacks_stepper_part_three(app):
         # Retrieve wf_id and dc_id
         wf_id, dc_id = return_mongoid(workflow_tag=workflow_selection, data_collection_tag=data_collection_selection)
 
-
-        df = load_deltatable_lite(wf_id, dc_id)
-
         # Check if any button has been clicked more than stored
         button_clicked = False
         if btn_component is not None and store_btn_component is not None:
@@ -95,26 +93,44 @@ def register_callbacks_stepper_part_three(app):
             if btn_index:
                 button_clicked = True
                 component_selected = components_list[btn_index[0]]
-                id = ids[btn_index[0]]
-                return return_design_component(component_selected, id, df, btn_component)
+                if component_selected in [
+                    "Figure",
+                    "Card",
+                    "Interactive",
+                    "Table",
+                ]:
+                    df = load_deltatable_lite(wf_id, dc_id)
+
+                    id = ids[btn_index[0]]
+                    return return_design_component(component_selected, id, df, btn_component)
+                elif component_selected == "JBrowse2":
+                    return design_jbrowse(ids[btn_index[0]]), btn_component
+                else:
+                    return html.Div("Not implemented yet"), btn_component
             else:
                 logger.info("No button clicked")
                 logger.info(f"wf_id: {wf_id}")
                 logger.info(f"workflow_selection: {workflow_selection}")
                 logger.info(f"dc_id: {dc_id}")
                 logger.info(f"data_collection_selection: {data_collection_selection}")
-                logger.info(f"df: {df}")
+                # logger.info(f"df: {df}")
                 logger.info(f"last_button: {last_button}")
                 # Get id using components_list index, last_button and store_btn_component
                 if last_button != "None":
-                    last_button_index = components_list.index(last_button)
-                    id = ids[last_button_index]
-                    logger.info(f"id: {id}")
+                    if last_button in ["Figure", "Card", "Interactive", "Table"]:
+                        last_button_index = components_list.index(last_button)
+                        id = ids[last_button_index]
+                        logger.info(f"id: {id}")
+                        df = load_deltatable_lite(wf_id, dc_id)
 
-                    return return_design_component(last_button, id, df, btn_component)
+                        return return_design_component(last_button, id, df, btn_component)
+                    elif last_button == "JBrowse2":
+                        id = ids[components_list.index(last_button)]
+                        return design_jbrowse(id), btn_component
+                    else:
+                        return html.Div("Not implemented yet"), btn_component
+
                 else:
                     return html.Div("Not implemented yet"), btn_component
-                return return_design_component(last_button, id, df, btn_component)
-
 
         return dash.no_update, btn_component if btn_component else dash.no_update
