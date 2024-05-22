@@ -215,7 +215,7 @@ def design_header(data):
     # https://dash.plotly.com/dash-core-components/store
     backend_components = html.Div(
         [
-            dcc.Store(id="stored-draggable-children", storage_type="session"),
+            dcc.Store(id="stored-draggable-children", storage_type="session", ),
             dcc.Store(id="stored-draggable-layouts", storage_type="session"),
         ]
     )

@@ -157,7 +157,7 @@ def upload_file_to_s3(bucket_name, file_location, s3_key):
     logger.info(s3_client)
     logger.info(s3_client.list_buckets())
     logger.info(s3_client.list_objects_v2(Bucket=bucket_name, Prefix=s3_key))
-    logger.info(file_location, bucket_name, s3_key)
+    logger.info(f"{file_location}, {bucket_name}, {s3_key}")
 
     # check if the file exists
     if not os.path.exists(file_location):
@@ -339,7 +339,7 @@ async def create_trackset(
 
 @jbrowse_endpoints_router.post("/log")
 async def log_message(log_data: LogData):
-    logger.info(datetime.now(), log_data)  # Or store it in a database/file
+    logger.info(f"{datetime.now()}, {log_data}")  # Or store it in a database/file
     logger.info(settings)
 
     if log_data.coarseDynamicBlocks and log_data.selectedTracks:

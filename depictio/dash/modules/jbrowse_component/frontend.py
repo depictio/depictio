@@ -6,6 +6,7 @@ from dash_iconify import DashIconify
 import httpx
 
 
+from depictio.dash.modules.jbrowse_component.utils import build_jbrowse, build_jbrowse_frame
 from depictio.dash.utils import list_workflows, return_mongoid
 
 # Depictio imports
@@ -47,49 +48,15 @@ def register_callbacks_jbrowse_component(app):
                 _, dc_id = return_mongoid(workflow_id=workflow_id, data_collection_tag=dc_tag)
                 dc_specs["config"]["join"]["with_dc_id"].append(dc_id)
 
-        response = httpx.get(
-            f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user",
-            headers={
-                "Authorization": f"Bearer {TOKEN}",
-            },
-        )
+        jbrowse_kwargs = {
+            "index": id["index"],
+            "wf_id": workflow_id,
+            "dc_id": data_collection_id,
+            "dc_config": dc_specs["config"],
+        }
 
-        if response.status_code != 200:
-            raise Exception("Error fetching user")
-
-        elif response.status_code == 200:
-            # Session to define based on User ID & Dashboard ID
-            # TODO: define dashboard ID
-
-            user_id = response.json()["user_id"]
-            dashboard_id = "1"
-            session = f"{user_id}_{dashboard_id}_lite.json"
-
-            iframe = html.Iframe(
-                src=f"http://localhost:3000?config=http://localhost:9010/sessions/{session}&loc=chr1:1-248956422&assembly=hg38",
-                width="100%",
-                height="1000px",
-                style={
-                    "transform": "scale(0.8)",
-                    "transform-origin": "0 0",  # Adjust as needed to change the scaling origin
-                    "width": "125%",  # Increase width to compensate for the scale down
-                },
-                id={"type": "iframe-jbrowse", "index": id["index"]},
-            )
-            store_component = dcc.Store(
-                id={"type": "stored-metadata-component", "index": id["index"]},
-                data={
-                    "component_type": "jbrowse",
-                    "current_url": f"http://localhost:3000?config=http://localhost:9010/sessions/{session}&loc=chr1:1-248956422&assembly=hg38",
-                    "index": id["index"],
-                    "wf_id": workflow_id,
-                    "dc_id": data_collection_id,
-                    "dc_config": dc_specs["config"],
-                },
-                storage_type="memory",
-            )
-
-            return html.Div([store_component, iframe])
+        jbrowse_body = build_jbrowse(**jbrowse_kwargs)
+        return jbrowse_body
 
 
 def design_jbrowse(id):
@@ -108,19 +75,19 @@ def design_jbrowse(id):
             ),
         ),
         dbc.Row(
-            dbc.Card(
-                dbc.CardBody(
-                    html.Div(id={"type": "jbrowse-body", "index": id["index"]}),
-                    id={
-                        "type": "card-body",
-                        "index": id["index"],
-                    },
-                ),
-                id={
-                    "type": "component-container",
-                    "index": id["index"],
-                },
-            )
+            html.Div(build_jbrowse_frame(index=id["index"]), id={"type": "component-container", "index": id["index"]}),
+            # dbc.Card(
+            #     dbc.CardBody(
+            #         id={
+            #             "type": "jbrowse-body",
+            #             "index": id["index"],
+            #         },
+            #     ),
+            #     id={
+            #         "type": "component-container",
+            #         "index": id["index"],
+            #     },
+            # )
         ),
     ]
     return row

@@ -49,11 +49,13 @@ def build_table(**kwargs):
     dc_config = kwargs.get("dc_config")
     cols = kwargs.get("cols_json")
     build_frame = kwargs.get("build_frame", False)
+    import polars as pl
+    df = kwargs.get("df", pl.DataFrame())
 
 
 
-    # Load deltatable from the selected data collection
-    df = load_deltatable_lite(wf_id, dc_id)
+    if df.is_empty():
+        df = load_deltatable_lite(wf_id, dc_id)
 
     # Add dah aggrid filters to the columns
     for c in cols:
@@ -73,7 +75,7 @@ def build_table(**kwargs):
     # Prepare ag grid table
     table_aggrid = dag.AgGrid(
         id={"type": "table-aggrid", "index": str(index)},
-        rowData=df.to_dict("records"),
+        rowData=df.to_pandas().to_dict("records"),
         columnDefs=columnDefs,
         dashGridOptions={
             "tooltipShowDelay": 500,
@@ -115,7 +117,7 @@ def build_table(**kwargs):
     # Create the card body
     new_card_body = html.Div(
         [
-            div_table,
+            table_aggrid,
             store_component,
         ]
     )

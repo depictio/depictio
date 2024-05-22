@@ -20,7 +20,6 @@ from depictio.dash.utils import (
     list_workflows_for_dropdown,
     get_columns_from_data_collection,
 )
-from depictio.api.v1.deltatables_utils import load_deltatable_lite, join_deltatables
 
 from depictio.api.v1.configs.config import logger
 # Depictio imports
