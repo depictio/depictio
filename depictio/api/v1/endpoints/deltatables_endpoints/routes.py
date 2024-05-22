@@ -275,7 +275,6 @@ async def aggregate_data(
     files = [File.from_mongo(file) for file in files]
 
     # Create a DeltaTableAggregated object
-    # TODO: fix the data_dir - not working without due to Docker volumes
     destination_file_name = f"s3://{settings.minio.bucket}/{user_oid}/{workflow_oid}/{data_collection_oid}/"  # Destination path in MinIO
     # destination_file_name = f"{settings.minio.data_dir}/{settings.minio.bucket}/{user_oid}/{workflow_oid}/{data_collection_oid}/"  # Destination path in MinIO
     os.makedirs(destination_file_name, exist_ok=True)
@@ -324,20 +323,7 @@ async def aggregate_data(
     logger.info("aggregated_df")
     logger.info(aggregated_df)
 
-    # FIXME: solve the issue of writing to MinIO using polars
-    # TMP solution: write to Delta Lake locally and then upload to MinIO
-    # Write aggregated dataframe to Delta Lake
-
     aggregated_df.write_delta(destination_file_name, mode="overwrite", storage_options=minio_storage_options, delta_write_options={"overwrite_schema": "True"})
-    # aggregated_df.write_delta(destination_file_name, mode="overwrite", overwrite_schema=True, storage_options=minio_storage_options)
-
-    # Upload the Delta Lake to MinIO
-    # upload_dir_to_s3(
-    #     settings.minio.bucket,
-    #     f"{user_oid}/{workflow_oid}/{data_collection_oid}",
-    #     destination_file_name,
-    #     s3_client,
-    # )
 
     logger.info("Write complete to MinIO at destination: ", destination_file_name)
 
@@ -378,7 +364,6 @@ async def aggregate_data(
         )
     else:
         logger.info("Inserting new DeltaTableAggregated")
-        # FIXME: fix id & _id issue
         logger.info(serialize_for_mongo(deltatable))
         deltatables_collection.insert_one(serialize_for_mongo(deltatable))
 

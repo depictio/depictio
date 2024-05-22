@@ -303,7 +303,7 @@ def register_callbacks_draggable(app):
         elif "edit-dashboard-mode-button" in triggered_input:
             logger.info(f"Edit dashboard mode button triggered: {edit_dashboard_mode_button}")
             new_children = list()
-            logger.info("Current draggable children: {}".format(draggable_children))
+            # logger.info("Current draggable children: {}".format(draggable_children))
             logger.info("Len Current draggable children: {}".format(len(draggable_children)))
             for child in draggable_children:
                 child = enable_box_edit_mode(child["props"]["children"][-1], edit_dashboard_mode_button)
