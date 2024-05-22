@@ -159,7 +159,7 @@ workflows:
               - "mosaicatcher_stats"
             how: "inner"
             on_columns:
-              - "sample"
+              - "cell"
 
           # The specific properties of the data collection - is related to the type of the data collection (JBrowse2 here)
           dc_specific_properties:
