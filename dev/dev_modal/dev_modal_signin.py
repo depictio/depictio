@@ -436,7 +436,7 @@ def update_landing_page(
 
     # Check which input triggered the callback
     if not ctx.triggered:
-        return no_update
+        return dash.no_update
     trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
 
     # Respond to URL changes
@@ -448,7 +448,7 @@ def update_landing_page(
                 return html.Div([f"Displaying Dashboard {dashboard_id}", dbc.Button("Go back", href="/", color="black", external_link=True)])
             # Add more conditions for other routes
             # return html.Div("This is the home page")
-            return no_update
+            return dash.no_update
 
     # Respond to modal-store data changes
     elif trigger_id == "modal-store":
@@ -463,9 +463,9 @@ def update_landing_page(
                 ]
             )
         # return html.Div("Please login to view this page.")
-        return no_update
+        return dash.no_update
 
-    return no_update
+    return dash.no_update
 
 
 if __name__ == "__main__":
