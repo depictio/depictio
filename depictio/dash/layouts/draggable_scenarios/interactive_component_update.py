@@ -14,6 +14,7 @@ from depictio.dash.modules.card_component.utils import build_card, compute_value
 from depictio.dash.modules.figure_component.utils import build_figure
 from depictio.dash.modules.interactive_component.utils import build_interactive
 
+from depictio.dash.modules.jbrowse_component.utils import build_jbrowse, build_jbrowse_df_mapping_dict
 from depictio.dash.modules.table_component.utils import build_table
 from depictio.dash.utils import analyze_structure_and_get_deepest_type
 
@@ -113,6 +114,7 @@ def group_interactive_components(interactive_components_dict):
         grouped[v["metadata"]["wf_id"], v["metadata"]["dc_id"]].append(v)
     return grouped
 
+
 class UnionFind:
     def __init__(self):
         self.parent = {}
@@ -130,34 +132,43 @@ class UnionFind:
         if root1 != root2:
             self.parent[root2] = root1
 
-def update_interactive_component(stored_metadata, interactive_components_dict, current_draggable_children, switch_state):
+
+def update_interactive_component(stored_metadata_raw, interactive_components_dict, current_draggable_children, switch_state):
     helpers_mapping = {
         "card": build_card,
         "figure": build_figure,
         "interactive": build_interactive,
         "table": build_table,
+        "jbrowse": build_jbrowse,
     }
 
     children = list()
-    stored_metadata = sorted(stored_metadata, key=lambda x: x["index"])
-    stored_metadata_interactive_components = [e for e in stored_metadata if e["component_type"] in ["interactive"]]
-    logger.info(f"stored_metadata - {stored_metadata}")
-    stored_metadata_table_components = [e for e in stored_metadata if e["component_type"] in ["graph", "card", "table"]]
-    stored_metadata_jbrowse_components = [e for e in stored_metadata if e["component_type"] in ["jbrowse"]]
 
-    df_dict_processed = collections.defaultdict(dict)
     workflow_ids = list(set([v["metadata"]["wf_id"] for k, v in interactive_components_dict.items()]))
-    dc_ids_all_components = list(set([v["dc_id"] for v in stored_metadata]))
-    logger.info(f"dc_ids_all_components - {dc_ids_all_components}")
-
-    # Using itertools, generate all the combinations of dc_ids in order to get all the possible joins
-    dc_ids_all_joins = list(itertools.combinations(dc_ids_all_components, 2))
-    # Turn the list of tuples into a list of strings with -- as separator, and store it in dc_ids_all_joins in the 2 possible orders
-    dc_ids_all_joins = [f"{dc_id1}--{dc_id2}" for dc_id1, dc_id2 in dc_ids_all_joins] + [f"{dc_id2}--{dc_id1}" for dc_id1, dc_id2 in dc_ids_all_joins]
-
-    logger.info(f"dc_ids_all_joins - {dc_ids_all_joins}")
 
     for wf in workflow_ids:
+        df_dict_processed = collections.defaultdict(dict)
+
+        # stored_metadata = sorted(stored_metadata, key=lambda x: x["index"])
+        # Filter stored_metadata based on the workflow id
+        logger.info(f"wf - {wf}")
+        logger.info(f"stored_metadata_raw - {stored_metadata_raw}")
+        stored_metadata = [v for v in stored_metadata_raw if v["wf_id"] == wf]
+        stored_metadata_interactive_components = [e for e in stored_metadata if e["component_type"] in ["interactive"]]
+        logger.info(f"stored_metadata - {stored_metadata}")
+        stored_metadata_table_components = [e for e in stored_metadata if e["component_type"] in ["graph", "card", "table"]]
+        stored_metadata_jbrowse_components = [e for e in stored_metadata if e["component_type"] in ["jbrowse"]]
+
+        dc_ids_all_components = list(set([v["dc_id"] for v in stored_metadata if v["component_type"] not in ["jbrowse"]]))
+        logger.info(f"dc_ids_all_components - {dc_ids_all_components}")
+
+        # Using itertools, generate all the combinations of dc_ids in order to get all the possible joins
+        dc_ids_all_joins = list(itertools.combinations(dc_ids_all_components, 2))
+        # Turn the list of tuples into a list of strings with -- as separator, and store it in dc_ids_all_joins in the 2 possible orders
+        dc_ids_all_joins = [f"{dc_id1}--{dc_id2}" for dc_id1, dc_id2 in dc_ids_all_joins] + [f"{dc_id2}--{dc_id1}" for dc_id1, dc_id2 in dc_ids_all_joins]
+
+        logger.info(f"dc_ids_all_joins - {dc_ids_all_joins}")
+
         stored_metadata_interactive_components_wf = [v for k, v in interactive_components_dict.items() if v["metadata"]["wf_id"] == wf]
         join_tables_for_wf = get_join_tables(wf, TOKEN)
         logger.info(f"join_tables_for_wf - {join_tables_for_wf}")
@@ -226,13 +237,7 @@ def update_interactive_component(stored_metadata, interactive_components_dict, c
                     # Create a placeholder join based on available join details
                     if dc_id1 in join_tables_for_wf[wf] and dc_id2 in join_tables_for_wf[wf]:
                         example_join = next(iter(join_tables_for_wf[wf].values()))
-                        new_join = {
-                            join_id: {
-                                "how": example_join["how"],
-                                "on_columns": example_join["on_columns"],
-                                "dc_tags": example_join["dc_tags"]
-                            }
-                        }
+                        new_join = {join_id: {"how": example_join["how"], "on_columns": example_join["on_columns"], "dc_tags": example_join["dc_tags"]}}
                         joins_dict[join_key_tuple].append(new_join)
                         added_joins.add(join_id)
 
@@ -248,46 +253,45 @@ def update_interactive_component(stored_metadata, interactive_components_dict, c
             logger.info(f"interactive_components_dict - {interactive_components_dict}")
             merged_df = iterative_join(wf, {join_key_tuple: joins}, interactive_components_dict)
             df_dict_processed[wf][join_key_tuple] = merged_df
-
-        # if joins_dict:
-        #     join_df = iterative_join(wf, joins_dict, interactive_components)
-        #     df_dict_processed[wf][join_key_tuple] = join_df
-        # else:
-        #     df = process_individual_df(wf_dc_key, interactive_components)
-        #     df_dict_processed[wf][join_key_tuple] = df
-        # logger.info(f"df_dict_processed shape - {[(k, df.shape) for k, df in df_dict_processed[wf].items()]}")
-
-    # return df_dict_processed
-
-            # if joins:
-            #     join_df = join_deltatables_dev(wf, joins, interactive_components)
-            #     if wf_dc not in df_dict_processed:
-            #         df_dict_processed[wf_dc] = join_df
-
-            # else:
-            #     df = process_individual_df(wf_dc, interactive_components)
-            #     if wf_dc not in df_dict_processed:
-            #         df_dict_processed[wf_dc] = df
+        for e in stored_metadata:
+            if e["component_type"] == "jbrowse":
+                build_jbrowse_df_mapping_dict(stored_metadata, df_dict_processed[wf])
 
     # Initialize the children list with the interactive components
     children = [
         child
         for child in current_draggable_children
-        if any(child["props"]["id"] == f'box-{component["index"]}' for component in stored_metadata if component["component_type"] == "interactive")
+        if any(child["props"]["id"] == f'box-{component["index"]}' for component in stored_metadata if component["component_type"] in ["interactive", "jbrowse"])
     ]
 
     # Add or update the non-interactive components
     for component in stored_metadata:
-        if component["component_type"] not in ["interactive"]:
+        if component["component_type"] not in ["interactive", "jbrowse"]:
             # retrieve the key from df_dict_processed based on the wf_id and dc_id, checking which join encompasses the dc_id
             for key, df in df_dict_processed[component["wf_id"]].items():
                 if component["dc_id"] in key:
                     component["df"] = df
                     break
             # component["df"] = df_dict_processed[component["wf_id"], component["dc_id"]]
-            component["refresh"] = True
             component["build_frame"] = True
+            component["refresh"] = True
+
             child = helpers_mapping[component["component_type"]](**component)
+            if component["component_type"] == "card":
+                logger.info(f"Card CHILD - {child}")
+            child = enable_box_edit_mode(child.to_plotly_json(), switch_state=switch_state)
+            children.append(child)
+
+
+
+        elif component["component_type"] == "jbrowse":
+            component["stored_metadata_jbrowse"] = stored_metadata_jbrowse_components
+            component["refresh"] = True
+
+            child = helpers_mapping[component["component_type"]](**component)
+
+            logger.info(f"JBROWSE CHILD - {child}")
+
             child = enable_box_edit_mode(child.to_plotly_json(), switch_state=switch_state)
             children.append(child)
 
@@ -317,7 +321,7 @@ def update_interactive_component(stored_metadata, interactive_components_dict, c
 
     ####
 
-    # # Create a dict to store which new_df is related to jbrowse components, if dc_config["dc_specific_properties"]["regex_wildcars"]["join_data_collection"]
+    # Create a dict to store which new_df is related to jbrowse components, if dc_config["dc_specific_properties"]["regex_wildcars"]["join_data_collection"]
     # jbrowse_df_mapping_dict = collections.defaultdict(dict)
 
     # for j, e in enumerate(stored_metadata):
@@ -375,7 +379,7 @@ def update_interactive_component(stored_metadata, interactive_components_dict, c
     #                             os.makedirs("data", exist_ok=True)
     #                             json.dump(jbrowse_df_mapping_dict, open("data/jbrowse_df_mapping_dict.json", "w"), indent=4)
 
-    #                             # httpx.post("{API_BASE_URL}/depictio/api/v1/jbrowse/dynamic_mapping_dict", json=jbrowse_df_mapping_dict)
+    # httpx.post("{API_BASE_URL}/depictio/api/v1/jbrowse/dynamic_mapping_dict", json=jbrowse_df_mapping_dict)
 
     #                     # print("\n")
     #                     # print("jbrowse_df_mapping_dict")

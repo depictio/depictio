@@ -5,6 +5,7 @@ from dash import html
 from depictio.dash.layouts.header import enable_box_edit_mode
 from depictio.api.v1.configs.config import logger
 from depictio.dash.modules.interactive_component.utils import build_interactive
+from depictio.dash.modules.jbrowse_component.utils import build_jbrowse
 from depictio.dash.modules.table_component.utils import build_table
 
 
@@ -14,7 +15,7 @@ def load_depictio_data():
         "figure": build_figure,
         "interactive": build_interactive,
         "table": build_table,
-        # "jbrowse": build_jbrowse,
+        "jbrowse": build_jbrowse,
     }
 
     dashboard_id = "1"
