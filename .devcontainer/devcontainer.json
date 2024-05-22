@@ -1,6 +1,6 @@
 {
     "name": "depictio devcontainer",
-    "dockerComposeFile": "docker-compose.yml",
+    "dockerComposeFile": "docker-compose.yaml",
     "service": "depictio_frontend",
     "workspaceFolder": "/workspace",
     "extensions": [
