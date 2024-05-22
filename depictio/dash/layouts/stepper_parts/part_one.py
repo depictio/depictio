@@ -22,9 +22,10 @@ def register_callbacks_stepper_part_one(app):
         Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
         Input({"type": "btn-option", "index": MATCH, "value": ALL}, "n_clicks"),
         State({"type": "last-button", "index": MATCH}, "data"),
+        State({"type": "workflow-selection-label", "index": MATCH}, "id"),
         prevent_initial_call=True,
     )
-    def update_step_1(workflow_selection, data_collection_selection, input_btn_values, component_selected):
+    def update_step_1(workflow_selection, data_collection_selection, input_btn_values, component_selected, id):
         # Use dcc.Store in store-list to get the latest button clicked using timestamps
 
         logger.info(f"CTX Triggered ID: {ctx.triggered_id}")
@@ -184,7 +185,7 @@ def register_callbacks_stepper_part_one(app):
                 cols = get_columns_from_data_collection(workflow_selection, data_collection_selection)
                 logger.info(f"Columns: {cols}")
                 columnDefs = [{"field": c, "headerTooltip": f"Type: {e['type']}"} for c, e in cols.items()]
-                
+
                 # if description in col sub dict, update headerTooltip
                 for col in columnDefs:
                     if "description" in cols[col["field"]] and cols[col["field"]]["description"] is not None:
@@ -199,15 +200,23 @@ def register_callbacks_stepper_part_one(app):
                 # print(df.head(20).to_dict("records"))
                 # cellClicked, cellDoubleClicked, cellRendererData, cellValueChanged, className, columnDefs, columnSize, columnSizeOptions, columnState, csvExportParams, dangerously_allow_code, dashGridOptions, defaultColDef, deleteSelectedRows, deselectAll, detailCellRendererParams, enableEnterpriseModules, exportDataAsCsv, filterModel, getDetailRequest, getDetailResponse, getRowId, getRowStyle, getRowsRequest, getRowsResponse, id, licenseKey, masterDetail, paginationGoTo, paginationInfo, persisted_props, persistence, persistence_type, resetColumnState, rowClass, rowClassRules, rowData, rowModelType, rowStyle, rowTransaction, scrollTo, selectAll, selectedRows, style, suppressDragLeaveHidesColumns, updateColumnState, virtualRowData
                 grid = dag.AgGrid(
-                    id="get-started-example-basic",
-                    # FIXME : full polars
-                    rowData=df.head(2000).to_pandas().to_dict("records"),
+                    id={"type": "get-started-example-basic", "index": id["index"]},
+                    rowModelType="infinite",
                     columnDefs=columnDefs,
                     dashGridOptions={
                         "tooltipShowDelay": 500,
                         "pagination": True,
                         "paginationAutoPageSize": False,
                         "animateRows": False,
+                        # The number of rows rendered outside the viewable area the grid renders.
+                        "rowBuffer": 0,
+                        # How many blocks to keep in the store. Default is no limit, so every requested block is kept.
+                        "maxBlocksInCache": 2,
+                        "cacheBlockSize": 100,
+                        "cacheOverflowSize": 2,
+                        "maxConcurrentDatasourceRequests": 2,
+                        "infiniteInitialRowCount": 1,
+                        "rowSelection": "multiple",
                     },
                     columnSize="sizeToFit",
                     defaultColDef={"resizable": True, "sortable": True, "filter": True},
@@ -286,3 +295,74 @@ def register_callbacks_stepper_part_one(app):
             color=component_metadata_dict[component_selected]["color"],
             leftSection=DashIconify(icon=component_metadata_dict[component_selected]["icon"], width=15, color=component_metadata_dict[component_selected]["color"]),
         )
+
+    @app.callback(
+        Output({"type": "get-started-example-basic", "index": MATCH}, "getRowsResponse"),
+        Input({"type": "get-started-example-basic", "index": MATCH}, "getRowsRequest"),
+        Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
+        Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+        prevent_initial_call=True,
+    )
+    def infinite_scroll(request, workflow_selection, data_collection_selection):
+        # simulate slow callback
+        # time.sleep(2)
+
+        if request is None:
+            return dash.no_update
+
+        if workflow_selection is not None and data_collection_selection is not None:
+
+            workflow_id, data_collection_id = return_mongoid(workflow_tag=workflow_selection, data_collection_tag=data_collection_selection)
+
+            dc_specs = httpx.get(
+                f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
+                headers={
+                    "Authorization": f"Bearer {TOKEN}",
+                },
+            ).json()
+
+            if dc_specs["config"]["type"] == "Table":
+                df = load_deltatable_lite(workflow_id, data_collection_id)
+
+                partial = df[request["startRow"] : request["endRow"]]
+                return {"rowData": partial.to_dicts(), "rowCount": df.shape[0]}
+            else:
+                return dash.no_update
+        else:
+            return dash.no_update
+
+    @app.callback(
+        Output({"type": "table-aggrid", "index": MATCH}, "getRowsResponse"),
+        Input({"type": "table-aggrid", "index": MATCH}, "getRowsRequest"),
+        Input({"type": "stored-metadata-component", "index": MATCH}, "data"),
+        # prevent_initial_call=True,
+    )
+    def infinite_scroll_component(request, stored_metadata):
+        # simulate slow callback
+        # time.sleep(2)
+
+        if request is None:
+            return dash.no_update
+
+        if stored_metadata is not None:
+            logger.info(f"Stored metadata: {stored_metadata}")
+
+            workflow_id = stored_metadata["wf_id"]
+            data_collection_id = stored_metadata["dc_id"]
+
+            dc_specs = httpx.get(
+                f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
+                headers={
+                    "Authorization": f"Bearer {TOKEN}",
+                },
+            ).json()
+
+            if dc_specs["config"]["type"] == "Table":
+                df = load_deltatable_lite(workflow_id, data_collection_id)
+
+                partial = df[request["startRow"] : request["endRow"]]
+                return {"rowData": partial.to_dicts(), "rowCount": df.shape[0]}
+            else:
+                return dash.no_update
+        else:
+            return dash.no_update
