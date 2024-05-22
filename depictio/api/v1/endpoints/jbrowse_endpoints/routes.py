@@ -314,7 +314,7 @@ async def create_trackset(
 
     new_tracks = list()
 
-    for file in files[:5]:
+    for file in files:
         file = File(**file)
 
         track_config = handle_jbrowse_tracks(file, current_user.user_id, workflow_id, data_collection)

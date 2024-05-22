@@ -238,7 +238,6 @@ def return_mongoid(workflow_tag: str = None, workflow_id: ObjectId = None, data_
     return workflow_id, data_collection_id
 
 
-# TODO: utils / config
 
 
 def get_columns_from_data_collection(

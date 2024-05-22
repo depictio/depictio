@@ -1,5 +1,4 @@
-# List of all the possible aggregation methods for each data type
-# TODO: reference in the documentation
+
 
 from dash import html, dcc
 import dash_bootstrap_components as dbc
@@ -158,6 +157,9 @@ def build_card(**kwargs):
     else:
         return build_card_frame(index=index, children=new_card_body)
 
+
+# List of all the possible aggregation methods for each data type
+# TODO: reference in the documentation
 
 agg_functions = {
     "int64": {
