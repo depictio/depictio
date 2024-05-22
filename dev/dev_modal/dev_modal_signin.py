@@ -9,13 +9,6 @@ import dash_mantine_components as dmc
 from dash_iconify import DashIconify
 from dash import MATCH, ALL, ctx
 
-# dashboards = [
-#     {"title": "Genome Analysis", "last_modified": "2023-10-01 14:23:08", "status": "Completed"},
-#     {"title": "Protein Folding Study", "last_modified": "2023-09-20 11:15:42", "status": "In Progress"},
-#     {"title": "Environmental Data Overview", "last_modified": "2023-10-02 09:02:55", "status": "Completed"},
-# ]
-
-# # datasets
 
 # workflows = [
 #     {
@@ -91,19 +84,20 @@ dashboards = []
 workflows = []
 
 app = dash.Dash(__name__)
+depictio_logo = html.Img(src=dash.get_asset_url("logo.png"), height=40, style={"margin-left": "0px"})
 
 app.layout = html.Div(
     [
         dcc.Location(id="url", refresh=False),
-        html.Div(id="hidden-div", style={"display": "none"}),
-        html.Div(id="page-content"),
+        dcc.Location(id="redirect-url", refresh=True),  # Add this component for redirection
         dcc.Store(id="modal-store", storage_type="session", data={"email": "", "submitted": False}),
         dmc.Modal(
             opened=False,
             id="email-modal",
             centered=True,
             children=[
-                dmc.Center(dmc.Title("Welcome to Depictio", order=1, style={"fontFamily": "Virgil"}, align="center")),
+                dmc.Center(depictio_logo),  # Center the logo
+                # dmc.Center(dmc.Title("Welcome to Depictio", order=1, style={"fontFamily": "Virgil"}, align="center")),
                 dmc.Center(dmc.Text("Please enter your email to login:", style={"paddingTop": 15})),
                 dmc.Center(dmc.Space(h=20)),
                 dmc.Center(
@@ -124,21 +118,65 @@ app.layout = html.Div(
 )
 
 
-@app.callback(
-    Output("url", "pathname"),
-    [Input({"type": "view-dashboard-button", "index": ALL, "value": ALL}, "n_clicks")],
-    [State({"type": "view-dashboard-button", "index": ALL, "value": ALL}, "id")],
-)
-def navigate_to_dashboard(n_clicks, ids):
-    print("Navigating to dashboard")
-    print(n_clicks)
-    print(ids)
-    print(ctx.triggered)
-    for i in ctx.triggered:
-        if i["value"] is not None:
-            print(i)
-            print(ctx.triggered_id)
-            return f"/dashboard/{ctx.triggered_id['index']}"
+def render_workflow_item(workflow):
+    return dmc.AccordionItem(
+        [
+            dmc.AccordionControl(dmc.Title(workflow["title"], order=5)),
+            dmc.AccordionPanel(
+                dmc.Container(
+                    [
+                        dmc.Text(f"Last Modified: {workflow['last_modified']}"),
+                        dmc.Text(f"Status: {workflow['status']}"),
+                        dmc.Divider(style={"margin": "20px 0"}),
+                        dmc.Title("Data Collections", order=4),
+                        dmc.Accordion(
+                            children=[
+                                dmc.AccordionItem(
+                                    [
+                                        dmc.AccordionControl(dmc.Title(dc["title"], order=5)),
+                                        dmc.AccordionPanel(
+                                            dmc.Paper(
+                                                dmc.Group(
+                                                    [
+                                                        html.Div(
+                                                            dmc.List(
+                                                                [
+                                                                    dmc.ListItem(f"Type: {dc['type']}"),
+                                                                    dmc.ListItem(f"Description: {dc['description']}"),
+                                                                    dmc.ListItem(f"Creation time: {dc['creation_time']}"),
+                                                                    dmc.ListItem(f"Last update time: {dc['last_update_time']}"),
+                                                                ]
+                                                            )
+                                                        ),
+                                                        dmc.Button("View Data", variant="outline", color="dark", style={"marginRight": 20}),
+                                                    ],
+                                                    # align="center",
+                                                    position="apart",
+                                                    grow=False,
+                                                    noWrap=False,
+                                                    style={"width": "100%"},
+                                                ),
+                                                shadow="xs",
+                                                p="md",
+                                                style={"marginBottom": 20},
+                                            ),
+                                        ),
+                                    ],
+                                    value=f"{workflow['title']}-{dc['type']}",
+                                )
+                                for dc in workflow["data_collections"]
+                            ],
+                        ),
+                    ]
+                )
+            ),
+        ],
+        value=workflow["title"],  # Ensure each AccordionItem has a unique value
+    )
+
+
+def render_workflows_section(workflows, data):
+    return dmc.Accordion(children=[render_workflow_item(workflow) for workflow in workflows])
 
 
 @app.callback([Output("submit-button", "disabled"), Output("email-input", "error")], [Input("email-input", "value")])
@@ -199,6 +237,60 @@ def open_delete_modal(n_clicks, button_id):
     return False
 
 
+def create_dashboards_view(dashboards):
+    dashboards_view = [
+        dmc.Paper(
+            dmc.Group(
+                [
+                    html.Div(
+                        [
+                            dmc.Title(dashboard["title"], order=5),
+                            dmc.Text(f"Last Modified: {dashboard['last_modified']}"),
+                            dmc.Text(f"Status: {dashboard['status']}"),
+                            dmc.Text(f"Owner: {dashboard['owner']}"),
+                        ],
+                        style={"flex": "1"},
+                    ),
+                    dmc.Button(
+                        f"View Dashboard {dashboard['index']}",
+                        id={"type": "view-dashboard-button", "index": dashboard["index"]},
+                        variant="outline",
+                        color="dark",
+                        style={"marginRight": 20},
+                    ),
+                    dmc.Button(
+                        "Delete",
+                        id={"type": "delete-dashboard-button", "value": dashboard["owner"], "index": dashboard["index"]},
+                        variant="outline",
+                        color="red",
+                        style={"marginRight": 20},
+                    ),
+                    dmc.Modal(
+                        opened=False,
+                        id={"type": "delete-confirmation-modal", "index": dashboard["index"]},
+                        centered=True,
+                        # title="Confirm Deletion",
+                        children=[
+                            dmc.Title("Are you sure you want to delete this dashboard?", order=3, color="black", style={"marginBottom": 20}),
+                            dmc.Button("Delete", id={"type": "confirm-delete", "index": dashboard["index"], "value": dashboard["owner"]}, color="red", style={"marginRight": 10}),
+                            dmc.Button("Cancel", id={"type": "cancel-delete", "index": dashboard["index"], "value": dashboard["owner"]}, color="grey"),
+                        ],
+                    ),
+                    # dcc.Store(id={"type": "dashboard-delete-index", "index": dashboard["index"]}, storage_type="session", data={})
+                ],
+                align="center",
+                position="apart",
+                grow=False,
+                noWrap=False,
+                style={"width": "100%"},
+            ),
+            shadow="xs",
+            p="md",
+            style={"marginBottom": 20},
+        )
+        for dashboard in dashboards
+    ]
+    return dashboards_view
 
 
 @app.callback(
@@ -280,6 +372,7 @@ def create_dashboard(n_clicks, id, index_data):
 def render_welcome_section(email):
     return dmc.Container(
         [
+            dmc.Center(depictio_logo),  # Center the logo
             dmc.Title(f"Welcome, {email}!", order=2, align="center"),
             dmc.Center(
                 dmc.Button(
@@ -293,7 +386,6 @@ def render_welcome_section(email):
                 )
             ),
             dcc.Store(id={"type": "dashboard-index-store", "index": email}, storage_type="session", data={"next_index": 1}),  # Store for dashboard index management
-            # dcc.Store(id={"type": "dashboards-store", "index": email}, storage_type="session", data={"dashboards": []}),  # Store to cache workflows
             dmc.Divider(style={"margin": "20px 0"}),
         ]
     )
@@ -303,75 +395,44 @@ def render_dashboard_list_section(email):
     return html.Div(id={"type": "dashboard-list", "index": email}, style={"padding": "20px"})
 
 
-def render_data_collection_item(data_collection):
-    return dmc.AccordionItem(
-        [
-            dmc.AccordionControl(dmc.Title(data_collection["title"], order=5)),
-            dmc.AccordionPanel(
-                dmc.Paper(
-                    dmc.Group(
-                        [
-                            html.Div(
-                                dmc.List(
-                                    [
-                                        dmc.ListItem(f"Type: {data_collection['type']}"),
-                                        dmc.ListItem(f"Description: {data_collection['description']}"),
-                                        dmc.ListItem(f"Creation time: {data_collection['creation_time']}"),
-                                        dmc.ListItem(f"Last update time: {data_collection['last_update_time']}"),
-                                    ]
-                                )
-                            ),
-                            dmc.Button("View Data", variant="outline", color="dark", style={"marginRight": 20}),
-                        ],
-                        align="center",
-                        position="apart",
-                        grow=False,
-                        noWrap=False,
-                        style={"width": "100%"},
-                    ),
-                    shadow="xs",
-                    p="md",
-                    style={"marginBottom": 20},
-                ),
-            ),
-        ],
-        value=f"{data_collection['title']}-{data_collection['type']}",
-    )
+@app.callback(
+    Output("redirect-url", "href"),
+    [Input({"type": "view-dashboard-button", "index": ALL}, "n_clicks")],
+    [State({"type": "view-dashboard-button", "index": ALL}, "id")],
+    prevent_initial_call=True,
+)
+def redirect_to_dashboard(n_clicks, ids):
+    if not any(n_clicks):
+        raise dash.exceptions.PreventUpdate
+
+    # Find the index of the clicked button
+    clicked_index = next((i for i, v in enumerate(n_clicks) if v), None)
+    if clicked_index is not None:
+        dashboard_id = ids[clicked_index]["index"]
+        return f"http://localhost:5080"
+    raise dash.exceptions.PreventUpdate
 
 
-
-
-def render_workflow_item(workflow):
-    return dmc.AccordionItem(
-        [
-            dmc.AccordionControl(dmc.Title(workflow["title"], order=5)),
-            dmc.AccordionPanel(
-                dmc.Container(
-                    [
-                        dmc.Text(f"Last Modified: {workflow['last_modified']}"),
-                        dmc.Text(f"Status: {workflow['status']}"),
-                        dmc.Divider(style={"margin": "20px 0"}),
-                        dmc.Title("Data Collections", order=4),
-                        dmc.Accordion(children=[render_data_collection_item(dc) for dc in workflow["data_collections"]]),
-                    ]
-                )
-            ),
-        ],
-        value=workflow["title"],
-    )
-
-
-def render_workflows_section(workflows):
-    return dmc.Accordion(children=[render_workflow_item(workflow) for workflow in workflows])
-
-
-from dash import no_update
-
-
-
-@app.callback(Output("landing-page", "children"), [Input("url", "pathname"), Input("modal-store", "data")])
-def update_landing_page(pathname, data):
-    ctx = dash.callback_context
+@app.callback(
+    Output("landing-page", "children"),
+    [
+        Input("url", "pathname"),
+        Input("modal-store", "data"),
+        Input({"type": "view-dashboard-button", "index": ALL}, "n_clicks"),
+    ],
+)
+def update_landing_page(
+    pathname,
+    data,
+    view_dashboard_clicks,
+):
+    print("\n")
+    print("update_landing_page")
+    print(f"CTX triggered: {ctx.triggered}")
+    print(f"CTX triggered prop IDs: {ctx.triggered_prop_ids}")
+    print(f"CTX triggered ID {ctx.triggered_id}")
+    print(f"CTX inputs: {ctx.inputs}")
+    print("\n")
 
     # Check which input triggered the callback
     if not ctx.triggered:
