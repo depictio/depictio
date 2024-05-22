@@ -40,8 +40,10 @@ def build_table_frame(index, children=None):
 
 
 from depictio.api.v1.configs.config import logger
+
+
 def build_table(**kwargs):
-    logger.info("build_table")  
+    logger.info("build_table")
     # def build_card(index, title, wf_id, dc_id, dc_config, column_name, column_type, aggregation, v, build_frame=False):
     index = kwargs.get("index")
     wf_id = kwargs.get("wf_id")
@@ -49,11 +51,12 @@ def build_table(**kwargs):
     dc_config = kwargs.get("dc_config")
     cols = kwargs.get("cols_json")
     build_frame = kwargs.get("build_frame", False)
+    import polars as pl
 
+    df = kwargs.get("df", pl.DataFrame())
 
-
-    # Load deltatable from the selected data collection
-    df = load_deltatable_lite(wf_id, dc_id)
+    if df.is_empty():
+        df = load_deltatable_lite(wf_id, dc_id)
 
     # Add dah aggrid filters to the columns
     for c in cols:
@@ -69,17 +72,26 @@ def build_table(**kwargs):
     # print(cols)
     columnDefs = [{"field": c, "headerTooltip": f"Column type: {e['type']}", "filter": e["filter"]} for c, e in cols.items()]
 
-    # TODO: use other properties of Dash AgGrid
     # Prepare ag grid table
     table_aggrid = dag.AgGrid(
         id={"type": "table-aggrid", "index": str(index)},
-        rowData=df.to_dict("records"),
+        # rowData=df.to_pandas().to_dict("records"),
+        rowModelType="infinite",
         columnDefs=columnDefs,
         dashGridOptions={
             "tooltipShowDelay": 500,
             "pagination": True,
-            # "paginationAutoPageSize": False,
-            # "animateRows": False,
+            "paginationAutoPageSize": False,
+            "animateRows": False,
+            # The number of rows rendered outside the viewable area the grid renders.
+            "rowBuffer": 0,
+            # How many blocks to keep in the store. Default is no limit, so every requested block is kept.
+            "maxBlocksInCache": 2,
+            "cacheBlockSize": 100,
+            "cacheOverflowSize": 2,
+            "maxConcurrentDatasourceRequests": 2,
+            "infiniteInitialRowCount": 1,
+            "rowSelection": "multiple",
         },
         # columnSize="sizeToFit",
         defaultColDef={"resizable": True, "sortable": True, "filter": True},
