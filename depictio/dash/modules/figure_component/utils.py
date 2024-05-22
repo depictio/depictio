@@ -45,7 +45,7 @@ def render_figure(dict_kwargs, visu_type, df):
         return figure
     else:
         # return empty figure
-        raise ValueError("Error in render_figure")
+        # raise ValueError("Error in render_figure")
         return px.scatter()
 
 def build_figure(**kwargs):

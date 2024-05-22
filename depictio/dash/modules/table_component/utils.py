@@ -5,6 +5,7 @@ import dash_ag_grid as dag
 
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
 from depictio.dash.utils import get_columns_from_data_collection
+from depictio.api.v1.configs.config import logger
 
 
 def build_table_frame(index, children=None):
@@ -39,7 +40,6 @@ def build_table_frame(index, children=None):
         )
 
 
-from depictio.api.v1.configs.config import logger
 def build_table(**kwargs):
     logger.info("build_table")  
     # def build_card(index, title, wf_id, dc_id, dc_config, column_name, column_type, aggregation, v, build_frame=False):
