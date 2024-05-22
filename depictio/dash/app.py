@@ -37,7 +37,6 @@ from depictio.dash.layouts.draggable_scenarios.restore_dashboard import load_dep
 from depictio.api.v1.configs.config import logger
 
 
-# TODO: move to depictio.dash.utils or somewhere else
 
 
 # Start the app

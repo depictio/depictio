@@ -1,5 +1,3 @@
-# List of all the possible aggregation methods for each data type and their corresponding input methods
-# TODO: reference in the documentation
 
 from dash import dcc, html
 import dash_mantine_components as dmc
@@ -83,7 +81,7 @@ def build_interactive(**kwargs):
 
     # If the aggregation value is Select, MultiSelect or SegmentedControl
     if interactive_component_type in ["Select", "MultiSelect", "SegmentedControl"]:
-        data = sorted(df[column_name].dropna().unique())
+        data = sorted(df[column_name].drop_nans().unique())
 
         interactive_component = func_name(data=data, id={"type": "interactive-component-value", "index": str(index), "persistence_type": "local"})
 
@@ -152,6 +150,9 @@ def build_interactive(**kwargs):
         return new_interactive_component
     else:
         return build_interactive_frame(index=index, children=new_interactive_component)
+
+# List of all the possible aggregation methods for each data type and their corresponding input methods
+# TODO: reference in the documentation
 
 
 agg_functions = {

@@ -9,7 +9,6 @@ import dash_ag_grid as dag
 # Depictio imports
 from depictio.dash.modules.table_component.utils import build_table, build_table_frame
 from depictio.dash.utils import return_mongoid
-from depictio.api.v1.deltatables_utils import load_deltatable_lite, join_deltatables
 
 from depictio.api.v1.configs.config import API_BASE_URL, TOKEN
 
@@ -38,7 +37,6 @@ def register_callbacks_table_component(app):
         Callback to update card body based on the selected column and aggregation
         """
 
-        # FIXME: This is a temporary solution to get the token
         headers = {
             "Authorization": f"Bearer {TOKEN}",
         }

@@ -78,7 +78,6 @@ def register_callbacks_card_component(app):
         Callback to update card body based on the selected column and aggregation
         """
 
-        # FIXME: This is a temporary solution to get the token
         headers = {
             "Authorization": f"Bearer {TOKEN}",
         }
