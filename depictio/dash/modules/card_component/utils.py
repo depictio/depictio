@@ -1,5 +1,3 @@
-
-
 from dash import html, dcc
 import dash_bootstrap_components as dbc
 import numpy as np
@@ -13,42 +11,6 @@ def compute_value(data, column_name, aggregation):
     if type(new_value) is np.float64:
         new_value = round(new_value, 2)
     return new_value
-
-
-def build_card_frame(index, children=None):
-    if not children:
-        return dbc.Card(
-            dbc.CardBody(
-                id={
-                    "type": "card-body",
-                    "index": index,
-                }
-            ),
-            style={"width": "100%"},
-            id={
-                "type": "card-component",
-                "index": index,
-            },
-        )
-    else:
-        return dbc.Card(
-            dbc.CardBody(
-                children=children,
-                id={
-                    "type": "card-body",
-                    "index": index,
-                },
-            ),
-            style={"width": "100%"},
-            id={
-                "type": "card-component",
-                "index": index,
-            },
-        )
-
-
-
-    
 
 
 def build_card_frame(index, children=None):
@@ -97,11 +59,9 @@ def build_card(**kwargs):
     build_frame = kwargs.get("build_frame", False)
     refresh = kwargs.get("refresh", False)
 
-
     if refresh:
         data = kwargs.get("df")
         v = compute_value(data, column_name, aggregation)
-
 
     try:
         v = round(float(v), 2)
