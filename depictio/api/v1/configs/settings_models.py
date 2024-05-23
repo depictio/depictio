@@ -88,6 +88,8 @@ class JbrowseConfig(BaseSettings):
 class Auth(BaseSettings):
     """Authentication configuration."""
     tmp_token: str = Field(default="eyJhb...")
+    private_key: str = Field(default=None)
+    public_key: str = Field(default=None)
 
     class Config:
         env_prefix = 'AUTH_'

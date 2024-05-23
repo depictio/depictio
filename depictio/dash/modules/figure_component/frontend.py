@@ -1,27 +1,16 @@
 # Import necessary libraries
 import collections
-import numpy as np
-from dash import html, dcc, Input, Output, State, ALL, MATCH
+from dash import html, dcc, Input, Output, State, MATCH
 import dash
 import dash_bootstrap_components as dbc
-import dash_draggable
 import dash_mantine_components as dmc
-import inspect
-import pandas as pd
-import plotly.express as px
-import re
 from dash_iconify import DashIconify
-import ast
-from depictio.dash.utils import list_workflows, return_mongoid
+from depictio.dash.utils import list_workflows
 from depictio.dash.utils import (
-    SELECTED_STYLE,
     UNSELECTED_STYLE,
-    list_data_collections_for_dropdown,
-    list_workflows_for_dropdown,
     get_columns_from_data_collection,
 )
 
-from depictio.api.v1.configs.config import logger
 # Depictio imports
 from depictio.dash.modules.figure_component.utils import (
     build_figure,
@@ -31,7 +20,6 @@ from depictio.dash.modules.figure_component.utils import (
     plotly_bootstrap_mapping,
     secondary_common_params,
     base_elements,
-    secondary_common_params_lite,
     plotly_vizu_dict,
 )
 from depictio.dash.utils import (
@@ -559,7 +547,6 @@ def register_callbacks_figure_component(app):
         #     if data_collection_id in join_tables_for_wf:
         #         join_details = join_tables_for_wf[data_collection_id]
         #         dc_specs["config"]["join"] = join_details
-            
 
         # print("dc_specs")
         # print(dc_specs)
@@ -630,9 +617,6 @@ def register_callbacks_figure_component(app):
         # else:
         #     return dash.no_update, dash.no_update
 
-
-
-
         if dict_kwargs:
             figure_kwargs = {
                 "index": id["index"],
@@ -646,6 +630,7 @@ def register_callbacks_figure_component(app):
             return build_figure(**figure_kwargs)
         else:
             raise dash.exceptions.PreventUpdate
+
 
 def design_figure(id):
     figure_row = [

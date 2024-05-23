@@ -15,3 +15,15 @@ MONGODB_URL = f"mongodb://{settings.mongodb.service_name}:{settings.mongodb.port
 TOKEN = settings.auth.tmp_token
 
 
+# Load your private key from the settings
+PRIVATE_KEY = settings.auth.private_key.encode() if settings.auth.private_key else None
+# Load your public key from the settings
+PUBLIC_KEY = settings.auth.public_key.encode() if settings.auth.public_key else None
+
+ALGORITHM = "RS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 360 * 3600
+
+if not PRIVATE_KEY or not PUBLIC_KEY:
+    logger.error("Private or public key not found in environment variables.")
+else:
+    logger.info("Private and public keys successfully loaded.")

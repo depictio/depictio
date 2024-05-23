@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 # from werkzeug.security import check_password_hash, generate_password_hash
 from depictio.api.v1.endpoints.user_endpoints.models import User, Token, TokenData
 from depictio.api.v1.models.base import PyObjectId
-from depictio.api.v1.configs.config import logger
+from depictio.api.v1.configs.config import logger, PRIVATE_KEY, PUBLIC_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
 
 from depictio.api.v1.db import db
 
@@ -20,15 +20,15 @@ users_collection = db.users
 auth_endpoint_router = APIRouter()
 
 
-# Load your private key
-with open("depictio/private_key.pem", "rb") as f:
-    PRIVATE_KEY = f.read()
-# Load your private key
-with open("depictio/public_key.pem", "rb") as f:
-    PUBLIC_KEY = f.read()
+# # Load your private key
+# with open("depictio/private_key.pem", "rb") as f:
+#     PRIVATE_KEY = f.read()
+# # Load your private key
+# with open("depictio/public_key.pem", "rb") as f:
+#     PUBLIC_KEY = f.read()
 
-ALGORITHM = "RS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 360 * 3600
+# ALGORITHM = "RS256"
+# ACCESS_TOKEN_EXPIRE_MINUTES = 360 * 3600
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"/api/v1/auth/token")
 
