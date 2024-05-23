@@ -1,3 +1,5 @@
+# Depictio requirements
+
 bleach==6.1.0
 boto3==1.34.36
 botocore==1.34.36

@@ -15,3 +15,6 @@ source depictio-cli-venv/bin/activate
 
 # Install dependencies from requirements file
 pip install -r requirements/depictio-cli-requirements.txt
+
+# Add the depictio package to the PYTHONPATH
+export PYTHONPATH=$PYTHONPATH:/workspaces/depictio

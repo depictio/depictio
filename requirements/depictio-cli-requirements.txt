@@ -1,0 +1,12 @@
+# Depictio-cli requirements
+
+bleach
+bson
+httpx
+pydantic==1.10.10
+python-devtools
+python-jose
+pyyaml
+typer
+pydantic[email]==1.10.10
+devtools
