@@ -2,17 +2,17 @@
     "name": "depictio devcontainer",
     "dockerComposeFile": ["../docker-compose.yml"], // Adjusting the path
     "service": "depictio_frontend",
-    "workspaceFolder": "/workspace",
-    // "extensions": [
-    //     "ms-python.python",
-    //     "ms-azuretools.vscode-docker",
-    //     "ms-python.anaconda-extension-pack",
-    //     "GitHub.copilot"
-    // ],
-    // "settings": {
-    //     "terminal.integrated.shell.linux": "/bin/bash"
-    // },
-    // "postCreateCommand": "conda env create -f conda_envs/depictio_cli.yaml && ./download_depictio_data.sh",
+    "workspaceFolder": "/workspaces/depictio",
+    "extensions": [
+        "ms-python.python",
+        "ms-azuretools.vscode-docker",
+        "ms-python.anaconda-extension-pack",
+        "GitHub.copilot"
+    ],
+    "settings": {
+        "terminal.integrated.shell.linux": "/bin/bash"
+    },
+    "postCreateCommand": "./download_depictio_data.sh",
     "forwardPorts": [
         27018,
         3000,
