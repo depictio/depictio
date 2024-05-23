@@ -2,7 +2,7 @@
     "name": "depictio devcontainer",
     "dockerComposeFile": [
         "../docker-compose.yml"
-    ], 
+    ],
     "service": "depictio_frontend",
     "workspaceFolder": "/workspaces/depictio",
     "extensions": [
@@ -46,10 +46,13 @@
         "AUTH_TMP_TOKEN": "${localEnv:AUTH_TMP_TOKEN}"
     },
     "features": {
-        "ghcr.io/devcontainers/features/common-utils:1": {
+        "ghcr.io/devcontainers/features/common-utils:2": {
             "installZsh": "true",
             "installGit": "true",
             "installDocker": "true"
+        },
+        "ghcr.io/devcontainers/features/docker-in-docker:2": {
+            "version": "latest"
         }
     }
 }
