@@ -37,15 +37,15 @@
             "label": "minio"
         }
     },
-    "containerEnv": {
-        "MINIO_ROOT_USER": "${{ secrets.MINIO_ROOT_USER }}",
-        "MINIO_ROOT_PASSWORD": "${{ secrets.MINIO_ROOT_PASSWORD }}",
-        "MINIO_ACCESS_KEY": "${{ secrets.MINIO_ACCESS_KEY }}",
-        "MINIO_SECRET_KEY": "${{ secrets.MINIO_SECRET_KEY }}",
+    "remoteEnv": {
+        "MINIO_ROOT_USER": "${localEnv:MINIO_ROOT_USER}",
+        "MINIO_ROOT_PASSWORD": "${localEnv:MINIO_ROOT_PASSWORD}",
+        "MINIO_ACCESS_KEY": "${localEnv:MINIO_ACCESS_KEY}",
+        "MINIO_SECRET_KEY": "${localEnv:MINIO_SECRET_KEY}",
         "DEPICTIO_BACKEND_DATA_VOLUME_HOST": "/workspace/depictio-data",
-        "AUTH_TMP_TOKEN": "${{ secrets.AUTH_TMP_TOKEN }}",
-        "PRIVATE_KEY": "${{ secrets.PRIVATE_KEY }}",
-        "PUBLIC_KEY": "${{ secrets.PUBLIC_KEY }}"
+        "AUTH_TMP_TOKEN": "${localEnv:AUTH_TMP_TOKEN}",
+        "PRIVATE_KEY": "${ localEnv.PRIVATE_KEY }",
+        "PUBLIC_KEY": "${ localEnv.PUBLIC_KEY }"
     },
     "features": {
         "ghcr.io/devcontainers/features/common-utils:2": {
