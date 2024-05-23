@@ -2,29 +2,41 @@
     "name": "depictio devcontainer",
     "dockerComposeFile": [
         "../docker-compose.yml"
-    ], // Adjusting the path
+    ], 
     "service": "depictio_frontend",
     "workspaceFolder": "/workspaces/depictio",
     "extensions": [
         "ms-python.python",
         "ms-azuretools.vscode-docker",
         "ms-python.anaconda-extension-pack",
-        "GitHub.copilot"
+        "GitHub.copilot",
+        "charliermarsh.ruff"
     ],
     "settings": {
         "terminal.integrated.shell.linux": "/bin/bash"
     },
-    "postCreateCommand": "./download_depictio_data.sh",
+    "postCreateCommand": "./setup_codespaces.sh",
     "forwardPorts": [
         27018,
-        3000,
-        9010,
         5080,
         8058,
         9000,
         9001
     ],
-    // "remoteUser": "vscode",
+    "portsAttributes": {
+        "27018": {
+            "label": "mongo"
+        },
+        "5080": {
+            "label": "depictio_frontend"
+        },
+        "8058": {
+            "label": "depictio_backend"
+        },
+        "9000-9001": {
+            "label": "minio"
+        }
+    },
     "remoteEnv": {
         "MINIO_ROOT_USER": "${localEnv:MINIO_ROOT_USER}",
         "MINIO_ROOT_PASSWORD": "${localEnv:MINIO_ROOT_PASSWORD}",
