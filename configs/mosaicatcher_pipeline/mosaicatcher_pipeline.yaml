@@ -27,8 +27,8 @@ workflows:
       # TODO: to turn into a dict (location - regex)
       # The location of the runs - multiple locations can be specified
       parent_runs_location:
-        - "/Users/tweber/Data/mosaicatcher-pipeline"
-        # - "/Users/tweber/Gits/depictio-data/StrandSeq/HGSVC"
+        # - "/Users/tweber/Data/mosaicatcher-pipeline"
+        - "./depictio-data/StrandSeq/HGSVC"
 
       # Regular expression to match the runs
       runs_regex: ".*"

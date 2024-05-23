@@ -7,6 +7,13 @@ else
   echo "depictio-data repository already exists."
 fi
 
+# Create a directory for the depictioDB and set permissions
+mkdir -p ./depictioDB
+sudo chmod -R 777 ./depictioDB
+
+# start docker-compose services
+docker-compose -f docker-compose.yml up -d
+
 # Set up a virtual environment
 python -m venv depictio-cli-venv
 
@@ -19,10 +26,3 @@ pip install -r requirements/depictio-cli-requirements.txt
 # Add the depictio package to the PYTHONPATH
 export PYTHONPATH=$PYTHONPATH:/workspaces/depictio
 
-
-# Create a directory for the depictioDB and set permissions
-mkdir -p ./depictioDB
-sudo chmod -R 777 ./depictioDB
-
-# start docker-compose services
-docker-compose up -f docker-compose.yml -d

@@ -369,6 +369,9 @@ def setup(
         # check if token exists in the config file
         config = load_depictio_config()
         token = config.get("token")
+        print(config)
+        print(token)
+        exit()
         if not token:
             typer.echo("A valid token must be provided for authentication.")
             raise typer.Exit(code=1)

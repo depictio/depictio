@@ -51,8 +51,8 @@
         "MINIO_SECRET_KEY": "${localEnv:MINIO_SECRET_KEY}",
         "DEPICTIO_BACKEND_DATA_VOLUME_HOST": "/workspace/depictio-data",
         "AUTH_TMP_TOKEN": "${localEnv:AUTH_TMP_TOKEN}",
-        "PRIVATE_KEY": "${localEnv.PRIVATE_KEY}",
-        "PUBLIC_KEY": "${localEnv.PUBLIC_KEY}"
+        "AUTH_PRIVATE_KEY": "${localEnv.AUTH_PRIVATE_KEY}",
+        "AUTH_PUBLIC_KEY": "${localEnv.AUTH_PUBLIC_KEY}"
     },
     "features": {
         "ghcr.io/devcontainers/features/common-utils:2": {
