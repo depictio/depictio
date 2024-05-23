@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+from boto3.exceptions import NoCredentialsError, PartialCredentialsError, ClientError
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.db import workflows_collection, data_collections_collection, runs_collection, files_collection, deltatables_collection, dashboards_collection
@@ -11,16 +12,25 @@ utils_endpoint_router = APIRouter()
 @utils_endpoint_router.get("/create_bucket")
 async def create_bucket():
     bucket_name = settings.minio.bucket
-    # check if the bucket already exists
+    # Check if the bucket already exists
     try:
         s3_client.head_bucket(Bucket=bucket_name)
         return {"message": "Bucket already exists"}
-    except Exception as e:
-        # Create a new bucket
-        s3_client.create_bucket(Bucket=bucket_name)
-        return {"message": "Bucket created"}
-    else:
-        return {"message": "Bucket creation failed"}
+    except ClientError as e:
+        error_code = int(e.response['Error']['Code'])
+        if error_code == 404:
+            try:
+                # Create a new bucket
+                s3_client.create_bucket(Bucket=bucket_name)
+                # Set bucket permissions to public
+                s3_client.put_bucket_acl(Bucket=bucket_name, ACL='public-read')
+                return {"message": "Bucket created and permissions set to public"}
+            except (ClientError, NoCredentialsError, PartialCredentialsError) as e:
+                return {"message": f"Bucket creation failed: {str(e)}"}
+        else:
+            return {"message": f"Error checking bucket: {str(e)}"}
+    except (NoCredentialsError, PartialCredentialsError) as e:
+        return {"message": f"Credentials error: {str(e)}"}
     
 # TODO - remove this endpoint - only for testing purposes in order to drop the S3 bucket content & the DB collections
 @utils_endpoint_router.get("/drop_S3_content")

@@ -1,6 +1,8 @@
 {
     "name": "depictio devcontainer",
-    "dockerComposeFile": ["../docker-compose.yml"], // Adjusting the path
+    "dockerComposeFile": [
+        "../docker-compose.yml"
+    ], // Adjusting the path
     "service": "depictio_frontend",
     "workspaceFolder": "/workspaces/depictio",
     "extensions": [
@@ -30,5 +32,12 @@
         "MINIO_SECRET_KEY": "${localEnv:MINIO_SECRET_KEY}",
         "DEPICTIO_BACKEND_DATA_VOLUME_HOST": "/workspace/depictio-data",
         "AUTH_TMP_TOKEN": "${localEnv:AUTH_TMP_TOKEN}"
+    },
+    "features": {
+        "ghcr.io/devcontainers/features/common-utils:1": {
+            "installZsh": "true",
+            "installGit": "true",
+            "installDocker": "true"
+        }
     }
 }
