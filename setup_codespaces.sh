@@ -18,3 +18,11 @@ pip install -r requirements/depictio-cli-requirements.txt
 
 # Add the depictio package to the PYTHONPATH
 export PYTHONPATH=$PYTHONPATH:/workspaces/depictio
+
+
+# Create a directory for the depictioDB and set permissions
+mkdir -p ./depictioDB
+sudo chmod -R 777 ./depictioDB
+
+# start docker-compose services
+docker-compose up -f docker-compose.yml -d

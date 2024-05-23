@@ -1,42 +1,49 @@
 {
-    "name": "depictio devcontainer",
+    "name": "Depictio devcontainer",
     // "dockerComposeFile": [
     //     "../docker-compose.yml"
     // ],
-    "service": "depictio_frontend",
+    "image": "mcr.microsoft.com/devcontainers/python:1-3.11",
+    // "service": "depictio_frontend",
     "workspaceFolder": "/workspaces/depictio",
-    "extensions": [
-        "ms-python.python",
-        "ms-azuretools.vscode-docker",
-        "ms-python.anaconda-extension-pack",
-        "GitHub.copilot",
-        "charliermarsh.ruff"
-    ],
-    "settings": {
-        "terminal.integrated.shell.linux": "/bin/bash"
-    },
-    "postCreateCommand": "./setup_codespaces.sh",
-    "forwardPorts": [
-        27018,
-        5080,
-        8058,
-        9000,
-        9001
-    ],
-    "portsAttributes": {
-        "27018": {
-            "label": "mongo"
-        },
-        "5080": {
-            "label": "depictio_frontend"
-        },
-        "8058": {
-            "label": "depictio_backend"
-        },
-        "9000-9001": {
-            "label": "minio"
+    "customizations": {
+        "vscode": {
+            "settings": {
+                "editor.tabSize": 2,
+                "git.detectSubmodules": false,
+                "terminal.integrated.defaultProfile.linux": "zsh"
+            },
+            "extensions": [
+                "ms-python.python",
+                "ms-azuretools.vscode-docker",
+                "ms-python.anaconda-extension-pack",
+                "GitHub.copilot",
+                "charliermarsh.ruff"
+            ]
         }
     },
+    "postCreateCommand": "./setup_codespaces.sh",
+    // "forwardPorts": [
+    //     27018,
+    //     5080,
+    //     8058,
+    //     9000,
+    //     9001
+    // ],
+    // "portsAttributes": {
+    //     "27018": {
+    //         "label": "mongo"
+    //     },
+    //     "5080": {
+    //         "label": "depictio_frontend"
+    //     },
+    //     "8058": {
+    //         "label": "depictio_backend"
+    //     },
+    //     "9000-9001": {
+    //         "label": "minio"
+    //     }
+    // },
     "remoteEnv": {
         "MINIO_ROOT_USER": "${localEnv:MINIO_ROOT_USER}",
         "MINIO_ROOT_PASSWORD": "${localEnv:MINIO_ROOT_PASSWORD}",

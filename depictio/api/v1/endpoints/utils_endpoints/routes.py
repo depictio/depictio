@@ -1,5 +1,6 @@
 from fastapi import APIRouter
-from boto3.exceptions import NoCredentialsError, PartialCredentialsError, ClientError
+import boto3
+from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ClientError
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.db import workflows_collection, data_collections_collection, runs_collection, files_collection, deltatables_collection, dashboards_collection
