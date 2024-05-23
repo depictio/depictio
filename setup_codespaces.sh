@@ -18,3 +18,6 @@ pip install -r requirements/depictio-cli-requirements.txt
 
 # Add the depictio package to the PYTHONPATH
 export PYTHONPATH=$PYTHONPATH:/workspaces/depictio
+
+# start docker-compose services
+docker-compose up -f docker-compose.yml --build -d
