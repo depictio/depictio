@@ -1,18 +1,18 @@
 {
     "name": "depictio devcontainer",
-    "dockerComposeFile": ["../docker-compose.yaml"], // Adjusting the path
+    "dockerComposeFile": ["../docker-compose.yml"], // Adjusting the path
     "service": "depictio_frontend",
     "workspaceFolder": "/workspace",
-    "extensions": [
-        "ms-python.python",
-        "ms-azuretools.vscode-docker",
-        "ms-python.anaconda-extension-pack",
-        "GitHub.copilot"
-    ],
-    "settings": {
-        "terminal.integrated.shell.linux": "/bin/bash"
-    },
-    "postCreateCommand": "conda env create -f conda_envs/depictio_cli.yaml && ./download_depictio_data.sh",
+    // "extensions": [
+    //     "ms-python.python",
+    //     "ms-azuretools.vscode-docker",
+    //     "ms-python.anaconda-extension-pack",
+    //     "GitHub.copilot"
+    // ],
+    // "settings": {
+    //     "terminal.integrated.shell.linux": "/bin/bash"
+    // },
+    // "postCreateCommand": "conda env create -f conda_envs/depictio_cli.yaml && ./download_depictio_data.sh",
     "forwardPorts": [
         27018,
         3000,
@@ -22,7 +22,7 @@
         9000,
         9001
     ],
-    "remoteUser": "vscode",
+    // "remoteUser": "vscode",
     "remoteEnv": {
         "MINIO_ROOT_USER": "${localEnv:MINIO_ROOT_USER}",
         "MINIO_ROOT_PASSWORD": "${localEnv:MINIO_ROOT_PASSWORD}",
