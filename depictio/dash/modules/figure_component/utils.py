@@ -4,7 +4,6 @@ import inspect
 import plotly.express as px
 import re
 
-from depictio.api.v1.configs.config import logger
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
 

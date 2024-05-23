@@ -1,9 +1,7 @@
-from bson import ObjectId
 from fastapi import HTTPException, APIRouter
 
 from depictio.api.v1.db import dashboards_collection
 from depictio.api.v1.endpoints.dashboards_endpoints.models import DashboardData
-from depictio.api.v1.models.base import convert_objectid_to_str
 
 
 dashboards_endpoint_router = APIRouter()
@@ -22,7 +20,7 @@ async def get_dashboard(dashboard_id: str):
 
     # Remove the MongoDB '_id' field from the response (optional, based on your need)
     dashboard_data.pop("_id", None)
-    
+
     return dashboard_data
 
 
@@ -38,7 +36,7 @@ async def save_dashboard(dashboard_id: str, data: DashboardData):
         {"dashboard_id": dashboard_id},
         {"$set": data_dict},
         upsert=True,
-        return_document=True  # Adjust based on your MongoDB driver version, some versions might use ReturnDocument.AFTER
+        return_document=True,  # Adjust based on your MongoDB driver version, some versions might use ReturnDocument.AFTER
     )
 
     # MongoDB should always return a document after an upsert operation

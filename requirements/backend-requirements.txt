@@ -1,0 +1,17 @@
+bleach==6.1.0
+boto3==1.34.111
+botocore==1.34.111
+deltalake==0.17.4
+fastapi==0.111.0
+httpx==0.27.0
+numpy==1.25.0
+pandas==2.0.3
+polars==0.20.28
+pydantic[email]==1.10.10
+pymongo==4.7.2
+python-dotenv==1.0.1
+python_jose==3.3.0
+PyYAML==6.0.1
+redis==5.0.4
+uvicorn==0.29.0
+PyJWT==2.8.0

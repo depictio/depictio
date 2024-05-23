@@ -1,9 +1,7 @@
-import shutil
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 
 from depictio.api.v1.configs.config import settings
-from depictio.api.v1.db import workflows_collection, data_collections_collection, runs_collection, files_collection, deltatables_collection, users_collection, dashboards_collection
-from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user
+from depictio.api.v1.db import workflows_collection, data_collections_collection, runs_collection, files_collection, deltatables_collection, dashboards_collection
 from depictio.api.v1.s3 import s3_client
 
 # Define the router

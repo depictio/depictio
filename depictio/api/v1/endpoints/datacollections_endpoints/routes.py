@@ -1,23 +1,8 @@
 import collections
-import copy
-from datetime import datetime
-from io import BytesIO
-import json
-import os
-from pathlib import PosixPath
-import re
-from bson import ObjectId
-from deltalake import DeltaTable
 from fastapi import HTTPException, Depends, APIRouter
 from typing import Dict, List
 
-import httpx
-import pandas as pd
-import polars as pl
-import numpy as np
-from pydantic import BaseModel
-
-from depictio.api.v1.configs.config import TOKEN, settings, API_BASE_URL, logger
+from depictio.api.v1.configs.config import settings, logger
 from depictio.api.v1.db import db
 from depictio.api.v1.endpoints.files_endpoints.routes import delete_files
 from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user
@@ -25,20 +10,9 @@ from depictio.api.v1.endpoints.validators import validate_workflow_and_collectio
 from depictio.api.v1.endpoints.workflow_endpoints.routes import get_all_workflows, get_workflow
 from depictio.api.v1.models.base import convert_objectid_to_str
 
-
-from depictio.api.v1.utils import (
-    # decode_token,
-    # public_key_path,
-    numpy_to_python,
-    scan_runs,
-    serialize_for_mongo,
-    agg_functions,
-)
-from depictio.dash.utils import return_dc_tag_from_id, return_mongoid, return_wf_tag_from_id
-
+from depictio.dash.utils import return_dc_tag_from_id, return_mongoid
 
 datacollections_endpoint_router = APIRouter()
-
 
 data_collections_collection = db[settings.mongodb.collections.data_collection]
 workflows_collection = db[settings.mongodb.collections.workflow_collection]

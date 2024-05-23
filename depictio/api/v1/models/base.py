@@ -1,22 +1,11 @@
 from datetime import datetime
 import hashlib
-import os
 from pathlib import Path, PosixPath
-from typing import Type, Dict, List, Tuple, Optional, Any, Set
-import bleach
 from bson import ObjectId
-from pydantic import (
-    BaseModel,
-    EmailStr,
-    Field,
-    FilePath,
-    ValidationError,
-    validator,
-    root_validator,
-)
+from pydantic import BaseModel
 import re
 
-import yaml, json
+import json
 
 
 def convert_objectid_to_str(item):
@@ -57,8 +46,7 @@ class PyObjectId(ObjectId):
 
 
 class MongoModel(BaseModel):
-
-    class Config():
+    class Config:
         allow_population_by_field_name = True
         json_encoders = {
             datetime: lambda dt: dt.isoformat(),
@@ -68,15 +56,15 @@ class MongoModel(BaseModel):
 
     @classmethod
     def from_mongo(cls, data: dict):
-        """We must convert _id into "id". """
+        """We must convert _id into "id"."""
         if not data:
             return data
-        id = data.pop('_id', None)
+        id = data.pop("_id", None)
         return cls(**dict(data, id=id))
 
     def mongo(self, **kwargs):
-        exclude_unset = kwargs.pop('exclude_unset', True)
-        by_alias = kwargs.pop('by_alias', True)
+        exclude_unset = kwargs.pop("exclude_unset", True)
+        by_alias = kwargs.pop("by_alias", True)
 
         parsed = self.dict(
             exclude_unset=exclude_unset,
@@ -85,15 +73,16 @@ class MongoModel(BaseModel):
         )
 
         # Mongo uses `_id` as default key. We should stick to that as well.
-        if '_id' not in parsed and 'id' in parsed:
-            parsed['_id'] = parsed.pop('id')
-        
+        if "_id" not in parsed and "id" in parsed:
+            parsed["_id"] = parsed.pop("id")
+
         # Convert PosixPath to str
         for key, value in parsed.items():
             if isinstance(value, Path):
                 parsed[key] = str(value)
 
         return parsed
+
 
 class DirectoryPath(str):
     @classmethod
@@ -109,6 +98,7 @@ class DirectoryPath(str):
             raise ValueError(f"'{value}' is not a directory.")
         return value
 
+
 class HashModel(BaseModel):
     @classmethod
     def __get_validators__(cls):
@@ -122,5 +112,5 @@ class HashModel(BaseModel):
 
     @classmethod
     def compute_hash(cls, value: dict) -> str:
-        hash_str = json.dumps(value, sort_keys=True).encode('utf-8')
+        hash_str = json.dumps(value, sort_keys=True).encode("utf-8")
         return hashlib.sha256(hash_str).hexdigest()

@@ -2,7 +2,6 @@ import collections
 import json
 import os
 import httpx
-import polars as pl
 from depictio.api.v1.configs.config import API_BASE_URL, TOKEN, logger
 from dash import html, dcc
 import dash_bootstrap_components as dbc
@@ -61,6 +60,7 @@ def build_jbrowse_frame(index, children=None):
                 "index": index,
             },
         )
+
 
 def build_jbrowse(**kwargs):
     wf_id = kwargs.get("wf_id")

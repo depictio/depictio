@@ -1,12 +1,11 @@
 # Import necessary libraries
 import httpx
 
-from dash import html, dcc, Input, Output, State, ALL, MATCH
+from dash import html, dcc, Input, Output, State, MATCH
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
-import pandas as pd
 from dash_iconify import DashIconify
-from depictio.dash.utils import list_workflows, return_mongoid
+from depictio.dash.utils import return_mongoid
 
 # Depictio imports
 from depictio.dash.modules.interactive_component.utils import (
@@ -15,10 +14,7 @@ from depictio.dash.modules.interactive_component.utils import (
     build_interactive_frame,
 )
 from depictio.dash.utils import (
-    SELECTED_STYLE,
     UNSELECTED_STYLE,
-    list_data_collections_for_dropdown,
-    list_workflows_for_dropdown,
     get_columns_from_data_collection,
 )
 from depictio.api.v1.configs.config import API_BASE_URL, TOKEN, logger

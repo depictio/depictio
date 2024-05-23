@@ -1,9 +1,8 @@
 from bson import ObjectId
 import httpx
 import polars as pl
-import pandas as pd
 from depictio.api.v1.configs.config import API_BASE_URL, TOKEN
-from depictio.api.v1.s3 import s3_client, minio_storage_options
+from depictio.api.v1.s3 import minio_storage_options
 from depictio.api.v1.configs.config import logger
 
 

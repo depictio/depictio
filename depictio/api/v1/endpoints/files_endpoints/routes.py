@@ -1,16 +1,10 @@
 import collections
-import json
-import os
-import re
 from bson import ObjectId
 from fastapi import HTTPException, Depends, APIRouter
-import subprocess
 
-from botocore.exceptions import NoCredentialsError
 
 from depictio.api.v1.configs.config import settings, logger
 from depictio.api.v1.db import db
-from depictio.api.v1.s3 import s3_client
 from depictio.api.v1.endpoints.files_endpoints.models import File
 from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user
 from depictio.api.v1.endpoints.validators import validate_workflow_and_collection
@@ -21,7 +15,6 @@ from depictio.api.v1.models.base import convert_objectid_to_str
 from depictio.api.v1.utils import (
     # decode_token,
     # public_key_path,
-    construct_full_regex,
     scan_files,
     scan_runs,
     serialize_for_mongo,
@@ -123,9 +116,8 @@ async def scan_metadata(
                 logger.info(f"File already exists: {file['file_location']}")
                 file = File.from_mongo(existing_file)
                 logger.info("from mongo", file)
-    
-    return {"message": f"Files successfully scanned and created for data_collection: {data_collection.id} of workflow: {workflow.id}"}
 
+    return {"message": f"Files successfully scanned and created for data_collection: {data_collection.id} of workflow: {workflow.id}"}
 
 
 @files_endpoint_router.post("/scan/{workflow_id}/{data_collection_id}")
@@ -178,8 +170,7 @@ async def scan_data_collection(
                 files = run.pop("files", [])
 
                 # Insert the run into runs_collection and retrieve its id
-                
-                
+
                 run = WorkflowRun(**run)
 
                 existing_run = runs_collection.find_one({"run_tag": run.mongo()["run_tag"]})
@@ -219,8 +210,6 @@ async def scan_data_collection(
         return {"message": f"Files successfully scanned and created for data_collection: {data_collection.id} of workflow: {workflow.id}"}
     else:
         return {"Warning: runs_and_content is not a list of dictionaries."}
-
-
 
 
 @files_endpoint_router.delete("/delete/{workflow_id}/{data_collection_id}")

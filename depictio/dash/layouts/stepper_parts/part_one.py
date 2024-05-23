@@ -1,6 +1,5 @@
 import json
 from dash import html, Input, Output, State, ALL, MATCH, ctx
-import dash
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 from dash_iconify import DashIconify
@@ -8,7 +7,7 @@ import httpx
 import yaml
 import dash_ag_grid as dag
 
-from depictio.dash.utils import list_workflows, get_columns_from_data_collection, return_mongoid
+from depictio.dash.utils import get_columns_from_data_collection, return_mongoid
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
 from depictio.api.v1.configs.config import API_BASE_URL, TOKEN, logger
 
@@ -184,7 +183,7 @@ def register_callbacks_stepper_part_one(app):
                 cols = get_columns_from_data_collection(workflow_selection, data_collection_selection)
                 logger.info(f"Columns: {cols}")
                 columnDefs = [{"field": c, "headerTooltip": f"Type: {e['type']}"} for c, e in cols.items()]
-                
+
                 # if description in col sub dict, update headerTooltip
                 for col in columnDefs:
                     if "description" in cols[col["field"]] and cols[col["field"]]["description"] is not None:

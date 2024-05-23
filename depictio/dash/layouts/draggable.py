@@ -1,42 +1,15 @@
-import ast
-from copy import deepcopy
-import json
-import os
-import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 from dash_iconify import DashIconify
 import dash_draggable
-from dash import html, dcc, Input, Output, State, ALL, MATCH
+from dash import html, Input, Output, State, ALL
 import dash
 import httpx
-import numpy as np
+
+
 from depictio.dash.layouts.draggable_scenarios.add_component import add_new_component
-
 from depictio.api.v1.configs.config import API_BASE_URL, TOKEN, logger
-
 from depictio.dash.layouts.draggable_scenarios.interactive_component_update import update_interactive_component
-from depictio.dash.layouts.stepper import create_stepper_output
-from depictio.dash.utils import (
-    analyze_structure_and_get_deepest_type
-)
-from depictio.dash.layouts.draggable_scenarios.restore_dashboard import load_depictio_data
-
-
-# Depictio layout imports for stepper
-from depictio.dash.layouts.stepper import (
-    # create_stepper_dropdowns,
-    # create_stepper_buttons,
-    create_stepper_output,
-)
-
-# Depictio layout imports for header
-from depictio.dash.layouts.header import (
-    design_header,
-    enable_box_edit_mode,
-    # enable_box_edit_mode_dev,
-)
-
-from depictio.dash.modules.figure_component.utils import plotly_vizu_dict
+from depictio.dash.layouts.header import enable_box_edit_mode
 
 
 # Mapping of component types to their respective dimensions (width and height)
@@ -60,6 +33,7 @@ def calculate_new_layout_position(child_type, existing_layouts, child_id, n):
         "h": dimensions["h"],
         "i": child_id,
     }
+
 
 def remove_duplicates_by_index(components):
     unique_components = {}
@@ -174,10 +148,9 @@ def register_callbacks_draggable(app):
         logger.info("triggered_input : {}".format(triggered_input))
         logger.info("type of triggered_input: {}".format(type(triggered_input)))
 
-
         # Check if the value of the interactive component is not None
         check_value = False
-        # remove duplicate of stored_metadata based on index  
+        # remove duplicate of stored_metadata based on index
         index_list = []
 
         # FIXME: Remove duplicates from stored_metadata
@@ -187,8 +160,6 @@ def register_callbacks_draggable(app):
         stored_metadata = remove_duplicates_by_index(stored_metadata)
         logger.info("CLEANED Stored metadata: {}".format(stored_metadata))
         logger.info(f"Length of cleaned stored metadata: {len(stored_metadata)}")
-
-
 
         logger.info("Interactive component values: {}".format(interactive_component_values))
         logger.info("Interactive component ids: {}".format(interactive_component_ids))
@@ -206,7 +177,6 @@ def register_callbacks_draggable(app):
 
         if triggered_input == "interactive-component":
             if interactive_components_dict:
-
                 logger.info(f"Interactive component triggered input: {triggered_input}")
                 logger.info(f"Interactive components dict: {interactive_components_dict}")
                 triggered_input_eval_index = int(triggered_input_dict["index"])

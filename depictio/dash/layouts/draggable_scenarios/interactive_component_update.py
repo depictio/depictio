@@ -1,22 +1,16 @@
 import collections
 import itertools
-import json
-import os
-from pprint import pprint
-from bson import ObjectId
 import httpx
-import numpy as np
 import pandas as pd
 from depictio.api.v1.configs.config import API_BASE_URL, TOKEN, logger
 from depictio.api.v1.deltatables_utils import iterative_join, join_deltatables_dev, load_deltatable_lite
 from depictio.dash.layouts.header import enable_box_edit_mode
-from depictio.dash.modules.card_component.utils import build_card, compute_value
+from depictio.dash.modules.card_component.utils import build_card
 from depictio.dash.modules.figure_component.utils import build_figure
 from depictio.dash.modules.interactive_component.utils import build_interactive
 
 from depictio.dash.modules.jbrowse_component.utils import build_jbrowse, build_jbrowse_df_mapping_dict
 from depictio.dash.modules.table_component.utils import build_table
-from depictio.dash.utils import analyze_structure_and_get_deepest_type
 
 
 def apply_dropdowns(df, n_dict):
@@ -281,8 +275,6 @@ def update_interactive_component(stored_metadata_raw, interactive_components_dic
                 logger.info(f"Card CHILD - {child}")
             child = enable_box_edit_mode(child.to_plotly_json(), switch_state=switch_state)
             children.append(child)
-
-
 
         elif component["component_type"] == "jbrowse":
             component["stored_metadata_jbrowse"] = stored_metadata_jbrowse_components

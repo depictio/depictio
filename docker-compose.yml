@@ -1,0 +1,61 @@
+services:
+  mongo:
+    image: mongo:latest
+    command: --dbpath /data/depictioDB --port 27018
+    ports:
+      - 27018:27018
+    volumes:
+      - ./depictioDB:/data/depictioDB
+
+  minio:
+    image: minio/minio:latest
+    volumes:
+      - "./minio_data:/data"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+    command: server /data --console-address :9001
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+
+  depictio_frontend:
+    image: depictio:dev
+    build:
+      dockerfile: docker-images/Depictio-pythonslim.dockerfile
+    ports:
+      - 5080:5080
+    volumes:
+      - ./depictio:/app/depictio
+      - ./configs:/configs
+      - ./data:/app/data
+      - ./minio_data:/minio_data
+      - ./.env:/app/.env
+    command: ["python", "depictio/dash/app.py"]
+    depends_on:
+      - mongo
+      - minio
+      - depictio_backend
+
+
+  depictio_backend:
+    image: depictio:dev
+    build:
+      dockerfile: docker-images/Depictio-pythonslim.dockerfile
+    ports:
+      - 8058:8058
+    volumes:
+      - "${DEPICTIO_BACKEND_DATA_VOLUME_HOST}:${DEPICTIO_BACKEND_DATA_VOLUME_HOST}"
+      - ./depictio:/app/depictio
+      - ./data:/app/data
+      - ./minio_data:/minio_data
+      - ./jbrowse-watcher-plugin/sessions:/jbrowse-watcher-plugin/sessions
+      - ./configs:/configs
+      - ./.env:/app/.env
+    command: ["python", "depictio/api/run.py"]
+    depends_on:
+      - mongo
+      - minio

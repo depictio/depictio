@@ -1,10 +1,9 @@
 # Import necessary libraries
-from dash import html, dcc, Input, Output, State, MATCH
+from dash import html, dcc, Input, Output, MATCH
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 from dash_iconify import DashIconify
 import httpx
-import dash_ag_grid as dag
 
 # Depictio imports
 from depictio.dash.modules.table_component.utils import build_table, build_table_frame

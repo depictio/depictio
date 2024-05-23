@@ -5,8 +5,6 @@ from pydantic import (
 )
 
 
-
-
 class DCTableConfig(BaseModel):
     format: str
     polars_kwargs: Optional[Dict[str, Any]] = {}

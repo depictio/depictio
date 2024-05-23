@@ -1,19 +1,13 @@
-from typing import Dict, List, Optional, Any
-import re
+from typing import Optional
 from pydantic import (
     BaseModel,
-    root_validator,
     validator,
 )
-
-
-
 
 
 class DCJBrowse2Config(BaseModel):
     index_extension: Optional[str] = None
     jbrowse_template_location: Optional[str] = None
-
 
     @validator("format", check_fields=False)
     def validate_format(cls, v, values, **kwargs):

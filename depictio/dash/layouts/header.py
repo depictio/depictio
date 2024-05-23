@@ -1,13 +1,11 @@
 import datetime
-import json
-import sys
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
-from dash import html, dcc, Input, Output, State, ALL, MATCH
+from dash import html, dcc, Input, Output, State, ALL
 import dash
 import httpx
 
-from depictio.dash.utils import analyze_structure_and_get_deepest_type, get_size
+from depictio.dash.utils import get_size
 from depictio.api.v1.configs.config import API_BASE_URL, TOKEN, logger
 
 
@@ -49,8 +47,6 @@ def register_callbacks_header(app):
                     stored_metadata.remove(elem)
                 else:
                     stored_metadata_indexes.append(elem["index"])
-                
-
 
             # logger.info(f"stored_children: {type(children)} {get_size(children)}")
             logger.info(f"stored_layout_data: {type(stored_layout_data)} {get_size(stored_layout_data)}")
@@ -66,7 +62,6 @@ def register_callbacks_header(app):
             # for value, component in stored_metadata.items():
             #     if component["component_type"] == "interactive":
             #         logger.info(component)
-
 
             dashboard_data = {
                 # "tmp_children_data": children,
@@ -215,7 +210,10 @@ def design_header(data):
     # https://dash.plotly.com/dash-core-components/store
     backend_components = html.Div(
         [
-            dcc.Store(id="stored-draggable-children", storage_type="session", ),
+            dcc.Store(
+                id="stored-draggable-children",
+                storage_type="session",
+            ),
             dcc.Store(id="stored-draggable-layouts", storage_type="session"),
         ]
     )

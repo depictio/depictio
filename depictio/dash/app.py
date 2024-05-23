@@ -1,4 +1,3 @@
-import os
 from dash import html
 import dash
 import dash_bootstrap_components as dbc
@@ -35,8 +34,6 @@ from depictio.dash.layouts.draggable import (
 from depictio.dash.layouts.draggable_scenarios.restore_dashboard import load_depictio_data
 
 from depictio.api.v1.configs.config import logger
-
-
 
 
 # Start the app
@@ -79,13 +76,11 @@ register_callbacks_table_component(app)
 # register_callbacks_add_component(app)
 
 
-
 def create_app_layout():
     # Load depictio depictio_dash_data from JSON
     depictio_dash_data = load_depictio_data()
     # logger.info(f"Loaded depictio depictio_dash_data: {depictio_dash_data}")
     # depictio_dash_data = None
-
 
     # Init layout and children if depictio_dash_data is available, else set to empty
     init_layout = depictio_dash_data["stored_layout_data"] if depictio_dash_data else {}
@@ -93,7 +88,7 @@ def create_app_layout():
     # init_layout = {
     #     "lg": [{"i": "1", "x": 0, "y": 0, "w": 6, "h": 4, "static": False}]
     # }
-        
+
     logger.info(f"Loaded depictio init_layout: {init_layout}")
     init_children = depictio_dash_data["stored_children_data"] if depictio_dash_data else list()
     # init_children = [html.Div("test", id="1")]
@@ -121,6 +116,7 @@ def create_app_layout():
         ],
         fluid=True,
     )
+
 
 app.layout = create_app_layout
 

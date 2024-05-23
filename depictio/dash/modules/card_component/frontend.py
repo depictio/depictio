@@ -10,7 +10,6 @@ from depictio.dash.utils import return_mongoid
 from depictio.api.v1.configs.config import API_BASE_URL, TOKEN
 
 from depictio.dash.modules.card_component.utils import (
-    agg_functions,
     build_card,
     build_card_frame,
 )
@@ -18,6 +17,7 @@ from depictio.dash.utils import (
     UNSELECTED_STYLE,
     get_columns_from_data_collection,
 )
+from depictio.dash.modules.card_component.agg_functions import agg_functions
 
 
 def register_callbacks_card_component(app):

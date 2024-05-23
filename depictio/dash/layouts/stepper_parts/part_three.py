@@ -1,12 +1,5 @@
-import json
-from dash import html, Input, Output, State, ALL, MATCH, ctx
+from dash import html, Input, Output, State, ALL, MATCH
 import dash
-import dash_bootstrap_components as dbc
-import dash_mantine_components as dmc
-from dash_iconify import DashIconify
-import httpx
-import pandas as pd
-import yaml
 
 
 # Depictio components imports - design step

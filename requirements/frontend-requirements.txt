@@ -1,0 +1,17 @@
+dash_ag_grid==2.2.0
+dash_bootstrap_components==1.6.0
+dash_draggable==0.1.2
+dash_iconify==0.1.2
+dash_mantine_components==0.12.1
+dash==2.17.0
+httpx==0.27.0
+numpy==1.25.0
+pandas==2.0.3
+plotly==5.22.0
+polars==0.20.28
+PyJWT==2.8.0
+pymongo==4.7.2
+python_jose==3.3.0
+PyYAML==6.0.1
+pydantic[email]==1.10.10
+

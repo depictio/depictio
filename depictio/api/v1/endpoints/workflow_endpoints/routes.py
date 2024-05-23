@@ -1,10 +1,9 @@
-import collections
 from bson import ObjectId
 from fastapi import HTTPException, Depends, APIRouter
 from pymongo import ReturnDocument
 
-from depictio.api.v1.configs.config import settings, logger
-from depictio.api.v1.db import workflows_collection, data_collections_collection, runs_collection, files_collection
+from depictio.api.v1.configs.config import logger
+from depictio.api.v1.db import workflows_collection
 from depictio.api.v1.endpoints.deltatables_endpoints.routes import delete_deltatable
 from depictio.api.v1.endpoints.files_endpoints.routes import delete_files
 from depictio.api.v1.models.base import convert_objectid_to_str
@@ -12,7 +11,6 @@ from depictio.api.v1.models.top_structure import (
     Workflow,
 )
 from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user
-from depictio.api.v1.s3 import s3_client
 
 # Define the router
 workflows_endpoint_router = APIRouter()

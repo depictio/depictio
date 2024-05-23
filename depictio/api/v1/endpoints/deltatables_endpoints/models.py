@@ -1,11 +1,8 @@
 from datetime import datetime
-from pathlib import Path
 from typing import Dict, List, Optional, Union
 from bson import ObjectId
 from pydantic import (
     BaseModel,
-    Field,
-    root_validator,
     validator,
 )
 from depictio.api.v1.endpoints.user_endpoints.models import User

@@ -1,4 +1,3 @@
-import ast
 from dash import html, Input, Output, State, ALL, MATCH, ctx
 import dash
 import dash_bootstrap_components as dbc
@@ -7,10 +6,6 @@ from dash_iconify import DashIconify
 import httpx
 
 # Depictio imports
-from depictio.dash.utils import (
-    list_data_collections_for_dropdown,
-    list_workflows_for_dropdown,
-)
 from depictio.api.v1.configs.config import API_BASE_URL, TOKEN, logger
 
 
@@ -59,7 +54,9 @@ def register_callbacks_stepper(app):
         }
 
         logger.info(f"Component selected: {component_selected}")
-        valid_wfs = sorted({wf["workflow_tag"] for wf in all_wf_dc for dc in wf["data_collections"] if component_selected in mapping_component_data_collection[dc["config"]["type"]]})
+        valid_wfs = sorted(
+            {wf["workflow_tag"] for wf in all_wf_dc for dc in wf["data_collections"] if component_selected in mapping_component_data_collection[dc["config"]["type"]]}
+        )
         logger.info(f"valid_wfs: {valid_wfs}")
 
         # Return the data and the first value if the data is not empty
@@ -73,7 +70,7 @@ def register_callbacks_stepper(app):
         Output({"type": "datacollection-selection-label", "index": MATCH}, "value"),
         Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
         State({"type": "workflow-selection-label", "index": MATCH}, "id"),
-        Input({"type": "btn-option", "index": MATCH, "value": ALL}, "n_clicks")
+        Input({"type": "btn-option", "index": MATCH, "value": ALL}, "n_clicks"),
         # prevent_initial_call=True,
     )
     def set_datacollection_options(selected_workflow, id, n_clicks):
@@ -101,10 +98,10 @@ def register_callbacks_stepper(app):
         }
 
         logger.info(f"Component selected: {component_selected}")
-        valid_dcs = sorted({dc["data_collection_tag"] for dc in selected_wf_data["data_collections"] if component_selected in mapping_component_data_collection[dc["config"]["type"]]})
+        valid_dcs = sorted(
+            {dc["data_collection_tag"] for dc in selected_wf_data["data_collections"] if component_selected in mapping_component_data_collection[dc["config"]["type"]]}
+        )
         logger.info(f"valid_dcs: {valid_dcs}")
-
-
 
         logger.info("ID: {}".format(id))
         if not selected_workflow:
