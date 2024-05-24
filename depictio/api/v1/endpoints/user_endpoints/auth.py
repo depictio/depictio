@@ -133,13 +133,18 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 async def fetch_user_from_token(token: str = Depends(oauth2_scheme)) -> User:
     logger.info("\n\n\n")
     logger.info("fetch_user_from_token")
+    logger.info(token)
+    logger.info(PUBLIC_KEY)
     payload = jwt.decode(token, PUBLIC_KEY, algorithms=[ALGORITHM])
     user_id = payload.get("sub")
+    logger.info(ObjectId(str(user_id)))
+    logger.info(user_id)
     if user_id is None:
         logger.info("Token is invalid or expired.")
         sys.exit(code=1)
     # Fetch user from the database or wherever it is stored
     user_document = users_collection.find_one({"_id": ObjectId(str(user_id))})
+    logger.info(user_document)
     if not user_document:
         raise HTTPException(status_code=404, detail="User not found")
     user = User(

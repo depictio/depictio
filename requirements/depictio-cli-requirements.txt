@@ -11,3 +11,4 @@ typer
 pydantic[email]==1.10.10
 devtools
 pymongo
+numpy

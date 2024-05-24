@@ -369,13 +369,20 @@ def setup(
         # check if token exists in the config file
         config = load_depictio_config()
         token = config.get("token")
+        print(config)
+        print(token)
         if not token:
             typer.echo("A valid token must be provided for authentication.")
             raise typer.Exit(code=1)
 
+    # Delete bucket 
+    # response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/utils/delete_bucket")
+    # print(response.json())
+
     # Create bucket if not exists
     response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/utils/create_bucket")
     print(response.json())
+
 
     if erase_all:
         # Drop all collections
@@ -391,6 +398,8 @@ def setup(
         raise typer.Exit(code=1)
 
     user = return_user_from_token(token)  # Decode the token to get the user information
+    print(user)
+
     if not user:
         typer.echo("Invalid token or unable to decode^ user information.")
         raise typer.Exit(code=1)

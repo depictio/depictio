@@ -1,5 +1,6 @@
 import boto3
-from depictio.api.v1.configs.config import settings
+from depictio.api.v1.configs.config import settings, logger
+
 
 minio_storage_options = {
     "endpoint_url": f"{settings.minio.internal_endpoint}:{settings.minio.port}",
@@ -12,6 +13,8 @@ minio_storage_options = {
     "AWS_S3_ALLOW_UNSAFE_RENAME": "true",
 }
 
+logger.info(f"Minio storage options: {minio_storage_options}")
+
 
 # Initialize your S3 client outside of your endpoint function
 s3_client = boto3.client(
@@ -20,4 +23,3 @@ s3_client = boto3.client(
     aws_secret_access_key=settings.minio.secret_key,
     endpoint_url=f"{settings.minio.internal_endpoint}:{settings.minio.port}",
 )
-

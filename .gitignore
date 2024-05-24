@@ -194,7 +194,7 @@ depictio/private_key.pem
 depictio/public_key.pem
 jbrowse2/
 delta_dev/
-dev/dev_minio/
+!dev/dev_minio/dev.ipynb
 dev/dev_design_visu/data/
 depictio/jbrowse2_configs/
 jbrowse2_sessions/
