@@ -214,3 +214,5 @@ dev/dev_delta/.DS_Store
 .DS_Store
 dev/dev_delta/.DS_Store
 jbrowse-watcher-plugin
+depictio-cli-venv/
+jbrowse-watcher-plugin/
