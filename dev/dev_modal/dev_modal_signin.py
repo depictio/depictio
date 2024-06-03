@@ -3,7 +3,7 @@ import json
 import dash_bootstrap_components as dbc
 import re
 import dash
-from dash import html, dcc
+from dash import html, dcc, ctx, MATCH, Input, Output, State, ALL
 from dash.dependencies import Input, Output, State
 import dash_mantine_components as dmc
 from dash_iconify import DashIconify
@@ -209,32 +209,38 @@ def show_landing_page(data):
     return {"display": "none"}  # Hide landing page
 
 
-
-def render_modal_delete(index):
-    modal_view = dmc.Modal(
-        opened=False,
-        id={"type": "delete-confirmation-modal", "index": index},
-        centered=True,
-        # title="Confirm Deletion",
-        children=[
-            dmc.Title("Are you sure you want to delete this dashboard?", order=3, color="black", style={"marginBottom": 20}),
-            dmc.Button("Delete", id="confirm-delete", color="red", style={"marginRight": 10}),
-            dmc.Button("Cancel", id="cancel-delete", color="grey"),
-        ],
-    )
-    return modal_view
-
-# Callback to open the deletion confirmation modal and store the dashboard index
 @app.callback(
     Output({"type": "delete-confirmation-modal", "index": MATCH}, "opened"),
     [Input({"type": "delete-dashboard-button", "index": MATCH}, "n_clicks")],
     [State({"type": "delete-dashboard-button", "index": MATCH}, "id")],
-    prevent_initial_call=True
+    prevent_initial_call=True,
 )
-def open_delete_modal(n_clicks, button_id):
-    if n_clicks:
-        return True
-    return False
+def open_delete_modal(n_clicks, ids):
+    print("\n")
+    print("open_delete_modal")
+    print(n_clicks)
+    print(ids)
+    print(ctx.triggered_prop_ids)
+    print(ctx.triggered)
+    triggered_input = ctx.triggered
+    if [e for e in triggered_input if e["value"] is not None]:
+        # Check if any delete button was clicked in the n_clicks list
+        # if len([n for n in n_clicks if n != None]) > 0:
+        if n_clicks > 0:
+            print("Opening delete modal")
+            print("\n")
+
+            button_id = ctx.triggered[0]["prop_id"]
+            index = json.loads(button_id.split(".")[0])["index"]
+            # Update which dashboard is to be deleted
+            return True, index
+        else:
+            print("Not opening delete modal")
+            print("\n")
+
+            return False, dash.no_update
+    else:
+        raise dash.exceptions.PreventUpdate
 
 
 def create_dashboards_view(dashboards):
@@ -253,7 +259,7 @@ def create_dashboards_view(dashboards):
                     ),
                     dmc.Button(
                         f"View Dashboard {dashboard['index']}",
-                        id={"type": "view-dashboard-button", "index": dashboard["index"]},
+                        id={"type": "view-dashboard-button", "value": dashboard["owner"], "index": dashboard["index"]},
                         variant="outline",
                         color="dark",
                         style={"marginRight": 20},
@@ -294,18 +300,18 @@ def create_dashboards_view(dashboards):
 
 
 @app.callback(
-    [Output({"type": "dashboard-list", "index": MATCH}, "children"), Output({"type": "dashboard-index-store", "index": MATCH}, "data")],
+    [Output({"type": "dashboard-list", "index": MATCH}, "children"), Output({"type": "dashboard-index-store", "value": MATCH}, "data")],
     [
         Input({"type": "create-dashboard-button", "index": MATCH}, "n_clicks"),
         State({"type": "create-dashboard-button", "index": MATCH}, "id"),
-        State({"type": "dashboard-index-store", "index": MATCH}, "data"),
+        State({"type": "dashboard-index-store", "value": MATCH}, "data"),
         # Input({"type": "dashboard-index-store", "index": MATCH}, "data"),
     ],
-    # prevent_initial_call=True
+    # prevent_initial_call=True,
 )
 def create_dashboard(n_clicks, id, index_data):
     # if not n_clicks:
-    #     return dash.no_update, dash.no_update
+    #     return dash.dash.no_update, dash.dash.no_update
 
     # Assuming index_data also stores a list of dashboards
     dashboards = index_data.get("dashboards", [])
@@ -326,53 +332,45 @@ def create_dashboard(n_clicks, id, index_data):
 
         # Updating the store data to include the new list of dashboards and the incremented index
         new_index_data = {"next_index": next_index + 1, "dashboards": dashboards}
+
+    # elif triggered_input
+
     else:
         new_index_data = index_data
 
     # Creating views for each dashboard
-    dashboards_view = [
-        dmc.Paper(
-            dmc.Group(
-                [
-                    html.Div(
-                        [
-                            dmc.Title(dashboard["title"], order=5),
-                            dmc.Text(f"Last Modified: {dashboard['last_modified']}"),
-                            dmc.Text(f"Status: {dashboard['status']}"),
-                            dmc.Text(f"Owner: {dashboard['owner']}"),
-                        ],
-                        style={"flex": "1"},
-                    ),
-                    dmc.Button(
-                        f"View Dashboard {dashboard['index']}",
-                        id={"type": "view-dashboard-button", "value": dashboard["owner"], "index": dashboard["index"]},
-                        variant="outline",
-                        color="dark",
-                        style={"marginRight": 20},
-                    ),
-                    dmc.Button("Delete", id={"type": "delete-dashboard-button", "index": dashboard["index"]}, variant="outline", color="red", style={"marginRight": 20}),
-                    render_modal_delete(dashboard["index"]),
-                ],
-                align="center",
-                position="apart",
-                grow=False,
-                noWrap=False,
-                style={"width": "100%"},
-            ),
-            shadow="xs",
-            p="md",
-            style={"marginBottom": 20},
-        )
-        for dashboard in dashboards
-    ]
+    dashboards_view = create_dashboards_view(dashboards)
 
     return dashboards_view, new_index_data
+
+
+@app.callback(
+    Output({"type": "dashboard-index-store", "index": MATCH}, "data", allow_duplicate=True),
+    [Input({"type": "confirm-delete", "index": MATCH}, "n_clicks")],
+    [State({"type": "dashboard-index-store", "index": MATCH}, "data"), State({"type": "confirm-delete", "index": MATCH}, "index")],
+    prevent_initial_call=True,
+)
+def confirm_dashboard_deletion(confirm_delete_clicks, index_data, delete_index):
+    print("confirm_dashboard_deletion")
+    print(confirm_delete_clicks)
+    print(index_data)
+    print(delete_index)
+    if confirm_delete_clicks is None:
+        raise dash.exceptions.PreventUpdate
+
+    dashboards = index_data.get("dashboards", [])
+    # Mark the dashboard as deleted instead of removing it
+    for dashboard in dashboards:
+        if dashboard["index"] == delete_index:
+            dashboard["is_deleted"] = True
+
+    # Return updated data with the dashboard marked as deleted
+    return {"next_index": index_data["next_index"], "dashboards": dashboards}
 
 
 def render_welcome_section(email):
     return dmc.Container(
         [
-            dmc.Center(depictio_logo),  # Center the logo
             dmc.Title(f"Welcome, {email}!", order=2, align="center"),
             dmc.Center(
                 dmc.Button(
@@ -385,7 +383,8 @@ def render_welcome_section(email):
                     size="xl",
                 )
             ),
-            dcc.Store(id={"type": "dashboard-index-store", "index": email}, storage_type="session", data={"next_index": 1}),  # Store for dashboard index management
+            dcc.Store(id={"type": "dashboard-index-store", "value": email}, storage_type="session", data={"next_index": 1}),  # Store for dashboard index management
+            # dcc.Store(id={"type": "dashboards-store", "index": email}, storage_type="session", data={"dashboards": []}),  # Store to cache workflows
             dmc.Divider(style={"margin": "20px 0"}),
         ]
     )
@@ -395,22 +394,161 @@ def render_dashboard_list_section(email):
     return html.Div(id={"type": "dashboard-list", "index": email}, style={"padding": "20px"})
 
 
-@app.callback(
-    Output("redirect-url", "href"),
-    [Input({"type": "view-dashboard-button", "index": ALL}, "n_clicks")],
-    [State({"type": "view-dashboard-button", "index": ALL}, "id")],
-    prevent_initial_call=True,
-)
-def redirect_to_dashboard(n_clicks, ids):
-    if not any(n_clicks):
-        raise dash.exceptions.PreventUpdate
+def render_data_collection_item(data_collection):
+    return dmc.AccordionItem(
+        [
+            dmc.AccordionControl(dmc.Title(data_collection["title"], order=5)),
+            dmc.AccordionPanel(
+                dmc.Paper(
+                    dmc.Group(
+                        [
+                            html.Div(
+                                dmc.List(
+                                    [
+                                        dmc.ListItem(f"Type: {data_collection['type']}"),
+                                        dmc.ListItem(f"Description: {data_collection['description']}"),
+                                        dmc.ListItem(f"Creation time: {data_collection['creation_time']}"),
+                                        dmc.ListItem(f"Last update time: {data_collection['last_update_time']}"),
+                                    ]
+                                )
+                            ),
+                            dmc.Button("View Data", variant="outline", color="dark", style={"marginRight": 20}),
+                        ],
+                        align="center",
+                        position="apart",
+                        grow=False,
+                        noWrap=False,
+                        style={"width": "100%"},
+                    ),
+                    shadow="xs",
+                    p="md",
+                    style={"marginBottom": 20},
+                ),
+            ),
+        ],
+        value=f"{data_collection['title']}-{data_collection['type']}",
+    )
 
-    # Find the index of the clicked button
-    clicked_index = next((i for i, v in enumerate(n_clicks) if v), None)
-    if clicked_index is not None:
-        dashboard_id = ids[clicked_index]["index"]
-        return f"http://localhost:5080"
-    raise dash.exceptions.PreventUpdate
+
+def render_workflow_item(workflow, data):
+    return dmc.AccordionItem(
+        [
+            dmc.AccordionControl(dmc.Title(workflow["title"], order=5)),
+            dmc.AccordionPanel(
+                dmc.Container(
+                    [
+                        dmc.Title(f"Welcome, {data['email']}!", order=2, align="center"),
+                        dmc.Center(
+                            dmc.Button(
+                                "+ Create New Dashboard",
+                                id="create-dashboard-button",
+                                variant="gradient",
+                                gradient={"from": "black", "to": "grey", "deg": 135},
+                                style={"margin": "20px 0", "fontFamily": "Virgil"},
+                                size="xl",
+                            )
+                        ),
+                        dmc.Divider(style={"margin": "20px 0"}),
+                        dmc.Title("Your Dashboards", order=3),
+                        html.Div(
+                            [
+                                dmc.Paper(
+                                    dmc.Group(
+                                        [
+                                            html.Div(
+                                                [
+                                                    dmc.Title(d["title"], order=5),
+                                                    dmc.Text(f"Last Modified: {d['last_modified']}"),
+                                                    dmc.Text(f"Status: {d['status']}"),
+                                                ],
+                                                style={"flex": "1"},
+                                            ),
+                                            dmc.Button("View Dashboard", variant="outline", color="dark", style={"marginRight": 20}),
+                                        ],
+                                        align="center",
+                                        position="apart",
+                                        grow=False,
+                                        noWrap=False,
+                                        style={"width": "100%"},
+                                    ),
+                                    shadow="xs",
+                                    p="md",
+                                    style={"marginBottom": 20},
+                                )
+                                for d in dashboards
+                            ],
+                            style={"padding": "20px"},
+                        ),
+                        dmc.Title("Your Workflows & Data Collections", order=3),
+                        dmc.Accordion(
+                            children=[
+                                dmc.AccordionItem(
+                                    [
+                                        dmc.AccordionControl(dmc.Title(workflow["title"], order=5)),
+                                        dmc.AccordionPanel(
+                                            dmc.Container(
+                                                [
+                                                    dmc.Text(f"Last Modified: {workflow['last_modified']}"),
+                                                    dmc.Text(f"Status: {workflow['status']}"),
+                                                    dmc.Divider(style={"margin": "20px 0"}),
+                                                    dmc.Title("Data Collections", order=4),
+                                                    dmc.Accordion(
+                                                        children=[
+                                                            dmc.AccordionItem(
+                                                                [
+                                                                    dmc.AccordionControl(dmc.Title(dc["title"], order=5)),
+                                                                    dmc.AccordionPanel(
+                                                                        dmc.Paper(
+                                                                            dmc.Group(
+                                                                                [
+                                                                                    html.Div(
+                                                                                        dmc.List(
+                                                                                            [
+                                                                                                dmc.ListItem(f"Type: {dc['type']}"),
+                                                                                                dmc.ListItem(f"Description: {dc['description']}"),
+                                                                                                dmc.ListItem(f"Creation time: {dc['creation_time']}"),
+                                                                                                dmc.ListItem(f"Last update time: {dc['last_update_time']}"),
+                                                                                            ]
+                                                                                        )
+                                                                                    ),
+                                                                                    dmc.Button("View Data", variant="outline", color="dark", style={"marginRight": 20}),
+                                                                                ],
+                                                                                align="center",
+                                                                                position="apart",
+                                                                                grow=False,
+                                                                                noWrap=False,
+                                                                                style={"width": "100%"},
+                                                                            ),
+                                                                            shadow="xs",
+                                                                            p="md",
+                                                                            style={"marginBottom": 20},
+                                                                        ),
+                                                                    ),
+                                                                ],
+                                                                value=f"{workflow['title']}-{dc['type']}",
+                                                            )
+                                                            for dc in workflow["data_collections"]
+                                                        ],
+                                                    ),
+                                                ]
+                                            )
+                                        ),
+                                    ],
+                                    value=workflow["title"],
+                                )
+                                for workflow in workflows
+                            ],
+                        ),
+                    ]
+                )
+            ),
+        ],
+        value=workflow["title"],
+    )
+
+
+def render_workflows_section(workflows, data):
+    return dmc.Accordion(children=[render_workflow_item(workflow, data) for workflow in workflows])
 
 
 @app.callback(
@@ -418,13 +556,11 @@ def redirect_to_dashboard(n_clicks, ids):
     [
         Input("url", "pathname"),
         Input("modal-store", "data"),
-        Input({"type": "view-dashboard-button", "index": ALL}, "n_clicks"),
     ],
 )
 def update_landing_page(
     pathname,
     data,
-    view_dashboard_clicks,
 ):
     print("\n")
     print("update_landing_page")
@@ -459,7 +595,7 @@ def update_landing_page(
                     dmc.Title("Your Dashboards", order=3),
                     render_dashboard_list_section(data["email"]),
                     dmc.Title("Your Workflows & Data Collections", order=3),
-                    render_workflows_section(workflows),
+                    render_workflows_section(workflows, data),
                 ]
             )
         # return html.Div("Please login to view this page.")

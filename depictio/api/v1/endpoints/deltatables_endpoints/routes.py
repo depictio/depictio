@@ -65,7 +65,7 @@ async def list_registered_files(
     return convert_objectid_to_str(deltatables)
 
 
-def read_table_for_DC_table(file_info, data_collection_config, deltaTable):
+def read_table_for_DC_table(file_info, data_collection_config_raw, deltaTable):
     """
     Read a table file and return a Polars DataFrame.
     """
@@ -77,6 +77,7 @@ def read_table_for_DC_table(file_info, data_collection_config, deltaTable):
     #     continue  # Skip already processed files
 
     file_path = file_info.file_location
+    data_collection_config = data_collection_config_raw["dc_specific_properties"]
 
     if data_collection_config["format"].lower() in ["csv", "tsv", "txt"]:
             # Read the file using polars
@@ -96,8 +97,17 @@ def read_table_for_DC_table(file_info, data_collection_config, deltaTable):
 
     # logger.info(df)
     raw_cols = df.columns
-    df = df.with_columns(pl.lit(file_info.run_id).alias("depictio_run_id"))
-    df = df.select(["depictio_run_id"] + raw_cols)
+    no_run_id = False
+    logger.info(f"data_collection_config : {data_collection_config_raw}")
+    if "metatype" in data_collection_config_raw:
+        logger.info(f'metatype : {data_collection_config_raw["metatype"]}')
+
+        if data_collection_config_raw["metatype"].lower() == "metadata":
+            logger.info("Metadata file detected")
+            no_run_id = True
+    if not no_run_id:
+        df = df.with_columns(pl.lit(file_info.run_id).alias("depictio_run_id"))
+        df = df.select(["depictio_run_id"] + raw_cols)
     # data_frames.append(df)
 
     # Update the file_info in MongoDB to mark it as processed
@@ -265,7 +275,6 @@ async def aggregate_data(
     files = [File.from_mongo(file) for file in files]
 
     # Create a DeltaTableAggregated object
-    # TODO: fix the data_dir - not working without due to Docker volumes
     destination_file_name = f"s3://{settings.minio.bucket}/{user_oid}/{workflow_oid}/{data_collection_oid}/"  # Destination path in MinIO
     # destination_file_name = f"{settings.minio.data_dir}/{settings.minio.bucket}/{user_oid}/{workflow_oid}/{data_collection_oid}/"  # Destination path in MinIO
     os.makedirs(destination_file_name, exist_ok=True)
@@ -292,7 +301,8 @@ async def aggregate_data(
     # Read each file and append to data_frames list for futher aggregation
     data_frames = []
     for file_info in files:
-        data_frames.append(read_table_for_DC_table(file_info, dc_config["dc_specific_properties"], deltatable))
+        logger.info(f"TESTTT : Reading file: {file_info.file_location}")
+        data_frames.append(read_table_for_DC_table(file_info, dc_config, deltatable))
 
     # Aggregate data
     if not data_frames:
@@ -300,6 +310,8 @@ async def aggregate_data(
             status_code=404,
             detail=f"No files found for data_collection: {data_collection_id} of workflow: {workflow_id}.",
         )
+
+    logger.info(f"data_frames : {data_frames}")
 
     # Aggregate the dataframes
     aggregated_df = pl.concat(data_frames)
@@ -311,20 +323,7 @@ async def aggregate_data(
     logger.info("aggregated_df")
     logger.info(aggregated_df)
 
-    # FIXME: solve the issue of writing to MinIO using polars
-    # TMP solution: write to Delta Lake locally and then upload to MinIO
-    # Write aggregated dataframe to Delta Lake
-
     aggregated_df.write_delta(destination_file_name, mode="overwrite", storage_options=minio_storage_options, delta_write_options={"overwrite_schema": "True"})
-    # aggregated_df.write_delta(destination_file_name, mode="overwrite", overwrite_schema=True, storage_options=minio_storage_options)
-
-    # Upload the Delta Lake to MinIO
-    # upload_dir_to_s3(
-    #     settings.minio.bucket,
-    #     f"{user_oid}/{workflow_oid}/{data_collection_oid}",
-    #     destination_file_name,
-    #     s3_client,
-    # )
 
     logger.info("Write complete to MinIO at destination: ", destination_file_name)
 
@@ -365,7 +364,6 @@ async def aggregate_data(
         )
     else:
         logger.info("Inserting new DeltaTableAggregated")
-        # FIXME: fix id & _id issue
         logger.info(serialize_for_mongo(deltatable))
         deltatables_collection.insert_one(serialize_for_mongo(deltatable))
 

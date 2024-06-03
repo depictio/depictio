@@ -28,7 +28,7 @@ services:
   minio:
     image: minio/minio:latest
     volumes:
-      - "./minio_data:/minio_data"
+      - "./minio_data:/data"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
@@ -49,7 +49,8 @@ services:
       - 3000:3000
       - 9010:9010
     volumes:
-      - "./jbrowse-watcher-plugin:/usr/src/plugin"
+    #   - "./jbrowse-watcher-plugin:/usr/src/plugin"
+      - "./jbrowse-watcher-plugin/sessions:/usr/src/jbrowse/plugin/sessions"
 
   depictio_frontend:
     image: depictio:dev
@@ -107,6 +108,7 @@ services:
       - ./jbrowse-watcher-plugin/sessions:/jbrowse-watcher-plugin/sessions
       - ./CLI_client/configs:/CLI_client/configs
       - ./dev:/app/dev
+      - ./.env:/app/.env
     depends_on:
       - mongo
       - minio
