@@ -17,10 +17,9 @@ from depictio.api.v1.configs.config import API_BASE_URL, TOKEN, logger
 from depictio.dash.layouts.draggable_scenarios.interactive_component_update import update_interactive_component
 from depictio.dash.layouts.stepper import create_stepper_output
 from depictio.dash.utils import (
-    analyze_structure_and_get_deepest_type,
-    join_deltatables,
-    load_depictio_data,
+    analyze_structure_and_get_deepest_type
 )
+from depictio.dash.layouts.draggable_scenarios.restore_dashboard import load_depictio_data
 
 
 # Depictio layout imports for stepper
@@ -62,6 +61,14 @@ def calculate_new_layout_position(child_type, existing_layouts, child_id, n):
         "i": child_id,
     }
 
+def remove_duplicates_by_index(components):
+    unique_components = {}
+    for component in components:
+        index = component["index"]
+        if index not in unique_components:
+            unique_components[index] = component
+    return list(unique_components.values())
+
 
 def register_callbacks_draggable(app):
     @app.callback(
@@ -76,6 +83,20 @@ def register_callbacks_draggable(app):
                 "index": ALL,
             },
             "n_clicks",
+        ),
+        State(
+            {
+                "type": "interactive-component-value",
+                "index": ALL,
+            },
+            "id",
+        ),
+        Input(
+            {
+                "type": "interactive-component-value",
+                "index": ALL,
+            },
+            "value",
         ),
         State("stored-add-button", "data"),
         State(
@@ -100,14 +121,19 @@ def register_callbacks_draggable(app):
         Input("stored-draggable-children", "data"),
         Input("stored-draggable-layouts", "data"),
         Input(
-            {"type": "remove-box-button", "index": dash.dependencies.ALL},
+            {"type": "remove-box-button", "index": ALL},
             "n_clicks",
         ),
         Input("remove-all-components-button", "n_clicks"),
+        State("toggle-interactivity-button", "checked"),
+        State("edit-dashboard-mode-button", "checked"),
+        Input("edit-dashboard-mode-button", "checked"),
         prevent_initial_call=True,
     )
     def populate_draggable(
         btn_done_clicks,
+        interactive_component_ids,
+        interactive_component_values,
         stored_add_button,
         stored_metadata,
         test_container,
@@ -120,6 +146,9 @@ def register_callbacks_draggable(app):
         input_stored_draggable_layouts,
         remove_box_button_values,
         remove_all_components_button,
+        toggle_interactivity_button,
+        edit_dashboard_mode_button,
+        input_edit_dashboard_mode_button,
     ):
         logger.info("btn_done_clicks: {}".format(btn_done_clicks))
         logger.info("stored_add_button: {}".format(stored_add_button))
@@ -127,22 +156,70 @@ def register_callbacks_draggable(app):
         ctx = dash.callback_context
 
         logger.info("CTX: {}".format(ctx))
-        logger.info("CTX triggered: {}".format(ctx.triggered))
+        # logger.info("CTX triggered: {}".format(ctx.triggered))
         logger.info("CTX triggered_id: {}".format(ctx.triggered_id))
         logger.info("TYPE CTX triggered_id: {}".format(type(ctx.triggered_id)))
         logger.info("CTX triggered_props_id: {}".format(ctx.triggered_prop_ids))
-        logger.info("CTX args_grouping: {}".format(ctx.args_grouping))
-        logger.info("CTX inputs: {}".format(ctx.inputs))
-        logger.info("CTX inputs_list: {}".format(ctx.inputs_list))
-        logger.info("CTX states: {}".format(ctx.states))
-        logger.info("CTX states_list: {}".format(ctx.states_list))
+        # logger.info("CTX args_grouping: {}".format(ctx.args_grouping))
+        # logger.info("CTX inputs: {}".format(ctx.inputs))
+        # logger.info("CTX inputs_list: {}".format(ctx.inputs_list))
+        # logger.info("CTX states: {}".format(ctx.states))
+        # logger.info("CTX states_list: {}".format(ctx.states_list))
 
         if isinstance(ctx.triggered_id, dict):
             triggered_input = ctx.triggered_id["type"]
+            triggered_input_dict = ctx.triggered_id
         elif isinstance(ctx.triggered_id, str):
             triggered_input = ctx.triggered_id
         logger.info("triggered_input : {}".format(triggered_input))
         logger.info("type of triggered_input: {}".format(type(triggered_input)))
+
+
+        # Check if the value of the interactive component is not None
+        check_value = False
+        # remove duplicate of stored_metadata based on index  
+        index_list = []
+
+        # FIXME: Remove duplicates from stored_metadata
+        # Remove duplicates from stored_metadata
+        logger.info("Stored metadata: {}".format(stored_metadata))
+        logger.info(f"Length of stored metadata: {len(stored_metadata)}")
+        stored_metadata = remove_duplicates_by_index(stored_metadata)
+        logger.info("CLEANED Stored metadata: {}".format(stored_metadata))
+        logger.info(f"Length of cleaned stored metadata: {len(stored_metadata)}")
+
+
+
+        logger.info("Interactive component values: {}".format(interactive_component_values))
+        logger.info("Interactive component ids: {}".format(interactive_component_ids))
+        stored_metadata_interactive = [e for e in stored_metadata if e["component_type"] == "interactive"]
+
+        interactive_components_dict = {
+            id["index"]: {"value": value, "metadata": metadata}
+            for (id, value, metadata) in zip(
+                interactive_component_ids,
+                interactive_component_values,
+                stored_metadata_interactive,
+            )
+        }
+        logger.info(f"Interactive components dict: {interactive_components_dict}")
+
+        if triggered_input == "interactive-component":
+            if interactive_components_dict:
+
+                logger.info(f"Interactive component triggered input: {triggered_input}")
+                logger.info(f"Interactive components dict: {interactive_components_dict}")
+                triggered_input_eval_index = int(triggered_input_dict["index"])
+                logger.info(f"Triggered input eval index: {triggered_input_eval_index}")
+                if triggered_input_eval_index in interactive_components_dict:
+                    value = interactive_components_dict[triggered_input_eval_index]["value"]
+                    logger.info(f"Value: {value}")
+                    # Handle the case of the TextInput component
+                    if interactive_components_dict[triggered_input_eval_index]["metadata"]["interactive_component_type"] != "TextInput":
+                        check_value = True if value is not None else False
+                    else:
+                        check_value = True if value is not "" else False
+                    logger.info(f"Check value: {check_value}")
 
         # # if triggered_input["type"] == "btn-done":
         if triggered_input == "btn-done":
@@ -154,8 +231,8 @@ def register_callbacks_draggable(app):
             logger.info("Populate draggable")
 
             logger.info("stored_metadata: {}".format(stored_metadata))
-            logger.info("stored_children: {}".format(test_container))
-            logger.info("draggable_children: {}".format(draggable_children))
+            # logger.info("stored_children: {}".format(test_container))
+            # logger.info("draggable_children: {}".format(draggable_children))
             logger.info("draggable_layouts: {}".format(draggable_layouts))
 
             existing_ids = {child["props"]["id"] for child in draggable_children}
@@ -171,7 +248,7 @@ def register_callbacks_draggable(app):
                     draggable_layouts[bp] = []
 
             for child in test_container:
-                logger.info(f"Child: {child}")
+                # logger.info(f"Child: {child}")
                 child_index = int(child["props"]["id"]["index"])
                 child_type = child["props"]["id"]["type"]
                 logger.info(f"Child index: {child_index}")
@@ -200,7 +277,7 @@ def register_callbacks_draggable(app):
                         draggable_layouts[key].append(new_layout_item)
                     n += 1
 
-            logger.info(f"Updated draggable children: {draggable_children}")
+            # logger.info(f"Updated draggable children: {draggable_children}")
             logger.info(f"Updated draggable layouts: {draggable_layouts}")
             return draggable_children, draggable_layouts, draggable_children, draggable_layouts
         #     else:
@@ -215,6 +292,23 @@ def register_callbacks_draggable(app):
                 return draggable_children, new_layouts, draggable_children, new_layouts
             else:
                 return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+        elif "interactive-component" in triggered_input:
+            logger.info("Interactive component triggered")
+            logger.info("Interactive component values: {}".format(interactive_component_values))
+
+            new_children = update_interactive_component(stored_metadata, interactive_components_dict, draggable_children, switch_state=edit_dashboard_mode_button)
+            return new_children, dash.no_update, new_children, dash.no_update
+
+        elif "edit-dashboard-mode-button" in triggered_input:
+            logger.info(f"Edit dashboard mode button triggered: {edit_dashboard_mode_button}")
+            new_children = list()
+            # logger.info("Current draggable children: {}".format(draggable_children))
+            logger.info("Len Current draggable children: {}".format(len(draggable_children)))
+            for child in draggable_children:
+                child = enable_box_edit_mode(child["props"]["children"][-1], edit_dashboard_mode_button)
+                new_children.append(child)
+            return new_children, dash.no_update, new_children, dash.no_update
 
         elif triggered_input == "stored-draggable-children":
             if state_stored_draggable_layouts and state_stored_draggable_children:
@@ -234,9 +328,9 @@ def register_callbacks_draggable(app):
             logger.info("Input ID: {}".format(input_id))
 
             # Use list comprehension to filter
-            logger.info("Current draggable children: {}".format(draggable_children))
+            # logger.info("Current draggable children: {}".format(draggable_children))
             updated_children = [child for child in draggable_children if child["props"]["id"] != f"box-{input_id}"]
-            logger.info("Updated draggable children: {}".format(updated_children))
+            # logger.info("Updated draggable children: {}".format(updated_children))
 
             return updated_children, draggable_layouts, updated_children, draggable_layouts
 
@@ -951,7 +1045,7 @@ def design_draggable(data, init_layout, init_children):
 
     if not workflows:
         # When there are no workflows, log information and prepare a message
-        logger.info(f"init_children {init_children}")
+        # logger.info(f"init_children {init_children}")
         logger.info(f"init_layout {init_layout}")
         # message = html.Div(["No workflows available."])
         message = html.Div(

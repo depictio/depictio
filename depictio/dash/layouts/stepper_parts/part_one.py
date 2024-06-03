@@ -8,7 +8,8 @@ import httpx
 import yaml
 import dash_ag_grid as dag
 
-from depictio.dash.utils import list_workflows, join_deltatables, get_columns_from_data_collection, load_deltatable_lite, return_mongoid
+from depictio.dash.utils import list_workflows, get_columns_from_data_collection, return_mongoid
+from depictio.api.v1.deltatables_utils import load_deltatable_lite
 from depictio.api.v1.configs.config import API_BASE_URL, TOKEN, logger
 
 
@@ -179,12 +180,21 @@ def register_callbacks_stepper_part_one(app):
 
             layout = [dc_main_info, html.Hr(), main_info, html.Hr()]
             if dc_specs["config"]["type"] == "Table":
-                df = load_deltatable_lite(workflow_id, data_collection_id, raw=True)
+                df = load_deltatable_lite(workflow_id, data_collection_id)
                 cols = get_columns_from_data_collection(workflow_selection, data_collection_selection)
-                columnDefs = [{"field": c, "headerTooltip": f"Column type: {e['type']}"} for c, e in cols.items()]
+                logger.info(f"Columns: {cols}")
+                columnDefs = [{"field": c, "headerTooltip": f"Type: {e['type']}"} for c, e in cols.items()]
+                
+                # if description in col sub dict, update headerTooltip
+                for col in columnDefs:
+                    if "description" in cols[col["field"]] and cols[col["field"]]["description"] is not None:
+                        col["headerTooltip"] = f"{col['headerTooltip']}\nDescription: {cols[col['field']]['description']}"
 
-                run_nb = cols["depictio_run_id"]["specs"]["nunique"]
-                run_nb_title = dmc.Title(f"Run Nb : {run_nb}", order=3, align="left", weight=500)
+                if "depictio_run_id" in cols:
+                    run_nb = cols["depictio_run_id"]["specs"]["nunique"]
+                    run_nb_title = dmc.Title(f"Run Nb : {run_nb}", order=3, align="left", weight=500)
+                else:
+                    run_nb_title = dmc.Title("Run Nb : 0", order=3, align="left", weight=500)
 
                 data_previz_title = dmc.Title("Data previsualization", order=3, align="left", weight=500)
                 config_title = dmc.Title("Data collection configuration", order=3, align="left", weight=500)
@@ -192,7 +202,8 @@ def register_callbacks_stepper_part_one(app):
                 # cellClicked, cellDoubleClicked, cellRendererData, cellValueChanged, className, columnDefs, columnSize, columnSizeOptions, columnState, csvExportParams, dangerously_allow_code, dashGridOptions, defaultColDef, deleteSelectedRows, deselectAll, detailCellRendererParams, enableEnterpriseModules, exportDataAsCsv, filterModel, getDetailRequest, getDetailResponse, getRowId, getRowStyle, getRowsRequest, getRowsResponse, id, licenseKey, masterDetail, paginationGoTo, paginationInfo, persisted_props, persistence, persistence_type, resetColumnState, rowClass, rowClassRules, rowData, rowModelType, rowStyle, rowTransaction, scrollTo, selectAll, selectedRows, style, suppressDragLeaveHidesColumns, updateColumnState, virtualRowData
                 grid = dag.AgGrid(
                     id="get-started-example-basic",
-                    rowData=df.head(2000).to_dict("records"),
+                    # FIXME : full polars
+                    rowData=df.head(2000).to_pandas().to_dict("records"),
                     columnDefs=columnDefs,
                     dashGridOptions={
                         "tooltipShowDelay": 500,
@@ -273,6 +284,7 @@ def register_callbacks_stepper_part_one(app):
             component_selected,
             size="xl",
             radius="xl",
+            style={"fontFamily": "Virgil"},
             color=component_metadata_dict[component_selected]["color"],
             leftSection=DashIconify(icon=component_metadata_dict[component_selected]["icon"], width=15, color=component_metadata_dict[component_selected]["color"]),
         )

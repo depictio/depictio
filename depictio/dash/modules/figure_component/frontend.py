@@ -12,7 +12,7 @@ import plotly.express as px
 import re
 from dash_iconify import DashIconify
 import ast
-from depictio.dash.utils import join_deltatables, list_workflows, load_deltatable_lite, return_mongoid
+from depictio.dash.utils import list_workflows, return_mongoid
 from depictio.dash.utils import (
     SELECTED_STYLE,
     UNSELECTED_STYLE,
@@ -21,8 +21,11 @@ from depictio.dash.utils import (
     get_columns_from_data_collection,
 )
 
+from depictio.api.v1.configs.config import logger
 # Depictio imports
 from depictio.dash.modules.figure_component.utils import (
+    build_figure,
+    build_figure_frame,
     specific_params,
     param_info,
     plotly_bootstrap_mapping,
@@ -463,11 +466,9 @@ def register_callbacks_figure_component(app):
     #     return [output_div]
 
     @app.callback(
-        [
-            # Output({"type": "graph", "index": MATCH}, "figure"),
-            # Output({"type": "stored-metadata-component", "index": MATCH}, "data"),
-            Output({"type": "figure-body", "index": MATCH}, "children"),
-        ],
+        # Output({"type": "graph", "index": MATCH}, "figure"),
+        # Output({"type": "stored-metadata-component", "index": MATCH}, "data"),
+        Output({"type": "figure-body", "index": MATCH}, "children"),
         [
             Input({"type": "dict_kwargs", "index": MATCH}, "data"),
             Input({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
@@ -553,11 +554,13 @@ def register_callbacks_figure_component(app):
             headers=headers,
         )
 
-        if join_tables_for_wf.status_code == 200:
-            join_tables_for_wf = join_tables_for_wf.json()
-            if data_collection_id in join_tables_for_wf:
-                join_details = join_tables_for_wf[data_collection_id]
-                dc_specs["config"]["join"] = join_details
+        # if join_tables_for_wf.status_code == 200:
+        #     join_tables_for_wf = join_tables_for_wf.json()
+        #     if data_collection_id in join_tables_for_wf:
+        #         join_details = join_tables_for_wf[data_collection_id]
+        #         dc_specs["config"]["join"] = join_details
+            
+
         # print("dc_specs")
         # print(dc_specs)
         # print(visu_type)
@@ -572,59 +575,77 @@ def register_callbacks_figure_component(app):
         # except:
         #     pass
 
-        store_component_data = {
-            "index": id["index"],
-            "component_type": "graph",
-            "dict_kwargs": dict_kwargs,
-            "visu_type": visu_type,
-            "wf_id": workflow_id,
-            "dc_id": data_collection_id,
-            "dc_config": dc_specs["config"],
-        }
-        # print(store_component_data)
+        # store_component_data = {
+        #     "index": id["index"],
+        #     "component_type": "graph",
+        #     "dict_kwargs": dict_kwargs,
+        #     "visu_type": visu_type,
+        #     "wf_id": workflow_id,
+        #     "dc_id": data_collection_id,
+        #     "dc_config": dc_specs["config"],
+        # }
+        # # print(store_component_data)
 
-        # print(dict_kwargs)
-        dict_kwargs = {k: v for k, v in dict_kwargs.items() if v is not None}
-        wf_id, dc_id = return_mongoid(workflow_tag=workflow, data_collection_tag=data_collection)
-        df = load_deltatable_lite(wf_id, dc_id)
+        # # print(dict_kwargs)
+        # dict_kwargs = {k: v for k, v in dict_kwargs.items() if v is not None}
+        # wf_id, dc_id = return_mongoid(workflow_tag=workflow, data_collection_tag=data_collection)
+        # df = load_deltatable_lite(wf_id, dc_id)
 
-        # print("df")
-        # print(df)
-        # print("\n\n\n")
-        # print(dict_kwargs)
-        if dict_kwargs:
-            figure = plotly_vizu_dict[visu_type.lower()](df, **dict_kwargs)
-            # figure = px.scatter(df, **dict_kwargs)
-            # print(figure)
-            # figure.update_layout(uirevision=1)
-            # print("TOTO")
+        # # print("df")
+        # # print(df)
+        # # print("\n\n\n")
+        # # print(dict_kwargs)
+        # if dict_kwargs:
+        #     figure = plotly_vizu_dict[visu_type.lower()](df, **dict_kwargs)
+        #     # figure = px.scatter(df, **dict_kwargs)
+        #     # print(figure)
+        #     # figure.update_layout(uirevision=1)
+        #     # print("TOTO")
 
-            # return [figure]
+        #     # return [figure]
 
-            return [html.Div([
-                dcc.Graph(
-                    # figure,
-                    figure=figure,
-                    id={"type": "graph", "index": id["index"]},
-                    config={"editable": True, "scrollZoom": True},
-                ),
-                # f"TEST-GRAPH-{id['index']}",
-                dcc.Store(
-                    data=store_component_data,
-                    id={
-                        "type": "stored-metadata-component",
-                        "index": id["index"],
-                    },
-                ),
-            ])]
+        #     return html.Div(
+        #         [
+        #             dcc.Graph(
+        #                 # figure,
+        #                 figure=figure,
+        #                 id={"type": "graph", "index": id["index"]},
+        #                 config={"editable": True, "scrollZoom": True},
+        #             ),
+        #             # f"TEST-GRAPH-{id['index']}",
+        #             dcc.Store(
+        #                 data=store_component_data,
+        #                 id={
+        #                     "type": "stored-metadata-component",
+        #                     "index": id["index"],
+        #                 },
+        #             ),
+        #         ]
+        #     )
         # else:
         #     raise dash.exceptions.PreventUpdate
         # print("\n")
 
         # accordion_specific_params = args[0][3]
-        else:
-            return dash.no_update, dash.no_update
+        # else:
+        #     return dash.no_update, dash.no_update
 
+
+
+
+        if dict_kwargs:
+            figure_kwargs = {
+                "index": id["index"],
+                "dict_kwargs": dict_kwargs,
+                "visu_type": visu_type,
+                "wf_id": workflow_id,
+                "dc_id": data_collection_id,
+                "dc_config": dc_specs["config"],
+                "visu_type": visu_type,
+            }
+            return build_figure(**figure_kwargs)
+        else:
+            raise dash.exceptions.PreventUpdate
 
 def design_figure(id):
     figure_row = [
@@ -660,19 +681,20 @@ def design_figure(id):
                         #     }
                         # ),
                         html.Div(
-                            dbc.Card(
-                                dbc.CardBody(
-                                    id={
-                                        "type": "figure-body",
-                                        "index": id["index"],
-                                    }
-                                ),
-                                style={"width": "100%"},
-                                id={
-                                    "type": "figure-component",
-                                    "index": id["index"],
-                                },
-                            ),
+                            build_figure_frame(index=id["index"]),
+                            # dbc.Card(
+                            #     dbc.CardBody(
+                            #         id={
+                            #             "type": "figure-body",
+                            #             "index": id["index"],
+                            #         }
+                            #     ),
+                            #     style={"width": "100%"},
+                            #     id={
+                            #         "type": "figure-component",
+                            #         "index": id["index"],
+                            #     },
+                            # ),
                             id={
                                 "type": "component-container",
                                 "index": id["index"],
