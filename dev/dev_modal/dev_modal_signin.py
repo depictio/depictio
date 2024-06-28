@@ -10,76 +10,6 @@ from dash_iconify import DashIconify
 from dash import MATCH, ALL, ctx
 
 
-# workflows = [
-#     {
-#         "title": "nf-core/rnaseq",
-#         "creation_time": "2023-01-15 08:30:00",
-#         "last_modified": "2023-10-01 14:23:08",
-#         "status": "Completed",
-#         "data_collections": [
-#             {
-#                 "type": "Table",
-#                 "title": "Gene Expression Levels",
-#                 "description": "Differential expression analysis across samples and conditions, presented in a comprehensive table format.",
-#                 "creation_time": "2023-01-16 09:00:00",
-#                 "last_update_time": "2023-09-30 10:00:00",
-#             },
-#             {
-#                 "type": "Graph",
-#                 "title": "Expression Peaks",
-#                 "description": "Graphical representation of expression peaks over time.",
-#                 "creation_time": "2023-01-16 10:00:00",
-#                 "last_update_time": "2023-09-30 11:00:00",
-#             },
-#         ],
-#     },
-#     {
-#         "title": "galaxy/folding@home",
-#         "creation_time": "2023-02-01 07:20:00",
-#         "last_modified": "2023-09-20 11:15:42",
-#         "status": "In Progress",
-#         "data_collections": [
-#             {
-#                 "type": "JBrowse",
-#                 "title": "Protein Interaction Maps",
-#                 "description": "Interactive JBrowse map showcasing protein interactions.",
-#                 "creation_time": "2023-02-02 08:00:00",
-#                 "last_update_time": "2023-09-19 12:00:00",
-#             },
-#             {
-#                 "type": "Graph",
-#                 "title": "Folding Rate Analysis",
-#                 "description": "Analysis of protein folding rates over time displayed graphically.",
-#                 "creation_time": "2023-02-02 09:30:00",
-#                 "last_update_time": "2023-09-19 13:00:00",
-#             },
-#         ],
-#     },
-#     {
-#         "title": "nf-core/ampliseq",
-#         "creation_time": "2023-03-05 06:45:00",
-#         "last_modified": "2023-10-02 09:02:55",
-#         "status": "Completed",
-#         "data_collections": [
-#             {
-#                 "type": "Geomap",
-#                 "title": "Sample Collection Locations",
-#                 "description": "Geographical map of sample collection sites for environmental data.",
-#                 "creation_time": "2023-03-06 10:15:00",
-#                 "last_update_time": "2023-10-01 14:00:00",
-#             },
-#             {
-#                 "type": "Table",
-#                 "title": "Environmental Metrics",
-#                 "description": "Detailed metrics and environmental data collated in tabular form.",
-#                 "creation_time": "2023-03-06 11:20:00",
-#                 "last_update_time": "2023-10-01 15:30:00",
-#             },
-#         ],
-#     },
-# ]
-
-
 dashboards = []
 workflows = []
 
@@ -116,67 +46,6 @@ app.layout = html.Div(
         html.Div(id="landing-page", style={"display": "none"}),  # Initially hidden
     ]
 )
-
-
-def render_workflow_item(workflow):
-    return dmc.AccordionItem(
-        [
-            dmc.AccordionControl(dmc.Title(workflow["title"], order=5)),
-            dmc.AccordionPanel(
-                dmc.Container(
-                    [
-                        dmc.Text(f"Last Modified: {workflow['last_modified']}"),
-                        dmc.Text(f"Status: {workflow['status']}"),
-                        dmc.Divider(style={"margin": "20px 0"}),
-                        dmc.Title("Data Collections", order=4),
-                        dmc.Accordion(
-                            children=[
-                                dmc.AccordionItem(
-                                    [
-                                        dmc.AccordionControl(dmc.Title(dc["title"], order=5)),
-                                        dmc.AccordionPanel(
-                                            dmc.Paper(
-                                                dmc.Group(
-                                                    [
-                                                        html.Div(
-                                                            dmc.List(
-                                                                [
-                                                                    dmc.ListItem(f"Type: {dc['type']}"),
-                                                                    dmc.ListItem(f"Description: {dc['description']}"),
-                                                                    dmc.ListItem(f"Creation time: {dc['creation_time']}"),
-                                                                    dmc.ListItem(f"Last update time: {dc['last_update_time']}"),
-                                                                ]
-                                                            )
-                                                        ),
-                                                        dmc.Button("View Data", variant="outline", color="dark", style={"marginRight": 20}),
-                                                    ],
-                                                    # align="center",
-                                                    position="apart",
-                                                    grow=False,
-                                                    noWrap=False,
-                                                    style={"width": "100%"},
-                                                ),
-                                                shadow="xs",
-                                                p="md",
-                                                style={"marginBottom": 20},
-                                            ),
-                                        ),
-                                    ],
-                                    value=f"{workflow['title']}-{dc['type']}",
-                                )
-                                for dc in workflow["data_collections"]
-                            ],
-                        ),
-                    ]
-                )
-            ),
-        ],
-        value=workflow["title"],  # Ensure each AccordionItem has a unique value
-    )
-
-
-def render_workflows_section(workflows, data):
-    return dmc.Accordion(children=[render_workflow_item(workflow) for workflow in workflows])
 
 
 @app.callback([Output("submit-button", "disabled"), Output("email-input", "error")], [Input("email-input", "value")])
@@ -300,11 +169,11 @@ def create_dashboards_view(dashboards):
 
 
 @app.callback(
-    [Output({"type": "dashboard-list", "index": MATCH}, "children"), Output({"type": "dashboard-index-store", "value": MATCH}, "data")],
+    [Output({"type": "dashboard-list", "index": MATCH}, "children"), Output({"type": "dashboard-index-store", "index": MATCH}, "data")],
     [
         Input({"type": "create-dashboard-button", "index": MATCH}, "n_clicks"),
         State({"type": "create-dashboard-button", "index": MATCH}, "id"),
-        State({"type": "dashboard-index-store", "value": MATCH}, "data"),
+        State({"type": "dashboard-index-store", "index": MATCH}, "data"),
         # Input({"type": "dashboard-index-store", "index": MATCH}, "data"),
     ],
     # prevent_initial_call=True,
@@ -383,7 +252,7 @@ def render_welcome_section(email):
                     size="xl",
                 )
             ),
-            dcc.Store(id={"type": "dashboard-index-store", "value": email}, storage_type="session", data={"next_index": 1}),  # Store for dashboard index management
+            dcc.Store(id={"type": "dashboard-index-store", "index": email}, storage_type="session", data={"next_index": 1}),  # Store for dashboard index management
             # dcc.Store(id={"type": "dashboards-store", "index": email}, storage_type="session", data={"dashboards": []}),  # Store to cache workflows
             dmc.Divider(style={"margin": "20px 0"}),
         ]
@@ -392,163 +261,6 @@ def render_welcome_section(email):
 
 def render_dashboard_list_section(email):
     return html.Div(id={"type": "dashboard-list", "index": email}, style={"padding": "20px"})
-
-
-def render_data_collection_item(data_collection):
-    return dmc.AccordionItem(
-        [
-            dmc.AccordionControl(dmc.Title(data_collection["title"], order=5)),
-            dmc.AccordionPanel(
-                dmc.Paper(
-                    dmc.Group(
-                        [
-                            html.Div(
-                                dmc.List(
-                                    [
-                                        dmc.ListItem(f"Type: {data_collection['type']}"),
-                                        dmc.ListItem(f"Description: {data_collection['description']}"),
-                                        dmc.ListItem(f"Creation time: {data_collection['creation_time']}"),
-                                        dmc.ListItem(f"Last update time: {data_collection['last_update_time']}"),
-                                    ]
-                                )
-                            ),
-                            dmc.Button("View Data", variant="outline", color="dark", style={"marginRight": 20}),
-                        ],
-                        align="center",
-                        position="apart",
-                        grow=False,
-                        noWrap=False,
-                        style={"width": "100%"},
-                    ),
-                    shadow="xs",
-                    p="md",
-                    style={"marginBottom": 20},
-                ),
-            ),
-        ],
-        value=f"{data_collection['title']}-{data_collection['type']}",
-    )
-
-
-def render_workflow_item(workflow, data):
-    return dmc.AccordionItem(
-        [
-            dmc.AccordionControl(dmc.Title(workflow["title"], order=5)),
-            dmc.AccordionPanel(
-                dmc.Container(
-                    [
-                        dmc.Title(f"Welcome, {data['email']}!", order=2, align="center"),
-                        dmc.Center(
-                            dmc.Button(
-                                "+ Create New Dashboard",
-                                id="create-dashboard-button",
-                                variant="gradient",
-                                gradient={"from": "black", "to": "grey", "deg": 135},
-                                style={"margin": "20px 0", "fontFamily": "Virgil"},
-                                size="xl",
-                            )
-                        ),
-                        dmc.Divider(style={"margin": "20px 0"}),
-                        dmc.Title("Your Dashboards", order=3),
-                        html.Div(
-                            [
-                                dmc.Paper(
-                                    dmc.Group(
-                                        [
-                                            html.Div(
-                                                [
-                                                    dmc.Title(d["title"], order=5),
-                                                    dmc.Text(f"Last Modified: {d['last_modified']}"),
-                                                    dmc.Text(f"Status: {d['status']}"),
-                                                ],
-                                                style={"flex": "1"},
-                                            ),
-                                            dmc.Button("View Dashboard", variant="outline", color="dark", style={"marginRight": 20}),
-                                        ],
-                                        align="center",
-                                        position="apart",
-                                        grow=False,
-                                        noWrap=False,
-                                        style={"width": "100%"},
-                                    ),
-                                    shadow="xs",
-                                    p="md",
-                                    style={"marginBottom": 20},
-                                )
-                                for d in dashboards
-                            ],
-                            style={"padding": "20px"},
-                        ),
-                        dmc.Title("Your Workflows & Data Collections", order=3),
-                        dmc.Accordion(
-                            children=[
-                                dmc.AccordionItem(
-                                    [
-                                        dmc.AccordionControl(dmc.Title(workflow["title"], order=5)),
-                                        dmc.AccordionPanel(
-                                            dmc.Container(
-                                                [
-                                                    dmc.Text(f"Last Modified: {workflow['last_modified']}"),
-                                                    dmc.Text(f"Status: {workflow['status']}"),
-                                                    dmc.Divider(style={"margin": "20px 0"}),
-                                                    dmc.Title("Data Collections", order=4),
-                                                    dmc.Accordion(
-                                                        children=[
-                                                            dmc.AccordionItem(
-                                                                [
-                                                                    dmc.AccordionControl(dmc.Title(dc["title"], order=5)),
-                                                                    dmc.AccordionPanel(
-                                                                        dmc.Paper(
-                                                                            dmc.Group(
-                                                                                [
-                                                                                    html.Div(
-                                                                                        dmc.List(
-                                                                                            [
-                                                                                                dmc.ListItem(f"Type: {dc['type']}"),
-                                                                                                dmc.ListItem(f"Description: {dc['description']}"),
-                                                                                                dmc.ListItem(f"Creation time: {dc['creation_time']}"),
-                                                                                                dmc.ListItem(f"Last update time: {dc['last_update_time']}"),
-                                                                                            ]
-                                                                                        )
-                                                                                    ),
-                                                                                    dmc.Button("View Data", variant="outline", color="dark", style={"marginRight": 20}),
-                                                                                ],
-                                                                                align="center",
-                                                                                position="apart",
-                                                                                grow=False,
-                                                                                noWrap=False,
-                                                                                style={"width": "100%"},
-                                                                            ),
-                                                                            shadow="xs",
-                                                                            p="md",
-                                                                            style={"marginBottom": 20},
-                                                                        ),
-                                                                    ),
-                                                                ],
-                                                                value=f"{workflow['title']}-{dc['type']}",
-                                                            )
-                                                            for dc in workflow["data_collections"]
-                                                        ],
-                                                    ),
-                                                ]
-                                            )
-                                        ),
-                                    ],
-                                    value=workflow["title"],
-                                )
-                                for workflow in workflows
-                            ],
-                        ),
-                    ]
-                )
-            ),
-        ],
-        value=workflow["title"],
-    )
-
-
-def render_workflows_section(workflows, data):
-    return dmc.Accordion(children=[render_workflow_item(workflow, data) for workflow in workflows])
 
 
 @app.callback(
@@ -594,8 +306,6 @@ def update_landing_page(
                     render_welcome_section(data["email"]),
                     dmc.Title("Your Dashboards", order=3),
                     render_dashboard_list_section(data["email"]),
-                    dmc.Title("Your Workflows & Data Collections", order=3),
-                    render_workflows_section(workflows, data),
                 ]
             )
         # return html.Div("Please login to view this page.")
