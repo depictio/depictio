@@ -8,7 +8,7 @@ import subprocess
 from bson import ObjectId
 from fastapi import HTTPException, Depends, APIRouter
 import boto3
-import pika
+# import pika
 
 from botocore.exceptions import NoCredentialsError
 from depictio.api.v1.endpoints.files_endpoints.models import File
