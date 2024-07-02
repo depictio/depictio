@@ -169,60 +169,14 @@ def create_dashboards_view(dashboards):
     return dashboards_view
 
 
-# @app.callback(
-#     [
-#         Output({"type": "dashboard-list", "index": MATCH}, "children"),
-#         Output({"type": "dashboard-index-store", "index": MATCH}, "data")
-#     ],
-#     [
-#         Input({"type": "create-dashboard-button", "index": MATCH}, "n_clicks"),
-#         Input({"type": "confirm-delete", "index": MATCH}, "n_clicks")
-#     ],
-#     [
-#         State({"type": "create-dashboard-button", "index": MATCH}, "id"),
-#         State({"type": "confirm-delete", "index": MATCH}, "index"),
-#         State({"type": "dashboard-index-store", "index": MATCH}, "data")
-#     ],
-#     prevent_initial_call=True
-# )
-# def manage_dashboards(create_clicks, delete_clicks, create_id, delete_index, index_data, filepath="dashboards.json"):
-#     if not ctx.triggered:
-#         raise dash.exceptions.PreventUpdate
-
-#     trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
-
-#     # Load existing dashboards
-#     index_data = load_dashboards_from_file(filepath)
-#     dashboards = index_data.get("dashboards", [])
-
-#     if trigger_id == "create-dashboard-button":
-#         if create_clicks:
-#             next_index = index_data.get("next_index", 1)
-#             new_dashboard = {
-#                 "title": f"Dashboard {next_index}",
-#                 "last_modified": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-#                 "version": "V1",
-#                 "owner": create_id["index"],
-#                 "index": next_index,
-#             }
-
-#             dashboards.append(new_dashboard)
-#             index_data = {"next_index": next_index + 1, "dashboards": dashboards}
-#             save_dashboards_to_file(index_data, filepath)
-
-#     elif trigger_id == "confirm-delete":
-#         if delete_clicks:
-#             dashboards = [dashboard for dashboard in dashboards if dashboard["index"] != delete_index]
-#             index_data = {"next_index": index_data["next_index"], "dashboards": dashboards}
-#             save_dashboards_to_file(index_data, filepath)
-
-#     dashboards_view = create_dashboards_view(dashboards)
-#     return dashboards_view, index_data
-
 
 @app.callback(
     [Output({"type": "dashboard-list", "index": ALL}, "children"), Output({"type": "dashboard-index-store", "index": ALL}, "data")],
-    [Input({"type": "create-dashboard-button", "index": ALL}, "n_clicks"), Input({"type": "confirm-delete", "index": ALL}, "n_clicks")],
+    [
+        Input({"type": "create-dashboard-button", "index": ALL}, "n_clicks"),
+        Input({"type": "confirm-delete", "index": ALL}, "n_clicks"),
+        # Input({"type": "cancel-delete", "index": ALL}, "n_clicks"),
+    ],
     [
         State({"type": "create-dashboard-button", "index": ALL}, "id"),
         State({"type": "dashboard-index-store", "index": ALL}, "data"),
@@ -233,6 +187,7 @@ def create_dashboards_view(dashboards):
 def update_dashboards(
     create_n_clicks_list,
     delete_n_clicks_list,
+    # cancel_n_clicks_list,
     create_ids_list,
     store_data_list,
     delete_ids_list,
@@ -300,199 +255,18 @@ def update_dashboards(
     return [dashboards_view] * len(create_n_clicks_list), [new_index_data] * len(create_n_clicks_list)
 
 
-# @app.callback(
-#     [Output({"type": "dashboard-list", "index": MATCH}, "children"), Output({"type": "dashboard-index-store", "index": MATCH}, "data")],
-#     # [Output({"type": "dashboard-list", "index": MATCH}, "children"), Output({"type": "dashboard-index-store", "index": MATCH}, "data")],
-#     [
-#         Input({"type": "create-dashboard-button", "index": MATCH}, "n_clicks"),
-#         State({"type": "create-dashboard-button", "index": MATCH}, "id"),
-#         # State({"type": "dashboard-index-store", "index": MATCH}, "data"),
-#         # Input({"type": "dashboard-index-store", "index": MATCH}, "data"),
-#     ],
-#     # prevent_initial_call=True,
-# )
-# def create_dashboard(n_clicks, id, filepath="dashboards.json"):
-#     # if not n_clicks:
-#     #     return dash.dash.no_update, dash.dash.no_update
-
-#     # Load existing dashboards
-#     index_data = load_dashboards_from_file(filepath)
-
-#     # Assuming index_data also stores a list of dashboards
-#     dashboards = index_data.get("dashboards", [])
-
-#     if n_clicks:
-#         next_index = index_data.get("next_index", 1)  # Default to 1 if not found
-
-#         # Creating a new dashboard entry
-#         new_dashboard = {
-#             "title": f"Dashboard {next_index}",
-#             "last_modified": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-#             "version": "V1",
-#             "owner": id["index"],
-#             "index": next_index,
-#         }
-
-#         dashboards.append(new_dashboard)
-
-#         # Updating the store data to include the new list of dashboards and the incremented index
-#         new_index_data = {"next_index": next_index + 1, "dashboards": dashboards}
-#         save_dashboards_to_file(new_index_data, filepath)
-
-#     # elif triggered_input
-
-#     else:
-#         new_index_data = index_data
-
-#     # Creating views for each dashboard
-#     dashboards_view = create_dashboards_view(dashboards)
-
-#     return dashboards_view, new_index_data
-
-
-# @app.callback(
-#     [
-#         Output({"type": "dashboard-index-store", "index": MATCH}, "data", allow_duplicate=True),
-#         Output({"type": "delete-confirmation-modal", "index": MATCH}, "opened")
-#     ],
-#     [
-#         Input({"type": "confirm-delete", "index": MATCH}, "n_clicks"),
-#         Input({"type": "delete-dashboard-button", "index": MATCH}, "n_clicks")
-#     ],
-#     [
-#         State({"type": "dashboard-index-store", "index": MATCH}, "data"),
-#         State({"type": "confirm-delete", "index": MATCH}, "index"),
-#         State({"type": "delete-dashboard-button", "index": MATCH}, "id")
-#     ],
-#     prevent_initial_call=True,
-# )
-# def handle_dashboard_deletion(confirm_delete_clicks, delete_button_clicks, index_data, delete_index, delete_button_id):
-
-#     logging.info("\n")
-#     logging.info("handle_dashboard_deletion")
-#     logging.info(confirm_delete_clicks)
-#     logging.info(delete_button_clicks)
-#     logging.info(index_data)
-#     logging.info(delete_index)
-#     logging.info(delete_button_id)
-
-#     filepath = "dashboards.json"
-#     ctx = dash.callback_context
-
-#     if not ctx.triggered:
-#         raise dash.exceptions.PreventUpdate
-
-#     triggered_input = ctx.triggered[0]["prop_id"]
-
-#     # Handling the delete button click to open the modal
-#     if "delete-dashboard-button" in triggered_input:
-#         if delete_button_clicks:
-#             logging.info("\n")
-#             logging.info("open_delete_modal")
-#             logging.info(delete_button_clicks)
-#             logging.info(delete_button_id)
-#             logging.info(ctx.triggered)
-#             return dash.no_update, True  # Open the delete confirmation modal
-
-#     # Handling the confirmation click to delete the dashboard
-#     if "confirm-delete" in triggered_input:
-#         if confirm_delete_clicks:
-#             logging.info("\n")
-#             logging.info("confirm_dashboard_deletion")
-#             logging.info(confirm_delete_clicks)
-#             logging.info(index_data)
-#             logging.info(delete_index)
-
-#             dashboards = index_data.get("dashboards", [])
-#             dashboards = [dashboard for dashboard in dashboards if dashboard["index"] != delete_index]
-#             new_index_data = {"next_index": index_data["next_index"], "dashboards": dashboards}
-#             save_dashboards_to_file(new_index_data, filepath)
-#             return new_index_data, False  # Close the delete confirmation modal
-
-#     raise dash.exceptions.PreventUpdate
-
-
-# @app.callback(
-#     Output({"type": "dashboard-index-store", "index": MATCH}, "data", allow_duplicate=True),
-#     [Input({"type": "confirm-delete", "index": MATCH}, "n_clicks")],
-#     [State({"type": "dashboard-index-store", "index": MATCH}, "data"), State({"type": "confirm-delete", "index": MATCH}, "index")],
-#     prevent_initial_call=True,
-# )
-# def confirm_dashboard_deletion(confirm_delete_clicks, index_data, delete_index, filepath="dashboards.json"):
-
-#     logging.info("\n")
-#     logging.info("confirm_dashboard_deletion")
-#     logging.info(confirm_delete_clicks)
-#     logging.info(index_data)
-#     logging.info(delete_index)
-
-#     if confirm_delete_clicks is None:
-#         raise dash.exceptions.PreventUpdate
-
-#     dashboards = index_data.get("dashboards", [])
-#     dashboards = [dashboard for dashboard in dashboards if dashboard["index"] != delete_index]
-#     new_index_data = {"next_index": index_data["next_index"], "dashboards": dashboards}
-#     save_dashboards_to_file(new_index_data, filepath)
-#     return new_index_data
-
-
 @app.callback(
     Output({"type": "delete-confirmation-modal", "index": MATCH}, "opened"),
-    [Input({"type": "delete-dashboard-button", "index": MATCH}, "n_clicks"), Input({"type": "confirm-delete", "index": MATCH}, "n_clicks")],
-    [State({"type": "delete-dashboard-button", "index": MATCH}, "id")],
+    [
+        Input({"type": "delete-dashboard-button", "index": MATCH}, "n_clicks"),
+        Input({"type": "confirm-delete", "index": MATCH}, "n_clicks"),
+        Input({"type": "cancel-delete", "index": MATCH}, "n_clicks"),
+    ],
+    [State({"type": "delete-confirmation-modal", "index": MATCH}, "opened")],
     prevent_initial_call=True,
 )
-def open_delete_modal(n_clicks_delete, n_clicks_confirm_delete, ids):
-    logging.info("\n")
-    logging.info("open_delete_modal")
-    logging.info(n_clicks_delete)
-    logging.info(ids)
-    logging.info(ctx.triggered_prop_ids)
-    logging.info(ctx.triggered)
-    triggered_input = ctx.triggered
-    if [e for e in triggered_input if e["value"] is not None]:
-        # Check if any delete button was clicked in the n_clicks list
-        # if len([n for n in n_clicks if n != None]) > 0:
-        if n_clicks_delete > 0:
-            logging.info("Opening delete modal")
-            logging.info("\n")
-
-            button_id = ctx.triggered[0]["prop_id"]
-            index = json.loads(button_id.split(".")[0])["index"]
-            # Update which dashboard is to be deleted
-            return True, index
-        else:
-            logging.info("Not opening delete modal")
-            logging.info("\n")
-
-            return False, dash.no_update
-    else:
-        raise dash.exceptions.PreventUpdate
-
-
-# @app.callback(
-#     Output({"type": "dashboard-index-store", "index": MATCH}, "data", allow_duplicate=True),
-#     [Input({"type": "confirm-delete", "index": MATCH}, "n_clicks")],
-#     [State({"type": "dashboard-index-store", "index": MATCH}, "data"), State({"type": "confirm-delete", "index": MATCH}, "index")],
-#     prevent_initial_call=True,
-# )
-# def confirm_dashboard_deletion(confirm_delete_clicks, index_data, delete_index):
-#     logging.info("confirm_dashboard_deletion")
-#     logging.info(confirm_delete_clicks)
-#     logging.info(index_data)
-#     logging.info(delete_index)
-#     if confirm_delete_clicks is None:
-#         raise dash.exceptions.PreventUpdate
-
-#     dashboards = index_data.get("dashboards", [])
-#     # Mark the dashboard as deleted instead of removing it
-#     for dashboard in dashboards:
-#         if dashboard["index"] == delete_index:
-#             dashboard["is_deleted"] = True
-
-#     # Return updated data with the dashboard marked as deleted
-#     return {"next_index": index_data["next_index"], "dashboards": dashboards}
-
+def open_delete_modal(n1, n2, n3, opened):
+    return not opened
 
 def render_welcome_section(email):
     return dmc.Container(
