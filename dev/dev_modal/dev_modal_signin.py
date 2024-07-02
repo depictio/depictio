@@ -4,10 +4,8 @@ import dash_bootstrap_components as dbc
 import re
 import dash
 from dash import html, dcc, ctx, MATCH, Input, Output, State, ALL
-from dash.dependencies import Input, Output, State
 import dash_mantine_components as dmc
 from dash_iconify import DashIconify
-from dash import MATCH, ALL, ctx
 import logging
 
 # set time format for logging
@@ -25,6 +23,7 @@ app.layout = html.Div(
         dcc.Location(id="url", refresh=False),
         dcc.Location(id="redirect-url", refresh=True),  # Add this component for redirection
         dcc.Store(id="modal-store", storage_type="session", data={"email": "", "submitted": False}),
+        dcc.Store(id="dashboard-modal-store", storage_type="memory", data={"title": ""}),  # Store for new dashboard data
         dmc.Modal(
             opened=False,
             id="email-modal",
@@ -46,6 +45,21 @@ app.layout = html.Div(
             closeOnClickOutside=False,
             closeOnEscape=False,
             withCloseButton=False,
+        ),
+        dmc.Modal(
+            opened=False,
+            id="dashboard-modal",
+            centered=True,
+            children=[
+                dmc.Center(dmc.Title("Create New Dashboard", order=2)),
+                dmc.Center(dmc.Space(h=20)),
+                dmc.Center(dmc.TextInput(label="Dashboard Title", style={"width": 300}, placeholder="Enter dashboard title", id="dashboard-title-input")),
+                dmc.Center(dmc.Space(h=20)),
+                dmc.Center(dmc.Button("Create Dashboard", id="create-dashboard-submit", variant="filled", size="lg", color="black")),
+            ],
+            closeOnClickOutside=False,
+            closeOnEscape=False,
+            withCloseButton=True,
         ),
         html.Div(id="landing-page", style={"display": "none"}),  # Initially hidden
     ]
@@ -113,18 +127,18 @@ def create_dashboards_view(dashboards):
                         style={"flex": "1"},
                     ),
                     dmc.Button(
-                        f"View Dashboard {dashboard['index']}",
+                        f"View",
                         id={"type": "view-dashboard-button", "index": dashboard["index"]},
                         variant="outline",
                         color="dark",
-                        style={"marginRight": 20},
+                        # style={"marginRight": 5},
                     ),
                     dmc.Button(
                         "Delete",
                         id={"type": "delete-dashboard-button", "index": dashboard["index"]},
                         variant="outline",
                         color="red",
-                        style={"marginRight": 20},
+                        # style={"marginRight": 5},
                     ),
                     dmc.Modal(
                         opened=False,
@@ -168,91 +182,121 @@ def create_dashboards_view(dashboards):
     ]
     return dashboards_view
 
-
-
 @app.callback(
     [Output({"type": "dashboard-list", "index": ALL}, "children"), Output({"type": "dashboard-index-store", "index": ALL}, "data")],
     [
-        Input({"type": "create-dashboard-button", "index": ALL}, "n_clicks"),
+        # Input({"type": "create-dashboard-button", "index": ALL}, "n_clicks"),
+        # Input("create-dashboard-submit", "n_clicks"),
         Input({"type": "confirm-delete", "index": ALL}, "n_clicks"),
-        # Input({"type": "cancel-delete", "index": ALL}, "n_clicks"),
     ],
     [
         State({"type": "create-dashboard-button", "index": ALL}, "id"),
         State({"type": "dashboard-index-store", "index": ALL}, "data"),
         State({"type": "confirm-delete", "index": ALL}, "index"),
+        Input("dashboard-modal-store", "data"),
     ],
-    # prevent_initial_call=True,
 )
 def update_dashboards(
-    create_n_clicks_list,
+    # create_n_clicks_list,
+    # submit_n_clicks,
     delete_n_clicks_list,
-    # cancel_n_clicks_list,
     create_ids_list,
     store_data_list,
     delete_ids_list,
+    modal_data,
 ):
     logging.info("\n")
     logging.info("update_dashboards")
-    logging.info(create_n_clicks_list)
-    logging.info(create_ids_list)
-    logging.info(store_data_list)
-    ctx = dash.callback_context
-
     logging.info(f"CTX triggered: {ctx.triggered}")
     logging.info(f"CTX triggered prop IDs: {ctx.triggered_prop_ids}")
     logging.info(f"CTX triggered ID {ctx.triggered_id}")
     logging.info(f"CTX inputs: {ctx.inputs}")
-    logging.info(f"Type of ctx.triggered: {type(ctx.triggered)}")
+    logging.info(f"create_ids_list: {create_ids_list}") 
+    logging.info(f"store_data_list: {store_data_list}")
+    logging.info(f"delete_ids_list: {delete_ids_list}")
+    logging.info(f"modal_data: {modal_data}")
 
     filepath = "dashboards.json"
-    # Load existing dashboards
-    logging.info(f"Loading dashboards from file: {filepath}")
     index_data = load_dashboards_from_file(filepath)
-    logging.info(index_data)
     dashboards = index_data.get("dashboards", [])
-    next_index = index_data.get("next_index", 1)  # Default to 1 if not found
+    next_index = index_data.get("next_index", 1)
 
-    if not ctx.triggered:
-        # Create views for each dashboard
+    logging.info(f"dashboards: {dashboards}")
+    logging.info(f"CTX triggered ID {ctx.triggered_id}")
+
+    if not ctx.triggered_id:
         dashboards_view = create_dashboards_view(dashboards)
+        logging.info("No trigger")
+        logging.info(f"dashboards_view: {dashboards_view}")
+        logging.info(f"next_index: {next_index}")
+        logging.info(f"{[dashboards_view] * len(store_data_list)}")
+        logging.info(f'{[{"next_index": next_index, "dashboards": dashboards}] * len(store_data_list)}')
+        return [dashboards_view] * len(store_data_list), [{"next_index": next_index, "dashboards": dashboards}] * len(store_data_list)
 
-        # We need to return the appropriate outputs for all matched components
-        return [dashboards_view] * len(create_n_clicks_list), [{"next_index": next_index, "dashboards": dashboards}] * len(create_n_clicks_list)
 
-    ctx_triggered_dict = ctx.triggered[0]
 
-    if ctx.triggered_id["type"] == "create-dashboard-button":
 
-        # Create a new dashboard if any create button is clicked
-        for n_clicks, id in zip(create_n_clicks_list, create_ids_list):
-            if n_clicks:
-                new_dashboard = {
-                    "title": f"Dashboard {next_index}",
-                    "last_modified": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "version": "V1",
-                    "owner": id["index"],
-                    "index": next_index,
-                }
-                dashboards.append(new_dashboard)
-                next_index += 1
 
-    elif ctx.triggered_id["type"] == "confirm-delete":
-        import ast
+    if "type" not in ctx.triggered_id:
+        if ctx.triggered_id == "dashboard-modal-store":
+            logging.info("Creating new dashboard")
+            logging.info(f"modal_data: {modal_data}")
+            new_dashboard = {
+                "title": modal_data["title"],
+                "last_modified": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "version": "V1",
+                "owner": create_ids_list[0]["index"],
+                "index": next_index,
+            }
+            dashboards.append(new_dashboard)
+            next_index += 1
+    else:
 
-        index_confirm_delete = ast.literal_eval(ctx_triggered_dict["prop_id"].split(".")[0])["index"]
-        logging.info(f"Index to delete: {index_confirm_delete}")
-        dashboards = [dashboard for dashboard in dashboards if dashboard["index"] != index_confirm_delete]
+        if ctx.triggered_id["type"] == "confirm-delete":
+            ctx_triggered_dict = ctx.triggered[0]
+            import ast
+            index_confirm_delete = ast.literal_eval(ctx_triggered_dict["prop_id"].split(".")[0])["index"]
+            dashboards = [dashboard for dashboard in dashboards if dashboard["index"] != index_confirm_delete]
 
-    # Update the store data
+    logging.info(f"TEST")
+    logging.info(f"dashboards: {dashboards}")
+
     new_index_data = {"next_index": next_index, "dashboards": dashboards}
     save_dashboards_to_file(new_index_data, filepath)
-
-    # Create views for each dashboard
     dashboards_view = create_dashboards_view(dashboards)
 
-    # We need to return the appropriate outputs for all matched components
-    return [dashboards_view] * len(create_n_clicks_list), [new_index_data] * len(create_n_clicks_list)
+    return [dashboards_view] * len(store_data_list), [new_index_data] * len(store_data_list)
+
+
+# New callback to handle the creation of a new dashboard
+@app.callback(
+    Output("dashboard-modal-store", "data"),
+    [Input("create-dashboard-submit", "n_clicks")],
+    [State("dashboard-title-input", "value")],
+    prevent_initial_call=True,
+)
+def handle_create_dashboard(n_clicks, title):
+    logging.info("handle_create_dashboard")
+    logging.info(f"n_clicks: {n_clicks}")
+    logging.info(f"title: {title}")
+    data = {"title": ""}
+    if n_clicks:
+        data["title"] = title
+    return data
+
+# New callback to open the create dashboard modal
+@app.callback(
+    Output("dashboard-modal", "opened"),
+    [Input({"type": "create-dashboard-button", "index": ALL}, "n_clicks"), Input("create-dashboard-submit", "n_clicks")],
+    [State("dashboard-modal", "opened")],
+    prevent_initial_call=True,
+)
+def open_dashboard_modal(n_clicks_create, n_clicks_submit, opened):
+    if any(n_clicks_create):
+        return not opened
+    elif n_clicks_submit:
+        return opened
+    return opened
 
 
 @app.callback(
@@ -267,6 +311,7 @@ def update_dashboards(
 )
 def open_delete_modal(n1, n2, n3, opened):
     return not opened
+
 
 def render_welcome_section(email):
     return dmc.Container(
