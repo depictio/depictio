@@ -12,6 +12,16 @@ import logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
+import pymongo
+from depictio.api.v1.configs.config import settings, MONGODB_URL
+
+
+client = pymongo.MongoClient("mongodb://localhost:27018/")
+db = client[settings.mongodb.db_name]
+dashboards_collection = db[settings.mongodb.collections.dashboards_collection]
+logging.info(f"dashboards_collection: {dashboards_collection}")
+logging.info(dashboards_collection.count_documents({}))
+
 dashboards = []
 workflows = []
 
@@ -64,6 +74,37 @@ app.layout = html.Div(
         html.Div(id="landing-page", style={"display": "none"}),  # Initially hidden
     ]
 )
+
+def convert_objectid_to_str(data):
+    for item in data:
+        if "_id" in item:
+            item["_id"] = str(item["_id"])
+    return data
+
+
+def load_dashboards_from_db():
+    logging.info("Loading dashboards from MongoDB")
+    projection = {"_id": 1, "dashboard_id": 1,"version": 1, "title": 1, "owner": 1}
+
+    dashboards = list(dashboards_collection.find({}, projection))
+
+    # turn mongodb ObjectId to string
+    dashboards = convert_objectid_to_str(dashboards)
+
+    logging.info(f"dashboards: {dashboards}")
+    next_index = dashboards_collection.count_documents({}) + 1
+    logging.info(f"next_index: {next_index}")
+    return {"next_index": next_index, "dashboards": dashboards}
+
+
+def insert_dashboard(dashboard):
+    logging.info(f"Inserting dashboard: {dashboard}")
+    dashboards_collection.insert_one(dashboard)
+
+
+def delete_dashboard(index):
+    logging.info(f"Deleting dashboard with index: {index}")
+    dashboards_collection.delete_one({"dashboard_id": str(index)})
 
 
 def load_dashboards_from_file(filepath):
@@ -120,7 +161,7 @@ def create_dashboards_view(dashboards):
                     html.Div(
                         [
                             dmc.Title(dashboard["title"], order=5),
-                            dmc.Text(f"Last Modified: {dashboard['last_modified']}"),
+                            # dmc.Text(f"Last Modified: {dashboard['last_modified']}"),
                             dmc.Text(f"Version: {dashboard['version']}"),
                             dmc.Text(f"Owner: {dashboard['owner']}"),
                         ],
@@ -128,30 +169,30 @@ def create_dashboards_view(dashboards):
                     ),
                     dmc.Button(
                         f"View",
-                        id={"type": "view-dashboard-button", "index": dashboard["index"]},
+                        id={"type": "view-dashboard-button", "index": dashboard["dashboard_id"]},
                         variant="outline",
                         color="dark",
                         # style={"marginRight": 5},
                     ),
                     dmc.Button(
                         "Delete",
-                        id={"type": "delete-dashboard-button", "index": dashboard["index"]},
+                        id={"type": "delete-dashboard-button", "index": dashboard["dashboard_id"]},
                         variant="outline",
                         color="red",
                         # style={"marginRight": 5},
                     ),
                     dmc.Modal(
                         opened=False,
-                        id={"type": "delete-confirmation-modal", "index": dashboard["index"]},
+                        id={"type": "delete-confirmation-modal", "index": dashboard["dashboard_id"]},
                         centered=True,
                         # title="Confirm Deletion",
                         children=[
-                            dmc.Title(f"Are you sure you want to delete this dashboard? {dashboard['index']}", order=3, color="black", style={"marginBottom": 20}),
+                            dmc.Title(f"Are you sure you want to delete this dashboard? {dashboard['dashboard_id']}", order=3, color="black", style={"marginBottom": 20}),
                             dmc.Button(
                                 "Delete",
                                 id={
                                     "type": "confirm-delete",
-                                    "index": dashboard["index"],
+                                    "index": dashboard["dashboard_id"],
                                 },
                                 color="red",
                                 style={"marginRight": 10},
@@ -160,7 +201,7 @@ def create_dashboards_view(dashboards):
                                 "Cancel",
                                 id={
                                     "type": "cancel-delete",
-                                    "index": dashboard["index"],
+                                    "index": dashboard["dashboard_id"],
                                 },
                                 color="grey",
                             ),
@@ -180,7 +221,9 @@ def create_dashboards_view(dashboards):
         )
         for dashboard in dashboards
     ]
+    logging.info(f"dashboards_view: {dashboards_view}")
     return dashboards_view
+
 
 @app.callback(
     [Output({"type": "dashboard-list", "index": ALL}, "children"), Output({"type": "dashboard-index-store", "index": ALL}, "data")],
@@ -211,13 +254,15 @@ def update_dashboards(
     logging.info(f"CTX triggered prop IDs: {ctx.triggered_prop_ids}")
     logging.info(f"CTX triggered ID {ctx.triggered_id}")
     logging.info(f"CTX inputs: {ctx.inputs}")
-    logging.info(f"create_ids_list: {create_ids_list}") 
+    logging.info(f"create_ids_list: {create_ids_list}")
     logging.info(f"store_data_list: {store_data_list}")
     logging.info(f"delete_ids_list: {delete_ids_list}")
     logging.info(f"modal_data: {modal_data}")
 
-    filepath = "dashboards.json"
-    index_data = load_dashboards_from_file(filepath)
+    # filepath = "dashboards.json"
+    # index_data = load_dashboards_from_file(filepath)
+    index_data = load_dashboards_from_db()
+
     dashboards = index_data.get("dashboards", [])
     next_index = index_data.get("next_index", 1)
 
@@ -233,10 +278,6 @@ def update_dashboards(
         logging.info(f'{[{"next_index": next_index, "dashboards": dashboards}] * len(store_data_list)}')
         return [dashboards_view] * len(store_data_list), [{"next_index": next_index, "dashboards": dashboards}] * len(store_data_list)
 
-
-
-
-
     if "type" not in ctx.triggered_id:
         if ctx.triggered_id == "dashboard-modal-store":
             logging.info("Creating new dashboard")
@@ -246,9 +287,11 @@ def update_dashboards(
                 "last_modified": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "version": "V1",
                 "owner": create_ids_list[0]["index"],
-                "index": next_index,
+                "dashboard_id": str(next_index),
             }
             dashboards.append(new_dashboard)
+            logging.info(f"dashboards: {dashboards}")
+            insert_dashboard(new_dashboard)
             next_index += 1
     else:
 
@@ -256,13 +299,16 @@ def update_dashboards(
             ctx_triggered_dict = ctx.triggered[0]
             import ast
             index_confirm_delete = ast.literal_eval(ctx_triggered_dict["prop_id"].split(".")[0])["index"]
-            dashboards = [dashboard for dashboard in dashboards if dashboard["index"] != index_confirm_delete]
+            delete_dashboard(index_confirm_delete)
+            dashboards = [dashboard for dashboard in dashboards if dashboard["dashboard_id"] != index_confirm_delete]
 
     logging.info(f"TEST")
     logging.info(f"dashboards: {dashboards}")
 
+    dashboards = convert_objectid_to_str(dashboards)
+
     new_index_data = {"next_index": next_index, "dashboards": dashboards}
-    save_dashboards_to_file(new_index_data, filepath)
+    # save_dashboards_to_file(new_index_data, filepath)
     dashboards_view = create_dashboards_view(dashboards)
 
     return [dashboards_view] * len(store_data_list), [new_index_data] * len(store_data_list)
@@ -283,6 +329,7 @@ def handle_create_dashboard(n_clicks, title):
     if n_clicks:
         data["title"] = title
     return data
+
 
 # New callback to open the create dashboard modal
 @app.callback(
