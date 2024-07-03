@@ -1,5 +1,5 @@
 import os
-from dash import html
+from dash import html, Input, Output, dcc
 import dash
 import dash_bootstrap_components as dbc
 
@@ -78,27 +78,40 @@ register_callbacks_table_component(app)
 # Register callbacks for draggable layout
 # register_callbacks_add_component(app)
 
+from depictio.dash.layouts.dashboards_management import register_callbacks_management
+from depictio.dash.layouts.dashboards_management import layout as management_layout
+register_callbacks_management(app)
+
+@app.callback(
+    Output("page-content", "children"),
+    [Input("second-url", "pathname")],
+)
+def display_page(pathname):
+    if pathname is None:
+        return dash.no_update
+    elif pathname.startswith("/dashboard/"):
+        dashboard_id = pathname.split("/")[-1]
+        # Fetch dashboard data based on dashboard_id and return the dashboard layout
+        return create_dashboard_layout(dashboard_id=dashboard_id)
+        # return html.Div([f"Displaying Dashboard {dashboard_id}", dbc.Button("Go back", href="/", color="black", external_link=True)])
+    else:
+        # Return the dashboards management layout
+        return create_management_layout()
+        # return html.Div([f"Displaying Management Layout"])
+
+def create_management_layout():
+    return management_layout
 
 
-def create_app_layout():
+def create_dashboard_layout(dashboard_id=None):
     # Load depictio depictio_dash_data from JSON
     depictio_dash_data = load_depictio_data()
-    # logger.info(f"Loaded depictio depictio_dash_data: {depictio_dash_data}")
-    # depictio_dash_data = None
-
 
     # Init layout and children if depictio_dash_data is available, else set to empty
     init_layout = depictio_dash_data["stored_layout_data"] if depictio_dash_data else {}
-    # fake layout
-    # init_layout = {
-    #     "lg": [{"i": "1", "x": 0, "y": 0, "w": 6, "h": 4, "static": False}]
-    # }
         
     logger.info(f"Loaded depictio init_layout: {init_layout}")
     init_children = depictio_dash_data["stored_children_data"] if depictio_dash_data else list()
-    # init_children = [html.Div("test", id="1")]
-    # logger.info(f"Loaded depictio init_children: {init_children}")
-    # Generate header and backend components
     header, backend_components = design_header(depictio_dash_data)
 
     # Generate draggable layout
@@ -118,6 +131,15 @@ def create_app_layout():
             html.Div(id="test-input"),
             html.Div(id="test-output", style={"display": "none"}),
             html.Div(id="test-output-visible"),
+        ],
+        fluid=True,
+    )
+
+def create_app_layout():
+    return dbc.Container(
+        [
+            dcc.Location(id="second-url", refresh=False),
+            html.Div(id="page-content"),
         ],
         fluid=True,
     )
