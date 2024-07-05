@@ -75,6 +75,7 @@ app.layout = html.Div(
     ]
 )
 
+
 def convert_objectid_to_str(data):
     for item in data:
         if "_id" in item:
@@ -84,7 +85,7 @@ def convert_objectid_to_str(data):
 
 def load_dashboards_from_db():
     logging.info("Loading dashboards from MongoDB")
-    projection = {"_id": 1, "dashboard_id": 1,"version": 1, "title": 1, "owner": 1}
+    projection = {"_id": 1, "dashboard_id": 1, "version": 1, "title": 1, "owner": 1}
 
     dashboards = list(dashboards_collection.find({}, projection))
 
@@ -167,12 +168,15 @@ def create_dashboards_view(dashboards):
                         ],
                         style={"flex": "1"},
                     ),
-                    dmc.Button(
-                        f"View",
-                        id={"type": "view-dashboard-button", "index": dashboard["dashboard_id"]},
-                        variant="outline",
-                        color="dark",
-                        # style={"marginRight": 5},
+                    dcc.Link(
+                        dmc.Button(
+                            f"View",
+                            id={"type": "view-dashboard-button", "index": dashboard["dashboard_id"]},
+                            variant="outline",
+                            color="dark",
+                            # style={"marginRight": 5},
+                        ),
+                        href=f"/dashboard/{dashboard['dashboard_id']}",
                     ),
                     dmc.Button(
                         "Delete",
@@ -298,6 +302,7 @@ def update_dashboards(
         if ctx.triggered_id["type"] == "confirm-delete":
             ctx_triggered_dict = ctx.triggered[0]
             import ast
+
             index_confirm_delete = ast.literal_eval(ctx_triggered_dict["prop_id"].split(".")[0])["index"]
             delete_dashboard(index_confirm_delete)
             dashboards = [dashboard for dashboard in dashboards if dashboard["dashboard_id"] != index_confirm_delete]
