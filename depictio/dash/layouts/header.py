@@ -198,6 +198,18 @@ def register_callbacks_header(app):
 
         return is_open
 
+    @app.callback(
+        Output("offcanvas-parameters", "is_open"),
+        Input("open-offcanvas-parameters-button", "n_clicks"),
+        State("offcanvas-parameters", "is_open"),
+        prevent_initial_call=True,
+    )
+    def toggle_offcanvas_parameters(n_clicks, is_open):
+        logger.info(n_clicks, is_open)
+        if n_clicks:
+            return not is_open
+        return is_open
+
 
 def design_header(data):
     """
@@ -284,13 +296,18 @@ def design_header(data):
     # APP Header
 
     header_style = {
-        "display": "flex",
-        "alignItems": "center",
-        "justifyContent": "space-between",
-        "padding": "10px 20px",
-        "backgroundColor": "#FCFCFC",
-        "borderBottom": "1px solid #eaeaea",
-        "fontFamily": "'Open Sans', sans-serif",
+        # "display": "flex",
+        # "alignItems": "center",
+        # "justifyContent": "space-between",
+        "padding": "10px 20px 10px 20px",
+        # "backgroundColor": "#FCFCFC",
+        # "borderBottom": "1px solid #eaeaea",
+        # "fontFamily": "'Open Sans', sans-serif",
+        # "maxWidth": "100%",
+        # "overflow": "hidden",
+        # "flexGrow": "1",
+        # "maxHeight": "100%",
+        # "flexDirection": "column",
     }
 
     title_style = {"fontWeight": "bold", "fontSize": "24px", "color": "#333"}
@@ -326,7 +343,7 @@ def design_header(data):
     )
 
     remove_all_components_button = dmc.Button(
-        "Remove all components",
+        "Remove all",
         id="remove-all-components-button",
         leftIcon=DashIconify(icon="mdi:trash-can-outline", width=16, color="white"),
         size="lg",
@@ -334,38 +351,110 @@ def design_header(data):
         variant="gradient",
         gradient={"from": "red", "to": "pink", "deg": 105},
         style=button_style,
+        # Hide
+        # style={"display": "none"},
         disabled=disabled,
     )
 
-    edit_switch = dmc.Switch(
-        # edit_switch = dbc.Checklist(
-        id="edit-dashboard-mode-button",
-        label="Edit dashboard",
-        thumbIcon=DashIconify(icon="mdi:lead-pencil", width=16, color=dmc.theme.DEFAULT_COLORS["teal"][5]),
-        style={"fontFamily": "Virgil"},
-        # options=[{"label": "Edit dashboard", "value": 0}],
-        # value=init_nclicks_edit_dashboard_mode_button,
-        # switch=True,
-        size="md",
-        checked=True,
-        color="teal",
-    )
-    toggle_interactivity = dmc.Switch(
-        label="Toggle interactivity",
-        id="toggle-interactivity-button",
-        thumbIcon=DashIconify(icon="mdi:gesture-tap", width=16, color=dmc.theme.DEFAULT_COLORS["orange"][5]),
-        style={"fontFamily": "Virgil"},
-        size="md",
-        # options=[{"label": "Toggle interactivity", "value": 0}],
-        # value=0,
-        checked=True,
-        # switch=True,
-        color="orange",
+    card_section = dbc.Row(
+        [
+            dmc.Card(
+                [
+                    dmc.CardSection(
+                        [
+                            dmc.Badge("User: Paul Cézanne", color="blue", leftSection=DashIconify(icon="mdi:account", width=16, color="grey")),
+                            dmc.Badge(f"Last updated: {current_time}", color="green", leftSection=DashIconify(icon="mdi:clock-time-four-outline", width=16, color="grey")),
+                        ]
+                    ),
+                ],
+            ),
+        ],
     )
 
-    share_actionicon = dmc.ActionIcon(
-        DashIconify(icon="mdi:share-variant", width=32, color="white"),
-        id="share-button",
+    offcanvas_menu = dbc.Offcanvas(
+        id="offcanvas-menu",
+        title="Menu",
+        placement="start",
+        backdrop=False,
+        children=[],
+    )
+
+    open_offcanvas_menu_button = dmc.ActionIcon(
+        DashIconify(icon="mdi:menu", width=32, color="grey "),
+        id="open-offcanvas-menu-button",
+        size="xl",
+        radius="xl",
+        # color="grey",
+        variant="transparent",
+        style={"marginRight": "10px"},
+    )
+
+    offcanvas_parameters = dbc.Offcanvas(
+        id="offcanvas-parameters",
+        title="Parameters",
+        placement="end",
+        backdrop=False,
+        children=[
+            dmc.Group(
+                dmc.Select(
+                    id="dashboard-version",
+                    data=["v1"],
+                    value="v1",
+                    label="Dashboard version",
+                    style={"width": 150, "padding": "0 10px"},
+                    icon=DashIconify(icon="mdi:format-list-bulleted-square", width=16, color=dmc.theme.DEFAULT_COLORS["blue"][5]),
+                    # rightSection=DashIconify(icon="radix-icons:chevron-down"),
+                )
+            ),
+            dmc.Group(
+                [
+                    dmc.Switch(
+                        id="edit-dashboard-mode-button",
+                        checked=True,
+                        color="teal",
+                    ),
+                    dmc.Text("Edit dashboard", style={"fontFamily": "default"}),
+                ],
+                align="center",
+                spacing="sm",
+                style={"border": "1px solid lightgrey", "padding": "10px", "margin": "10px 0"},
+            ),
+            dmc.Group(
+                [
+                    dmc.Switch(
+                        id="toggle-interactivity-button",
+                        checked=True,
+                        color="orange",
+                    ),
+                    dmc.Text("Toggle interactivity", style={"fontFamily": "default"}),
+                ],
+                align="center",
+                spacing="sm",
+                style={"border": "1px solid lightgrey", "padding": "10px", "margin": "10px 0"},
+            ),
+            dmc.Group(
+                [
+                    dmc.Button(
+                        leftIcon=DashIconify(icon="mdi:share-variant", width=20, color="white"),
+                        id="share-button",
+                        color="grey",
+                        variant="filled",
+                        style={"fontFamily": "default"},
+                        disabled=disabled,
+                        n_clicks=0,
+                    ),
+                    dmc.Text("Share", style={"fontFamily": "default"}),
+                ],
+                align="center",
+                spacing="sm",
+                style={"border": "1px solid lightgrey", "padding": "10px", "margin": "10px 0"},
+            ),
+        ],
+    )
+
+    open_offcanvas_parameters_button = dmc.ActionIcon(
+        DashIconify(icon="mdi:cog", width=32, color="white"),
+        id="open-offcanvas-parameters-button",
         size="xl",
         radius="xl",
         color="grey",
@@ -388,7 +477,13 @@ def design_header(data):
     dummy_output = html.Div(id="dummy-output", style={"display": "none"})
     stepper_output = html.Div(id="stepper-output", style={"display": "none"})
 
-    depictio_logo = html.Img(src=dash.get_asset_url("logo.png"), height=40, style={"margin-left": "0px"})
+    # Add link to depictio logo to redirect to / page
+    depictio_logo = html.A(
+        html.Img(src=dash.get_asset_url("logo.png"), height=40, style={"margin-left": "0px"}),
+        # html.Img(src=dash.get_asset_url("logo_icon.png"), height=40, style={"margin-left": "0px"}),
+        href="/",
+    )
+    # depictio_logo = html.Img(src=dash.get_asset_url("logo.png"), height=40, style={"margin-left": "0px"})
 
     # Store the number of clicks for the add button and edit dashboard mode button
     stores_add_edit = [
@@ -406,78 +501,63 @@ def design_header(data):
         ),
     ]
 
-    current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    header = html.Div(
+    button_menu = dmc.Group(
         [
-            dummy_output,
-            stepper_output,
-            html.Div(children=stores_add_edit),
-            dbc.Col(
-                [depictio_logo, dashboard_version_select],
-                width=1,
-            ),
-            dbc.Col(
+            dmc.MediaQuery(
                 [
-                    dbc.Row(),
-                    dbc.Row(
-                        [
-                            dmc.Card(
-                                [
-                                    dmc.CardSection(
-                                        [
-                                            dmc.Badge("User: Paul Cézanne", color="blue", leftSection=DashIconify(icon="mdi:account", width=16, color="grey")),
-                                            dmc.Badge(
-                                                f"Last updated: {current_time}", color="green", leftSection=DashIconify(icon="mdi:clock-time-four-outline", width=16, color="grey")
-                                            ),
-                                        ]
-                                    ),
-                                ],
-                                # style={"width": "200px"},
-                                # align to bottom
-                            ),
-                        ],
-                        # justify="start"
-                    ),
-                ],
-                width=2,
-                align="end",
-                style={"paddingLeft": "10px"},
-            ),
-            # dbc.Col(width=1),
-            dbc.Col(
-                [
-                    html.Div(
-                        [
-                            add_new_component_button,
-                            modal_save_button,
-                            save_button,
-                            remove_all_components_button,
-                        ],
-                        style={"display": "flex", "alignItems": "center"},
+                    dmc.Button(
+                        DashIconify(
+                            icon="ci:hamburger-lg",
+                            width=24,
+                            height=24,
+                            color="#c2c7d0",
+                        ),
+                        variant="subtle",
+                        p=1,
+                        id="sidebar-button",
                     )
                 ],
-                width=6,
+                smallerThan="md",
+                styles={"display": "none"},
             ),
-            html.Div(
+            dmc.MediaQuery(
                 [
-                    dbc.Col(
-                        [
-                            dbc.Row(edit_switch, style={"paddingBottom": "15px"}),
-                            dbc.Row(
-                                toggle_interactivity,
-                            ),
-                        ],
-                        width="auto",
-                    ),
-                    dbc.Col(
-                        [
-                            share_actionicon,
-                            modal_share_dashboard,
-                        ],
-                        width=1,
-                    ),
+                    dmc.Button(
+                        DashIconify(
+                            icon="ci:hamburger-lg",
+                            width=24,
+                            height=24,
+                            color="#c2c7d0",
+                        ),
+                        variant="subtle",
+                        p=1,
+                        id="drawer-demo-button",
+                    )
                 ],
-                style={"display": "flex", "alignItems": "center", "justifyContent": "space-between", "padding": "0 50px 0 0"},
+                largerThan="md",
+                styles={"display": "none"},
+            ),
+            # dmc.Text("Company Name"),
+        ]
+    )
+
+    header = dmc.Header(
+        height=70,
+        children=[
+            dummy_output,
+            stepper_output,
+            modal_save_button,
+            offcanvas_parameters,
+            html.Div(stores_add_edit),
+        dbc.Row(
+            [
+                dbc.Col(button_menu, width=1, className="sticky-left"),
+                dbc.Col([add_new_component_button, save_button, remove_all_components_button], width="auto", className="mx-auto"),
+                dbc.Col(open_offcanvas_parameters_button, width=1, className="sticky-right"),
+            ],
+                # justify="center",
+                align="center",
+                # style={"display": "flex", "justifyContent": "space-between", "alignItems": "center", "height": "100%"},
             ),
         ],
         style=header_style,

@@ -16,9 +16,7 @@ from depictio.api.v1.configs.config import API_BASE_URL, TOKEN, logger
 
 from depictio.dash.layouts.draggable_scenarios.interactive_component_update import update_interactive_component
 from depictio.dash.layouts.stepper import create_stepper_output
-from depictio.dash.utils import (
-    analyze_structure_and_get_deepest_type
-)
+from depictio.dash.utils import analyze_structure_and_get_deepest_type
 from depictio.dash.layouts.draggable_scenarios.restore_dashboard import load_depictio_data
 
 
@@ -60,6 +58,7 @@ def calculate_new_layout_position(child_type, existing_layouts, child_id, n):
         "h": dimensions["h"],
         "i": child_id,
     }
+
 
 def remove_duplicates_by_index(components):
     unique_components = {}
@@ -174,10 +173,9 @@ def register_callbacks_draggable(app):
         logger.info("triggered_input : {}".format(triggered_input))
         logger.info("type of triggered_input: {}".format(type(triggered_input)))
 
-
         # Check if the value of the interactive component is not None
         check_value = False
-        # remove duplicate of stored_metadata based on index  
+        # remove duplicate of stored_metadata based on index
         index_list = []
 
         # FIXME: Remove duplicates from stored_metadata
@@ -187,8 +185,6 @@ def register_callbacks_draggable(app):
         stored_metadata = remove_duplicates_by_index(stored_metadata)
         logger.info("CLEANED Stored metadata: {}".format(stored_metadata))
         logger.info(f"Length of cleaned stored metadata: {len(stored_metadata)}")
-
-
 
         logger.info("Interactive component values: {}".format(interactive_component_values))
         logger.info("Interactive component ids: {}".format(interactive_component_ids))
@@ -1072,13 +1068,13 @@ def design_draggable(data, init_layout, init_children):
                 ),
             ]
         )
-        display_style = "none"  # Hide the draggable layout
+        style = {"display": "none"}  # Hide the draggable layout
         core_children = [message]
     else:
-        display_style = "block"  # Show the draggable layout
+        style = {"display": "flex", "flexGrow": "1", "flexDirection": "column", "width": "100%", "maxWidth": "100%"}
         core_children = []
 
-    # Create the draggable layout outside of the if-else to keep it in the DOM
+    # Create the draggable layout
     draggable = dash_draggable.ResponsiveGridLayout(
         id="draggable",
         clearSavedLayout=True,
@@ -1086,13 +1082,21 @@ def design_draggable(data, init_layout, init_children):
         children=init_children,
         isDraggable=True,
         isResizable=True,
-        style={"display": display_style},
+        style={"display": "flex", "flexGrow": "1", "flexDirection": "column", "width": "100%", "maxWidth": "100%", "height": "100%"},
+    )
+
+    # The core Div contains all elements, managing visibility as needed
+    core = html.Div(
+        draggable,
+        # id="core-container",
+        style={"flexGrow": "1", "display": "flex", "flexDirection": "column", "height": "100%"}
     )
 
     # Add draggable to the core children list whether it's visible or not
-    core_children.append(draggable)
+    # core_children.append(draggable)
 
     # The core Div contains all elements, managing visibility as needed
-    core = html.Div(core_children)
+    # core = html.Div(core_children)
+
 
     return core
