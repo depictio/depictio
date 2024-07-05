@@ -10,6 +10,8 @@ import httpx
 from depictio.dash.utils import analyze_structure_and_get_deepest_type, get_size
 from depictio.api.v1.configs.config import API_BASE_URL, TOKEN, logger
 
+current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
 
 def register_callbacks_header(app):
     @app.callback(
@@ -49,8 +51,6 @@ def register_callbacks_header(app):
                     stored_metadata.remove(elem)
                 else:
                     stored_metadata_indexes.append(elem["index"])
-                
-
 
             # logger.info(f"stored_children: {type(children)} {get_size(children)}")
             logger.info(f"stored_layout_data: {type(stored_layout_data)} {get_size(stored_layout_data)}")
@@ -66,7 +66,6 @@ def register_callbacks_header(app):
             # for value, component in stored_metadata.items():
             #     if component["component_type"] == "interactive":
             #         logger.info(component)
-
 
             dashboard_data = {
                 # "tmp_children_data": children,
@@ -198,6 +197,30 @@ def register_callbacks_header(app):
 
         return is_open
 
+    @app.callback(
+        Output("offcanvas-parameters", "is_open"),
+        Input("open-offcanvas-parameters-button", "n_clicks"),
+        State("offcanvas-parameters", "is_open"),
+        prevent_initial_call=True,
+    )
+    def toggle_offcanvas_parameters(n_clicks, is_open):
+        logger.info(n_clicks, is_open)
+        if n_clicks:
+            return not is_open
+        return is_open
+
+    @app.callback(
+        Output("offcanvas-menu", "is_open"),
+        Input("open-offcanvas-menu-button", "n_clicks"),
+        State("offcanvas-menu", "is_open"),
+        prevent_initial_call=True,
+    )
+    def toggle_offcanvas_menu(n_clicks, is_open):
+        logger.info(n_clicks, is_open)
+        if n_clicks:
+            return not is_open
+        return is_open
+
 
 def design_header(data):
     """
@@ -215,7 +238,10 @@ def design_header(data):
     # https://dash.plotly.com/dash-core-components/store
     backend_components = html.Div(
         [
-            dcc.Store(id="stored-draggable-children", storage_type="session", ),
+            dcc.Store(
+                id="stored-draggable-children",
+                storage_type="session",
+            ),
             dcc.Store(id="stored-draggable-layouts", storage_type="session"),
         ]
     )
@@ -300,7 +326,7 @@ def design_header(data):
     # if data:
 
     add_new_component_button = dmc.Button(
-        "Add new component",
+        "Add component",
         id="add-button",
         size="lg",
         radius="xl",
@@ -333,62 +359,169 @@ def design_header(data):
         radius="xl",
         variant="gradient",
         gradient={"from": "red", "to": "pink", "deg": 105},
-        style=button_style,
+        # style=button_style,
+        # Hide
+        style={"display": "none"},
         disabled=disabled,
     )
 
-    edit_switch = dmc.Switch(
-        # edit_switch = dbc.Checklist(
-        id="edit-dashboard-mode-button",
-        label="Edit dashboard",
-        thumbIcon=DashIconify(icon="mdi:lead-pencil", width=16, color=dmc.theme.DEFAULT_COLORS["teal"][5]),
-        style={"fontFamily": "Virgil"},
-        # options=[{"label": "Edit dashboard", "value": 0}],
-        # value=init_nclicks_edit_dashboard_mode_button,
-        # switch=True,
-        size="md",
-        checked=True,
-        color="teal",
-    )
-    toggle_interactivity = dmc.Switch(
-        label="Toggle interactivity",
-        id="toggle-interactivity-button",
-        thumbIcon=DashIconify(icon="mdi:gesture-tap", width=16, color=dmc.theme.DEFAULT_COLORS["orange"][5]),
-        style={"fontFamily": "Virgil"},
-        size="md",
-        # options=[{"label": "Toggle interactivity", "value": 0}],
-        # value=0,
-        checked=True,
-        # switch=True,
-        color="orange",
+
+                    
+    card_section = dbc.Row(
+        [
+            dmc.Card(
+                [
+                    dmc.CardSection(
+                        [
+                            dmc.Badge("User: Paul Cézanne", color="blue", leftSection=DashIconify(icon="mdi:account", width=16, color="grey")),
+                            dmc.Badge(
+                                f"Last updated: {current_time}", color="green", leftSection=DashIconify(icon="mdi:clock-time-four-outline", width=16, color="grey")
+                            ),
+                        ]
+                    ),
+                ],
+            ),
+        ],
     )
 
-    share_actionicon = dmc.ActionIcon(
-        DashIconify(icon="mdi:share-variant", width=32, color="white"),
-        id="share-button",
+    offcanvas_menu = dbc.Offcanvas(
+        id="offcanvas-menu",
+        title="Menu",
+        placement="start",
+        backdrop=False,
+        children=[
+            dmc.Group(
+                [
+                    dmc.Button(
+                        leftIcon=DashIconify(icon="mdi:home", width=20, color="white"),
+                        id="home-button",
+                        color="grey",
+                        variant="filled",
+                        style={"fontFamily": "default"},
+                        disabled=disabled,
+                        n_clicks=0,
+                    ),
+                    dmc.Text("Home", style={"fontFamily": "default"}),
+                ],
+                align="center",
+                spacing="sm",
+                style={"border": "1px solid lightgrey", "padding": "10px", "margin": "10px 0"},
+            ),
+            dmc.Group(
+                [
+                    dmc.Button(
+                        leftIcon=DashIconify(icon="mdi:account", width=20, color="white"),
+                        id="profile-button",
+                        color="grey",
+                        variant="filled",
+                        style={"fontFamily": "default"},
+                        disabled=disabled,
+                        n_clicks=0,
+                    ),
+                    dmc.Text("Profile", style={"fontFamily": "default"}),
+                ],
+                align="center",
+                spacing="sm",
+                style={"border": "1px solid lightgrey", "padding": "10px", "margin": "10px 0"},
+            )
+        ],
+    )
+
+    open_offcanvas_menu_button = dmc.ActionIcon(
+        DashIconify(icon="mdi:menu", width=32, color="grey "),
+        id="open-offcanvas-menu-button",
+        size="xl",
+        radius="xl",
+        # color="grey",
+        variant="transparent",
+        style={"marginRight": "10px"},
+    )
+
+
+
+
+    offcanvas_parameters = dbc.Offcanvas(
+        id="offcanvas-parameters",
+        title="Parameters",
+        placement="end",
+        backdrop=False,
+        children=[
+            dmc.Group(
+                dmc.Select(
+                    id="dashboard-version",
+                    data=["v1"],
+                    value="v1",
+                    label="Dashboard version",
+                    style={"width": 150, "padding": "0 10px"},
+                    icon=DashIconify(icon="mdi:format-list-bulleted-square", width=16, color=dmc.theme.DEFAULT_COLORS["blue"][5]),
+                    # rightSection=DashIconify(icon="radix-icons:chevron-down"),
+                )
+            ),
+            dmc.Group(
+                [
+                    dmc.Switch(
+                        id="edit-dashboard-mode-button",
+                        checked=True,
+                        color="teal",
+                    ),
+                    dmc.Text("Edit dashboard", style={"fontFamily": "default"}),
+                ],
+                align="center",
+                spacing="sm",
+                style={"border": "1px solid lightgrey", "padding": "10px", "margin": "10px 0"},
+            ),
+            dmc.Group(
+                [
+                    dmc.Switch(
+                        id="toggle-interactivity-button",
+                        checked=True,
+                        color="orange",
+                    ),
+                    dmc.Text("Toggle interactivity", style={"fontFamily": "default"}),
+                ],
+                align="center",
+                spacing="sm",
+                style={"border": "1px solid lightgrey", "padding": "10px", "margin": "10px 0"},
+            ),
+            dmc.Group(
+                [
+                    dmc.Button(
+                        leftIcon=DashIconify(icon="mdi:share-variant", width=20, color="white"),
+                        id="share-button",
+                        color="grey",
+                        variant="filled",
+                        style={"fontFamily": "default"},
+                        disabled=disabled,
+                        n_clicks=0,
+                    ),
+                    dmc.Text("Share", style={"fontFamily": "default"}),
+                ],
+                align="center",
+                spacing="sm",
+                style={"border": "1px solid lightgrey", "padding": "10px", "margin": "10px 0"},
+            ),
+        ],
+    )
+
+    open_offcanvas_parameters_button = dmc.ActionIcon(
+        DashIconify(icon="mdi:cog", width=32, color="white"),
+        id="open-offcanvas-parameters-button",
         size="xl",
         radius="xl",
         color="grey",
         variant="filled",
         style=button_style,
-        disabled=disabled,
-        n_clicks=0,
-    )
-
-    dashboard_version_select = dmc.Select(
-        id="dashboard-version",
-        data=["v1"],
-        value="v1",
-        label="Dashboard version",
-        style={"width": 150, "padding": "0 10px"},
-        icon=DashIconify(icon="mdi:format-list-bulleted-square", width=16, color=dmc.theme.DEFAULT_COLORS["blue"][5]),
-        # rightSection=DashIconify(icon="radix-icons:chevron-down"),
     )
 
     dummy_output = html.Div(id="dummy-output", style={"display": "none"})
     stepper_output = html.Div(id="stepper-output", style={"display": "none"})
 
-    depictio_logo = html.Img(src=dash.get_asset_url("logo.png"), height=40, style={"margin-left": "0px"})
+    # Add link to depictio logo to redirect to / page
+    depictio_logo = html.A(
+        html.Img(src=dash.get_asset_url("logo_icon.png"), height=40, style={"margin-left": "0px"}),
+        href="/",
+    )
+    # depictio_logo = html.Img(src=dash.get_asset_url("logo.png"), height=40, style={"margin-left": "0px"})
 
     # Store the number of clicks for the add button and edit dashboard mode button
     stores_add_edit = [
@@ -406,38 +539,21 @@ def design_header(data):
         ),
     ]
 
-    current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     header = html.Div(
         [
             dummy_output,
             stepper_output,
             html.Div(children=stores_add_edit),
+            open_offcanvas_menu_button,
+            offcanvas_menu,
             dbc.Col(
-                [depictio_logo, dashboard_version_select],
+                [depictio_logo],
                 width=1,
             ),
             dbc.Col(
                 [
                     dbc.Row(),
-                    dbc.Row(
-                        [
-                            dmc.Card(
-                                [
-                                    dmc.CardSection(
-                                        [
-                                            dmc.Badge("User: Paul Cézanne", color="blue", leftSection=DashIconify(icon="mdi:account", width=16, color="grey")),
-                                            dmc.Badge(
-                                                f"Last updated: {current_time}", color="green", leftSection=DashIconify(icon="mdi:clock-time-four-outline", width=16, color="grey")
-                                            ),
-                                        ]
-                                    ),
-                                ],
-                                # style={"width": "200px"},
-                                # align to bottom
-                            ),
-                        ],
-                        # justify="start"
-                    ),
+
                 ],
                 width=2,
                 align="end",
@@ -458,27 +574,29 @@ def design_header(data):
                 ],
                 width=6,
             ),
-            html.Div(
-                [
-                    dbc.Col(
-                        [
-                            dbc.Row(edit_switch, style={"paddingBottom": "15px"}),
-                            dbc.Row(
-                                toggle_interactivity,
-                            ),
-                        ],
-                        width="auto",
-                    ),
-                    dbc.Col(
-                        [
-                            share_actionicon,
-                            modal_share_dashboard,
-                        ],
-                        width=1,
-                    ),
-                ],
-                style={"display": "flex", "alignItems": "center", "justifyContent": "space-between", "padding": "0 50px 0 0"},
-            ),
+            open_offcanvas_parameters_button,
+            offcanvas_parameters,
+            # html.Div(
+            #     [
+            #         dbc.Col(
+            #             [
+            #                 dbc.Row(edit_switch, style={"paddingBottom": "15px"}),
+            #                 dbc.Row(
+            #                     toggle_interactivity,
+            #                 ),
+            #             ],
+            #             width="auto",
+            #         ),
+            #         dbc.Col(
+            #             [
+            #                 share_actionicon,
+            #                 modal_share_dashboard,
+            #             ],
+            #             width=1,
+            #         ),
+            #     ],
+            #     style={"display": "flex", "alignItems": "center", "justifyContent": "space-between", "padding": "0 50px 0 0"},
+            # ),
         ],
         style=header_style,
     )
