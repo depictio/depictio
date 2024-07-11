@@ -1,7 +1,15 @@
+import os
+import random
 import numpy as np
 import random
 import hashlib
 from datetime import datetime, timedelta
+
+import pandas as pd
+
+df = pd.read_csv('assets/rel-table-ASV_with-DADA2-tax.tsv', sep='\t')
+# Extract unique species names
+species = df['Species'].dropna().unique().tolist()
 
 def generate_metadata(locations):
     metadata = {}
@@ -51,11 +59,20 @@ class Graph:
     def build_graph(self):
         for i in range(self.num_nodes):
             node_id = f"{self.location}_species{i + 1}"
-            node_label = f"Species {i + 1}"
+            # node_label = f"Species {i + 1}"
+            node_label = random.choice(species)
+            # node_id = f"{self.location}_{node_label.replace(' ', '_')}"
+            node_id = node_label
+
             node_href = f"https://via.placeholder.com/150/{np.base_repr(np.random.randint(0, 16777215), base=16).zfill(6)}/FFFFFF?text=Species{i + 1}"
             num_edges = random.randint(1, 3) if i < self.num_nodes - 2 else random.randint(8, 12)
             self.nodes.append({"data": {"id": node_id, "label": node_label, "href": node_href, "num_edges": num_edges}})
         
+        # Get a list of all image files in the specified folder
+        image_folder = "assets/images/PNG"
+        image_files = [f for f in os.listdir(image_folder) if os.path.isfile(os.path.join(image_folder, f))]
+
+
         # Sort nodes by num_edges in descending order
         self.nodes.sort(key=lambda x: x["data"]["num_edges"], reverse=True)
         
@@ -78,7 +95,10 @@ class Graph:
                 target_node_id = target_node["data"]["id"]
                 edge_id = f"{self.location}_edge{len(self.edges) + 1}"
                 intensity = random.uniform(0.1, 1.0)
-                edge_image = f"https://via.placeholder.com/150/{np.base_repr(np.random.randint(0, 16777215), base=16).zfill(6)}/FFFFFF?text={source_node_id}-{target_node_id}"
+                # Select a random image from the folder
+                edge_image = os.path.join(image_folder, random.choice(image_files))
+
+                # edge_image = f"https://via.placeholder.com/150/{np.base_repr(np.random.randint(0, 16777215), base=16).zfill(6)}/FFFFFF?text={source_node_id}-{target_node_id}"
                 self.edges.append({"data": {"id": edge_id, "source": source_node_id, "target": target_node_id, "image": edge_image, "intensity": intensity}})
                 
                 # Decrease num_edges of both source and target nodes

@@ -24,11 +24,21 @@ server = app.server
 
 # Some sample locations for the markers
 locations = [
-    {"name": "London", "lat": 51.5074, "lon": -0.1278},
-    {"name": "Paris", "lat": 48.8566, "lon": 2.3522},
-    {"name": "Berlin", "lat": 52.5200, "lon": 13.4050},
-    {"name": "Rome", "lat": 41.9028, "lon": 12.4964},
+    {"name": "Naples", "lat": 40.8518, "lon": 14.2681},
+    {"name": "Bilbao", "lat": 43.2630, "lon": -2.9350},
+    {"name": "Roskoff", "lat": 48.7219, "lon": -3.9833},
+    {"name": "Kritineberg", "lat": 59.3523, "lon": 13.4853},
+    {"name": "Porto", "lat": 41.1579, "lon": -8.6291},
+    {"name": "Galway", "lat": 53.2707, "lon": -9.0568},
+    {"name": "Tallinn", "lat": 59.4370, "lon": 24.7535},
 ]
+
+# locations = [
+#     {"name": "London", "lat": 51.5074, "lon": -0.1278},
+#     {"name": "Paris", "lat": 48.8566, "lon": 2.3522},
+#     {"name": "Berlin", "lat": 52.5200, "lon": 13.4050},
+#     {"name": "Rome", "lat": 41.9028, "lon": 12.4964},
+# ]
 
 locations_graph = {}
 for j, city_dict in enumerate(locations):
