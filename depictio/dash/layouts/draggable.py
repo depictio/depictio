@@ -16,9 +16,7 @@ from depictio.api.v1.configs.config import API_BASE_URL, TOKEN, logger
 
 from depictio.dash.layouts.draggable_scenarios.interactive_component_update import update_interactive_component
 from depictio.dash.layouts.stepper import create_stepper_output
-from depictio.dash.utils import (
-    analyze_structure_and_get_deepest_type
-)
+from depictio.dash.utils import analyze_structure_and_get_deepest_type
 from depictio.dash.layouts.draggable_scenarios.restore_dashboard import load_depictio_data
 
 
@@ -60,6 +58,7 @@ def calculate_new_layout_position(child_type, existing_layouts, child_id, n):
         "h": dimensions["h"],
         "i": child_id,
     }
+
 
 def remove_duplicates_by_index(components):
     unique_components = {}
@@ -128,6 +127,7 @@ def register_callbacks_draggable(app):
         State("toggle-interactivity-button", "checked"),
         State("edit-dashboard-mode-button", "checked"),
         Input("edit-dashboard-mode-button", "checked"),
+        State("second-url", "pathname"),
         prevent_initial_call=True,
     )
     def populate_draggable(
@@ -149,6 +149,7 @@ def register_callbacks_draggable(app):
         toggle_interactivity_button,
         edit_dashboard_mode_button,
         input_edit_dashboard_mode_button,
+        pathname,
     ):
         logger.info("btn_done_clicks: {}".format(btn_done_clicks))
         logger.info("stored_add_button: {}".format(stored_add_button))
@@ -174,10 +175,9 @@ def register_callbacks_draggable(app):
         logger.info("triggered_input : {}".format(triggered_input))
         logger.info("type of triggered_input: {}".format(type(triggered_input)))
 
-
         # Check if the value of the interactive component is not None
         check_value = False
-        # remove duplicate of stored_metadata based on index  
+        # remove duplicate of stored_metadata based on index
         index_list = []
 
         # FIXME: Remove duplicates from stored_metadata
@@ -187,8 +187,8 @@ def register_callbacks_draggable(app):
         stored_metadata = remove_duplicates_by_index(stored_metadata)
         logger.info("CLEANED Stored metadata: {}".format(stored_metadata))
         logger.info(f"Length of cleaned stored metadata: {len(stored_metadata)}")
-
-
+        logger.info(f"URL PATHNAME: {pathname}")
+        dashboard_id = pathname.split("/")[-1]
 
         logger.info("Interactive component values: {}".format(interactive_component_values))
         logger.info("Interactive component ids: {}".format(interactive_component_ids))
@@ -206,7 +206,6 @@ def register_callbacks_draggable(app):
 
         if triggered_input == "interactive-component":
             if interactive_components_dict:
-
                 logger.info(f"Interactive component triggered input: {triggered_input}")
                 logger.info(f"Interactive components dict: {interactive_components_dict}")
                 triggered_input_eval_index = int(triggered_input_dict["index"])
@@ -289,7 +288,10 @@ def register_callbacks_draggable(app):
             ctx_triggered_props_id = ctx.triggered_prop_ids
             if "draggable.layouts" in ctx_triggered_props_id:
                 new_layouts = input_draggable_layouts
-                return draggable_children, new_layouts, draggable_children, new_layouts
+                state_stored_draggable_children[dashboard_id] = draggable_children
+                state_stored_draggable_layouts[dashboard_id] = new_layouts
+
+                return draggable_children, new_layouts, state_stored_draggable_children, state_stored_draggable_layouts
             else:
                 return dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
@@ -311,13 +313,17 @@ def register_callbacks_draggable(app):
             return new_children, dash.no_update, new_children, dash.no_update
 
         elif triggered_input == "stored-draggable-children":
+
             if state_stored_draggable_layouts and state_stored_draggable_children:
-                return (
-                    state_stored_draggable_children,
-                    state_stored_draggable_layouts,
-                    state_stored_draggable_children,
-                    state_stored_draggable_layouts,
-                )
+                if dashboard_id in state_stored_draggable_children:
+                    return (
+                        state_stored_draggable_children[dashboard_id],
+                        state_stored_draggable_layouts[dashboard_id],
+                        state_stored_draggable_children,
+                        state_stored_draggable_layouts,
+                    )
+                else:
+                    return dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
             else:
                 return dash.no_update, dash.no_update, dash.no_update, dash.no_update
