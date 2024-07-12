@@ -29,6 +29,7 @@ def register_callbacks_header(app):
         State("stored-edit-dashboard-mode-button", "data"),
         State("stored-add-button", "data"),
         State({"type": "interactive-component-value", "index": ALL}, "value"),
+        State("second-url", "pathname"),
         prevent_initial_call=True,
     )
     def save_data_dashboard(
@@ -39,6 +40,7 @@ def register_callbacks_header(app):
         edit_dashboard_mode_button,
         add_button,
         interactive_component_values,
+        pathname
     ):
         if n_clicks > 0:
             logger.info("\n\n\n")
@@ -75,7 +77,8 @@ def register_callbacks_header(app):
                 "stored_add_button": add_button,
                 "version": "1",
             }
-            dashboard_id = "1"
+            # dashboard_id = "1"
+            dashboard_id = pathname.split("/")[-1]
             dashboard_data["dashboard_id"] = dashboard_id
             logger.info("Dashboard data:")
             logger.info(dashboard_data)

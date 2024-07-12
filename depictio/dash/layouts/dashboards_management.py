@@ -18,8 +18,8 @@ logger.info(dashboards_collection.count_documents({}))
 layout = html.Div(
     [
         dcc.Location(id="url", refresh=False),
-        dcc.Location(id="redirect-url", refresh=True),  # Add this component for redirection
-        dcc.Store(id="modal-store", storage_type="session", data={"email": "", "submitted": False}),
+        # dcc.Location(id="redirect-url", refresh=True),  # Add this component for redirection
+        dcc.Store(id="modal-store", storage_type="local", data={"email": "", "submitted": False}),
         dcc.Store(id="dashboard-modal-store", storage_type="memory", data={"title": ""}),  # Store for new dashboard data
         dmc.Modal(
             opened=False,
@@ -416,13 +416,14 @@ def register_callbacks_management(app):
                 if pathname.startswith("/dashboard/"):
                     dashboard_id = pathname.split("/")[-1]
                     # Fetch dashboard data based on dashboard_id and return the appropriate layout
-                    return html.Div([f"Displaying Dashboard {dashboard_id}", dbc.Button("Go back", href="/", color="black", external_link=True)])
+                    # return html.Div([f"Displaying Dashboard {dashboard_id}", dbc.Button("Go back", href="/", color="black", external_link=True)])
+                    return None
                 # Add more conditions for other routes
                 # return html.Div("This is the home page")
                 return dash.no_update
 
         # Respond to modal-store data changes
-        elif trigger_id == "modal-store":
+        if trigger_id == "modal-store":
             if data and data.get("submitted"):
                 return html.Div(
                     [
