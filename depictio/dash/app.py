@@ -105,7 +105,7 @@ def create_management_layout():
 
 def create_dashboard_layout(dashboard_id=None):
     # Load depictio depictio_dash_data from JSON
-    depictio_dash_data = load_depictio_data()
+    depictio_dash_data = load_depictio_data(dashboard_id)
 
     # Init layout and children if depictio_dash_data is available, else set to empty
     init_layout = depictio_dash_data["stored_layout_data"] if depictio_dash_data else {}
