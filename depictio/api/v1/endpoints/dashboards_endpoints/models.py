@@ -23,7 +23,7 @@ class DashboardData(MongoModel):
     stored_add_button: Dict
     title: str
     owner: str
-    last_saved_ts: str
+    last_saved_t: str
 
     class Config:
         arbitrary_types_allowed = True

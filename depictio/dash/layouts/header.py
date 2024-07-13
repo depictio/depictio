@@ -42,9 +42,15 @@ def register_callbacks_header(app):
         interactive_component_values,
         pathname
     ):
+
+
         if n_clicks:
-            logger.info("\n\n\n")
+
+
+            dashboard_id = pathname.split("/")[-1]
+
             logger.info(f"save_data_dashboard INSIDE")
+            logger.info(f"stored-metadata-component: {stored_metadata}")
 
             # FIXME: check if some component are duplicated based on index value, if yes, remove them
             stored_metadata_indexes = list()
@@ -54,35 +60,20 @@ def register_callbacks_header(app):
                 else:
                     stored_metadata_indexes.append(elem["index"])
 
-            # logger.info(f"stored_children: {type(children)} {get_size(children)}")
-            logger.info(f"stored_layout_data: {type(stored_layout_data)} {get_size(stored_layout_data)}")
-            logger.info(f"stored_metadata: {type(stored_metadata)} {get_size(stored_metadata)}")
-            logger.info(f"edit_dashboard_mode_button: {type(edit_dashboard_mode_button)} {get_size(edit_dashboard_mode_button)}")
-            logger.info(f"add_button: {type(add_button)} {get_size(add_button)}")
-            logger.info(f"n_clicks: {n_clicks}")
 
-            logger.info(f"interactive_component_values: {interactive_component_values}")
-            # interactive_component_values = [value for value in interactive_component_values if value is not None]
-            # logger.info(f"interactive_component_values EDITED: {interactive_component_values}")
+            # Get existing metadata for the dashboard
+            dashboard_data = httpx.get(f"{API_BASE_URL}/depictio/api/v1/dashboards/get/{dashboard_id}").json()
 
-            # for value, component in stored_metadata.items():
-            #     if component["component_type"] == "interactive":
-            #         logger.info(component)
 
-            dashboard_data = {
-                # "tmp_children_data": children,
-                "stored_layout_data": stored_layout_data,
-                "stored_metadata": stored_metadata,
-                "stored_edit_dashboard_mode_button": edit_dashboard_mode_button,
-                "stored_add_button": add_button,
-                "version": "1",
-                "last_saved_ts": current_time,
-            }
-            # dashboard_id = "1"
-            dashboard_id = pathname.split("/")[-1]
-            dashboard_data["dashboard_id"] = dashboard_id
-            logger.info("Dashboard data:")
-            logger.info(dashboard_data)
+            # Replace the existing metadata with the new metadata
+            dashboard_data["stored_metadata"] = stored_metadata
+            dashboard_data["stored_layout_data"] = stored_layout_data
+            dashboard_data["stored_edit_dashboard_mode_button"] = edit_dashboard_mode_button
+            dashboard_data["stored_add_button"] = add_button
+            dashboard_data["version"] = "1"
+            dashboard_data["last_saved_ts"] = str(current_time)
+            
+            logger.info(f"Dashboard data: {dashboard_data}")
 
             response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/dashboards/save/{dashboard_id}", json=dashboard_data)
             if response.status_code == 200:
