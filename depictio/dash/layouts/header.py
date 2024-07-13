@@ -42,7 +42,7 @@ def register_callbacks_header(app):
         interactive_component_values,
         pathname
     ):
-        if n_clicks > 0:
+        if n_clicks:
             logger.info("\n\n\n")
             logger.info(f"save_data_dashboard INSIDE")
 
@@ -76,6 +76,7 @@ def register_callbacks_header(app):
                 "stored_edit_dashboard_mode_button": edit_dashboard_mode_button,
                 "stored_add_button": add_button,
                 "version": "1",
+                "last_saved_ts": current_time,
             }
             # dashboard_id = "1"
             dashboard_id = pathname.split("/")[-1]
@@ -229,6 +230,8 @@ def design_header(data):
     """
     Design the header of the dashboard
     """
+    logger.info(f"depictio dashboard data: {data}")
+
     init_nclicks_add_button = data["stored_add_button"] if data else {"count": 0}
     init_nclicks_edit_dashboard_mode_button = data["stored_edit_dashboard_mode_button"] if data else [int(0)]
 
@@ -376,9 +379,9 @@ def design_header(data):
                 [
                     dmc.CardSection(
                         [
-                            dmc.Badge("User: Paul Cézanne", color="blue", leftSection=DashIconify(icon="mdi:account", width=16, color="grey")),
+                            dmc.Badge(f"Owner: {data['owner']}", color="blue", leftSection=DashIconify(icon="mdi:account", width=16, color="grey")),
                             dmc.Badge(
-                                f"Last updated: {current_time}", color="green", leftSection=DashIconify(icon="mdi:clock-time-four-outline", width=16, color="grey")
+                                f"Last saved: {data['last_saved_ts']}", color="green", leftSection=DashIconify(icon="mdi:clock-time-four-outline", width=16, color="grey")
                             ),
                         ]
                     ),
@@ -542,6 +545,7 @@ def design_header(data):
         ),
     ]
 
+    title_style = {"fontWeight": "bold", "fontSize": "24px", "color": "#333"}
     header = html.Div(
         [
             dummy_output,
@@ -555,7 +559,16 @@ def design_header(data):
             ),
             dbc.Col(
                 [
-                    dbc.Row(),
+                    card_section,
+
+                ],
+                width=2,
+                align="end",
+                style={"paddingLeft": "10px"},
+            ),
+            dbc.Col(
+                [
+                    dmc.Text(f'{data["title"]}', style=title_style),
 
                 ],
                 width=2,

@@ -9,6 +9,8 @@ from pydantic import (
 )
 
 from depictio.api.v1.models.base import MongoModel, PyObjectId
+# FIXME: Replace user with the real user model
+# from depictio.api.v1.models.users_endpoints.models import User
 
 class DashboardData(MongoModel):
     dashboard_id: str
@@ -19,6 +21,9 @@ class DashboardData(MongoModel):
     stored_metadata: List
     stored_edit_dashboard_mode_button: List
     stored_add_button: Dict
+    title: str
+    owner: str
+    last_saved_ts: str
 
     class Config:
         arbitrary_types_allowed = True
