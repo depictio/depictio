@@ -4,7 +4,7 @@ from fastapi import HTTPException, APIRouter
 from depictio.api.v1.db import dashboards_collection
 from depictio.api.v1.endpoints.dashboards_endpoints.models import DashboardData
 from depictio.api.v1.models.base import convert_objectid_to_str
-
+from depictio.api.v1.configs.config import logger
 
 dashboards_endpoint_router = APIRouter()
 
@@ -32,6 +32,7 @@ async def save_dashboard(dashboard_id: str, data: DashboardData):
     Check if an entry with the same dashboard_id exists, if not, insert, if yes, update.
     """
     data_dict = data.dict()
+    logger.info(f"Data to save: {data_dict}")
 
     # Attempt to find and update the document, or insert if it doesn't exist
     result = dashboards_collection.find_one_and_update(
