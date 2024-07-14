@@ -446,8 +446,8 @@ def design_header(data):
             dmc.Group(
                 dmc.Select(
                     id="dashboard-version",
-                    data=["v1"],
-                    value="v1",
+                    data=[f"{data['version']}"],
+                    value=f"{data['version']}",
                     label="Dashboard version",
                     style={"width": 150, "padding": "0 10px"},
                     icon=DashIconify(icon="mdi:format-list-bulleted-square", width=16, color=dmc.theme.DEFAULT_COLORS["blue"][5]),
