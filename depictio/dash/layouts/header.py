@@ -223,6 +223,12 @@ def design_header(data):
     """
     logger.info(f"depictio dashboard data: {data}")
 
+    if data:
+        if "stored_add_button" not in data:
+            data["stored_add_button"] = {"count": 0}
+        if "stored_edit_dashboard_mode_button" not in data:
+            data["stored_edit_dashboard_mode_button"] = [int(0)]
+            
     init_nclicks_add_button = data["stored_add_button"] if data else {"count": 0}
     init_nclicks_edit_dashboard_mode_button = data["stored_edit_dashboard_mode_button"] if data else [int(0)]
 

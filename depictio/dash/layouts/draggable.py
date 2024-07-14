@@ -288,6 +288,9 @@ def register_callbacks_draggable(app):
             ctx_triggered_props_id = ctx.triggered_prop_ids
             if "draggable.layouts" in ctx_triggered_props_id:
                 new_layouts = input_draggable_layouts
+                logger.info(f"state_stored_draggable_layouts: {state_stored_draggable_layouts}")
+                logger.info(f"state_stored_draggable_children: {state_stored_draggable_children}")
+                logger.info(f"dashboard_id: {dashboard_id}")  
                 state_stored_draggable_children[dashboard_id] = draggable_children
                 state_stored_draggable_layouts[dashboard_id] = new_layouts
 
@@ -313,7 +316,7 @@ def register_callbacks_draggable(app):
             return new_children, dash.no_update, new_children, dash.no_update
 
         elif triggered_input == "stored-draggable-children":
-
+            
             if state_stored_draggable_layouts and state_stored_draggable_children:
                 if dashboard_id in state_stored_draggable_children:
                     return (

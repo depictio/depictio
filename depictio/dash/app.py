@@ -91,6 +91,7 @@ def display_page(pathname):
         return dash.no_update
     elif pathname.startswith("/dashboard/"):
         dashboard_id = pathname.split("/")[-1]
+        logger.info(f"dashboard_id: {dashboard_id}")
         # Fetch dashboard data based on dashboard_id and return the dashboard layout
         return create_dashboard_layout(dashboard_id=dashboard_id)
         # return html.Div([f"Displaying Dashboard {dashboard_id}", dbc.Button("Go back", href="/", color="black", external_link=True)])
@@ -106,12 +107,22 @@ def create_management_layout():
 def create_dashboard_layout(dashboard_id=None):
     # Load depictio depictio_dash_data from JSON
     depictio_dash_data = load_depictio_data(dashboard_id)
+    logger.info(f"dashboard_id: {dashboard_id}")
+    logger.info(f"depictio_dash_data: {depictio_dash_data}")
+
 
     # Init layout and children if depictio_dash_data is available, else set to empty
-    init_layout = depictio_dash_data["stored_layout_data"] if depictio_dash_data else {}
+    if depictio_dash_data:
+        if "stored_layout_data" in depictio_dash_data:
+            init_layout = depictio_dash_data["stored_layout_data"]
+        else:
+            init_layout = {}
+        if "stored_children_data" in depictio_dash_data:
+            init_children = depictio_dash_data["stored_children_data"]
+        else:
+            init_children = list()
         
     logger.info(f"Loaded depictio init_layout: {init_layout}")
-    init_children = depictio_dash_data["stored_children_data"] if depictio_dash_data else list()
     header, backend_components = design_header(depictio_dash_data)
 
     # Generate draggable layout
