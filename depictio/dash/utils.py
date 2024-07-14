@@ -68,7 +68,7 @@ def get_size(obj, seen=None):
     return size
 
 
-def load_depictio_data():
+def load_depictio_data(dashboard_id):
     from depictio.api.v1.db import dashboards_collection
 
     helpers_mapping = {
@@ -79,9 +79,7 @@ def load_depictio_data():
 
     }
 
-    dashboard_id = "1"
     dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
-    logger.info("load_depictio_data")
     logger.info(f"dashboard_data : {dashboard_data}")
     if dashboard_data:
         children = list()

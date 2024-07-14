@@ -18,9 +18,8 @@ def load_depictio_data(dashboard_id):
         "jbrowse": build_jbrowse,
     }
 
-    # dashboard_id = "1"
     dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
-    logger.info("load_depictio_data")
+    logger.info(f"load_depictio_data : {dashboard_data}")
     # logger.info(f"dashboard_data : {dashboard_data}")
 
     if dashboard_data:
@@ -48,21 +47,21 @@ def load_depictio_data(dashboard_id):
                 # logger.info(child)
                 children.append(child)
 
-            if children:
-                logger.info(f"BEFORE child :")
+            # if children:
+            logger.info(f"BEFORE child :")
 
-                # Convert children to their plotly JSON representation
-                children = [enable_box_edit_mode(child.to_plotly_json(), switch_state=True) for child in children]
-                # children = enable_box_edit_mode(children[0].to_plotly_json(), switch_state=True)
-                # logger.info(f"AFTER child : {children}")
+            # Convert children to their plotly JSON representation
+            children = [enable_box_edit_mode(child.to_plotly_json(), switch_state=True) for child in children]
+            # children = enable_box_edit_mode(children[0].to_plotly_json(), switch_state=True)
+            # logger.info(f"AFTER child : {children}")
 
-                dashboard_data["stored_children_data"] = children
-                # logger.info(f"dashboard_data['stored_children_data'] : {dashboard_data['stored_children_data']}")
-                logger.info(f"dashboard_data['stored_layout_data'] : {dashboard_data['stored_layout_data']}")
+            dashboard_data["stored_children_data"] = children
+            # logger.info(f"dashboard_data['stored_children_data'] : {dashboard_data['stored_children_data']}")
+            logger.info(f"dashboard_data['stored_layout_data'] : {dashboard_data['stored_layout_data']}")
 
-                return dashboard_data
-        else:
-            return None
+        return dashboard_data
+    else:
+        return None
 
     # if os.path.exists("/app/data/depictio_data.json"):
     #     with open("/app/data/depictio_data.json", "r") as file:
