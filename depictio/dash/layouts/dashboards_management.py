@@ -308,7 +308,7 @@ def register_callbacks_management(app):
                 logger.info(f"modal_data: {modal_data}")
                 new_dashboard = {
                     "title": modal_data["title"],
-                    "last_modified": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "last_saved_ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "version": "V1",
                     "owner": create_ids_list[0]["index"],
                     "dashboard_id": str(next_index),
