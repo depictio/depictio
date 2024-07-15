@@ -43,7 +43,7 @@ spec:
       containers:
       - image: mongo:latest
         name: mongo
-        command: ["mongod", "--dbpath", "/data/depictioDB", "--port", "27018"]
+        command: ["mongod", "--dbpath", "/data/depictioDB_K8S", "--port", "27018"]
         ports:
         - containerPort: 27018
         volumeMounts:
