@@ -50,7 +50,8 @@ spec:
       containers:
         - name: mongo
           image: mongo:latest
-          args: ["mongod", "--dbpath", "/data/depictioDB_K8S", "--port", "27018"]
+          args:
+            ["mongod", "--dbpath", "/data/depictioDB_K8S", "--port", "27018"]
           ports:
             - containerPort: 27018
           volumeMounts:
@@ -130,101 +131,45 @@ spec:
             path: /mnt/data/minio
             type: DirectoryOrCreate
 ---
-apiVersion: v1
-kind: Service
-metadata:
-  name: minio
-  namespace: depictio
-spec:
-  ports:
-    - name: api
-      port: 9000
-    - name: console
-      port: 9001
-  selector:
-    app: minio
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: depictio-backend
+  name: depictio
   namespace: depictio
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: depictio-backend
+      app: depictio
   template:
     metadata:
       labels:
-        app: depictio-backend
+        app: depictio
     spec:
       containers:
-      - name: depictio-backend
-        image: depictio:dev
-        command: ["python", "depictio/api/run.py"]
-        ports:
-        - containerPort: 8058
-        # env:
-        #   - name: AUTH_PUBLIC_KEY_PATH
-        #     value: /etc/secret-volume/auth_public_key.pem
-        #   - name: ANOTHER_KEY_PATH
-        #     value: /etc/secret-volume/another_key.txt
-        #   - name: SIMPLE_KEY_PATH
-        #     value: /etc/secret-volume/simple_key.txt
-        volumeMounts:
-        # - name: secret-volume
-        #   mountPath: /etc/secret-volume
-        - name: depictio-src
-          mountPath: /app/depictio
-        - name: configs
-          mountPath: /configs
-        - name: data
-          mountPath: /app/data
-        - name: minio-data
-          mountPath: /minio_data
-        - name: env-file
-          mountPath: /app/.env
-          subPath: .env
-        - name: jbrowse-sessions
-          mountPath: /jbrowse-watcher-plugin/sessions
+        - name: depictio-test
+          image: depictio:dev
+          command: ["python", "/mnt/kubernetes/app.py"]
+          ports:
+            - containerPort: 8060
+          volumeMounts:
+            - name: app-script
+              mountPath: /mnt/kubernetes
       volumes:
-      # - name: secret-volume
-      #   secret:
-      #     secretName: multiline-secrets
-      - name: depictio-src
-        hostPath:
-          path: /Users/tweber/Gits/depictio/depictio
-          type: DirectoryOrCreate
-      - name: configs
-        hostPath:
-          path: /Users/tweber/Gits/depictio/configs
-          type: DirectoryOrCreate
-      - name: data
-        hostPath:
-          path: /Users/tweber/Gits/depictio/data
-          type: DirectoryOrCreate
-      - name: minio-data
-        hostPath:
-          path: /Users/tweber/Gits/depictio/minio_data
-          type: DirectoryOrCreate
-      - name: env-file
-        hostPath:
-          path: /Users/tweber/Gits/depictio/.env
-          type: File
-      - name: jbrowse-sessions
-        hostPath:
-          path: /Users/tweber/Gits/depictio/jbrowse-sessions
-          type: DirectoryOrCreate
+        - name: app-script
+          hostPath:
+            path: /mnt/kubernetes
+            type: DirectoryOrCreate
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: depictio-backend
+  name: depictio-test
   namespace: depictio
 spec:
   ports:
     - name: http
-      port: 8058
+      port: 8060
+      targetPort: 8060
   selector:
-    app: depictio-backend
+    app: depictio
