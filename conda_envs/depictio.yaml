@@ -2,7 +2,6 @@ name: depictio-condaenv
 channels:
   - conda-forge
   - plotly
-  - anaconda
 dependencies:
   - curl
   - bleach
