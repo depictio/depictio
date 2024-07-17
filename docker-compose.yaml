@@ -24,7 +24,7 @@ services:
 
 
   depictio_frontend:
-    image: depictio:170724
+    image: depictio:dev
     build:
       dockerfile: docker-images/Dockerfile_depictio.dockerfile
     ports:
@@ -45,7 +45,7 @@ services:
 
 
   depictio_backend:
-    image: depictio:170724
+    image: depictio:dev
     build:
       dockerfile: docker-images/Dockerfile_depictio.dockerfile
     ports:
