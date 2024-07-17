@@ -2,16 +2,14 @@ import collections
 from datetime import datetime
 import hashlib
 import os
-import shutil
 from bson import ObjectId
 from fastapi import HTTPException, Depends, APIRouter
-import deltalake
 import polars as pl
 import numpy as np
 
 from depictio.api.v1.configs.config import settings, logger
-from depictio.api.v1.db import db, workflows_collection, files_collection, users_collection, deltatables_collection
-from depictio.api.v1.s3 import s3_client, minio_storage_options
+from depictio.api.v1.db import workflows_collection, files_collection, users_collection, deltatables_collection
+from depictio.api.v1.s3 import minio_storage_options
 from depictio.api.v1.endpoints.deltatables_endpoints.models import Aggregation, DeltaTableAggregated
 from depictio.api.v1.endpoints.files_endpoints.models import File
 from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user
