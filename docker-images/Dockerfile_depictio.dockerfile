@@ -1,4 +1,3 @@
-# Dockerfile_frontend
 FROM mambaorg/micromamba:latest
 
 WORKDIR /app

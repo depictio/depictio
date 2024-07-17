@@ -7,23 +7,6 @@ services:
     volumes:
       - ./depictioDB:/data/depictioDB
 
-  # redis:
-  #   image: redis:latest
-  #   command: redis-server
-  #   ports:
-  #     - 6379:6379
-
-  # redis-cli-monitor:
-  #   image: redis:latest
-  #   command: redis-cli -h redis monitor
-  #   depends_on:
-  #     - redis
-
-  # rabbitmq:
-  #   image: rabbitmq:3-management
-  #   ports:
-  #     - "5672:5672"
-  #     - "15672:15672"
 
   minio:
     image: minio/minio:latest
@@ -40,20 +23,8 @@ services:
       - "9001:9001"
 
 
-
-  jbrowse2:
-    image: jbrowse2:latest
-    build:
-      dockerfile: docker-images/Dockerfile_jbrowse.dev.240424.dockerfile
-    ports: 
-      - 3000:3000
-      - 9010:9010
-    volumes:
-    #   - "./jbrowse-watcher-plugin:/usr/src/plugin"
-      - "./jbrowse-watcher-plugin/sessions:/usr/src/jbrowse/plugin/sessions"
-
   depictio_frontend:
-    image: depictio:dev
+    image: depictio:170724
     build:
       dockerfile: docker-images/Dockerfile_depictio.dockerfile
     ports:
@@ -74,7 +45,7 @@ services:
 
 
   depictio_backend:
-    image: depictio:dev
+    image: depictio:170724
     build:
       dockerfile: docker-images/Dockerfile_depictio.dockerfile
     ports:
@@ -94,25 +65,56 @@ services:
       # - redis
       # - rabbitmq
 
-  depictio_nb:
-    image: depictio_nb:dev
-    build:
-      dockerfile: docker-images/Dockerfile_depictio_nb_debug.dockerfile
-    ports:
-      - 8888:8888
-    volumes:
-      - "${DEPICTIO_BACKEND_DATA_VOLUME_HOST}:${DEPICTIO_BACKEND_DATA_VOLUME_HOST}"
-      - ./depictio:/app/depictio
-      - ./data:/app/data
-      - ./minio_data:/minio_data
-      - ./jbrowse-watcher-plugin/sessions:/jbrowse-watcher-plugin/sessions
-      - ./CLI_client/configs:/CLI_client/configs
-      - ./dev:/app/dev
-      - ./.env:/app/.env
-    depends_on:
-      - mongo
-      - minio
-      - depictio_backend
-      # - redis
-      # - rabbitmq
-    command: ["jupyter", "lab", "--ip=0.0.0.0", "--allow-root"]
+  # depictio_nb:
+  #   image: depictio_nb:dev
+  #   build:
+  #     dockerfile: docker-images/Dockerfile_depictio_nb_debug.dockerfile
+  #   ports:
+  #     - 8888:8888
+  #   volumes:
+  #     - "${DEPICTIO_BACKEND_DATA_VOLUME_HOST}:${DEPICTIO_BACKEND_DATA_VOLUME_HOST}"
+  #     - ./depictio:/app/depictio
+  #     - ./data:/app/data
+  #     - ./minio_data:/minio_data
+  #     - ./jbrowse-watcher-plugin/sessions:/jbrowse-watcher-plugin/sessions
+  #     - ./CLI_client/configs:/CLI_client/configs
+  #     - ./dev:/app/dev
+  #     - ./.env:/app/.env
+  #   depends_on:
+  #     - mongo
+  #     - minio
+  #     - depictio_backend
+  #     # - redis
+  #     # - rabbitmq
+  #   command: ["jupyter", "lab", "--ip=0.0.0.0", "--allow-root"]
+
+
+  # jbrowse2:
+  #   image: jbrowse2:latest
+  #   build:
+  #     dockerfile: docker-images/Dockerfile_jbrowse.dev.240424.dockerfile
+  #   ports: 
+  #     - 3000:3000
+  #     - 9010:9010
+  #   volumes:
+  #   #   - "./jbrowse-watcher-plugin:/usr/src/plugin"
+  #     - "./jbrowse-watcher-plugin/sessions:/usr/src/jbrowse/plugin/sessions"
+
+
+  # redis:
+  #   image: redis:latest
+  #   command: redis-server
+  #   ports:
+  #     - 6379:6379
+
+  # redis-cli-monitor:
+  #   image: redis:latest
+  #   command: redis-cli -h redis monitor
+  #   depends_on:
+  #     - redis
+
+  # rabbitmq:
+  #   image: rabbitmq:3-management
+  #   ports:
+  #     - "5672:5672"
+  #     - "15672:15672"

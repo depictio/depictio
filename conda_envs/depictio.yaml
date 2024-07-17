@@ -28,7 +28,7 @@ dependencies:
   - redis-py
   - typer
   - uvicorn
-  # - deltalake
+  - deltalake
   - pip:  
     - pydantic[email]==1.10.10
     - dash-mantine-components==0.12.1
