@@ -1,3 +1,4 @@
+import os
 from typing import Dict, Union
 from pydantic import BaseSettings, Field
 
@@ -16,12 +17,11 @@ class Collections(BaseSettings):
 class MongoConfig(BaseSettings):
     """MongoDB configuration."""
     service_name: str = "mongo"
-    port: int = 27018
+    port: int = Field(default=27018, env='DEPICTIO_MONGO_DB_PORT')
     db_name: str = "depictioDB"
     collections: Collections = Collections()
     class Config:
-        env_prefix = 'MONGO_'
-
+        env_prefix = 'DEPICTIO_MONGO_'
 
 class RedisConfig(BaseSettings):
     """Redis configuration."""
@@ -31,7 +31,7 @@ class RedisConfig(BaseSettings):
     cache_ttl: int = 300
     user_secret_key: str = Field(default="mysecretkey")
     class Config:
-        env_prefix = 'REDIS_'
+        env_prefix = 'DEPICTIO_REDIS_'
 
 
 class RabbitMQConfig(BaseSettings):
@@ -42,14 +42,14 @@ class RabbitMQConfig(BaseSettings):
     routing_key: str = Field(default="depictio_key")
     queue: str = "jbrowse_logs"
     class Config:
-        env_prefix = 'RABBITMQ_'
+        env_prefix = 'DEPICTIO_RABBITMQ_'
 
 
 class FastAPIConfig(BaseSettings):
     """Backend configuration."""
     host: str = "0.0.0.0"
     service_name: str = "depictio_backend"
-    port: int = 8058
+    port: int = Field(default=8058, env='DEPICTIO_BACKEND_PORT')
     class Config:
         env_prefix = 'DEPICTIO_BACKEND_'
 
@@ -57,7 +57,9 @@ class DashConfig(BaseSettings):
     """Frontend configuration."""
     host: str = "0.0.0.0"
     service_name: str = "depictio_frontend"
-    port: int = 5080
+    port: int = Field(default=8059, env='DEPICTIO_FRONTEND_PORT')
+    class Config:
+        env_prefix = 'DEPICTIO_FRONTEND_'
 
 
 class MinioConfig(BaseSettings):
@@ -71,7 +73,7 @@ class MinioConfig(BaseSettings):
     bucket: str = "depictio-bucket"
     data_dir: str = "/depictio/minio_data"
     class Config:
-        env_prefix = 'MINIO_'
+        env_prefix = 'DEPICTIO_MINIO_'
 
 
 class JbrowseConfig(BaseSettings):
@@ -82,7 +84,7 @@ class JbrowseConfig(BaseSettings):
     data_dir: str = "/data"
     config_dir: str = "/jbrowse-watcher-plugin/sessions"
     class Config:
-        env_prefix = 'JBROWSE_'
+        env_prefix = 'DEPICTIO_JBROWSE_'
 
 
 class Auth(BaseSettings):
@@ -90,8 +92,10 @@ class Auth(BaseSettings):
     tmp_token: str = Field(default="eyJhb...")
 
     class Config:
-        env_prefix = 'AUTH_'
+        env_prefix = 'DEPICTIO_AUTH_'
         arbitrary_types_allowed = True
+
+
 
 
 class Settings(BaseSettings):
