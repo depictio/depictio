@@ -4,6 +4,18 @@ metadata:
   name: depictio
 ---
 apiVersion: v1
+kind: Secret
+metadata:
+  name: depictio-secrets
+  namespace: depictio
+type: Opaque
+data:
+  MINIO_ROOT_USER: bWluaW8=
+  MINIO_ROOT_PASSWORD: bWluaW8xMjM=
+  MINIO_ACCESS_KEY: bWluaW8=
+  MINIO_SECRET_KEY: bWluaW8xMjM=
+---
+apiVersion: v1
 kind: PersistentVolume
 metadata:
   name: mongo-pv
@@ -50,6 +62,13 @@ spec:
       containers:
         - name: mongo
           image: mongo:latest
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "0.5"
+            limits:
+              memory: "2Gi"
+              cpu: "1"
           args:
             ["mongod", "--dbpath", "/data/depictioDB_K8S", "--port", "27018"]
           ports:
@@ -75,7 +94,6 @@ spec:
     - name: db
       port: 27018
       targetPort: 27018
-      nodePort: 32000 # Minikube will allocate a port if you don't specify one  selector:
   selector:
     app: mongo
 ---
@@ -97,6 +115,13 @@ spec:
       containers:
         - name: minio
           image: minio/minio:latest
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "0.5"
+            limits:
+              memory: "2Gi"
+              cpu: "1"
           env:
             - name: MINIO_ROOT_USER
               valueFrom:
@@ -127,49 +152,202 @@ spec:
               mountPath: /data
       volumes:
         - name: minio-storage
-          hostPath:
-            path: /mnt/data/minio
-            type: DirectoryOrCreate
+          emptyDir: {}
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: depictio
+  name: depictio-backend
   namespace: depictio
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: depictio
+      app: depictio-backend
   template:
     metadata:
       labels:
-        app: depictio
+        app: depictio-backend
     spec:
       containers:
-        - name: depictio-test
+        - name: depictio-backend
           image: depictio:dev
-          command: ["python", "/mnt/kubernetes/app.py"]
+          env:
+            - name: DEPICTIO_CONFIG_BACKEND_LOCATION
+              value: "/mnt/depictio/api/v1/configs/config_backend.yaml"
+            - name: DEPICTIO_PRIVATE_KEY_FILE
+              value: "/mnt/depictio/private_key.pem"
+            - name: DEPICTIO_PUBLIC_KEY_FILE
+              value: "/mnt/depictio/public_key.pem"
+            - name: DEPICTIO_MONGO_DB_PORT
+              value: "27018"
+            - name: DEPICTIO_BACKEND_PORT
+              value: "8058"
+            - name: DEPICTIO_FRONTEND_PORT
+              value: "5080"
+            - name: AUTH_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: multiline-secrets
+                  key: AUTH_PRIVATE_KEY
+            - name: AUTH_PUBLIC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: multiline-secrets
+                  key: AUTH_PUBLIC_KEY
+            - name: AUTH_TMP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: multiline-secrets
+                  key: AUTH_TMP_TOKEN
+
+          command: ["/opt/conda/bin/python", "/mnt/depictio/api/run.py"]
           ports:
-            - containerPort: 8060
+            - containerPort: 8058
           volumeMounts:
-            - name: app-script
-              mountPath: /mnt/kubernetes
+            - name: depictio-src
+              mountPath: /mnt/depictio
+            - name: data
+              mountPath: /mnt/data
+            - name: minio-data
+              mountPath: /mnt/minio_data
+            - name: configs
+              mountPath: /mnt/configs
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "0.5"
+            limits:
+              memory: "2Gi"
+              cpu: "1"
       volumes:
-        - name: app-script
-          hostPath:
-            path: /mnt/kubernetes
-            type: DirectoryOrCreate
+      - name: depictio-src
+        hostPath:
+          path: /mnt/depictio
+          type: DirectoryOrCreate
+      - name: data
+        hostPath:
+          path: /mnt/data
+          type: DirectoryOrCreate
+      - name: minio-data
+        hostPath:
+          path: /mnt/minio_data
+          type: DirectoryOrCreate
+      - name: configs
+        hostPath:
+          path: /mnt/configs
+          type: DirectoryOrCreate
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: depictio-test
+  name: depictio-backend
   namespace: depictio
 spec:
+  type: NodePort
   ports:
     - name: http
-      port: 8060
-      targetPort: 8060
+      port: 8058
+      targetPort: 8058
+      nodePort: 32058
   selector:
-    app: depictio
+    app: depictio-backend
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: depictio-frontend
+  namespace: depictio
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: depictio-frontend
+  template:
+    metadata:
+      labels:
+        app: depictio-frontend
+    spec:
+      containers:
+        - name: depictio-frontend
+          image: depictio:dev
+          env:
+            - name: DEPICTIO_CONFIG_BACKEND_LOCATION
+              value: "/mnt/depictio/api/v1/configs/config_backend.yaml"
+            - name: DEPICTIO_PRIVATE_KEY_FILE
+              value: "/mnt/depictio/private_key.pem"
+            - name: DEPICTIO_PUBLIC_KEY_FILE
+              value: "/mnt/depictio/public_key.pem"
+            - name: DEPICTIO_MONGO_DB_PORT
+              value: "27018"
+            - name: DEPICTIO_BACKEND_PORT
+              value: "8058"
+            - name: DEPICTIO_FRONTEND_PORT
+              value: "5080"
+            - name: AUTH_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: multiline-secrets
+                  key: AUTH_PRIVATE_KEY
+            - name: AUTH_PUBLIC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: multiline-secrets
+                  key: AUTH_PUBLIC_KEY
+            - name: AUTH_TMP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: multiline-secrets
+                  key: AUTH_TMP_TOKEN
+
+          command: ["/opt/conda/bin/python", "/mnt/depictio/dash/app.py"]
+          ports:
+            - containerPort: 5080
+          volumeMounts:
+            - name: depictio-src
+              mountPath: /mnt/depictio
+            - name: data
+              mountPath: /mnt/data
+            - name: minio-data
+              mountPath: /mnt/minio_data
+            - name: configs
+              mountPath: /mnt/configs
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "0.5"
+            limits:
+              memory: "2Gi"
+              cpu: "1"
+      volumes:
+      - name: depictio-src
+        hostPath:
+          path: /mnt/depictio
+          type: DirectoryOrCreate
+      - name: data
+        hostPath:
+          path: /mnt/data
+          type: DirectoryOrCreate
+      - name: minio-data
+        hostPath:
+          path: /mnt/minio_data
+          type: DirectoryOrCreate
+      - name: configs
+        hostPath:
+          path: /mnt/configs
+          type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: depictio-frontend
+  namespace: depictio
+spec:
+  type: NodePort
+  ports:
+    - name: http
+      port: 5080
+      targetPort: 5080
+      nodePort: 32080
+  selector:
+    app: depictio-frontend
