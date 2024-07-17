@@ -218,3 +218,6 @@ jbrowse-watcher-plugin
 dashboards.json
 depictio-cli-venv/
 jbrowse-watcher-plugin/
+data/minio/
+*.b64
+depictio/tmp_token.pem
