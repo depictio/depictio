@@ -57,7 +57,7 @@ class DashConfig(BaseSettings):
     """Frontend configuration."""
     host: str = "0.0.0.0"
     service_name: str = "depictio_frontend"
-    port: int = Field(default=8059, env='DEPICTIO_FRONTEND_PORT')
+    port: int = Field(default=5080, env='DEPICTIO_FRONTEND_PORT')
     class Config:
         env_prefix = 'DEPICTIO_FRONTEND_'
 
