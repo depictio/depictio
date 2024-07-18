@@ -1,3 +1,4 @@
+import os
 import sys
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -20,11 +21,14 @@ users_collection = db.users
 auth_endpoint_router = APIRouter()
 
 
+private_key_file = os.getenv("DEPICTIO_PRIVATE_KEY_FILE", "depictio/private_key.pem")
+public_key_file = os.getenv("DEPICTIO_PUBLIC_KEY_FILE", "depictio/public_key.pem")
+
 # Load your private key
-with open("depictio/private_key.pem", "rb") as f:
+with open(private_key_file, "rb") as f:
     PRIVATE_KEY = f.read()
 # Load your private key
-with open("depictio/public_key.pem", "rb") as f:
+with open(public_key_file, "rb") as f:
     PUBLIC_KEY = f.read()
 
 ALGORITHM = "RS256"
