@@ -162,6 +162,7 @@ cython_debug/
 .nfs*
 depictioDB/
 depictioDB_bak/
+depictioDB_K8S/
 diagnostic.data/
 journal/
 *.db
