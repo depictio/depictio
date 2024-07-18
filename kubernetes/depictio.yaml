@@ -89,7 +89,7 @@ metadata:
   name: mongo
   namespace: depictio
 spec:
-  type: NodePort # Or use LoadBalancer if you're using Minikube with a cloud provider's driver
+  type: LoadBalancer # Or use LoadBalancer if you're using Minikube with a cloud provider's driver
   ports:
     - name: db
       port: 27018
@@ -154,6 +154,23 @@ spec:
         - name: minio-storage
           emptyDir: {}
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: depictio
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 9000
+      name: http
+      targetPort: 9000
+    - port: 9001
+      name: console
+      targetPort: 9001
+  selector:
+    app: minio
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -171,6 +188,7 @@ spec:
     spec:
       containers:
         - name: depictio-backend
+          # image: backend:local
           image: depictio:dev
           env:
             - name: DEPICTIO_CONFIG_BACKEND_LOCATION
@@ -203,7 +221,7 @@ spec:
 
           command: ["/opt/conda/bin/python", "/mnt/depictio/api/run.py"]
           ports:
-            - containerPort: 8058
+            - containerPort: 80
           volumeMounts:
             - name: depictio-src
               mountPath: /mnt/depictio
@@ -213,6 +231,8 @@ spec:
               mountPath: /mnt/minio_data
             - name: configs
               mountPath: /mnt/configs
+            - name: kubernetes
+              mountPath: /mnt/kubernetes
           resources:
             requests:
               memory: "1Gi"
@@ -221,22 +241,26 @@ spec:
               memory: "2Gi"
               cpu: "1"
       volumes:
-      - name: depictio-src
-        hostPath:
-          path: /mnt/depictio
-          type: DirectoryOrCreate
-      - name: data
-        hostPath:
-          path: /mnt/data
-          type: DirectoryOrCreate
-      - name: minio-data
-        hostPath:
-          path: /mnt/minio_data
-          type: DirectoryOrCreate
-      - name: configs
-        hostPath:
-          path: /mnt/configs
-          type: DirectoryOrCreate
+        - name: depictio-src
+          hostPath:
+            path: /mnt/depictio
+            type: DirectoryOrCreate
+        - name: data
+          hostPath:
+            path: /mnt/data
+            type: DirectoryOrCreate
+        - name: minio-data
+          hostPath:
+            path: /mnt/minio_data
+            type: DirectoryOrCreate
+        - name: configs
+          hostPath:
+            path: /mnt/configs
+            type: DirectoryOrCreate
+        - name: kubernetes
+          hostPath:
+            path: /mnt/kubernetes
+            type: DirectoryOrCreate
 ---
 apiVersion: v1
 kind: Service
@@ -244,14 +268,12 @@ metadata:
   name: depictio-backend
   namespace: depictio
 spec:
-  type: NodePort
-  ports:
-    - name: http
-      port: 8058
-      targetPort: 8058
-      nodePort: 32058
   selector:
     app: depictio-backend
+  type: LoadBalancer
+  ports:
+    - port: 80
+      targetPort: 80
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -281,7 +303,7 @@ spec:
             - name: DEPICTIO_MONGO_DB_PORT
               value: "27018"
             - name: DEPICTIO_BACKEND_PORT
-              value: "8058"
+              value: "80"
             - name: DEPICTIO_FRONTEND_PORT
               value: "5080"
             - name: AUTH_PRIVATE_KEY
@@ -320,22 +342,22 @@ spec:
               memory: "2Gi"
               cpu: "1"
       volumes:
-      - name: depictio-src
-        hostPath:
-          path: /mnt/depictio
-          type: DirectoryOrCreate
-      - name: data
-        hostPath:
-          path: /mnt/data
-          type: DirectoryOrCreate
-      - name: minio-data
-        hostPath:
-          path: /mnt/minio_data
-          type: DirectoryOrCreate
-      - name: configs
-        hostPath:
-          path: /mnt/configs
-          type: DirectoryOrCreate
+        - name: depictio-src
+          hostPath:
+            path: /mnt/depictio
+            type: DirectoryOrCreate
+        - name: data
+          hostPath:
+            path: /mnt/data
+            type: DirectoryOrCreate
+        - name: minio-data
+          hostPath:
+            path: /mnt/minio_data
+            type: DirectoryOrCreate
+        - name: configs
+          hostPath:
+            path: /mnt/configs
+            type: DirectoryOrCreate
 ---
 apiVersion: v1
 kind: Service
@@ -343,11 +365,9 @@ metadata:
   name: depictio-frontend
   namespace: depictio
 spec:
-  type: NodePort
+  type: LoadBalancer
   ports:
-    - name: http
-      port: 5080
+    - port: 80
       targetPort: 5080
-      nodePort: 32080
   selector:
     app: depictio-frontend
