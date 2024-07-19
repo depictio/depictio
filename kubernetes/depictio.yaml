@@ -192,7 +192,7 @@ spec:
           image: depictio:dev
           env:
             - name: DEPICTIO_CONFIG_BACKEND_LOCATION
-              value: "/mnt/depictio/api/v1/configs/config_backend.yaml"
+              value: "/mnt/depictio/api/v1/configs/config_backend_k8s.yaml"
             - name: DEPICTIO_PRIVATE_KEY_FILE
               value: "/mnt/depictio/private_key.pem"
             - name: DEPICTIO_PUBLIC_KEY_FILE
@@ -213,7 +213,7 @@ spec:
                 secretKeyRef:
                   name: multiline-secrets
                   key: AUTH_PUBLIC_KEY
-            - name: AUTH_TMP_TOKEN
+            - name: DEPICTIO_AUTH_TMP_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: multiline-secrets
@@ -295,7 +295,7 @@ spec:
           image: depictio:dev
           env:
             - name: DEPICTIO_CONFIG_BACKEND_LOCATION
-              value: "/mnt/depictio/api/v1/configs/config_backend.yaml"
+              value: "/mnt/depictio/api/v1/configs/config_backend_k8s.yaml"
             - name: DEPICTIO_PRIVATE_KEY_FILE
               value: "/mnt/depictio/private_key.pem"
             - name: DEPICTIO_PUBLIC_KEY_FILE
@@ -316,7 +316,7 @@ spec:
                 secretKeyRef:
                   name: multiline-secrets
                   key: AUTH_PUBLIC_KEY
-            - name: AUTH_TMP_TOKEN
+            - name: DEPICTIO_AUTH_TMP_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: multiline-secrets
