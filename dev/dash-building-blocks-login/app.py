@@ -1,95 +1,203 @@
 from dash import html, Dash, dcc, Input, Output, State
 import dash_mantine_components as dmc
 import dash
+import json
+import os
 
-app = Dash(__name__)
+# Initialize the Dash app
+app = Dash(__name__, suppress_callback_exceptions=True)
 
-app.layout = html.Div([
-    dcc.Store(id="modal-state-store", data="login"),  # Store to control modal content state (login or register)
-    dcc.Store(id="modal-open-store", data=True),  # Store to control modal state (open or close)
-    dmc.Modal(
-        id="auth-modal",
-        opened=True,
-        centered=True,
-        children=[
-            dmc.Center(id="modal-content")
-        ],
-        withCloseButton=False,
-        closeOnEscape=False,
-        closeOnClickOutside=False,
-        size="lg"
-    ),
-        html.Div([
-        dmc.Button("hidden-login-button", id="open-login-form", style={'display': 'none'}),
-        dmc.Button("hidden-register-button", id="open-register-form", style={'display': 'none'}),
-    ])
-])
+# Path to the JSON file for storing user data
+USER_DATA_FILE = "/Users/tweber/Gits/depictio/dev/dash-building-blocks-login/user_data.json"
+
+# Ensure the JSON file exists
+if not os.path.exists(USER_DATA_FILE):
+    with open(USER_DATA_FILE, "w") as f:
+        json.dump({}, f)
+
+
+# Function to load user data from the JSON file
+def load_user_data():
+    with open(USER_DATA_FILE, "r") as f:
+        return json.load(f)
+
+
+# Function to save user data to the JSON file
+def save_user_data(data):
+    with open(USER_DATA_FILE, "w") as f:
+        json.dump(data, f)
+
+
+app.layout = html.Div(
+    [
+        dcc.Store(id="modal-state-store", data="login"),  # Store to control modal content state (login or register)
+        dcc.Store(id="modal-open-store", data=True),  # Store to control modal state (open or close)
+        dmc.Modal(
+            id="auth-modal", opened=True, centered=True, children=[dmc.Center(id="modal-content")], withCloseButton=False, closeOnEscape=False, closeOnClickOutside=False, size="lg"
+        ),
+        # Hidden buttons for switching forms to ensure they exist in the layout
+        html.Div(
+            [
+                dmc.Button("hidden-login-button", id="open-login-form", style={"display": "none"}),
+                dmc.Button("hidden-register-button", id="open-register-form", style={"display": "none"}),
+                dmc.Button("hidden-login-button", id="login-button", style={"display": "none"}),
+                dmc.Button("hidden-register-button", id="register-button", style={"display": "none"}),
+                dmc.PasswordInput("hidden-register-password", id="register-password", style={"display": "none"}),
+                dmc.PasswordInput("hidden-register-confirm-password", id="register-confirm-password", style={"display": "none"}),
+                dmc.TextInput("hidden-register-email", id="register-email", style={"display": "none"}),
+                dmc.PasswordInput("hidden-login-password", id="login-password", style={"display": "none"}),
+                dmc.TextInput("hidden-login-email", id="login-email", style={"display": "none"}),
+                html.Div(id="user-feedback"),
+            ]
+        ),
+    ]
+)
+
 
 def render_login_form():
-    return dmc.Stack([
-        dmc.Title('Welcome to DMC/DBC', align='center', order=2),
-        dmc.Space(h=20),
-        dmc.TextInput(label="Email:", placeholder="Enter your email", style={"width": "100%"}),
-        dmc.PasswordInput(label="Password:", placeholder="Enter your password", style={"width": "100%"}),
-        dmc.Space(h=20),
-        dmc.Group([
-            dmc.Button("Login", radius='md', id="login-button", fullWidth=True),
-            html.A(dmc.Button("Register", radius='md', variant='outline', color='gray', fullWidth=True), href='#', id="open-login-form", style={'display': 'none'}), 
-            html.A(dmc.Button("Register", radius='md', variant='outline', color='gray', fullWidth=True), href='#', id="open-register-form"), 
-        ], position="center", mt='1rem')
-    ], spacing='1rem', style={"width": "100%"})
+    return dmc.Stack(
+        [
+            dmc.Title("Welcome to DMC/DBC", align="center", order=2),
+            dmc.Space(h=20),
+            dmc.TextInput(label="Email:", id="register-email", placeholder="Enter your email", style={"width": "100%", "display": "none"}),
+            dmc.PasswordInput(label="Password:", id="register-password", placeholder="Enter your password", style={"width": "100%", "display": "none"}),
+            dmc.TextInput(label="Email:", id="login-email", placeholder="Enter your email", style={"width": "100%"}),
+            dmc.PasswordInput(label="Password:", id="login-password", placeholder="Enter your password", style={"width": "100%"}),
+            dmc.PasswordInput(label="Confirm Password:", id="register-confirm-password", placeholder="Confirm your password", style={"width": "100%", "display": "none"}),
+            html.Div(id="user-feedback"),
+            dmc.Space(h=20),
+            dmc.Group(
+                [
+                    dmc.Button("Login", radius="md", id="login-button", fullWidth=True),
+                    dmc.Button("Login", radius="md", id="register-button", fullWidth=True, style={"display": "none"}),
+                    html.A(dmc.Button("Register", radius="md", variant="outline", color="gray", fullWidth=True), href="#", id="open-register-form"),
+                    html.A(dmc.Button("Register", radius="md", variant="outline", color="gray", fullWidth=True), href="#", id="open-login-form", style={"display": "none"}),
+                ],
+                position="center",
+                mt="1rem",
+            ),
+        ],
+        spacing="1rem",
+        style={"width": "100%"},
+    )
+
 
 def render_register_form():
-    return dmc.Stack([
-        dmc.Title('Register for DMC/DBC', align='center', order=2),
-        dmc.Space(h=20),
-        dmc.TextInput(label="Email:", placeholder="Enter your email", style={"width": "100%"}),
-        dmc.PasswordInput(label="Password:", placeholder="Enter your password", style={"width": "100%"}),
-        dmc.PasswordInput(label="Confirm Password:", placeholder="Confirm your password", style={"width": "100%"}),
-        dmc.Space(h=20),
-        dmc.Group([
-            dmc.Button("Register", radius='md', id="register-button", fullWidth=True),
-            html.A(dmc.Button("Back to Login", radius='md', variant='outline', color='gray', fullWidth=True), href='#', id="open-login-form"), 
-            html.A(dmc.Button("Back to Login", radius='md', variant='outline', color='gray', fullWidth=True), href='#', id="open-register-form", style={'display': 'none'}), 
-        ], position="center", mt='1rem')
-    ], spacing='1rem', style={"width": "100%"})
+    return dmc.Stack(
+        [
+            dmc.Title("Register for DMC/DBC", align="center", order=2),
+            dmc.Space(h=20),
+            dmc.TextInput(label="Email:", id="register-email", placeholder="Enter your email", style={"width": "100%"}),
+            dmc.PasswordInput(label="Password:", id="register-password", placeholder="Enter your password", style={"width": "100%"}),
+            dmc.TextInput(label="Email:", id="login-email", placeholder="Enter your email", style={"width": "100%", "display": "none"}),
+            dmc.PasswordInput(label="Password:", id="login-password", placeholder="Enter your password", style={"width": "100%", "display": "none"}),
+            dmc.PasswordInput(label="Confirm Password:", id="register-confirm-password", placeholder="Confirm your password", style={"width": "100%"}),
+            html.Div(id="user-feedback"),
+            dmc.Space(h=20),
+            dmc.Group(
+                [
+                    dmc.Button("Register", radius="md", id="login-button", fullWidth=True, style={"display": "none"}),
+                    dmc.Button("Register", radius="md", id="register-button", fullWidth=True),
+                    html.A(dmc.Button("Back to Login", radius="md", variant="outline", color="gray", fullWidth=True), href="#", id="open-register-form", style={"display": "none"}),
+                    html.A(dmc.Button("Back to Login", radius="md", variant="outline", color="gray", fullWidth=True), href="#", id="open-login-form"),
+                ],
+                position="center",
+                mt="1rem",
+            ),
+        ],
+        spacing="1rem",
+        style={"width": "100%"},
+    )
 
 @app.callback(
-    Output("auth-modal", "opened"),
-    Input("modal-open-store", "data")
+    [Output("auth-modal", "opened"), Output("modal-content", "children"), Output("user-feedback", "children"), Output("modal-state-store", "data"), Output("modal-open-store", "data")],
+    [Input("open-register-form", "n_clicks"), Input("open-login-form", "n_clicks"), Input("login-button", "n_clicks"), Input("register-button", "n_clicks")],
+    [
+        State("modal-state-store", "data"),
+        State("login-email", "value"),
+        State("login-password", "value"),
+        State("register-email", "value"),
+        State("register-password", "value"),
+        State("register-confirm-password", "value"),
+        State("modal-open-store", "data"),
+    ],
+    # prevent_initial_call=True,
 )
-def open_modal_on_load(open_modal):
-    return open_modal
-
-@app.callback(
-    Output("modal-content", "children"),
-    Input("modal-state-store", "data")
-)
-def update_modal_content(modal_state):
-    if modal_state == "login":
-        return render_login_form()
-    elif modal_state == "register":
-        return render_register_form()
-    return html.Div()
-
-@app.callback(
-    Output("modal-state-store", "data"),
-    [Input("open-register-form", "n_clicks"), Input("open-login-form", "n_clicks")],
-    [State("modal-state-store", "data")]
-)
-def switch_modal_content(n_clicks_register, n_clicks_login, current_state):
+def handle_auth_and_switch_forms(
+    n_clicks_register,
+    n_clicks_login_form,
+    n_clicks_login,
+    n_clicks_register_form,
+    current_state,
+    login_email,
+    login_password,
+    register_email,
+    register_password,
+    register_confirm_password,
+    modal_open,
+):
+    print("\n")
     ctx = dash.callback_context
+    print(ctx.triggered)
 
-    if not ctx.triggered:
-        return current_state
+    # if not ctx.triggered:
+    #     return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
-    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    button_id = ctx.triggered[0]["prop_id"].split(".")[0]
+
+    user_data = load_user_data()
+
+    feedback_message = ""
 
     if button_id == "open-register-form":
-        return "register"
-    elif button_id == "open-login-form":
-        return "login"
-    return current_state
+        modal_state = "register"
+        content = render_register_form()
+        return modal_open, content, dash.no_update, modal_state, dash.no_update
+    elif button_id == "open-login-form" or not ctx.triggered:
+        modal_state = "login"
+        content = render_login_form()
+        return modal_open, content, dash.no_update, modal_state, dash.no_update
+    elif button_id == "login-button":
+        print("login")
+        if login_email and login_password:
+            print('login_email:', login_email)
+            print('login_password:', login_password)
+            if login_email in user_data and user_data[login_email] == login_password:
+                feedback_message = dmc.Text("Login successful!", color="green")
+                modal_open = False
+            else:
+                print('Invalid email or password.')
+                feedback_message = dmc.Text("Invalid email or password.", color="red")
+                modal_open = True
+        else:
+            print('Please fill in all fields.')
+            feedback_message = dash.no_update
+            modal_open = True
+        content = render_login_form()
+        return modal_open, content, feedback_message, current_state, modal_open
+    elif button_id == "register-button":
+        if register_email and register_password and register_confirm_password:
+            if register_email in user_data:
+                feedback_message = dmc.Text("Email already registered.", color="red")
+                modal_open = True
+            elif register_password != register_confirm_password:
+                feedback_message = dmc.Text("Passwords do not match.", color="red")
+                modal_open = True
+            else:
+                user_data[register_email] = register_password
+                save_user_data(user_data)
+                feedback_message = dmc.Text("Registration successful! Please log in.", color="green")
+                modal_state = "login"
+                content = render_login_form()
+                return modal_open, content, feedback_message, modal_state, modal_open
+        else:
+            feedback_message = dmc.Text("Please fill in all fields.", color="red")
+            modal_open = True
+        content = render_register_form()
+        return modal_open, content, feedback_message, current_state, modal_open
 
-if __name__ == '__main__':
+    return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+
+if __name__ == "__main__":
     app.run_server(debug=True)
