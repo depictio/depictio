@@ -1,3 +1,4 @@
+import re
 from dash import html, Dash, dcc, Input, Output, State
 import dash_mantine_components as dmc
 import dash
@@ -112,6 +113,24 @@ def render_register_form():
         spacing="1rem",
         style={"width": "100%"},
     )
+
+
+@app.callback([Output("login-button", "disabled"), Output("login-email", "error")], [Input("login-email", "value")])
+def update_submit_button(email):
+    if email:
+        valid = re.match(r"^[a-zA-Z0-9_.+-]+@embl\.de$", email)
+        return not valid, not valid
+    return True, False  # Initially disabled with no error
+
+
+
+@app.callback([Output("register-button", "disabled"), Output("login-email", "error")], [Input("login-email", "value")])
+def update_submit_button(email):
+    if email:
+        valid = re.match(r"^[a-zA-Z0-9_.+-]+@embl\.de$", email)
+        return not valid, not valid
+    return True, False  # Initially disabled with no error
+
 
 
 @app.callback(
