@@ -8,13 +8,13 @@ import bcrypt
 
 
 # Dummy login function
-def login_user():
-    return {"logged_in": True}
+def login_user(email):
+    return {"logged_in": True, "email": email}
 
 
 # Dummy logout function
 def logout_user():
-    return {"logged_in": False}
+    return {"logged_in": False, "email": None}
 
 
 # Check if user is logged in
@@ -287,7 +287,7 @@ def register_callbacks_users_management(app):
                             dmc.Button("Logout", id="logout-button", variant="outline", color="red", size="lg", fullWidth=True),
                         ]
                     )
-                    session_data = login_user()
+                    session_data = login_user(login_email)
                     return modal_open, dash.no_update, feedback_message, current_state, modal_open, landing_page_content, session_data
 
                 else:

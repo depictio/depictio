@@ -251,7 +251,8 @@ def register_callbacks_dashboards_management(app):
             State({"type": "create-dashboard-button", "index": ALL}, "id"),
             State({"type": "dashboard-index-store", "index": ALL}, "data"),
             State({"type": "confirm-delete", "index": ALL}, "index"),
-            State("modal-store", "data"),
+            # State("modal-store", "data"),
+            State("session-store", "data"),
             Input("dashboard-modal-store", "data"),
         ],
     )
@@ -262,7 +263,7 @@ def register_callbacks_dashboards_management(app):
         create_ids_list,
         store_data_list,
         delete_ids_list,
-        user_email,
+        user_data,
         modal_data,
     ):
         logger.info("\n")
@@ -278,6 +279,7 @@ def register_callbacks_dashboards_management(app):
 
         # filepath = "dashboards.json"
         # index_data = load_dashboards_from_file(filepath)
+        user_email = user_data["email"]
         index_data = load_dashboards_from_db(user_email)
 
         dashboards = index_data.get("dashboards", [])

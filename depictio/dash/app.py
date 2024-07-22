@@ -166,7 +166,7 @@ def create_app_layout():
     return dbc.Container(
         [
             dcc.Location(id="second-url", refresh=False),
-            dcc.Store(id="session-store", storage_type="session", data={"logged_in": False}),
+            dcc.Store(id="session-store", storage_type="session", data={"logged_in": False, "email": None}),
             html.Div(id="page-content"),
         ],
         fluid=True,
