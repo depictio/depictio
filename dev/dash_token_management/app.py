@@ -3,9 +3,14 @@ from dash import html, Input, Output, State, ctx
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
+import jwt
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+
+# Secret key for JWT encoding
+PRIVATE_KEY = "your_private_key_here"
+ALGORITHM = "HS256"
 
 app.layout = dbc.Container(
     [
@@ -68,6 +73,27 @@ app.layout = dbc.Container(
                 ),
                 dmc.Button("Confirm Delete", id="confirm-delete-button", className="mt-2", color="danger")
             ]
+        ),
+        dmc.Modal(
+            title="Token Created",
+            id="display-token-modal",
+            centered=True,
+            children=[
+                dmc.TextInput(
+                    id="display-token-input",
+                    label="Token",
+                    value="",
+                    # readOnly=True,
+                    className="mt-2",
+                    disabled=True
+                ),
+                # dmc.CopyButton(
+                #     content="Copy",
+                #     value="",
+                #     className="mt-2",
+                #     id="copy-token-button"
+                # )
+            ]
         )
     ],
     fluid=True
@@ -81,6 +107,9 @@ token_to_delete = None
     Output("token-modal", "opened"),
     Output("delete-modal", "opened"),
     Output("tokens-list", "children"),
+    Output("display-token-modal", "opened"),
+    Output("display-token-input", "value"),
+    # Output("copy-token-button", "value"),
     Input("add-token-button", "n_clicks"),
     Input("save-token-name", "n_clicks"),
     Input("confirm-delete-button", "n_clicks"),
@@ -95,29 +124,37 @@ def handle_callbacks(add_clicks, save_clicks, confirm_delete_clicks, delete_clic
     triggered = ctx.triggered_id
 
     if triggered == "add-token-button" and add_clicks > 0:
-        return True, False, render_tokens_list()
+        return True, False, render_tokens_list(), False, ""
     
     if triggered == "save-token-name" and save_clicks > 0 and token_name:
-        token = str(uuid.uuid4())
-        created_time = datetime.now().strftime("%b %d, %Y, %I:%M:%S %p")
+        token, created_time = create_access_token({"name": token_name})
         tokens[token] = {
             "name": token_name,
             "created_time": created_time,
             "last_activity": created_time
         }
-        return False, False, render_tokens_list()
+        return False, False, render_tokens_list(), True, token
+
     
     if isinstance(triggered, dict) and triggered.get("type") == "delete-token":
         token_to_delete = triggered.get("index")
-        return False, True, render_tokens_list()
+        return False, True, render_tokens_list(), False, ""
     
     if triggered == "confirm-delete-button" and confirm_delete_clicks > 0 and delete_confirm_input == "delete":
         if token_to_delete in tokens:
             del tokens[token_to_delete]
             token_to_delete = None
-        return False, False, render_tokens_list()
+        return False, False, render_tokens_list(), False, ""
 
-    return False, False, render_tokens_list()
+    return False, False, render_tokens_list(), False, ""
+
+def create_access_token(data, expires_delta=timedelta(minutes=15)):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + expires_delta
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, PRIVATE_KEY, algorithm=ALGORITHM)
+    created_time = datetime.now().strftime("%b %d, %Y, %I:%M:%S %p")
+    return encoded_jwt, created_time
 
 def render_tokens_list():
     if not tokens:
