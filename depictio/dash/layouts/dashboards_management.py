@@ -63,8 +63,6 @@ layout = html.Div(
 )
 
 
-
-
 def convert_objectid_to_str(data):
     for item in data:
         if "_id" in item:
@@ -72,11 +70,12 @@ def convert_objectid_to_str(data):
     return data
 
 
-def load_dashboards_from_db():
+def load_dashboards_from_db(owner):
     logger.info("Loading dashboards from MongoDB")
     projection = {"_id": 1, "dashboard_id": 1, "version": 1, "title": 1, "owner": 1}
 
-    dashboards = list(dashboards_collection.find({}, projection))
+    # Fetch all dashboards corresponding to owner (email address)
+    dashboards = list(dashboards_collection.find({"owner": owner}, projection))
 
     # turn mongodb ObjectId to string
     dashboards = convert_objectid_to_str(dashboards)
@@ -113,9 +112,6 @@ def save_dashboards_to_file(data, filepath):
         json.dump(data, file, indent=4)
 
 
-
-
-
 def render_welcome_section(email):
     return dmc.Container(
         [
@@ -142,7 +138,7 @@ def render_dashboard_list_section(email):
     return html.Div(id={"type": "dashboard-list", "index": email}, style={"padding": "20px"})
 
 
-def register_callbacks_management(app):
+def register_callbacks_dashboards_management(app):
 
     @app.callback([Output("submit-button", "disabled"), Output("email-input", "error")], [Input("email-input", "value")])
     def update_submit_button(email):
@@ -150,7 +146,6 @@ def register_callbacks_management(app):
             valid = re.match(r"^[a-zA-Z0-9_.+-]+@embl\.de$", email)
             return not valid, not valid
         return True, False  # Initially disabled with no error
-
 
     @app.callback(Output("modal-store", "data"), [Input("submit-button", "n_clicks")], [State("email-input", "value"), State("modal-store", "data")])
     def store_email(submit_clicks, email, data):
@@ -160,19 +155,16 @@ def register_callbacks_management(app):
             data["submitted"] = True
         return data
 
-
     @app.callback(Output("email-modal", "opened"), [Input("modal-store", "data")])
     def manage_modal(data):
         logger.info(data)
         return not data["submitted"]  # Keep modal open until submitted
-
 
     @app.callback(Output("landing-page", "style"), [Input("modal-store", "data")])
     def show_landing_page(data):
         if data["submitted"]:
             return {"display": "block"}  # Show landing page
         return {"display": "none"}  # Hide landing page
-
 
     def create_dashboards_view(dashboards):
         dashboards_view = [
@@ -248,7 +240,6 @@ def register_callbacks_management(app):
         logger.info(f"dashboards_view: {dashboards_view}")
         return dashboards_view
 
-
     @app.callback(
         [Output({"type": "dashboard-list", "index": ALL}, "children"), Output({"type": "dashboard-index-store", "index": ALL}, "data")],
         [
@@ -260,6 +251,7 @@ def register_callbacks_management(app):
             State({"type": "create-dashboard-button", "index": ALL}, "id"),
             State({"type": "dashboard-index-store", "index": ALL}, "data"),
             State({"type": "confirm-delete", "index": ALL}, "index"),
+            State("modal-store", "data"),
             Input("dashboard-modal-store", "data"),
         ],
     )
@@ -270,6 +262,7 @@ def register_callbacks_management(app):
         create_ids_list,
         store_data_list,
         delete_ids_list,
+        user_email,
         modal_data,
     ):
         logger.info("\n")
@@ -285,7 +278,7 @@ def register_callbacks_management(app):
 
         # filepath = "dashboards.json"
         # index_data = load_dashboards_from_file(filepath)
-        index_data = load_dashboards_from_db()
+        index_data = load_dashboards_from_db(user_email)
 
         dashboards = index_data.get("dashboards", [])
         next_index = index_data.get("next_index", 1)
@@ -338,7 +331,6 @@ def register_callbacks_management(app):
 
         return [dashboards_view] * len(store_data_list), [new_index_data] * len(store_data_list)
 
-
     # New callback to handle the creation of a new dashboard
     @app.callback(
         Output("dashboard-modal-store", "data"),
@@ -355,7 +347,6 @@ def register_callbacks_management(app):
             data["title"] = title
         return data
 
-
     # New callback to open the create dashboard modal
     @app.callback(
         Output("dashboard-modal", "opened"),
@@ -370,7 +361,6 @@ def register_callbacks_management(app):
             return opened
         return opened
 
-
     @app.callback(
         Output({"type": "delete-confirmation-modal", "index": MATCH}, "opened"),
         [
@@ -383,7 +373,6 @@ def register_callbacks_management(app):
     )
     def open_delete_modal(n1, n2, n3, opened):
         return not opened
-
 
     @app.callback(
         Output("landing-page", "children"),

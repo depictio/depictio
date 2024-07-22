@@ -1,5 +1,5 @@
 import os
-from dash import html, Input, Output, dcc
+from dash import html, Input, Output, State, dcc
 import dash
 import dash_bootstrap_components as dbc
 
@@ -35,8 +35,6 @@ from depictio.dash.layouts.draggable import (
 from depictio.dash.layouts.draggable_scenarios.restore_dashboard import load_depictio_data
 
 from depictio.api.v1.configs.config import logger
-
-
 
 
 # Start the app
@@ -78,30 +76,48 @@ register_callbacks_table_component(app)
 # Register callbacks for draggable layout
 # register_callbacks_add_component(app)
 
-from depictio.dash.layouts.dashboards_management import register_callbacks_management
-from depictio.dash.layouts.dashboards_management import layout as management_layout
-register_callbacks_management(app)
+from depictio.dash.layouts.dashboards_management import register_callbacks_dashboards_management
+from depictio.dash.layouts.dashboards_management import layout as dashboards_management_layout
+
+register_callbacks_dashboards_management(app)
+from depictio.dash.layouts.users_management import is_user_logged_in, register_callbacks_users_management
+from depictio.dash.layouts.users_management import layout as users_management_layout
+
+register_callbacks_users_management(app)
+
 
 @app.callback(
     Output("page-content", "children"),
-    [Input("second-url", "pathname")],
+    Output("second-url", "pathname"),
+    [Input("second-url", "pathname"), State("session-store", "data")],
 )
-def display_page(pathname):
+def display_page(pathname, session_data):
+
+    logger.info(f"session_data: {session_data}")
+
+    if not session_data["logged_in"]:
+        logger.info("User not logged in")
+        logger.info(f"pathname: {pathname}")
+        return create_users_management_layout(), "/auth"
+
     if pathname is None:
-        return dash.no_update
+        return dash.no_update, "/"
     elif pathname.startswith("/dashboard/"):
         dashboard_id = pathname.split("/")[-1]
         logger.info(f"dashboard_id: {dashboard_id}")
-        # Fetch dashboard data based on dashboard_id and return the dashboard layout
-        return create_dashboard_layout(dashboard_id=dashboard_id)
-        # return html.Div([f"Displaying Dashboard {dashboard_id}", dbc.Button("Go back", href="/", color="black", external_link=True)])
+        return create_dashboard_layout(dashboard_id=dashboard_id), pathname
+    elif pathname == "/auth":
+        return create_dashboards_management_layout(), "/"
     else:
-        # Return the dashboards management layout
-        return create_management_layout()
-        # return html.Div([f"Displaying Management Layout"])
+        return create_dashboards_management_layout(), pathname
 
-def create_management_layout():
-    return management_layout
+
+def create_dashboards_management_layout():
+    return dashboards_management_layout
+
+
+def create_users_management_layout():
+    return users_management_layout
 
 
 def create_dashboard_layout(dashboard_id=None):
@@ -109,7 +125,6 @@ def create_dashboard_layout(dashboard_id=None):
     depictio_dash_data = load_depictio_data(dashboard_id)
     logger.info(f"dashboard_id: {dashboard_id}")
     logger.info(f"depictio_dash_data: {depictio_dash_data}")
-
 
     # Init layout and children if depictio_dash_data is available, else set to empty
     if depictio_dash_data:
@@ -121,7 +136,7 @@ def create_dashboard_layout(dashboard_id=None):
             init_children = depictio_dash_data["stored_children_data"]
         else:
             init_children = list()
-        
+
     logger.info(f"Loaded depictio init_layout: {init_layout}")
     header, backend_components = design_header(depictio_dash_data)
 
@@ -146,14 +161,17 @@ def create_dashboard_layout(dashboard_id=None):
         fluid=True,
     )
 
+
 def create_app_layout():
     return dbc.Container(
         [
             dcc.Location(id="second-url", refresh=False),
+            dcc.Store(id="session-store", storage_type="session", data={"logged_in": False}),
             html.Div(id="page-content"),
         ],
         fluid=True,
     )
+
 
 app.layout = create_app_layout
 
