@@ -44,6 +44,8 @@ class User(MongoModel):
     # user_id: Optional[PyObjectId] = None
     username: str
     email: EmailStr
+    tokens: List[Token] = Field(default_factory=list)
+
 
     @root_validator(pre=True)
     def set_default_id(cls, values):
