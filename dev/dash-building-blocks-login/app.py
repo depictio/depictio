@@ -7,6 +7,19 @@ import os
 import bcrypt
 
 
+# Dummy login function
+def login_user():
+    return {'logged_in': True}
+
+# Dummy logout function
+def logout_user():
+    return {'logged_in': False}
+
+# Check if user is logged in
+def is_user_logged_in(session_data):
+    return session_data.get('logged_in', False)
+
+
 def hash_password(password: str) -> str:
     # Generate a salt
     salt = bcrypt.gensalt()
@@ -67,6 +80,8 @@ app.layout = html.Div(
     [
         dcc.Store(id="modal-state-store", data="login"),  # Store to control modal content state (login or register)
         dcc.Store(id="modal-open-store", data=True),  # Store to control modal state (open or close)
+        dcc.Store(id='session-store', storage_type='session'),
+
         dmc.Modal(
             id="auth-modal", opened=True, centered=True, children=[dmc.Center(id="modal-content")], withCloseButton=False, closeOnEscape=False, closeOnClickOutside=False, size="lg"
         ),
@@ -149,6 +164,21 @@ def render_register_form():
     )
 
 
+@app.callback(
+    Output('session-store', 'data'),
+    [Input('login-button', 'n_clicks'), Input('logout-button', 'n_clicks')],
+    [State('session-store', 'data')]
+)
+def update_session_store(login_clicks, logout_clicks, session_data):
+    if session_data is None:
+        session_data = {}
+    if login_clicks:
+        session_data = login_user()
+    elif logout_clicks:
+        session_data = logout_user()
+    return session_data
+
+
 @app.callback([Output("login-button", "disabled"), Output("login-email", "error")], [Input("login-email", "value")])
 def update_submit_button(email):
     if email:
@@ -189,6 +219,7 @@ def update_submit_button(email):
         State("register-password", "value"),
         State("register-confirm-password", "value"),
         State("modal-open-store", "data"),
+        State("session-store", "data"),
     ],
     # prevent_initial_call=True,
 )
@@ -205,7 +236,20 @@ def handle_auth_and_switch_forms(
     register_password,
     register_confirm_password,
     modal_open,
+    session_data,
 ):
+    
+
+    if session_data and session_data.get('logged_in', False):
+        return False, dash.no_update, dash.no_update, dash.no_update, dash.no_update, html.Div(
+            [
+                dmc.Title("Welcome to DMC/DBC", align="center"),
+                dmc.Space(h=20),
+                dmc.Text("You are now logged in.", align="center"),
+                dmc.Button("Logout", id="logout-button", variant="outline", color="red", size="lg", fullWidth=True),
+            ]
+        )
+
     print("\n")
     ctx = dash.callback_context
     print(ctx.triggered)
@@ -214,8 +258,6 @@ def handle_auth_and_switch_forms(
     #     return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
     button_id = ctx.triggered[0]["prop_id"].split(".")[0]
-
-    user_data = load_user_data()
 
     feedback_message = ""
     landing_page_content = ""
