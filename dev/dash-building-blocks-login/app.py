@@ -4,6 +4,22 @@ import dash_mantine_components as dmc
 import dash
 import json
 import os
+import bcrypt
+
+
+def hash_password(password: str) -> str:
+    # Generate a salt
+    salt = bcrypt.gensalt()
+    # Hash the password with the salt
+    hashed = bcrypt.hashpw(password.encode("utf-8"), salt)
+    # Return the hashed password
+    return hashed.decode("utf-8")
+
+
+def verify_password(stored_hash: str, password: str) -> bool:
+    # Verify the password against the stored hash
+    return bcrypt.checkpw(password.encode("utf-8"), stored_hash.encode("utf-8"))
+
 
 # Initialize the Dash app
 app = Dash(__name__, suppress_callback_exceptions=True)
@@ -27,6 +43,24 @@ def load_user_data():
 def save_user_data(data):
     with open(USER_DATA_FILE, "w") as f:
         json.dump(data, f)
+
+
+# Function to find user by username
+def find_user(email):
+    users = load_user_data()
+    for user in users:
+        if user["email"] == email:
+            return user
+    return None
+
+
+# Function to add a new user
+def add_user(email, password):
+    users = load_user_data()
+    if not users:
+        users = []
+    users.append({"email": email, "password": password, "last_login": None, "registration_date": None, "groups": [], "tokens": [], "username": None, "user_id": None})
+    save_user_data(users)
 
 
 app.layout = html.Div(
@@ -60,7 +94,7 @@ app.layout = html.Div(
 def render_login_form():
     return dmc.Stack(
         [
-            dmc.Title("Welcome to DMC/DBC", align="center", order=2),
+            dmc.Title("Welcome to Depictio", align="center", order=2),
             dmc.Space(h=20),
             dmc.TextInput(label="Email:", id="register-email", placeholder="Enter your email", style={"width": "100%", "display": "none"}),
             dmc.PasswordInput(label="Password:", id="register-password", placeholder="Enter your password", style={"width": "100%", "display": "none"}),
@@ -123,14 +157,12 @@ def update_submit_button(email):
     return True, False  # Initially disabled with no error
 
 
-
-@app.callback([Output("register-button", "disabled"), Output("login-email", "error")], [Input("login-email", "value")])
+@app.callback([Output("register-button", "disabled"), Output("register-email", "error")], [Input("register-email", "value")])
 def update_submit_button(email):
     if email:
         valid = re.match(r"^[a-zA-Z0-9_.+-]+@embl\.de$", email)
         return not valid, not valid
     return True, False  # Initially disabled with no error
-
 
 
 @app.callback(
@@ -186,6 +218,7 @@ def handle_auth_and_switch_forms(
     user_data = load_user_data()
 
     feedback_message = ""
+    landing_page_content = ""
 
     if button_id == "open-register-form":
         modal_state = "register"
@@ -200,7 +233,15 @@ def handle_auth_and_switch_forms(
         if login_email and login_password:
             print("login_email:", login_email)
             print("login_password:", login_password)
-            if login_email in user_data and user_data[login_email] == login_password:
+
+            user = find_user(login_email)
+            print("user:", user)
+
+            # print("user['password']:", user["password"])
+            # print(verify_password(user["password"], login_password))
+            # print(login_password)
+
+            if user and verify_password(user["password"], login_password):
                 feedback_message = dmc.Text("Login successful!", color="green")
                 modal_open = False
                 landing_page_content = html.Div(
@@ -211,29 +252,29 @@ def handle_auth_and_switch_forms(
                         dmc.Button("Logout", id="logout-button", variant="outline", color="red", size="lg", fullWidth=True),
                     ]
                 )
+                return modal_open, dash.no_update, feedback_message, current_state, modal_open, landing_page_content
+
             else:
-                print("Invalid email or password.")
                 feedback_message = dmc.Text("Invalid email or password.", color="red")
                 modal_open = True
-                landing_page_content = dash.no_update
         else:
-            print("Please fill in all fields.")
-            feedback_message = dash.no_update
+            feedback_message = dmc.Text("Please fill in all fields.", color="red")
             modal_open = True
-            landing_page_content = dash.no_update
+
         content = render_login_form()
         return modal_open, content, feedback_message, current_state, modal_open, landing_page_content
     elif button_id == "register-button":
         if register_email and register_password and register_confirm_password:
-            if register_email in user_data:
+            if find_user(register_email):
                 feedback_message = dmc.Text("Email already registered.", color="red")
                 modal_open = True
             elif register_password != register_confirm_password:
                 feedback_message = dmc.Text("Passwords do not match.", color="red")
                 modal_open = True
             else:
-                user_data[register_email] = register_password
-                save_user_data(user_data)
+                hashed_password = hash_password(register_password)
+                add_user(register_email, hashed_password)
+                # save_user_data(user_data)
                 feedback_message = dmc.Text("Registration successful! Please log in.", color="green")
                 modal_state = "login"
                 content = render_login_form()
