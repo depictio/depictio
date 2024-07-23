@@ -17,32 +17,31 @@ logger.info(dashboards_collection.count_documents({}))
 
 layout = html.Div(
     [
-        dcc.Location(id="url", refresh=False),
         # dcc.Location(id="redirect-url", refresh=True),  # Add this component for redirection
         dcc.Store(id="modal-store", storage_type="local", data={"email": "", "submitted": False}),
         dcc.Store(id="dashboard-modal-store", storage_type="memory", data={"title": ""}),  # Store for new dashboard data
-        dmc.Modal(
-            opened=False,
-            id="email-modal",
-            centered=True,
-            children=[
-                dmc.Center(html.Img(src=dash.get_asset_url("logo.png"), height=40, style={"margin-left": "0px"})),  # Center the logo
-                # dmc.Center(dmc.Title("Welcome to Depictio", order=1, style={"fontFamily": "Virgil"}, align="center")),
-                dmc.Center(dmc.Text("Please enter your email to login:", style={"paddingTop": 15})),
-                dmc.Center(dmc.Space(h=20)),
-                dmc.Center(
-                    dmc.TextInput(
-                        label="Your Email", style={"width": 300}, placeholder="Please enter your email", icon=DashIconify(icon="ic:round-alternate-email"), id="email-input"
-                    )
-                ),
-                dmc.Center(dmc.Space(h=20)),
-                dmc.Center(dmc.Button("Login", id="submit-button", variant="filled", disabled=True, size="lg", color="black")),
-            ],
-            # Prevent closing the modal by clicking outside or pressing ESC
-            closeOnClickOutside=False,
-            closeOnEscape=False,
-            withCloseButton=False,
-        ),
+        # dmc.Modal(
+        #     opened=False,
+        #     id="email-modal",
+        #     centered=True,
+        #     children=[
+        #         dmc.Center(html.Img(src=dash.get_asset_url("logo.png"), height=40, style={"margin-left": "0px"})),  # Center the logo
+        #         # dmc.Center(dmc.Title("Welcome to Depictio", order=1, style={"fontFamily": "Virgil"}, align="center")),
+        #         dmc.Center(dmc.Text("Please enter your email to login:", style={"paddingTop": 15})),
+        #         dmc.Center(dmc.Space(h=20)),
+        #         dmc.Center(
+        #             dmc.TextInput(
+        #                 label="Your Email", style={"width": 300}, placeholder="Please enter your email", icon=DashIconify(icon="ic:round-alternate-email"), id="email-input"
+        #             )
+        #         ),
+        #         dmc.Center(dmc.Space(h=20)),
+        #         dmc.Center(dmc.Button("Login", id="submit-button", variant="filled", disabled=True, size="lg", color="black")),
+        #     ],
+        #     # Prevent closing the modal by clicking outside or pressing ESC
+        #     closeOnClickOutside=False,
+        #     closeOnEscape=False,
+        #     withCloseButton=False,
+        # ),
         dmc.Modal(
             opened=False,
             id="dashboard-modal",
@@ -63,8 +62,6 @@ layout = html.Div(
 )
 
 
-
-
 def convert_objectid_to_str(data):
     for item in data:
         if "_id" in item:
@@ -72,11 +69,12 @@ def convert_objectid_to_str(data):
     return data
 
 
-def load_dashboards_from_db():
+def load_dashboards_from_db(owner):
     logger.info("Loading dashboards from MongoDB")
     projection = {"_id": 1, "dashboard_id": 1, "version": 1, "title": 1, "owner": 1}
 
-    dashboards = list(dashboards_collection.find({}, projection))
+    # Fetch all dashboards corresponding to owner (email address)
+    dashboards = list(dashboards_collection.find({"owner": owner}, projection))
 
     # turn mongodb ObjectId to string
     dashboards = convert_objectid_to_str(dashboards)
@@ -113,9 +111,6 @@ def save_dashboards_to_file(data, filepath):
         json.dump(data, file, indent=4)
 
 
-
-
-
 def render_welcome_section(email):
     return dmc.Container(
         [
@@ -142,37 +137,33 @@ def render_dashboard_list_section(email):
     return html.Div(id={"type": "dashboard-list", "index": email}, style={"padding": "20px"})
 
 
-def register_callbacks_management(app):
+def register_callbacks_dashboards_management(app):
 
-    @app.callback([Output("submit-button", "disabled"), Output("email-input", "error")], [Input("email-input", "value")])
-    def update_submit_button(email):
-        if email:
-            valid = re.match(r"^[a-zA-Z0-9_.+-]+@embl\.de$", email)
-            return not valid, not valid
-        return True, False  # Initially disabled with no error
+    # @app.callback([Output("submit-button", "disabled"), Output("email-input", "error")], [Input("email-input", "value")])
+    # def update_submit_button(email):
+    #     if email:
+    #         valid = re.match(r"^[a-zA-Z0-9_.+-]+@embl\.de$", email)
+    #         return not valid, not valid
+    #     return True, False  # Initially disabled with no error
 
+    # @app.callback(Output("modal-store", "data"), [Input("submit-button", "n_clicks")], [State("email-input", "value"), State("modal-store", "data")])
+    # def store_email(submit_clicks, email, data):
+    #     # logger.info(submit_clicks, email, data)
+    #     if submit_clicks:
+    #         data["email"] = email
+    #         data["submitted"] = True
+    #     return data
 
-    @app.callback(Output("modal-store", "data"), [Input("submit-button", "n_clicks")], [State("email-input", "value"), State("modal-store", "data")])
-    def store_email(submit_clicks, email, data):
-        # logger.info(submit_clicks, email, data)
-        if submit_clicks:
-            data["email"] = email
-            data["submitted"] = True
-        return data
-
-
-    @app.callback(Output("email-modal", "opened"), [Input("modal-store", "data")])
-    def manage_modal(data):
-        logger.info(data)
-        return not data["submitted"]  # Keep modal open until submitted
-
+    # @app.callback(Output("email-modal", "opened"), [Input("modal-store", "data")])
+    # def manage_modal(data):
+    #     logger.info(data)
+    #     return not data["submitted"]  # Keep modal open until submitted
 
     @app.callback(Output("landing-page", "style"), [Input("modal-store", "data")])
     def show_landing_page(data):
         if data["submitted"]:
             return {"display": "block"}  # Show landing page
         return {"display": "none"}  # Hide landing page
-
 
     def create_dashboards_view(dashboards):
         dashboards_view = [
@@ -248,7 +239,6 @@ def register_callbacks_management(app):
         logger.info(f"dashboards_view: {dashboards_view}")
         return dashboards_view
 
-
     @app.callback(
         [Output({"type": "dashboard-list", "index": ALL}, "children"), Output({"type": "dashboard-index-store", "index": ALL}, "data")],
         [
@@ -260,6 +250,8 @@ def register_callbacks_management(app):
             State({"type": "create-dashboard-button", "index": ALL}, "id"),
             State({"type": "dashboard-index-store", "index": ALL}, "data"),
             State({"type": "confirm-delete", "index": ALL}, "index"),
+            # State("modal-store", "data"),
+            State("session-store", "data"),
             Input("dashboard-modal-store", "data"),
         ],
     )
@@ -270,6 +262,7 @@ def register_callbacks_management(app):
         create_ids_list,
         store_data_list,
         delete_ids_list,
+        user_data,
         modal_data,
     ):
         logger.info("\n")
@@ -285,7 +278,8 @@ def register_callbacks_management(app):
 
         # filepath = "dashboards.json"
         # index_data = load_dashboards_from_file(filepath)
-        index_data = load_dashboards_from_db()
+        user_email = user_data["email"]
+        index_data = load_dashboards_from_db(user_email)
 
         dashboards = index_data.get("dashboards", [])
         next_index = index_data.get("next_index", 1)
@@ -338,7 +332,6 @@ def register_callbacks_management(app):
 
         return [dashboards_view] * len(store_data_list), [new_index_data] * len(store_data_list)
 
-
     # New callback to handle the creation of a new dashboard
     @app.callback(
         Output("dashboard-modal-store", "data"),
@@ -355,7 +348,6 @@ def register_callbacks_management(app):
             data["title"] = title
         return data
 
-
     # New callback to open the create dashboard modal
     @app.callback(
         Output("dashboard-modal", "opened"),
@@ -370,7 +362,6 @@ def register_callbacks_management(app):
             return opened
         return opened
 
-
     @app.callback(
         Output({"type": "delete-confirmation-modal", "index": MATCH}, "opened"),
         [
@@ -383,7 +374,6 @@ def register_callbacks_management(app):
     )
     def open_delete_modal(n1, n2, n3, opened):
         return not opened
-
 
     @app.callback(
         Output("landing-page", "children"),

@@ -4,6 +4,7 @@ channels:
   - plotly
 dependencies:
   - curl
+  - bcrypt
   - bleach
   - boto3
   - bson

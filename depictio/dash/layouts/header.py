@@ -29,7 +29,7 @@ def register_callbacks_header(app):
         State("stored-edit-dashboard-mode-button", "data"),
         State("stored-add-button", "data"),
         State({"type": "interactive-component-value", "index": ALL}, "value"),
-        State("second-url", "pathname"),
+        State("url", "pathname"),
         prevent_initial_call=True,
     )
     def save_data_dashboard(
