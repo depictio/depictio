@@ -127,7 +127,7 @@ def register_callbacks_draggable(app):
         State("toggle-interactivity-button", "checked"),
         State("edit-dashboard-mode-button", "checked"),
         Input("edit-dashboard-mode-button", "checked"),
-        State("second-url", "pathname"),
+        State("url", "pathname"),
         prevent_initial_call=True,
     )
     def populate_draggable(
