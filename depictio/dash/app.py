@@ -1,5 +1,5 @@
 import os
-from dash import html, Input, Output, State, dcc
+from dash import html, Input, Output, State, dcc, ctx
 import dash
 import dash_bootstrap_components as dbc
 
@@ -86,28 +86,53 @@ from depictio.dash.layouts.users_management import layout as users_management_la
 register_callbacks_users_management(app)
 
 
+
 @app.callback(
     Output("page-content", "children"),
-    Output("second-url", "pathname"),
-    [Input("second-url", "pathname"), State("session-store", "data")],
+    Output("url", "pathname"),
+    [Input("url", "pathname"), Input("session-store", "data")],
 )
 def display_page(pathname, session_data):
 
+    trigger = ctx.triggered[0]["prop_id"].split(".")[0]
+    logger.info(f"trigger: {trigger}")
     logger.info(f"session_data: {session_data}")
+    logger.info(f"pathname: {pathname}")
 
-    if not session_data["logged_in"]:
-        logger.info("User not logged in")
+    if trigger == "session-store":
+        logger.info("Session store triggered")
+        if session_data["logged_in"]:
+            return create_dashboards_management_layout(), "/"
+        else:
+            return dash.no_update, "/auth"
+    elif trigger == "url":
+        return handle_url(pathname, session_data)
+
+def handle_url(pathname, session_data):
+
+    if session_data["logged_in"]:
+        return handle_authenticated_user(pathname)
+    else:
+        return handle_unauthenticated_user(pathname)
+
+def handle_unauthenticated_user(pathname):
+    logger.info("User not logged in")
+    if pathname is None or pathname == "/":
+        logger.info(f"pathname: {pathname}")
+        return create_users_management_layout(), "/auth"
+    elif pathname == "/auth":
         logger.info(f"pathname: {pathname}")
         return create_users_management_layout(), "/auth"
 
+
+def handle_authenticated_user(pathname):
+    logger.info("User logged in")
     if pathname is None:
         return dash.no_update, "/"
     elif pathname.startswith("/dashboard/"):
         dashboard_id = pathname.split("/")[-1]
         logger.info(f"dashboard_id: {dashboard_id}")
         return create_dashboard_layout(dashboard_id=dashboard_id), pathname
-    elif pathname == "/auth":
-        return create_dashboards_management_layout(), "/"
     else:
         return create_dashboards_management_layout(), pathname
 
@@ -165,7 +190,7 @@ def create_dashboard_layout(dashboard_id=None):
 def create_app_layout():
     return dbc.Container(
         [
-            dcc.Location(id="second-url", refresh=False),
+            dcc.Location(id="url", refresh=False),
             dcc.Store(id="session-store", storage_type="session", data={"logged_in": False, "email": None}),
             html.Div(id="page-content"),
         ],

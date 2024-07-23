@@ -17,32 +17,31 @@ logger.info(dashboards_collection.count_documents({}))
 
 layout = html.Div(
     [
-        dcc.Location(id="url", refresh=False),
         # dcc.Location(id="redirect-url", refresh=True),  # Add this component for redirection
         dcc.Store(id="modal-store", storage_type="local", data={"email": "", "submitted": False}),
         dcc.Store(id="dashboard-modal-store", storage_type="memory", data={"title": ""}),  # Store for new dashboard data
-        dmc.Modal(
-            opened=False,
-            id="email-modal",
-            centered=True,
-            children=[
-                dmc.Center(html.Img(src=dash.get_asset_url("logo.png"), height=40, style={"margin-left": "0px"})),  # Center the logo
-                # dmc.Center(dmc.Title("Welcome to Depictio", order=1, style={"fontFamily": "Virgil"}, align="center")),
-                dmc.Center(dmc.Text("Please enter your email to login:", style={"paddingTop": 15})),
-                dmc.Center(dmc.Space(h=20)),
-                dmc.Center(
-                    dmc.TextInput(
-                        label="Your Email", style={"width": 300}, placeholder="Please enter your email", icon=DashIconify(icon="ic:round-alternate-email"), id="email-input"
-                    )
-                ),
-                dmc.Center(dmc.Space(h=20)),
-                dmc.Center(dmc.Button("Login", id="submit-button", variant="filled", disabled=True, size="lg", color="black")),
-            ],
-            # Prevent closing the modal by clicking outside or pressing ESC
-            closeOnClickOutside=False,
-            closeOnEscape=False,
-            withCloseButton=False,
-        ),
+        # dmc.Modal(
+        #     opened=False,
+        #     id="email-modal",
+        #     centered=True,
+        #     children=[
+        #         dmc.Center(html.Img(src=dash.get_asset_url("logo.png"), height=40, style={"margin-left": "0px"})),  # Center the logo
+        #         # dmc.Center(dmc.Title("Welcome to Depictio", order=1, style={"fontFamily": "Virgil"}, align="center")),
+        #         dmc.Center(dmc.Text("Please enter your email to login:", style={"paddingTop": 15})),
+        #         dmc.Center(dmc.Space(h=20)),
+        #         dmc.Center(
+        #             dmc.TextInput(
+        #                 label="Your Email", style={"width": 300}, placeholder="Please enter your email", icon=DashIconify(icon="ic:round-alternate-email"), id="email-input"
+        #             )
+        #         ),
+        #         dmc.Center(dmc.Space(h=20)),
+        #         dmc.Center(dmc.Button("Login", id="submit-button", variant="filled", disabled=True, size="lg", color="black")),
+        #     ],
+        #     # Prevent closing the modal by clicking outside or pressing ESC
+        #     closeOnClickOutside=False,
+        #     closeOnEscape=False,
+        #     withCloseButton=False,
+        # ),
         dmc.Modal(
             opened=False,
             id="dashboard-modal",
@@ -140,25 +139,25 @@ def render_dashboard_list_section(email):
 
 def register_callbacks_dashboards_management(app):
 
-    @app.callback([Output("submit-button", "disabled"), Output("email-input", "error")], [Input("email-input", "value")])
-    def update_submit_button(email):
-        if email:
-            valid = re.match(r"^[a-zA-Z0-9_.+-]+@embl\.de$", email)
-            return not valid, not valid
-        return True, False  # Initially disabled with no error
+    # @app.callback([Output("submit-button", "disabled"), Output("email-input", "error")], [Input("email-input", "value")])
+    # def update_submit_button(email):
+    #     if email:
+    #         valid = re.match(r"^[a-zA-Z0-9_.+-]+@embl\.de$", email)
+    #         return not valid, not valid
+    #     return True, False  # Initially disabled with no error
 
-    @app.callback(Output("modal-store", "data"), [Input("submit-button", "n_clicks")], [State("email-input", "value"), State("modal-store", "data")])
-    def store_email(submit_clicks, email, data):
-        # logger.info(submit_clicks, email, data)
-        if submit_clicks:
-            data["email"] = email
-            data["submitted"] = True
-        return data
+    # @app.callback(Output("modal-store", "data"), [Input("submit-button", "n_clicks")], [State("email-input", "value"), State("modal-store", "data")])
+    # def store_email(submit_clicks, email, data):
+    #     # logger.info(submit_clicks, email, data)
+    #     if submit_clicks:
+    #         data["email"] = email
+    #         data["submitted"] = True
+    #     return data
 
-    @app.callback(Output("email-modal", "opened"), [Input("modal-store", "data")])
-    def manage_modal(data):
-        logger.info(data)
-        return not data["submitted"]  # Keep modal open until submitted
+    # @app.callback(Output("email-modal", "opened"), [Input("modal-store", "data")])
+    # def manage_modal(data):
+    #     logger.info(data)
+    #     return not data["submitted"]  # Keep modal open until submitted
 
     @app.callback(Output("landing-page", "style"), [Input("modal-store", "data")])
     def show_landing_page(data):
