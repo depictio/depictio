@@ -10,38 +10,10 @@ from depictio.api.v1.db import dashboards_collection
 from depictio.api.v1.configs.config import logger
 
 
-logger.info(f"dashboards_collection: {dashboards_collection}")
-logger.info(dashboards_collection.count_documents({}))
-
-# app = dash.Dash(__name__)
-
 layout = html.Div(
     [
-        # dcc.Location(id="redirect-url", refresh=True),  # Add this component for redirection
-        dcc.Store(id="modal-store", storage_type="local", data={"email": "", "submitted": False}),
+        # dcc.Store(id="modal-store", storage_type="local", data={"email": "", "submitted": False}),
         dcc.Store(id="dashboard-modal-store", storage_type="memory", data={"title": ""}),  # Store for new dashboard data
-        # dmc.Modal(
-        #     opened=False,
-        #     id="email-modal",
-        #     centered=True,
-        #     children=[
-        #         dmc.Center(html.Img(src=dash.get_asset_url("logo.png"), height=40, style={"margin-left": "0px"})),  # Center the logo
-        #         # dmc.Center(dmc.Title("Welcome to Depictio", order=1, style={"fontFamily": "Virgil"}, align="center")),
-        #         dmc.Center(dmc.Text("Please enter your email to login:", style={"paddingTop": 15})),
-        #         dmc.Center(dmc.Space(h=20)),
-        #         dmc.Center(
-        #             dmc.TextInput(
-        #                 label="Your Email", style={"width": 300}, placeholder="Please enter your email", icon=DashIconify(icon="ic:round-alternate-email"), id="email-input"
-        #             )
-        #         ),
-        #         dmc.Center(dmc.Space(h=20)),
-        #         dmc.Center(dmc.Button("Login", id="submit-button", variant="filled", disabled=True, size="lg", color="black")),
-        #     ],
-        #     # Prevent closing the modal by clicking outside or pressing ESC
-        #     closeOnClickOutside=False,
-        #     closeOnEscape=False,
-        #     withCloseButton=False,
-        # ),
         dmc.Modal(
             opened=False,
             id="dashboard-modal",
@@ -57,7 +29,7 @@ layout = html.Div(
             closeOnEscape=False,
             withCloseButton=True,
         ),
-        html.Div(id="landing-page", style={"display": "none"}),  # Initially hidden
+        html.Div(id="landing-page"),  # Initially hidden
     ]
 )
 
@@ -112,25 +84,57 @@ def save_dashboards_to_file(data, filepath):
 
 
 def render_welcome_section(email):
-    return dmc.Container(
-        [
-            dmc.Title(f"Welcome, {email}!", order=2, align="center"),
-            dmc.Center(
-                dmc.Button(
-                    "+ Create New Dashboard",
-                    id={"type": "create-dashboard-button", "index": email},
-                    n_clicks=0,
-                    variant="gradient",
-                    gradient={"from": "black", "to": "grey", "deg": 135},
-                    style={"margin": "20px 0", "fontFamily": "Virgil"},
-                    size="xl",
-                )
+    style = {
+        "border": f"1px solid {dmc.theme.DEFAULT_COLORS['indigo'][4]}",
+        "textAlign": "center",
+    }
+    return dmc.Grid(
+        children=[
+            dmc.Col(
+                html.A(
+                    dmc.Tooltip(
+                        dmc.Avatar(
+                            src="https://e7.pngegg.com/pngimages/799/987/png-clipart-computer-icons-avatar-icon-design-avatar-heroes" "-computer-wallpaper-thumbnail.png",
+                            size="lg",
+                            radius="xl",
+                        ),
+                        label=email,
+                        position="bottom",
+                    ),
+                    href="/profile",
+                    # target="_blank",
+                ),
+                span="content",
             ),
-            dcc.Store(id={"type": "dashboard-index-store", "index": email}, storage_type="session", data={"next_index": 1}),  # Store for dashboard index management
-            # dcc.Store(id={"type": "dashboards-store", "index": email}, storage_type="session", data={"dashboards": []}),  # Store to cache workflows
-            dmc.Divider(style={"margin": "20px 0"}),
-        ]
+            dmc.Col(
+                [
+                    dmc.Title(f"Welcome, {email}!", order=2, align="center"),
+                    dmc.Center(
+                        dmc.Button(
+                            "+ Create New Dashboard",
+                            id={"type": "create-dashboard-button", "index": email},
+                            n_clicks=0,
+                            variant="gradient",
+                            gradient={"from": "black", "to": "grey", "deg": 135},
+                            style={"margin": "20px 0", "fontFamily": "Virgil"},
+                            size="xl",
+                        )
+                    ),
+                    dcc.Store(id={"type": "dashboard-index-store", "index": email}, storage_type="session", data={"next_index": 1}),  # Store for dashboard index management
+                    dmc.Divider(style={"margin": "20px 0"}),
+                    dmc.Title("Your Dashboards", order=3),
+                    dmc.Divider(style={"margin": "20px 0"}),
+                ],
+                span=10,
+            ),
+        ],
+        gutter="xl",
     )
+    # return dmc.Container(
+    #     [
+
+    #     ]
+    # )
 
 
 def render_dashboard_list_section(email):
@@ -138,32 +142,11 @@ def render_dashboard_list_section(email):
 
 
 def register_callbacks_dashboards_management(app):
-
-    # @app.callback([Output("submit-button", "disabled"), Output("email-input", "error")], [Input("email-input", "value")])
-    # def update_submit_button(email):
-    #     if email:
-    #         valid = re.match(r"^[a-zA-Z0-9_.+-]+@embl\.de$", email)
-    #         return not valid, not valid
-    #     return True, False  # Initially disabled with no error
-
-    # @app.callback(Output("modal-store", "data"), [Input("submit-button", "n_clicks")], [State("email-input", "value"), State("modal-store", "data")])
-    # def store_email(submit_clicks, email, data):
-    #     # logger.info(submit_clicks, email, data)
-    #     if submit_clicks:
-    #         data["email"] = email
-    #         data["submitted"] = True
-    #     return data
-
-    # @app.callback(Output("email-modal", "opened"), [Input("modal-store", "data")])
-    # def manage_modal(data):
-    #     logger.info(data)
-    #     return not data["submitted"]  # Keep modal open until submitted
-
-    @app.callback(Output("landing-page", "style"), [Input("modal-store", "data")])
-    def show_landing_page(data):
-        if data["submitted"]:
-            return {"display": "block"}  # Show landing page
-        return {"display": "none"}  # Hide landing page
+    # @app.callback(Output("landing-page", "style"), [Input("modal-store", "data")])
+    # def show_landing_page(data):
+    #     if data["submitted"]:
+    #         return {"display": "block"}  # Show landing page
+    #     return {"display": "none"}  # Hide landing page
 
     def create_dashboards_view(dashboards):
         dashboards_view = [
@@ -202,7 +185,7 @@ def register_callbacks_dashboards_management(app):
                             centered=True,
                             # title="Confirm Deletion",
                             children=[
-                                dmc.Title(f"Are you sure you want to delete this dashboard? {dashboard['dashboard_id']}", order=3, color="black", style={"marginBottom": 20}),
+                                dmc.Title("Are you sure you want to delete this dashboard?", order=3, color="black", style={"marginBottom": 20}),
                                 dmc.Button(
                                     "Delete",
                                     id={
@@ -242,7 +225,6 @@ def register_callbacks_dashboards_management(app):
     @app.callback(
         [Output({"type": "dashboard-list", "index": ALL}, "children"), Output({"type": "dashboard-index-store", "index": ALL}, "data")],
         [
-            # Input({"type": "create-dashboard-button", "index": ALL}, "n_clicks"),
             # Input("create-dashboard-submit", "n_clicks"),
             Input({"type": "confirm-delete", "index": ALL}, "n_clicks"),
         ],
@@ -275,6 +257,7 @@ def register_callbacks_dashboards_management(app):
         logger.info(f"store_data_list: {store_data_list}")
         logger.info(f"delete_ids_list: {delete_ids_list}")
         logger.info(f"modal_data: {modal_data}")
+        logger.info(f"user_data: {user_data}")
 
         # filepath = "dashboards.json"
         # index_data = load_dashboards_from_file(filepath)
@@ -312,7 +295,6 @@ def register_callbacks_dashboards_management(app):
                 insert_dashboard(new_dashboard)
                 next_index += 1
         else:
-
             if ctx.triggered_id["type"] == "confirm-delete":
                 ctx_triggered_dict = ctx.triggered[0]
                 import ast
@@ -379,7 +361,7 @@ def register_callbacks_dashboards_management(app):
         Output("landing-page", "children"),
         [
             Input("url", "pathname"),
-            Input("modal-store", "data"),
+            Input("session-store", "data"),
         ],
     )
     def update_landing_page(
@@ -392,13 +374,24 @@ def register_callbacks_dashboards_management(app):
         logger.info(f"CTX triggered prop IDs: {ctx.triggered_prop_ids}")
         logger.info(f"CTX triggered ID {ctx.triggered_id}")
         logger.info(f"CTX inputs: {ctx.inputs}")
+        logger.info(f"pathname: {pathname}")
+        logger.info(f"data: {data}")
         logger.info("\n")
+
+        def render_landing_page(data):
+            return html.Div(
+                [
+                    render_welcome_section(data["email"]),
+                    render_dashboard_list_section(data["email"]),
+                ]
+            )
 
         # Check which input triggered the callback
         if not ctx.triggered:
             # return dash.no_update
             raise dash.exceptions.PreventUpdate
         trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
+        logger.info(f"trigger_id: {trigger_id}")
 
         # Respond to URL changes
         if trigger_id == "url":
@@ -410,18 +403,12 @@ def register_callbacks_dashboards_management(app):
                     return None
                 # Add more conditions for other routes
                 # return html.Div("This is the home page")
-                return dash.no_update
+                return render_landing_page(data)
 
         # Respond to modal-store data changes
-        if trigger_id == "modal-store":
-            if data and data.get("submitted"):
-                return html.Div(
-                    [
-                        render_welcome_section(data["email"]),
-                        dmc.Title("Your Dashboards", order=3),
-                        render_dashboard_list_section(data["email"]),
-                    ]
-                )
+        elif trigger_id == "session-store":
+            if data:
+                return render_landing_page(data)
             # return html.Div("Please login to view this page.")
             return dash.no_update
 
