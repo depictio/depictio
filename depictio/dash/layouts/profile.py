@@ -35,6 +35,7 @@ layout = dbc.Container(
                     ],
                     width=True,
                 ),
+
             ],
             align="center",
             justify="center",
