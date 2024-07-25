@@ -92,22 +92,22 @@ def authenticate_user(username: str, password: str):
 
 
 # FIXME: remove this - only for testing purposes
-@auth_endpoint_router.post("/create_user")
-async def create_user():
+# @auth_endpoint_router.post("/create_user")
+# async def create_user():
 
 
-    # delete the user
-    users_collection.drop()
+#     # delete the user
+#     users_collection.drop()
 
-    user = {
-        "username": "cezanne",
-        "password": "paul",
-        "email": "paul.cezanne@embl.de",
-    }
+#     user = {
+#         "username": "cezanne",
+#         "password": "paul",
+#         "email": "paul.cezanne@embl.de",
+#     }
 
-    users_collection.insert_one(user)
+#     users_collection.insert_one(user)
 
-    return {"message": "User created"}
+#     return {"message": "User created"}
 
 
 
@@ -136,7 +136,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     )
 
 
-@auth_endpoint_router.get("/fetch_user", response_model=User)
+@auth_endpoint_router.get("/fetch_user/from_token", response_model=User)
 async def fetch_user_from_token(token: str = Depends(oauth2_scheme)) -> User:
     logger.info("\n\n\n")
     logger.info("fetch_user_from_token")
@@ -175,3 +175,24 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> TokenData:
 
     except JWTError as e:
         raise credentials_exception
+
+@auth_endpoint_router.post("/register", response_model=User)
+async def create_user(user: User) -> User:
+    # Add user to the database
+    user_dict = user.dict()
+    # Check if the user already exists
+    existing_user = users_collection.find_one({"email": user.email})
+    if existing_user:
+        raise HTTPException(status_code=400, detail="User already exists")
+    # Insert the user into the database
+    else:
+        users_collection.insert_one(User(**user_dict).mongo())
+        return user
+
+@auth_endpoint_router.get("/fetch_user/from_email", response_model=User)
+async def fetch_user(email: str) -> User:
+    user = users_collection.find_one({"email": email})
+    if user:
+        return user
+    else:
+        raise HTTPException(status_code=404, detail="User not found")

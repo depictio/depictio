@@ -72,7 +72,7 @@ def build_jbrowse(**kwargs):
     build_frame = kwargs.get("build_frame", False)
 
     response = httpx.get(
-        f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user",
+        f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_token",
         headers={
             "Authorization": f"Bearer {TOKEN}",
         },
