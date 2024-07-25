@@ -1,8 +1,10 @@
 # from gridfs import GridFS
+from datetime import time
 import pymongo
 import redis
-from depictio.api.v1.configs.config import settings, MONGODB_URL
-
+from depictio.api.v1.configs.config import settings, MONGODB_URL, logger
+from depictio.api.v1.endpoints.user_endpoints.models import User
+from depictio.api.v1.endpoints.user_endpoints.utils import hash_password, verify_password
 
 client = pymongo.MongoClient(MONGODB_URL)
 db = client[settings.mongodb.db_name]
@@ -20,3 +22,38 @@ users_collection = db[settings.mongodb.collections.users_collection]
 deltatables_collection = db[settings.mongodb.collections.deltatables_collection]
 jbrowse_collection = db[settings.mongodb.collections.jbrowse_collection]
 dashboards_collection = db[settings.mongodb.collections.dashboards_collection]
+
+
+
+
+
+
+# Create a user if it does not exist
+
+user = {
+    "username": "admin",
+    "password": hash_password("changeme"),
+    "is_admin": True,
+    "email": "admin@embl.de"
+}
+
+# Ensure MongoDB is up and running
+for _ in range(5):
+    try:
+        client.server_info()
+        print("Connected to MongoDB")
+        break
+    except Exception as e:
+        print("Waiting for MongoDB to start...")
+        time.sleep(5)
+else:
+    raise Exception("Could not connect to MongoDB")
+
+if users_collection.find_one({"username": user["username"]}) is None:
+
+    user = User(**user).mongo()
+
+    users_collection.insert_one(user)
+    logger.info("User 'admin' created successfully")
+else:
+    logger.info("User 'admin' already exists")

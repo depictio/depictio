@@ -86,8 +86,7 @@ from depictio.dash.layouts.profile import register_profile_callbacks
 from depictio.dash.layouts.profile import layout as profile_layout
 register_profile_callbacks(app)
 
-
-from depictio.dash.layouts.users_management import is_user_logged_in, register_callbacks_users_management
+from depictio.dash.layouts.users_management import register_callbacks_users_management
 from depictio.dash.layouts.users_management import layout as users_management_layout
 
 register_callbacks_users_management(app)
