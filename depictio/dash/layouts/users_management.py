@@ -6,25 +6,34 @@ import dash
 import json
 import os
 import bcrypt
+import httpx
 from depictio.api.v1.db import users_collection
-from depictio.api.v1.configs.config import logger
+from depictio.api.v1.configs.config import API_BASE_URL, logger
 
 from depictio.api.v1.endpoints.user_endpoints.utils import verify_password, hash_password, login_user, logout_user
 
 
 # Function to find user by email
 def find_user(email):
-    return users_collection.find_one({"email": email})
+    # return users_collection.find_one({"email": email})
+    response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_email", params={"email": email})
+    if response.status_code == 200:
+        return response.json()
+    return None
+
 
 
 # Function to add a new user
 def add_user(email, password):
     hashed_password = hash_password(password)
-    user = {"email": email, "password": hashed_password, "last_login": None, "registration_date": None, "groups": [], "tokens": [], "username": None, "user_id": str(ObjectId())}
-    try:
-        users_collection.insert_one(user)
-    except Exception as e:
-        print(f"Error inserting user: {e}")
+    user_dict = {"email": email, "password": hashed_password}
+    response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/auth/register", json=user_dict)
+    if response.status_code == 200:
+        logger.info(f"User {email} added successfully.")
+    else:
+        logger.error(f"Error adding user {email}: {response.text}")
+    return response
+
 
 
 def render_login_form():
@@ -113,7 +122,9 @@ def handle_registration(register_email, register_password, register_confirm_pass
         return "Email already registered.", True
     if register_password != register_confirm_password:
         return "Passwords do not match.", True
-    add_user(register_email, register_password)
+    response = add_user(register_email, register_password)
+    if response.status_code != 200:
+        return f"Error registering user: {response.text}", True
     return "Registration successful! Please log in.", False
 
 
