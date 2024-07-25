@@ -10,30 +10,7 @@ import httpx
 from depictio.api.v1.db import users_collection
 from depictio.api.v1.configs.config import API_BASE_URL, logger
 
-from depictio.api.v1.endpoints.user_endpoints.utils import verify_password, hash_password, login_user, logout_user
-
-
-# Function to find user by email
-def find_user(email):
-    # return users_collection.find_one({"email": email})
-    response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_email", params={"email": email})
-    if response.status_code == 200:
-        return response.json()
-    return None
-
-
-
-# Function to add a new user
-def add_user(email, password):
-    hashed_password = hash_password(password)
-    user_dict = {"email": email, "password": hashed_password}
-    response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/auth/register", json=user_dict)
-    if response.status_code == 200:
-        logger.info(f"User {email} added successfully.")
-    else:
-        logger.error(f"Error adding user {email}: {response.text}")
-    return response
-
+from depictio.api.v1.endpoints.user_endpoints.utils import verify_password, hash_password, login_user, logout_user, find_user, add_user
 
 
 def render_login_form():
