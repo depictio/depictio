@@ -5,11 +5,7 @@ from dash import html, dcc, Input, Output, State
 import dash
 from depictio.api.v1.db import users_collection
 from depictio.api.v1.configs.config import logger
-
-
-# Function to find user by email
-def find_user(email):
-    return users_collection.find_one({"email": email})
+from depictio.api.v1.endpoints.user_endpoints.utils import find_user, edit_password, check_password
 
 
 # Layout placeholders
@@ -29,17 +25,43 @@ layout = dbc.Container(
                         dbc.Row(
                             [
                                 dbc.Col(dmc.Button("Logout", id="logout-button", variant="outline", color="red", style={"marginTop": "20px"}), align="left", width="auto"),
-                                dbc.Col(html.A(dmc.Button("Back to Home", id="back-to-homepage", variant="outline", color="blue", style={"marginTop": "20px"}), href="/"), align="left", width="auto"),
-                            ], align="left"
+                                dbc.Col(
+                                    html.A(dmc.Button("Back to Home", id="back-to-homepage", variant="outline", color="blue", style={"marginTop": "20px"}), href="/"),
+                                    align="left",
+                                    width="auto",
+                                ),
+                                dbc.Col(
+                                    html.A(dmc.Button("Edit password", id="edit-password", variant="outline", color="blue", style={"marginTop": "20px"})),
+                                    align="left",
+                                    width="auto",
+                                ),
+                            ],
+                            align="left",
                         ),
                     ],
                     width=True,
                 ),
-
             ],
             align="center",
             justify="center",
             className="mt-4",
+        ),
+        dmc.Modal(
+            id="edit-password-modal",
+            opened=False,
+            centered=True,
+            withCloseButton=False,
+            closeOnEscape=False,
+            closeOnClickOutside=False,
+            size="lg",
+            title="Edit Password",
+            children=[
+                dmc.PasswordInput(placeholder="Old Password", label="Old Password", id="old-password"),
+                dmc.PasswordInput(placeholder="New Password", label="New Password", id="new-password"),
+                dmc.PasswordInput(placeholder="Confirm New Password", label="Confirm New Password", id="confirm-new-password"),
+                dmc.Text(id="message-password", color="red", style={"display": "none"}),
+                dmc.Button("Save", color="blue", id="save-password"),
+            ],
         ),
     ],
     fluid=True,
@@ -47,6 +69,59 @@ layout = dbc.Container(
 
 
 def register_profile_callbacks(app):
+
+        
+    # Callback to edit user password
+    @app.callback(
+        [Output("edit-password-modal", "opened"), Output("message-password", "children"), Output("message-password", "style")],
+        [Input("edit-password", "n_clicks"), Input("save-password", "n_clicks")],
+        [
+            State("edit-password-modal", "open"),
+            State("old-password", "value"),
+            State("new-password", "value"),
+            State("confirm-new-password", "value"),
+            State("session-store", "data"),
+        ],
+    )
+    def edit_password_callback(n_clicks, n_clicks_save, is_open, old_password, new_password, confirm_new_password, session_data):
+        ctx = dash.callback_context
+
+        triggered_id = ctx.triggered[0]["prop_id"].split(".")[0]
+        logger.info(f"triggered_id: {triggered_id}")
+
+        if not session_data or "email" not in session_data:
+            return False, dash.no_update, dash.no_update
+
+        if triggered_id == "old-password":
+            if check_password(session_data["email"], old_password):
+                return is_open, "Password is correct", {"display": "none"}
+            else:
+                return is_open, "Password is incorrect", {"display": "block"}
+
+        elif triggered_id == "new-password":
+            return is_open, dash.no_update, dash.no_update
+
+        elif triggered_id == "confirm-new-password":
+            if new_password != confirm_new_password:
+                return is_open, "Passwords do not match", {"display": "block"}
+            else:
+                return is_open, dash.no_update, dash.no_update
+
+        elif triggered_id == "save-password":
+            if new_password != confirm_new_password:
+                return is_open, "Passwords do not match", {"display": "block"}
+            else:
+                edit_password(session_data["email"], old_password, new_password)
+
+                return is_open, dash.no_update, dash.no_update
+
+        elif triggered_id == "edit-password":
+            logger.info("Edit password triggered")
+            return True, dash.no_update, dash.no_update
+
+        else:
+            return is_open, dash.no_update, dash.no_update
+
     # Callback to populate user information based on email
     @app.callback([Output("avatar-placeholder", "children"), Output("user-info-placeholder", "children")], [State("session-store", "data"), Input("url", "pathname")])
     def populate_user_info(session_data, pathname):

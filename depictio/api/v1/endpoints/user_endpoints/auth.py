@@ -196,3 +196,13 @@ async def fetch_user(email: str) -> User:
         return user
     else:
         raise HTTPException(status_code=404, detail="User not found")
+
+@auth_endpoint_router.get("/edit_password", response_model=User)
+async def edit_password(email: str, password: str) -> User:
+    user = users_collection.find_one({"email": email})
+    if user:
+        user["password"] = password
+        users_collection.update_one({"email": email}, {"$set": user})
+        return user
+    else:
+        raise HTTPException(status_code=404, detail="User not found")
