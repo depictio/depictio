@@ -34,6 +34,8 @@ class TokenData(BaseModel):
     is_admin: bool = False
 
 
+
+
 ###################
 # User management #
 ###################
@@ -51,7 +53,14 @@ class User(MongoModel):
     last_login: Optional[str] = None
     registration_date: Optional[str] = None
     groups: Optional[List[PyObjectId]] = Field(default_factory=list)
+    password: str
 
+
+    @validator("password", pre=True)
+    def hash_password(cls, v):
+        # check that the password is hashed
+        if v.startswith("$2b$"):
+            return v    
 
 
     @root_validator(pre=True)
