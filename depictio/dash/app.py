@@ -80,7 +80,7 @@ from depictio.dash.layouts.dashboards_management import register_callbacks_dashb
 from depictio.dash.layouts.dashboards_management import layout as dashboards_management_layout
 
 register_callbacks_dashboards_management(app)
-from depictio.dash.layouts.users_management import is_user_logged_in, register_callbacks_users_management
+from depictio.dash.layouts.users_management import register_callbacks_users_management
 from depictio.dash.layouts.users_management import layout as users_management_layout
 
 register_callbacks_users_management(app)
