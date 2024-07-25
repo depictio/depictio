@@ -44,7 +44,7 @@ class TokenData(BaseModel):
 class User(MongoModel):
     user_id: PyObjectId = Field(default_factory=PyObjectId)
     # user_id: Optional[PyObjectId] = None
-    username: str
+    # username: str
     email: EmailStr
     tokens: List[Token] = Field(default_factory=list)
     is_active: bool = True
