@@ -1,5 +1,6 @@
 import os
 import sys
+import bcrypt
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -23,6 +24,8 @@ auth_endpoint_router = APIRouter()
 
 private_key_file = os.getenv("DEPICTIO_PRIVATE_KEY_FILE", "depictio/private_key.pem")
 public_key_file = os.getenv("DEPICTIO_PUBLIC_KEY_FILE", "depictio/public_key.pem")
+
+
 
 # Load your private key
 with open(private_key_file, "rb") as f:

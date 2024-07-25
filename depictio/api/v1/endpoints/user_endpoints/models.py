@@ -45,6 +45,13 @@ class User(MongoModel):
     username: str
     email: EmailStr
     tokens: List[Token] = Field(default_factory=list)
+    is_active: bool = True
+    is_admin: bool = False
+    is_verified: bool = False
+    last_login: Optional[str] = None
+    registration_date: Optional[str] = None
+    groups: Optional[List[PyObjectId]] = Field(default_factory=list)
+
 
 
     @root_validator(pre=True)
