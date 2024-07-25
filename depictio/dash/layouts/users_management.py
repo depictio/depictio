@@ -44,7 +44,7 @@ def render_login_form():
                 [
                     dmc.Button("Login", radius="md", id="login-button", fullWidth=True),
                     dmc.Button("", radius="md", id="register-button", fullWidth=True, style={"display": "none"}),
-                    dmc.Button("", radius="md", id="logout-button", fullWidth=True, style={"display": "none"}),
+                    # dmc.Button("", radius="md", id="logout-button", fullWidth=True, style={"display": "none"}),
                     html.A(dmc.Button("Register", radius="md", variant="outline", color="gray", fullWidth=True), id="open-register-form"),
                     html.A(dmc.Button("", radius="md", variant="outline", color="gray", fullWidth=True), id="open-login-form", style={"display": "none"}),
                 ],
@@ -73,7 +73,7 @@ def render_register_form():
             dmc.Group(
                 [
                     dmc.Button("", radius="md", id="login-button", fullWidth=True, style={"display": "none"}),
-                    dmc.Button("", radius="md", id="logout-button", fullWidth=True, style={"display": "none"}),
+                    # dmc.Button("", radius="md", id="logout-button", fullWidth=True, style={"display": "none"}),
                     dmc.Button("Register", radius="md", id="register-button", fullWidth=True),
                     html.A(dmc.Button("", radius="md", variant="outline", color="gray", fullWidth=True), id="open-register-form", style={"display": "none"}),
                     html.A(dmc.Button("Back to Login", radius="md", variant="outline", color="gray", fullWidth=True), id="open-login-form"),
@@ -131,7 +131,7 @@ layout = html.Div(
                 dmc.Button("hidden-login-button", id="open-login-form", style={"display": "none"}),
                 dmc.Button("hidden-register-button", id="open-register-form", style={"display": "none"}),
                 dmc.Button("hidden-login-button", id="login-button", style={"display": "none"}),
-                dmc.Button("hidden-logout-button", id="logout-button", style={"display": "none"}),
+                # dmc.Button("hidden-logout-button", id="logout-button", style={"display": "none"}),
                 dmc.Button("hidden-register-button", id="register-button", style={"display": "none"}),
                 dmc.PasswordInput("hidden-register-password", id="register-password", style={"display": "none"}),
                 dmc.PasswordInput("hidden-register-confirm-password", id="register-confirm-password", style={"display": "none"}),
@@ -174,7 +174,7 @@ def register_callbacks_users_management(app):
             Input("open-login-form", "n_clicks"),
             Input("login-button", "n_clicks"),
             Input("register-button", "n_clicks"),
-            Input("logout-button", "n_clicks"),
+            # Input("logout-button", "n_clicks"),
         ],
         [
             State("modal-state-store", "data"),
@@ -192,7 +192,7 @@ def register_callbacks_users_management(app):
         n_clicks_login_form,
         n_clicks_login,
         n_clicks_register_form,
-        n_clicks_logout,
+        # n_clicks_logout,
         current_state,
         login_email,
         login_password,
@@ -208,11 +208,11 @@ def register_callbacks_users_management(app):
 
         # If user is already logged in, do not show the login form
         if session_data and session_data.get("logged_in", False):
-            return (False, dash.no_update, dash.no_update, dash.no_update, dash.no_update, session_data)
+            return (False, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update)
 
         # If no button was clicked, return the current state
         if not ctx.triggered:
-            return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, session_data
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
         # Handle button clicks
         # If the register button was clicked, open the register form
@@ -245,9 +245,9 @@ def register_callbacks_users_management(app):
                 content = render_register_form()
             return modal_open, content, dmc.Text(feedback_message, color="red" if modal_open else "green"), modal_state, modal_open, session_data
         # If the logout button was clicked, log the user out
-        elif button_id == "logout-button":
-            modal_open = True
-            content = render_login_form()
-            return modal_open, content, dash.no_update, current_state, modal_open, session_data
+        # elif button_id == "logout-button":
+        #     modal_open = True
+        #     content = render_login_form()
+        #     return modal_open, content, dash.no_update, current_state, modal_open, session_data
 
-        return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, session_data
+        return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update

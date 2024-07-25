@@ -80,11 +80,16 @@ from depictio.dash.layouts.dashboards_management import register_callbacks_dashb
 from depictio.dash.layouts.dashboards_management import layout as dashboards_management_layout
 
 register_callbacks_dashboards_management(app)
+
+
+from depictio.dash.layouts.profile import register_profile_callbacks
+from depictio.dash.layouts.profile import layout as profile_layout
+register_profile_callbacks(app)
+
 from depictio.dash.layouts.users_management import register_callbacks_users_management
 from depictio.dash.layouts.users_management import layout as users_management_layout
 
 register_callbacks_users_management(app)
-
 
 
 @app.callback(
@@ -102,10 +107,23 @@ def display_page(pathname, session_data):
     if trigger == "session-store":
         logger.info("Session store triggered")
         if session_data["logged_in"]:
-            return create_dashboards_management_layout(), "/"
+            logger.info("User logged in")
+            logger.info(f"pathname: {pathname}")
+            if pathname is None or pathname == "/":
+                # return html.Div("Welcome to Depictio"), "/"
+                return create_dashboards_management_layout(), "/"
+            # elif pathname.startswith("/dashboard/"):
+            #     return create_dashboard_layout(dashboard_id=pathname.split("/")[-1]), pathname
+            elif pathname == "/profile":
+                return create_profile_layout(), pathname
+            else:
+                return create_dashboards_management_layout(), "/"
         else:
+            logger.info("User not logged in")
+            logger.info(f"pathname: {pathname}")
             return dash.no_update, "/auth"
     elif trigger == "url":
+        logger.info("URL triggered")
         return handle_url(pathname, session_data)
 
 def handle_url(pathname, session_data):
@@ -123,6 +141,9 @@ def handle_unauthenticated_user(pathname):
     elif pathname == "/auth":
         logger.info(f"pathname: {pathname}")
         return create_users_management_layout(), "/auth"
+    elif pathname == "/profile":
+        logger.info(f"pathname: {pathname}")
+        return create_users_management_layout(), "/auth"
 
 
 def handle_authenticated_user(pathname):
@@ -133,6 +154,8 @@ def handle_authenticated_user(pathname):
         dashboard_id = pathname.split("/")[-1]
         logger.info(f"dashboard_id: {dashboard_id}")
         return create_dashboard_layout(dashboard_id=dashboard_id), pathname
+    elif pathname == "/profile":
+        return create_profile_layout(), pathname
     else:
         return create_dashboards_management_layout(), pathname
 
@@ -144,6 +167,8 @@ def create_dashboards_management_layout():
 def create_users_management_layout():
     return users_management_layout
 
+def create_profile_layout():
+    return profile_layout
 
 def create_dashboard_layout(dashboard_id=None):
     # Load depictio depictio_dash_data from JSON
