@@ -18,6 +18,11 @@ API_BASE_URL = f"http://{settings.fastapi.service_name}:{settings.fastapi.port}"
 MONGODB_URL = f"mongodb://{settings.mongodb.service_name}:{settings.mongodb.port}/"
 TOKEN = settings.auth.tmp_token
 TOKEN = TOKEN.strip()
+with open("depictio/private_key.pem", "rb") as f:
+    PRIVATE_KEY = f.read()
+with open("depictio/public_key.pem", "rb") as f:
+    PUBLIC_KEY = f.read()
+ALGORITHM = "RS256"
 
 logger.info(f"API_BASE_URL: {API_BASE_URL}")
 logger.info(f"MONGODB_URL: {MONGODB_URL}")
