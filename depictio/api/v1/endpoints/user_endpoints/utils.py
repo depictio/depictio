@@ -1,9 +1,13 @@
+from datetime import datetime, timedelta
 import httpx
-from depictio.api.v1.configs.config import API_BASE_URL, logger
+import jwt
+from depictio.api.v1.configs.config import API_BASE_URL, logger, PRIVATE_KEY, ALGORITHM
 
 
 # Dummy login function
 import bcrypt
+
+
 
 
 def login_user(email):
@@ -84,3 +88,18 @@ def check_password(email, password):
         if verify_password(user["password"], password):
             return True
     return False
+
+
+def create_access_token(data, expires_delta=timedelta(minutes=15)):
+    to_encode = data.copy()
+    expire = datetime.now() + expires_delta
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, PRIVATE_KEY, algorithm=ALGORITHM)
+    created_time = datetime.now().strftime("%b %d, %Y, %I:%M:%S %p")
+    return encoded_jwt, created_time
+
+def list_existing_tokens(email):
+    user = find_user(email)
+    if user:
+        return user.get("tokens", [])
+    return None
