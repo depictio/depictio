@@ -63,7 +63,9 @@ def edit_password(email, old_password, new_password):
     if user:
         if verify_password(user["password"], old_password):
             hashed_password = hash_password(new_password)
-            response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/auth/edit_password", json={"email": email, "password": hashed_password})
+            user_dict = {"email": email, "new_password": hashed_password}
+            logger.info(f"Updating password for user {email} with new password: {new_password}")
+            response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/auth/edit_password", params=user_dict)
             if response.status_code == 200:
                 logger.info(f"Password for user {email} updated successfully.")
             else:
