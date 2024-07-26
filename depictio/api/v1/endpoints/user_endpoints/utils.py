@@ -1,4 +1,5 @@
-from depictio.api.v1.configs.config import logger
+import httpx
+from depictio.api.v1.configs.config import API_BASE_URL, logger
 
 
 # Dummy login function
@@ -35,3 +36,51 @@ def verify_password(stored_hash: str, password: str) -> bool:
     return bcrypt.checkpw(password.encode("utf-8"), stored_hash.encode("utf-8"))
 
 
+
+# Function to find user by email
+def find_user(email):
+    # return users_collection.find_one({"email": email})
+    response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_email", params={"email": email})
+    if response.status_code == 200:
+        return response.json()
+    return None
+
+
+
+# Function to add a new user
+def add_user(email, password):
+    hashed_password = hash_password(password)
+    user_dict = {"email": email, "password": hashed_password}
+    response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/auth/register", json=user_dict)
+    if response.status_code == 200:
+        logger.info(f"User {email} added successfully.")
+    else:
+        logger.error(f"Error adding user {email}: {response.text}")
+    return response
+
+def edit_password(email, old_password, new_password):
+    user = find_user(email)
+    if user:
+        if verify_password(user["password"], old_password):
+            hashed_password = hash_password(new_password)
+            user_dict = {"email": email, "new_password": hashed_password}
+            logger.info(f"Updating password for user {email} with new password: {new_password}")
+            response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/auth/edit_password", params=user_dict)
+            if response.status_code == 200:
+                logger.info(f"Password for user {email} updated successfully.")
+            else:
+                logger.error(f"Error updating password for user {email}: {response.text}")
+            return response
+        else:
+            logger.error(f"Old password for user {email} is incorrect.")
+            return {"error": "Old password is incorrect."}
+    else:
+        logger.error(f"User {email} not found.")
+        return {"error": "User not found."}
+
+def check_password(email, password):
+    user = find_user(email)
+    if user:
+        if verify_password(user["password"], password):
+            return True
+    return False

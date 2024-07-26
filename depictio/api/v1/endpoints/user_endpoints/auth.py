@@ -26,7 +26,6 @@ private_key_file = os.getenv("DEPICTIO_PRIVATE_KEY_FILE", "depictio/private_key.
 public_key_file = os.getenv("DEPICTIO_PUBLIC_KEY_FILE", "depictio/public_key.pem")
 
 
-
 # Load your private key
 with open(private_key_file, "rb") as f:
     PRIVATE_KEY = f.read()
@@ -110,7 +109,6 @@ def authenticate_user(username: str, password: str):
 #     return {"message": "User created"}
 
 
-
 @auth_endpoint_router.post("/token", response_model=Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
     user = authenticate_user(form_data.username, form_data.password)
@@ -176,6 +174,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> TokenData:
     except JWTError as e:
         raise credentials_exception
 
+
 @auth_endpoint_router.post("/register", response_model=User)
 async def create_user(user: User) -> User:
     # Add user to the database
@@ -189,10 +188,44 @@ async def create_user(user: User) -> User:
         users_collection.insert_one(User(**user_dict).mongo())
         return user
 
+
 @auth_endpoint_router.get("/fetch_user/from_email", response_model=User)
 async def fetch_user(email: str) -> User:
     user = users_collection.find_one({"email": email})
     if user:
         return user
+    else:
+        raise HTTPException(status_code=404, detail="User not found")
+
+
+@auth_endpoint_router.post("/edit_password", response_model=User)
+async def edit_password(email: str, new_password: str) -> User:
+    user_data = users_collection.find_one({"email": email})
+    if user_data:
+        logger.info("Before")
+        logger.info(user_data)
+
+        user = User.from_mongo(user_data)
+
+        if user.password == new_password:
+            raise HTTPException(status_code=400, detail="New password cannot be the same as the old password")
+
+        user.password = new_password
+        logger.info("After")
+        logger.info(user)
+
+        update_data = user.mongo()
+        logger.info(f"Update data: {update_data}")
+
+        result = users_collection.update_one({"_id": user.id}, {"$set": update_data})
+
+        # Log the update result
+        logger.info(f"Update result: {result.modified_count} document(s) updated")
+        logger.info(f"Show updated user from database: {users_collection.find_one({'email' : email})}")
+
+        if result.modified_count == 1:
+            return user
+        else:
+            raise HTTPException(status_code=500, detail="Failed to update password")
     else:
         raise HTTPException(status_code=404, detail="User not found")

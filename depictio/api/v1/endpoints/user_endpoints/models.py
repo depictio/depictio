@@ -34,15 +34,13 @@ class TokenData(BaseModel):
     is_admin: bool = False
 
 
-
-
 ###################
 # User management #
 ###################
 
 
 class User(MongoModel):
-    user_id: PyObjectId = Field(default_factory=PyObjectId)
+    id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
     # user_id: Optional[PyObjectId] = None
     # username: str
     email: EmailStr
@@ -55,20 +53,18 @@ class User(MongoModel):
     groups: Optional[List[PyObjectId]] = Field(default_factory=list)
     password: str
 
+    @root_validator(pre=True)
+    def set_default_id(cls, values):
+        if values is None or "_id" not in values or values["_id"] is None:
+            return values  # Ensure we don't proceed if values is None
+        values["_id"] = PyObjectId()
+        return values
 
     @validator("password", pre=True)
     def hash_password(cls, v):
         # check that the password is hashed
         if v.startswith("$2b$"):
-            return v    
-
-
-    @root_validator(pre=True)
-    def set_default_id(cls, values):
-        if values is None or "id" not in values or values["id"] is None:
-            return values  # Ensure we don't proceed if values is None
-        values["id"] = PyObjectId()
-        return values
+            return v
 
     class Config:
         json_encoders = {ObjectId: lambda v: str(v)}
@@ -80,7 +76,7 @@ class User(MongoModel):
     def __eq__(self, other):
         # Equality based on the unique user_id
         if isinstance(other, User):
-            return self.user_id == other.user_id
+            return all(getattr(self, field) == getattr(other, field) for field in self.__fields__.keys() if field not in ["user_id", "registration_time"])
         return False
 
 
