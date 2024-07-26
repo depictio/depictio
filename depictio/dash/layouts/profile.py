@@ -38,6 +38,11 @@ layout = dbc.Container(
                                     align="left",
                                     width="auto",
                                 ),
+                                dbc.Col(
+                                    html.A(dmc.Button("Tokens", id="tokens-page-redirection", variant="outline", color="green", style={"marginTop": "20px"}), href="/tokens"),
+                                    align="left",
+                                    width="auto",
+                                ),
                             ],
                             align="left",
                         ),
@@ -175,6 +180,7 @@ def register_profile_callbacks(app):
         elif triggered_id == "edit-password":
             logger.info("Edit password triggered")
             return True, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
 
         else:
             return is_open, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
