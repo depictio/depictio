@@ -192,8 +192,12 @@ async def create_user(user: User) -> User:
 @auth_endpoint_router.get("/fetch_user/from_email", response_model=User)
 async def fetch_user(email: str) -> User:
     user = users_collection.find_one({"email": email})
+    logger.info(f"Fetching user with email: {email} : {user}")
+    user_mongo = User.from_mongo(user)
+    logger.info(f"User from mongo : {user_mongo}")
+
     if user:
-        return user
+        return user_mongo
     else:
         raise HTTPException(status_code=404, detail="User not found")
 
