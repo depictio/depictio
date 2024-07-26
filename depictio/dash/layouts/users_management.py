@@ -12,6 +12,15 @@ from depictio.api.v1.configs.config import API_BASE_URL, logger
 
 from depictio.api.v1.endpoints.user_endpoints.utils import verify_password, hash_password, login_user, logout_user, find_user, add_user
 
+from dash_extensions.enrich import DashProxy
+from dash_extensions.enrich import Output as OutputEnrich
+from dash_extensions.enrich import Input as InputEnrich
+from dash_extensions.enrich import State as StateEnrich
+from dash_extensions import EventListener
+from dash.exceptions import PreventUpdate
+
+event = {"event": "keydown", "props": ["key"]}
+
 
 def render_login_form():
     return dmc.Stack(
@@ -79,7 +88,7 @@ def validate_login(login_email, login_password):
 
     user = find_user(login_email)
     if not user:
-        return "Invalid email or password.", True, dash.no_update
+        return "User not found. Please register first.", True, dash.no_update
 
     logger.info(f"User: {user}")
 
@@ -102,7 +111,7 @@ def handle_registration(register_email, register_password, register_confirm_pass
     response = add_user(register_email, register_password)
     if response.status_code != 200:
         return f"Error registering user: {response.text}", True
-    return "Registration successful! Please log in.", False
+    return "Registration successful! Please login.", False
 
 
 layout = html.Div(
@@ -110,7 +119,14 @@ layout = html.Div(
         dcc.Store(id="modal-state-store", data="login"),  # Store to control modal content state (login or register)
         dcc.Store(id="modal-open-store", data=True),  # Store to control modal state (open or close)
         dmc.Modal(
-            id="auth-modal", opened=True, centered=True, children=[dmc.Center(id="modal-content")], withCloseButton=False, closeOnEscape=False, closeOnClickOutside=False, size="lg"
+            id="auth-modal",
+            opened=True,
+            centered=True,
+            children=EventListener([dmc.Center(id="modal-content")], events=[event], logging=True, id="auth-modal-listener"),
+            withCloseButton=False,
+            closeOnEscape=False,
+            closeOnClickOutside=False,
+            size="lg",
         ),
         html.Div(id="landing-page-content"),
         # Hidden buttons for switching forms to ensure they exist in the layout
@@ -134,6 +150,13 @@ layout = html.Div(
 
 
 def register_callbacks_users_management(app):
+    @app.callback(Output("login-button", "n_clicks"), Input("auth-modal-listener", "n_events"), State("auth-modal-listener", "event"), State("login-button", "disabled"))
+    def trigger_save_on_enter(n_events, e, disabled):
+        if e is None or e["key"] != "Enter" or disabled:
+            raise PreventUpdate()
+
+        return 1  # Simulate a click on the save button
+
     @app.callback([Output("login-button", "disabled"), Output("login-email", "error")], [Input("login-email", "value")])
     def update_submit_button(email):
         if email:
@@ -230,6 +253,7 @@ def register_callbacks_users_management(app):
                 modal_state = "login"
                 content = render_login_form()
             else:
+                modal_state = "register"
                 content = render_register_form()
             return modal_open, content, dmc.Text(feedback_message, color="red" if modal_open else "green"), modal_state, modal_open, session_data
         # If the logout button was clicked, log the user out

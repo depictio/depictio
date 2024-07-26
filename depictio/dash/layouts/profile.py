@@ -75,7 +75,7 @@ layout = dbc.Container(
                     ),
                     events=[event],
                     logging=True,
-                    id="key-listener",
+                    id="edit-password-modal-listener",
                 ),
             ],
         ),
@@ -85,7 +85,7 @@ layout = dbc.Container(
 
 
 def register_profile_callbacks(app):
-    @app.callback(Output("save-password", "n_clicks"), Input("key-listener", "n_events"), State("key-listener", "event"))
+    @app.callback(Output("save-password", "n_clicks"), Input("edit-password-modal-listener", "n_events"), State("edit-password-modal-listener", "event"))
     def trigger_save_on_enter(n_events, e):
         if e is None or e["key"] != "Enter":
             raise PreventUpdate()
