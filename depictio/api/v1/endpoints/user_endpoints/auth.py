@@ -10,13 +10,12 @@ from jose import jwt, JWTError
 from datetime import datetime, timedelta
 
 # from werkzeug.security import check_password_hash, generate_password_hash
-from depictio.api.v1.endpoints.user_endpoints.models import User, Token, TokenData
+from depictio.api.v1.endpoints.user_endpoints.models import TokenRequest, User, Token, TokenData
 from depictio.api.v1.models.base import PyObjectId
 from depictio.api.v1.configs.config import logger
+from depictio.api.v1.db import users_collection
 
-from depictio.api.v1.db import db
-
-users_collection = db.users
+# users_collection = db.users
 
 
 auth_endpoint_router = APIRouter()
@@ -233,3 +232,24 @@ async def edit_password(email: str, new_password: str) -> User:
             raise HTTPException(status_code=500, detail="Failed to update password")
     else:
         raise HTTPException(status_code=404, detail="User not found")
+
+
+@auth_endpoint_router.post("/add_token", response_model=Token)
+async def add_token(request: TokenRequest) -> Token:
+    user = request.user
+    token = request.token
+    logger.info(f"Request: {request}")
+    logger.info(f"User: {user}")
+    logger.info(f"Token: {token}")
+
+    token_dict = token.dict()
+    token_data = Token(**token_dict)
+    logger.info(f"Token data: {token_data}")
+    token_data.mongo()
+    logger.info(f"Token data: {token_data}")
+
+    # Insert in the user collection
+    result = users_collection.update_one({"_id": user.id}, {"$push": {"tokens": token_data.mongo()}})
+    logger.info(f"Update result: {result.modified_count} document(s) updated")
+
+    return token_data
