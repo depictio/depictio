@@ -9,6 +9,7 @@ from depictio.api.v1.configs.config import API_BASE_URL, logger, PRIVATE_KEY, AL
 import bcrypt
 
 from depictio.api.v1.endpoints.user_endpoints.models import Token, User
+from depictio.api.v1.models.base import convert_objectid_to_str
 
 
 
@@ -49,16 +50,7 @@ def find_user(email):
     if response.status_code == 200:
         user_data = response.json()
         logger.info(f"Raw user data from response: {user_data}")
-        
-        # Ensure the ID is converted properly if needed
-        user_data['_id'] = ObjectId(user_data['_id'])
-        logger.info(f"Processed user data with ObjectId: {user_data}")
-
-        user = User(**user_data)
-        logger.info(f"User: {user}")
-        user = user.mongo()
-        logger.info(f"User.mongo(): {user}")
-        return user
+        return user_data
     return None
 
 
@@ -111,6 +103,7 @@ def create_access_token(data, expires_delta=timedelta(days=30)):
     return encoded_jwt, expire
 
 def add_token(email, token):
+    logger.info(f"Adding token for user {email}.")
     user = find_user(email)
     logger.info(f"User: {user}")
     if user:
@@ -121,7 +114,7 @@ def add_token(email, token):
 
         request_body = {
             "user": user,
-            "token": token.mongo()
+            "token": convert_objectid_to_str(token.mongo())
         }
 
         response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/auth/add_token", json=request_body)
@@ -133,7 +126,9 @@ def add_token(email, token):
     return None
 
 def list_existing_tokens(email):
+    logger.info(f"Listing tokens for user {email}.")
     user = find_user(email)
+    logger.info(f"User: {user}")
     if user:
         return user.get("tokens", [])
     return None
