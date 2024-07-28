@@ -56,5 +56,11 @@ if existing_user:
     logger.info("Admin user already exists in the database")
 # Insert the user into the database
 else:
-    users_collection.insert_one(User(**user_dict).mongo())
+    logger.info("Adding admin user to the database")
+    logger.info(f"User: {user_dict}")
+    user = User(**user_dict)
+    logger.info(f"User: {user}")
+    user = user.mongo()
+    logger.info(f"User.mongo(): {user}")
+    users_collection.insert_one(user)
     logger.info("Admin user added to the database")
