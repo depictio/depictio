@@ -165,6 +165,6 @@ class Permission(BaseModel):
 
         return values
 
-class TokenRequest(BaseModel):
+class TokenRequest(MongoModel):
     user: User
     token: Token
