@@ -1,11 +1,12 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 from dash import html, dcc, Input, Output, State, ctx
 import dash
 from depictio.api.v1.db import users_collection
 from depictio.api.v1.configs.config import logger
-from depictio.api.v1.endpoints.user_endpoints.utils import create_access_token, list_existing_tokens
+from depictio.api.v1.endpoints.user_endpoints.models import Token
+from depictio.api.v1.endpoints.user_endpoints.utils import add_token, create_access_token, list_existing_tokens
 from dash_extensions.enrich import DashProxy, html, Input, Output, State
 from dash_extensions import EventListener
 from dash.exceptions import PreventUpdate
@@ -106,7 +107,7 @@ def register_tokens_management_callbacks(app):
         State("delete-confirm-input", "value"),
         State({"type": "delete-token", "index": dash.dependencies.ALL}, "id"),
         State("session-store", "data"),
-        prevent_initial_call=True,
+        # prevent_initial_call=True,
     )
     def handle_callbacks(add_clicks, save_clicks, confirm_delete_clicks, delete_clicks, token_name, delete_confirm_input, delete_button_id, session_data):
         global token_to_delete
@@ -116,20 +117,26 @@ def register_tokens_management_callbacks(app):
             raise PreventUpdate
 
         tokens = list_existing_tokens(session_data["email"])
+        logger.info(f"tokens: {tokens}")
+        logger.info(f"triggered: {triggered}")
+        logger.info(f"session_data: {session_data}")
 
         if triggered == "add-token-button" and add_clicks > 0:
             return True, False, render_tokens_list(tokens), False, ""
 
-        if triggered == "save-token-name" and save_clicks > 0 and token_name:
-            token, created_time = create_access_token({"name": token_name})
-            tokens[token] = {"name": token_name, "created_time": created_time, "last_activity": created_time}
+        elif triggered == "save-token-name" and save_clicks > 0 and token_name:
+            token, expire = create_access_token({"name": token_name})
+            token_data = {"access_token": token, "expire_datetime": expire.strftime("%Y-%m-%d %H:%M:%S")}
+            add_token(session_data["email"], token_data)
+            # tokens.append({"name": token_name, "created_time": created_time, "last_activity": created_time})
+            
             return False, False, render_tokens_list(tokens), True, token
 
-        if isinstance(triggered, dict) and triggered.get("type") == "delete-token":
+        elif isinstance(triggered, dict) and triggered.get("type") == "delete-token":
             token_to_delete = triggered.get("index")
             return False, True, render_tokens_list(tokens), False, ""
 
-        if triggered == "confirm-delete-button" and confirm_delete_clicks > 0 and delete_confirm_input == "delete":
+        elif triggered == "confirm-delete-button" and confirm_delete_clicks > 0 and delete_confirm_input == "delete":
             if token_to_delete in tokens:
                 del tokens[token_to_delete]
                 token_to_delete = None
