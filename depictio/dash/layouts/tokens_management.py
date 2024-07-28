@@ -20,19 +20,20 @@ def render_tokens_list(tokens):
         return html.P("No tokens available.")
 
     token_items = []
-    for token, details in tokens.items():
+    for token in tokens:
+        # for k, v in token.items():
         token_items.append(
             dbc.ListGroupItem(
                 [
                     html.Div(
                         [
-                            html.Strong(details["name"]),
-                            html.P(f"Created: {details['created_time']}"),
-                            html.P(f"Last activity: {details['last_activity']}"),
+                            html.Strong(str(token["_id"])),
+                            html.P(f"Expiration datetime: {token['expire_datetime']}"),
+                            # html.P(f"Last activity: {token['last_activity']}"),
                         ],
                         className="token-details",
                     ),
-                    dbc.Button("Delete", id={"type": "delete-token", "index": token}, color="danger", className="ml-auto"),
+                    dbc.Button("Delete", id={"type": "delete-token", "index": token['_id']}, color="danger", className="ml-auto"),
                 ],
                 className="d-flex justify-content-between align-items-center",
             )
