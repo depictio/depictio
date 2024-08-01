@@ -21,6 +21,7 @@ class Token(MongoModel):
     access_token: str
     # token_type: str
     expire_datetime: str
+    name: Optional[str] = None
     # scope: Optional[str] = None
     # user_id: PyObjectId
 
