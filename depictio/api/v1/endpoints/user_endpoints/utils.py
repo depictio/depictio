@@ -1,9 +1,17 @@
+from datetime import datetime, timedelta
+from bson import ObjectId
 import httpx
-from depictio.api.v1.configs.config import API_BASE_URL, logger
+import jwt
+from depictio.api.v1.configs.config import API_BASE_URL, logger, PRIVATE_KEY, ALGORITHM
 
 
 # Dummy login function
 import bcrypt
+
+from depictio.api.v1.endpoints.user_endpoints.models import Token, User
+from depictio.api.v1.models.base import convert_objectid_to_str
+
+
 
 
 def login_user(email):
@@ -37,20 +45,21 @@ def verify_password(stored_hash: str, password: str) -> bool:
 
 
 
-# Function to find user by email
 def find_user(email):
-    # return users_collection.find_one({"email": email})
     response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_email", params={"email": email})
     if response.status_code == 200:
-        return response.json()
+        user_data = response.json()
+        logger.info(f"Raw user data from response: {user_data}")
+        return user_data
     return None
 
 
 
+
 # Function to add a new user
-def add_user(email, password):
+def add_user(email, password, is_admin=False):
     hashed_password = hash_password(password)
-    user_dict = {"email": email, "password": hashed_password}
+    user_dict = {"email": email, "password": hashed_password, "is_admin": is_admin}
     response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/auth/register", json=user_dict)
     if response.status_code == 200:
         logger.info(f"User {email} added successfully.")
@@ -84,3 +93,60 @@ def check_password(email, password):
         if verify_password(user["password"], password):
             return True
     return False
+
+
+def create_access_token(data, expires_delta=timedelta(days=30)):
+    to_encode = data.copy()
+    expire = datetime.now() + expires_delta
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, PRIVATE_KEY, algorithm=ALGORITHM)
+    return encoded_jwt, expire
+
+def add_token(email, token):
+    logger.info(f"Adding token for user {email}.")
+    user = find_user(email)
+    logger.info(f"User: {user}")
+    if user:
+        logger.info(f"Adding token for user {email}.")
+        token = Token(**token)
+        logger.info(f"Token: {token}")
+        logger.info(f"Token.mongo(): {token.mongo()}")
+
+        request_body = {
+            "user": user,
+            "token": convert_objectid_to_str(token.mongo())
+        }
+
+        response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/auth/add_token", json=request_body)
+        if response.status_code == 200:
+            logger.info(f"Token added for user {email}.")
+        else:
+            logger.error(f"Error adding token for user {email}: {response.text}")
+        return response
+    return None
+
+def delete_token(email, token_id):
+    logger.info(f"Deleting token for user {email}.")
+    user = find_user(email)
+    logger.info(f"User: {user}")
+    if user:
+        logger.info(f"Deleting token for user {email}.")
+        request_body = {
+            "user": user,
+            "token_id": token_id
+        }
+        response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/auth/delete_token", json=request_body)
+        if response.status_code == 200:
+            logger.info(f"Token deleted for user {email}.")
+        else:
+            logger.error(f"Error deleting token for user {email}: {response.text}")
+        return response
+    return None
+
+def list_existing_tokens(email):
+    logger.info(f"Listing tokens for user {email}.")
+    user = find_user(email)
+    logger.info(f"User: {user}")
+    if user:
+        return user.get("tokens", [])
+    return None

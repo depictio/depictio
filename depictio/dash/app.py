@@ -91,6 +91,10 @@ from depictio.dash.layouts.users_management import layout as users_management_la
 
 register_callbacks_users_management(app)
 
+from depictio.dash.layouts.tokens_management import register_tokens_management_callbacks
+from depictio.dash.layouts.tokens_management import layout as tokens_management_layout
+
+register_tokens_management_callbacks(app)
 
 @app.callback(
     Output("page-content", "children"),
@@ -116,6 +120,8 @@ def display_page(pathname, session_data):
             #     return create_dashboard_layout(dashboard_id=pathname.split("/")[-1]), pathname
             elif pathname == "/profile":
                 return create_profile_layout(), pathname
+            elif pathname == "/tokens":
+                return create_tokens_management_layout(), pathname
             else:
                 return create_dashboards_management_layout(), "/"
         else:
@@ -144,6 +150,9 @@ def handle_unauthenticated_user(pathname):
     elif pathname == "/profile":
         logger.info(f"pathname: {pathname}")
         return create_users_management_layout(), "/auth"
+    elif pathname == "/tokens":
+        logger.info(f"pathname: {pathname}")
+        return create_users_management_layout(), "/auth"
 
 
 def handle_authenticated_user(pathname):
@@ -156,6 +165,8 @@ def handle_authenticated_user(pathname):
         return create_dashboard_layout(dashboard_id=dashboard_id), pathname
     elif pathname == "/profile":
         return create_profile_layout(), pathname
+    elif pathname == "/tokens":
+        return create_tokens_management_layout(), pathname
     else:
         return create_dashboards_management_layout(), pathname
 
@@ -169,6 +180,9 @@ def create_users_management_layout():
 
 def create_profile_layout():
     return profile_layout
+
+def create_tokens_management_layout():
+    return tokens_management_layout
 
 def create_dashboard_layout(dashboard_id=None):
     # Load depictio depictio_dash_data from JSON
