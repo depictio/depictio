@@ -1,5 +1,6 @@
 # from gridfs import GridFS
 from datetime import time
+from fastapi import HTTPException
 import pymongo
 import redis
 from depictio.api.v1.configs.config import settings, MONGODB_URL, logger
@@ -30,7 +31,7 @@ dashboards_collection = db[settings.mongodb.collections.dashboards_collection]
 
 # Create a user if it does not exist
 
-user = {
+user_dict = {
     "username": "admin",
     "password": hash_password("changeme"),
     "is_admin": True,
@@ -49,11 +50,17 @@ for _ in range(5):
 else:
     raise Exception("Could not connect to MongoDB")
 
-if users_collection.find_one({"username": user["username"]}) is None:
-
-    user = User(**user).mongo()
-
-    users_collection.insert_one(user)
-    logger.info("User 'admin' created successfully")
+# Check if the user already exists
+existing_user = users_collection.find_one({"email": user_dict["email"]})
+if existing_user:
+    logger.info("Admin user already exists in the database")
+# Insert the user into the database
 else:
-    logger.info("User 'admin' already exists")
+    logger.info("Adding admin user to the database")
+    logger.info(f"User: {user_dict}")
+    user = User(**user_dict)
+    logger.info(f"User: {user}")
+    user = user.mongo()
+    logger.info(f"User.mongo(): {user}")
+    users_collection.insert_one(user)
+    logger.info("Admin user added to the database")

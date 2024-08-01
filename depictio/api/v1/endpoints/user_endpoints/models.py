@@ -1,4 +1,4 @@
-from typing import List, Optional, Set
+from typing import Dict, List, Optional, Set
 from bson import ObjectId
 from pydantic import (
     BaseModel,
@@ -16,23 +16,39 @@ from depictio.api.v1.models.base import MongoModel, PyObjectId
 ##################
 
 
-class Token(BaseModel):
+class Token(MongoModel):
+    id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
     access_token: str
-    token_type: str
-    expires_in: Optional[int] = None
-    scope: Optional[str] = None
-    user_id: PyObjectId
+    # token_type: str
+    expire_datetime: str
+    name: Optional[str] = None
+    # scope: Optional[str] = None
+    # user_id: PyObjectId
+
+    @root_validator(pre=True)
+    def set_default_id(cls, values):
+        if values is None or "_id" not in values or values["_id"] is None:
+            return values  # Ensure we don't proceed if values is None
+        values["_id"] = PyObjectId()
+        return values
 
     class Config:
         arbitrary_types_allowed = True
-        json_encoders = {ObjectId: str}
+        json_encoders = {ObjectId: lambda v: str(v)}
 
 
 class TokenData(BaseModel):
+    id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
     user_id: PyObjectId
     exp: Optional[int] = None
     is_admin: bool = False
 
+    @root_validator(pre=True)
+    def set_default_id(cls, values):
+        if values is None or "_id" not in values or values["_id"] is None:
+            return values  # Ensure we don't proceed if values is None
+        values["_id"] = PyObjectId()
+        return values
 
 ###################
 # User management #
@@ -149,3 +165,7 @@ class Permission(BaseModel):
             raise ValueError("A User cannot be both an owner and a viewer.")
 
         return values
+
+class TokenRequest(MongoModel):
+    user: User
+    token: Token
