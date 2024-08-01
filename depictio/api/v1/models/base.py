@@ -66,13 +66,33 @@ class MongoModel(BaseModel):
             PosixPath: lambda path: str(path),
         }
 
+    # @classmethod
+    # def from_mongo(cls, data: dict):
+    #     """We must convert _id into "id". """
+    #     if not data:
+    #         return data
+    #     id = data.pop('_id', None)
+    #     return cls(**dict(data, id=id))
+
     @classmethod
     def from_mongo(cls, data: dict):
         """We must convert _id into "id". """
         if not data:
             return data
-        id = data.pop('_id', None)
-        return cls(**dict(data, id=id))
+        
+        # Helper function to convert nested documents
+        def convert_ids(document):
+            if isinstance(document, list):
+                return [convert_ids(item) for item in document]
+            if isinstance(document, dict):
+                document = {key: convert_ids(value) for key, value in document.items()}
+                id = document.pop('_id', None)
+                if id:
+                    document['id'] = id
+            return document
+        
+        data = convert_ids(data)
+        return cls(**data)
 
     def mongo(self, **kwargs):
         exclude_unset = kwargs.pop('exclude_unset', False)
