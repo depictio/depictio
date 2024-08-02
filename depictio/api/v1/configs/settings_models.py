@@ -12,7 +12,7 @@ class Collections(BaseSettings):
     deltatables_collection: str = "deltatables"
     jbrowse_collection: str = "jbrowse_collection"
     dashboards_collection: str = "dashboards_collection"
-
+    initialization_collection: str = "initialization"
 
 class MongoConfig(BaseSettings):
     """MongoDB configuration."""
