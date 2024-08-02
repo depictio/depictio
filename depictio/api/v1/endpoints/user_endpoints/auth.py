@@ -10,7 +10,7 @@ from jose import jwt, JWTError
 from datetime import datetime, timedelta
 
 # from werkzeug.security import check_password_hash, generate_password_hash
-from depictio.api.v1.endpoints.user_endpoints.core_functions import add_token_to_user
+from depictio.api.v1.endpoints.user_endpoints.core_functions import add_token_to_user, fetch_user_from_email
 from depictio.api.v1.endpoints.user_endpoints.models import TokenRequest, User, Token, TokenData
 from depictio.api.v1.models.base import PyObjectId
 from depictio.api.v1.configs.config import logger
@@ -189,22 +189,29 @@ async def create_user(user: User) -> User:
         users_collection.insert_one(User(**user_dict).mongo())
         return user
 
-
 @auth_endpoint_router.get("/fetch_user/from_email")
 async def fetch_user(email: str):
-    user = users_collection.find_one({"email": email})
-    logger.info(f"Fetching user with email: {email} : {user}")
-    # user = User.from_mongo(user)
-    logger.info("Before")
-    logger.info(user)
-    user = User.from_mongo(user)
-    logger.info("After")
-    logger.info(user)
-
+    user = fetch_user_from_email(email)
     if user:
         return user
     else:
         raise HTTPException(status_code=404, detail="User not found")
+
+# @auth_endpoint_router.get("/fetch_user/from_email")
+# async def fetch_user(email: str):
+#     user = users_collection.find_one({"email": email})
+#     logger.info(f"Fetching user with email: {email} : {user}")
+#     # user = User.from_mongo(user)
+#     logger.info("Before")
+#     logger.info(user)
+#     user = User.from_mongo(user)
+#     logger.info("After")
+#     logger.info(user)
+
+#     if user:
+#         return user
+#     else:
+#         raise HTTPException(status_code=404, detail="User not found")
 
 
 @auth_endpoint_router.post("/edit_password", response_model=User)
