@@ -73,3 +73,4 @@ def initialize_db():
 
     else:
         logger.info("Initialization already done. Skipping...")
+
