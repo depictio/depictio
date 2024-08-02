@@ -131,12 +131,12 @@ def register_tokens_management_callbacks(app):
             return True, False, render_tokens_list(tokens), False, "", delete_token_id, ""
 
         elif triggered == "save-token-name" and save_clicks > 0 and token_name:
-            token, expire = create_access_token({"name": token_name})
-            token_data = {"access_token": token, "expire_datetime": expire.strftime("%Y-%m-%d %H:%M:%S"), "name": token_name}
-            add_token(session_data["email"], token_data)
+            # token, expire = create_access_token({"name": token_name})
+            # token_data = {"access_token": token, "expire_datetime": expire.strftime("%Y-%m-%d %H:%M:%S"), "name": token_name}
+            token_data = add_token(session_data["email"], {"name": token_name})
             # tokens.append({"name": token_name, "created_time": created_time, "last_activity": created_time})
             tokens = list_existing_tokens(session_data["email"])
-            return False, False, render_tokens_list(tokens), True, token, delete_token_id, ""
+            return False, False, render_tokens_list(tokens), True, token_data, delete_token_id, ""
 
         elif isinstance(triggered, dict) and triggered.get("type") == "delete-token":
             logger.info(f"{triggered}")

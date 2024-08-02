@@ -10,6 +10,7 @@ from jose import jwt, JWTError
 from datetime import datetime, timedelta
 
 # from werkzeug.security import check_password_hash, generate_password_hash
+from depictio.api.v1.endpoints.user_endpoints.core_functions import add_token_to_user, fetch_user_from_email
 from depictio.api.v1.endpoints.user_endpoints.models import TokenRequest, User, Token, TokenData
 from depictio.api.v1.models.base import PyObjectId
 from depictio.api.v1.configs.config import logger
@@ -188,22 +189,29 @@ async def create_user(user: User) -> User:
         users_collection.insert_one(User(**user_dict).mongo())
         return user
 
-
 @auth_endpoint_router.get("/fetch_user/from_email")
 async def fetch_user(email: str):
-    user = users_collection.find_one({"email": email})
-    logger.info(f"Fetching user with email: {email} : {user}")
-    # user = User.from_mongo(user)
-    logger.info("Before")
-    logger.info(user)
-    user = User.from_mongo(user)
-    logger.info("After")
-    logger.info(user)
-
+    user = fetch_user_from_email(email)
     if user:
         return user
     else:
         raise HTTPException(status_code=404, detail="User not found")
+
+# @auth_endpoint_router.get("/fetch_user/from_email")
+# async def fetch_user(email: str):
+#     user = users_collection.find_one({"email": email})
+#     logger.info(f"Fetching user with email: {email} : {user}")
+#     # user = User.from_mongo(user)
+#     logger.info("Before")
+#     logger.info(user)
+#     user = User.from_mongo(user)
+#     logger.info("After")
+#     logger.info(user)
+
+#     if user:
+#         return user
+#     else:
+#         raise HTTPException(status_code=404, detail="User not found")
 
 
 @auth_endpoint_router.post("/edit_password", response_model=User)
@@ -239,6 +247,9 @@ async def edit_password(email: str, new_password: str) -> User:
         raise HTTPException(status_code=404, detail="User not found")
 
 
+
+
+
 @auth_endpoint_router.post("/add_token")
 async def add_token(request: dict):
     user = request["user"]
@@ -247,26 +258,42 @@ async def add_token(request: dict):
     logger.info(f"User: {user}")
     logger.info(f"Token: {token}")
 
-    # Ensure _id is an ObjectId
-    user_id = user["_id"]
-    if isinstance(user_id, str):
-        user_id = ObjectId(user_id)
-    elif isinstance(user_id, dict) and "$oid" in user_id:
-        user_id = ObjectId(user_id["$oid"])
+    result = add_token_to_user(user, token)
+    if not result["success"]:
+        raise HTTPException(status_code=500, detail="Failed to add token")
 
-    # Log the _id and the query structure
-    logger.info(f"User _id (ObjectId): {user_id}")
-    query = {"_id": user_id}
-    update = {"$push": {"tokens": token}}
-    logger.info(f"Query: {query}")
-    logger.info(f"Update: {update}")
+    return result
 
-    # Insert in the user collection
-    result = users_collection.update_one(query, update)
-    logger.info(f"Update result: {result.modified_count} document(s) updated")
 
-    # Return success status
-    return {"success": result.modified_count > 0}
+
+# @auth_endpoint_router.post("/add_token")
+# async def add_token(request: dict):
+#     user = request["user"]
+#     token = request["token"]
+#     logger.info(f"Request: {request}")
+#     logger.info(f"User: {user}")
+#     logger.info(f"Token: {token}")
+
+#     # Ensure _id is an ObjectId
+#     user_id = user["_id"]
+#     if isinstance(user_id, str):
+#         user_id = ObjectId(user_id)
+#     elif isinstance(user_id, dict) and "$oid" in user_id:
+#         user_id = ObjectId(user_id["$oid"])
+
+#     # Log the _id and the query structure
+#     logger.info(f"User _id (ObjectId): {user_id}")
+#     query = {"_id": user_id}
+#     update = {"$push": {"tokens": token}}
+#     logger.info(f"Query: {query}")
+#     logger.info(f"Update: {update}")
+
+#     # Insert in the user collection
+#     result = users_collection.update_one(query, update)
+#     logger.info(f"Update result: {result.modified_count} document(s) updated")
+
+#     # Return success status
+#     return {"success": result.modified_count > 0}
 
 @auth_endpoint_router.post("/delete_token")
 async def delete_token(request: dict):
