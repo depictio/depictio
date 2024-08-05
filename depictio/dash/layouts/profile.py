@@ -4,7 +4,7 @@ import dash_mantine_components as dmc
 from dash import html, dcc, Input, Output, State
 import dash
 from depictio.api.v1.db import users_collection
-from depictio.api.v1.configs.config import logger
+from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.endpoints.user_endpoints.utils import find_user, edit_password, check_password
 from dash_extensions.enrich import DashProxy, html, Input, Output, State
 from dash_extensions import EventListener

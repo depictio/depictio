@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from depictio.api.v1.endpoints.user_endpoints.core_functions import add_token_to_user, fetch_user_from_email
 from depictio.api.v1.endpoints.user_endpoints.models import TokenRequest, User, Token, TokenData
 from depictio.api.v1.models.base import PyObjectId
-from depictio.api.v1.configs.config import logger
+from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.db import users_collection
 from depictio.dash.layouts.dashboards_management import convert_objectid_to_str
 

@@ -21,7 +21,7 @@ from depictio.dash.utils import (
     get_columns_from_data_collection,
 )
 
-from depictio.api.v1.configs.config import logger
+from depictio.api.v1.configs.logging import logger
 # Depictio imports
 from depictio.dash.modules.figure_component.utils import (
     build_figure,
@@ -425,7 +425,7 @@ def register_callbacks_figure_component(app):
     #     prevent_initial_call=True,
     # )
     # def test(input_segmented_control, workflow_id, data_collection_id, id):
-    #     from depictio.api.v1.configs.config import logger
+    #     from depictio.api.v1.configs.logging import logger
 
     #     logger.info(f"input_segmented_control: {input_segmented_control}")
     #     logger.info(f"workflow: {workflow_id}")
