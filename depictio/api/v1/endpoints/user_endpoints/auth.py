@@ -297,12 +297,13 @@ async def add_token(request: dict):
 
 @auth_endpoint_router.post("/delete_token")
 async def delete_token(request: dict):
+    logger.info(f"Request: {request}") 
     user = request["user"]
     token_id = request["token_id"]
-    user_id = user["_id"]
+    user_id = user["id"]
+    logger.info(f"User: {user}")
+    logger.info(f"Token ID: {token_id}")
 
-    # Ensure _id is an ObjectId
-    user_id = user["_id"]
     if isinstance(user_id, str):
         user_id = ObjectId(user_id)
     elif isinstance(user_id, dict) and "$oid" in user_id:
@@ -315,7 +316,9 @@ async def delete_token(request: dict):
     # Get existing tokens from the user and remove the token to be deleted
     user_data = users_collection.find_one(query)
     tokens = user_data.get("tokens", [])
-    tokens = [e for e in tokens if e["_id"] != token_id]
+    logger.info(f"Tokens: {tokens}")
+    tokens = [e for e in tokens if str(e["_id"]) != str(token_id)]
+    logger.info(f"Tokens after deletion: {tokens}")
 
     # Update the user with the new tokens
     update = {"$set": {"tokens": tokens}}
@@ -327,3 +330,21 @@ async def delete_token(request: dict):
 
     # Return success status
     return {"success": result.modified_count > 0}
+
+@auth_endpoint_router.post("/generate_agent_config")
+def generate_agent_config(request: dict):
+    logger.info(f"Request: {request}")
+    user = request["user"]
+    token = request["token"]
+
+    # Add token to user
+    user["token"] = token
+
+    # Depictio API config
+    from depictio.api.v1.configs.config import API_BASE_URL
+    depictio_agent_config = {
+        "api_base_url": API_BASE_URL,
+        "user": user,
+    }
+    return depictio_agent_config
+    

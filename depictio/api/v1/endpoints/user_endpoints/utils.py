@@ -13,8 +13,6 @@ from depictio.api.v1.endpoints.user_endpoints.models import Token, User
 from depictio.api.v1.models.base import convert_objectid_to_str
 
 
-
-
 def login_user(email):
     return {"logged_in": True, "email": email}
 
@@ -45,7 +43,6 @@ def verify_password(stored_hash: str, password: str) -> bool:
     return bcrypt.checkpw(password.encode("utf-8"), stored_hash.encode("utf-8"))
 
 
-
 # def find_user(email):
 #     response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_email", params={"email": email})
 #     if response.status_code == 200:
@@ -54,9 +51,10 @@ def verify_password(stored_hash: str, password: str) -> bool:
 #         return user_data
 #     return None
 
-def find_user(email):
+
+def find_user(email, return_tokens=False):
     # Call the core function directly
-    user_data = fetch_user_from_email(email)
+    user_data = fetch_user_from_email(email, return_tokens)
     if user_data:
         logger.info(f"Found user data: {user_data}")
         return user_data
@@ -73,6 +71,7 @@ def add_user(email, password, is_admin=False):
     else:
         logger.error(f"Error adding user {email}: {response.text}")
     return response
+
 
 def edit_password(email, old_password, new_password):
     user = find_user(email)
@@ -94,6 +93,7 @@ def edit_password(email, old_password, new_password):
         logger.error(f"User {email} not found.")
         return {"error": "User not found."}
 
+
 def check_password(email, password):
     user = find_user(email)
     if user:
@@ -108,6 +108,7 @@ def create_access_token(data, expires_delta=timedelta(days=30)):
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, PRIVATE_KEY, algorithm=ALGORITHM)
     return encoded_jwt, expire
+
 
 # def add_token(email, token):
 #     logger.info(f"Adding token for user {email}.")
@@ -132,12 +133,12 @@ def create_access_token(data, expires_delta=timedelta(days=30)):
 #         return response
 #     return None
 
+
 def add_token(email: str, token_data: dict) -> dict:
     logger.info(f"Adding token for user {email}.")
     logger.info(f"Token: {token_data}")
     token, expire = create_access_token(data=token_data)
     token_data = {"access_token": token, "expire_datetime": expire.strftime("%Y-%m-%d %H:%M:%S"), "name": token_data["name"]}
-
 
     logger.info(f"Adding token for user {email}.")
     user = find_user(email)
@@ -149,24 +150,23 @@ def add_token(email: str, token_data: dict) -> dict:
         logger.info(f"Token.mongo(): {token.mongo()}")
 
         result = add_token_to_user(user, token.mongo())
+        logger.info(f"Result: {result}")
         if result["success"]:
             logger.info(f"Token added for user {email}.")
         else:
             logger.error(f"Error adding token for user {email}")
-        return result
+        # return token
     return token
 
 
 def delete_token(email, token_id):
     logger.info(f"Deleting token for user {email}.")
     user = find_user(email)
+    user = convert_objectid_to_str(user.dict())
     logger.info(f"User: {user}")
     if user:
         logger.info(f"Deleting token for user {email}.")
-        request_body = {
-            "user": user,
-            "token_id": token_id
-        }
+        request_body = {"user": user, "token_id": token_id}
         response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/auth/delete_token", json=request_body)
         if response.status_code == 200:
             logger.info(f"Token deleted for user {email}.")
@@ -175,10 +175,27 @@ def delete_token(email, token_id):
         return response
     return None
 
+
 def list_existing_tokens(email):
     logger.info(f"Listing tokens for user {email}.")
-    user = find_user(email)
+    user = find_user(email, return_tokens=True)
     logger.info(f"User: {user}")
     if user:
+        user = user.dict()
         return user.get("tokens", [])
     return None
+
+
+def generate_agent_config(email, token):
+
+    user = find_user(email)
+    user = convert_objectid_to_str(user.dict())
+    logger.info(f"User: {user}")
+
+    logger.info(f"Generating agent config for user {user}.")
+    result = httpx.post(f"{API_BASE_URL}/depictio/api/v1/auth/generate_agent_config", json={"user": user, "token": token})
+    if result.status_code == 200:
+        logger.info(f"Agent config generated for user {user}.")
+        return result.json()
+    else:
+        logger.error(f"Error generating agent config for user {user}: {result.text}")
