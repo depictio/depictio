@@ -3,7 +3,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.backends import default_backend
 
-from depictio.api.v1.configs.config import logger   
+from depictio.api.v1.configs.logging import logger   
 
 
 # Key file paths

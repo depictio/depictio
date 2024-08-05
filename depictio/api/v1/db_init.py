@@ -2,7 +2,7 @@
 
 from datetime import time
 from depictio.api.v1.endpoints.user_endpoints.utils import hash_password
-from depictio.api.v1.configs.config import logger
+from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.endpoints.user_endpoints.models import User
 from depictio.api.v1.endpoints.user_endpoints.utils import add_token
 

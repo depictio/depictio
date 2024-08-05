@@ -1,12 +1,9 @@
-import logging
 import os
 
 from depictio.api.v1.configs.settings_models import Settings
 from depictio.api.v1.utils import get_config, validate_config
 from depictio.api.v1.crypto import run_generate_keys
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(filename)s - %(funcName)s - line %(lineno)d - %(message)s")
-logger = logging.getLogger("depictio")
+from depictio.api.v1.configs.logging import logger
 
 config_backend_location = os.getenv("DEPICTIO_CONFIG_BACKEND_LOCATION", "depictio/api/v1/configs/config_backend_dockercompose.yaml")
 logger.info(f"Using config file: {config_backend_location}")
