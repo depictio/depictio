@@ -3,7 +3,7 @@ from depictio.dash.modules.figure_component.utils import build_figure
 from depictio.api.v1.db import dashboards_collection
 from dash import html
 from depictio.dash.layouts.header import enable_box_edit_mode
-from depictio.api.v1.configs.config import logger
+from depictio.api.v1.configs.logging import logger
 from depictio.dash.modules.interactive_component.utils import build_interactive
 from depictio.dash.modules.jbrowse_component.utils import build_jbrowse
 from depictio.dash.modules.table_component.utils import build_table

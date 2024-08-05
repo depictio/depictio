@@ -222,3 +222,4 @@ jbrowse-watcher-plugin/
 data/minio/
 *.b64
 depictio/tmp_token.pem
+user_data.json

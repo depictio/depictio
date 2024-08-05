@@ -14,7 +14,7 @@ import pandas as pd
 import polars as pl
 import sys
 
-from depictio.api.v1.configs.config import logger
+from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.endpoints.user_endpoints.auth import (
     ALGORITHM,
     PUBLIC_KEY,
