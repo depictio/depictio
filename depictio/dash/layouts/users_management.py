@@ -92,9 +92,9 @@ def validate_login(login_email, login_password):
 
     logger.info(f"User: {user}")
 
-    if verify_password(user["password"], login_password):
+    if verify_password(user.password, login_password):
         logger.info("Password verification successful.")
-        return "Login successful!", False, login_user(user["email"])
+        return "Login successful!", False, login_user(user.email)
 
     logger.info("Password verification failed.")
     return "Invalid email or password.", True, dash.no_update

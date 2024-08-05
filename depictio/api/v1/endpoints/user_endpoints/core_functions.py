@@ -30,10 +30,14 @@ def add_token_to_user(user, token):
     # Return success status
     return {"success": result.modified_count > 0}
 
-def fetch_user_from_email(email: str):
+def fetch_user_from_email(email: str, return_tokens: bool = False) -> User:
     from depictio.api.v1.db import users_collection  # Move import inside the function
 
-    user = users_collection.find_one({"email": email})
+    # Find the user in the database and exclude the tokens field
+    if return_tokens:
+        user = users_collection.find_one({"email": email})
+    else:
+        user = users_collection.find_one({"email": email}, {"tokens": 0})
     logger.info(f"Fetching user with email: {email} : {user}")
     user = User.from_mongo(user)
     logger.info("After conversion to User model")
