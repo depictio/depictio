@@ -193,6 +193,7 @@ def register_profile_callbacks(app):
             return html.Div(), html.Div()
 
         user = find_user(session_data["email"])
+        user = user.dict()
 
         if not user:
             return html.Div(), html.Div()
@@ -208,6 +209,7 @@ def register_profile_callbacks(app):
                 position="bottom",
             )
         )
+
 
         user_metadata = {
             "Email": user.get("email", "N/A"),
