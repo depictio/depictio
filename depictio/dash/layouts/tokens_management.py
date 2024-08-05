@@ -6,7 +6,7 @@ import dash
 from depictio.api.v1.db import users_collection
 from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.endpoints.user_endpoints.models import Token
-from depictio.api.v1.endpoints.user_endpoints.utils import add_token, create_access_token, delete_token, list_existing_tokens
+from depictio.api.v1.endpoints.user_endpoints.utils import add_token, create_access_token, delete_token, generate_agent_config, list_existing_tokens
 from dash_extensions.enrich import DashProxy, html, Input, Output, State
 from dash_extensions import EventListener
 from dash.exceptions import PreventUpdate
@@ -34,7 +34,7 @@ def render_tokens_list(tokens):
                         ],
                         className="token-details",
                     ),
-                    dbc.Button("Delete", id={"type": "delete-token", "index": token['_id']}, color="danger", className="ml-auto"),
+                    dbc.Button("Delete", id={"type": "delete-token", "index": str(token['id'])}, color="danger", className="ml-auto"),
                 ],
                 className="d-flex justify-content-between align-items-center",
             )
@@ -134,9 +134,15 @@ def register_tokens_management_callbacks(app):
             # token, expire = create_access_token({"name": token_name})
             # token_data = {"access_token": token, "expire_datetime": expire.strftime("%Y-%m-%d %H:%M:%S"), "name": token_name}
             token_data = add_token(session_data["email"], {"name": token_name})
+            token_data = token_data.dict()
+            logger.info(f"Token data: {token_data}")
+
+            agent_config = generate_agent_config(session_data["email"], token_data["access_token"])
+            logger.info(f"Agent config: {agent_config}")
+
             # tokens.append({"name": token_name, "created_time": created_time, "last_activity": created_time})
             tokens = list_existing_tokens(session_data["email"])
-            return False, False, render_tokens_list(tokens), True, token_data, delete_token_id, ""
+            return False, False, render_tokens_list(tokens), True, token_data["access_token"], delete_token_id, ""
 
         elif isinstance(triggered, dict) and triggered.get("type") == "delete-token":
             logger.info(f"{triggered}")
@@ -146,11 +152,11 @@ def register_tokens_management_callbacks(app):
         elif triggered == "confirm-delete-button" and confirm_delete_clicks > 0 and delete_confirm_input == "delete":
             logger.info(f"Deleting token {delete_token_id}")
             logger.info(f"tokens: {tokens}")
-            if delete_token_id in [t["_id"] for t in tokens]:
+            if delete_token_id in [str(t["id"]) for t in tokens]:
                 # del tokens[token_to_delete]
                 # token_to_delete = None
                 delete_token(session_data["email"], delete_token_id)
-                tokens = [e for e in tokens if e['_id'] != delete_token_id]
+                tokens = [e for e in tokens if str(e['id']) != delete_token_id]
 
             return False, False, render_tokens_list(tokens), False, "", {}, ""
 
