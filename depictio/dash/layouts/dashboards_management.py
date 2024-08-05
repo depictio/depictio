@@ -7,7 +7,7 @@ from dash import html, dcc, ctx, MATCH, Input, Output, State, ALL
 import dash_mantine_components as dmc
 from dash_iconify import DashIconify
 from depictio.api.v1.db import dashboards_collection
-from depictio.api.v1.configs.config import logger
+from depictio.api.v1.configs.logging import logger
 
 
 layout = html.Div(
