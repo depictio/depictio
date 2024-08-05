@@ -335,6 +335,13 @@ async def delete_token(request: dict):
 def generate_agent_config(request: dict):
     logger.info(f"Request: {request}")
     user = request["user"]
+    
+    # Keep only email and is_admin fields from user
+    user = {
+        "email": user["email"],
+        "is_admin": user["is_admin"],
+    }
+
     token = request["token"]
 
     # Add token to user
