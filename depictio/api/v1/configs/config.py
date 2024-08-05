@@ -6,7 +6,7 @@ from depictio.api.v1.crypto import run_generate_keys
 from depictio.api.v1.configs.logging import logger
 
 config_backend_location = os.getenv("DEPICTIO_CONFIG_BACKEND_LOCATION", "depictio/api/v1/configs/config_backend_dockercompose.yaml")
-logger.info(f"Using config file: {config_backend_location}")   
+logger.info(f"Using config file: {config_backend_location}")
 
 # Settings
 # Overwrite priority: environment variables (.env) > config file (.yaml) > default values
@@ -16,6 +16,12 @@ API_BASE_URL = f"http://{settings.fastapi.service_name}:{settings.fastapi.port}"
 MONGODB_URL = f"mongodb://{settings.mongodb.service_name}:{settings.mongodb.port}/"
 TOKEN = settings.auth.tmp_token
 TOKEN = TOKEN.strip()
+
+
+# Check if key files exist, generate if they don't
+run_generate_keys()
+
+
 with open("depictio/private_key.pem", "rb") as f:
     PRIVATE_KEY = f.read()
 with open("depictio/public_key.pem", "rb") as f:
