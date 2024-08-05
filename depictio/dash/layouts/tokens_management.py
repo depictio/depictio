@@ -3,6 +3,7 @@ import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 from dash import html, dcc, Input, Output, State, ctx
 import dash
+import yaml
 from depictio.api.v1.db import users_collection
 from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.endpoints.user_endpoints.models import Token
@@ -17,7 +18,7 @@ event = {"event": "keydown", "props": ["key"]}
 
 def render_tokens_list(tokens):
     if not tokens:
-        return html.P("No tokens available.")
+        return html.P("No agent configs available.")
 
     token_items = []
     for token in tokens:
@@ -34,7 +35,7 @@ def render_tokens_list(tokens):
                         ],
                         className="token-details",
                     ),
-                    dbc.Button("Delete", id={"type": "delete-token", "index": str(token['id'])}, color="danger", className="ml-auto"),
+                    dbc.Button("Delete", id={"type": "delete-token", "index": str(token["id"])}, color="danger", className="ml-auto"),
                 ],
                 className="d-flex justify-content-between align-items-center",
             )
@@ -46,16 +47,16 @@ def render_tokens_list(tokens):
 layout = dbc.Container(
     [
         dcc.Store(id="delete-token-id-store", storage_type="memory"),
-        dbc.Row(dbc.Col(html.H2("Access Tokens", className="text-center"), width=12)),
-        dbc.Row(dbc.Col(html.P("Security tokens to access Depictio via API."), width=12)),
-        dbc.Row(dbc.Col(dbc.Button("Add Token", id="add-token-button", color="primary", className="mb-4", n_clicks=0), width={"size": 2, "offset": 10})),
+        dbc.Row(dbc.Col(html.H2("CLI agent config", className="text-center"), width=12)),
+        dbc.Row(dbc.Col(html.P("Security configuration to access Depictio via depictio-cli."), width=12)),
+        dbc.Row(dbc.Col(dbc.Button("Add new config", id="add-token-button", color="primary", className="mb-4", n_clicks=0), width={"size": 2, "offset": 10})),
         dbc.Row(dbc.Col(html.Div(id="tokens-list", className="token-display mt-3"), width=12)),
         dmc.Modal(
-            title="Name Your Token",
+            title="Name Your Agent",
             id="token-modal",
             centered=True,
             children=[
-                dmc.TextInput(id="token-name-input", label="Token Name", description="Enter a name for your token", required=True),
+                dmc.TextInput(id="token-name-input", label="Token Name", description="Enter a name for your agent", required=True),
                 dmc.Button("Save", id="save-token-name", className="mt-2"),
             ],
         ),
@@ -69,25 +70,10 @@ layout = dbc.Container(
             ],
         ),
         dmc.Modal(
-            title="Token Created",
+            # title="Token Created",
             id="display-token-modal",
             centered=True,
-            children=[
-                dmc.TextInput(
-                    id="display-token-input",
-                    label="Token",
-                    value="",
-                    # readOnly=True,
-                    className="mt-2",
-                    disabled=True,
-                ),
-                # dmc.CopyButton(
-                #     content="Copy",
-                #     value="",
-                #     className="mt-2",
-                #     id="copy-token-button"
-                # )
-            ],
+            children=[html.Div(id="display-token-input")],
         ),
     ],
     fluid=True,
@@ -100,7 +86,7 @@ def register_tokens_management_callbacks(app):
         Output("delete-modal", "opened"),
         Output("tokens-list", "children"),
         Output("display-token-modal", "opened"),
-        Output("display-token-input", "value"),
+        Output("display-token-input", "children"),
         Output("delete-token-id-store", "data"),
         Output("delete-confirm-input", "value"),
         # Output("copy-token-button", "value"),
@@ -134,15 +120,50 @@ def register_tokens_management_callbacks(app):
             # token, expire = create_access_token({"name": token_name})
             # token_data = {"access_token": token, "expire_datetime": expire.strftime("%Y-%m-%d %H:%M:%S"), "name": token_name}
             token_data = add_token(session_data["email"], {"name": token_name})
+
+            if not token_data:
+                div = dmc.Title("Failed to create agent. Agent with that name already exists.", color="red", order=3)
+
+                return False, False, render_tokens_list(tokens), True, div, delete_token_id, ""
+
             token_data = token_data.dict()
             logger.info(f"Token data: {token_data}")
 
-            agent_config = generate_agent_config(session_data["email"], token_data["access_token"])
+            agent_config = generate_agent_config(session_data["email"], token_data)
             logger.info(f"Agent config: {agent_config}")
 
             # tokens.append({"name": token_name, "created_time": created_time, "last_activity": created_time})
             tokens = list_existing_tokens(session_data["email"])
-            return False, False, render_tokens_list(tokens), True, token_data["access_token"], delete_token_id, ""
+
+            # Format token data for display using dcc.Markdown, using YAML format
+            agent_config = yaml.dump(agent_config, default_flow_style=False)
+            logger.info(f"Token data: {token_data}")
+
+            # Add extra formatting to color with YAML ('''...''') and add a copy button
+            agent_config = f"```yaml\n{agent_config}\n```"
+
+            # Add a copy button to the token display modal
+
+            logger.info(f"Agent config: {agent_config}")
+
+            div_agent_config = html.Div(
+                [
+                    dmc.Title("Agent Created", color="blue", order=3),
+                    dcc.Markdown(id="display-token-input", children=agent_config),
+                    dcc.Clipboard(
+                        target_id="display-token-input",
+                        style={
+                            "position": "absolute",
+                            "top": 45,
+                            "right": 20,
+                            "fontSize": 15,
+                        },
+                    ),
+                    dmc.Text("Please copy the agent config and store it in a safe place. You will not be able to access it again once you close this dialog."),
+                ]
+            )
+
+            return False, False, render_tokens_list(tokens), True, div_agent_config, delete_token_id, ""
 
         elif isinstance(triggered, dict) and triggered.get("type") == "delete-token":
             logger.info(f"{triggered}")
@@ -150,14 +171,14 @@ def register_tokens_management_callbacks(app):
             return False, True, render_tokens_list(tokens), False, "", token_to_delete, ""
 
         elif triggered == "confirm-delete-button" and confirm_delete_clicks > 0 and delete_confirm_input == "delete":
-            logger.info(f"Deleting token {delete_token_id}")
+            logger.info(f"Deleting agent {delete_token_id}")
             logger.info(f"tokens: {tokens}")
             if delete_token_id in [str(t["id"]) for t in tokens]:
                 # del tokens[token_to_delete]
                 # token_to_delete = None
                 delete_token(session_data["email"], delete_token_id)
-                tokens = [e for e in tokens if str(e['id']) != delete_token_id]
+                tokens = [e for e in tokens if str(e["id"]) != delete_token_id]
 
             return False, False, render_tokens_list(tokens), False, "", {}, ""
 
-        return False, False, render_tokens_list(tokens), False, "", {} , ""
+        return False, False, render_tokens_list(tokens), False, "", {}, ""
