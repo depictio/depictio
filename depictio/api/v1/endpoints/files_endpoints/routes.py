@@ -10,6 +10,7 @@ from botocore.exceptions import NoCredentialsError
 
 from depictio.api.v1.configs.config import settings, logger
 from depictio.api.v1.db import db
+from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_token
 from depictio.api.v1.s3 import s3_client
 from depictio.api.v1.endpoints.files_endpoints.models import File
 from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user
@@ -17,6 +18,7 @@ from depictio.api.v1.endpoints.validators import validate_workflow_and_collectio
 from depictio.api.v1.endpoints.workflow_endpoints.models import WorkflowRun
 from depictio.api.v1.models.base import convert_objectid_to_str
 
+from depictio.api.v1.endpoints.user_endpoints.auth import oauth2_scheme
 
 from depictio.api.v1.utils import (
     # decode_token,
@@ -47,15 +49,29 @@ bucket_name = settings.minio.bucket
 async def list_registered_files(
     workflow_id: str,
     data_collection_id: str,
-    current_user: str = Depends(get_current_user),
+    token: str = Depends(oauth2_scheme),
 ):
     """
     Fetch all files registered from a Data Collection registered into a workflow.
     """
 
+    if not workflow_id or not data_collection_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Both workflow_id and data_collection_id must be provided.",
+        )
+    
+    if not token:
+        raise HTTPException(
+            status_code=400,
+            detail="Token must be provided.",
+        )
+
+    current_user = fetch_user_from_token(token)
+
     workflow_oid = ObjectId(workflow_id)
     data_collection_oid = ObjectId(data_collection_id)
-    user_oid = ObjectId(current_user.user_id)  # This should be the ObjectId
+    user_oid = ObjectId(current_user.id)  # This should be the ObjectId
     assert isinstance(workflow_oid, ObjectId)
     assert isinstance(data_collection_oid, ObjectId)
     assert isinstance(user_oid, ObjectId)
@@ -63,7 +79,7 @@ async def list_registered_files(
     # Construct the query
     query = {
         "_id": workflow_oid,
-        "permissions.owners.user_id": user_oid,
+        "permissions.owners.id": user_oid,
         "data_collections._id": data_collection_oid,
     }
     logger.info(query)
@@ -84,7 +100,7 @@ async def list_registered_files(
 async def scan_metadata(
     workflow_id: str,
     data_collection_id: str,
-    current_user: str = Depends(get_current_user),
+    token: str = Depends(oauth2_scheme),
 ):
     """
     Scan the files and retrieve metadata.
@@ -92,6 +108,22 @@ async def scan_metadata(
     logger.info("Scanning data collection")
     logger.info(workflow_id)
     logger.info(data_collection_id)
+
+
+    if not workflow_id or not data_collection_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Both workflow_id and data_collection_id must be provided.",
+        )
+
+    if not token:
+        raise HTTPException(
+            status_code=400,
+            detail="Token must be provided.",
+        )
+    
+    current_user = fetch_user_from_token(token)
+
 
     (
         workflow_oid,
@@ -101,13 +133,13 @@ async def scan_metadata(
         user_oid,
     ) = validate_workflow_and_collection(
         workflows_collection,
-        current_user.user_id,
+        current_user.id,
         workflow_id,
         data_collection_id,
     )
 
     logger.info(current_user)
-    user_id = str(current_user.user_id)
+    user_id = str(current_user.id)
     logger.info(user_id)
 
     for location in workflow.config.parent_runs_location:
@@ -132,11 +164,29 @@ async def scan_metadata(
 async def scan_data_collection(
     workflow_id: str,
     data_collection_id: str,
-    current_user: str = Depends(get_current_user),
+    token: str = Depends(oauth2_scheme),
 ):
     logger.info("Scanning data collection")
     logger.info(workflow_id)
     logger.info(data_collection_id)
+
+
+
+    if not workflow_id or not data_collection_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Both workflow_id and data_collection_id must be provided.",
+        )
+    
+    if not token:
+        raise HTTPException(
+            status_code=400,
+            detail="Token must be provided.",
+        )
+    
+    current_user = fetch_user_from_token(token)
+    logger.info(f"Current user: {current_user}")
+
 
     (
         workflow_oid,
@@ -146,13 +196,13 @@ async def scan_data_collection(
         user_oid,
     ) = validate_workflow_and_collection(
         workflows_collection,
-        current_user.user_id,
+        current_user.id,
         workflow_id,
         data_collection_id,
     )
 
     logger.info(current_user)
-    user_id = str(current_user.user_id)
+    user_id = str(current_user.id)
     logger.info(user_id)
 
     # Retrieve the workflow_config from the workflow
@@ -227,22 +277,36 @@ async def scan_data_collection(
 async def delete_files(
     workflow_id: str,
     data_collection_id: str,
-    current_user: str = Depends(get_current_user),
+    token: str = Depends(oauth2_scheme),
 ):
     """
     Delete all files from GridFS.
     """
 
+    if not workflow_id or not data_collection_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Both workflow_id and data_collection_id must be provided.",
+        )
+    
+    if not token:
+        raise HTTPException(
+            status_code=400,
+            detail="Token must be provided.",
+        )
+    
+    current_user = fetch_user_from_token(token)
+
     workflow_oid = ObjectId(workflow_id)
     data_collection_oid = ObjectId(data_collection_id)
-    user_oid = ObjectId(current_user.user_id)  # This should be the ObjectId
+    user_oid = ObjectId(current_user.id)  # This should be the ObjectId
     assert isinstance(workflow_oid, ObjectId)
     assert isinstance(data_collection_oid, ObjectId)
     assert isinstance(user_oid, ObjectId)
     # Construct the query
     query = {
         "_id": workflow_oid,
-        "permissions.owners.user_id": user_oid,
+        "permissions.owners.id": user_oid,
         "data_collections._id": data_collection_oid,
     }
     logger.info(query)

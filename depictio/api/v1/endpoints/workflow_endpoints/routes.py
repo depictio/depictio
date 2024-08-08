@@ -10,13 +10,9 @@ from depictio.api.v1.endpoints.files_endpoints.routes import delete_files
 from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_token
 from depictio.api.v1.endpoints.workflow_endpoints.utils import compare_models
 from depictio.api.v1.models.base import convert_objectid_to_str
-from depictio.api.v1.models.top_structure import (
-    Workflow,
-)
+from depictio.api.v1.models.top_structure import Workflow
 from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user
 from depictio.api.v1.s3 import s3_client
-
-
 from depictio.api.v1.endpoints.user_endpoints.auth import oauth2_scheme
 
 # Define the router
@@ -27,12 +23,12 @@ workflows_endpoint_router = APIRouter()
 # @workflows_endpoint_router.get("/get_workflows", response_model=List[Workflow])
 async def get_all_workflows(current_user: str = Depends(get_current_user)):
     # Assuming the 'current_user' now holds a 'user_id' as an ObjectId after being parsed in 'get_current_user'
-    user_id = current_user.user_id  # This should be the ObjectId
+    user_id = current_user.id  # This should be the ObjectId
 
     # Find workflows where current_user is either an owner or a viewer
     query = {
         "$or": [
-            {"permissions.owners.user_id": user_id},
+            {"permissions.owners.id": user_id},
             {"permissions.viewers.user_id": user_id},
         ]
     }
@@ -49,19 +45,18 @@ async def get_all_workflows(current_user: str = Depends(get_current_user)):
 @workflows_endpoint_router.get("/get")
 # @workflows_endpoint_router.get("/get_workflows", response_model=List[Workflow])
 async def get_workflow(workflow_id: str, token: str = Depends(oauth2_scheme)):
-
     logger.info(f"workflow_id: {workflow_id}")
 
     current_user = fetch_user_from_token(token)
 
     # Assuming the 'current_user' now holds a 'user_id' as an ObjectId after being parsed in 'get_current_user'
-    user_id = current_user.user_id  # This should be the ObjectId
+    user_id = current_user.id  # This should be the ObjectId
 
     # Find workflows where current_user is either an owner or a viewer
     query = {
         "_id": ObjectId(workflow_id),
         "$or": [
-            {"permissions.owners.user_id": user_id},
+            {"permissions.owners.id": user_id},
             {"permissions.viewers.user_id": user_id},
         ],
     }
@@ -82,13 +77,13 @@ async def get_workflow(workflow_id: str, token: str = Depends(oauth2_scheme)):
 async def create_workflow(workflow: Workflow, token: str = Depends(oauth2_scheme)):
     if not token:
         raise HTTPException(status_code=401, detail="Token is required to create a workflow.")
-    
+
     current_user = fetch_user_from_token(token)
 
     if not current_user:
         raise HTTPException(status_code=404, detail="User not found.")
 
-    logger.info(f"current_user: {current_user}")    
+    logger.info(f"current_user: {current_user}")
 
     if not workflow:
         raise HTTPException(status_code=400, detail="Workflow is required to create it.")
@@ -125,15 +120,14 @@ async def create_workflow(workflow: Workflow, token: str = Depends(oauth2_scheme
 
 @workflows_endpoint_router.put("/update")
 async def update_workflow(workflow: Workflow, token: str = Depends(oauth2_scheme)):
-
     if not token:
         raise HTTPException(status_code=401, detail="Token is required to update a workflow.")
-    
+
     current_user = fetch_user_from_token(token)
 
     if not current_user:
         raise HTTPException(status_code=401, detail="Token is required to update a workflow.")
-    
+
     if not workflow:
         raise HTTPException(status_code=400, detail="Workflow is required to update it.")
 
@@ -193,7 +187,7 @@ async def delete_workflow(workflow_id: str, current_user: str = Depends(get_curr
     data_collections = existing_workflow["data_collections"]
 
     # Ensure that the current user is authorized to update the workflow
-    user_id = current_user.user_id
+    user_id = current_user.id
     print(
         user_id,
         type(user_id),

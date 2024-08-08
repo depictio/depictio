@@ -55,14 +55,21 @@ class TokenData(BaseModel):
 ###################
 
 
-class User(MongoModel):
+
+class UserBase(MongoModel):
     id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
+    email: EmailStr
+    is_admin: bool = False
+
+
+class User(UserBase):
+    # id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
     # user_id: Optional[PyObjectId] = None
     # username: str
-    email: EmailStr
+    # email: EmailStr
     tokens: List[Token] = Field(default_factory=list)
     is_active: bool = True
-    is_admin: bool = False
+    # is_admin: bool = False
     is_verified: bool = False
     last_login: Optional[str] = None
     registration_date: Optional[str] = None
@@ -87,12 +94,12 @@ class User(MongoModel):
 
     def __hash__(self):
         # Hash based on the unique user_id
-        return hash(self.user_id)
+        return hash(self.id)
 
     def __eq__(self, other):
         # Equality based on the unique user_id
         if isinstance(other, User):
-            return all(getattr(self, field) == getattr(other, field) for field in self.__fields__.keys() if field not in ["user_id", "registration_time"])
+            return all(getattr(self, field) == getattr(other, field) for field in self.__fields__.keys() if field not in ["id", "registration_time"])
         return False
 
     @root_validator
@@ -103,9 +110,11 @@ class User(MongoModel):
                 group_ids.append("admin")
             values["groups"] = group_ids
         return values
-    
+
+
+
 class Group(BaseModel):
-    user_id: PyObjectId = Field(default_factory=PyObjectId)
+    id: PyObjectId = Field(default_factory=PyObjectId)
     name: str
     members: Set[User]  # Set of User objects instead of ObjectId
 
@@ -119,7 +128,7 @@ class Group(BaseModel):
     @root_validator(pre=True)
     def ensure_unique_member_ids(cls, values):
         members = values.get("members", [])
-        unique_members = {member.user_id: member for member in members}.values()
+        unique_members = {member.id: member for member in members}.values()
         return {"members": set(unique_members)}
 
     # This function validates that each user_id in the members is unique
@@ -128,15 +137,15 @@ class Group(BaseModel):
         seen = set()
         members = values.get("members", [])
         for member in members:
-            if member.user_id in seen:
-                raise ValueError("Duplicate user_id found in group members.")
-            seen.add(member.user_id)
+            if member.id in seen:
+                raise ValueError("Duplicate id found in group members.")
+            seen.add(member.id)
         return values
 
 
 class Permission(BaseModel):
-    owners: List[User]
-    viewers: Optional[List[User]] = set()  # Set default to empty set
+    owners: List[UserBase]
+    viewers: Optional[List[UserBase]] = set()  # Set default to empty set
 
     def dict(self, **kwargs):
         # Generate list of owner and viewer dictionaries
@@ -147,8 +156,8 @@ class Permission(BaseModel):
     @validator("owners", "viewers", pre=True, each_item=True)
     def convert_dict_to_user(cls, v):
         if isinstance(v, dict):
-            return User(**v)  # Assuming `User` is a Pydantic model and can be instantiated like this
-        elif not isinstance(v, User):
+            return UserBase(**v)  # Assuming `User` is a Pydantic model and can be instantiated like this
+        elif not isinstance(v, UserBase):
             raise ValueError("Permissions should be assigned to User instances.")
         return v
 
@@ -166,8 +175,8 @@ class Permission(BaseModel):
     def ensure_owners_and_viewers_are_unique(cls, values):
         owners = values.get("owners", set())
         viewers = values.get("viewers", set())
-        owner_ids = {owner.user_id for owner in owners}
-        viewer_ids = {viewer.user_id for viewer in viewers}
+        owner_ids = {owner.id for owner in owners}
+        viewer_ids = {viewer.id for viewer in viewers}
 
         if not owner_ids.isdisjoint(viewer_ids):
             raise ValueError("A User cannot be both an owner and a viewer.")
