@@ -144,6 +144,16 @@ def add_token(email: str, token_data: dict) -> dict:
     user = find_user(email)
     logger.info(f"User: {user}")
     if user:
+
+        # Check if the token already exists based on the name
+        tokens = list_existing_tokens(email)
+        logger.info(f"Tokens: {tokens}")
+        for t in tokens:
+            if t["name"] == token_data["name"]:
+                logger.error(f"Token with name {token_data['name']} already exists for user {email}.")
+                return None
+        
+
         logger.info(f"Adding token for user {email}.")
         token = Token(**token_data)
         logger.info(f"Token: {token}")
@@ -191,6 +201,9 @@ def generate_agent_config(email, token):
     user = find_user(email)
     user = convert_objectid_to_str(user.dict())
     logger.info(f"User: {user}")
+
+    token = convert_objectid_to_str(token)
+    token = {"access_token": token["access_token"], "expire_datetime": token["expire_datetime"], "name": token["name"]}
 
     logger.info(f"Generating agent config for user {user}.")
     result = httpx.post(f"{API_BASE_URL}/depictio/api/v1/auth/generate_agent_config", json={"user": user, "token": token})
