@@ -186,6 +186,15 @@ def delete_token(email, token_id):
     return None
 
 
+def fetch_user_from_token(token):
+    logger.info(f"Fetching user from token.")
+    response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_token", params={"token": token})
+    if response.status_code == 200:
+        user_data = response.json()
+        logger.info(f"Raw user data from response: {user_data}")
+        return user_data
+    return None
+
 def list_existing_tokens(email):
     logger.info(f"Listing tokens for user {email}.")
     user = find_user(email, return_tokens=True)
