@@ -10,7 +10,7 @@ from jose import jwt, JWTError
 from datetime import datetime, timedelta
 
 # from werkzeug.security import check_password_hash, generate_password_hash
-from depictio.api.v1.endpoints.user_endpoints.core_functions import add_token_to_user, fetch_user_from_email
+from depictio.api.v1.endpoints.user_endpoints.core_functions import add_token_to_user, fetch_user_from_email, fetch_user_from_token
 from depictio.api.v1.endpoints.user_endpoints.models import TokenRequest, User, Token, TokenData
 from depictio.api.v1.models.base import PyObjectId
 from depictio.api.v1.configs.logging import logger
@@ -135,26 +135,26 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     )
 
 
-@auth_endpoint_router.get("/fetch_user/from_token", response_model=User)
-async def fetch_user_from_token(token: str = Depends(oauth2_scheme)) -> User:
-    logger.info("\n\n\n")
-    logger.info("fetch_user_from_token")
-    payload = jwt.decode(token, PUBLIC_KEY, algorithms=[ALGORITHM])
-    user_id = payload.get("sub")
-    if user_id is None:
-        logger.info("Token is invalid or expired.")
-        sys.exit(code=1)
-    # Fetch user from the database or wherever it is stored
-    user_document = users_collection.find_one({"_id": ObjectId(str(user_id))})
-    if not user_document:
-        raise HTTPException(status_code=404, detail="User not found")
-    user = User(
-        user_id=user_document["_id"],
-        username=user_document["username"],
-        email=user_document["email"],
-    )
-    logger.info(user)
-    return user
+# @auth_endpoint_router.get("/fetch_user/from_token", response_model=User)
+# async def fetch_user_from_token(token: str = Depends(oauth2_scheme)) -> User:
+#     logger.info("\n\n\n")
+#     logger.info("fetch_user_from_token")
+#     payload = jwt.decode(token, PUBLIC_KEY, algorithms=[ALGORITHM])
+#     user_id = payload.get("sub")
+#     if user_id is None:
+#         logger.info("Token is invalid or expired.")
+#         sys.exit(code=1)
+#     # Fetch user from the database or wherever it is stored
+#     user_document = users_collection.find_one({"_id": ObjectId(str(user_id))})
+#     if not user_document:
+#         raise HTTPException(status_code=404, detail="User not found")
+#     user = User(
+#         user_id=user_document["_id"],
+#         username=user_document["username"],
+#         email=user_document["email"],
+#     )
+#     logger.info(user)
+#     return user
 
 
 async def get_current_user(token: str = Depends(oauth2_scheme)) -> TokenData:
@@ -190,8 +190,16 @@ async def create_user(user: User) -> User:
         return user
 
 @auth_endpoint_router.get("/fetch_user/from_email")
-async def fetch_user(email: str):
+async def api_fetch_user(email: str):
     user = fetch_user_from_email(email)
+    if user:
+        return user
+    else:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+@auth_endpoint_router.post("/fetch_user/from_token", response_model=User)
+async def api_fetch_user_from_token(token: str):
+    user = fetch_user_from_token(token)
     if user:
         return user
     else:
@@ -335,6 +343,13 @@ async def delete_token(request: dict):
 def generate_agent_config(request: dict):
     logger.info(f"Request: {request}")
     user = request["user"]
+    
+    # Keep only email and is_admin fields from user
+    user = {
+        "email": user["email"],
+        "is_admin": user["is_admin"],
+    }
+
     token = request["token"]
 
     # Add token to user
