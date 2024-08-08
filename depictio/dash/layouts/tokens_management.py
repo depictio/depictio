@@ -72,6 +72,7 @@ layout = dbc.Container(
             title="Token Created",
             id="display-token-modal",
             centered=True,
+<<<<<<< Updated upstream
             children=[
                 dmc.TextInput(
                     id="display-token-input",
@@ -88,6 +89,9 @@ layout = dbc.Container(
                 #     id="copy-token-button"
                 # )
             ],
+=======
+            children=[html.Div(id="display-agent")],
+>>>>>>> Stashed changes
         ),
     ],
     fluid=True,
@@ -100,7 +104,11 @@ def register_tokens_management_callbacks(app):
         Output("delete-modal", "opened"),
         Output("tokens-list", "children"),
         Output("display-token-modal", "opened"),
+<<<<<<< Updated upstream
         Output("display-token-input", "value"),
+=======
+        Output("display-agent", "children"),
+>>>>>>> Stashed changes
         Output("delete-token-id-store", "data"),
         Output("delete-confirm-input", "value"),
         # Output("copy-token-button", "value"),
@@ -142,7 +150,40 @@ def register_tokens_management_callbacks(app):
 
             # tokens.append({"name": token_name, "created_time": created_time, "last_activity": created_time})
             tokens = list_existing_tokens(session_data["email"])
+<<<<<<< Updated upstream
             return False, False, render_tokens_list(tokens), True, token_data["access_token"], delete_token_id, ""
+=======
+
+            # Format token data for display using dcc.Markdown, using YAML format
+            agent_config = yaml.dump(agent_config, default_flow_style=False)
+            logger.info(f"Token data: {token_data}")
+
+            # Add extra formatting to color with YAML ('''...''') and add a copy button
+            agent_config = f"```yaml\n{agent_config}\n```"
+
+            # Add a copy button to the token display modal
+
+            logger.info(f"Agent config: {agent_config}")
+
+            div_agent_config = html.Div(
+                [
+                    dmc.Title("Agent Created", color="blue", order=3),
+                    dcc.Markdown(id="agent-config-md", children=agent_config),
+                    dcc.Clipboard(
+                        target_id="agent-config-md",
+                        style={
+                            "position": "absolute",
+                            "top": 75,
+                            "right": 20,
+                            "fontSize": 15,
+                        },
+                    ),
+                    dmc.Text(["Please copy the agent config and store it in ", dmc.Code("~/.depictio/agent.yaml")," . You will not be able to access this config again once you close this dialog."]),
+                ]
+            )
+
+            return False, False, render_tokens_list(tokens), True, div_agent_config, delete_token_id, ""
+>>>>>>> Stashed changes
 
         elif isinstance(triggered, dict) and triggered.get("type") == "delete-token":
             logger.info(f"{triggered}")
