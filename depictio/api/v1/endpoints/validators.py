@@ -4,6 +4,7 @@ from depictio.api.v1.endpoints.datacollections_endpoints.models import DataColle
 
 from depictio.api.v1.endpoints.workflow_endpoints.models import Workflow
 from depictio.api.v1.models.base import convert_objectid_to_str
+from depictio.api.v1.configs.config import settings, logger
 
 
 def validate_workflow_and_collection(collection, user_id: str, workflow_id: str, data_collection_id: str = None):
@@ -23,7 +24,7 @@ def validate_workflow_and_collection(collection, user_id: str, workflow_id: str,
 
     # Retrieve the workflow
     workflow = collection.find_one(
-        {"_id": workflow_oid, "permissions.owners.user_id": user_oid},
+        {"_id": workflow_oid, "permissions.owners.id": user_oid},
     )
 
 
@@ -38,6 +39,7 @@ def validate_workflow_and_collection(collection, user_id: str, workflow_id: str,
     
     # Convert the workflow to a Workflow object
     workflow = convert_objectid_to_str(workflow)
+    logger.info(f"workflow: {workflow}")    
     workflow = Workflow(**workflow)
 
     # If no data collection id is provided, return the workflow and user_oid
@@ -46,7 +48,7 @@ def validate_workflow_and_collection(collection, user_id: str, workflow_id: str,
 
 
     # Extract the correct data collection from the workflow's data_collections
-    data_collection = collection.find_one({"_id": workflow_oid, "permissions.owners.user_id": user_oid}, {"data_collections": {"$elemMatch": {"_id": data_collection_oid}}})
+    data_collection = collection.find_one({"_id": workflow_oid, "permissions.owners.id": user_oid}, {"data_collections": {"$elemMatch": {"_id": data_collection_oid}}})
     data_collection = data_collection.get("data_collections")[0]
 
     data_collection = convert_objectid_to_str(data_collection)
