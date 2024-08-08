@@ -155,7 +155,7 @@ class Workflow(MongoModel):
     config: WorkflowConfig
     registration_time: datetime = datetime.now()
     # data_collection_ids: Optional[List[str]] = []
-    permissions: Optional[Permission]
+    permissions: Optional[Permission] = {"owners": [], "viewers": []}
     hash: Optional[str] = None  # Change this to expect a string
 
 

@@ -3,7 +3,9 @@ from depictio.api.v1.endpoints.datacollections_endpoints.models import DataColle
 from depictio.api.v1.endpoints.workflow_endpoints.models import Workflow
 
 
+
 def compare_models(workflow_yaml: dict, workflow_db: dict) -> bool:
+
     """
     Compare the workflow data dictionary with the retrieved workflow JSON.
     """

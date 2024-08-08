@@ -39,7 +39,7 @@ layout = dbc.Container(
                                     width="auto",
                                 ),
                                 dbc.Col(
-                                    html.A(dmc.Button("Tokens", id="tokens-page-redirection", variant="outline", color="green", style={"marginTop": "20px"}), href="/tokens"),
+                                    html.A(dmc.Button("CLI Agents", id="tokens-page-redirection", variant="outline", color="green", style={"marginTop": "20px"}), href="/tokens"),
                                     align="left",
                                     width="auto",
                                 ),
