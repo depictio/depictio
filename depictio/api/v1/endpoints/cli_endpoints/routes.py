@@ -39,6 +39,8 @@ async def validate_agent_config_endpoint(agent_config: dict):
 
     db_user = fetch_user_from_email(email, return_tokens=True)
 
+    logger.info(f"DB User: {db_user}")  
+
     if db_user:
         tokens = db_user.tokens
         for t in tokens:

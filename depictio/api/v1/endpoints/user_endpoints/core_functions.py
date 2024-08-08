@@ -40,8 +40,9 @@ def fetch_user_from_email(email: str, return_tokens: bool = False) -> User:
         user = users_collection.find_one({"email": email}, {"tokens": 0})
     logger.info(f"Fetching user with email: {email} : {user}")
     user = User.from_mongo(user)
+
     logger.info("After conversion to User model")
-    logger.info(user)
+    logger.info(f"User: {user}")
 
     if user:
         return user
@@ -56,7 +57,7 @@ def fetch_user_from_token(token: str) -> User:
     logger.info(f"Fetching user with token: {token} : {user}")
     user = User.from_mongo(user)
     logger.info("After conversion to User model")
-    logger.info(user)
+    logger.info(f"User: {user}")
 
     if user:
         return user
