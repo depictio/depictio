@@ -9,6 +9,7 @@ from depictio.api.v1.endpoints.user_endpoints.auth import auth_endpoint_router
 from depictio.api.v1.endpoints.jbrowse_endpoints.routes import jbrowse_endpoints_router
 from depictio.api.v1.endpoints.utils_endpoints.routes import utils_endpoint_router
 from depictio.api.v1.endpoints.dashboards_endpoints.routes import dashboards_endpoint_router
+from depictio.api.v1.endpoints.cli_endpoints.routes import cli_endpoint_router
 
 router = APIRouter()
 
@@ -50,6 +51,13 @@ router.include_router(
     prefix="/utils",
     tags=["Utils"],
 )
+
+router.include_router(
+    cli_endpoint_router,
+    prefix="/cli",
+    tags=["CLI"],
+)
+
 router.include_router(
     dashboards_endpoint_router,
     prefix="/dashboards",
