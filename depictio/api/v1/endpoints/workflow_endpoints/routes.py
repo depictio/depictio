@@ -7,6 +7,8 @@ from depictio.api.v1.configs.config import settings, logger
 from depictio.api.v1.db import workflows_collection, data_collections_collection, runs_collection, files_collection
 from depictio.api.v1.endpoints.deltatables_endpoints.routes import delete_deltatable
 from depictio.api.v1.endpoints.files_endpoints.routes import delete_files
+from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_token
+from depictio.api.v1.endpoints.workflow_endpoints.utils import compare_models
 from depictio.api.v1.models.base import convert_objectid_to_str
 from depictio.api.v1.models.top_structure import (
     Workflow,
@@ -14,9 +16,11 @@ from depictio.api.v1.models.top_structure import (
 from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user
 from depictio.api.v1.s3 import s3_client
 
+
+from depictio.api.v1.endpoints.user_endpoints.auth import oauth2_scheme
+
 # Define the router
 workflows_endpoint_router = APIRouter()
-
 
 
 @workflows_endpoint_router.get("/get_all_workflows")
@@ -42,11 +46,14 @@ async def get_all_workflows(current_user: str = Depends(get_current_user)):
     return workflows
 
 
-
 @workflows_endpoint_router.get("/get")
 # @workflows_endpoint_router.get("/get_workflows", response_model=List[Workflow])
-async def get_workflow(workflow_id: str, current_user: str = Depends(get_current_user)):
+async def get_workflow(workflow_id: str, token: str = Depends(oauth2_scheme)):
+
     logger.info(f"workflow_id: {workflow_id}")
+
+    current_user = fetch_user_from_token(token)
+
     # Assuming the 'current_user' now holds a 'user_id' as an ObjectId after being parsed in 'get_current_user'
     user_id = current_user.user_id  # This should be the ObjectId
 
@@ -72,13 +79,27 @@ async def get_workflow(workflow_id: str, current_user: str = Depends(get_current
 
 
 @workflows_endpoint_router.post("/create")
-async def create_workflow(workflow: Workflow, current_user: str = Depends(get_current_user)):
+async def create_workflow(workflow: Workflow, token: str = Depends(oauth2_scheme)):
+    if not token:
+        raise HTTPException(status_code=401, detail="Token is required to create a workflow.")
+    
+    current_user = fetch_user_from_token(token)
+
+    if not current_user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    logger.info(f"current_user: {current_user}")    
+
+    if not workflow:
+        raise HTTPException(status_code=400, detail="Workflow is required to create it.")
+
     existing_workflow = workflows_collection.find_one(
         {
             "workflow_tag": workflow.workflow_tag,
-            "permissions.owners.user_id": current_user.user_id,
+            "permissions.owners.id": current_user.id,
         }
     )
+    logger.info(f"existing_workflow: {existing_workflow}")
 
     if existing_workflow:
         raise HTTPException(
@@ -86,16 +107,13 @@ async def create_workflow(workflow: Workflow, current_user: str = Depends(get_cu
             detail=f"Workflow with name '{workflow.workflow_tag}' already exists. Use update option to modify it.",
         )
 
-    # Create new workflow
-    print(workflow)
+    logger.info(f"workflow: {workflow}")
+    workflow.permissions["owners"] = [{"id": current_user.id, "email": current_user.email, "groups": current_user.groups}]
 
     # Assign PyObjectId to workflow ID and data collection IDs
     workflow.id = ObjectId()
     for data_collection in workflow.data_collections:
         data_collection.id = ObjectId()
-    print("\n\n\n")
-    print("create_workflow")
-    print(workflow)
     assert isinstance(workflow.id, ObjectId)
     res = workflows_collection.insert_one(workflow.mongo())
     assert res.inserted_id == workflow.id
@@ -106,22 +124,33 @@ async def create_workflow(workflow: Workflow, current_user: str = Depends(get_cu
 
 
 @workflows_endpoint_router.put("/update")
-async def update_workflow(workflow: Workflow, current_user: str = Depends(get_current_user)):
+async def update_workflow(workflow: Workflow, token: str = Depends(oauth2_scheme)):
+
+    if not token:
+        raise HTTPException(status_code=401, detail="Token is required to update a workflow.")
+    
+    current_user = fetch_user_from_token(token)
+
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Token is required to update a workflow.")
+    
+    if not workflow:
+        raise HTTPException(status_code=400, detail="Workflow is required to update it.")
+
     existing_workflow = workflows_collection.find_one(
         {
             "workflow_tag": workflow.workflow_tag,
-            "permissions.owners.user_id": current_user.user_id,
+            "permissions.owners.id": current_user.id,
         }
     )
+
+    logger.info(f"existing_workflow: {existing_workflow}")
 
     if not existing_workflow:
         raise HTTPException(
             status_code=404,
             detail=f"Workflow with name '{workflow.workflow_tag}' does not exist. Use create option to create it.",
         )
-    # Preserve existing data collection IDs
-    print("existing_workflow")
-    print(existing_workflow)
     existing_data_collections = {dc["data_collection_tag"]: dc["_id"] for dc in existing_workflow.get("data_collections", [])}
     for dc in workflow.data_collections:
         if dc.data_collection_tag in existing_data_collections:
@@ -131,7 +160,7 @@ async def update_workflow(workflow: Workflow, current_user: str = Depends(get_cu
     # Update the workflow with potentially new or modified data collections
     updated_workflow_data = workflow.mongo()
     updated_workflow_data["_id"] = existing_workflow["_id"]  # Ensure the workflow ID is preserved
-
+    updated_workflow_data["permissions"] = existing_workflow["permissions"]  # Ensure the permissions are preserved
     res = workflows_collection.find_one_and_update({"_id": existing_workflow["_id"]}, {"$set": updated_workflow_data}, return_document=ReturnDocument.AFTER)
 
     # Verify the update was successful
@@ -140,8 +169,6 @@ async def update_workflow(workflow: Workflow, current_user: str = Depends(get_cu
 
     # Return a mapping of workflow ID to data collection IDs
     updated_data_collection_ids = [str(dc.id) for dc in workflow.data_collections]
-    print("upddate")
-    print(updated_workflow_data)
     return_data = convert_objectid_to_str(updated_workflow_data)
 
     return return_data
@@ -188,3 +215,14 @@ async def delete_workflow(workflow_id: str, current_user: str = Depends(get_curr
         delete_datatable_message = await delete_deltatable(workflow_id, data_collection["data_collection_id"], current_user)
 
     return {"message": f"Workflow {workflow_tag} with ID '{id}' deleted successfully, as well as all files"}
+
+
+@workflows_endpoint_router.post("/compare_workflow_models")
+async def compare_models_endpoint(new_workflow: Workflow, existing_workflow: Workflow, token: str = Depends(oauth2_scheme)):
+    if not token:
+        raise HTTPException(status_code=401, detail="Token is required to compare workflow models.")
+    if not new_workflow or not existing_workflow:
+        raise HTTPException(status_code=400, detail="Both new and existing workflows are required to compare them.")
+
+    result = compare_models(new_workflow, existing_workflow)
+    return {"exists": True, "match": result, "message": f"Workflow with name '{new_workflow.workflow_tag}' exists."}
