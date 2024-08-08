@@ -95,6 +95,14 @@ class User(MongoModel):
             return all(getattr(self, field) == getattr(other, field) for field in self.__fields__.keys() if field not in ["user_id", "registration_time"])
         return False
 
+    # Add "admin" to group if is_admin is True
+    @root_validator
+    def add_admin_to_group(cls, values):
+        if values["is_admin"]:
+            group_ids = values.get("groups", [])
+            group_ids.append("admin")
+            return {"groups": group_ids}
+        return values
 
 class Group(BaseModel):
     user_id: PyObjectId = Field(default_factory=PyObjectId)
