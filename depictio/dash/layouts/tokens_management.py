@@ -74,6 +74,7 @@ layout = dbc.Container(
             id="display-token-modal",
             centered=True,
             children=[html.Div(id="display-agent")],
+        ),
     ],
     fluid=True,
 )
@@ -134,7 +135,6 @@ def register_tokens_management_callbacks(app):
             # tokens.append({"name": token_name, "created_time": created_time, "last_activity": created_time})
             tokens = list_existing_tokens(session_data["email"])
 
-
             # Format token data for display using dcc.Markdown, using YAML format
             agent_config = yaml.dump(agent_config, default_flow_style=False)
             logger.info(f"Token data: {token_data}")
@@ -159,14 +159,18 @@ def register_tokens_management_callbacks(app):
                             "fontSize": 15,
                         },
                     ),
-                    dmc.Text(["Please copy the agent config and store it in ", dmc.Code("~/.depictio/agent.yaml")," . You will not be able to access this config again once you close this dialog."]),
+                    dmc.Text(
+                        [
+                            "Please copy the agent config and store it in ",
+                            dmc.Code("~/.depictio/agent.yaml"),
+                            " . You will not be able to access this config again once you close this dialog.",
+                        ]
+                    ),
                 ]
             )
 
             return False, False, render_tokens_list(tokens), True, div_agent_config, delete_token_id, ""
 
-
-
             # Format token data for display using dcc.Markdown, using YAML format
             agent_config = yaml.dump(agent_config, default_flow_style=False)
             logger.info(f"Token data: {token_data}")
@@ -191,7 +195,13 @@ def register_tokens_management_callbacks(app):
                             "fontSize": 15,
                         },
                     ),
-                    dmc.Text(["Please copy the agent config and store it in ", dmc.Code("~/.depictio/agent.yaml")," . You will not be able to access this config again once you close this dialog."]),
+                    dmc.Text(
+                        [
+                            "Please copy the agent config and store it in ",
+                            dmc.Code("~/.depictio/agent.yaml"),
+                            " . You will not be able to access this config again once you close this dialog.",
+                        ]
+                    ),
                 ]
             )
 
