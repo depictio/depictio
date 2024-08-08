@@ -47,3 +47,18 @@ def fetch_user_from_email(email: str, return_tokens: bool = False) -> User:
         return user
     else:
         return None
+
+def fetch_user_from_token(token: str) -> User:
+    from depictio.api.v1.db import users_collection  # Move import inside the function
+
+    # Find the user in the database and exclude the tokens field
+    user = users_collection.find_one({"tokens.access_token": token}, {"tokens": 0})
+    logger.info(f"Fetching user with token: {token} : {user}")
+    user = User.from_mongo(user)
+    logger.info("After conversion to User model")
+    logger.info(user)
+
+    if user:
+        return user
+    else:
+        return None
