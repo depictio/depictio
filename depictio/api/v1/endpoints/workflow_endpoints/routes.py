@@ -25,7 +25,7 @@ workflows_endpoint_router = APIRouter()
 # @workflows_endpoint_router.get("/get_workflows", response_model=List[Workflow])
 async def get_all_workflows(current_user: str = Depends(get_current_user)):
     # Assuming the 'current_user' now holds a 'user_id' as an ObjectId after being parsed in 'get_current_user'
-    user_id = current_user.user_id  # This should be the ObjectId
+    user_id = current_user.id  # This should be the ObjectId
 
     # Find workflows where current_user is either an owner or a viewer
     query = {
@@ -52,7 +52,7 @@ async def get_workflow(workflow_id: str, token: str = Depends(oauth2_scheme)):
     current_user = fetch_user_from_token(token)
 
     # Assuming the 'current_user' now holds a 'user_id' as an ObjectId after being parsed in 'get_current_user'
-    user_id = current_user.user_id  # This should be the ObjectId
+    user_id = current_user.id  # This should be the ObjectId
 
     # Find workflows where current_user is either an owner or a viewer
     query = {
@@ -189,7 +189,7 @@ async def delete_workflow(workflow_id: str, current_user: str = Depends(get_curr
     data_collections = existing_workflow["data_collections"]
 
     # Ensure that the current user is authorized to update the workflow
-    user_id = current_user.user_id
+    user_id = current_user.id
     print(
         user_id,
         type(user_id),

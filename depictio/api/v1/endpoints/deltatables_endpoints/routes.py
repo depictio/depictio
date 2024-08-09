@@ -52,7 +52,7 @@ async def list_registered_files(
         user_oid,
     ) = validate_workflow_and_collection(
         workflows_collection,
-        current_user.user_id,
+        current_user.id,
         workflow_id,
         data_collection_id,
     )
@@ -86,7 +86,7 @@ async def specs(
         data_collection,
         user_oid,
     ) = validate_workflow_and_collection(
-         workflows_collection, current_user.user_id, workflow_id, data_collection_id, 
+         workflows_collection, current_user.id, workflow_id, data_collection_id, 
     )
 
     # Query to find deltatable associated with the data collection
@@ -141,7 +141,7 @@ token: str = Depends(oauth2_scheme)
         user_oid,
     ) = validate_workflow_and_collection(
         workflows_collection,
-        current_user.user_id,
+        current_user.id,
         workflow_id,
         data_collection_id,
     )
@@ -285,7 +285,7 @@ async def delete_deltatable(
 
     workflow_oid = ObjectId(workflow_id)
     data_collection_oid = ObjectId(data_collection_id)
-    user_oid = ObjectId(current_user.user_id)  # This should be the ObjectId
+    user_oid = ObjectId(current_user.id)  # This should be the ObjectId
     assert isinstance(workflow_oid, ObjectId)
     assert isinstance(data_collection_oid, ObjectId)
     assert isinstance(user_oid, ObjectId)

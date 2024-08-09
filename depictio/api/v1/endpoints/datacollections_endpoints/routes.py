@@ -35,7 +35,7 @@ async def specs(
     # Assuming the 'current_user' now holds a 'user_id' as an ObjectId after being parsed in 'get_current_user'
     # workflow_oid = ObjectId(workflow_id)
     # data_collection_oid = ObjectId(data_collection_id)
-    # user_oid = ObjectId(current_user.user_id)  # This should be the ObjectId
+    # user_oid = ObjectId(current_user.id)  # This should be the ObjectId
     # assert isinstance(workflow_oid, ObjectId)
     # assert isinstance(data_collection_oid, ObjectId)
     # assert isinstance(user_oid, ObjectId)
@@ -73,7 +73,7 @@ async def specs(
         user_oid,
     ) = validate_workflow_and_collection(
         workflows_collection,
-        current_user.user_id,
+        current_user.id,
         workflow_id,
         data_collection_id,
     )
@@ -94,7 +94,7 @@ async def delete_datacollection(
 ):
     # workflow_oid = ObjectId(workflow_id)
     # data_collection_oid = ObjectId(data_collection_id)
-    # user_oid = ObjectId(current_user.user_id)  # This should be the ObjectId
+    # user_oid = ObjectId(current_user.id)  # This should be the ObjectId
     # assert isinstance(workflow_oid, ObjectId)
     # assert isinstance(data_collection_oid, ObjectId)
     # assert isinstance(user_oid, ObjectId)
@@ -131,7 +131,7 @@ async def delete_datacollection(
         user_oid,
     ) = validate_workflow_and_collection(
         workflows_collection,
-        current_user.user_id,
+        current_user.id,
         workflow_id,
         data_collection_id,
     )
@@ -147,7 +147,7 @@ async def delete_datacollection(
     # delete corresponding files from files_collection
 
     # # Ensure that the current user is authorized to update the workflow
-    # user_id = current_user.user_id
+    # user_id = current_user.id
     # print(
     #     user_id,
     #     type(user_id),

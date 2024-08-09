@@ -71,7 +71,7 @@ token: str = Depends(oauth2_scheme)
 
     workflow_oid = ObjectId(workflow_id)
     data_collection_oid = ObjectId(data_collection_id)
-    user_oid = ObjectId(current_user.user_id)  # This should be the ObjectId
+    user_oid = ObjectId(current_user.id)  # This should be the ObjectId
     assert isinstance(workflow_oid, ObjectId)
     assert isinstance(data_collection_oid, ObjectId)
     assert isinstance(user_oid, ObjectId)
@@ -131,13 +131,13 @@ async def scan_metadata(
         user_oid,
     ) = validate_workflow_and_collection(
         workflows_collection,
-        current_user.user_id,
+        current_user.id,
         workflow_id,
         data_collection_id,
     )
 
     logger.info(current_user)
-    user_id = str(current_user.user_id)
+    user_id = str(current_user.id)
     logger.info(user_id)
 
     for location in workflow.config.parent_runs_location:
@@ -166,6 +166,7 @@ async def scan_data_collection(
     workflow_id: str,
     data_collection_id: str,
 token: str = Depends(oauth2_scheme)):
+    
     logger.info("Scanning data collection")
     logger.info(workflow_id)
     logger.info(data_collection_id)
@@ -193,13 +194,13 @@ token: str = Depends(oauth2_scheme)):
         user_oid,
     ) = validate_workflow_and_collection(
         workflows_collection,
-        current_user.user_id,
+        current_user.id,
         workflow_id,
         data_collection_id,
     )
 
     logger.info(current_user)
-    user_id = str(current_user.user_id)
+    user_id = str(current_user.id)
     logger.info(user_id)
 
     # Retrieve the workflow_config from the workflow
@@ -246,6 +247,7 @@ token: str = Depends(oauth2_scheme)):
                         "viewers": [],
                     }
 
+                    logger.info(f"\n")
                     
                     logger.info(f"User ID: {user_id}")
                     logger.info(f"File: {file}")
@@ -313,7 +315,7 @@ token: str = Depends(oauth2_scheme)):
 
     workflow_oid = ObjectId(workflow_id)
     data_collection_oid = ObjectId(data_collection_id)
-    user_oid = ObjectId(current_user.user_id)  # This should be the ObjectId
+    user_oid = ObjectId(current_user.id)  # This should be the ObjectId
     assert isinstance(workflow_oid, ObjectId)
     assert isinstance(data_collection_oid, ObjectId)
     assert isinstance(user_oid, ObjectId)
