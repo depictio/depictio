@@ -54,19 +54,24 @@ class TokenData(BaseModel):
 # User management #
 ###################
 
-
-class User(MongoModel):
+class UserBase(MongoModel):
     id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
+    email: EmailStr
+    is_admin: bool = False
+    groups: Optional[List[PyObjectId]] = Field(default_factory=list)
+
+class User(UserBase):
+    # id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
     # user_id: Optional[PyObjectId] = None
     # username: str
-    email: EmailStr
+    # email: EmailStr
     tokens: List[Token] = Field(default_factory=list)
     is_active: bool = True
-    is_admin: bool = False
+    # is_admin: bool = False
     is_verified: bool = False
     last_login: Optional[str] = None
     registration_date: Optional[str] = None
-    groups: Optional[List[PyObjectId]] = Field(default_factory=list)
+    # groups: Optional[List[PyObjectId]] = Field(default_factory=list)
     password: str
 
     @root_validator(pre=True)
