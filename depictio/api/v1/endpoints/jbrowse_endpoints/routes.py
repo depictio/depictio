@@ -288,7 +288,7 @@ async def create_trackset(
 ):
     workflow_oid = ObjectId(workflow_id)
     data_collection_oid = ObjectId(data_collection_id)
-    user_oid = ObjectId(current_user.user_id)
+    user_oid = ObjectId(current_user.id)
     assert isinstance(workflow_oid, ObjectId)
     assert isinstance(data_collection_oid, ObjectId)
     assert isinstance(user_oid, ObjectId)
@@ -301,7 +301,7 @@ async def create_trackset(
         user_oid,
     ) = validate_workflow_and_collection(
         workflows_collection,
-        current_user.user_id,
+        current_user.id,
         workflow_id,
         data_collection_id,
     )
@@ -317,7 +317,7 @@ async def create_trackset(
     for file in files:
         file = File(**file)
 
-        track_config = handle_jbrowse_tracks(file, current_user.user_id, workflow_id, data_collection)
+        track_config = handle_jbrowse_tracks(file, current_user.id, workflow_id, data_collection)
         if track_config:
             new_tracks.append(track_config)
 
@@ -328,7 +328,7 @@ async def create_trackset(
     # TODO - retrieve dashboard ID
     # Generate dashboard ID
     dashboard_id = "1"  # Replace with actual dashboard ID
-    config_path = os.path.join(jbrowse_config_dir, f"{current_user.user_id}_{dashboard_id}.json")
+    config_path = os.path.join(jbrowse_config_dir, f"{current_user.id}_{dashboard_id}.json")
 
     payload = update_jbrowse_config(config_path, new_tracks)
     if payload["type"] == "error":

@@ -8,6 +8,7 @@ from pydantic import (
     validator,
 )
 from depictio.api.v1.endpoints.datacollections_endpoints.models import DataCollection, WildcardRegexBase
+from depictio.api.v1.endpoints.user_endpoints.models import Permission, UserBase
 from depictio.api.v1.models.base import MongoModel, PyObjectId
 
 
@@ -30,6 +31,7 @@ class File(MongoModel):
     run_id: Optional[str] = None
     registration_time: datetime = datetime.now()
     wildcards: Optional[List[WildcardRegex]]
+    permissions: Optional[Permission] = {"owners": [], "viewers": []}
 
     @root_validator(pre=True)
     def set_default_id(cls, values):
