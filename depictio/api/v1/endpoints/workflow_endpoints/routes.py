@@ -23,7 +23,13 @@ workflows_endpoint_router = APIRouter()
 
 @workflows_endpoint_router.get("/get_all_workflows")
 # @workflows_endpoint_router.get("/get_workflows", response_model=List[Workflow])
-async def get_all_workflows(current_user: str = Depends(get_current_user)):
+async def get_all_workflows(token: str = Depends(oauth2_scheme)):
+
+    if not token:
+        raise HTTPException(status_code=401, detail="Token is required to get all workflows.")
+
+    current_user = fetch_user_from_token(token)
+
     # Assuming the 'current_user' now holds a 'user_id' as an ObjectId after being parsed in 'get_current_user'
     user_id = current_user.id  # This should be the ObjectId
 
