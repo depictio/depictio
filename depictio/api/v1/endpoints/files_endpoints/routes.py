@@ -10,6 +10,7 @@ from botocore.exceptions import NoCredentialsError
 
 from depictio.api.v1.configs.config import settings, logger
 from depictio.api.v1.db import db
+from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_token
 from depictio.api.v1.s3 import s3_client
 from depictio.api.v1.endpoints.files_endpoints.models import File
 from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user
@@ -17,6 +18,7 @@ from depictio.api.v1.endpoints.validators import validate_workflow_and_collectio
 from depictio.api.v1.endpoints.workflow_endpoints.models import WorkflowRun
 from depictio.api.v1.models.base import convert_objectid_to_str
 
+from depictio.api.v1.endpoints.user_endpoints.auth import oauth2_scheme
 
 from depictio.api.v1.utils import (
     # decode_token,
@@ -47,15 +49,29 @@ bucket_name = settings.minio.bucket
 async def list_registered_files(
     workflow_id: str,
     data_collection_id: str,
-    current_user: str = Depends(get_current_user),
+token: str = Depends(oauth2_scheme)
 ):
     """
     Fetch all files registered from a Data Collection registered into a workflow.
     """
 
+    if not workflow_id or not data_collection_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Both workflow_id and data_collection_id must be provided.",
+        )
+
+    if not token:
+        raise HTTPException(
+            status_code=400,
+            detail="Token must be provided.",
+        )
+
+    current_user = fetch_user_from_token(token)
+
     workflow_oid = ObjectId(workflow_id)
     data_collection_oid = ObjectId(data_collection_id)
-    user_oid = ObjectId(current_user.user_id)  # This should be the ObjectId
+    user_oid = ObjectId(current_user.id)  # This should be the ObjectId
     assert isinstance(workflow_oid, ObjectId)
     assert isinstance(data_collection_oid, ObjectId)
     assert isinstance(user_oid, ObjectId)
@@ -84,7 +100,7 @@ async def list_registered_files(
 async def scan_metadata(
     workflow_id: str,
     data_collection_id: str,
-    current_user: str = Depends(get_current_user),
+    token: str = Depends(oauth2_scheme),
 ):
     """
     Scan the files and retrieve metadata.
@@ -93,6 +109,20 @@ async def scan_metadata(
     logger.info(workflow_id)
     logger.info(data_collection_id)
 
+    if not workflow_id or not data_collection_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Both workflow_id and data_collection_id must be provided.",
+        )
+
+    if not token:
+        raise HTTPException(
+            status_code=400,
+            detail="Token must be provided.",
+        )
+
+    current_user = fetch_user_from_token(token)
+
     (
         workflow_oid,
         data_collection_oid,
@@ -101,13 +131,13 @@ async def scan_metadata(
         user_oid,
     ) = validate_workflow_and_collection(
         workflows_collection,
-        current_user.user_id,
+        current_user.id,
         workflow_id,
         data_collection_id,
     )
 
     logger.info(current_user)
-    user_id = str(current_user.user_id)
+    user_id = str(current_user.id)
     logger.info(user_id)
 
     for location in workflow.config.parent_runs_location:
@@ -116,6 +146,10 @@ async def scan_metadata(
             file = file.mongo()
             existing_file = files_collection.find_one({"file_location": file["file_location"]})
             if not existing_file:
+                file["permissions"] = {
+                    "owners": [{"id": user_oid, "email": current_user.email, "groups": current_user.groups}],
+                    "viewers": [],
+                }
                 file = File(**file)
                 file.id = ObjectId()
                 files_collection.insert_one(file.mongo())
@@ -123,20 +157,34 @@ async def scan_metadata(
                 logger.info(f"File already exists: {file['file_location']}")
                 file = File.from_mongo(existing_file)
                 logger.info("from mongo", file)
-    
-    return {"message": f"Files successfully scanned and created for data_collection: {data_collection.id} of workflow: {workflow.id}"}
 
+    return {"message": f"Files successfully scanned and created for data_collection: {data_collection.id} of workflow: {workflow.id}"}
 
 
 @files_endpoint_router.post("/scan/{workflow_id}/{data_collection_id}")
 async def scan_data_collection(
     workflow_id: str,
     data_collection_id: str,
-    current_user: str = Depends(get_current_user),
-):
+token: str = Depends(oauth2_scheme)):
+    
     logger.info("Scanning data collection")
     logger.info(workflow_id)
     logger.info(data_collection_id)
+
+    if not workflow_id or not data_collection_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Both workflow_id and data_collection_id must be provided.",
+        )
+
+    if not token:
+        raise HTTPException(
+            status_code=400,
+            detail="Token must be provided.",
+        )
+
+    current_user = fetch_user_from_token(token)
+    logger.info(f"Current user: {current_user}")
 
     (
         workflow_oid,
@@ -146,13 +194,13 @@ async def scan_data_collection(
         user_oid,
     ) = validate_workflow_and_collection(
         workflows_collection,
-        current_user.user_id,
+        current_user.id,
         workflow_id,
         data_collection_id,
     )
 
     logger.info(current_user)
-    user_id = str(current_user.user_id)
+    user_id = str(current_user.id)
     logger.info(user_id)
 
     # Retrieve the workflow_config from the workflow
@@ -178,8 +226,7 @@ async def scan_data_collection(
                 files = run.pop("files", [])
 
                 # Insert the run into runs_collection and retrieve its id
-                
-                
+
                 run = WorkflowRun(**run)
 
                 existing_run = runs_collection.find_one({"run_tag": run.mongo()["run_tag"]})
@@ -195,7 +242,16 @@ async def scan_data_collection(
 
                 # Add run_id to each file before inserting
                 for file in sorted(files, key=lambda x: x["file_location"]):
-                    file = File(**file)
+                    file["permissions"] = {
+                        "owners": [{"id": user_oid, "email": current_user.email, "groups": current_user.groups, "is_admin": current_user.is_admin}],
+                        "viewers": [],
+                    }
+
+                    logger.info(f"\n")
+                    
+                    logger.info(f"User ID: {user_id}")
+                    logger.info(f"File: {file}")
+
                     # logger.info(data_collection.config.type)
 
                     # if data_collection.config.type == "JBrowse2":
@@ -204,7 +260,20 @@ async def scan_data_collection(
 
                     # Check if the file already exists in the database
 
-                    existing_file = files_collection.find_one({"file_location": file.mongo()["file_location"]})
+                    # Assuming user_oid is the ObjectId of the current user
+                    existing_file = files_collection.find_one({
+                        "file_location": file["file_location"],
+                        "permissions.owners": {
+                            "$elemMatch": {
+                                "id": ObjectId(user_oid)
+                            }
+                        }
+                    })
+                    logger.info(f"Existing file: {existing_file}")
+
+                    file = File(**file)
+
+
                     if not existing_file:
                         file.id = ObjectId()
                         # If the file does not exist, add it to the database
@@ -221,21 +290,32 @@ async def scan_data_collection(
         return {"Warning: runs_and_content is not a list of dictionaries."}
 
 
-
-
 @files_endpoint_router.delete("/delete/{workflow_id}/{data_collection_id}")
 async def delete_files(
     workflow_id: str,
     data_collection_id: str,
-    current_user: str = Depends(get_current_user),
-):
+token: str = Depends(oauth2_scheme)):
     """
     Delete all files from GridFS.
     """
 
+    if not workflow_id or not data_collection_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Both workflow_id and data_collection_id must be provided.",
+        )
+
+    if not token:
+        raise HTTPException(
+            status_code=400,
+            detail="Token must be provided.",
+        )
+
+    current_user = fetch_user_from_token(token)
+
     workflow_oid = ObjectId(workflow_id)
     data_collection_oid = ObjectId(data_collection_id)
-    user_oid = ObjectId(current_user.user_id)  # This should be the ObjectId
+    user_oid = ObjectId(current_user.id)  # This should be the ObjectId
     assert isinstance(workflow_oid, ObjectId)
     assert isinstance(data_collection_oid, ObjectId)
     assert isinstance(user_oid, ObjectId)
