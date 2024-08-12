@@ -2,8 +2,10 @@
 from fastapi import APIRouter, Depends
 from fastapi.security import OAuth2PasswordBearer
 
-from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_email
+from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_email, fetch_user_from_token
 from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.endpoints.user_endpoints.models import UserBase
+from depictio.api.v1.models.base import convert_objectid_to_str
 from depictio.api.v1.models.top_structure import RootConfig
 from depictio.api.v1.models_utils import validate_config
 
@@ -49,8 +51,25 @@ async def validate_agent_config_endpoint(agent_config: dict):
     else:
         return {"valid": False}
 
-@cli_endpoint_router.post("/validate_pipeline_config")
+@cli_endpoint_router.post("/validate_pipeline_config") 
 async def validate_pipeline_config_endpoint(pipeline_config: dict = dict(), token: str = Depends(oauth2_scheme)):
+    
+    if not pipeline_config:
+        return {"success": False, "error": "No pipeline config provided"}
+    
+    if not token:
+        return {"success": False, "error": "No token provided"}
+    
+    current_user = fetch_user_from_token(token)
+    logger.info(f"Current user: {current_user}")
+    current_userbase =user_base = UserBase(**current_user.dict(exclude={'tokens', 'is_active', 'is_verified', 'last_login', 'registration_date', 'password'}))
+    logger.info(f"Current user base: {current_userbase}")
+
+    current_userbase = convert_objectid_to_str(current_userbase)
+    logger.info(f"Current user base: {current_user}")
+    if not current_user:
+        return {"success": False, "error": "Invalid token"}
+
     # Validate that the pipeline config is correct using agent config and pipeline config
 
     logger.info(f"Pipeline config: {pipeline_config}")
@@ -58,4 +77,14 @@ async def validate_pipeline_config_endpoint(pipeline_config: dict = dict(), toke
 
     # Validate Root config
     validated_pipeline_config = validate_config(pipeline_config, RootConfig)
+
+    # For all workflows, add the current_user.id to the owners list
+    for workflow in validated_pipeline_config.workflows:
+
+        workflow.permissions["owners"].append(current_userbase)
+
     logger.info(f"Validated pipeline config: {validated_pipeline_config}")
+    validated_pipeline_config = convert_objectid_to_str(validated_pipeline_config.dict())
+    logger.info(f"Validated pipeline config: {validated_pipeline_config}")
+
+    return {"success": True, "config": validated_pipeline_config}
