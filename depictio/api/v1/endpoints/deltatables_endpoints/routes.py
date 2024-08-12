@@ -15,7 +15,7 @@ from depictio.api.v1.s3 import minio_storage_options
 from depictio.api.v1.endpoints.deltatables_endpoints.models import Aggregation, DeltaTableAggregated
 from depictio.api.v1.endpoints.files_endpoints.models import File
 from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user
-from depictio.api.v1.endpoints.user_endpoints.models import User
+from depictio.api.v1.endpoints.user_endpoints.models import User, UserBase
 from depictio.api.v1.endpoints.validators import validate_workflow_and_collection
 from depictio.api.v1.models.base import convert_objectid_to_str
 from depictio.api.v1.endpoints.user_endpoints.auth import oauth2_scheme
@@ -181,7 +181,7 @@ token: str = Depends(oauth2_scheme)
     os.makedirs(destination_file_name, exist_ok=True)
 
     # Get the user object to use as aggregation_by
-    user = User.from_mongo(users_collection.find_one({"_id": user_oid}))
+    user = UserBase.from_mongo(users_collection.find_one({"_id": user_oid}))
 
     # Check if a DeltaTableAggregated already exists in the deltatables_collection
     query_dt = deltatables_collection.find_one({"data_collection_id": data_collection_oid})
@@ -224,9 +224,9 @@ token: str = Depends(oauth2_scheme)
     logger.info("aggregated_df")
     logger.info(aggregated_df)
 
-    aggregated_df.write_delta(destination_file_name, mode="overwrite", storage_options=minio_storage_options, delta_write_options={"overwrite_schema": "True"})
+    aggregated_df.write_delta(destination_file_name, mode="overwrite", storage_options=minio_storage_options, delta_write_options={"schema_mode": "overwrite"})
 
-    logger.info("Write complete to MinIO at destination: ", destination_file_name)
+    logger.info(f"Write complete to MinIO at destination: {destination_file_name}")
 
     # Precompute columns specs
     results = precompute_columns_specs(aggregated_df, agg_functions)
@@ -292,7 +292,7 @@ async def delete_deltatable(
     # Construct the query
     query = {
         "_id": workflow_oid,
-        "permissions.owners.user_id": user_oid,
+        "permissions.owners.id": user_oid,
         "data_collections._id": data_collection_oid,
     }
     logger.info(query)
