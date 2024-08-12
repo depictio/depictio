@@ -8,7 +8,7 @@ from depictio.api.v1.db import db
 from depictio.api.v1.endpoints.files_endpoints.routes import delete_files
 from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user
 from depictio.api.v1.endpoints.validators import validate_workflow_and_collection
-from depictio.api.v1.endpoints.workflow_endpoints.routes import get_all_workflows, get_workflow
+from depictio.api.v1.endpoints.workflow_endpoints.routes import get_all_workflows, get_workflow_from_id
 from depictio.api.v1.models.base import convert_objectid_to_str
 
 
@@ -43,7 +43,7 @@ async def specs(
     # # Construct the query
     # query = {
     #     "_id": workflow_oid,
-    #     "permissions.owners.user_id": user_oid,
+    #     "permissions.owners.id": user_oid,
     #     "data_collections._id": data_collection_oid,
     # }
     # print(query)
@@ -102,7 +102,7 @@ async def delete_datacollection(
     # # Construct the query
     # query = {
     #     "_id": workflow_oid,
-    #     "permissions.owners.user_id": user_oid,
+    #     "permissions.owners.id": user_oid,
     #     "data_collections._id": data_collection_oid,
     # }
     # print(query)
@@ -356,7 +356,7 @@ async def get_dc_joined(workflow_id: str, current_user: str = Depends(get_curren
     """
 
     # Retrieve workflow
-    workflow = await get_workflow(workflow_id, current_user=current_user)
+    workflow = await get_workflow_from_id(workflow_id, current_user=current_user)
     workflow = workflow.mongo()
     logger.info(f"Workflow: {workflow}")
     logger.info(f"type(workflow): {type(workflow)}")
