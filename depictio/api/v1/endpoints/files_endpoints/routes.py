@@ -79,7 +79,7 @@ token: str = Depends(oauth2_scheme)
     # Construct the query
     query = {
         "_id": workflow_oid,
-        "permissions.owners.user_id": user_oid,
+        "permissions.owners.id": user_oid,
         "data_collections._id": data_collection_oid,
     }
     logger.info(query)
@@ -322,7 +322,7 @@ token: str = Depends(oauth2_scheme)):
     # Construct the query
     query = {
         "_id": workflow_oid,
-        "permissions.owners.user_id": user_oid,
+        "permissions.owners.id": user_oid,
         "data_collections._id": data_collection_oid,
     }
     logger.info(query)
