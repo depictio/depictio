@@ -13,11 +13,6 @@ from depictio.api.v1.endpoints.cli_endpoints.routes import cli_endpoint_router
 
 router = APIRouter()
 
-router.include_router(
-    auth_endpoint_router,
-    prefix="/auth",
-    tags=["Authentication"],
-)
 
 # initialize_db(settings)
 router.include_router(
@@ -63,4 +58,11 @@ router.include_router(
     dashboards_endpoint_router,
     prefix="/dashboards",
     tags=["Dashboards"],
+)
+
+
+router.include_router(
+    auth_endpoint_router,
+    prefix="/auth",
+    tags=["Authentication"],
 )

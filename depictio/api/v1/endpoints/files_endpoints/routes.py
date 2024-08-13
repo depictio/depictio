@@ -274,7 +274,7 @@ async def scan_data_collection(
 async def delete_files(
     workflow_id: str,
     data_collection_id: str,
-    current_user: Depends(get_current_user),
+    current_user= Depends(get_current_user),
 ):
     """
     Delete all files from GridFS.
