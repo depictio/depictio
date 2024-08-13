@@ -16,8 +16,6 @@ from dash_extensions import EventListener
 from dash.exceptions import PreventUpdate
 
 
-from flask import request, make_response
-
 
 from depictio.api.v1.db import users_collection
 from depictio.api.v1.configs.config import API_BASE_URL, logger
