@@ -119,7 +119,7 @@ def register_tokens_management_callbacks(app):
         elif triggered == "save-token-name" and save_clicks > 0 and token_name:
             # token, expire = create_access_token({"name": token_name})
             # token_data = {"access_token": token, "expire_datetime": expire.strftime("%Y-%m-%d %H:%M:%S"), "name": token_name}
-            token_data = add_token(session_data["email"], {"name": token_name})
+            token_data = add_token({"sub": session_data["email"], "name": token_name, "token_type": "long-lived"})
 
             if not token_data:
                 div = dmc.Title("Failed to create agent. Agent with that name already exists.", color="red", order=3)

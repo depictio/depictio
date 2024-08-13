@@ -1,5 +1,7 @@
+from datetime import datetime
 import re
 from typing import List
+from bson import ObjectId
 from pydantic import (
     BaseModel,
     validator,
@@ -18,3 +20,9 @@ class RootConfig(BaseModel):
         if not re.match(pattern, v):
             raise ValueError("Invalid version number, must be in format X.Y.Z where X, Y, Z are integers")
         return v
+
+    class Config:
+        json_encoders = {
+            ObjectId: str,  # Convert ObjectId to string
+            datetime: lambda dt: dt.isoformat(),  # Convert datetime to ISO format
+        }

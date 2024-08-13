@@ -231,6 +231,7 @@ def create_app_layout():
         [
             dcc.Location(id="url", refresh=False),
             dcc.Store(id="session-store", storage_type="session", data={"logged_in": False, "email": None}),
+            dcc.Store(id="local-store", storage_type="local", data={"logged_in": False, "access_token": None}),
             html.Div(id="page-content"),
         ],
         fluid=True,
