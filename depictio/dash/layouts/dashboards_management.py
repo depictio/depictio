@@ -8,6 +8,7 @@ import dash_mantine_components as dmc
 from dash_iconify import DashIconify
 from depictio.api.v1.db import dashboards_collection
 from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_token
 
 
 layout = html.Div(
@@ -361,7 +362,7 @@ def register_callbacks_dashboards_management(app):
         Output("landing-page", "children"),
         [
             Input("url", "pathname"),
-            Input("session-store", "data"),
+            Input("local-store", "data"),
         ],
     )
     def update_landing_page(
@@ -378,11 +379,13 @@ def register_callbacks_dashboards_management(app):
         logger.info(f"data: {data}")
         logger.info("\n")
 
+        user = fetch_user_from_token(data["access_token"])
+
         def render_landing_page(data):
             return html.Div(
                 [
-                    render_welcome_section(data["email"]),
-                    render_dashboard_list_section(data["email"]),
+                    render_welcome_section(user.email),
+                    render_dashboard_list_section(user.email),
                 ]
             )
 
@@ -406,7 +409,7 @@ def register_callbacks_dashboards_management(app):
                 return render_landing_page(data)
 
         # Respond to modal-store data changes
-        elif trigger_id == "session-store":
+        elif trigger_id == "local-store":
             if data:
                 return render_landing_page(data)
             # return html.Div("Please login to view this page.")

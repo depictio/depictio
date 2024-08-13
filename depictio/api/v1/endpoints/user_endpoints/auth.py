@@ -74,7 +74,7 @@ async def login(login_request: OAuth2PasswordRequestForm = Depends()):
     token_data = {
         "sub": login_request.username,
         "name": token_name,
-        "token_type": "short-lived",
+        "token_lifetime": "short-lived",
     }
 
     # Generate and store token
@@ -86,127 +86,18 @@ async def login(login_request: OAuth2PasswordRequestForm = Depends()):
 
     logger.info(f"Token generated for user: {login_request.username}")
 
-    return {"access_token": token.access_token, "token_type": "bearer", "expire_datetime": token.expire_datetime, "name": token.name, "token_type": token.token_type}
-
-
-# Helper function to verify password (modify this to hash verification in production)
-def verify_password(plain_password, hashed_password):
-    # return check_password_hash(
-    #     hashed_password,
-    #     plain_password,
-    # )
-    return plain_password == hashed_password
-
-
-def register_user(username: str, email: str, password: str):
-    user = users_collection.find_one({"username": username})
-    if user:
-        raise HTTPException(status_code=400, detail="Username already registered")
-    user = users_collection.find_one({"email": email})
-    if user:
-        raise HTTPException(status_code=400, detail="Email already registered")
-
-    hashed_password = password
-
-    user = {
-        "username": username,
-        "email": email,
-        "password": hashed_password,
+    return {
+        "access_token": token.access_token,
+        "token_type": "bearer",
+        "expire_datetime": token.expire_datetime,
+        "name": token.name,
+        "token_lifetime": token.token_lifetime,
+        "logged_in": True,
     }
-    users_collection.insert_one(user)
-    return user
-
-
-def create_access_token(data: dict, expires_delta: timedelta | None = None):
-    logger.info("\n\n\n")
-    logger.info("create_access_token")
-    logger.info(data)
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, PRIVATE_KEY, algorithm=ALGORITHM)
-    logger.info(encoded_jwt)
-    return encoded_jwt
-
-
-# Authentication function
-def authenticate_user(username: str, password: str):
-    user = users_collection.find_one({"username": username})
-    if user and verify_password(password, user.get("password")):
-        return user
-    return None
-
-
-@auth_endpoint_router.post("/token", response_model=Token)
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
-    user = authenticate_user(form_data.username, form_data.password)
-    logger.info("\n\n\n")
-    logger.info("login_for_access_token")
-    logger.info(form_data.username)
-    logger.info(user)
-
-    if not user:
-        raise HTTPException(status_code=400, detail="Incorrect username or password")
-    user_id = str(user["_id"])  # Get the user ID from the database entry
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user_id},  # Use user_id as the subject of the token
-        expires_delta=access_token_expires,
-    )
-    return Token(
-        access_token=access_token,
-        token_type="bearer",
-        user_id=PyObjectId(user_id),  # Ensure this is a PyObjectId instance
-        expires_in=int(access_token_expires.total_seconds()),
-        scope="read",
-    )
-
-
-# @auth_endpoint_router.get("/fetch_user/from_token", response_model=User)
-# async def fetch_user_from_token(token: str = Depends(oauth2_scheme)) -> User:
-#     logger.info("\n\n\n")
-#     logger.info("fetch_user_from_token")
-#     payload = jwt.decode(token, PUBLIC_KEY, algorithms=[ALGORITHM])
-#     user_id = payload.get("sub")
-#     if user_id is None:
-#         logger.info("Token is invalid or expired.")
-#         sys.exit(code=1)
-#     # Fetch user from the database or wherever it is stored
-#     user_document = users_collection.find_one({"_id": ObjectId(str(user_id))})
-#     if not user_document:
-#         raise HTTPException(status_code=404, detail="User not found")
-#     user = User(
-#         user_id=user_document["_id"],
-#         username=user_document["username"],
-#         email=user_document["email"],
-#     )
-#     logger.info(user)
-#     return user
-
-
-# credentials_exception = HTTPException(
-#     status_code=status.HTTP_401_UNAUTHORIZED,
-#     detail="Could not validate credentials",
-#     headers={"WWW-Authenticate": "Bearer"},
-# )
-# try:
-#     payload = jwt.decode(token, PUBLIC_KEY, algorithms=[ALGORITHM])
-
-#     user_id: str = payload.get("sub")
-#     if user_id is None:
-#         raise credentials_exception
-#     token_data = TokenData(user_id=PyObjectId(user_id))
-#     return token_data
-
-# except JWTError as e:
-#     raise credentials_exception
 
 
 @auth_endpoint_router.post("/register", response_model=User)
-async def create_user(user: User) -> User:
+async def create_user(user: User):
     # Add user to the database
     user_dict = user.dict()
     # Check if the user already exists
@@ -220,7 +111,13 @@ async def create_user(user: User) -> User:
 
 
 @auth_endpoint_router.get("/fetch_user/from_email")
-async def api_fetch_user(email: str):
+async def api_fetch_user(email: str, current_user=Depends(get_current_user)):
+    if not email:
+        raise HTTPException(status_code=400, detail="No email provided")
+
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Current user not found.")
+
     user = fetch_user_from_email(email)
     if user:
         return user
@@ -228,8 +125,14 @@ async def api_fetch_user(email: str):
         raise HTTPException(status_code=404, detail="User not found")
 
 
-@auth_endpoint_router.post("/fetch_user/from_token", response_model=User)
-async def api_fetch_user_from_token(token: str):
+@auth_endpoint_router.get("/fetch_user/from_token", response_model=User)
+async def api_fetch_user_from_token(token: str, current_user=Depends(get_current_user)):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Current user not found.")
+
+    if not token:
+        raise HTTPException(status_code=400, detail="No token provided")
+
     user = fetch_user_from_token(token)
     if user:
         return user
@@ -237,60 +140,67 @@ async def api_fetch_user_from_token(token: str):
         raise HTTPException(status_code=404, detail="User not found")
 
 
-# @auth_endpoint_router.get("/fetch_user/from_email")
-# async def fetch_user(email: str):
-#     user = users_collection.find_one({"email": email})
-#     logger.info(f"Fetching user with email: {email} : {user}")
-#     # user = User.from_mongo(user)
-#     logger.info("Before")
-#     logger.info(user)
-#     user = User.from_mongo(user)
-#     logger.info("After")
-#     logger.info(user)
-
-#     if user:
-#         return user
-#     else:
-#         raise HTTPException(status_code=404, detail="User not found")
-
-
 @auth_endpoint_router.post("/edit_password", response_model=User)
-async def edit_password(email: str, new_password: str) -> User:
-    user_data = users_collection.find_one({"email": email})
-    if user_data:
-        logger.info("Before")
-        logger.info(user_data)
+async def edit_password(request: dict, current_user=Depends(get_current_user)):
+    # user_data = users_collection.find_one({"id": current_user.id})
 
-        user = User.from_mongo(user_data)
+    logger.info(f"Current user: {current_user}")
 
-        if user.password == new_password:
-            raise HTTPException(status_code=400, detail="New password cannot be the same as the old password")
+    if not request:
+        raise HTTPException(status_code=400, detail="No request provided")
+    
+    if not "old_password" in request:
+        raise HTTPException(status_code=400, detail="No old password provided")
+    
+    if not "new_password" in request:
+        raise HTTPException(status_code=400, detail="No new password provided")
 
-        user.password = new_password
-        logger.info("After")
-        logger.info(user)
+    old_password = request.get("old_password")
+    new_password = request.get("new_password")
 
-        update_data = user.mongo()
-        logger.info(f"Update data: {update_data}")
+    if not old_password:
+        raise HTTPException(status_code=400, detail="No old password provided")
 
-        result = users_collection.update_one({"_id": user.id}, {"$set": update_data})
+    if not new_password:
+        raise HTTPException(status_code=400, detail="No new password provided")
 
-        # Log the update result
-        logger.info(f"Update result: {result.modified_count} document(s) updated")
-        logger.info(f"Show updated user from database: {users_collection.find_one({'email' : email})}")
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Current user not found.")
 
-        if result.modified_count == 1:
-            return user
-        else:
-            raise HTTPException(status_code=500, detail="Failed to update password")
+    if not check_password(current_user.email, old_password):
+        raise HTTPException(status_code=400, detail="Old password is incorrect")
+
+    if current_user.password == new_password:
+        raise HTTPException(status_code=400, detail="New password cannot be the same as the old password")
+
+    current_user.password = new_password
+
+    update_data = current_user.mongo()
+    logger.info(f"Update data: {update_data}")
+
+    # Update the user in the database by replacing ONLY the password field
+    result = users_collection.update_one({"_id": current_user.id}, {"$set": {"password": new_password}})
+
+    # Log the update result
+    logger.info(f"Update result: {result.modified_count} document(s) updated")
+    logger.info(f"Show updated user from database: {users_collection.find_one({'email' : current_user.email})}")
+
+    if result.modified_count == 1:
+        return current_user
     else:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=500, detail="Failed to update password")
 
 
 @auth_endpoint_router.post("/add_token")
-async def add_token_endpoint(request: dict):
+async def add_token_endpoint(request: dict, current_user=Depends(get_current_user)):
+    if not request:
+        raise HTTPException(status_code=400, detail="No request provided")
+
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Current user not found.")
+
     logger.info(f"Request: {request}")
-    user = request["user"]
+    user = current_user.dict()
     token = request["token"]
     logger.info(f"Request: {request}")
     logger.info(f"User: {user}")
@@ -303,43 +213,18 @@ async def add_token_endpoint(request: dict):
     return result
 
 
-# @auth_endpoint_router.post("/add_token")
-# async def add_token(request: dict):
-#     user = request["user"]
-#     token = request["token"]
-#     logger.info(f"Request: {request}")
-#     logger.info(f"User: {user}")
-#     logger.info(f"Token: {token}")
-
-#     # Ensure _id is an ObjectId
-#     user_id = user["_id"]
-#     if isinstance(user_id, str):
-#         user_id = ObjectId(user_id)
-#     elif isinstance(user_id, dict) and "$oid" in user_id:
-#         user_id = ObjectId(user_id["$oid"])
-
-#     # Log the _id and the query structure
-#     logger.info(f"User _id (ObjectId): {user_id}")
-#     query = {"_id": user_id}
-#     update = {"$push": {"tokens": token}}
-#     logger.info(f"Query: {query}")
-#     logger.info(f"Update: {update}")
-
-#     # Insert in the user collection
-#     result = users_collection.update_one(query, update)
-#     logger.info(f"Update result: {result.modified_count} document(s) updated")
-
-#     # Return success status
-#     return {"success": result.modified_count > 0}
-
-
 @auth_endpoint_router.post("/delete_token")
-async def delete_token(request: dict):
+async def delete_token(request: dict, current_user=Depends(get_current_user)):
+    if not request:
+        raise HTTPException(status_code=400, detail="No request provided")
+
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Current user not found.")
+
     logger.info(f"Request: {request}")
-    user = request["user"]
+
     token_id = request["token_id"]
-    user_id = user["id"]
-    logger.info(f"User: {user}")
+    user_id = current_user.id
     logger.info(f"Token ID: {token_id}")
 
     if isinstance(user_id, str):
@@ -371,16 +256,18 @@ async def delete_token(request: dict):
 
 
 @auth_endpoint_router.post("/generate_agent_config")
-def generate_agent_config(request: dict):
-    logger.info(f"Request: {request}")
-    user = request["user"]
+def generate_agent_config(request: dict, current_user=Depends(get_current_user)):
+    if not request:
+        raise HTTPException(status_code=400, detail="No request provided")
+
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Current user not found.")
+
+    logger.info(f"Current user: {current_user}")
+
+    user = current_user.dict()
 
     # Keep only email and is_admin fields from user
-    user = {
-        "email": user["email"],
-        "is_admin": user["is_admin"],
-    }
-
     token = request["token"]
 
     # Add token to user

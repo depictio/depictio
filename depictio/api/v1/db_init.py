@@ -49,7 +49,7 @@ def create_admin_user(user_dict=user_dict):
 
     if not users_collection.find_one({"email": user_dict["email"], "tokens.name": "default_admin_token"}):
         logger.info("Creating default admin token")
-        add_token({"sub": user_dict["email"], "name": "default_admin_token", "token_type": "long-lived"})
+        add_token({"sub": user_dict["email"], "name": "default_admin_token", "token_lifetime": "long-lived"})
         logger.info("Default admin token created")
 
     else:

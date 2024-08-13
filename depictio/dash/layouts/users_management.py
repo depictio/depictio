@@ -109,9 +109,9 @@ def validate_login(login_email, login_password):
         # Parse the response JSON to extract the token
         token_data = response.json()
         access_token = token_data.get("access_token")
-        token_type = token_data.get("token_type")
+        token_lifetime = token_data.get("token_lifetime")
 
-        if not access_token or not token_type:
+        if not access_token or not token_lifetime:
             return "Failed to retrieve access token.", True, dash.no_update, dash.no_update
 
         if response.status_code != 200:
@@ -242,10 +242,10 @@ def register_callbacks_users_management(app):
     ):
         button_id = ctx.triggered[0]["prop_id"].split(".")[0]
 
-        session_data = logout_user()
+        # session_data = logout_user()
 
         # If user is already logged in, do not show the login form
-        if session_data and session_data.get("logged_in", False):
+        if local_data and local_data.get("logged_in", False):
             return False, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
         # If no button was clicked, return the current state
