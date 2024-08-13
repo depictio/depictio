@@ -1,6 +1,6 @@
 
 from fastapi import APIRouter, Depends
-from fastapi.security import OAuth2PasswordBearer
+from depictio.api.v1.endpoints.user_endpoints.auth import oauth2_scheme
 
 from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_email, fetch_user_from_token
 from depictio.api.v1.configs.logging import logger
@@ -12,7 +12,7 @@ from depictio.api.v1.models_utils import validate_config
 cli_endpoint_router = APIRouter()
 
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/fetch_user/from_token")
+# oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/fetch_user/from_token")
 
 
 # Define the collections from the settings
