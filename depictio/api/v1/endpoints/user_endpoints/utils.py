@@ -19,7 +19,7 @@ def login_user(email):
 
 # Dummy logout function
 def logout_user():
-    return {"logged_in": False, "email": None}
+    return {"logged_in": False, "access_token": None}
 
 
 # Check if user is logged in
@@ -107,9 +107,9 @@ def create_access_token(token_data):
     token_type = token_data["token_type"]
 
     if token_type == "short-lived":
-        expires_delta = timedelta(minutes=30)
+        expires_delta = timedelta(hours=12)
     elif token_type == "long-lived":
-        expires_delta = timedelta(days=30)
+        expires_delta = timedelta(days=360)
     else:
         raise ValueError("Invalid token type. Must be 'short-lived' or 'long-lived'.")
     
