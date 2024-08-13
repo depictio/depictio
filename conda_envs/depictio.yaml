@@ -3,6 +3,7 @@ channels:
   - conda-forge
   - plotly
 dependencies:
+  - colorlog
   - curl
   - bcrypt
   - bleach
