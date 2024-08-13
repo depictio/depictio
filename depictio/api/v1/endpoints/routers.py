@@ -13,6 +13,12 @@ from depictio.api.v1.endpoints.cli_endpoints.routes import cli_endpoint_router
 
 router = APIRouter()
 
+router.include_router(
+    auth_endpoint_router,
+    prefix="/auth",
+    tags=["Authentication"],
+)
+
 # initialize_db(settings)
 router.include_router(
     workflows_endpoint_router,
@@ -40,11 +46,6 @@ if settings.jbrowse.enabled:
         prefix="/jbrowse",
         tags=["JBrowse"],
     )
-router.include_router(
-    auth_endpoint_router,
-    prefix="/auth",
-    tags=["Authentication"],
-)
 
 router.include_router(
     utils_endpoint_router,
