@@ -1,6 +1,5 @@
-
-from fastapi import APIRouter, Depends
-from depictio.api.v1.endpoints.user_endpoints.auth import oauth2_scheme
+from fastapi import APIRouter, Depends, HTTPException
+from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user, oauth2_scheme
 
 from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_email, fetch_user_from_token
 from depictio.api.v1.configs.logging import logger
@@ -12,28 +11,13 @@ from depictio.api.v1.models_utils import validate_config
 cli_endpoint_router = APIRouter()
 
 
-# oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/fetch_user/from_token")
-
-
-# Define the collections from the settings
-# data_collections_collection = db[settings.mongodb.collections.data_collection]
-# workflows_collection = db[settings.mongodb.collections.workflow_collection]
-# runs_collection = db[settings.mongodb.collections.runs_collection]
-# files_collection = db[settings.mongodb.collections.files_collection]
-# users_collection = db["users"]
-
-# Define the MinIO endpoint and bucket name from the settings
-# endpoint_url = settings.minio.internal_endpoint
-# bucket_name = settings.minio.bucket
-
-
 @cli_endpoint_router.post("/validate_agent_config")
 async def validate_agent_config_endpoint(agent_config: dict):
     # Validate that the agent config is correct using token and email
     user = agent_config["user"]
     token = user["token"]
     email = user["email"]
-    
+
     logger.info(f"Agent config: {agent_config}")
     logger.info(f"User: {user}")
     logger.info(f"Token: {token}")
@@ -51,18 +35,17 @@ async def validate_agent_config_endpoint(agent_config: dict):
     else:
         return {"valid": False}
 
-@cli_endpoint_router.post("/validate_pipeline_config") 
-async def validate_pipeline_config_endpoint(pipeline_config: dict = dict(), token: str = Depends(oauth2_scheme)):
-    
+
+@cli_endpoint_router.post("/validate_pipeline_config")
+async def validate_pipeline_config_endpoint(pipeline_config: dict = dict(), current_user=Depends(get_current_user)):
     if not pipeline_config:
         return {"success": False, "error": "No pipeline config provided"}
-    
-    if not token:
-        return {"success": False, "error": "No token provided"}
-    
-    current_user = fetch_user_from_token(token)
+
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Current user not found.")
+
     logger.info(f"Current user: {current_user}")
-    current_userbase =user_base = UserBase(**current_user.dict(exclude={'tokens', 'is_active', 'is_verified', 'last_login', 'registration_date', 'password'}))
+    current_userbase = UserBase(**current_user.dict(exclude={"tokens", "is_active", "is_verified", "last_login", "registration_date", "password"}))
     logger.info(f"Current user base: {current_userbase}")
 
     current_userbase = convert_objectid_to_str(current_userbase)
@@ -73,14 +56,12 @@ async def validate_pipeline_config_endpoint(pipeline_config: dict = dict(), toke
     # Validate that the pipeline config is correct using agent config and pipeline config
 
     logger.info(f"Pipeline config: {pipeline_config}")
-    logger.info(f"Token: {token}")
 
     # Validate Root config
     validated_pipeline_config = validate_config(pipeline_config, RootConfig)
 
     # For all workflows, add the current_user.id to the owners list
     for workflow in validated_pipeline_config.workflows:
-
         workflow.permissions["owners"].append(current_userbase)
 
     logger.info(f"Validated pipeline config: {validated_pipeline_config}")

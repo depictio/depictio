@@ -46,11 +46,7 @@ bucket_name = settings.minio.bucket
 
 @files_endpoint_router.get("/list/{workflow_id}/{data_collection_id}")
 # @datacollections_endpoint_router.get("/files/{workflow_id}/{data_collection_id}", response_model=List[GridFSFileInfo])
-async def list_registered_files(
-    workflow_id: str,
-    data_collection_id: str,
-token: str = Depends(oauth2_scheme)
-):
+async def list_registered_files(workflow_id: str, data_collection_id: str, current_user=Depends(get_current_user)):
     """
     Fetch all files registered from a Data Collection registered into a workflow.
     """
@@ -61,13 +57,11 @@ token: str = Depends(oauth2_scheme)
             detail="Both workflow_id and data_collection_id must be provided.",
         )
 
-    if not token:
+    if not current_user:
         raise HTTPException(
             status_code=400,
-            detail="Token must be provided.",
+            detail="Current user not found.",
         )
-
-    current_user = fetch_user_from_token(token)
 
     workflow_oid = ObjectId(workflow_id)
     data_collection_oid = ObjectId(data_collection_id)
@@ -100,7 +94,7 @@ token: str = Depends(oauth2_scheme)
 async def scan_metadata(
     workflow_id: str,
     data_collection_id: str,
-    token: str = Depends(oauth2_scheme),
+    current_user=Depends(get_current_user),
 ):
     """
     Scan the files and retrieve metadata.
@@ -115,13 +109,11 @@ async def scan_metadata(
             detail="Both workflow_id and data_collection_id must be provided.",
         )
 
-    if not token:
+    if not current_user:
         raise HTTPException(
             status_code=400,
-            detail="Token must be provided.",
+            detail="Current user not found.",
         )
-
-    current_user = fetch_user_from_token(token)
 
     (
         workflow_oid,
@@ -165,8 +157,8 @@ async def scan_metadata(
 async def scan_data_collection(
     workflow_id: str,
     data_collection_id: str,
-token: str = Depends(oauth2_scheme)):
-    
+    current_user=Depends(get_current_user),
+):
     logger.info("Scanning data collection")
     logger.info(workflow_id)
     logger.info(data_collection_id)
@@ -177,13 +169,9 @@ token: str = Depends(oauth2_scheme)):
             detail="Both workflow_id and data_collection_id must be provided.",
         )
 
-    if not token:
-        raise HTTPException(
-            status_code=400,
-            detail="Token must be provided.",
-        )
+    if not current_user:
+        raise HTTPException(status_code=400, detail="Current user not found.")
 
-    current_user = fetch_user_from_token(token)
     logger.info(f"Current user: {current_user}")
 
     (
@@ -248,7 +236,7 @@ token: str = Depends(oauth2_scheme)):
                     }
 
                     logger.info(f"\n")
-                    
+
                     logger.info(f"User ID: {user_id}")
                     logger.info(f"File: {file}")
 
@@ -261,18 +249,10 @@ token: str = Depends(oauth2_scheme)):
                     # Check if the file already exists in the database
 
                     # Assuming user_oid is the ObjectId of the current user
-                    existing_file = files_collection.find_one({
-                        "file_location": file["file_location"],
-                        "permissions.owners": {
-                            "$elemMatch": {
-                                "id": ObjectId(user_oid)
-                            }
-                        }
-                    })
+                    existing_file = files_collection.find_one({"file_location": file["file_location"], "permissions.owners": {"$elemMatch": {"id": ObjectId(user_oid)}}})
                     logger.info(f"Existing file: {existing_file}")
 
                     file = File(**file)
-
 
                     if not existing_file:
                         file.id = ObjectId()
@@ -294,7 +274,8 @@ token: str = Depends(oauth2_scheme)):
 async def delete_files(
     workflow_id: str,
     data_collection_id: str,
-token: str = Depends(oauth2_scheme)):
+    current_user: Depends(get_current_user),
+):
     """
     Delete all files from GridFS.
     """
@@ -305,13 +286,11 @@ token: str = Depends(oauth2_scheme)):
             detail="Both workflow_id and data_collection_id must be provided.",
         )
 
-    if not token:
+    if not current_user:
         raise HTTPException(
             status_code=400,
-            detail="Token must be provided.",
+            detail="Current user not found.",
         )
-
-    current_user = fetch_user_from_token(token)
 
     workflow_oid = ObjectId(workflow_id)
     data_collection_oid = ObjectId(data_collection_id)

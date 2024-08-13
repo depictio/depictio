@@ -74,7 +74,7 @@ async def login(login_request: OAuth2PasswordRequestForm = Depends()):
     token_data = {
         "sub": login_request.username,
         "name": token_name,
-        "token_type": "short-lived",
+        "token_lifetime": "short-lived",
     }
 
     # Generate and store token
@@ -86,7 +86,14 @@ async def login(login_request: OAuth2PasswordRequestForm = Depends()):
 
     logger.info(f"Token generated for user: {login_request.username}")
 
-    return {"access_token": token.access_token, "expire_datetime": token.expire_datetime, "name": token.name, "token_type": token.token_type, "logged_in": True}
+    return {
+        "access_token": token.access_token,
+        "token_type": "bearer",
+        "expire_datetime": token.expire_datetime,
+        "name": token.name,
+        "token_lifetime": token.token_lifetime,
+        "logged_in": True,
+    }
 
 
 # Helper function to verify password (modify this to hash verification in production)

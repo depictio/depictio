@@ -66,7 +66,6 @@ async def list_registered_files(
     return convert_objectid_to_str(deltatables)
 
 
-
 @deltatables_endpoint_router.get("/specs/{workflow_id}/{data_collection_id}")
 # @workflows_endpoint_router.get("/get_workflows", response_model=List[Workflow])
 async def specs(
@@ -86,7 +85,10 @@ async def specs(
         data_collection,
         user_oid,
     ) = validate_workflow_and_collection(
-         workflows_collection, current_user.id, workflow_id, data_collection_id, 
+        workflows_collection,
+        current_user.id,
+        workflow_id,
+        data_collection_id,
     )
 
     # Query to find deltatable associated with the data collection
@@ -98,9 +100,7 @@ async def specs(
     column_specs = deltatables["aggregation"][-1]["aggregation_columns_specs"]
 
     if not data_collection:
-        raise HTTPException(
-            status_code=404, detail="No workflows found for the current user."
-        )
+        raise HTTPException(status_code=404, detail="No workflows found for the current user.")
 
     return column_specs
 
@@ -109,28 +109,21 @@ async def specs(
 async def aggregate_data(
     workflow_id: str,
     data_collection_id: str,
-token: str = Depends(oauth2_scheme)
+    current_user: str = Depends(get_current_user),
 ):
     logger.info("Aggregating data...")
-
 
     if not workflow_id or not data_collection_id:
         raise HTTPException(
             status_code=400,
             detail="Workflow ID and Data Collection ID are required",
         )
-    
-    if not token:
+
+    if not current_user:
         raise HTTPException(
             status_code=401,
             detail="Not authenticated",
         )
-    
-    current_user = fetch_user_from_token(token)
-
-
-    
-
 
     # Use the utility function to validate and retrieve necessary info
     (
@@ -152,7 +145,6 @@ token: str = Depends(oauth2_scheme)
     # Assert type of data_collection_config is Table
     assert dc_config.type == "Table", "Data collection type must be Table"
     dc_config = convert_objectid_to_str(dc_config.mongo())
-
 
     logger.info(f"Data Collection Config: {dc_config}")
     logger.info(f"Data Collection ID: {data_collection_oid}")
