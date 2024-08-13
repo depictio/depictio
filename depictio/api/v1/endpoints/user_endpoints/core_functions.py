@@ -33,10 +33,16 @@ def add_token_to_user(user, token):
 def fetch_user_from_email(email: str, return_tokens: bool = False) -> User:
     from depictio.api.v1.db import users_collection  # Move import inside the function
 
-    # Find the user in the database and exclude the tokens field
     if return_tokens:
+        # Find the user in the database and only returns tokens with token_type = "long-lived"
         user = users_collection.find_one({"email": email})
+        # user = users_collection.find_one({"email": email }, {"tokens": {"$elemMatch": {"token_type": "long-lived"}}})
+
+        # Filter the tokens to only return the long-lived tokens
+        user["tokens"] = [token for token in user["tokens"] if token["token_type"] == "long-lived"]
+
     else:
+        # Find the user in the database and exclude the tokens field
         user = users_collection.find_one({"email": email}, {"tokens": 0})
     logger.info(f"Fetching user with email: {email} : {user}")
     user = User.from_mongo(user)
@@ -44,6 +50,7 @@ def fetch_user_from_email(email: str, return_tokens: bool = False) -> User:
     logger.info(user)
 
     if user:
+        # user = user.dict()
         return user
     else:
         return None
