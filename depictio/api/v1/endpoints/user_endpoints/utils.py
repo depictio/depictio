@@ -104,12 +104,12 @@ def check_password(email, password):
 
 
 def create_access_token(token_data):
-    token_type = token_data["token_type"]
+    token_lifetime = token_data["token_lifetime"]
 
-    if token_type == "short-lived":
+    if token_lifetime == "short-lived":
         expires_delta = timedelta(hours=12)
-    elif token_type == "long-lived":
-        expires_delta = timedelta(days=360)
+    elif token_lifetime == "long-lived":
+        expires_delta = timedelta(years=1)
     else:
         raise ValueError("Invalid token type. Must be 'short-lived' or 'long-lived'.")
     
@@ -127,7 +127,7 @@ def add_token(token_data: dict) -> dict:
     logger.info(f"Adding token for user {email}.")
     logger.info(f"Token: {token_data}")
     token, expire = create_access_token(token_data)
-    token_data = {"access_token": token, "expire_datetime": expire.strftime("%Y-%m-%d %H:%M:%S"), "name": token_data["name"], "token_type": token_data["token_type"]}
+    token_data = {"access_token": token, "expire_datetime": expire.strftime("%Y-%m-%d %H:%M:%S"), "name": token_data["name"], "token_lifetime": token_data["token_lifetime"]}
 
     logger.info(f"Adding token for user {email}.")
     user = find_user(email)

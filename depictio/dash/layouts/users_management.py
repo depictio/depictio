@@ -109,9 +109,9 @@ def validate_login(login_email, login_password):
         # Parse the response JSON to extract the token
         token_data = response.json()
         access_token = token_data.get("access_token")
-        token_type = token_data.get("token_type")
+        token_lifetime = token_data.get("token_lifetime")
 
-        if not access_token or not token_type:
+        if not access_token or not token_lifetime:
             return "Failed to retrieve access token.", True, dash.no_update, dash.no_update
 
         if response.status_code != 200:
