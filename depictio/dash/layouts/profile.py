@@ -160,7 +160,7 @@ def register_profile_callbacks(app):
                 elif new_password == old_password:
                     return True, "New password cannot be the same as old password", {"display": "block"}, False, True, True, dash.no_update, dash.no_update, dash.no_update
                 else:
-                    response = edit_password(current_user.email, old_password, new_password)
+                    response = edit_password(current_user.email, old_password, new_password, headers={"Authorization": f"Bearer {local_data['access_token']}"})
                     if response.status_code == 200:
                         return True, "Password updated successfully", {"display": "block", "color": "green"}, False, False, False, "", "", ""
                     else:
@@ -195,6 +195,7 @@ def register_profile_callbacks(app):
             return html.Div(), html.Div()
 
         user = fetch_user_from_token(local_data["access_token"])
+        logger.info(f"PROFILE user: {user}")
         user = user.dict()
 
         if not user:
