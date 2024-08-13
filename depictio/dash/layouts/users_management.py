@@ -7,10 +7,6 @@ import json
 import os
 import bcrypt
 import httpx
-from depictio.api.v1.db import users_collection
-from depictio.api.v1.configs.config import API_BASE_URL, logger
-
-from depictio.api.v1.endpoints.user_endpoints.utils import verify_password, hash_password, login_user, logout_user, find_user, add_user
 
 from dash_extensions.enrich import DashProxy
 from dash_extensions.enrich import Output as OutputEnrich
@@ -18,6 +14,13 @@ from dash_extensions.enrich import Input as InputEnrich
 from dash_extensions.enrich import State as StateEnrich
 from dash_extensions import EventListener
 from dash.exceptions import PreventUpdate
+
+
+
+from depictio.api.v1.db import users_collection
+from depictio.api.v1.configs.config import API_BASE_URL, logger
+from depictio.api.v1.endpoints.user_endpoints.utils import verify_password, hash_password, login_user, logout_user, find_user, add_user
+
 
 event = {"event": "keydown", "props": ["key"]}
 
@@ -84,20 +87,41 @@ def render_register_form():
 
 def validate_login(login_email, login_password):
     if not login_email or not login_password:
-        return "Please fill in all fields.", True, dash.no_update
+        return "Please fill in all fields.", True, dash.no_update, dash.no_update
 
     user = find_user(login_email)
     if not user:
-        return "User not found. Please register first.", True, dash.no_update
+        return "User not found. Please register first.", True, dash.no_update, dash.no_update
 
     logger.info(f"User: {user}")
 
     if verify_password(user.password, login_password):
         logger.info("Password verification successful.")
-        return "Login successful!", False, login_user(user.email)
+        # from flask import make_response
+        # resp = make_response("Login successful!")
+
+        response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/auth/login", data={"username": user.email, "password": login_password})
+        logger.info(f"Response: {response}")
+        logger.info(f"Response status code: {response.status_code}")
+        logger.info(f"Response text: {response.text}")
+        logger.info(f"Response json: {response.json()}")
+
+        # Parse the response JSON to extract the token
+        token_data = response.json()
+        access_token = token_data.get("access_token")
+        token_type = token_data.get("token_type")
+
+        if not access_token or not token_type:
+            return "Failed to retrieve access token.", True, dash.no_update, dash.no_update
+
+        if response.status_code != 200:
+            return f"Error logging in: {response.text}", True, dash.no_update,  dash.no_update
+
+        # return "Login successful!", False, 
+        return "Login successful!", False, login_user(user.email), token_data
 
     logger.info("Password verification failed.")
-    return "Invalid email or password.", True, dash.no_update
+    return "Invalid email or password.", True, dash.no_update, dash.no_update
 
 
 # Function to handle registration
@@ -179,6 +203,7 @@ def register_callbacks_users_management(app):
             Output("modal-state-store", "data"),
             Output("modal-open-store", "data"),
             Output("session-store", "data"),
+            Output("local-store", "data"),
         ],
         [
             Input("open-register-form", "n_clicks"),
@@ -196,6 +221,7 @@ def register_callbacks_users_management(app):
             State("register-confirm-password", "value"),
             State("modal-open-store", "data"),
             State("session-store", "data"),
+            State("local-store", "data"),
         ],
     )
     def handle_auth_and_switch_forms(
@@ -212,6 +238,7 @@ def register_callbacks_users_management(app):
         register_confirm_password,
         modal_open,
         session_data,
+        local_data,
     ):
         button_id = ctx.triggered[0]["prop_id"].split(".")[0]
 
@@ -219,11 +246,11 @@ def register_callbacks_users_management(app):
 
         # If user is already logged in, do not show the login form
         if session_data and session_data.get("logged_in", False):
-            return (False, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update)
+            return False, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
         # If no button was clicked, return the current state
         if not ctx.triggered:
-            return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
         # Handle button clicks
         # If the register button was clicked, open the register form
@@ -232,20 +259,20 @@ def register_callbacks_users_management(app):
             modal_state = "register"
             content = render_register_form()
             logger.info(f"content: {content}")
-            return modal_open, content, dash.no_update, modal_state, dash.no_update, session_data
+            return modal_open, content, dash.no_update, modal_state, dash.no_update, session_data, local_data
         # If the login button was clicked, open the login form
         elif button_id == "open-login-form" or not ctx.triggered:
             modal_state = "login"
             content = render_login_form()
-            return modal_open, content, dash.no_update, modal_state, dash.no_update, session_data
+            return modal_open, content, dash.no_update, modal_state, dash.no_update, session_data, local_data
         # If the login button was clicked, validate the login
         elif button_id == "login-button":
-            feedback_message, modal_open, session_data = validate_login(login_email, login_password)
+            feedback_message, modal_open, session_data, local_data = validate_login(login_email, login_password)
             if not modal_open:
                 content = dash.no_update
             else:
                 content = render_login_form()
-            return modal_open, content, dmc.Text(feedback_message, color="red" if modal_open else "green"), current_state, modal_open, session_data
+            return modal_open, content, dmc.Text(feedback_message, color="red" if modal_open else "green"), current_state, modal_open, session_data, local_data
         # If the register button was clicked, handle the registration
         elif button_id == "register-button":
             feedback_message, modal_open = handle_registration(register_email, register_password, register_confirm_password)
@@ -255,11 +282,11 @@ def register_callbacks_users_management(app):
             else:
                 modal_state = "register"
                 content = render_register_form()
-            return modal_open, content, dmc.Text(feedback_message, color="red" if modal_open else "green"), modal_state, modal_open, session_data
+            return modal_open, content, dmc.Text(feedback_message, color="red" if modal_open else "green"), modal_state, modal_open, session_data, local_data
         # If the logout button was clicked, log the user out
         # elif button_id == "logout-button":
         #     modal_open = True
         #     content = render_login_form()
         #     return modal_open, content, dash.no_update, current_state, modal_open, session_data
 
-        return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+        return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update

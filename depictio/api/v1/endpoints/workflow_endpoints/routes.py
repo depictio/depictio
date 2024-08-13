@@ -23,12 +23,20 @@ workflows_endpoint_router = APIRouter()
 
 @workflows_endpoint_router.get("/get_all_workflows")
 # @workflows_endpoint_router.get("/get_workflows", response_model=List[Workflow])
-async def get_all_workflows(token: str = Depends(oauth2_scheme)):
+async def get_all_workflows(current_user: str = Depends(get_current_user)):
 
-    if not token:
-        raise HTTPException(status_code=401, detail="Token is required to get all workflows.")
+    # logger.info(f"token: {token}")
 
-    current_user = fetch_user_from_token(token)
+    # if not token:
+    #     raise HTTPException(status_code=401, detail="Token is required to get all workflows.")
+
+    # logger.info(f"token: {token}")
+    # current_user = fetch_user_from_token(token)
+
+    logger.info(f"current_user: {current_user}")
+
+    if not current_user:
+        raise HTTPException(status_code=404, detail="User not found.")
 
     # Assuming the 'current_user' now holds a 'user_id' as an ObjectId after being parsed in 'get_current_user'
     user_id = current_user.id  # This should be the ObjectId
@@ -36,8 +44,8 @@ async def get_all_workflows(token: str = Depends(oauth2_scheme)):
     # Find workflows where current_user is either an owner or a viewer
     query = {
         "$or": [
-            {"permissions.owners.user_id": user_id},
-            {"permissions.viewers.user_id": user_id},
+            {"permissions.owners.id": user_id},
+            {"permissions.viewers.id": user_id},
         ]
     }
 
@@ -49,10 +57,58 @@ async def get_all_workflows(token: str = Depends(oauth2_scheme)):
     workflows = [Workflow(**convert_objectid_to_str(w)) for w in workflows_cursor]
     return workflows
 
+@workflows_endpoint_router.get("/get/from_args")
+async def get_workflow_from_args(name: str, engine: str, token: str = Depends(oauth2_scheme)):
+    logger.info(f"workflow_name: {name}")
+    logger.info(f"workflow_engine: {engine}")
 
-@workflows_endpoint_router.get("/get")
+    if not token:
+        raise HTTPException(status_code=401, detail="Token is required to get a workflow.")
+    
+    if not name or not engine:
+        raise HTTPException(status_code=400, detail="Workflow name and engine are required to get a workflow.")
+
+    current_user = fetch_user_from_token(token)
+
+    logger.info(f"current_user: {current_user}")
+
+
+    # Assuming the 'current_user' now holds a 'user_id' as an ObjectId after being parsed in 'get_current_user'
+    user_id = current_user.id
+
+    # Find workflows where current_user is either an owner or a viewer
+    query = {
+        "name": name,
+        "engine": engine,
+        "$or": [
+            {"permissions.owners.id": user_id},
+            {"permissions.viewers.id": user_id},
+        ],
+    }
+
+    # Retrieve the workflows & convert them to Workflow objects to validate the model
+    workflows = list(workflows_collection.find(query))
+    logger.info(f"workflows: {workflows}")
+
+
+    if not workflows:
+        raise HTTPException(status_code=404, detail=f"No workflow found for the current user with name {name} and engine {engine}.")
+    
+    if len(workflows) > 1:
+        raise HTTPException(status_code=500, detail=f"Multiple workflows found for the current user with name {name} and engine {engine}.")
+    
+
+    # workflows_cursor = [Workflow(**convert_objectid_to_str(w)) for w in list(workflows_collection.find(query))]
+    # workflows = convert_objectid_to_str(list(workflows_cursor))
+
+    workflows = convert_objectid_to_str(workflows)
+
+    return workflows[0]
+
+
+@workflows_endpoint_router.get("/get/from_id")
 # @workflows_endpoint_router.get("/get_workflows", response_model=List[Workflow])
-async def get_workflow(workflow_id: str, token: str = Depends(oauth2_scheme)):
+async def get_workflow_from_id(workflow_id: str, token: str = Depends(oauth2_scheme)):
     logger.info(f"workflow_id: {workflow_id}")
 
     current_user = fetch_user_from_token(token)
@@ -64,8 +120,8 @@ async def get_workflow(workflow_id: str, token: str = Depends(oauth2_scheme)):
     query = {
         "_id": ObjectId(workflow_id),
         "$or": [
-            {"permissions.owners.user_id": user_id},
-            {"permissions.viewers.user_id": user_id},
+            {"permissions.owners.id": user_id},
+            {"permissions.viewers.id": user_id},
         ],
     }
     logger.info(f"query: {query}")
@@ -221,10 +277,14 @@ async def delete_workflow(workflow_id: str, current_user: str = Depends(get_curr
 
 @workflows_endpoint_router.post("/compare_workflow_models")
 async def compare_models_endpoint(new_workflow: Workflow, existing_workflow: Workflow, token: str = Depends(oauth2_scheme)):
+    logger.info(f"new_workflow: {new_workflow}")
+    logger.info(f"existing_workflow: {existing_workflow}")
+
     if not token:
         raise HTTPException(status_code=401, detail="Token is required to compare workflow models.")
     if not new_workflow or not existing_workflow:
         raise HTTPException(status_code=400, detail="Both new and existing workflows are required to compare them.")
 
     result = compare_models(new_workflow, existing_workflow)
+    
     return {"exists": True, "match": result, "message": f"Workflow with name '{new_workflow.workflow_tag}' exists."}

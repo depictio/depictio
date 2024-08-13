@@ -43,12 +43,14 @@ def read_table_for_DC_table(file_info, data_collection_config_raw, deltaTable):
     raw_cols = df.columns
     no_run_id = False
     logger.info(f"data_collection_config : {data_collection_config_raw}")
-    if "metatype" in data_collection_config_raw:
+    if "metatype" in data_collection_config_raw and data_collection_config_raw["metatype"] != None:
         logger.info(f'metatype : {data_collection_config_raw["metatype"]}')
 
-        if data_collection_config_raw["metatype"].lower() == "metadata":
+        if  data_collection_config_raw["metatype"].lower() == "metadata":
             logger.info("Metadata file detected")
             no_run_id = True
+
+
     if not no_run_id:
         df = df.with_columns(pl.lit(file_info.run_id).alias("depictio_run_id"))
         df = df.select(["depictio_run_id"] + raw_cols)

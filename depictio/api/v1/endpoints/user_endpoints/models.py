@@ -19,7 +19,7 @@ from depictio.api.v1.models.base import MongoModel, PyObjectId
 class Token(MongoModel):
     id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
     access_token: str
-    # token_type: str
+    token_type: str = "short-lived"
     expire_datetime: str
     name: Optional[str] = None
     # scope: Optional[str] = None
@@ -58,7 +58,7 @@ class UserBase(MongoModel):
     id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
     email: EmailStr
     is_admin: bool = False
-    groups: Optional[List[PyObjectId]] = Field(default_factory=list)
+    groups: List[str] = Field(default_factory=list)
 
 class User(UserBase):
     # id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
@@ -92,7 +92,7 @@ class User(UserBase):
 
     def __hash__(self):
         # Hash based on the unique user_id
-        return hash(self.user_id)
+        return hash(self.id)
 
     def __eq__(self, other):
         # Equality based on the unique user_id
@@ -124,7 +124,7 @@ class Group(BaseModel):
     @root_validator(pre=True)
     def ensure_unique_member_ids(cls, values):
         members = values.get("members", [])
-        unique_members = {member.user_id: member for member in members}.values()
+        unique_members = {member.id: member for member in members}.values()
         return {"members": set(unique_members)}
 
     # This function validates that each user_id in the members is unique
@@ -133,15 +133,15 @@ class Group(BaseModel):
         seen = set()
         members = values.get("members", [])
         for member in members:
-            if member.user_id in seen:
+            if member.id in seen:
                 raise ValueError("Duplicate user_id found in group members.")
-            seen.add(member.user_id)
+            seen.add(member.id)
         return values
 
 
 class Permission(BaseModel):
-    owners: List[User]
-    viewers: Optional[List[User]] = set()  # Set default to empty set
+    owners: List[UserBase]
+    viewers: Optional[List[UserBase]] = set()  # Set default to empty set
 
     def dict(self, **kwargs):
         # Generate list of owner and viewer dictionaries
@@ -152,8 +152,8 @@ class Permission(BaseModel):
     @validator("owners", "viewers", pre=True, each_item=True)
     def convert_dict_to_user(cls, v):
         if isinstance(v, dict):
-            return User(**v)  # Assuming `User` is a Pydantic model and can be instantiated like this
-        elif not isinstance(v, User):
+            return UserBase(**v)  # Assuming `User` is a Pydantic model and can be instantiated like this
+        elif not isinstance(v, UserBase):
             raise ValueError("Permissions should be assigned to User instances.")
         return v
 
@@ -171,8 +171,8 @@ class Permission(BaseModel):
     def ensure_owners_and_viewers_are_unique(cls, values):
         owners = values.get("owners", set())
         viewers = values.get("viewers", set())
-        owner_ids = {owner.user_id for owner in owners}
-        viewer_ids = {viewer.user_id for viewer in viewers}
+        owner_ids = {owner.id for owner in owners}
+        viewer_ids = {viewer.id for viewer in viewers}
 
         if not owner_ids.isdisjoint(viewer_ids):
             raise ValueError("A User cannot be both an owner and a viewer.")

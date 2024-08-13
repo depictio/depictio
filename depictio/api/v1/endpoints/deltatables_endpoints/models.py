@@ -8,7 +8,7 @@ from pydantic import (
     root_validator,
     validator,
 )
-from depictio.api.v1.endpoints.user_endpoints.models import User
+from depictio.api.v1.endpoints.user_endpoints.models import User, UserBase
 
 from depictio.api.v1.models.base import MongoModel, PyObjectId
 
@@ -40,7 +40,7 @@ class DeltaTableColumn(BaseModel):
 
 class Aggregation(MongoModel):
     aggregation_time: datetime = datetime.now()
-    aggregation_by: User
+    aggregation_by: UserBase
     aggregation_version: int = 1
     aggregation_hash: str
     aggregation_columns_specs: List[DeltaTableColumn] = []

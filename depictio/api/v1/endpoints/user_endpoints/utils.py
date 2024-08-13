@@ -96,49 +96,38 @@ def edit_password(email, old_password, new_password):
 
 def check_password(email, password):
     user = find_user(email)
+    logger.info(f"User: {user}")
     if user:
-        if verify_password(user["password"], password):
+        if verify_password(user.password, password):
             return True
     return False
 
 
-def create_access_token(data, expires_delta=timedelta(days=30)):
-    to_encode = data.copy()
+def create_access_token(token_data):
+    token_type = token_data["token_type"]
+
+    if token_type == "short-lived":
+        expires_delta = timedelta(minutes=30)
+    elif token_type == "long-lived":
+        expires_delta = timedelta(days=30)
+    else:
+        raise ValueError("Invalid token type. Must be 'short-lived' or 'long-lived'.")
+    
+    to_encode = token_data.copy()
     expire = datetime.now() + expires_delta
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, PRIVATE_KEY, algorithm=ALGORITHM)
     return encoded_jwt, expire
 
 
-# def add_token(email, token):
-#     logger.info(f"Adding token for user {email}.")
-#     user = find_user(email)
-#     logger.info(f"User: {user}")
-#     if user:
-#         logger.info(f"Adding token for user {email}.")
-#         token = Token(**token)
-#         logger.info(f"Token: {token}")
-#         logger.info(f"Token.mongo(): {token.mongo()}")
-
-#         request_body = {
-#             "user": user,
-#             "token": convert_objectid_to_str(token.mongo())
-#         }
-
-#         response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/auth/add_token", json=request_body)
-#         if response.status_code == 200:
-#             logger.info(f"Token added for user {email}.")
-#         else:
-#             logger.error(f"Error adding token for user {email}: {response.text}")
-#         return response
-#     return None
 
 
-def add_token(email: str, token_data: dict) -> dict:
+def add_token(token_data: dict) -> dict:
+    email = token_data["sub"]
     logger.info(f"Adding token for user {email}.")
     logger.info(f"Token: {token_data}")
-    token, expire = create_access_token(data=token_data)
-    token_data = {"access_token": token, "expire_datetime": expire.strftime("%Y-%m-%d %H:%M:%S"), "name": token_data["name"]}
+    token, expire = create_access_token(token_data)
+    token_data = {"access_token": token, "expire_datetime": expire.strftime("%Y-%m-%d %H:%M:%S"), "name": token_data["name"], "token_type": token_data["token_type"]}
 
     logger.info(f"Adding token for user {email}.")
     user = find_user(email)
@@ -168,6 +157,30 @@ def add_token(email: str, token_data: dict) -> dict:
         # return token
     return token
 
+
+
+# def add_token(email, token):
+#     logger.info(f"Adding token for user {email}.")
+#     user = find_user(email)
+#     logger.info(f"User: {user}")
+#     if user:
+#         logger.info(f"Adding token for user {email}.")
+#         token = Token(**token)
+#         logger.info(f"Token: {token}")
+#         logger.info(f"Token.mongo(): {token.mongo()}")
+
+#         request_body = {
+#             "user": user,
+#             "token": convert_objectid_to_str(token.mongo())
+#         }
+
+#         response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/auth/add_token", json=request_body)
+#         if response.status_code == 200:
+#             logger.info(f"Token added for user {email}.")
+#         else:
+#             logger.error(f"Error adding token for user {email}: {response.text}")
+#         return response
+#     return None
 
 def delete_token(email, token_id):
     logger.info(f"Deleting token for user {email}.")
