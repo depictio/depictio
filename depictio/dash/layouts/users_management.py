@@ -242,10 +242,10 @@ def register_callbacks_users_management(app):
     ):
         button_id = ctx.triggered[0]["prop_id"].split(".")[0]
 
-        session_data = logout_user()
+        # session_data = logout_user()
 
         # If user is already logged in, do not show the login form
-        if session_data and session_data.get("logged_in", False):
+        if local_data and local_data.get("logged_in", False):
             return False, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
         # If no button was clicked, return the current state
