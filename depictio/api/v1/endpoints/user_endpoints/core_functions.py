@@ -34,12 +34,12 @@ def fetch_user_from_email(email: str, return_tokens: bool = False) -> User:
     from depictio.api.v1.db import users_collection  # Move import inside the function
 
     if return_tokens:
-        # Find the user in the database and only returns tokens with token_type = "long-lived"
+        # Find the user in the database and only returns tokens with token_lifetime = "long-lived"
         user = users_collection.find_one({"email": email})
-        # user = users_collection.find_one({"email": email }, {"tokens": {"$elemMatch": {"token_type": "long-lived"}}})
+        # user = users_collection.find_one({"email": email }, {"tokens": {"$elemMatch": {"token_lifetime": "long-lived"}}})
 
         # Filter the tokens to only return the long-lived tokens
-        user["tokens"] = [token for token in user["tokens"] if token["token_type"] == "long-lived"]
+        user["tokens"] = [token for token in user["tokens"] if token["token_lifetime"] == "long-lived"]
 
     else:
         # Find the user in the database and exclude the tokens field
@@ -57,6 +57,9 @@ def fetch_user_from_email(email: str, return_tokens: bool = False) -> User:
 
 def fetch_user_from_token(token: str) -> User:
     from depictio.api.v1.db import users_collection  # Move import inside the function
+
+    if not token:
+        return None
 
     # Find the user in the database and exclude the tokens field
     user = users_collection.find_one({"tokens.access_token": token}, {"tokens": 0})

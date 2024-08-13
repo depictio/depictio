@@ -99,18 +99,18 @@ register_tokens_management_callbacks(app)
 @app.callback(
     Output("page-content", "children"),
     Output("url", "pathname"),
-    [Input("url", "pathname"), Input("session-store", "data")],
+    [Input("url", "pathname"), Input("local-store", "data")],
 )
-def display_page(pathname, session_data):
+def display_page(pathname, local_data):
 
     trigger = ctx.triggered[0]["prop_id"].split(".")[0]
     logger.info(f"trigger: {trigger}")
-    logger.info(f"session_data: {session_data}")
+    logger.info(f"local_data: {local_data}")
     logger.info(f"pathname: {pathname}")
 
-    if trigger == "session-store":
-        logger.info("Session store triggered")
-        if session_data["logged_in"]:
+    if trigger == "local-store":
+        logger.info("Local store triggered")
+        if local_data["logged_in"]:
             logger.info("User logged in")
             logger.info(f"pathname: {pathname}")
             if pathname is None or pathname == "/":
@@ -130,11 +130,11 @@ def display_page(pathname, session_data):
             return dash.no_update, "/auth"
     elif trigger == "url":
         logger.info("URL triggered")
-        return handle_url(pathname, session_data)
+        return handle_url(pathname, local_data)
 
-def handle_url(pathname, session_data):
+def handle_url(pathname, local_data):
 
-    if session_data["logged_in"]:
+    if local_data["logged_in"]:
         return handle_authenticated_user(pathname)
     else:
         return handle_unauthenticated_user(pathname)

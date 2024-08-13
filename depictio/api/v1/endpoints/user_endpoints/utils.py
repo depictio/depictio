@@ -19,7 +19,7 @@ def login_user(email):
 
 # Dummy logout function
 def logout_user():
-    return {"logged_in": False, "email": None}
+    return {"logged_in": False, "access_token": None}
 
 
 # Check if user is logged in
@@ -73,14 +73,18 @@ def add_user(email, password, is_admin=False):
     return response
 
 
-def edit_password(email, old_password, new_password):
+def edit_password(email, old_password, new_password, headers):
+    logger.info(f"Editing password for user {email}.")
+    logger.info(f"Old password: {old_password}")
+    logger.info(f"New password: {new_password}")
     user = find_user(email)
+    user = convert_objectid_to_str(user.dict())
     if user:
         if verify_password(user["password"], old_password):
             hashed_password = hash_password(new_password)
-            user_dict = {"email": email, "new_password": hashed_password}
+            user_dict = {"new_password": hashed_password, "old_password": old_password}
             logger.info(f"Updating password for user {email} with new password: {new_password}")
-            response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/auth/edit_password", params=user_dict)
+            response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/auth/edit_password", json=user_dict, headers=headers)
             if response.status_code == 200:
                 logger.info(f"Password for user {email} updated successfully.")
             else:
@@ -104,15 +108,15 @@ def check_password(email, password):
 
 
 def create_access_token(token_data):
-    token_type = token_data["token_type"]
+    token_lifetime = token_data["token_lifetime"]
 
-    if token_type == "short-lived":
-        expires_delta = timedelta(minutes=30)
-    elif token_type == "long-lived":
-        expires_delta = timedelta(days=30)
+    if token_lifetime == "short-lived":
+        expires_delta = timedelta(hours=12)
+    elif token_lifetime == "long-lived":
+        expires_delta = timedelta(years=1)
     else:
         raise ValueError("Invalid token type. Must be 'short-lived' or 'long-lived'.")
-    
+
     to_encode = token_data.copy()
     expire = datetime.now() + expires_delta
     to_encode.update({"exp": expire})
@@ -120,20 +124,17 @@ def create_access_token(token_data):
     return encoded_jwt, expire
 
 
-
-
 def add_token(token_data: dict) -> dict:
     email = token_data["sub"]
     logger.info(f"Adding token for user {email}.")
     logger.info(f"Token: {token_data}")
     token, expire = create_access_token(token_data)
-    token_data = {"access_token": token, "expire_datetime": expire.strftime("%Y-%m-%d %H:%M:%S"), "name": token_data["name"], "token_type": token_data["token_type"]}
+    token_data = {"access_token": token, "expire_datetime": expire.strftime("%Y-%m-%d %H:%M:%S"), "name": token_data["name"], "token_lifetime": token_data["token_lifetime"]}
 
     logger.info(f"Adding token for user {email}.")
     user = find_user(email)
     logger.info(f"User: {user}")
     if user:
-
         # Check if the token already exists based on the name
         tokens = list_existing_tokens(email)
         logger.info(f"Tokens: {tokens}")
@@ -141,7 +142,6 @@ def add_token(token_data: dict) -> dict:
             if t["name"] == token_data["name"]:
                 logger.error(f"Token with name {token_data['name']} already exists for user {email}.")
                 return None
-        
 
         logger.info(f"Adding token for user {email}.")
         token = Token(**token_data)
@@ -156,7 +156,6 @@ def add_token(token_data: dict) -> dict:
             logger.error(f"Error adding token for user {email}")
         # return token
     return token
-
 
 
 # def add_token(email, token):
@@ -181,6 +180,7 @@ def add_token(token_data: dict) -> dict:
 #             logger.error(f"Error adding token for user {email}: {response.text}")
 #         return response
 #     return None
+
 
 def delete_token(email, token_id):
     logger.info(f"Deleting token for user {email}.")
@@ -208,6 +208,7 @@ def fetch_user_from_token(token):
         return user_data
     return None
 
+
 def list_existing_tokens(email):
     logger.info(f"Listing tokens for user {email}.")
     user = find_user(email, return_tokens=True)
@@ -219,7 +220,6 @@ def list_existing_tokens(email):
 
 
 def generate_agent_config(email, token):
-
     user = find_user(email)
     user = convert_objectid_to_str(user.dict())
     logger.info(f"User: {user}")

@@ -19,7 +19,7 @@ from depictio.api.v1.models.base import MongoModel, PyObjectId
 class Token(MongoModel):
     id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
     access_token: str
-    token_type: str = "short-lived"
+    token_lifetime: str = "short-lived"
     expire_datetime: str
     name: Optional[str] = None
     # scope: Optional[str] = None

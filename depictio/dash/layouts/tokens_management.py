@@ -6,6 +6,7 @@ import dash
 import yaml
 from depictio.api.v1.db import users_collection
 from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_token
 from depictio.api.v1.endpoints.user_endpoints.models import Token
 from depictio.api.v1.endpoints.user_endpoints.utils import add_token, create_access_token, delete_token, generate_agent_config, list_existing_tokens
 from dash_extensions.enrich import DashProxy, html, Input, Output, State
@@ -97,20 +98,22 @@ def register_tokens_management_callbacks(app):
         State("token-name-input", "value"),
         State("delete-confirm-input", "value"),
         State({"type": "delete-token", "index": dash.dependencies.ALL}, "id"),
-        State("session-store", "data"),
+        State("local-store", "data"),
         State("delete-token-id-store", "data"),
         # prevent_initial_call=True,
     )
-    def handle_callbacks(add_clicks, save_clicks, confirm_delete_clicks, delete_clicks, token_name, delete_confirm_input, delete_button_id, session_data, delete_token_id):
+    def handle_callbacks(add_clicks, save_clicks, confirm_delete_clicks, delete_clicks, token_name, delete_confirm_input, delete_button_id, local_store, delete_token_id):
         triggered = ctx.triggered_id
 
-        if not session_data:
+        if not local_store:
             raise PreventUpdate
 
-        tokens = list_existing_tokens(session_data["email"])
+        user = fetch_user_from_token(local_store["access_token"])
+
+        tokens = list_existing_tokens(user.email)
         logger.info(f"tokens: {tokens}")
         logger.info(f"triggered: {triggered}")
-        logger.info(f"session_data: {session_data}")
+        logger.info(f"local_store: {local_store}")
         delete_token_id = delete_token_id or {}
 
         if triggered == "add-token-button" and add_clicks > 0:
@@ -119,7 +122,7 @@ def register_tokens_management_callbacks(app):
         elif triggered == "save-token-name" and save_clicks > 0 and token_name:
             # token, expire = create_access_token({"name": token_name})
             # token_data = {"access_token": token, "expire_datetime": expire.strftime("%Y-%m-%d %H:%M:%S"), "name": token_name}
-            token_data = add_token({"sub": session_data["email"], "name": token_name, "token_type": "long-lived"})
+            token_data = add_token({"sub": user.email, "name": token_name, "token_lifetime": "long-lived"})
 
             if not token_data:
                 div = dmc.Title("Failed to create agent. Agent with that name already exists.", color="red", order=3)
@@ -129,54 +132,18 @@ def register_tokens_management_callbacks(app):
             token_data = token_data.dict()
             logger.info(f"Token data: {token_data}")
 
-            agent_config = generate_agent_config(session_data["email"], token_data)
+            agent_config = generate_agent_config(user.email, token_data)
             logger.info(f"Agent config: {agent_config}")
 
             # tokens.append({"name": token_name, "created_time": created_time, "last_activity": created_time})
-            tokens = list_existing_tokens(session_data["email"])
+            tokens = list_existing_tokens(user.email)
 
             # Format token data for display using dcc.Markdown, using YAML format
             agent_config = yaml.dump(agent_config, default_flow_style=False)
             logger.info(f"Token data: {token_data}")
 
             # Add extra formatting to color with YAML ('''...''') and add a copy button
-            agent_config = f"```yaml\n{agent_config}\n```"
-
-            # Add a copy button to the token display modal
-
-            logger.info(f"Agent config: {agent_config}")
-
-            div_agent_config = html.Div(
-                [
-                    dmc.Title("Agent Created", color="blue", order=3),
-                    dcc.Markdown(id="agent-config-md", children=agent_config),
-                    dcc.Clipboard(
-                        target_id="agent-config-md",
-                        style={
-                            "position": "absolute",
-                            "top": 75,
-                            "right": 20,
-                            "fontSize": 15,
-                        },
-                    ),
-                    dmc.Text(
-                        [
-                            "Please copy the agent config and store it in ",
-                            dmc.Code("~/.depictio/agent.yaml"),
-                            " . You will not be able to access this config again once you close this dialog.",
-                        ]
-                    ),
-                ]
-            )
-
-            return False, False, render_tokens_list(tokens), True, div_agent_config, delete_token_id, ""
-
-            # Format token data for display using dcc.Markdown, using YAML format
-            agent_config = yaml.dump(agent_config, default_flow_style=False)
-            logger.info(f"Token data: {token_data}")
-
-            # Add extra formatting to color with YAML ('''...''') and add a copy button
-            agent_config = f"```yaml\n{agent_config}\n```"
+            agent_config = f"""```yaml\n{agent_config}\n```"""
 
             # Add a copy button to the token display modal
 
@@ -218,7 +185,7 @@ def register_tokens_management_callbacks(app):
             if delete_token_id in [str(t["id"]) for t in tokens]:
                 # del tokens[token_to_delete]
                 # token_to_delete = None
-                delete_token(session_data["email"], delete_token_id)
+                delete_token(user.email, delete_token_id)
                 tokens = [e for e in tokens if str(e["id"]) != delete_token_id]
 
             return False, False, render_tokens_list(tokens), False, "", {}, ""
