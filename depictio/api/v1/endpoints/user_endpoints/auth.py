@@ -1,5 +1,6 @@
 import os
 import sys
+from typing import Annotated, Optional
 import bcrypt
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -9,9 +10,12 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import jwt, JWTError
 from datetime import datetime, timedelta
 
+from pydantic import BaseModel
+
 # from werkzeug.security import check_password_hash, generate_password_hash
 from depictio.api.v1.endpoints.user_endpoints.core_functions import add_token_to_user, fetch_user_from_email, fetch_user_from_token
 from depictio.api.v1.endpoints.user_endpoints.models import TokenRequest, User, Token, TokenData
+from depictio.api.v1.endpoints.user_endpoints.utils import add_token, check_password
 from depictio.api.v1.models.base import PyObjectId
 from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.db import users_collection
@@ -37,7 +41,52 @@ with open(public_key_file, "rb") as f:
 ALGORITHM = "RS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 360 * 3600
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"/api/v1/auth/token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"/depictio/api/v1/auth/login")
+
+
+async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
+    if token is None:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    user = fetch_user_from_token(token)
+
+    if user is None:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    return user
+
+
+# Login endpoint
+@auth_endpoint_router.post("/login")
+async def login(login_request: OAuth2PasswordRequestForm = Depends()):
+    logger.info(f"Login attempt for user: {login_request.username}")
+
+    # Verify credentials
+    _ = check_password(login_request.username, login_request.password)
+    if not _:
+        logger.error("Invalid credentials")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+
+    # Generate random name for the token
+    token_name = f"{login_request.username}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+
+    # Add token details to user info
+    token_data = {
+        "sub": login_request.username,
+        "name": token_name,
+        "token_type": "short-lived",
+    }
+
+    # Generate and store token
+    token = add_token(token_data)
+    logger.info(f"Token : {token}")
+    if token is None:
+        logger.error("Token with the same name already exists.")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Token with the same name already exists")
+
+    logger.info(f"Token generated for user: {login_request.username}")
+
+    return {"access_token": token.access_token, "token_type": "bearer", "expire_datetime": token.expire_datetime, "name": token.name, "token_type": token.token_type}
 
 
 # Helper function to verify password (modify this to hash verification in production)
@@ -91,25 +140,6 @@ def authenticate_user(username: str, password: str):
     return None
 
 
-# FIXME: remove this - only for testing purposes
-# @auth_endpoint_router.post("/create_user")
-# async def create_user():
-
-
-#     # delete the user
-#     users_collection.drop()
-
-#     user = {
-#         "username": "cezanne",
-#         "password": "paul",
-#         "email": "paul.cezanne@embl.de",
-#     }
-
-#     users_collection.insert_one(user)
-
-#     return {"message": "User created"}
-
-
 @auth_endpoint_router.post("/token", response_model=Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
     user = authenticate_user(form_data.username, form_data.password)
@@ -157,23 +187,22 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 #     return user
 
 
-async def get_current_user(token: str = Depends(oauth2_scheme)) -> TokenData:
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    try:
-        payload = jwt.decode(token, PUBLIC_KEY, algorithms=[ALGORITHM])
+# credentials_exception = HTTPException(
+#     status_code=status.HTTP_401_UNAUTHORIZED,
+#     detail="Could not validate credentials",
+#     headers={"WWW-Authenticate": "Bearer"},
+# )
+# try:
+#     payload = jwt.decode(token, PUBLIC_KEY, algorithms=[ALGORITHM])
 
-        user_id: str = payload.get("sub")
-        if user_id is None:
-            raise credentials_exception
-        token_data = TokenData(user_id=PyObjectId(user_id))
-        return token_data
+#     user_id: str = payload.get("sub")
+#     if user_id is None:
+#         raise credentials_exception
+#     token_data = TokenData(user_id=PyObjectId(user_id))
+#     return token_data
 
-    except JWTError as e:
-        raise credentials_exception
+# except JWTError as e:
+#     raise credentials_exception
 
 
 @auth_endpoint_router.post("/register", response_model=User)
@@ -189,6 +218,7 @@ async def create_user(user: User) -> User:
         users_collection.insert_one(User(**user_dict).mongo())
         return user
 
+
 @auth_endpoint_router.get("/fetch_user/from_email")
 async def api_fetch_user(email: str):
     user = fetch_user_from_email(email)
@@ -196,7 +226,8 @@ async def api_fetch_user(email: str):
         return user
     else:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
+
 @auth_endpoint_router.post("/fetch_user/from_token", response_model=User)
 async def api_fetch_user_from_token(token: str):
     user = fetch_user_from_token(token)
@@ -204,6 +235,7 @@ async def api_fetch_user_from_token(token: str):
         return user
     else:
         raise HTTPException(status_code=404, detail="User not found")
+
 
 # @auth_endpoint_router.get("/fetch_user/from_email")
 # async def fetch_user(email: str):
@@ -255,11 +287,9 @@ async def edit_password(email: str, new_password: str) -> User:
         raise HTTPException(status_code=404, detail="User not found")
 
 
-
-
-
 @auth_endpoint_router.post("/add_token")
-async def add_token(request: dict):
+async def add_token_endpoint(request: dict):
+    logger.info(f"Request: {request}")
     user = request["user"]
     token = request["token"]
     logger.info(f"Request: {request}")
@@ -271,7 +301,6 @@ async def add_token(request: dict):
         raise HTTPException(status_code=500, detail="Failed to add token")
 
     return result
-
 
 
 # @auth_endpoint_router.post("/add_token")
@@ -303,9 +332,10 @@ async def add_token(request: dict):
 #     # Return success status
 #     return {"success": result.modified_count > 0}
 
+
 @auth_endpoint_router.post("/delete_token")
 async def delete_token(request: dict):
-    logger.info(f"Request: {request}") 
+    logger.info(f"Request: {request}")
     user = request["user"]
     token_id = request["token_id"]
     user_id = user["id"]
@@ -320,7 +350,7 @@ async def delete_token(request: dict):
     # Log the _id and the query structure
     logger.info(f"User _id (ObjectId): {user_id}")
     query = {"_id": user_id}
-    
+
     # Get existing tokens from the user and remove the token to be deleted
     user_data = users_collection.find_one(query)
     tokens = user_data.get("tokens", [])
@@ -339,11 +369,12 @@ async def delete_token(request: dict):
     # Return success status
     return {"success": result.modified_count > 0}
 
+
 @auth_endpoint_router.post("/generate_agent_config")
 def generate_agent_config(request: dict):
     logger.info(f"Request: {request}")
     user = request["user"]
-    
+
     # Keep only email and is_admin fields from user
     user = {
         "email": user["email"],
@@ -357,9 +388,9 @@ def generate_agent_config(request: dict):
 
     # Depictio API config
     from depictio.api.v1.configs.config import API_BASE_URL
+
     depictio_agent_config = {
         "api_base_url": API_BASE_URL,
         "user": user,
     }
     return depictio_agent_config
-    
