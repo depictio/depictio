@@ -181,7 +181,7 @@ def register_callbacks_header(app):
         prevent_initial_call=True,
     )
     def toggle_offcanvas_parameters(n_clicks, is_open):
-        logger.info(n_clicks, is_open)
+        logger.info(f"toggle_offcanvas_parameters: {n_clicks}, {is_open}")
         if n_clicks:
             return not is_open
         return is_open
@@ -193,7 +193,7 @@ def register_callbacks_header(app):
         prevent_initial_call=True,
     )
     def toggle_offcanvas_menu(n_clicks, is_open):
-        logger.info(n_clicks, is_open)
+        logger.info(f"toggle_offcanvas_menu: {n_clicks}, {is_open}")
         if n_clicks:
             return not is_open
         return is_open

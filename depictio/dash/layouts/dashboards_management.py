@@ -390,14 +390,16 @@ def register_callbacks_dashboards_management(app):
         # Respond to URL changes
         if trigger_id == "url":
             if pathname:
+
+                logger.info(f"trigger_id: {trigger_id}")
+                logger.info(f"pathname: {pathname}")
                 if pathname.startswith("/dashboard/"):
                     dashboard_id = pathname.split("/")[-1]
                     # Fetch dashboard data based on dashboard_id and return the appropriate layout
                     # return html.Div([f"Displaying Dashboard {dashboard_id}", dbc.Button("Go back", href="/", color="black", external_link=True)])
                     return None
-                # Add more conditions for other routes
-                # return html.Div("This is the home page")
-                return render_landing_page(data)
+                elif pathname == "/":
+                    return render_landing_page(data)
 
         # Respond to modal-store data changes
         elif trigger_id == "local-store":
