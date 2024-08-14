@@ -27,29 +27,41 @@ def symmetrize_join_details(join_details_map: Dict[str, List[dict]]):
 
 
 def generate_join_dict(workflow):
+    from depictio.api.v1.configs.logging import logger
+
+    logger.info(f"Workflow: {workflow}")
+
     join_dict = {}
 
     wf_id = str(workflow["_id"])
+    logger.info(f"Workflow ID: {wf_id}")
     join_dict[wf_id] = {}
 
     dc_ids = {str(dc["_id"]): dc for dc in workflow["data_collections"] if dc["config"]["type"].lower() == "table"}
+    logger.info(f"Data collections: {dc_ids}")
     visited = set()
 
     def find_joins(dc_id, join_configs):
+        logger.info(f"Data collection: {dc_id}")
+        logger.info(f"Visited: {visited}")
+        logger.info(f"Join configs: {join_configs}")
+
         if dc_id in visited:
             return
         visited.add(dc_id)
         if "join" in dc_ids[dc_id]["config"]:
             join_info = dc_ids[dc_id]["config"]["join"]
-            for related_dc_tag in join_info.get("with_dc", []):
-                related_dc_id = next((str(dc["_id"]) for dc in workflow["data_collections"] if dc["data_collection_tag"] == related_dc_tag), None)
-                if related_dc_id:
-                    join_configs[f"{dc_id}--{related_dc_id}"] = {
-                        "how": join_info["how"],
-                        "on_columns": join_info["on_columns"],
-                        "dc_tags": [dc_ids[dc_id]["data_collection_tag"], dc_ids[related_dc_id]["data_collection_tag"]],
-                    }
-                    find_joins(related_dc_id, join_configs)
+            logger.info(f"Join info: {join_info}")
+            if join_info:
+                for related_dc_tag in join_info.get("with_dc", []):
+                    related_dc_id = next((str(dc["_id"]) for dc in workflow["data_collections"] if dc["data_collection_tag"] == related_dc_tag), None)
+                    if related_dc_id:
+                        join_configs[f"{dc_id}--{related_dc_id}"] = {
+                            "how": join_info["how"],
+                            "on_columns": join_info["on_columns"],
+                            "dc_tags": [dc_ids[dc_id]["data_collection_tag"], dc_ids[related_dc_id]["data_collection_tag"]],
+                        }
+                        find_joins(related_dc_id, join_configs)
 
     for dc_id in dc_ids:
         if dc_id not in visited:
