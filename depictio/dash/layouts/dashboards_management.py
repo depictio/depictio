@@ -41,6 +41,8 @@ def convert_objectid_to_str(data):
 
 def load_dashboards_from_db(owner):
     logger.info("Loading dashboards from MongoDB")
+
+    logger.info(f"owner: {owner}")
     projection = {"_id": 1, "dashboard_id": 1, "version": 1, "title": 1, "owner": 1}
 
     # Fetch all dashboards corresponding to owner (email address)
@@ -221,7 +223,7 @@ def register_callbacks_dashboards_management(app):
             State({"type": "dashboard-index-store", "index": ALL}, "data"),
             State({"type": "confirm-delete", "index": ALL}, "index"),
             # State("modal-store", "data"),
-            State("session-store", "data"),
+            State("local-store", "data"),
             Input("dashboard-modal-store", "data"),
         ],
     )
@@ -247,9 +249,11 @@ def register_callbacks_dashboards_management(app):
         logger.info(f"modal_data: {modal_data}")
         logger.info(f"user_data: {user_data}")
 
+        current_user = fetch_user_from_token(user_data["access_token"])
+
         # filepath = "dashboards.json"
         # index_data = load_dashboards_from_file(filepath)
-        user_email = user_data["email"]
+        user_email = current_user.email
         index_data = load_dashboards_from_db(user_email)
 
         dashboards = index_data.get("dashboards", [])
@@ -386,14 +390,16 @@ def register_callbacks_dashboards_management(app):
         # Respond to URL changes
         if trigger_id == "url":
             if pathname:
+
+                logger.info(f"trigger_id: {trigger_id}")
+                logger.info(f"pathname: {pathname}")
                 if pathname.startswith("/dashboard/"):
                     dashboard_id = pathname.split("/")[-1]
                     # Fetch dashboard data based on dashboard_id and return the appropriate layout
                     # return html.Div([f"Displaying Dashboard {dashboard_id}", dbc.Button("Go back", href="/", color="black", external_link=True)])
                     return None
-                # Add more conditions for other routes
-                # return html.Div("This is the home page")
-                return render_landing_page(data)
+                elif pathname == "/":
+                    return render_landing_page(data)
 
         # Respond to modal-store data changes
         elif trigger_id == "local-store":

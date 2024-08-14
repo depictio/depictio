@@ -40,6 +40,7 @@ from depictio.api.v1.configs.logging import logger
 # Start the app
 app = dash.Dash(
     __name__,
+    requests_pathname_prefix="/",
     external_stylesheets=[
         dbc.themes.BOOTSTRAP,
         {
@@ -84,6 +85,7 @@ register_callbacks_dashboards_management(app)
 
 from depictio.dash.layouts.profile import register_profile_callbacks
 from depictio.dash.layouts.profile import layout as profile_layout
+
 register_profile_callbacks(app)
 
 from depictio.dash.layouts.users_management import register_callbacks_users_management
@@ -95,6 +97,7 @@ from depictio.dash.layouts.tokens_management import register_tokens_management_c
 from depictio.dash.layouts.tokens_management import layout as tokens_management_layout
 
 register_tokens_management_callbacks(app)
+
 
 @app.callback(
     Output("page-content", "children"),
@@ -132,6 +135,7 @@ def display_page(pathname, local_data):
         logger.info("URL triggered")
         return handle_url(pathname, local_data)
 
+
 def handle_url(pathname, local_data):
 
     if local_data["logged_in"]:
@@ -139,8 +143,10 @@ def handle_url(pathname, local_data):
     else:
         return handle_unauthenticated_user(pathname)
 
+
 def handle_unauthenticated_user(pathname):
     logger.info("User not logged in")
+    logger.info(f"pathname: {pathname}")
     if pathname is None or pathname == "/":
         logger.info(f"pathname: {pathname}")
         return create_users_management_layout(), "/auth"
@@ -178,20 +184,20 @@ def create_dashboards_management_layout():
 def create_users_management_layout():
     return users_management_layout
 
+
 def create_profile_layout():
     return profile_layout
 
+
 def create_tokens_management_layout():
     return tokens_management_layout
+
 
 def create_dashboard_layout(dashboard_id=None, local_data=None):
     # Load depictio depictio_dash_data from JSON
     depictio_dash_data = load_depictio_data(dashboard_id)
     logger.info(f"dashboard_id: {dashboard_id}")
     logger.info(f"depictio_dash_data: {depictio_dash_data}")
-
-    if not local_data:
-        local_data = {"logged_in": False, "access_token": None}
 
     # Init layout and children if depictio_dash_data is available, else set to empty
     if depictio_dash_data:
@@ -235,6 +241,7 @@ def create_app_layout():
             dcc.Location(id="url", refresh=False),
             dcc.Store(id="session-store", storage_type="session", data={"logged_in": False, "email": None}),
             dcc.Store(id="local-store", storage_type="local", data={"logged_in": False, "access_token": None}),
+            dcc.Store(id="url-store", storage_type="local", data={"last_pathname": "/"}),
             html.Div(id="page-content"),
         ],
         fluid=True,

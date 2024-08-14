@@ -64,6 +64,10 @@ def fetch_user_from_token(token: str) -> User:
 
     # Find the user in the database and exclude the tokens field
     user = users_collection.find_one({"tokens.access_token": token}, {"tokens": 0})
+
+    if not user:
+        return None
+
     logger.info(f"Fetching user with token: {token} : {user}")
     user = User.from_mongo(user)
     logger.info("After conversion to User model")

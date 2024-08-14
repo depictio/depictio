@@ -157,6 +157,12 @@ def register_callbacks_draggable(app):
         if not local_data:
             return dash.no_update, dash.no_update, dash.no_update, dash.no_update
         
+        if not state_stored_draggable_layouts:
+            state_stored_draggable_layouts = {}
+        if not state_stored_draggable_children:
+            state_stored_draggable_children = {}
+
+
         TOKEN = local_data["access_token"]
 
         logger.info("btn_done_clicks: {}".format(btn_done_clicks))
@@ -230,8 +236,6 @@ def register_callbacks_draggable(app):
 
         # # if triggered_input["type"] == "btn-done":
         if triggered_input == "btn-done":
-            # logger.info("TOTOTOOTO: Draggable children {}".format(draggable_children))
-
             # if btn_done_clicks:
             #     if btn_done_clicks[-1] > 0:
             logger.info("\n\n")
@@ -286,7 +290,9 @@ def register_callbacks_draggable(app):
 
             # logger.info(f"Updated draggable children: {draggable_children}")
             logger.info(f"Updated draggable layouts: {draggable_layouts}")
-            return draggable_children, draggable_layouts, draggable_children, draggable_layouts
+            state_stored_draggable_children[dashboard_id] = draggable_children
+            state_stored_draggable_layouts[dashboard_id] = draggable_layouts
+            return draggable_children, draggable_layouts, state_stored_draggable_children, state_stored_draggable_layouts
         #     else:
         #         return dash.no_update, dash.no_update, dash.no_update, dash.no_update
         # # elif triggered_input == "draggable":
@@ -296,10 +302,7 @@ def register_callbacks_draggable(app):
             ctx_triggered_props_id = ctx.triggered_prop_ids
             if "draggable.layouts" in ctx_triggered_props_id:
 
-                if not state_stored_draggable_layouts:
-                    state_stored_draggable_layouts = {}
-                if not state_stored_draggable_children:
-                    state_stored_draggable_children = {}
+
 
                 new_layouts = input_draggable_layouts
                 logger.info(f"state_stored_draggable_layouts: {state_stored_draggable_layouts}")
@@ -353,9 +356,13 @@ def register_callbacks_draggable(app):
             # Use list comprehension to filter
             # logger.info("Current draggable children: {}".format(draggable_children))
             updated_children = [child for child in draggable_children if child["props"]["id"] != f"box-{input_id}"]
+
+            state_stored_draggable_children[dashboard_id] = updated_children
+            state_stored_draggable_layouts[dashboard_id] = draggable_layouts
+
             # logger.info("Updated draggable children: {}".format(updated_children))
 
-            return updated_children, draggable_layouts, updated_children, draggable_layouts
+            return updated_children, draggable_layouts, state_stored_draggable_children, state_stored_draggable_layouts
 
         elif triggered_input == "remove-all-components-button":
             logger.info("Remove all components button clicked")
