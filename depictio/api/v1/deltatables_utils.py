@@ -2,7 +2,7 @@ from bson import ObjectId
 import httpx
 import polars as pl
 import pandas as pd
-from depictio.api.v1.configs.config import API_BASE_URL, TOKEN
+from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.s3 import s3_client, minio_storage_options
 from depictio.api.v1.configs.logging import logger
 
@@ -50,10 +50,7 @@ def process_metadata_and_filter(metadata):
     return filter_list
 
 
-def load_deltatable_lite(workflow_id: ObjectId, data_collection_id: ObjectId, metadata: dict = dict()):
-    # print("load_deltatable_lite")
-    # logger.info("load_deltatable_lite")
-
+def load_deltatable_lite(workflow_id: ObjectId, data_collection_id: ObjectId, metadata: dict = dict(), TOKEN: str = None):
     # Turn objectid to string
     workflow_id = str(workflow_id)
     data_collection_id = str(data_collection_id)
@@ -70,11 +67,6 @@ def load_deltatable_lite(workflow_id: ObjectId, data_collection_id: ObjectId, me
     if response.status_code == 200:
         file_id = response.json()["delta_table_location"]
 
-        # logger.info(f"file_id: {file_id}")
-        # logger.info(f"metadata: {metadata}")
-        # logger.info(f"type of metadata: {type(metadata)}")
-        # logger.info(f"check if metadata dict is empty : {not metadata}")
-        # logger.info(f"minio_storage_options: {minio_storage_options}")
         # If metadata is None or empty, return the DataFrame without filtering
         if not metadata:
             return pl.scan_delta(file_id, storage_options=minio_storage_options).collect().drop("depictio_aggregation_time")
