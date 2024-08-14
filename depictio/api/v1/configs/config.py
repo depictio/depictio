@@ -14,8 +14,8 @@ settings = validate_config(get_config(config_backend_location), Settings)
 
 API_BASE_URL = f"http://{settings.fastapi.service_name}:{settings.fastapi.port}"
 MONGODB_URL = f"mongodb://{settings.mongodb.service_name}:{settings.mongodb.port}/"
-TOKEN = settings.auth.tmp_token
-TOKEN = TOKEN.strip()
+# TOKEN = settings.auth.tmp_token
+# TOKEN = TOKEN.strip()
 
 
 # Check if key files exist, generate if they don't
@@ -30,4 +30,4 @@ ALGORITHM = "RS256"
 
 logger.info(f"API_BASE_URL: {API_BASE_URL}")
 logger.info(f"MONGODB_URL: {MONGODB_URL}")
-logger.info(f"TOKEN: {TOKEN}")
+# logger.info(f"TOKEN: {TOKEN}")
