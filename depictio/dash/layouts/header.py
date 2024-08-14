@@ -226,8 +226,9 @@ def design_header(data):
             dcc.Store(
                 id="stored-draggable-children",
                 storage_type="session",
+                data={},
             ),
-            dcc.Store(id="stored-draggable-layouts", storage_type="session"),
+            dcc.Store(id="stored-draggable-layouts", storage_type="session", data={}),
         ]
     )
 
