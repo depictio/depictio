@@ -98,8 +98,8 @@ def get_join_tables(wf, TOKEN):
 #     return load_deltatable_lite(wf_dc[0], wf_dc[1], interactive_components, TOKEN)
 
 
-def process_joins(wf, wf_dc, joins, interactive_components):
-    join_df = join_deltatables_dev(wf, joins, interactive_components)
+def process_joins(wf, wf_dc, joins, interactive_components, TOKEN):
+    join_df = join_deltatables_dev(wf, joins, interactive_components, TOKEN)
     for join in joins:
         for join_id in join:
             dc_id1, dc_id2 = join_id.split("--")
@@ -251,7 +251,7 @@ def update_interactive_component(stored_metadata_raw, interactive_components_dic
             logger.info(f"Processing joins for: {join_key_tuple}")
             logger.info(f"joins - {joins}")
             logger.info(f"interactive_components_dict - {interactive_components_dict}")
-            merged_df = iterative_join(wf, {join_key_tuple: joins}, interactive_components_dict)
+            merged_df = iterative_join(wf, {join_key_tuple: joins}, interactive_components_dict, TOKEN)
             df_dict_processed[wf][join_key_tuple] = merged_df
         for e in stored_metadata:
             if e["component_type"] == "jbrowse":
