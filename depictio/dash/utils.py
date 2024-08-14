@@ -1,28 +1,12 @@
 from bson import ObjectId
 import numpy as np
-from depictio.api.v1.configs.config import API_BASE_URL, TOKEN
-from depictio.api.v1.db import redis_cache
-from io import BytesIO
-from jose import JWTError
-import bson
+from depictio.api.v1.configs.config import API_BASE_URL
 import collections
 import httpx
-import jwt
-import os
-import json
-import pandas as pd
-import polars as pl
 import sys
 
 from depictio.api.v1.configs.logging import logger
-from depictio.api.v1.endpoints.user_endpoints.auth import (
-    ALGORITHM,
-    PUBLIC_KEY,
-    fetch_user_from_token,
-)
-from depictio.api.v1.endpoints.workflow_endpoints.models import Workflow
 from depictio.api.v1.models.base import convert_objectid_to_str
-from depictio.api.v1.s3 import s3_client, minio_storage_options
 from depictio.dash.modules.card_component.utils import build_card
 from depictio.dash.modules.figure_component.utils import build_figure
 from depictio.dash.modules.interactive_component.utils import build_interactive
@@ -76,7 +60,6 @@ def load_depictio_data(dashboard_id):
         "figure": build_figure,
         "interactive": build_interactive,
         # "table": build_table,
-
     }
 
     dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
@@ -93,7 +76,6 @@ def load_depictio_data(dashboard_id):
 
             builder_function = helpers_mapping[component_type]
             child = builder_function(**child_metadata)  # Pass all metadata as arguments
-
 
             logger.info(child)
             children.append(child)
@@ -178,33 +160,33 @@ def list_workflows(token: str = None):
     return workflows_json
 
 
-def list_workflows_for_dropdown():
-    workflows_model_list = list_workflows(TOKEN)
-    # print(workflows_model_list)
-    workflows = [wf["workflow_tag"] for wf in workflows_model_list]
-    workflows_dict_for_dropdown = [{"label": wf, "value": wf} for wf in workflows]
-    return workflows_dict_for_dropdown
+# def list_workflows_for_dropdown():
+#     workflows_model_list = list_workflows(TOKEN)
+#     # print(workflows_model_list)
+#     workflows = [wf["workflow_tag"] for wf in workflows_model_list]
+#     workflows_dict_for_dropdown = [{"label": wf, "value": wf} for wf in workflows]
+#     return workflows_dict_for_dropdown
 
 
-def list_data_collections_for_dropdown(workflow_tag: str = None):
-    if workflow_tag is None:
-        return []
-    else:
-        data_collections = [dc["data_collection_tag"] for wf in list_workflows(TOKEN) for dc in wf["data_collections"] if wf["workflow_tag"] == workflow_tag]
-        data_collections_dict_for_dropdown = [{"label": dc, "value": dc} for dc in data_collections]
-        return data_collections_dict_for_dropdown
+# def list_data_collections_for_dropdown(workflow_tag: str = None):
+#     if workflow_tag is None:
+#         return []
+#     else:
+#         data_collections = [dc["data_collection_tag"] for wf in list_workflows(TOKEN) for dc in wf["data_collections"] if wf["workflow_tag"] == workflow_tag]
+#         data_collections_dict_for_dropdown = [{"label": dc, "value": dc} for dc in data_collections]
+#         return data_collections_dict_for_dropdown
 
 
-def return_wf_tag_from_id(workflow_id: ObjectId, workflows: list = None):
-    if not workflows:
-        workflows = list_workflows(TOKEN)
-    else:
-        workflows = [convert_objectid_to_str(workflow.mongo()) for workflow in workflows]
+# def return_wf_tag_from_id(workflow_id: ObjectId, workflows: list = None):
+#     if not workflows:
+#         workflows = list_workflows(TOKEN)
+#     else:
+#         workflows = [convert_objectid_to_str(workflow.mongo()) for workflow in workflows]
 
-    return [e for e in workflows if e["_id"] == workflow_id][0]["workflow_tag"]
+#     return [e for e in workflows if e["_id"] == workflow_id][0]["workflow_tag"]
 
 
-def return_dc_tag_from_id(workflow_id: ObjectId, data_collection_id: ObjectId, workflows: list = None):
+def return_dc_tag_from_id(workflow_id: ObjectId, data_collection_id: ObjectId, workflows: list = None, TOKEN: str = None):
     if not workflows:
         workflows = list_workflows(TOKEN)
     # else:
@@ -213,7 +195,7 @@ def return_dc_tag_from_id(workflow_id: ObjectId, data_collection_id: ObjectId, w
     return [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["_id"] == data_collection_id][0]["data_collection_tag"]
 
 
-def return_mongoid(workflow_tag: str = None, workflow_id: ObjectId = None, data_collection_tag: str = None, data_collection_id: ObjectId = None, workflows: list = None):
+def return_mongoid(workflow_tag: str = None, workflow_id: ObjectId = None, data_collection_tag: str = None, data_collection_id: ObjectId = None, workflows: list = None, TOKEN: str = None):
     if not workflows:
         workflows = list_workflows(TOKEN)
     # else:
@@ -236,11 +218,10 @@ def return_mongoid(workflow_tag: str = None, workflow_id: ObjectId = None, data_
     return workflow_id, data_collection_id
 
 
-
-
 def get_columns_from_data_collection(
     workflow_tag: str,
     data_collection_tag: str,
+    TOKEN: str,
 ):
     # print("\n\n\n")
     # print("get_columns_from_data_collection")
@@ -248,7 +229,7 @@ def get_columns_from_data_collection(
     # workflows = list_workflows(TOKEN)
     # workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_id][0]["_id"]
     # data_collection_id = [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["data_collection_tag"] == data_collection_id][0]["_id"]
-    workflow_id, data_collection_id = return_mongoid(workflow_tag=workflow_tag, data_collection_tag=data_collection_tag)
+    workflow_id, data_collection_id = return_mongoid(workflow_tag=workflow_tag, data_collection_tag=data_collection_tag, TOKEN=TOKEN)
 
     if workflow_id is not None and data_collection_id is not None:
         response = httpx.get(
@@ -273,7 +254,6 @@ def get_columns_from_data_collection(
         else:
             print("No workflows found")
             return None
-
 
 
 def serialize_dash_component(obj):

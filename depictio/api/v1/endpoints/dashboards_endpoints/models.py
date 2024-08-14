@@ -1,14 +1,7 @@
-from typing import Dict, List, Optional, Union
-import bleach
-import re
+from typing import Dict, List, Optional
 from bson import ObjectId
-from pydantic import (
-    BaseModel,
-    Field,
-    validator,
-)
 
-from depictio.api.v1.models.base import MongoModel, PyObjectId
+from depictio.api.v1.models.base import MongoModel
 # FIXME: Replace user with the real user model
 # from depictio.api.v1.models.users_endpoints.models import User
 
@@ -24,6 +17,7 @@ class DashboardData(MongoModel):
     title: str
     owner: str
     last_saved_t: str
+    # TODO: add permissions
 
     class Config:
         arbitrary_types_allowed = True

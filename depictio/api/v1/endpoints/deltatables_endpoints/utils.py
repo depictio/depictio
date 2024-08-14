@@ -2,10 +2,10 @@
 import collections
 from bson import ObjectId
 import numpy as np
-from depictio.api.v1.configs.config import settings, logger
+from depictio.api.v1.configs.config import logger
 import polars as pl
 import os
-from depictio.api.v1.db import workflows_collection, data_collections_collection, runs_collection, files_collection
+from depictio.api.v1.db import files_collection
 from depictio.api.v1.utils import numpy_to_python
 
 
@@ -13,12 +13,6 @@ def read_table_for_DC_table(file_info, data_collection_config_raw, deltaTable):
     """
     Read a table file and return a Polars DataFrame.
     """
-    # logger.info("file_info")
-    # logger.info(file_info)
-    # logger.info("data_collection_config")
-    # logger.info(data_collection_config)
-    # if file_info.aggregated == True:
-    #     continue  # Skip already processed files
 
     file_path = file_info.file_location
     data_collection_config = data_collection_config_raw["dc_specific_properties"]
@@ -54,7 +48,6 @@ def read_table_for_DC_table(file_info, data_collection_config_raw, deltaTable):
     if not no_run_id:
         df = df.with_columns(pl.lit(file_info.run_id).alias("depictio_run_id"))
         df = df.select(["depictio_run_id"] + raw_cols)
-    # data_frames.append(df)
 
     # Update the file_info in MongoDB to mark it as processed
     files_collection.update_one(
@@ -66,7 +59,6 @@ def read_table_for_DC_table(file_info, data_collection_config_raw, deltaTable):
             }
         },
     )
-    # logger.info("Updated file_info in MongoDB")
     return df
 
 

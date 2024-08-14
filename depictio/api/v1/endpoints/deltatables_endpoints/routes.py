@@ -1,30 +1,25 @@
-import collections
 from datetime import datetime
 import hashlib
 import os
 from bson import ObjectId
 from fastapi import HTTPException, Depends, APIRouter
 import polars as pl
-import numpy as np
 
 from depictio.api.v1.configs.config import settings, logger
 from depictio.api.v1.db import workflows_collection, files_collection, users_collection, deltatables_collection
 from depictio.api.v1.endpoints.deltatables_endpoints.utils import precompute_columns_specs, read_table_for_DC_table
-from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_token
 from depictio.api.v1.s3 import minio_storage_options
 from depictio.api.v1.endpoints.deltatables_endpoints.models import Aggregation, DeltaTableAggregated
 from depictio.api.v1.endpoints.files_endpoints.models import File
-from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user
-from depictio.api.v1.endpoints.user_endpoints.models import User, UserBase
+from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
+from depictio.api.v1.endpoints.user_endpoints.models import UserBase
 from depictio.api.v1.endpoints.validators import validate_workflow_and_collection
 from depictio.api.v1.models.base import convert_objectid_to_str
-from depictio.api.v1.endpoints.user_endpoints.auth import oauth2_scheme
 
 
 from depictio.api.v1.utils import (
     # decode_token,
     # public_key_path,
-    numpy_to_python,
     serialize_for_mongo,
     agg_functions,
 )
@@ -34,7 +29,6 @@ deltatables_endpoint_router = APIRouter()
 
 
 @deltatables_endpoint_router.get("/get/{workflow_id}/{data_collection_id}")
-# @datacollections_endpoint_router.get("/files/{workflow_id}/{data_collection_id}", response_model=List[GridFSFileInfo])
 async def list_registered_files(
     workflow_id: str,
     data_collection_id: str,
@@ -67,7 +61,6 @@ async def list_registered_files(
 
 
 @deltatables_endpoint_router.get("/specs/{workflow_id}/{data_collection_id}")
-# @workflows_endpoint_router.get("/get_workflows", response_model=List[Workflow])
 async def specs(
     workflow_id: str,
     data_collection_id: str,

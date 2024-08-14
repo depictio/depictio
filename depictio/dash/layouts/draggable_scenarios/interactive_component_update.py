@@ -7,7 +7,7 @@ from bson import ObjectId
 import httpx
 import numpy as np
 import pandas as pd
-from depictio.api.v1.configs.config import API_BASE_URL, TOKEN, logger
+from depictio.api.v1.configs.config import API_BASE_URL, logger
 from depictio.api.v1.deltatables_utils import iterative_join, join_deltatables_dev, load_deltatable_lite
 from depictio.dash.layouts.header import enable_box_edit_mode
 from depictio.dash.modules.card_component.utils import build_card, compute_value
@@ -84,7 +84,7 @@ def filter_data(new_df, n_dict):
     return new_df
 
 
-def get_join_tables(wf, token):
+def get_join_tables(wf, TOKEN):
     response = httpx.get(
         f"{API_BASE_URL}/depictio/api/v1/datacollections/get_dc_joined/{wf}",
         headers={"Authorization": f"Bearer {TOKEN}"},
@@ -94,8 +94,8 @@ def get_join_tables(wf, token):
     return {}
 
 
-def process_individual_df(wf_dc, interactive_components):
-    return load_deltatable_lite(wf_dc[0], wf_dc[1], interactive_components)
+# def process_individual_df(wf_dc, interactive_components, TOKEN):
+#     return load_deltatable_lite(wf_dc[0], wf_dc[1], interactive_components, TOKEN)
 
 
 def process_joins(wf, wf_dc, joins, interactive_components):
@@ -133,7 +133,7 @@ class UnionFind:
             self.parent[root2] = root1
 
 
-def update_interactive_component(stored_metadata_raw, interactive_components_dict, current_draggable_children, switch_state):
+def update_interactive_component(stored_metadata_raw, interactive_components_dict, current_draggable_children, switch_state, TOKEN):
     helpers_mapping = {
         "card": build_card,
         "figure": build_figure,

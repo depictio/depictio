@@ -1,5 +1,5 @@
 # Import necessary libraries
-from dash import html, dcc, Input, Output, MATCH
+from dash import html, dcc, Input, Output, MATCH, State
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 from dash_iconify import DashIconify
@@ -14,7 +14,7 @@ from depictio.dash.utils import list_workflows, return_mongoid
 from depictio.dash.utils import (
     UNSELECTED_STYLE,
 )
-from depictio.api.v1.configs.config import API_BASE_URL, TOKEN
+from depictio.api.v1.configs.config import API_BASE_URL
 
 
 def register_callbacks_jbrowse_component(app):
@@ -25,10 +25,17 @@ def register_callbacks_jbrowse_component(app):
             Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
             Input({"type": "btn-jbrowse", "index": MATCH}, "n_clicks"),
             Input({"type": "btn-jbrowse", "index": MATCH}, "id"),
+            State("local-store", "data"),
         ],
         prevent_initial_call=True,
     )
-    def update_jbrowse(wf_id, dc_id, n_clicks, id):
+    def update_jbrowse(wf_id, dc_id, n_clicks, id, data):
+
+        if not data:
+            return None
+        
+        TOKEN = data["access_token"]
+
         workflows = list_workflows(TOKEN)
 
         workflow_id = [e for e in workflows if e["workflow_tag"] == wf_id][0]["_id"]
@@ -45,7 +52,7 @@ def register_callbacks_jbrowse_component(app):
         if "join" in dc_specs["config"]:
             dc_specs["config"]["join"]["with_dc_id"] = list()
             for dc_tag in dc_specs["config"]["join"]["with_dc"]:
-                _, dc_id = return_mongoid(workflow_id=workflow_id, data_collection_tag=dc_tag)
+                _, dc_id = return_mongoid(workflow_id=workflow_id, data_collection_tag=dc_tag, TOKEN=TOKEN)
                 dc_specs["config"]["join"]["with_dc_id"].append(dc_id)
 
         jbrowse_kwargs = {
@@ -53,6 +60,7 @@ def register_callbacks_jbrowse_component(app):
             "wf_id": workflow_id,
             "dc_id": data_collection_id,
             "dc_config": dc_specs["config"],
+            "access_token": TOKEN,
         }
 
         jbrowse_body = build_jbrowse(**jbrowse_kwargs)

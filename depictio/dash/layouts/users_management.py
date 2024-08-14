@@ -1,25 +1,14 @@
 import re
-from bson import ObjectId
-from dash import html, Dash, dcc, Input, Output, State, ctx
+from dash import html, dcc, Input, Output, State, ctx
 import dash_mantine_components as dmc
 import dash
-import json
-import os
-import bcrypt
 import httpx
 
-from dash_extensions.enrich import DashProxy
-from dash_extensions.enrich import Output as OutputEnrich
-from dash_extensions.enrich import Input as InputEnrich
-from dash_extensions.enrich import State as StateEnrich
 from dash_extensions import EventListener
 from dash.exceptions import PreventUpdate
 
-
-
-from depictio.api.v1.db import users_collection
 from depictio.api.v1.configs.config import API_BASE_URL, logger
-from depictio.api.v1.endpoints.user_endpoints.utils import verify_password, hash_password, login_user, logout_user, find_user, add_user
+from depictio.api.v1.endpoints.user_endpoints.utils import verify_password, login_user, find_user, add_user
 
 
 event = {"event": "keydown", "props": ["key"]}
@@ -115,9 +104,9 @@ def validate_login(login_email, login_password):
             return "Failed to retrieve access token.", True, dash.no_update, dash.no_update
 
         if response.status_code != 200:
-            return f"Error logging in: {response.text}", True, dash.no_update,  dash.no_update
+            return f"Error logging in: {response.text}", True, dash.no_update, dash.no_update
 
-        # return "Login successful!", False, 
+        # return "Login successful!", False,
         return "Login successful!", False, login_user(user.email), token_data
 
     logger.info("Password verification failed.")

@@ -1,16 +1,12 @@
-from datetime import datetime, timedelta
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 from dash import html, dcc, Input, Output, State, ctx
 import dash
 import yaml
-from depictio.api.v1.db import users_collection
 from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_token
-from depictio.api.v1.endpoints.user_endpoints.models import Token
-from depictio.api.v1.endpoints.user_endpoints.utils import add_token, create_access_token, delete_token, generate_agent_config, list_existing_tokens
-from dash_extensions.enrich import DashProxy, html, Input, Output, State
-from dash_extensions import EventListener
+from depictio.api.v1.endpoints.user_endpoints.utils import add_token, delete_token, generate_agent_config, list_existing_tokens
+from dash_extensions.enrich import html, Input, Output, State
 from dash.exceptions import PreventUpdate
 
 # Layout placeholders
@@ -48,6 +44,7 @@ def render_tokens_list(tokens):
 layout = dbc.Container(
     [
         dcc.Store(id="delete-token-id-store", storage_type="memory"),
+        html.A(dmc.Button("Back to Home", id="back-to-homepage", variant="outline", color="blue", style={"marginTop": "20px"}), href="/"),
         dbc.Row(dbc.Col(html.H2("CLI agent config", className="text-center"), width=12)),
         dbc.Row(dbc.Col(html.P("Security configuration to access Depictio via depictio-cli."), width=12)),
         dbc.Row(dbc.Col(dbc.Button("Add new config", id="add-token-button", color="primary", className="mb-4", n_clicks=0), width={"size": 2, "offset": 10})),
@@ -132,7 +129,7 @@ def register_tokens_management_callbacks(app):
             token_data = token_data.dict()
             logger.info(f"Token data: {token_data}")
 
-            agent_config = generate_agent_config(user.email, token_data)
+            agent_config = generate_agent_config(user.email, token_data, current_token=local_store["access_token"])
             logger.info(f"Agent config: {agent_config}")
 
             # tokens.append({"name": token_name, "created_time": created_time, "last_activity": created_time})

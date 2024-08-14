@@ -3,7 +3,7 @@ import json
 import os
 import httpx
 import polars as pl
-from depictio.api.v1.configs.config import API_BASE_URL, TOKEN, logger
+from depictio.api.v1.configs.config import API_BASE_URL, logger
 from dash import html, dcc
 import dash_bootstrap_components as dbc
 
@@ -70,11 +70,12 @@ def build_jbrowse(**kwargs):
     stored_metadata_jbrowse = kwargs.get("stored_metadata_jbrowse", {})
     index = kwargs.get("index")
     build_frame = kwargs.get("build_frame", False)
+    access_token = kwargs.get("access_token") 
 
     response = httpx.get(
         f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_token",
         headers={
-            "Authorization": f"Bearer {TOKEN}",
+            "Authorization": f"Bearer {access_token}",
         },
     )
 

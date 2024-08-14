@@ -52,6 +52,7 @@ def register_callbacks_stepper_part_three(app):
         Input({"type": "store-btn-option", "index": MATCH, "value": ALL}, "data"),
         State({"type": "btn-option", "index": MATCH, "value": ALL}, "id"),
         State({"type": "last-button", "index": MATCH}, "data"),
+        State("local-store", "data"),
         prevent_initial_call=True,
     )
     def update_step_3(
@@ -61,7 +62,15 @@ def register_callbacks_stepper_part_three(app):
         store_btn_component,
         ids,
         last_button,
+        local_data,
     ):
+        
+        if not local_data:
+            raise dash.exceptions.PreventUpdate
+        
+        TOKEN = local_data["access_token"]
+
+        
         logger.info(f"workflow_selection: {workflow_selection}")
         logger.info(f"data_collection_selection: {data_collection_selection}")
         logger.info(f"btn_component: {btn_component}")
@@ -84,7 +93,7 @@ def register_callbacks_stepper_part_three(app):
             raise dash.exceptions.PreventUpdate
 
         # Retrieve wf_id and dc_id
-        wf_id, dc_id = return_mongoid(workflow_tag=workflow_selection, data_collection_tag=data_collection_selection)
+        wf_id, dc_id = return_mongoid(workflow_tag=workflow_selection, data_collection_tag=data_collection_selection, TOKEN=TOKEN)
 
         # Check if any button has been clicked more than stored
         button_clicked = False
@@ -99,7 +108,7 @@ def register_callbacks_stepper_part_three(app):
                     "Interactive",
                     "Table",
                 ]:
-                    df = load_deltatable_lite(wf_id, dc_id)
+                    df = load_deltatable_lite(wf_id, dc_id, TOKEN)
 
                     id = ids[btn_index[0]]
                     return return_design_component(component_selected, id, df, btn_component)
@@ -121,7 +130,7 @@ def register_callbacks_stepper_part_three(app):
                         last_button_index = components_list.index(last_button)
                         id = ids[last_button_index]
                         logger.info(f"id: {id}")
-                        df = load_deltatable_lite(wf_id, dc_id)
+                        df = load_deltatable_lite(wf_id, dc_id, TOKEN)
 
                         return return_design_component(last_button, id, df, btn_component)
                     elif last_button == "JBrowse2":
