@@ -190,9 +190,6 @@ def create_dashboard_layout(dashboard_id=None, local_data=None):
     logger.info(f"dashboard_id: {dashboard_id}")
     logger.info(f"depictio_dash_data: {depictio_dash_data}")
 
-    if not local_data:
-        local_data = {"logged_in": False, "access_token": None}
-
     # Init layout and children if depictio_dash_data is available, else set to empty
     if depictio_dash_data:
         if "stored_layout_data" in depictio_dash_data:
