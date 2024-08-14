@@ -108,7 +108,7 @@ def register_callbacks_stepper_part_three(app):
                     "Interactive",
                     "Table",
                 ]:
-                    df = load_deltatable_lite(wf_id, dc_id, TOKEN)
+                    df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
 
                     id = ids[btn_index[0]]
                     return return_design_component(component_selected, id, df, btn_component)
@@ -130,7 +130,7 @@ def register_callbacks_stepper_part_three(app):
                         last_button_index = components_list.index(last_button)
                         id = ids[last_button_index]
                         logger.info(f"id: {id}")
-                        df = load_deltatable_lite(wf_id, dc_id, TOKEN)
+                        df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
 
                         return return_design_component(last_button, id, df, btn_component)
                     elif last_button == "JBrowse2":

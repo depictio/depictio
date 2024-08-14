@@ -223,6 +223,7 @@ def get_columns_from_data_collection(
     data_collection_tag: str,
     TOKEN: str,
 ):
+    logger.info(f"get_columns_from_data_collection - TOKEN: {TOKEN}")
     # print("\n\n\n")
     # print("get_columns_from_data_collection")
 

@@ -51,6 +51,8 @@ def process_metadata_and_filter(metadata):
 
 
 def load_deltatable_lite(workflow_id: ObjectId, data_collection_id: ObjectId, metadata: dict = dict(), TOKEN: str = None):
+
+    logger.info(f"Load deltable lite - TOKEN: {TOKEN}")
     # Turn objectid to string
     workflow_id = str(workflow_id)
     data_collection_id = str(data_collection_id)
@@ -152,7 +154,7 @@ def iterative_join(workflow_id: ObjectId, joins_dict: dict, metadata_dict: dict)
     return merged_df
 
 
-def join_deltatables_dev(wf_id: str, joins: list, metadata: dict = dict()):
+def join_deltatables_dev(wf_id: str, joins: list, metadata: dict = dict(), TOKEN: str = None):
     # Initialize a dictionary to store loaded dataframes
     loaded_dfs = {}
     logger.info(f"Loading dataframes for workflow {wf_id}")
@@ -167,14 +169,14 @@ def join_deltatables_dev(wf_id: str, joins: list, metadata: dict = dict()):
             if dc_id1 not in loaded_dfs:
                 logger.info(f"Loading dataframe for dc_id1: {dc_id1}")
                 logger.info(f"Metadata: {[e for e in metadata if e['metadata']['dc_id'] == dc_id1]}")
-                loaded_dfs[dc_id1] = load_deltatable_lite(wf_id, dc_id1, [e for e in metadata if e["metadata"]["dc_id"] == dc_id1])
+                loaded_dfs[dc_id1] = load_deltatable_lite(wf_id, dc_id1, [e for e in metadata if e["metadata"]["dc_id"] == dc_id1], TOKEN=TOKEN)
                 logger.info(f"dc1 columns: {loaded_dfs[dc_id1].columns}")
                 logger.info(f"dc1 shape: {loaded_dfs[dc_id1].shape}")
             if dc_id2 not in loaded_dfs:
                 logger.info(f"Loading dataframe for dc_id2: {dc_id2}")
                 logger.info(f"Metadata: {[e for e in metadata if e['metadata']['dc_id'] == dc_id2]}")
 
-                loaded_dfs[dc_id2] = load_deltatable_lite(wf_id, dc_id2, [e for e in metadata if e["metadata"]["dc_id"] == dc_id2])
+                loaded_dfs[dc_id2] = load_deltatable_lite(wf_id, dc_id2, [e for e in metadata if e["metadata"]["dc_id"] == dc_id2], TOKEN=TOKEN)
                 logger.info(f"dc2 columns: {loaded_dfs[dc_id2].columns}")
                 logger.info(f"dc2 shape: {loaded_dfs[dc_id2].shape}")
 
