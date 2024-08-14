@@ -37,22 +37,10 @@ class Token(MongoModel):
         json_encoders = {ObjectId: lambda v: str(v)}
 
 
-class TokenData(BaseModel):
-    id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
-    user_id: PyObjectId
-    exp: Optional[int] = None
-    is_admin: bool = False
-
-    @root_validator(pre=True)
-    def set_default_id(cls, values):
-        if values is None or "_id" not in values or values["_id"] is None:
-            return values  # Ensure we don't proceed if values is None
-        values["_id"] = PyObjectId()
-        return values
-
 ###################
 # User management #
 ###################
+
 
 class UserBase(MongoModel):
     id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
@@ -60,12 +48,14 @@ class UserBase(MongoModel):
     is_admin: bool = False
     groups: List[str] = Field(default_factory=list)
 
+
 class User(UserBase):
     # id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
     # user_id: Optional[PyObjectId] = None
     # username: str
     # email: EmailStr
     tokens: List[Token] = Field(default_factory=list)
+    current_access_token: Optional[str] = None
     is_active: bool = True
     # is_admin: bool = False
     is_verified: bool = False
@@ -108,6 +98,7 @@ class User(UserBase):
                 group_ids.append("admin")
             values["groups"] = group_ids
         return values
+
 
 class Group(BaseModel):
     user_id: PyObjectId = Field(default_factory=PyObjectId)
@@ -178,7 +169,3 @@ class Permission(BaseModel):
             raise ValueError("A User cannot be both an owner and a viewer.")
 
         return values
-
-class TokenRequest(MongoModel):
-    user: User
-    token: Token

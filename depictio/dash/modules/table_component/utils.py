@@ -51,11 +51,12 @@ def build_table(**kwargs):
     build_frame = kwargs.get("build_frame", False)
     import polars as pl
     df = kwargs.get("df", pl.DataFrame())
+    TOKEN = kwargs.get("access_token")
 
 
 
     if df.is_empty():
-        df = load_deltatable_lite(wf_id, dc_id)
+        df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
 
     # Add dah aggrid filters to the columns
     for c in cols:

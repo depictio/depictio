@@ -51,6 +51,7 @@ def build_interactive(**kwargs):
     cols_json = kwargs.get("cols_json")
     value = kwargs.get("value", None)
     build_frame = kwargs.get("build_frame", False)
+    TOKEN = kwargs.get("access_token")
 
     func_name = agg_functions[column_type]["input_methods"][interactive_component_type]["component"]
 
@@ -73,7 +74,7 @@ def build_interactive(**kwargs):
     )
 
     # Load the delta table & get the specs
-    df = load_deltatable_lite(wf_id, dc_id)
+    df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
 
     # Handling different aggregation values
 

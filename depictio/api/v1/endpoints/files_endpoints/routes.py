@@ -1,29 +1,18 @@
 import collections
-import json
-import os
-import re
 from bson import ObjectId
 from fastapi import HTTPException, Depends, APIRouter
-import subprocess
 
-from botocore.exceptions import NoCredentialsError
 
 from depictio.api.v1.configs.config import settings, logger
 from depictio.api.v1.db import db
-from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_token
-from depictio.api.v1.s3 import s3_client
 from depictio.api.v1.endpoints.files_endpoints.models import File
-from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user
+from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.api.v1.endpoints.validators import validate_workflow_and_collection
 from depictio.api.v1.endpoints.workflow_endpoints.models import WorkflowRun
 from depictio.api.v1.models.base import convert_objectid_to_str
 
-from depictio.api.v1.endpoints.user_endpoints.auth import oauth2_scheme
 
 from depictio.api.v1.utils import (
-    # decode_token,
-    # public_key_path,
-    construct_full_regex,
     scan_files,
     scan_runs,
     serialize_for_mongo,
