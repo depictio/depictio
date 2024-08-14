@@ -12,7 +12,7 @@ import httpx
 import numpy as np
 from depictio.dash.layouts.draggable_scenarios.add_component import add_new_component
 
-from depictio.api.v1.configs.config import API_BASE_URL, TOKEN, logger
+from depictio.api.v1.configs.config import API_BASE_URL, logger
 
 from depictio.dash.layouts.draggable_scenarios.interactive_component_update import update_interactive_component
 from depictio.dash.layouts.stepper import create_stepper_output
@@ -128,6 +128,7 @@ def register_callbacks_draggable(app):
         State("edit-dashboard-mode-button", "checked"),
         Input("edit-dashboard-mode-button", "checked"),
         State("url", "pathname"),
+        State("local-store", "data"),
         prevent_initial_call=True,
     )
     def populate_draggable(
@@ -150,7 +151,14 @@ def register_callbacks_draggable(app):
         edit_dashboard_mode_button,
         input_edit_dashboard_mode_button,
         pathname,
+        local_data,
     ):
+        
+        if not local_data:
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+        
+        TOKEN = local_data["access_token"]
+
         logger.info("btn_done_clicks: {}".format(btn_done_clicks))
         logger.info("stored_add_button: {}".format(stored_add_button))
 
@@ -308,7 +316,7 @@ def register_callbacks_draggable(app):
             logger.info("Interactive component triggered")
             logger.info("Interactive component values: {}".format(interactive_component_values))
 
-            new_children = update_interactive_component(stored_metadata, interactive_components_dict, draggable_children, switch_state=edit_dashboard_mode_button)
+            new_children = update_interactive_component(stored_metadata, interactive_components_dict, draggable_children, switch_state=edit_dashboard_mode_button, TOKEN=TOKEN)
             return new_children, dash.no_update, new_children, dash.no_update
 
         elif "edit-dashboard-mode-button" in triggered_input:
@@ -1021,32 +1029,10 @@ def register_callbacks_draggable(app):
     #         return dash.no_update
 
 
-def design_draggable(data, init_layout, init_children):
-    # # Generate core layout based on data availability
-    # if not data:
-    #     core = html.Div(
-    #         [
-    #             html.Hr(),
-    #             dmc.Center(dmc.Group(
-    #                 [
-    #                     DashIconify(icon="feather:info", color="orange", width=45),
-    #                     dmc.Text(
-    #                         "No data available.",
-    #                         variant="gradient",
-    #                         gradient={"from": "red", "to": "yellow", "deg": 45},
-    #                         style={"fontSize": 40, "textAlign": "center"},
-    #                     ),
-    #                 ]
-    #             )),
-    #             dmc.Text(
-    #                 "Please first register workflows and data using Depictio CLI.",
-    #                 variant="gradient",
-    #                 gradient={"from": "red", "to": "yellow", "deg": 45},
-    #                 style={"fontSize": 30, "textAlign": "center"},
-    #             ),
-    #         ]
-    #     )
-    # else:
+def design_draggable(data, init_layout, init_children, local_data):
+    # Generate core layout based on data availability
+
+    TOKEN = local_data["access_token"]
 
     workflows = httpx.get(
         f"{API_BASE_URL}/depictio/api/v1/workflows/get_all_workflows",

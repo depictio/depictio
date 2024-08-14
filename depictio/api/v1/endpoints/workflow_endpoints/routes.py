@@ -1,21 +1,16 @@
-import collections
 from bson import ObjectId
 from fastapi import HTTPException, Depends, APIRouter
 from pymongo import ReturnDocument
 
-from depictio.api.v1.configs.config import settings, logger
-from depictio.api.v1.db import workflows_collection, data_collections_collection, runs_collection, files_collection
+from depictio.api.v1.configs.config import logger
+from depictio.api.v1.db import workflows_collection
 from depictio.api.v1.endpoints.deltatables_endpoints.routes import delete_deltatable
 from depictio.api.v1.endpoints.files_endpoints.routes import delete_files
-from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_token
 from depictio.api.v1.endpoints.workflow_endpoints.utils import compare_models
 from depictio.api.v1.models.base import convert_objectid_to_str
 from depictio.api.v1.models.top_structure import Workflow
-from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user
-from depictio.api.v1.s3 import s3_client
+from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 
-
-from depictio.api.v1.endpoints.user_endpoints.auth import oauth2_scheme
 
 # Define the router
 workflows_endpoint_router = APIRouter()
@@ -86,9 +81,6 @@ async def get_workflow_from_args(name: str, engine: str, current_user: str = Dep
     if len(workflows) > 1:
         raise HTTPException(status_code=500, detail=f"Multiple workflows found for the current user with name {name} and engine {engine}.")
 
-    # workflows_cursor = [Workflow(**convert_objectid_to_str(w)) for w in list(workflows_collection.find(query))]
-    # workflows = convert_objectid_to_str(list(workflows_cursor))
-
     workflows = convert_objectid_to_str(workflows)
 
     return workflows[0]
@@ -101,8 +93,6 @@ async def get_workflow_from_id(workflow_id: str, current_user: str = Depends(get
 
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
-
-    # current_user = fetch_user_from_token(token)
 
     # Assuming the 'current_user' now holds a 'user_id' as an ObjectId after being parsed in 'get_current_user'
     user_id = current_user.id  # This should be the ObjectId

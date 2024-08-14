@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Union
+from typing import List, Optional, Union
 import bleach
 import re
 from bson import ObjectId
@@ -12,6 +12,7 @@ from depictio.api.v1.models.base import MongoModel, PyObjectId
 from depictio.api.v1.models.data_collections_custom_models.jbrowse_models import DCJBrowse2Config
 from depictio.api.v1.models.data_collections_custom_models.table_models import DCTableConfig
 
+
 class WildcardRegexBase(BaseModel):
     name: str
     wildcard_regex: str
@@ -24,9 +25,10 @@ class WildcardRegexBase(BaseModel):
         except re.error:
             raise ValueError("Invalid regex pattern")
 
+
 class Regex(BaseModel):
     pattern: str
-    type: str 
+    type: str
     wildcards: Optional[List[WildcardRegexBase]] = None
 
     @validator("pattern")
@@ -37,13 +39,13 @@ class Regex(BaseModel):
         except re.error:
             raise ValueError("Invalid regex pattern")
 
-
     @validator("type")
     def validate_type(cls, v):
         allowed_values = ["file-based", "path-based"]
         if v.lower() not in allowed_values:
             raise ValueError(f"type must be one of {allowed_values}")
         return v
+
 
 class TableJoinConfig(BaseModel):
     on_columns: List[str]
@@ -67,15 +69,6 @@ class DataCollectionConfig(MongoModel):
     dc_specific_properties: Union[DCTableConfig, DCJBrowse2Config]
     join: Optional[TableJoinConfig] = None
 
-
-    # @validator("files_regex")
-    # def validate_files_regex(cls, v):
-    #     try:
-    #         re.compile(v)
-    #         return v
-    #     except re.error:
-    #         raise ValueError("Invalid regex pattern")
-
     @validator("type")
     def validate_type(cls, v):
         allowed_values = ["table", "jbrowse2"]
@@ -93,17 +86,11 @@ class DataCollectionConfig(MongoModel):
         raise ValueError("Unsupported type")
 
 
-
 class DataCollection(MongoModel):
     id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
-    # _id: Optional[PyObjectId] = None
-    # id: Optional[PyObjectId] = Field(default=None, alias='_id')
     data_collection_tag: str
-    description: str = None  # Optional description
+    description: str = None
     config: DataCollectionConfig
-    # workflow_id: Optional[str]
-
-    # registration_time: datetime = datetime.now()
 
     class Config:
         arbitrary_types_allowed = True
@@ -119,9 +106,5 @@ class DataCollection(MongoModel):
 
     def __eq__(self, other):
         if isinstance(other, DataCollection):
-            return all(
-                getattr(self, field) == getattr(other, field)
-                for field in self.__fields__.keys()
-                if field not in ['id', 'registration_time']
-            )
+            return all(getattr(self, field) == getattr(other, field) for field in self.__fields__.keys() if field not in ["id", "registration_time"])
         return NotImplemented

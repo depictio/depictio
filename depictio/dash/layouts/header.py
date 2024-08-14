@@ -1,14 +1,11 @@
 import datetime
-import json
-import sys
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
-from dash import html, dcc, Input, Output, State, ALL, MATCH
+from dash import html, dcc, Input, Output, State, ALL
 import dash
 import httpx
 
-from depictio.dash.utils import analyze_structure_and_get_deepest_type, get_size
-from depictio.api.v1.configs.config import API_BASE_URL, TOKEN, logger
+from depictio.api.v1.configs.config import API_BASE_URL, logger
 
 current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -40,13 +37,9 @@ def register_callbacks_header(app):
         edit_dashboard_mode_button,
         add_button,
         interactive_component_values,
-        pathname
+        pathname,
     ):
-
-
         if n_clicks:
-
-
             dashboard_id = pathname.split("/")[-1]
 
             logger.info(f"save_data_dashboard INSIDE")
@@ -60,10 +53,8 @@ def register_callbacks_header(app):
                 else:
                     stored_metadata_indexes.append(elem["index"])
 
-
             # Get existing metadata for the dashboard
             dashboard_data = httpx.get(f"{API_BASE_URL}/depictio/api/v1/dashboards/get/{dashboard_id}").json()
-
 
             # Replace the existing metadata with the new metadata
             dashboard_data["stored_metadata"] = stored_metadata
@@ -72,7 +63,7 @@ def register_callbacks_header(app):
             dashboard_data["stored_add_button"] = add_button
             dashboard_data["version"] = "1"
             dashboard_data["last_saved_ts"] = str(current_time)
-            
+
             logger.info(f"Dashboard data: {dashboard_data}")
 
             response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/dashboards/save/{dashboard_id}", json=dashboard_data)
@@ -81,10 +72,6 @@ def register_callbacks_header(app):
             else:
                 logger.warn(f"Failed to save dashboard data: {response.json()}")
 
-            # dashboard_data["stored_children_data"] = children
-
-            # with open("/app/data/depictio_data.json", "w") as file:
-            #     json.dump(dashboard_data, file)
             return []
         return dash.no_update
 
@@ -129,14 +116,21 @@ def register_callbacks_header(app):
         Output("draggable", "isDraggable"),
         Output("draggable", "isResizable"),
         Input("edit-dashboard-mode-button", "checked"),
+        State("local-store", "data"),
         # prevent_initial_call=True,
     )
-    def toggle_buttons(switch_state):
+    def toggle_buttons(switch_state, local_store):
         logger.info("\n\n\n")
         logger.info("toggle_buttons")
         logger.info(switch_state)
-        logger.info("TOKEN: " + str(TOKEN))
         logger.info("API_BASE_URL: " + str(API_BASE_URL))
+
+        if not local_store["access_token"]:
+            switch_state = False
+            return [True] * 8
+        
+        TOKEN = local_store["access_token"]
+
 
         workflows = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/workflows/get_all_workflows",
@@ -145,18 +139,6 @@ def register_callbacks_header(app):
         if not workflows:
             switch_state = False
             return [True] * 8
-
-        # # Check if data is available in the backend
-        # workflows_data = httpx.get(
-        #     f"{API_BASE_URL}/depictio/api/v1/workflows/get_all_workflows",
-        #     headers={
-        #         "Authorization": f"Bearer {TOKEN}",
-        #     },
-        # )
-        # # print("workflows_data: ", workflows_data)
-        # # workflows_data = workflows_data.json()
-
-        # # print("workflows_data 2:",  workflows_data, type(workflows_data))
 
         return [not switch_state] * 6 + [switch_state] * 2
 
@@ -228,7 +210,7 @@ def design_header(data):
             data["stored_add_button"] = {"count": 0}
         if "stored_edit_dashboard_mode_button" not in data:
             data["stored_edit_dashboard_mode_button"] = [int(0)]
-            
+
     init_nclicks_add_button = data["stored_add_button"] if data else {"count": 0}
     init_nclicks_edit_dashboard_mode_button = data["stored_edit_dashboard_mode_button"] if data else [int(0)]
 
@@ -368,8 +350,6 @@ def design_header(data):
         disabled=disabled,
     )
 
-
-                    
     card_section = dbc.Row(
         [
             dmc.Card(
@@ -377,9 +357,7 @@ def design_header(data):
                     dmc.CardSection(
                         [
                             dmc.Badge(f"Owner: {data['owner']}", color="blue", leftSection=DashIconify(icon="mdi:account", width=16, color="grey")),
-                            dmc.Badge(
-                                f"Last saved: {data['last_saved_ts']}", color="green", leftSection=DashIconify(icon="mdi:clock-time-four-outline", width=16, color="grey")
-                            ),
+                            dmc.Badge(f"Last saved: {data['last_saved_ts']}", color="green", leftSection=DashIconify(icon="mdi:clock-time-four-outline", width=16, color="grey")),
                         ]
                     ),
                 ],
@@ -426,7 +404,7 @@ def design_header(data):
                 align="center",
                 spacing="sm",
                 style={"border": "1px solid lightgrey", "padding": "10px", "margin": "10px 0"},
-            )
+            ),
         ],
     )
 
@@ -439,9 +417,6 @@ def design_header(data):
         variant="transparent",
         style={"marginRight": "10px"},
     )
-
-
-
 
     offcanvas_parameters = dbc.Offcanvas(
         id="offcanvas-parameters",
@@ -557,7 +532,6 @@ def design_header(data):
             dbc.Col(
                 [
                     card_section,
-
                 ],
                 width=2,
                 align="end",
@@ -566,7 +540,6 @@ def design_header(data):
             dbc.Col(
                 [
                     dmc.Text(f'{data["title"]}', style=title_style),
-
                 ],
                 width=2,
                 align="end",
@@ -589,27 +562,6 @@ def design_header(data):
             ),
             open_offcanvas_parameters_button,
             offcanvas_parameters,
-            # html.Div(
-            #     [
-            #         dbc.Col(
-            #             [
-            #                 dbc.Row(edit_switch, style={"paddingBottom": "15px"}),
-            #                 dbc.Row(
-            #                     toggle_interactivity,
-            #                 ),
-            #             ],
-            #             width="auto",
-            #         ),
-            #         dbc.Col(
-            #             [
-            #                 share_actionicon,
-            #                 modal_share_dashboard,
-            #             ],
-            #             width=1,
-            #         ),
-            #     ],
-            #     style={"display": "flex", "alignItems": "center", "justifyContent": "space-between", "padding": "0 50px 0 0"},
-            # ),
         ],
         style=header_style,
     )
@@ -639,24 +591,10 @@ def enable_box_edit_mode(box, switch_state=True):
         color="red",
         leftIcon=DashIconify(icon="mdi:trash-can-outline", width=16, color="white"),
     )
-    # remove_button = dbc.Button(
-    #     "Remove",
-    #     id={"type": "remove-box-button", "index": f"{btn_index}"},
-    #     color="danger",
-    # )
-
-    # reset_button = dbc.Button(
-    #     "Reset",
-    #     id={"type": "reset-box-button", "index": f"{btn_index}"},
-    #     color="info",
-    #     style={"margin-left": "24px"},
-    # )
 
     if switch_state:
         box_components_list = [remove_button, box]
-        # box_components_list = [remove_button, edit_button, box]
-        # if box["props"]["children"]["props"]["children"][1]["props"]["id"]["type"] == "interactive-component":
-        #     box_components_list.append(reset_button)
+
     else:
         box_components_list = [box]
 
@@ -714,16 +652,9 @@ def enable_box_edit_mode_dev(sub_child, switch_state=True):
 
         # If switch_state is false and buttons are present, remove them
         elif not switch_state and edit_button_exists and remove_button_exists:
-            # logger.info("Removing buttons")
             # Assuming the last element is the main content box
-            # logger.info(analyze_structure(box))
-            # logger.info(box)
             content_box = box["props"]["children"][-1]
-            # logger.info(content_box)
             box["props"]["children"] = [content_box]
-            # logger.info(box)
 
     sub_child["props"]["children"] = box
-    # logger.info(sub_child)
-    # Return the modified sub_child structure
     return sub_child

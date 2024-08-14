@@ -1,13 +1,11 @@
-from datetime import datetime
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
-from dash import html, dcc, Input, Output, State
+from dash import html, Input, Output, State
 import dash
-from depictio.api.v1.db import users_collection
 from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_token
-from depictio.api.v1.endpoints.user_endpoints.utils import find_user, edit_password, check_password
-from dash_extensions.enrich import DashProxy, html, Input, Output, State
+from depictio.api.v1.endpoints.user_endpoints.utils import edit_password, check_password
+from dash_extensions.enrich import html, Input, Output, State
 from dash_extensions import EventListener
 from dash.exceptions import PreventUpdate
 
@@ -113,9 +111,6 @@ def register_profile_callbacks(app):
         [
             Input("edit-password", "n_clicks"),
             Input("save-password", "n_clicks"),
-            # Input("old-password", "value"),
-            # Input("new-password", "value"),
-            # Input("confirm-new-password", "value"),
         ],
         [
             State("edit-password-modal", "open"),

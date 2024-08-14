@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
-from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user, oauth2_scheme
+from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 
-from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_email, fetch_user_from_token
+from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_email
 from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.endpoints.user_endpoints.models import UserBase
 from depictio.api.v1.models.base import convert_objectid_to_str
