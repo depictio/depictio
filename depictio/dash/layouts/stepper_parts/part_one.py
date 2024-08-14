@@ -188,7 +188,7 @@ def register_callbacks_stepper_part_one(app):
             layout = [dc_main_info, html.Hr(), main_info, html.Hr()]
             if dc_specs["config"]["type"] == "Table":
                 logger.info(f"PART 1 - TOKEN: {TOKEN}")
-                df = load_deltatable_lite(workflow_id, data_collection_id, TOKEN)
+                df = load_deltatable_lite(workflow_id, data_collection_id, TOKEN=TOKEN)
                 cols = get_columns_from_data_collection(workflow_selection, data_collection_selection, TOKEN)
                 logger.info(f"Columns: {cols}")
                 columnDefs = [{"field": c, "headerTooltip": f"Type: {e['type']}"} for c, e in cols.items()]
