@@ -127,6 +127,9 @@ async def get_dc_joined(workflow_id: str, current_user: str = Depends(get_curren
     Retrieve join details for the data collections in a workflow.
     """
 
+    logger.info(f"Workflow ID: {workflow_id}")
+    logger.info(f"Current user: {current_user}")
+
     # Retrieve workflow
     workflow = await get_workflow_from_id(workflow_id, current_user=current_user)
     workflow = workflow.mongo()
