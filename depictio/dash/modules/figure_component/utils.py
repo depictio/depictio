@@ -58,6 +58,7 @@ def build_figure(**kwargs):
     build_frame = kwargs.get("build_frame", False)
     import polars as pl
     df = kwargs.get("df", pl.DataFrame())
+    TOKEN = kwargs.get("access_token")
 
 
 
@@ -74,7 +75,7 @@ def build_figure(**kwargs):
 
     # wf_id, dc_id = return_mongoid(workflow_id=wf_id, data_collection_id=dc_id)
     if df.is_empty():
-        df = load_deltatable_lite(wf_id, dc_id)
+        df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
 
     figure = render_figure(dict_kwargs, visu_type, df)
 

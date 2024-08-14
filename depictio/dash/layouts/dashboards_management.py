@@ -1,11 +1,8 @@
 from datetime import datetime
 import json
-import dash_bootstrap_components as dbc
-import re
 import dash
 from dash import html, dcc, ctx, MATCH, Input, Output, State, ALL
 import dash_mantine_components as dmc
-from dash_iconify import DashIconify
 from depictio.api.v1.db import dashboards_collection
 from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_token
@@ -143,12 +140,6 @@ def render_dashboard_list_section(email):
 
 
 def register_callbacks_dashboards_management(app):
-    # @app.callback(Output("landing-page", "style"), [Input("modal-store", "data")])
-    # def show_landing_page(data):
-    #     if data["submitted"]:
-    #         return {"display": "block"}  # Show landing page
-    #     return {"display": "none"}  # Hide landing page
-
     def create_dashboards_view(dashboards):
         dashboards_view = [
             dmc.Paper(
@@ -169,7 +160,6 @@ def register_callbacks_dashboards_management(app):
                                 id={"type": "view-dashboard-button", "index": dashboard["dashboard_id"]},
                                 variant="outline",
                                 color="dark",
-                                # style={"marginRight": 5},
                             ),
                             href=f"/dashboard/{dashboard['dashboard_id']}",
                         ),
@@ -178,13 +168,11 @@ def register_callbacks_dashboards_management(app):
                             id={"type": "delete-dashboard-button", "index": dashboard["dashboard_id"]},
                             variant="outline",
                             color="red",
-                            # style={"marginRight": 5},
                         ),
                         dmc.Modal(
                             opened=False,
                             id={"type": "delete-confirmation-modal", "index": dashboard["dashboard_id"]},
                             centered=True,
-                            # title="Confirm Deletion",
                             children=[
                                 dmc.Title("Are you sure you want to delete this dashboard?", order=3, color="black", style={"marginBottom": 20}),
                                 dmc.Button(
@@ -206,7 +194,6 @@ def register_callbacks_dashboards_management(app):
                                 ),
                             ],
                         ),
-                        # dcc.Store(id={"type": "dashboard-delete-index", "index": dashboard["index"]}, storage_type="session", data={})
                     ],
                     align="center",
                     position="apart",
@@ -416,7 +403,3 @@ def register_callbacks_dashboards_management(app):
             return dash.no_update
 
         return dash.no_update
-
-
-# if __name__ == "__main__":
-#     app.run_server(debug=True)

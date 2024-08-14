@@ -1,4 +1,3 @@
-import ast
 from dash import html, Input, Output, State, ALL, MATCH, ctx
 import dash
 import dash_bootstrap_components as dbc
@@ -7,11 +6,7 @@ from dash_iconify import DashIconify
 import httpx
 
 # Depictio imports
-from depictio.dash.utils import (
-    list_data_collections_for_dropdown,
-    list_workflows_for_dropdown,
-)
-from depictio.api.v1.configs.config import API_BASE_URL, TOKEN, logger
+from depictio.api.v1.configs.config import API_BASE_URL, logger
 
 
 min_step = 0
@@ -34,10 +29,16 @@ def register_callbacks_stepper(app):
         Output({"type": "workflow-selection-label", "index": MATCH}, "data"),
         Output({"type": "workflow-selection-label", "index": MATCH}, "value"),
         Input({"type": "btn-option", "index": MATCH, "value": ALL}, "n_clicks"),
+        State("local-store", "data"),
     )
-    def set_workflow_options(n_clicks):
+    def set_workflow_options(n_clicks, local_store):
         logger.info(f"CTX Triggered ID: {ctx.triggered_id}")
         logger.info(f"CTX triggered: {ctx.triggered}")
+
+        if not local_store:
+            raise dash.exceptions.PreventUpdate
+
+        TOKEN = local_store["access_token"]
 
         if isinstance(ctx.triggered_id, dict):
             if ctx.triggered_id["type"] == "btn-option":
@@ -73,12 +74,18 @@ def register_callbacks_stepper(app):
         Output({"type": "datacollection-selection-label", "index": MATCH}, "value"),
         Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
         State({"type": "workflow-selection-label", "index": MATCH}, "id"),
-        Input({"type": "btn-option", "index": MATCH, "value": ALL}, "n_clicks")
+        Input({"type": "btn-option", "index": MATCH, "value": ALL}, "n_clicks"),
+        State("local-store", "data"),
         # prevent_initial_call=True,
     )
-    def set_datacollection_options(selected_workflow, id, n_clicks):
+    def set_datacollection_options(selected_workflow, id, n_clicks, local_store):
         logger.info(f"CTX Triggered ID: {ctx.triggered_id}")
         logger.info(f"CTX triggered: {ctx.triggered}")
+
+        if not local_store:
+            raise dash.exceptions.PreventUpdate
+        
+        TOKEN = local_store["access_token"]
 
         if isinstance(ctx.triggered_id, dict):
             if ctx.triggered_id["type"] == "btn-option":
@@ -171,34 +178,6 @@ def register_callbacks_stepper(app):
 
         return next_step, disable_next
 
-    # @app.callback(
-    #     Output({"type": "stepper-basic-usage", "index": MATCH}, "active"),
-    #     Output({"type": "next-basic-usage", "index": MATCH}, "disabled"),
-    #     Input({"type": "back-basic-usage", "index": MATCH}, "n_clicks"),
-    #     Input({"type": "next-basic-usage", "index": MATCH}, "n_clicks"),
-    #     Input({"type": "btn-option", "index": MATCH, "value": ALL}, "n_clicks"),
-    #     State({"type": "stepper-basic-usage", "index": MATCH}, "active"),
-    #     prevent_initial_call=True,
-    # )
-    # def update(back, next_, btn_component, current):
-    #     if back is None and next_ is None:
-    #         if btn_component is not None:
-    #             disable_next = False
-    #         else:
-    #             disable_next = True
-
-    #         return current, disable_next
-    #     else:
-    #         button_id = ctx.triggered_id
-    #         step = current if current is not None else active
-
-    #         if button_id["type"] == "back-basic-usage":
-    #             step = step - 1 if step > min_step else step
-    #             return step, False
-
-    #         else:
-    #             step = step + 1 if step < max_step else step
-    #             return step, False
 
 
 def create_stepper_output(n, active):
@@ -283,25 +262,6 @@ def create_stepper_output(n, active):
         ]
     )
 
-    # index = n
-    # new_element = html.Div(
-    #     [
-    #         dbc.Button("Done", id={"type": "btn-done", "index": index}),
-    #         html.Div(
-    #             html.Div(
-    #                 [
-    #                     f"TEST-{index}",
-    #                     # html.Div("TOTOTOTO"),
-    #                     buttons_list
-    #                     # stepper_dropdowns
-    #                 ],
-    #                 id={"type": "TEST", "index": index},
-    #             ),
-    #             id={"type": "component-container", "index": index},
-    #         ),
-    #     ]
-    # )
-    # logger.info(f"New element: {new_element}")
 
     stepper = dmc.Stepper(
         id={"type": "stepper-basic-usage", "index": n},
@@ -314,9 +274,6 @@ def create_stepper_output(n, active):
                 description="Select your component type",
                 children=buttons_list,
                 id={"type": "stepper-step-2", "index": n},
-                # icon=DashIconify(icon="icon-park-outline:puzzle", width=30, color="white"),
-                # progressIcon=DashIconify(icon="icon-park-outline:puzzle", width=30, color="white"),
-                # completedIcon=DashIconify(icon="icon-park-solid:puzzle", width=30, color="white"),
             ),
             dmc.StepperStep(
                 label="Data selection",

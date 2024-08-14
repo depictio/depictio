@@ -1,14 +1,10 @@
 # from gridfs import GridFS
-from datetime import time
-from fastapi import HTTPException
 import pymongo
 import redis
 
 # from depictio.api.v1.admin_creation_startup import create_admin_user
-from depictio.api.v1.configs.config import settings, MONGODB_URL, logger
+from depictio.api.v1.configs.config import settings, MONGODB_URL
 from depictio.api.v1.db_init import initialize_db
-from depictio.api.v1.endpoints.user_endpoints.models import User
-from depictio.api.v1.endpoints.user_endpoints.utils import add_token, hash_password, verify_password
 
 client = pymongo.MongoClient(MONGODB_URL)
 db = client[settings.mongodb.db_name]

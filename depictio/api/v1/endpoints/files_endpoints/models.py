@@ -8,7 +8,7 @@ from pydantic import (
     validator,
 )
 from depictio.api.v1.endpoints.datacollections_endpoints.models import DataCollection, WildcardRegexBase
-from depictio.api.v1.endpoints.user_endpoints.models import Permission, UserBase
+from depictio.api.v1.endpoints.user_endpoints.models import Permission
 from depictio.api.v1.models.base import MongoModel, PyObjectId
 
 
@@ -39,15 +39,6 @@ class File(MongoModel):
             return values  # Ensure we don't proceed if values is None
         values["id"] = PyObjectId()
         return values
-
-    # @validator("S3_location")
-    # def validate_S3_location(cls, value):
-    #     if value is not None:
-    #         if not isinstance(value, str):
-    #             raise ValueError("S3_location must be a string")
-    #         if not value.startswith("s3://"):
-    #             raise ValueError("Invalid S3 location")
-    #     return value
 
     @validator("creation_time", pre=True, always=True)
     def validate_creation_time(cls, value):

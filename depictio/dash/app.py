@@ -135,7 +135,7 @@ def display_page(pathname, local_data):
 def handle_url(pathname, local_data):
 
     if local_data["logged_in"]:
-        return handle_authenticated_user(pathname)
+        return handle_authenticated_user(pathname, local_data)
     else:
         return handle_unauthenticated_user(pathname)
 
@@ -155,14 +155,14 @@ def handle_unauthenticated_user(pathname):
         return create_users_management_layout(), "/auth"
 
 
-def handle_authenticated_user(pathname):
+def handle_authenticated_user(pathname, local_data):
     logger.info("User logged in")
     if pathname is None:
         return dash.no_update, "/"
     elif pathname.startswith("/dashboard/"):
         dashboard_id = pathname.split("/")[-1]
         logger.info(f"dashboard_id: {dashboard_id}")
-        return create_dashboard_layout(dashboard_id=dashboard_id), pathname
+        return create_dashboard_layout(dashboard_id=dashboard_id, local_data=local_data), pathname
     elif pathname == "/profile":
         return create_profile_layout(), pathname
     elif pathname == "/tokens":
@@ -184,11 +184,14 @@ def create_profile_layout():
 def create_tokens_management_layout():
     return tokens_management_layout
 
-def create_dashboard_layout(dashboard_id=None):
+def create_dashboard_layout(dashboard_id=None, local_data=None):
     # Load depictio depictio_dash_data from JSON
     depictio_dash_data = load_depictio_data(dashboard_id)
     logger.info(f"dashboard_id: {dashboard_id}")
     logger.info(f"depictio_dash_data: {depictio_dash_data}")
+
+    if not local_data:
+        local_data = {"logged_in": False, "access_token": None}
 
     # Init layout and children if depictio_dash_data is available, else set to empty
     if depictio_dash_data:
@@ -205,7 +208,7 @@ def create_dashboard_layout(dashboard_id=None):
     header, backend_components = design_header(depictio_dash_data)
 
     # Generate draggable layout
-    core = design_draggable(depictio_dash_data, init_layout, init_children)
+    core = design_draggable(depictio_dash_data, init_layout, init_children, local_data)
 
     return dbc.Container(
         [

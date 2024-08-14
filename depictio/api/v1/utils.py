@@ -1,5 +1,3 @@
-
-
 from datetime import datetime
 from pathlib import PosixPath
 import dash_mantine_components as dmc
@@ -17,22 +15,6 @@ from depictio.api.v1.endpoints.files_endpoints.models import File
 from depictio.api.v1.endpoints.workflow_endpoints.models import WorkflowConfig, WorkflowRun
 from depictio.api.v1.models.top_structure import RootConfig
 from depictio.api.v1.models_utils import get_config, validate_all_workflows, validate_config
-
-# def return_user_from_id(token: str) -> dict:
-#     try:
-#         payload = jwt.decode(token, PUBLIC_KEY, algorithms=[ALGORITHM])
-#         user_id = payload.get("sub")
-#         if user_id is None:
-#             typer.echo("Token is invalid or expired.")
-#             raise typer.Exit(code=1)
-#         # Fetch user from the database or wherever it is stored
-#         user = fetch_user_by_id(user_id)
-#         return user
-#     except JWTError as e:
-#         typer.echo(f"Token verification failed: {e}")
-#         raise typer.Exit(code=1)
-
-
 
 
 # FIXME: update model & function using a list of dict instead of a dict

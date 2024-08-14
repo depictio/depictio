@@ -6,6 +6,9 @@ from cryptography.hazmat.backends import default_backend
 from depictio.api.v1.configs.logging import logger   
 
 
+# Algorithm used for signing
+ALGORITHM = "RS256"
+
 # Key file paths
 private_key_path = "depictio/private_key.pem"
 public_key_path = "depictio/public_key.pem"
@@ -41,3 +44,13 @@ def run_generate_keys():
     if not os.path.exists(private_key_path) or not os.path.exists(public_key_path):
         logger.warning("Key files not found. Generating new keys.")
         generate_keys()
+
+def load_private_key(private_key_path=private_key_path):
+    """Load the private key from the file."""
+    with open(private_key_path, "rb") as f:
+        return serialization.load_pem_private_key(f.read(), password=None, backend=default_backend())
+    
+def load_public_key(public_key_path=public_key_path):
+    """Load the public key from the file."""
+    with open(public_key_path, "rb") as f:
+        return serialization.load_pem_public_key(f.read(), backend=default_backend())

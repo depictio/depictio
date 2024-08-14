@@ -14,7 +14,7 @@ from botocore.exceptions import NoCredentialsError
 from depictio.api.v1.endpoints.files_endpoints.models import File
 
 from depictio.api.v1.endpoints.jbrowse_endpoints.models import LogData
-from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user
+from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.api.v1.endpoints.validators import validate_workflow_and_collection
 from depictio.api.v1.endpoints.workflow_endpoints.models import Workflow
 from depictio.api.v1.models.base import convert_objectid_to_str

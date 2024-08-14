@@ -1,12 +1,10 @@
-from bson import ObjectId
 from fastapi import Depends, HTTPException, APIRouter
 
 from depictio.api.v1.db import dashboards_collection
 from depictio.api.v1.endpoints.dashboards_endpoints.models import DashboardData
-from depictio.api.v1.models.base import convert_objectid_to_str
 from depictio.api.v1.configs.logging import logger
 
-from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user, oauth2_scheme
+from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 
 dashboards_endpoint_router = APIRouter()
 
