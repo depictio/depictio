@@ -52,7 +52,6 @@ def process_metadata_and_filter(metadata):
 
 def load_deltatable_lite(workflow_id: ObjectId, data_collection_id: ObjectId, metadata: dict = dict(), TOKEN: str = None):
 
-    logger.info(f"Load deltable lite - TOKEN: {TOKEN}")
     # Turn objectid to string
     workflow_id = str(workflow_id)
     data_collection_id = str(data_collection_id)
@@ -75,7 +74,7 @@ def load_deltatable_lite(workflow_id: ObjectId, data_collection_id: ObjectId, me
 
         # Process metadata to generate filter list
         filter_list = process_metadata_and_filter(metadata)
-        # logger.info(f"filter_list: {filter_list}")
+        logger.info(f"filter_list: {filter_list}")
 
         # Apply filters if any
         if filter_list:
@@ -91,6 +90,13 @@ def load_deltatable_lite(workflow_id: ObjectId, data_collection_id: ObjectId, me
 
 
 def iterative_join(workflow_id: ObjectId, joins_dict: dict, metadata_dict: dict, TOKEN: str = None):
+
+    logger.info(f"worfklow_id: {workflow_id}")
+    logger.info(f"joins_dict: {joins_dict}")
+    logger.info(f"metadata_dict: {metadata_dict}")
+
+
+
     # Initialize a dictionary to store loaded dataframes
     loaded_dfs = {}
     used_dcs = set()
@@ -101,8 +107,10 @@ def iterative_join(workflow_id: ObjectId, joins_dict: dict, metadata_dict: dict,
     for join_key_tuple in joins_dict.keys():
         for dc_id in join_key_tuple:
             if dc_id not in loaded_dfs:
+                logger.info(f"Metadata dict: {metadata_dict}")
                 # Filter metadata for the current dc_id
                 relevant_metadata = [md for md in metadata_dict.values() if md["metadata"]["dc_id"] == dc_id]
+                logger.info(f"Relevant metadata: {relevant_metadata}")
                 for e in relevant_metadata:
                     values_dict[e["metadata"]["dc_id"]] = e["value"]
                 logger.info(f"Loading dataframe for dc_id: {dc_id} with metadata: {relevant_metadata}")
