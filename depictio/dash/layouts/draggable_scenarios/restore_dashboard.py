@@ -9,7 +9,7 @@ from depictio.dash.modules.jbrowse_component.utils import build_jbrowse
 from depictio.dash.modules.table_component.utils import build_table
 
 
-def load_depictio_data(dashboard_id):
+def load_depictio_data(dashboard_id, local_data):
     build_functions = {
         "card": build_card,
         "figure": build_figure,
@@ -17,6 +17,10 @@ def load_depictio_data(dashboard_id):
         "table": build_table,
         "jbrowse": build_jbrowse,
     }
+
+    if not local_data["access_token"]:
+        logger.warning("Access token not found.")
+        return None
 
     dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
     logger.info(f"load_depictio_data : {dashboard_data}")
@@ -27,6 +31,7 @@ def load_depictio_data(dashboard_id):
         if "stored_metadata" in dashboard_data:
             for child_metadata in dashboard_data["stored_metadata"]:
                 child_metadata["build_frame"] = True
+                child_metadata["access_token"] = local_data["access_token"]
                 logger.info(child_metadata)
                 logger.info(f"type of child_metadata : {type(child_metadata)}")
 
