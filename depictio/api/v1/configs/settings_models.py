@@ -11,7 +11,7 @@ class Collections(BaseSettings):
     users_collection: str = "users"
     deltatables_collection: str = "deltatables"
     jbrowse_collection: str = "jbrowse_collection"
-    dashboards_collection: str = "dashboards_collection"
+    dashboards_collection: str = "dashboards"
     initialization_collection: str = "initialization"
 
 class MongoConfig(BaseSettings):
