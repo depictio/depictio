@@ -71,8 +71,9 @@ def fetch_user_from_token(token: str) -> User:
     logger.info(f"Fetching user with token: {token} : {user}")
     user = User.from_mongo(user)
     logger.info("After conversion to User model")
-    logger.info(user)
+    logger.info(f"Current access token: {token}")
     user.current_access_token = token
+    logger.info(user)
 
     if user:
         return user
