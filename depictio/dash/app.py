@@ -195,7 +195,7 @@ def create_tokens_management_layout():
 
 def create_dashboard_layout(dashboard_id=None, local_data=None):
     # Load depictio depictio_dash_data from JSON
-    depictio_dash_data = load_depictio_data(dashboard_id)
+    depictio_dash_data = load_depictio_data(dashboard_id, local_data)
     logger.info(f"dashboard_id: {dashboard_id}")
     logger.info(f"depictio_dash_data: {depictio_dash_data}")
 

@@ -64,7 +64,6 @@ def filter_data(new_df, n_dict):
     Filter the data based on the interactive component type and the selected value
     """
     pd.set_option("display.max_columns", None)
-    logger.info(f"{new_df}")
     logger.info(f"n_dict - {n_dict}")
 
     # Handles the case of the object type
@@ -275,6 +274,7 @@ def update_interactive_component(stored_metadata_raw, interactive_components_dic
             # component["df"] = df_dict_processed[component["wf_id"], component["dc_id"]]
             component["build_frame"] = True
             component["refresh"] = True
+            component["access_token"] = TOKEN
 
             child = helpers_mapping[component["component_type"]](**component)
             if component["component_type"] == "card":

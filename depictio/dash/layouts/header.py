@@ -6,6 +6,7 @@ import dash
 import httpx
 
 from depictio.api.v1.configs.config import API_BASE_URL, logger
+from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_token
 
 current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -27,6 +28,7 @@ def register_callbacks_header(app):
         State("stored-add-button", "data"),
         State({"type": "interactive-component-value", "index": ALL}, "value"),
         State("url", "pathname"),
+        State("local-store", "data"),
         prevent_initial_call=True,
     )
     def save_data_dashboard(
@@ -38,7 +40,16 @@ def register_callbacks_header(app):
         add_button,
         interactive_component_values,
         pathname,
+        local_store,
     ):
+        if not local_store:
+            logger.warn("User not logged in.")
+            return dash.no_update
+
+        TOKEN = local_store["access_token"]
+        logger.info(f"save_data_dashboard - TOKEN: {TOKEN}")
+        # current_user = fetch_user_from_token(TOKEN)
+
         if n_clicks:
             dashboard_id = pathname.split("/")[-1]
 
@@ -54,25 +65,39 @@ def register_callbacks_header(app):
                     stored_metadata_indexes.append(elem["index"])
 
             # Get existing metadata for the dashboard
-            dashboard_data = httpx.get(f"{API_BASE_URL}/depictio/api/v1/dashboards/get/{dashboard_id}").json()
+            dashboard_data_response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/dashboards/get/{dashboard_id}", headers={"Authorization": f"Bearer {TOKEN}"})
+            if dashboard_data_response.status_code == 200:
+                dashboard_data = dashboard_data_response.json()
+                logger.info(f"save_data_dashboard - Dashboard data: {dashboard_data}")
+                # Replace the existing metadata with the new metadata
+                dashboard_data["stored_metadata"] = stored_metadata
+                dashboard_data["stored_layout_data"] = stored_layout_data
+                dashboard_data["stored_edit_dashboard_mode_button"] = edit_dashboard_mode_button
+                dashboard_data["stored_add_button"] = add_button
+                dashboard_data["last_saved_ts"] = str(current_time)
 
-            # Replace the existing metadata with the new metadata
-            dashboard_data["stored_metadata"] = stored_metadata
-            dashboard_data["stored_layout_data"] = stored_layout_data
-            dashboard_data["stored_edit_dashboard_mode_button"] = edit_dashboard_mode_button
-            dashboard_data["stored_add_button"] = add_button
-            dashboard_data["version"] = "1"
-            dashboard_data["last_saved_ts"] = str(current_time)
+                logger.info(f"save_data_dashboard - Dashboard data: {dashboard_data}")
 
-            logger.info(f"Dashboard data: {dashboard_data}")
+                logger.info(f"Dashboard data: {dashboard_data}")
 
-            response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/dashboards/save/{dashboard_id}", json=dashboard_data)
-            if response.status_code == 200:
-                logger.warn("Dashboard data saved successfully.")
+                response = httpx.post(
+                    f"{API_BASE_URL}/depictio/api/v1/dashboards/save/{dashboard_id}",
+                    json=dashboard_data,
+                    headers={
+                        "Authorization": f"Bearer {TOKEN}",
+                    },
+                )
+                if response.status_code == 200:
+                    logger.warn("Dashboard data saved successfully.")
+                else:
+                    logger.warn(f"Failed to save dashboard data: {response.json()}")
+
+                return []
+
             else:
-                logger.warn(f"Failed to save dashboard data: {response.json()}")
+                logger.warn(f"Failed to fetch dashboard data: {dashboard_data_response.json()}")
+                return []
 
-            return []
         return dash.no_update
 
     @app.callback(
@@ -128,9 +153,8 @@ def register_callbacks_header(app):
         if not local_store["access_token"]:
             switch_state = False
             return [True] * 8
-        
-        TOKEN = local_store["access_token"]
 
+        TOKEN = local_store["access_token"]
 
         workflows = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/workflows/get_all_workflows",
@@ -357,7 +381,7 @@ def design_header(data):
                 [
                     dmc.CardSection(
                         [
-                            dmc.Badge(f"Owner: {data['owner']}", color="blue", leftSection=DashIconify(icon="mdi:account", width=16, color="grey")),
+                            dmc.Badge(f"Owner: {data['permissions']['owners'][0]['email']}", color="blue", leftSection=DashIconify(icon="mdi:account", width=16, color="grey")),
                             dmc.Badge(f"Last saved: {data['last_saved_ts']}", color="green", leftSection=DashIconify(icon="mdi:clock-time-four-outline", width=16, color="grey")),
                         ]
                     ),
