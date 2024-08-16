@@ -59,34 +59,36 @@ services:
       - ./configs:/configs
       - ./.env:/app/.env
     command: ["python", "depictio/api/run.py"]
+    # environment:
+    #   - JUPYTER_TOKEN='my_dev_token'
     depends_on:
       - mongo
       - minio
       # - redis
       # - rabbitmq
 
-  # depictio_nb:
-  #   image: depictio_nb:dev
-  #   build:
-  #     dockerfile: docker-images/Dockerfile_depictio_nb_debug.dockerfile
-  #   ports:
-  #     - 8888:8888
-  #   volumes:
-  #     - "${DEPICTIO_BACKEND_DATA_VOLUME_HOST}:${DEPICTIO_BACKEND_DATA_VOLUME_HOST}"
-  #     - ./depictio:/app/depictio
-  #     - ./data:/app/data
-  #     - ./minio_data:/minio_data
-  #     - ./jbrowse-watcher-plugin/sessions:/jbrowse-watcher-plugin/sessions
-  #     - ./CLI_client/configs:/CLI_client/configs
-  #     - ./dev:/app/dev
-  #     - ./.env:/app/.env
-  #   depends_on:
-  #     - mongo
-  #     - minio
-  #     - depictio_backend
-  #     # - redis
-  #     # - rabbitmq
-  #   command: ["jupyter", "lab", "--ip=0.0.0.0", "--allow-root"]
+  depictio_nb:
+    image: depictio_nb:dev
+    build:
+      dockerfile: docker-images/Dockerfile_depictio_nb_debug.dockerfile
+    ports:
+      - 8888:8888
+    volumes:
+      - "${DEPICTIO_BACKEND_DATA_VOLUME_HOST}:${DEPICTIO_BACKEND_DATA_VOLUME_HOST}"
+      - ./depictio:/app/depictio
+      - ./data:/app/data
+      - ./minio_data:/minio_data
+      - ./jbrowse-watcher-plugin/sessions:/jbrowse-watcher-plugin/sessions
+      - ./dev:/app/dev
+      - ./.env:/app/.env
+      - ./dev/jup_nb/.jupyter:/app/.jupyter
+    depends_on:
+      - mongo
+      - minio
+      - depictio_backend
+      # - redis
+      # - rabbitmq
+    command: ["jupyter", "lab", "--config=/app/.jupyter/jupyter_notebook_config.py"]
 
 
   # jbrowse2:
