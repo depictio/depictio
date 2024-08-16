@@ -4,6 +4,8 @@ from bson import ObjectId
 import dash
 from dash import html, dcc, ctx, MATCH, Input, Output, State, ALL
 import dash_mantine_components as dmc
+import httpx
+from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.db import dashboards_collection
 from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.endpoints.dashboards_endpoints.models import DashboardData
@@ -36,44 +38,53 @@ layout = html.Div(
 )
 
 
-# def convert_objectid_to_str(data):
-#     for item in data:
-#         if "_id" in item:
-#             item["_id"] = str(item["_id"])
-#     return data
+def load_dashboards_from_db(token):
+    logger.info(f"Loading dashboards from the database with token {token}")
+    if not token:
+        raise ValueError("Token is required to load dashboards from the database.")
+
+    response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/dashboards/list", headers={"Authorization": f"Bearer {token}"})
+
+    if response.status_code == 200:
+        dashboards = response.json()
+        logger.info(f"dashboards: {dashboards}")
+        next_index = dashboards_collection.count_documents({}) + 1
+        logger.info(f"next_index: {next_index}")
+        return {"next_index": next_index, "dashboards": dashboards}
+
+    else:
+        raise ValueError(f"Failed to load dashboards from the database. Error: {response.text}")
 
 
-def load_dashboards_from_db(owner):
-    logger.info("Loading dashboards from MongoDB")
+def insert_dashboard(dashboard_id, dashboard_data, token):
+    if not token:
+        raise ValueError("Token is required to insert a dashboard into the database.")
 
-    logger.info(f"owner: {owner}")
-    projection = {"_id": 1, "dashboard_id": 1, "version": 1, "title": 1, "permissions": 1}
+    if not dashboard_data:
+        raise ValueError("Dashboard data is required to insert a dashboard into the database.")
 
-    # Fetch all dashboards corresponding to owner (email address)
-    dashboards = list(dashboards_collection.find({"permissions.owners._id": ObjectId(owner)}, projection))
+    if not dashboard_id:
+        raise ValueError("Dashboard ID is required to insert a dashboard into the database.")
 
-    logger.info(f"dashboards: {dashboards}")
+    dashboard_data = convert_objectid_to_str(dashboard_data)
 
-    # turn mongodb ObjectId to string
-    dashboards = [convert_objectid_to_str(dashboard) for dashboard in dashboards]
+    response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/dashboards/save/{dashboard_id}", headers={"Authorization": f"Bearer {token}"}, json=dashboard_data)
 
-    logger.info(f"dashboards: {dashboards}")
-    next_index = dashboards_collection.count_documents({}) + 1
-    logger.info(f"next_index: {next_index}")
-    return {"next_index": next_index, "dashboards": dashboards}
+    if response.status_code == 200:
+        logger.info(f"Successfully inserted dashboard: {dashboard_data}")
 
-
-def insert_dashboard(dashboard):
-    logger.info(f"Inserting dashboard: {dashboard}")
-    dashboard = dashboard.mongo()
-    logger.info(f"Inserting dashboard: {dashboard}")
-
-    dashboards_collection.insert_one(dashboard)
+    else:
+        raise ValueError(f"Failed to insert dashboard into the database. Error: {response.text}")
 
 
-def delete_dashboard(index):
-    logger.info(f"Deleting dashboard with index: {index}")
-    dashboards_collection.delete_one({"dashboard_id": str(index)})
+def delete_dashboard(dashboard_id, token):
+    response = httpx.delete(f"{API_BASE_URL}/depictio/api/v1/dashboards/delete/{dashboard_id}", headers={"Authorization": f"Bearer {token}"})
+
+    if response.status_code == 200:
+        logger.info(f"Successfully deleted dashboard with ID: {dashboard_id}")
+
+    else:
+        raise ValueError(f"Failed to delete dashboard from the database. Error: {response.text}")
 
 
 def render_welcome_section(email):
@@ -256,7 +267,7 @@ def register_callbacks_dashboards_management(app):
 
         # filepath = "dashboards.json"
         # index_data = load_dashboards_from_file(filepath)
-        index_data = load_dashboards_from_db(ObjectId(current_user.id))
+        index_data = load_dashboards_from_db(user_data["access_token"])
 
         dashboards = index_data.get("dashboards", [])
         next_index = index_data.get("next_index", 1)
@@ -266,7 +277,6 @@ def register_callbacks_dashboards_management(app):
         logger.info(f"CTX triggered ID {ctx.triggered_id}")
 
         if not ctx.triggered_id:
-            
             dashboards = [convert_objectid_to_str(dashboard.mongo()) for dashboard in dashboards]
             dashboards_view = create_dashboards_view(dashboards)
             logger.info("No trigger")
@@ -293,7 +303,9 @@ def register_callbacks_dashboards_management(app):
 
                 dashboards.append(new_dashboard)
                 logger.info(f"dashboards: {dashboards}")
-                insert_dashboard(new_dashboard)
+                insert_dashboard(next_index, new_dashboard.mongo(), user_data["access_token"])
+                dashboards = [convert_objectid_to_str(dashboard.mongo()) for dashboard in dashboards]
+
                 next_index += 1
         else:
             if ctx.triggered_id["type"] == "confirm-delete":
@@ -301,15 +313,14 @@ def register_callbacks_dashboards_management(app):
                 import ast
 
                 index_confirm_delete = ast.literal_eval(ctx_triggered_dict["prop_id"].split(".")[0])["index"]
-                delete_dashboard(index_confirm_delete)
+                delete_dashboard(index_confirm_delete, user_data["access_token"])
+
+                logger.info(f"Dashboards before deletion: {dashboards}")
+                dashboards = [convert_objectid_to_str(dashboard.mongo()) for dashboard in dashboards]
+                logger.info(f"Dashboards after deletion: {dashboards}")
                 dashboards = [dashboard for dashboard in dashboards if dashboard["dashboard_id"] != index_confirm_delete]
 
         logger.info(f"dashboards: {dashboards}")
-
-        dashboards = [convert_objectid_to_str(dashboard.mongo()) for dashboard in dashboards]
-
-        logger.info(f'{[type(dashboard) for dashboard in dashboards]}')
-
 
         new_index_data = {"next_index": next_index, "dashboards": dashboards}
 
