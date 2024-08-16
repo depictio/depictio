@@ -9,7 +9,7 @@ from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 dashboards_endpoint_router = APIRouter()
 
 
-@dashboards_endpoint_router.get("/get/{dashboard_id}", response_model=DashboardData)
+@dashboards_endpoint_router.get("/get/{dashboard_id}")
 async def get_dashboard(dashboard_id: str, current_user=Depends(get_current_user)):
     """
     Fetch dashboard data related to a dashboard ID.
@@ -19,29 +19,32 @@ async def get_dashboard(dashboard_id: str, current_user=Depends(get_current_user
         raise HTTPException(status_code=401, detail="Current user not found.")
 
     user_id = current_user.id
+    logger.info(f"Current user ID: {user_id}")
 
     # Find dashboards where current_user is either an owner or a viewer
     query = {
-        "dashboard_id": dashboard_id,
+        "dashboard_id": str(dashboard_id),
         "$or": [
-            {"permissions.owners.id": user_id},
+            {"permissions.owners._id": user_id},
             {"permissions.viewers.id": user_id},
         ],
     }
 
     dashboard_data = dashboards_collection.find_one(query)
 
+    logger.info(f"Dashboard data: {dashboard_data}")
+
+    dashboard_data = DashboardData.from_mongo(dashboard_data)
+    logger.info(f"Dashboard data from mongo: {dashboard_data}")
+
     if not dashboard_data:
         raise HTTPException(status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found.")
 
-    # Remove the MongoDB '_id' field from the response (optional, based on your need)
-    dashboard_data.pop("_id", None)
-
     return dashboard_data
 
-
+# /Users/tweber/Gits/depictio/dev/jup_nb/.jupyter/jupyter_notebook_config.py
 @dashboards_endpoint_router.post("/save/{dashboard_id}")
-async def save_dashboard(dashboard_id: str, data: DashboardData, current_user=Depends(get_current_user)):
+async def save_dashboard(dashboard_id: str, data: dict, current_user=Depends(get_current_user)):
     """
     Check if an entry with the same dashboard_id exists, if not, insert, if yes, update.
     """
@@ -54,12 +57,16 @@ async def save_dashboard(dashboard_id: str, data: DashboardData, current_user=De
 
     user_id = current_user.id
 
-    data_dict = data.dict()
-    logger.info(f"Data to save: {data_dict}")
+    logger.info(f"Data to save: {data}")
+
+    data = DashboardData.from_mongo(data)
+
+    data_dict = data.mongo()
+    # logger.info(f"Data to save: {data_dict}")
 
     # Attempt to find and update the document, or insert if it doesn't exist
     result = dashboards_collection.find_one_and_update(
-        {"dashboard_id": dashboard_id, "permissions.owners.id": user_id},
+        {"dashboard_id": dashboard_id, "permissions.owners._id": user_id},
         {"$set": data_dict},
         upsert=True,
         return_document=True,  # Adjust based on your MongoDB driver version, some versions might use ReturnDocument.AFTER
