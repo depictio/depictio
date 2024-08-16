@@ -1,6 +1,7 @@
 from fastapi import Depends, HTTPException, APIRouter
 
 from depictio.api.v1.db import dashboards_collection
+from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import load_dashboards_from_db
 from depictio.api.v1.endpoints.dashboards_endpoints.models import DashboardData
 from depictio.api.v1.configs.logging import logger
 
@@ -42,6 +43,27 @@ async def get_dashboard(dashboard_id: str, current_user=Depends(get_current_user
 
     return dashboard_data
 
+
+@dashboards_endpoint_router.get("/list")
+async def list_dashboards(current_user=Depends(get_current_user)):
+    """
+    Fetch a list of dashboards for the current user.
+    """
+
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Current user not found.")
+
+    user_id = current_user.id
+    logger.info(f"Current user ID: {user_id}")
+
+    result = load_dashboards_from_db(owner=user_id)
+
+    if not result["success"]:
+        raise HTTPException(status_code=404, detail=result["message"])
+
+    return result["dashboards"]
+
+
 # /Users/tweber/Gits/depictio/dev/jup_nb/.jupyter/jupyter_notebook_config.py
 @dashboards_endpoint_router.post("/save/{dashboard_id}")
 async def save_dashboard(dashboard_id: str, data: dict, current_user=Depends(get_current_user)):
@@ -79,3 +101,21 @@ async def save_dashboard(dashboard_id: str, data: dict, current_user=Depends(get
     else:
         # It's unlikely to reach this point due to upsert=True, but included for completeness
         raise HTTPException(status_code=404, detail="Failed to insert or update dashboard data.")
+
+@dashboards_endpoint_router.delete("/delete/{dashboard_id}")
+async def delete_dashboard(dashboard_id: str, current_user=Depends(get_current_user)):
+    """
+    Delete a dashboard with the given dashboard ID.
+    """
+
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Current user not found.")
+
+    user_id = current_user.id
+
+    result = dashboards_collection.delete_one({"dashboard_id": dashboard_id, "permissions.owners._id": user_id})
+
+    if result.deleted_count > 0:
+        return {"message": f"Dashboard with ID '{dashboard_id}' deleted successfully."}
+    else:
+        raise HTTPException(status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found.")
