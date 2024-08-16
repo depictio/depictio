@@ -48,6 +48,12 @@ class UserBase(MongoModel):
     is_admin: bool = False
     groups: List[str] = Field(default_factory=list)
 
+    @root_validator(pre=True)
+    def set_default_id(cls, values):
+        if values is None or "_id" not in values or values["_id"] is None:
+            return values  # Ensure we don't proceed if values is None
+        values["_id"] = PyObjectId()
+        return values
 
 class User(UserBase):
     # id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
@@ -116,7 +122,7 @@ class Group(BaseModel):
     def ensure_unique_member_ids(cls, values):
         members = values.get("members", [])
         unique_members = {member.id: member for member in members}.values()
-        return {"members": set(unique_members)}
+        return {"members": set(unique_members)} 
 
     # This function validates that each user_id in the members is unique
     @root_validator
