@@ -1,11 +1,15 @@
 from datetime import datetime
 import json
+from bson import ObjectId
 import dash
 from dash import html, dcc, ctx, MATCH, Input, Output, State, ALL
 import dash_mantine_components as dmc
 from depictio.api.v1.db import dashboards_collection
 from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.endpoints.dashboards_endpoints.models import DashboardData
 from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_token
+from depictio.api.v1.endpoints.user_endpoints.models import UserBase
+from depictio.api.v1.models.base import convert_objectid_to_str
 
 
 layout = html.Div(
@@ -32,24 +36,26 @@ layout = html.Div(
 )
 
 
-def convert_objectid_to_str(data):
-    for item in data:
-        if "_id" in item:
-            item["_id"] = str(item["_id"])
-    return data
+# def convert_objectid_to_str(data):
+#     for item in data:
+#         if "_id" in item:
+#             item["_id"] = str(item["_id"])
+#     return data
 
 
 def load_dashboards_from_db(owner):
     logger.info("Loading dashboards from MongoDB")
 
     logger.info(f"owner: {owner}")
-    projection = {"_id": 1, "dashboard_id": 1, "version": 1, "title": 1, "owner": 1}
+    projection = {"_id": 1, "dashboard_id": 1, "version": 1, "title": 1, "permissions": 1}
 
     # Fetch all dashboards corresponding to owner (email address)
-    dashboards = list(dashboards_collection.find({"owner": owner}, projection))
+    dashboards = list(dashboards_collection.find({"permissions.owners._id": ObjectId(owner)}, projection))
+
+    logger.info(f"dashboards: {dashboards}")
 
     # turn mongodb ObjectId to string
-    dashboards = convert_objectid_to_str(dashboards)
+    dashboards = [convert_objectid_to_str(dashboard) for dashboard in dashboards]
 
     logger.info(f"dashboards: {dashboards}")
     next_index = dashboards_collection.count_documents({}) + 1
@@ -59,28 +65,15 @@ def load_dashboards_from_db(owner):
 
 def insert_dashboard(dashboard):
     logger.info(f"Inserting dashboard: {dashboard}")
+    dashboard = dashboard.mongo()
+    logger.info(f"Inserting dashboard: {dashboard}")
+
     dashboards_collection.insert_one(dashboard)
 
 
 def delete_dashboard(index):
     logger.info(f"Deleting dashboard with index: {index}")
     dashboards_collection.delete_one({"dashboard_id": str(index)})
-
-
-def load_dashboards_from_file(filepath):
-    logger.info("Loading dashboards from file")
-    logger.info(f"{filepath}")
-    try:
-        with open(filepath, "r") as file:
-            data = json.load(file)
-            return data
-    except FileNotFoundError:
-        return {"next_index": 1, "dashboards": []}  # Return default if no file exists
-
-
-def save_dashboards_to_file(data, filepath):
-    with open(filepath, "w") as file:
-        json.dump(data, file, indent=4)
 
 
 def render_welcome_section(email):
@@ -102,7 +95,7 @@ def render_welcome_section(email):
                         position="bottom",
                     ),
                     href="/profile",
-                    # target="_blank",
+                    # tar ="_blank",
                 ),
                 span="content",
             ),
@@ -143,6 +136,10 @@ def render_dashboard_list_section(email):
 
 def register_callbacks_dashboards_management(app):
     def create_dashboards_view(dashboards):
+        logger.info(f"dashboards: {dashboards}")
+
+        # dashboards = [convert_objectid_to_str(dashboard.mongo()) for dashboard in dashboards]
+
         dashboards_view = [
             dmc.Paper(
                 dmc.Group(
@@ -152,7 +149,7 @@ def register_callbacks_dashboards_management(app):
                                 dmc.Title(dashboard["title"], order=5),
                                 # dmc.Text(f"Last Modified: {dashboard['last_modified']}"),
                                 dmc.Text(f"Version: {dashboard['version']}"),
-                                dmc.Text(f"Owner: {dashboard['owner']}"),
+                                dmc.Text(f"Owner: {dashboard['permissions']['owners'][0]['email']}"),
                             ],
                             style={"flex": "1"},
                         ),
@@ -250,25 +247,35 @@ def register_callbacks_dashboards_management(app):
         logger.info(f"user_data: {user_data}")
 
         current_user = fetch_user_from_token(user_data["access_token"])
+        logger.info(f"Current user: {current_user}")
+        current_userbase = UserBase(**current_user.dict(exclude={"tokens", "is_active", "is_verified", "last_login", "registration_date", "password"}))
+        logger.info(f"Current user base: {current_userbase}")
+
+        # current_userbase = convert_objectid_to_str(current_userbase.dict())
+        # logger.info(f"Current user base: {current_userbase}")
 
         # filepath = "dashboards.json"
         # index_data = load_dashboards_from_file(filepath)
-        user_email = current_user.email
-        index_data = load_dashboards_from_db(user_email)
+        index_data = load_dashboards_from_db(ObjectId(current_user.id))
 
         dashboards = index_data.get("dashboards", [])
         next_index = index_data.get("next_index", 1)
+        dashboards = [DashboardData(**dashboard) for dashboard in dashboards]
 
         logger.info(f"dashboards: {dashboards}")
         logger.info(f"CTX triggered ID {ctx.triggered_id}")
 
         if not ctx.triggered_id:
+            
+            dashboards = [convert_objectid_to_str(dashboard.mongo()) for dashboard in dashboards]
             dashboards_view = create_dashboards_view(dashboards)
             logger.info("No trigger")
             logger.info(f"dashboards_view: {dashboards_view}")
             logger.info(f"next_index: {next_index}")
             logger.info(f"{[dashboards_view] * len(store_data_list)}")
             logger.info(f'{[{"next_index": next_index, "dashboards": dashboards}] * len(store_data_list)}')
+            # dashboards = [convert_objectid_to_str(dashboard.dict()) for dashboard in dashboards]
+            logger.info(f"dashboards: {dashboards}")
             return [dashboards_view] * len(store_data_list), [{"next_index": next_index, "dashboards": dashboards}] * len(store_data_list)
 
         if "type" not in ctx.triggered_id:
@@ -278,10 +285,12 @@ def register_callbacks_dashboards_management(app):
                 new_dashboard = {
                     "title": modal_data["title"],
                     "last_saved_ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "version": "V1",
-                    "owner": create_ids_list[0]["index"],
+                    "permissions": {"owners": [current_userbase], "viewers": []},
+                    # "owner": create_ids_list[0]["index"],
                     "dashboard_id": str(next_index),
                 }
+                new_dashboard = DashboardData(**new_dashboard)
+
                 dashboards.append(new_dashboard)
                 logger.info(f"dashboards: {dashboards}")
                 insert_dashboard(new_dashboard)
@@ -295,14 +304,20 @@ def register_callbacks_dashboards_management(app):
                 delete_dashboard(index_confirm_delete)
                 dashboards = [dashboard for dashboard in dashboards if dashboard["dashboard_id"] != index_confirm_delete]
 
-        logger.info(f"TEST")
         logger.info(f"dashboards: {dashboards}")
 
-        dashboards = convert_objectid_to_str(dashboards)
+        dashboards = [convert_objectid_to_str(dashboard.mongo()) for dashboard in dashboards]
+
+        logger.info(f'{[type(dashboard) for dashboard in dashboards]}')
+
 
         new_index_data = {"next_index": next_index, "dashboards": dashboards}
+
         # save_dashboards_to_file(new_index_data, filepath)
         dashboards_view = create_dashboards_view(dashboards)
+        logger.info(f"dashboards_view: {dashboards_view}")
+
+        logger.info(f"new_index_data: {new_index_data}")
 
         return [dashboards_view] * len(store_data_list), [new_index_data] * len(store_data_list)
 
@@ -390,7 +405,6 @@ def register_callbacks_dashboards_management(app):
         # Respond to URL changes
         if trigger_id == "url":
             if pathname:
-
                 logger.info(f"trigger_id: {trigger_id}")
                 logger.info(f"pathname: {pathname}")
                 if pathname.startswith("/dashboard/"):
