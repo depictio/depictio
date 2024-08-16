@@ -90,7 +90,7 @@ def load_deltatable_lite(workflow_id: ObjectId, data_collection_id: ObjectId, me
         raise Exception("Error loading deltatable")
 
 
-def iterative_join(workflow_id: ObjectId, joins_dict: dict, metadata_dict: dict):
+def iterative_join(workflow_id: ObjectId, joins_dict: dict, metadata_dict: dict, TOKEN: str = None):
     # Initialize a dictionary to store loaded dataframes
     loaded_dfs = {}
     used_dcs = set()
@@ -106,7 +106,7 @@ def iterative_join(workflow_id: ObjectId, joins_dict: dict, metadata_dict: dict)
                 for e in relevant_metadata:
                     values_dict[e["metadata"]["dc_id"]] = e["value"]
                 logger.info(f"Loading dataframe for dc_id: {dc_id} with metadata: {relevant_metadata}")
-                loaded_dfs[dc_id] = load_deltatable_lite(workflow_id, dc_id, relevant_metadata)
+                loaded_dfs[dc_id] = load_deltatable_lite(workflow_id, dc_id, relevant_metadata, TOKEN=TOKEN)
                 logger.info(f"Loaded dataframe for dc_id: {dc_id} with shape: {loaded_dfs[dc_id].shape}")
     logger.info(f"values_dict: {values_dict}")
 

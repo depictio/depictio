@@ -84,7 +84,8 @@ def build_interactive(**kwargs):
     if interactive_component_type in ["Select", "MultiSelect", "SegmentedControl"]:
         data = sorted(df[column_name].drop_nans().unique())
 
-        interactive_component = func_name(data=data, id={"type": "interactive-component-value", "index": str(index), "persistence_type": "local"})
+        # WARNING: This is a temporary solution to avoid modifying dashboard data - the -tmp suffix is added to the id and removed once clicked on the btn-done D
+        interactive_component = func_name(data=data, id={"type": "interactive-component-value-tmp", "index": str(index), "persistence_type": "local"})
 
         # If the aggregation value is MultiSelect, make the component searchable and clearable
         if interactive_component_type == "MultiSelect":
@@ -95,7 +96,7 @@ def build_interactive(**kwargs):
             kwargs.update({"value": value})
             interactive_component = func_name(
                 data=data,
-                id={"type": "interactive-component-value", "index": str(index)},
+                id={"type": "interactive-component-value-tmp", "index": str(index)},
                 **kwargs,
             )
 
@@ -107,7 +108,7 @@ def build_interactive(**kwargs):
         kwargs.update({"value": value})
         interactive_component = func_name(
             placeholder="Your selected value",
-            id={"type": "interactive-component-value", "index": str(index)},
+            id={"type": "interactive-component-value-tmp", "index": str(index)},
             **kwargs,
         )
 
@@ -122,7 +123,7 @@ def build_interactive(**kwargs):
         kwargs = {
             "min": min_value,
             "max": max_value,
-            "id": {"type": "interactive-component-value", "index": str(index)},
+            "id": {"type": "interactive-component-value-tmp", "index": str(index)},
             "persistence_type": "local",
         }
         if interactive_component_type == "RangeSlider":
