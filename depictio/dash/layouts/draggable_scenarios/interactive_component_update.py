@@ -263,18 +263,37 @@ def update_interactive_component(stored_metadata_raw, interactive_components_dic
         if any(child["props"]["id"] == f'box-{component["index"]}' for component in stored_metadata if component["component_type"] in ["interactive", "jbrowse"])
     ]
 
+
+    children = list()
+
+    
+    for child, component in zip(current_draggable_children, stored_metadata):
+        if component["component_type"] in ["jbrowse"]:
+            children.append(child)
+            # if component["component_type"] == "interactive":
+            #     logger.info(f"Interactive CHILD - {child}")
+            #     child["props"]["children"][1]["props"]["children"]["props"]["children"]["props"]["children"][2]["props"]["data"]["value"] = interactive_components_dict[component["index"]]["value"]
+            #     logger.info(f"Interactive CHILD - {child}")
+
+
     # Add or update the non-interactive components
     for component in stored_metadata:
-        if component["component_type"] not in ["interactive", "jbrowse"]:
+
+        if component["component_type"] not in ["jbrowse"]:
             # retrieve the key from df_dict_processed based on the wf_id and dc_id, checking which join encompasses the dc_id
             for key, df in df_dict_processed[component["wf_id"]].items():
                 if component["dc_id"] in key:
                     component["df"] = df
                     break
+            
+            if component["component_type"] == "interactive":
+                component["value"] = interactive_components_dict[component["index"]]["value"]
+
             # component["df"] = df_dict_processed[component["wf_id"], component["dc_id"]]
             component["build_frame"] = True
             component["refresh"] = True
             component["access_token"] = TOKEN
+
 
             child = helpers_mapping[component["component_type"]](**component)
             if component["component_type"] == "card":
@@ -295,7 +314,19 @@ def update_interactive_component(stored_metadata_raw, interactive_components_dic
             child = enable_box_edit_mode(child.to_plotly_json(), switch_state=switch_state)
             children.append(child)
 
+        # elif component["component_type"] == "interactive":
+        #     child = [c for c in children if c["props"]["id"] == f'box-{component["index"]}'][0]
+        #     logger.info(f"component - {component['index']}")
+        #     logger.info(f"Interactive CHILD - {child}")
+        #     # Update stored-metadata-component value 
+        #     # logger.info(f'child["props"]["children"][1]["props"]["children"]["props"]["children"]["props"]["children"][2] - {child["props"]["children"][1]["props"]["children"]["props"]["children"]["props"]["children"][2]}')
+        #     # child["props"]["children"][1]["props"]["children"]["props"]["children"]["props"]["children"][2]["props"]["data"] = interactive_components_dict[component["index"]]["value"]
+        #     # logger.info(interactive_components_dict[component["index"]]["value"])
+        #     logger.info(f"Interactive CHILD - {child}")
+
+
     logger.info(f"Len children - {len(children)}")
+    # logger.info(f"Children - {children}")
     return children
 
     # for wf_dc, interactive_components in interactive_components_dict_grouped.items():
