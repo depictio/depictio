@@ -1,5 +1,6 @@
 
 from dash import dcc, html
+import polars as pl
 import dash_mantine_components as dmc
 import dash_bootstrap_components as dbc
 
@@ -50,6 +51,7 @@ def build_interactive(**kwargs):
     interactive_component_type = kwargs.get("interactive_component_type")
     cols_json = kwargs.get("cols_json")
     value = kwargs.get("value", None)
+    df = kwargs.get("df", None)
     build_frame = kwargs.get("build_frame", False)
     TOKEN = kwargs.get("access_token")
     stepper = kwargs.get("stepper", False)
@@ -81,7 +83,8 @@ def build_interactive(**kwargs):
     )
 
     # Load the delta table & get the specs
-    df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
+    if not isinstance(df, pl.DataFrame):
+        df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
 
     # Handling different aggregation values
 
