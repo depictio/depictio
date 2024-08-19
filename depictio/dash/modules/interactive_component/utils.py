@@ -52,6 +52,13 @@ def build_interactive(**kwargs):
     value = kwargs.get("value", None)
     build_frame = kwargs.get("build_frame", False)
     TOKEN = kwargs.get("access_token")
+    stepper = kwargs.get("stepper", False)
+
+    if stepper: 
+        value_div_type = "interactive-component-value-tmp"
+    else:
+        value_div_type = "interactive-component-value"
+
 
     func_name = agg_functions[column_type]["input_methods"][interactive_component_type]["component"]
 
@@ -85,7 +92,7 @@ def build_interactive(**kwargs):
         data = sorted(df[column_name].drop_nans().unique())
 
         # WARNING: This is a temporary solution to avoid modifying dashboard data - the -tmp suffix is added to the id and removed once clicked on the btn-done D
-        interactive_component = func_name(data=data, id={"type": "interactive-component-value-tmp", "index": str(index), "persistence_type": "local"})
+        interactive_component = func_name(data=data, id={"type": value_div_type, "index": str(index), "persistence_type": "local"})
 
         # If the aggregation value is MultiSelect, make the component searchable and clearable
         if interactive_component_type == "MultiSelect":
@@ -96,7 +103,7 @@ def build_interactive(**kwargs):
             kwargs.update({"value": value})
             interactive_component = func_name(
                 data=data,
-                id={"type": "interactive-component-value-tmp", "index": str(index)},
+                id={"type": value_div_type, "index": str(index)},
                 **kwargs,
             )
 
@@ -108,7 +115,7 @@ def build_interactive(**kwargs):
         kwargs.update({"value": value})
         interactive_component = func_name(
             placeholder="Your selected value",
-            id={"type": "interactive-component-value-tmp", "index": str(index)},
+            id={"type": value_div_type, "index": str(index)},
             **kwargs,
         )
 
@@ -123,7 +130,7 @@ def build_interactive(**kwargs):
         kwargs = {
             "min": min_value,
             "max": max_value,
-            "id": {"type": "interactive-component-value-tmp", "index": str(index)},
+            "id": {"type": value_div_type, "index": str(index)},
             "persistence_type": "local",
         }
         if interactive_component_type == "RangeSlider":

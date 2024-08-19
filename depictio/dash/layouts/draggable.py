@@ -268,9 +268,10 @@ def register_callbacks_draggable(app):
                 if child_type == "interactive-component":
                     logger.info(f"Interactive component found: {child}")
                     # WARNING: This is a temporary fix to remove the '-tmp' suffix from the id
-                    child["props"]["children"]["props"]["children"]["props"]["children"][1]["props"]["id"]["type"] = child["props"]["children"]["props"]["children"]["props"][
-                        "children"
-                    ][1]["props"]["id"]["type"].replace("-tmp", "")
+                    if child["props"]["children"]["props"]["children"]["props"]["children"][1]["props"]["id"]["type"].endswith("-tmp"):
+                        child["props"]["children"]["props"]["children"]["props"]["children"][1]["props"]["id"]["type"] = child["props"]["children"]["props"]["children"]["props"][
+                            "children"
+                        ][1]["props"]["id"]["type"].replace("-tmp", "")
 
                 logger.info(f"Child index: {child_index}")
                 logger.info(f"Child type: {child_type}")
