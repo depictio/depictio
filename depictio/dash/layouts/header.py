@@ -42,6 +42,7 @@ def register_callbacks_header(app):
         pathname,
         local_store,
     ):
+        logger.info(f"URL pathname: {pathname}")
         if not local_store:
             logger.warn("User not logged in.")
             return dash.no_update
@@ -227,7 +228,7 @@ def design_header(data):
     """
     Design the header of the dashboard
     """
-    logger.info(f"depictio dashboard data: {data}")
+    # logger.info(f"depictio dashboard data: {data}")
 
     if data:
         if "stored_add_button" not in data:
