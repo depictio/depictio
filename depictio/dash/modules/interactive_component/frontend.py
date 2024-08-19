@@ -147,6 +147,7 @@ def register_callbacks_interactive_component(app):
             "interactive_component_type": aggregation_value,
             "cols_json": cols_json,
             "access_token": TOKEN,
+            "stepper": True,
         }
         new_interactive_component = build_interactive(**interactive_kwargs)
 
