@@ -185,6 +185,7 @@ def register_profile_callbacks(app):
     # Callback to populate user information based on email
     @app.callback([Output("avatar-placeholder", "children"), Output("user-info-placeholder", "children")], [State("local-store", "data"), Input("url", "pathname")])
     def populate_user_info(local_data, pathname):
+        logger.info(f"URL pathname: {pathname}")
         logger.info(f"session_data: {local_data}")
         if local_data is None or "access_token" not in local_data:
             return html.Div(), html.Div()

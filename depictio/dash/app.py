@@ -109,7 +109,7 @@ def display_page(pathname, local_data):
     trigger = ctx.triggered[0]["prop_id"].split(".")[0]
     logger.info(f"trigger: {trigger}")
     logger.info(f"local_data: {local_data}")
-    logger.info(f"pathname: {pathname}")
+    logger.info(f"URL pathname: {pathname}")
 
     if trigger == "local-store":
         logger.info("Local store triggered")
@@ -125,6 +125,10 @@ def display_page(pathname, local_data):
                 return create_profile_layout(), pathname
             elif pathname == "/tokens":
                 return create_tokens_management_layout(), pathname
+            elif pathname.startswith("/dashboard/"):
+                dashboard_id = pathname.split("/")[-1]
+                logger.info(f"dashboard_id: {dashboard_id}")
+                return create_dashboard_layout(dashboard_id=dashboard_id, local_data=local_data), pathname
             else:
                 return create_dashboards_management_layout(), "/"
         else:
@@ -197,7 +201,7 @@ def create_dashboard_layout(dashboard_id=None, local_data=None):
     # Load depictio depictio_dash_data from JSON
     depictio_dash_data = load_depictio_data(dashboard_id, local_data)
     logger.info(f"dashboard_id: {dashboard_id}")
-    logger.info(f"depictio_dash_data: {depictio_dash_data}")
+    # logger.info(f"depictio_dash_data: {depictio_dash_data}")
 
     # Init layout and children if depictio_dash_data is available, else set to empty
     if depictio_dash_data:
