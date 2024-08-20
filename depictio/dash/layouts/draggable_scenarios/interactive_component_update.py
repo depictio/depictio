@@ -257,11 +257,11 @@ def update_interactive_component(stored_metadata_raw, interactive_components_dic
                 build_jbrowse_df_mapping_dict(stored_metadata, df_dict_processed[wf])
 
     # Initialize the children list with the interactive components
-    children = [
-        child
-        for child in current_draggable_children
-        if any(child["props"]["id"] == f'box-{component["index"]}' for component in stored_metadata if component["component_type"] in ["interactive", "jbrowse"])
-    ]
+    # children = [
+    #     child
+    #     for child in current_draggable_children
+    #     if any(child["props"]["id"] == f'box-{component["index"]}' for component in stored_metadata if component["component_type"] in ["interactive", "jbrowse"])
+    # ]
 
 
     children = list()
