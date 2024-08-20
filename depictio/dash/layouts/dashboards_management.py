@@ -17,7 +17,7 @@ from depictio.api.v1.models.base import convert_objectid_to_str
 layout = html.Div(
     [
         # dcc.Store(id="modal-store", storage_type="local", data={"email": "", "submitted": False}),
-        dcc.Store(id="dashboard-modal-store", storage_type="memory", data={"title": ""}),  # Store for new dashboard data
+        dcc.Store(id="dashboard-modal-store", storage_type="session", data={"title": ""}),  # Store for new dashboard data
         dmc.Modal(
             opened=False,
             id="dashboard-modal",
@@ -290,23 +290,25 @@ def register_callbacks_dashboards_management(app):
 
         if "type" not in ctx.triggered_id:
             if ctx.triggered_id == "dashboard-modal-store":
-                logger.info("Creating new dashboard")
-                logger.info(f"modal_data: {modal_data}")
-                new_dashboard = {
-                    "title": modal_data["title"],
-                    "last_saved_ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "permissions": {"owners": [current_userbase], "viewers": []},
-                    # "owner": create_ids_list[0]["index"],
-                    "dashboard_id": str(next_index),
-                }
-                new_dashboard = DashboardData(**new_dashboard)
+                if modal_data["title"]:
+                    logger.info("Creating new dashboard")
+                    logger.info(f"modal_data: {modal_data}")
+                    new_dashboard = {
+                        "title": modal_data["title"],
+                        "last_saved_ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "permissions": {"owners": [current_userbase], "viewers": []},
+                        # "owner": create_ids_list[0]["index"],
+                        "dashboard_id": str(next_index),
+                    }
+                    new_dashboard = DashboardData(**new_dashboard)
 
-                dashboards.append(new_dashboard)
-                logger.info(f"dashboards: {dashboards}")
-                insert_dashboard(next_index, new_dashboard.mongo(), user_data["access_token"])
+                    dashboards.append(new_dashboard)
+                    logger.info(f"dashboards: {dashboards}")
+                    insert_dashboard(next_index, new_dashboard.mongo(), user_data["access_token"])
                 dashboards = [convert_objectid_to_str(dashboard.mongo()) for dashboard in dashboards]
 
                 next_index += 1
+
         else:
             if ctx.triggered_id["type"] == "confirm-delete":
                 ctx_triggered_dict = ctx.triggered[0]
@@ -332,35 +334,68 @@ def register_callbacks_dashboards_management(app):
 
         return [dashboards_view] * len(store_data_list), [new_index_data] * len(store_data_list)
 
-    # New callback to handle the creation of a new dashboard
     @app.callback(
-        Output("dashboard-modal-store", "data"),
-        [Input("create-dashboard-submit", "n_clicks")],
-        [State("dashboard-title-input", "value")],
+        [Output("dashboard-modal-store", "data"), Output("dashboard-modal", "opened")],
+        [Input({"type": "create-dashboard-button", "index": ALL}, "n_clicks"), Input("create-dashboard-submit", "n_clicks")],
+        [State("dashboard-title-input", "value"), State("dashboard-modal", "opened"), State("local-store", "data")],
         prevent_initial_call=True,
     )
-    def handle_create_dashboard(n_clicks, title):
-        logger.info("handle_create_dashboard")
-        logger.info(f"n_clicks: {n_clicks}")
+    def handle_create_dashboard_and_toggle_modal(n_clicks_create, n_clicks_submit, title, opened, user_data):
+        logger.info("handle_create_dashboard_and_toggle_modal")
+        logger.info(f"n_clicks_create: {n_clicks_create}")
+        logger.info(f"n_clicks_submit: {n_clicks_submit}")
         logger.info(f"title: {title}")
         data = {"title": ""}
-        if n_clicks:
-            data["title"] = title
-        return data
 
-    # New callback to open the create dashboard modal
-    @app.callback(
-        Output("dashboard-modal", "opened"),
-        [Input({"type": "create-dashboard-button", "index": ALL}, "n_clicks"), Input("create-dashboard-submit", "n_clicks")],
-        [State("dashboard-modal", "opened")],
-        prevent_initial_call=True,
-    )
-    def open_dashboard_modal(n_clicks_create, n_clicks_submit, opened):
         if any(n_clicks_create):
-            return not opened
-        elif n_clicks_submit:
-            return opened
-        return opened
+            # Toggle the modal when the create button is clicked
+            return dash.no_update, not opened
+
+        if n_clicks_submit:
+            dashboards = load_dashboards_from_db(user_data["access_token"])
+            existing_titles = [dashboard["title"] for dashboard in dashboards]
+            logger.info(f"existing_titles: {existing_titles}")
+            logger.info(f"title: {title}")
+            if title in existing_titles:
+                logger.warning(f"Dashboard with title '{title}' already exists.")
+                return dash.no_update, opened
+
+            # Set the title and keep the modal open (or toggle it based on your preference)
+            data["title"] = title
+            return data, opened
+
+        # Return default values if no relevant clicks happened
+        return data, opened
+
+    # # New callback to handle the creation of a new dashboard
+    # @app.callback(
+    #     Output("dashboard-modal-store", "data"),
+    #     [Input("create-dashboard-submit", "n_clicks")],
+    #     [State("dashboard-title-input", "value")],
+    #     prevent_initial_call=True,
+    # )
+    # def handle_create_dashboard(n_clicks, title):
+    #     logger.info("handle_create_dashboard")
+    #     logger.info(f"n_clicks: {n_clicks}")
+    #     logger.info(f"title: {title}")
+    #     data = {"title": ""}
+    #     if n_clicks:
+    #         data["title"] = title
+    #     return data
+
+    # # New callback to open the create dashboard modal
+    # @app.callback(
+    #     Output("dashboard-modal", "opened"),
+    #     [Input({"type": "create-dashboard-button", "index": ALL}, "n_clicks"), Input("create-dashboard-submit", "n_clicks")],
+    #     [State("dashboard-modal", "opened")],
+    #     prevent_initial_call=True,
+    # )
+    # def open_dashboard_modal(n_clicks_create, n_clicks_submit, opened):
+    #     if any(n_clicks_create):
+    #         return not opened
+    #     elif n_clicks_submit:
+    #         return opened
+    #     return opened
 
     @app.callback(
         Output({"type": "delete-confirmation-modal", "index": MATCH}, "opened"),
@@ -392,7 +427,7 @@ def register_callbacks_dashboards_management(app):
         logger.info(f"CTX triggered prop IDs: {ctx.triggered_prop_ids}")
         logger.info(f"CTX triggered ID {ctx.triggered_id}")
         logger.info(f"CTX inputs: {ctx.inputs}")
-        logger.info(f"pathname: {pathname}")
+        logger.info(f"URL pathname: {pathname}")
         logger.info(f"data: {data}")
         logger.info("\n")
 
@@ -417,12 +452,12 @@ def register_callbacks_dashboards_management(app):
         if trigger_id == "url":
             if pathname:
                 logger.info(f"trigger_id: {trigger_id}")
-                logger.info(f"pathname: {pathname}")
+                logger.info(f"URL pathname: {pathname}")
                 if pathname.startswith("/dashboard/"):
                     dashboard_id = pathname.split("/")[-1]
                     # Fetch dashboard data based on dashboard_id and return the appropriate layout
                     # return html.Div([f"Displaying Dashboard {dashboard_id}", dbc.Button("Go back", href="/", color="black", external_link=True)])
-                    return None
+                    return dash.no_update
                 elif pathname == "/":
                     return render_landing_page(data)
 
