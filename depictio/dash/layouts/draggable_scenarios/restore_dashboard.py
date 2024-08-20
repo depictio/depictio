@@ -1,3 +1,4 @@
+from depictio.dash.layouts.draggable_scenarios.interactive_component_update import update_interactive_component
 from depictio.dash.modules.card_component.utils import build_card
 from depictio.dash.modules.figure_component.utils import build_figure
 from depictio.api.v1.db import dashboards_collection
@@ -7,6 +8,13 @@ from depictio.api.v1.configs.logging import logger
 from depictio.dash.modules.interactive_component.utils import build_interactive
 from depictio.dash.modules.jbrowse_component.utils import build_jbrowse
 from depictio.dash.modules.table_component.utils import build_table
+
+
+def return_interactive_components_dict(dashboard_data):
+    logger.info(f"Dashboard data: {dashboard_data}")
+    interactive_components_dict = {e["index"]: {"value": e["value"], "metadata": e} for e in dashboard_data if e["component_type"] == "interactive"}
+    logger.info(f"Interactive components dict: {interactive_components_dict}")
+    return interactive_components_dict
 
 
 def load_depictio_data(dashboard_id, local_data):
@@ -52,11 +60,17 @@ def load_depictio_data(dashboard_id, local_data):
                 # logger.info(child)
                 children.append(child)
 
+            interactive_components_dict = return_interactive_components_dict(dashboard_data["stored_metadata"])
+
+            children = [enable_box_edit_mode(child.to_plotly_json(), switch_state=True) for child in children]
+
+            children = update_interactive_component(
+                dashboard_data["stored_metadata"], interactive_components_dict, children, switch_state=True, TOKEN=local_data["access_token"]
+            )
+
             # if children:
-            logger.info(f"BEFORE child :")
 
             # Convert children to their plotly JSON representation
-            children = [enable_box_edit_mode(child.to_plotly_json(), switch_state=True) for child in children]
             # children = enable_box_edit_mode(children[0].to_plotly_json(), switch_state=True)
             # logger.info(f"AFTER child : {children}")
 
