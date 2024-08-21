@@ -98,7 +98,7 @@ def render_welcome_section(email):
                 html.A(
                     dmc.Tooltip(
                         dmc.Avatar(
-                            src="https://e7.pngegg.com/pngimages/799/987/png-clipart-computer-icons-avatar-icon-design-avatar-heroes" "-computer-wallpaper-thumbnail.png",
+                            src=f"https://ui-avatars.com/api/?format=svg&name={email}&background=AEC8FF&color=white&rounded=true&bold=true&format=svg&size=16",
                             size="lg",
                             radius="xl",
                         ),

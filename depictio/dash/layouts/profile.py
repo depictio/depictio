@@ -200,7 +200,8 @@ def register_profile_callbacks(app):
         avatar = html.A(
             dmc.Tooltip(
                 dmc.Avatar(
-                    src="https://e7.pngegg.com/pngimages/799/987/png-clipart-computer-icons-avatar-icon-design-avatar-heroes" "-computer-wallpaper-thumbnail.png",
+                    # pastel blue: #AEC8FF
+                    src=f"https://ui-avatars.com/api/?format=svg&name={user.get('email', 'N/A')}&background=AEC8FF&color=white&rounded=true&bold=true&format=svg&size=16",
                     size="lg",
                     radius="xl",
                 ),
