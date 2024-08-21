@@ -4,7 +4,7 @@ from dash import html, Input, Output, State
 import dash
 from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_token
-from depictio.api.v1.endpoints.user_endpoints.utils import edit_password, check_password
+from depictio.api.v1.endpoints.user_endpoints.utils import edit_password, check_password, logout_user
 from dash_extensions.enrich import html, Input, Output, State
 from dash_extensions import EventListener
 from dash.exceptions import PreventUpdate
@@ -212,6 +212,7 @@ def register_profile_callbacks(app):
         user_metadata = {
             "Email": user.get("email", "N/A"),
             "Registration Date": user.get("registration_date", "N/A"),
+            "Last login": user.get("last_login", "N/A"),
             "Admin": user.get("is_admin", "N/A"),
             "Groups": user.get("groups", "N/A"),
         }
@@ -225,7 +226,7 @@ def register_profile_callbacks(app):
     @app.callback(
         [Output("url", "pathname", allow_duplicate=True), Output("local-store", "data", allow_duplicate=True)], [Input("logout-button", "n_clicks")], prevent_initial_call=True
     )
-    def logout_user(n_clicks):
+    def logout_user_callback(n_clicks):
         if n_clicks is None:
             return dash.no_update, dash.no_update
 
