@@ -51,7 +51,13 @@ def find_user(email, return_tokens=False):
 # Function to add a new user
 def add_user(email, password, is_admin=False):
     hashed_password = hash_password(password)
-    user_dict = {"email": email, "password": hashed_password, "is_admin": is_admin}
+    user_dict = {
+        "email": email,
+        "password": hashed_password,
+        "is_admin": is_admin,
+        "registration_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "last_login": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
     response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/auth/register", json=user_dict)
     if response.status_code == 200:
         logger.info(f"User {email} added successfully.")
