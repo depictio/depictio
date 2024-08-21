@@ -15,7 +15,7 @@ def load_dashboards_from_db(owner):
 
     if not dashboards:
         logger.info("No dashboards found.")
-        return {"success": False, "message": "No dashboards found."}
+        dashboards = []
 
     logger.info(f"dashboards: {dashboards}")
 
