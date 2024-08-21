@@ -86,6 +86,9 @@ async def login(login_request: OAuth2PasswordRequestForm = Depends()):
 
     logger.info(f"Token generated for user: {login_request.username}")
 
+    # Update last-login field in the user document
+    result = users_collection.update_one({"email": login_request.username}, {"$set": {"last_login": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}})
+
     return {
         "access_token": token.access_token,
         "token_type": "bearer",
@@ -266,10 +269,11 @@ def generate_agent_config(request: dict, current_user=Depends(get_current_user))
     logger.info(f"Current user: {current_user}")
 
     logger.info(f"Current user: {current_user}")
-    current_userbase = UserBase(**current_user.dict(exclude={"_id", "id", "tokens", "is_active", "is_verified", "last_login", "registration_date", "password", "current_access_token"}))
+    current_userbase = UserBase(
+        **current_user.dict(exclude={"_id", "id", "tokens", "is_active", "is_verified", "last_login", "registration_date", "password", "current_access_token"})
+    )
     logger.info(f"Current user base: {current_userbase}")
     current_userbase = convert_objectid_to_str(current_userbase.dict())
-
 
     # Keep only email and is_admin fields from user
     token = request["token"]
