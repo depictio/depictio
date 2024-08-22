@@ -93,6 +93,18 @@ def register_callbacks_header(app):
                 else:
                     logger.warn(f"Failed to save dashboard data: {response.json()}")
 
+                # Screenshot the dashboard
+                screenshot_response = httpx.get(
+                    f"{API_BASE_URL}/depictio/api/v1/dashboards/screenshot/{dashboard_id}",
+                    headers={
+                        "Authorization": f"Bearer {TOKEN}",
+                    },
+                )
+                if screenshot_response.status_code == 200:
+                    logger.warn("Dashboard screenshot saved successfully.")
+                else:
+                    logger.warn(f"Failed to save dashboard screenshot: {screenshot_response.json()}")
+
                 return []
 
             else:
