@@ -1,5 +1,7 @@
+import json
 from fastapi import Depends, HTTPException, APIRouter
 
+from depictio.api.v1.configs.config import API_BASE_URL, DASH_BASE_URL
 from depictio.api.v1.db import dashboards_collection
 from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import load_dashboards_from_db
 from depictio.api.v1.endpoints.dashboards_endpoints.models import DashboardData
@@ -71,6 +73,10 @@ async def save_dashboard(dashboard_id: str, data: dict, current_user=Depends(get
     Check if an entry with the same dashboard_id exists, if not, insert, if yes, update.
     """
 
+    logger.info(f"Dashboard ID: {dashboard_id}")
+    logger.info(f"Data: {data}")
+    logger.info(f"Current user: {current_user}")
+
     if not current_user:
         raise HTTPException(status_code=401, detail="Current user not found.")
 
@@ -97,10 +103,123 @@ async def save_dashboard(dashboard_id: str, data: dict, current_user=Depends(get
     # MongoDB should always return a document after an upsert operation
     if result:
         message = "Dashboard data updated successfully." if result.get("dashboard_id", None) == dashboard_id else "Dashboard data inserted successfully."
+
+        # # Trigger screenshot capture
+        # url = f"{DASH_BASE_URL}/{dashboard_id}"
+        # from pyppeteer.errors import BrowserError
+
+
+        # try:
+        #     await asyncio.run(capture_screenshots(url, current_user))
+        #     logger.info(f"Screenshot captured for dashboard ID: {dashboard_id}")
+        
+        # except (BrowserError, RuntimeError) as e:
+        #     logger.error(f"Failed to capture screenshot for dashboard ID: {dashboard_id} - {e}")
+
+        #     raise HTTPException(status_code=500, detail=str(e))
+
         return {"message": message, "dashboard_id": dashboard_id}
     else:
         # It's unlikely to reach this point due to upsert=True, but included for completeness
         raise HTTPException(status_code=404, detail="Failed to insert or update dashboard data.")
+
+
+
+@dashboards_endpoint_router.get("/screenshot/{dashboard_id}")
+async def screenshot_dashboard(dashboard_id: str, current_user=Depends(get_current_user)):
+    from playwright.async_api import async_playwright
+
+    
+    # Folder where screenshots will be saved
+    output_folder = "./depictio/dash/assets/screenshots"
+
+    # DASH_BASE_URL = "http://localhost:5080"
+    url = f"{DASH_BASE_URL}"
+    # url = f"{DASH_BASE_URL}/{dashboard_id}"
+    logger.info(f"Dashboard URL: {url}")
+
+    # # Create the output folder if it doesn't exist
+    # os.makedirs(output_folder, exist_ok=True)
+
+    try:
+
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            context = await browser.new_context()
+            page = await context.new_page()
+            logger.info(f"Browser: {browser}")
+
+            # Navigate to a blank page
+            # await page.goto(f"https://google.com",  wait_until="networkidle")
+            await page.goto(f"{url}/auth", wait_until="networkidle")
+            logger.info(f"Page URL: {url}/auth")
+
+            token_data = {
+                "access_token": current_user.current_access_token,
+                "logged_in": True,
+                # "email": current_user.email,
+            }
+
+            token_data_json = json.dumps(token_data)
+
+
+            logger.info(f"Token data: {token_data_json}")
+
+            # Set data in the local storage
+            await page.evaluate(f"""() => {{
+                localStorage.setItem('local-store', '{token_data_json}');
+            }}""")
+            # Set data in the local storage
+            await page.evaluate(f"""() => {{
+                localStorage.setItem('TEST-PLAYWRIGHT', 'TEST');
+            }}""")
+            
+            # logger.info(f"Evaluate local storage: {token_data}")
+
+            # # Navigate to the URL
+            await page.goto(f"{url}/dashboard/{dashboard_id}", wait_until="networkidle")
+            logger.info(f"Page URL: {url}/dashboard/{dashboard_id}")
+
+            # # # Wait for the page to load
+            await page.wait_for_selector("div#_dash-app-content")
+            logger.info(f"Wait for selector: div#_dash-app-content")
+
+            # Remove the debug menu
+            await page.evaluate("""() => {
+                const debugMenuOuter = document.querySelector('.dash-debug-menu__outer');
+                if (debugMenuOuter) {
+                    debugMenuOuter.remove();
+                }
+                
+            }""")
+            logger.info(f"Remove debug menu")
+
+            await page.evaluate("""() => {
+                const debugMenuOuter = document.querySelector('.dash-debug-menu');
+                if (debugMenuOuter) {
+                    debugMenuOuter.remove();
+                }
+            }""")
+
+            logger.info(f"Remove debug menu")
+
+            # Capture the screenshot
+            user = current_user.email.split("_")[0]
+            # Combine dashboard name and user name to create the output file name
+
+            output_file = f"{output_folder}/{user}_{dashboard_id}.png"
+            logger.info(f"Screenshot output file: {output_file}")
+            await page.screenshot(path=output_file, full_page=True)
+            logger.info(f"Screenshot captured for dashboard ID: {dashboard_id}")
+            # Close the browser
+            await browser.close()
+    
+    except Exception as e:
+        logger.error(f"Failed to capture screenshot for dashboard URL: {url} - {e}")
+        raise e
+
+
+
 
 @dashboards_endpoint_router.delete("/delete/{dashboard_id}")
 async def delete_dashboard(dashboard_id: str, current_user=Depends(get_current_user)):
