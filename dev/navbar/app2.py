@@ -46,6 +46,7 @@ def update_active_state(pathname):
     else:
         return [False, False]
 
+
 # Update URL
 @app.callback(
     Output("url", "pathname"),
@@ -59,6 +60,8 @@ def update_url(n_clicks):
         return "/dashboards"
     elif index == "datasets":
         return "/datasets"
+    elif index == "/dashboard/1":
+        return "/dashboard/1"
     else:
         return "/"
 
@@ -71,20 +74,69 @@ def update_url(n_clicks):
 )
 def update_page_content(pathname):
     if pathname == "/dashboards":
-        return html.Div("Dashboards")
+        recently_viewed = html.Div(
+            [
+                # margin left, top and bottom
+                # dark grey color #333333
+                dmc.Text("Dashboards recently viewed", size=20, weight=600, color="#333333", 
+                         style={"margin": "10px 10px 10px 10px"}),
+                dmc.Divider(style={"margin": "10px 10px"}),
+                dmc.SimpleGrid(
+                    # Dashboards recently viewed
+                    4
+                    * [
+                        dmc.Card(
+                            children=[
+                                html.A(
+                                    dmc.CardSection(
+                                        dmc.Image(
+                                            src="assets/screenshots/admin@embl.de_1.png",
+                                        )
+                                    ),
+                                    href="/dashboard/1",
+                                ),
+                                html.Hr(),
+                                # Center text
+                                dmc.Group(
+                                    [
+                                        # Center text
+                                        dmc.Tooltip(
+                                            label="Info",
+                                            offset=5,
+                                            position="top",
+                                            # Remove underlined text in the badge
+                                            children=dmc.ActionIcon(
+                                                DashIconify(icon="ci:info", width=20, height=20),
+                                                color="gray",
+                                                variant="subtle",
+                                                p=1,
+                                            ),
+                                        ),
+                                        dmc.Text("Test", weight=700),
+                                    ],
+                                    mt="md",
+                                    mb="xs",
+                                ),
+                            ],
+                            withBorder=True,
+                            shadow="sm",
+                            radius="md",
+                            style={"width": 350},
+                        ),
+                    ],
+                    cols=4,
+                    spacing="md",
+                ),
+            ]
+        )
+        return html.Div([recently_viewed, recently_viewed])
+    elif pathname == "/dashboard/1":
+        return html.Div("Dashboard 1")
     elif pathname == "/datasets":
         return html.Div("Datasets")
     else:
         return html.Div("Homepage")
 
-
-# @app.callback(
-#     Output("drawer-simple", "opened"),
-#     Input("drawer-demo-button", "n_clicks"),
-#     prevent_initial_call=True,
-# )
-# def drawer_dem(n_clicks):
-#     return True
 
 
 def design_header(data):
@@ -235,15 +287,15 @@ navbar = dmc.Navbar(
             children=[
                 dmc.NavLink(
                     id={"type": "sidebar-link", "index": "dashboards"},
-                    label=dmc.Text("Dashboards", size="lg", style={"fontSize": "20px"}),  # Using dmc.Text to set the font size
-                    icon=DashIconify(icon="material-symbols:dashboard", height=30),
+                    label=dmc.Text("Dashboards", size="lg", style={"fontSize": "16px"}),  # Using dmc.Text to set the font size
+                    icon=DashIconify(icon="material-symbols:dashboard", height=25),
                     href="/dashboards",
                     style={"padding": "20px"},
                 ),
                 dmc.NavLink(
                     id={"type": "sidebar-link", "index": "datasets"},
-                    label=dmc.Text("Datasets", size="lg", style={"fontSize": "20px"}),  # Using dmc.Text to set the font size
-                    icon=DashIconify(icon="material-symbols:dataset", height=30),
+                    label=dmc.Text("Datasets", size="lg", style={"fontSize": "16px"}),  # Using dmc.Text to set the font size
+                    icon=DashIconify(icon="material-symbols:dataset", height=25),
                     href="/datasets",
                     style={"padding": "20px"},
                 ),
@@ -302,6 +354,12 @@ app.layout = dmc.Container(
                     p=0,
                     fluid=True,
                     # style={"width": "100%", "height": "100%", "margin": "0", "maxWidth": "100%", "overflow": "auto", "flexShrink": "1", "maxHeight": "100%"},
+                    style={
+                        "width": "100%",
+                        "height": "100%",
+                        "overflowY": "auto",  # Allow vertical scrolling
+                        "flexGrow": "1",
+                    },
                 ),
                 html.Div(id="test-input"),
                 html.Div(id="test-output", style={"display": "none"}),
@@ -316,6 +374,7 @@ app.layout = dmc.Container(
         ),
     ],
     # size="100%",
+    fluid=True,
     p=0,
     m=0,
     style={"display": "flex", "maxWidth": "100vw", "overflow": "hidden", "maxHeight": "100vh", "position": "absolute", "top": 0, "left": 0, "width": "100vw"},
