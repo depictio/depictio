@@ -13,6 +13,7 @@ logger.info(f"Using config file: {config_backend_location}")
 settings = validate_config(get_config(config_backend_location), Settings)
 
 API_BASE_URL = f"http://{settings.fastapi.service_name}:{settings.fastapi.port}"
+DASH_BASE_URL = f"http://{settings.dash.service_name}:{settings.dash.port}"
 MONGODB_URL = f"mongodb://{settings.mongodb.service_name}:{settings.mongodb.port}/"
 # TOKEN = settings.auth.tmp_token
 # TOKEN = TOKEN.strip()
