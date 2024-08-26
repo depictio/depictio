@@ -44,7 +44,7 @@ def render_tokens_list(tokens):
 layout = dbc.Container(
     [
         dcc.Store(id="delete-token-id-store", storage_type="memory"),
-        html.A(dmc.Button("Back to Home", id="back-to-homepage", variant="outline", color="blue", style={"marginTop": "20px"}), href="/"),
+        # html.A(dmc.Button("Back to Home", id="back-to-homepage", variant="outline", color="blue", style={"marginTop": "20px"}), href="/"),
         dbc.Row(dbc.Col(html.H2("CLI agent config", className="text-center"), width=12)),
         dbc.Row(dbc.Col(html.P("Security configuration to access Depictio via depictio-cli."), width=12)),
         dbc.Row(dbc.Col(dbc.Button("Add new config", id="add-token-button", color="primary", className="mb-4", n_clicks=0), width={"size": 2, "offset": 10})),
