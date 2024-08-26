@@ -141,7 +141,7 @@ layout = html.Div(
             closeOnClickOutside=False,
             size="lg",
         ),
-        html.Div(id="landing-page-content"),
+        # html.Div(id="landing-page-content"),
         # Hidden buttons for switching forms to ensure they exist in the layout
         html.Div(
             [
@@ -191,7 +191,6 @@ def register_callbacks_users_management(app):
             Output("user-feedback", "children"),
             Output("modal-state-store", "data"),
             Output("modal-open-store", "data"),
-            Output("session-store", "data"),
             Output("local-store", "data"),
         ],
         [
@@ -209,7 +208,6 @@ def register_callbacks_users_management(app):
             State("register-password", "value"),
             State("register-confirm-password", "value"),
             State("modal-open-store", "data"),
-            State("session-store", "data"),
             State("local-store", "data"),
         ],
     )
@@ -226,7 +224,6 @@ def register_callbacks_users_management(app):
         register_password,
         register_confirm_password,
         modal_open,
-        session_data,
         local_data,
     ):
         button_id = ctx.triggered[0]["prop_id"].split(".")[0]
@@ -235,11 +232,11 @@ def register_callbacks_users_management(app):
 
         # If user is already logged in, do not show the login form
         if local_data and local_data.get("logged_in", False):
-            return False, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+            return False, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
         # If no button was clicked, return the current state
         if not ctx.triggered:
-            return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
         # Handle button clicks
         # If the register button was clicked, open the register form
@@ -248,12 +245,12 @@ def register_callbacks_users_management(app):
             modal_state = "register"
             content = render_register_form()
             logger.info(f"content: {content}")
-            return modal_open, content, dash.no_update, modal_state, dash.no_update, session_data, local_data
+            return modal_open, content, dash.no_update, modal_state, dash.no_update, local_data
         # If the login button was clicked, open the login form
         elif button_id == "open-login-form" or not ctx.triggered:
             modal_state = "login"
             content = render_login_form()
-            return modal_open, content, dash.no_update, modal_state, dash.no_update, session_data, local_data
+            return modal_open, content, dash.no_update, modal_state, dash.no_update, local_data
         # If the login button was clicked, validate the login
         elif button_id == "login-button":
             feedback_message, modal_open, session_data, local_data = validate_login(login_email, login_password)
@@ -261,7 +258,7 @@ def register_callbacks_users_management(app):
                 content = dash.no_update
             else:
                 content = render_login_form()
-            return modal_open, content, dmc.Text(feedback_message, color="red" if modal_open else "green"), current_state, modal_open, session_data, local_data
+            return modal_open, content, dmc.Text(feedback_message, color="red" if modal_open else "green"), current_state, modal_open, local_data
         # If the register button was clicked, handle the registration
         elif button_id == "register-button":
             feedback_message, modal_open = handle_registration(register_email, register_password, register_confirm_password)
@@ -271,11 +268,11 @@ def register_callbacks_users_management(app):
             else:
                 modal_state = "register"
                 content = render_register_form()
-            return modal_open, content, dmc.Text(feedback_message, color="red" if modal_open else "green"), modal_state, modal_open, session_data, local_data
+            return modal_open, content, dmc.Text(feedback_message, color="red" if modal_open else "green"), modal_state, modal_open, local_data
         # If the logout button was clicked, log the user out
         # elif button_id == "logout-button":
         #     modal_open = True
         #     content = render_login_form()
         #     return modal_open, content, dash.no_update, current_state, modal_open, session_data
 
-        return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+        return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update

@@ -10,6 +10,7 @@ from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_token
 from depictio.api.v1.configs.logging import logger
 
+
 def register_sidebar_callbacks(app):
     # Inject JavaScript to handle the resize
     app.clientside_callback(
@@ -82,7 +83,7 @@ def register_sidebar_callbacks(app):
 
         email = current_user.email
         name = email.split("@")[0]
-        avatar = html.A(
+        avatar = dcc.Link(
             dmc.Avatar(
                 id="avatar",
                 src=f"https://ui-avatars.com/api/?format=svg&name={email}&background=AEC8FF&color=white&rounded=true&bold=true&format=svg&size=16",
@@ -104,7 +105,6 @@ def register_sidebar_callbacks(app):
         if pathname == "/auth":
             return []
 
-
         response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/utils/status", headers={"Authorization": f"Bearer {local_store['access_token']}"})
         if response.status_code != 200:
             server_status_badge = dmc.Col(dmc.Badge("Server offline", variant="dot", color="red", size=14, style={"padding": "5px 5px"}), span="content")
@@ -113,12 +113,11 @@ def register_sidebar_callbacks(app):
             logger.info(f"Server status: {response.json()}")
             server_status = response.json()["status"]
             if server_status == "online":
-                server_status_badge = dmc.Col(dmc.Badge("Server online", variant="dot", color="green", size=14, style={"padding": "5px 5px"}), span="content")
-                server_version = dmc.Col(dmc.Text(f"{response.json()['version']}", size=15, weight=600), span="content")
+                server_status_badge = dmc.Col(dmc.Badge(f"Server online : {response.json()['version']}", variant="dot", color="green", size=14), span="content")
 
-                return [server_status_badge, server_version]
+                return [dmc.Group([server_status_badge], position="apart")]
             else:
-                server_status_badge = dmc.Col(dmc.Badge("Server offline", variant="dot", color="red", size=14, style={"padding": "5px 5px"}), span="content")
+                server_status_badge = dmc.Col(dmc.Badge("Server offline", variant="outline", color="red", size=14, style={"padding": "5px 5px"}), span="content")
                 return [server_status_badge]
 
 
