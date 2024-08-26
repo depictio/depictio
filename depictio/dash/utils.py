@@ -52,61 +52,6 @@ def get_size(obj, seen=None):
     return size
 
 
-def load_depictio_data(dashboard_id):
-    from depictio.api.v1.db import dashboards_collection
-
-    helpers_mapping = {
-        "card": build_card,
-        "figure": build_figure,
-        "interactive": build_interactive,
-        # "table": build_table,
-    }
-
-    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
-    logger.info(f"dashboard_data : {dashboard_data}")
-    if dashboard_data:
-        children = list()
-        for child_metadata in dashboard_data["stored_metadata"]:
-            child_metadata["build_frame"] = True
-            logger.info(child_metadata)
-            component_type = child_metadata.get("component_type")  # Default to 'card' if type is not specified
-            if component_type not in helpers_mapping:
-                logger.warning(f"Unsupported component type specified: {component_type}")
-                raise ValueError(f"Unsupported component type specified: {component_type}")
-
-            builder_function = helpers_mapping[component_type]
-            child = builder_function(**child_metadata)  # Pass all metadata as arguments
-
-            logger.info(child)
-            children.append(child)
-
-        if children:
-            logger.info(f"BEFORE child : {child}")
-
-            child = child.to_plotly_json()
-            logger.info(f"AFTER child : {child}")
-
-            from dash import html
-            from depictio.dash.layouts.edit import enable_box_edit_mode
-
-            dashboard_data["stored_children_data"] = enable_box_edit_mode(child, switch_state=True)
-            # logger.info(f"dashboard_data : {dashboard_data}")
-            logger.info(f"dashboard_data['stored_children_data'] : {dashboard_data['stored_children_data']}")
-            logger.info(f"dashboard_data['stored_layout_data'] : {dashboard_data['stored_layout_data']}")
-            return dashboard_data
-        else:
-            return None
-    else:
-        return None
-
-    # if os.path.exists("/app/data/depictio_data.json"):
-    #     with open("/app/data/depictio_data.json", "r") as file:
-    #         data = json.load(file)
-    #         # print(data.keys())
-    #     return data
-    # return None
-
-
 def load_depictio_data_mongo(dashboard_id: str):
     url = f"{API_BASE_URL}/depictio/api/v1/dashboards/get/{dashboard_id}"
     try:
@@ -195,7 +140,9 @@ def return_dc_tag_from_id(workflow_id: ObjectId, data_collection_id: ObjectId, w
     return [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["_id"] == data_collection_id][0]["data_collection_tag"]
 
 
-def return_mongoid(workflow_tag: str = None, workflow_id: ObjectId = None, data_collection_tag: str = None, data_collection_id: ObjectId = None, workflows: list = None, TOKEN: str = None):
+def return_mongoid(
+    workflow_tag: str = None, workflow_id: ObjectId = None, data_collection_tag: str = None, data_collection_id: ObjectId = None, workflows: list = None, TOKEN: str = None
+):
     if not workflows:
         workflows = list_workflows(TOKEN)
     # else:
