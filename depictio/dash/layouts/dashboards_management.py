@@ -118,7 +118,7 @@ def render_welcome_section(email):
     return dmc.Grid(
         children=[
             dmc.Col(
-                html.A(
+                dcc.Link(
                     dmc.Tooltip(
                         dmc.Avatar(
                             src=f"https://ui-avatars.com/api/?format=svg&name={email}&background=AEC8FF&color=white&rounded=true&bold=true&format=svg&size=16",
@@ -181,7 +181,7 @@ def register_callbacks_dashboards_management(app):
                             ],
                             style={"flex": "1"},
                         ),
-                        html.A(
+                        dcc.Link(
                             dmc.Button(
                                 f"View",
                                 id={"type": "view-dashboard-button", "index": dashboard["dashboard_id"]},
@@ -284,7 +284,7 @@ def register_callbacks_dashboards_management(app):
                         ],
                         style={"flex": "1"},
                     ),
-                    html.A(
+                    dcc.Link(
                         dmc.Button(
                             f"View",
                             id={"type": "view-dashboard-button", "index": dashboard["dashboard_id"]},
@@ -330,7 +330,7 @@ def register_callbacks_dashboards_management(app):
 
                 thumbnail = html.Div(
                     [
-                        html.A(
+                        dcc.Link(
                             dmc.CardSection([dmc.Center(dmc.Image(src=thumbnail_path, height=150, width=150, style={"padding": "20px 0px"}))]),
                             href=f"/dashboard/{dashboard['dashboard_id']}",
                         ),
@@ -338,7 +338,7 @@ def register_callbacks_dashboards_management(app):
                     ]
                 )
             else:
-                thumbnail = html.A(dmc.CardSection(dmc.Image(src=thumbnail_path, height=250, width=450)), href=f"/dashboard/{dashboard['dashboard_id']}")
+                thumbnail = dcc.Link(dmc.CardSection(dmc.Image(src=thumbnail_path, height=250, width=450)), href=f"/dashboard/{dashboard['dashboard_id']}")
 
             return thumbnail
 
@@ -593,7 +593,7 @@ def register_callbacks_dashboards_management(app):
                     # Fetch dashboard data based on dashboard_id and return the appropriate layout
                     # return html.Div([f"Displaying Dashboard {dashboard_id}", dbc.Button("Go back", href="/", color="black", external_link=True)])
                     return dash.no_update
-                elif pathname == "/":
+                elif pathname == "/dashboards":
                     return render_landing_page(data)
 
         # Respond to modal-store data changes
