@@ -52,7 +52,6 @@ layout = html.Div(
     ]
 )
 
-
 def load_dashboards_from_db(token):
     logger.info(f"Loading dashboards from the database with token {token}")
     if not token:
@@ -63,12 +62,22 @@ def load_dashboards_from_db(token):
     if response.status_code == 200:
         dashboards = response.json()
         logger.info(f"dashboards: {dashboards}")
-        next_index = dashboards_collection.count_documents({}) + 1
+
+        # Extract dashboard IDs and determine the maximum dashboard_id
+        dashboard_ids = [int(dashboard["dashboard_id"]) for dashboard in dashboards if "dashboard_id" in dashboard]
+
+        # If there are no dashboards, start with index 1
+        if dashboard_ids:
+            next_index = max(dashboard_ids) + 1
+        else:
+            next_index = 1
+
         logger.info(f"next_index: {next_index}")
         return {"next_index": next_index, "dashboards": dashboards}
 
     else:
         raise ValueError(f"Failed to load dashboards from the database. Error: {response.text}")
+
 
 
 def insert_dashboard(dashboard_id, dashboard_data, token):
@@ -317,9 +326,8 @@ def register_callbacks_dashboards_management(app):
             # Check if the thumbnail exists in the assets folder, if not, create a placeholder
             if not os.path.exists(thumbnail_path_check):
                 logger.warning(f"Thumbnail not found at path: {thumbnail_path}")
-                thumbnail_path = "assets/screenshots/admin@embl.de_2.png"
-                # thumbnail_path = "assets/default_thumbnail.png"
-
+                # thumbnail_path = "assets/screenshots/admin@embl.de_2.png"
+                thumbnail_path = "assets/default_thumbnail.png"
 
                 thumbnail = html.Div(
                     [
@@ -364,115 +372,78 @@ def register_callbacks_dashboards_management(app):
     @app.callback(
         [Output({"type": "dashboard-list", "index": ALL}, "children"), Output({"type": "dashboard-index-store", "index": ALL}, "data")],
         [
-            # Input("create-dashboard-submit", "n_clicks"),
             Input({"type": "confirm-delete", "index": ALL}, "n_clicks"),
         ],
         [
             State({"type": "create-dashboard-button", "index": ALL}, "id"),
             State({"type": "dashboard-index-store", "index": ALL}, "data"),
             State({"type": "confirm-delete", "index": ALL}, "index"),
-            # State("modal-store", "data"),
             State("local-store", "data"),
             Input("dashboard-modal-store", "data"),
         ],
     )
-    def update_dashboards(
-        # create_n_clicks_list,
-        # submit_n_clicks,
-        delete_n_clicks_list,
-        create_ids_list,
-        store_data_list,
-        delete_ids_list,
-        user_data,
-        modal_data,
-    ):
-        logger.info("\n")
-        logger.info("update_dashboards")
-        logger.info(f"CTX triggered: {ctx.triggered}")
-        logger.info(f"CTX triggered prop IDs: {ctx.triggered_prop_ids}")
-        logger.info(f"CTX triggered ID {ctx.triggered_id}")
-        logger.info(f"CTX inputs: {ctx.inputs}")
-        logger.info(f"create_ids_list: {create_ids_list}")
-        logger.info(f"store_data_list: {store_data_list}")
-        logger.info(f"delete_ids_list: {delete_ids_list}")
-        logger.info(f"modal_data: {modal_data}")
-        logger.info(f"user_data: {user_data}")
+    def update_dashboards(delete_n_clicks_list, create_ids_list, store_data_list, delete_ids_list, user_data, modal_data):
+        logger.info("\nupdate_dashboards triggered")
+        log_context_info()
 
         current_user = fetch_user_from_token(user_data["access_token"])
-        logger.info(f"Current user: {current_user}")
         current_userbase = UserBase(**current_user.dict(exclude={"tokens", "is_active", "is_verified", "last_login", "registration_date", "password"}))
-        logger.info(f"Current user base: {current_userbase}")
 
-        # current_userbase = convert_objectid_to_str(current_userbase.dict())
-        # logger.info(f"Current user base: {current_userbase}")
-
-        # filepath = "dashboards.json"
-        # index_data = load_dashboards_from_file(filepath)
         index_data = load_dashboards_from_db(user_data["access_token"])
-
-        dashboards = index_data.get("dashboards", [])
+        dashboards = [DashboardData(**dashboard) for dashboard in index_data.get("dashboards", [])]
         next_index = index_data.get("next_index", 1)
-        dashboards = [DashboardData(**dashboard) for dashboard in dashboards]
-
-        logger.info(f"dashboards: {dashboards}")
-        logger.info(f"CTX triggered ID {ctx.triggered_id}")
 
         if not ctx.triggered_id:
-            dashboards = [convert_objectid_to_str(dashboard.mongo()) for dashboard in dashboards]
-            dashboards_view = create_homepage_view(dashboards, current_userbase.email)
-            logger.info("No trigger")
-            logger.info(f"dashboards_view: {dashboards_view}")
-            logger.info(f"next_index: {next_index}")
-            logger.info(f"{[dashboards_view] * len(store_data_list)}")
-            logger.info(f'{[{"next_index": next_index, "dashboards": dashboards}] * len(store_data_list)}')
-            # dashboards = [convert_objectid_to_str(dashboard.dict()) for dashboard in dashboards]
-            logger.info(f"dashboards: {dashboards}")
-            return [dashboards_view] * len(store_data_list), [{"next_index": next_index, "dashboards": dashboards}] * len(store_data_list)
+            return handle_no_trigger(dashboards, next_index, store_data_list, current_userbase)
 
         if "type" not in ctx.triggered_id:
             if ctx.triggered_id == "dashboard-modal-store":
-                if modal_data["title"]:
-                    logger.info("Creating new dashboard")
-                    logger.info(f"modal_data: {modal_data}")
-                    new_dashboard = {
-                        "title": modal_data["title"],
-                        "last_saved_ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        "permissions": {"owners": [current_userbase], "viewers": []},
-                        # "owner": create_ids_list[0]["index"],
-                        "dashboard_id": str(next_index),
-                    }
-                    new_dashboard = DashboardData(**new_dashboard)
+                return handle_dashboard_creation(dashboards, next_index, modal_data, user_data, current_userbase, store_data_list)
 
-                    dashboards.append(new_dashboard)
-                    logger.info(f"dashboards: {dashboards}")
-                    insert_dashboard(next_index, new_dashboard.mongo(), user_data["access_token"])
-                dashboards = [convert_objectid_to_str(dashboard.mongo()) for dashboard in dashboards]
+        if ctx.triggered_id.get("type") == "confirm-delete":
+            return handle_dashboard_deletion(dashboards, delete_ids_list, user_data, store_data_list)
 
-                next_index += 1
+        return generate_dashboard_view_response(dashboards, next_index, store_data_list, current_userbase)
 
-        else:
-            if ctx.triggered_id["type"] == "confirm-delete":
-                ctx_triggered_dict = ctx.triggered[0]
-                import ast
+    def log_context_info():
+        logger.info(f"CTX triggered: {ctx.triggered}")
+        logger.info(f"CTX triggered prop IDs: {ctx.triggered_prop_ids}")
+        logger.info(f"CTX triggered ID: {ctx.triggered_id}")
+        logger.info(f"CTX inputs: {ctx.inputs}")
 
-                index_confirm_delete = ast.literal_eval(ctx_triggered_dict["prop_id"].split(".")[0])["index"]
-                delete_dashboard(index_confirm_delete, user_data["access_token"])
+    def handle_no_trigger(dashboards, next_index, store_data_list, current_userbase):
+        logger.info("No trigger")
+        return generate_dashboard_view_response(dashboards, next_index, store_data_list, current_userbase)
 
-                logger.info(f"Dashboards before deletion: {dashboards}")
-                dashboards = [convert_objectid_to_str(dashboard.mongo()) for dashboard in dashboards]
-                logger.info(f"Dashboards after deletion: {dashboards}")
-                dashboards = [dashboard for dashboard in dashboards if dashboard["dashboard_id"] != index_confirm_delete]
+    def handle_dashboard_creation(dashboards, next_index, modal_data, user_data, current_userbase, store_data_list):
+        if modal_data.get("title"):
+            logger.info("Creating new dashboard")
+            new_dashboard = DashboardData(
+                title=modal_data["title"],
+                last_saved_ts=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                permissions={"owners": [current_userbase], "viewers": []},
+                dashboard_id=str(next_index),
+            )
+            dashboards.append(new_dashboard)
+            insert_dashboard(next_index, new_dashboard.mongo(), user_data["access_token"])
+            next_index += 1
 
-        logger.info(f"dashboards: {dashboards}")
+        return generate_dashboard_view_response(dashboards, next_index, store_data_list, current_userbase)
 
+    def handle_dashboard_deletion(dashboards, delete_ids_list, user_data, store_data_list):
+        ctx_triggered_dict = ctx.triggered[0]
+        index_confirm_delete = eval(ctx_triggered_dict["prop_id"].split(".")[0])["index"]
+        delete_dashboard(index_confirm_delete, user_data["access_token"])
+
+        dashboards = [dashboard for dashboard in dashboards if dashboard["dashboard_id"] != index_confirm_delete]
+        return generate_dashboard_view_response(dashboards, len(dashboards) + 1, store_data_list)
+
+    def generate_dashboard_view_response(dashboards, next_index, store_data_list, current_userbase):
+        dashboards = [convert_objectid_to_str(dashboard.mongo()) for dashboard in dashboards]
+        dashboards_view = create_homepage_view(dashboards, current_userbase.email)
         new_index_data = {"next_index": next_index, "dashboards": dashboards}
 
-        # save_dashboards_to_file(new_index_data, filepath)
-        dashboards_view = create_homepage_view(dashboards, current_userbase.email)
-        logger.info(f"dashboards_view: {dashboards_view}")
-
-        logger.info(f"new_index_data: {new_index_data}")
-
+        logger.info(f"Generated dashboard view: {dashboards_view}")
         return [dashboards_view] * len(store_data_list), [new_index_data] * len(store_data_list)
 
     @app.callback(
