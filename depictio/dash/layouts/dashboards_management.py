@@ -30,11 +30,11 @@ layout = html.Div(
                 dmc.Stack(
                     [
                         dmc.Center(dmc.Title("Create New Dashboard", order=2)),
-                        dmc.Center(dmc.Space(h=20)),
+                        dmc.Center(dmc.Space(h=10)),
                         dmc.Center(dmc.TextInput(label="Dashboard Title", style={"width": 300}, placeholder="Enter dashboard title", id="dashboard-title-input")),
-                        dmc.Center(dmc.Space(h=20)),
+                        dmc.Center(dmc.Space(h=10)),
                         dmc.Center(dmc.Badge("Dashboard title must be unique", color="red", size=20), style={"display": "none"}, id="unique-title-warning"),
-                        dmc.Center(dmc.Space(h=20)),
+                        # dmc.Center(dmc.Space(h=20)),
                         dmc.Center(dmc.Button("Create Dashboard", id="create-dashboard-submit", variant="filled", size="lg", color="black")),
                     ],
                     align="center",
@@ -44,13 +44,13 @@ layout = html.Div(
             closeOnEscape=False,
             withCloseButton=True,
             zIndex=10000,
-            # see the background of the screen
-            # withOverlay=True,
-            overlayOpacity=0.7,
+            overlayOpacity=0.3,  # Set lower opacity for the overlay
+            overlayColor="black",  # Set overlay color (e.g., black)
         ),
         html.Div(id="landing-page"),  # Initially hidden
     ]
 )
+
 
 def load_dashboards_from_db(token):
     logger.info(f"Loading dashboards from the database with token {token}")
@@ -77,7 +77,6 @@ def load_dashboards_from_db(token):
 
     else:
         raise ValueError(f"Failed to load dashboards from the database. Error: {response.text}")
-
 
 
 def insert_dashboard(dashboard_id, dashboard_data, token):
