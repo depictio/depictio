@@ -1,13 +1,15 @@
 import os
-from dash import html, Input, Output, State, dcc, ctx
+from dash import html, Input, Output, State, dcc, ctx, ALL
 import dash
 import dash_bootstrap_components as dbc
-
+import dash_mantine_components as dmc
+from dash_iconify import DashIconify
 
 # Depictio imports
 from depictio.api.v1.configs.config import settings
 
 # Depictio components imports - design step
+from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_token
 from depictio.dash.modules.card_component.frontend import register_callbacks_card_component
 from depictio.dash.modules.interactive_component.frontend import register_callbacks_interactive_component
 from depictio.dash.modules.figure_component.frontend import register_callbacks_figure_component
@@ -99,17 +101,47 @@ from depictio.dash.layouts.tokens_management import layout as tokens_management_
 register_tokens_management_callbacks(app)
 
 
+from depictio.dash.layouts.sidebar import register_sidebar_callbacks
+
+# from depictio.dash.layouts.navbar import layout as navbar_layout
+register_sidebar_callbacks(app)
+
+from depictio.dash.layouts.save import register_callbacks_save
+
+register_callbacks_save(app)
+
+from depictio.dash.layouts.datasets_management import register_datasets_callbacks
+
+register_datasets_callbacks(app)
+
+
+def return_create_dashboard_button(email):
+    create_button = dmc.Button(
+        "+ New Dashboard",
+        id={"type": "create-dashboard-button", "index": email},
+        n_clicks=0,
+        color="orange",
+        # variant="gradient",
+        # gradient={"from": "black", "to": "grey", "deg": 135},
+        style={"margin": "20px 0", "fontFamily": "Virgil"},
+        size="xl",
+        radius="md",
+    )
+    return create_button
+
+
 @app.callback(
     Output("page-content", "children"),
+    Output("header", "children"),
     Output("url", "pathname"),
     [Input("url", "pathname"), Input("local-store", "data")],
 )
 def display_page(pathname, local_data):
-
     trigger = ctx.triggered[0]["prop_id"].split(".")[0]
     logger.info(f"trigger: {trigger}")
     logger.info(f"local_data: {local_data}")
     logger.info(f"URL pathname: {pathname}")
+    header = dmc.Text("Welcome to Depictio", weight=600, size="xl", style={"fontSize": "28px", "fontFamily": "Virgil"})
 
     if trigger == "local-store":
         logger.info("Local store triggered")
@@ -118,19 +150,47 @@ def display_page(pathname, local_data):
             logger.info(f"pathname: {pathname}")
             if pathname is None or pathname == "/":
                 # return html.Div("Welcome to Depictio"), "/"
-                return create_dashboards_management_layout(), "/"
+
+                user = fetch_user_from_token(local_data["access_token"])
+                create_button = return_create_dashboard_button(user.email)
+
+                final_header = dmc.Group(
+                    [
+                        dmc.Text("Dashboards", weight=600, size="xl", style={"fontSize": "28px", "fontFamily": "Virgil", "padding": "20px 10px"}),
+                        create_button,
+                    ],
+                    position="apart",  # Ensures the text and button are on opposite sides
+                    align="center",  # Vertically aligns the items in the center
+                    # p="10px",
+                    style={"backgroundColor": "#fff"},
+                )
+
+                return create_dashboards_management_layout(), final_header, "/"
             # elif pathname.startswith("/dashboard/"):
             #     return create_dashboard_layout(dashboard_id=pathname.split("/")[-1]), pathname
             elif pathname == "/profile":
-                return create_profile_layout(), pathname
+                return create_profile_layout(), header, pathname
             elif pathname == "/tokens":
-                return create_tokens_management_layout(), pathname
+                return create_tokens_management_layout(), header, pathname
+            elif pathname == "/dashboards":
+                header = dmc.Text(f"Dashboards", weight=600, size="xl", style={"fontSize": "28px", "fontFamily": "Virgil", "padding": "20px 10px"})
+
+                return html.Div(id="test-dashboards"), header, pathname
+
+            elif pathname == "/datasets":
+                header = dmc.Text(f"Datasets", weight=600, size="xl", style={"fontSize": "28px", "fontFamily": "Virgil", "padding": "20px 10px"})
+                datasets = html.Div(id="datasets-list")
+                return datasets, header, pathname
+
             elif pathname.startswith("/dashboard/"):
                 dashboard_id = pathname.split("/")[-1]
                 logger.info(f"dashboard_id: {dashboard_id}")
-                return create_dashboard_layout(dashboard_id=dashboard_id, local_data=local_data), pathname
+                depictio_dash_data = load_depictio_data(dashboard_id, local_data)
+                header = design_header(data=depictio_dash_data)
+
+                return create_dashboard_layout(depictio_dash_data=depictio_dash_data, local_data=local_data), header, pathname
             else:
-                return create_dashboards_management_layout(), "/"
+                return create_dashboards_management_layout(), header, "/"
         else:
             logger.info("User not logged in")
             logger.info(f"pathname: {pathname}")
@@ -141,7 +201,6 @@ def display_page(pathname, local_data):
 
 
 def handle_url(pathname, local_data):
-
     if local_data["logged_in"]:
         return handle_authenticated_user(pathname, local_data)
     else:
@@ -151,34 +210,53 @@ def handle_url(pathname, local_data):
 def handle_unauthenticated_user(pathname):
     logger.info("User not logged in")
     logger.info(f"pathname: {pathname}")
+    header = dmc.Text("Welcome to Depictio", weight=600, size="xl", style={"fontSize": "28px", "fontFamily": "Virgil"})
     if pathname is None or pathname == "/":
         logger.info(f"pathname: {pathname}")
-        return create_users_management_layout(), "/auth"
+        return create_users_management_layout(), header, "/auth"
     elif pathname == "/auth":
         logger.info(f"pathname: {pathname}")
-        return create_users_management_layout(), "/auth"
+        return create_users_management_layout(), header, "/auth"
     elif pathname == "/profile":
         logger.info(f"pathname: {pathname}")
-        return create_users_management_layout(), "/auth"
+        return create_users_management_layout(), header, "/auth"
     elif pathname == "/tokens":
         logger.info(f"pathname: {pathname}")
-        return create_users_management_layout(), "/auth"
+        return create_users_management_layout(), header, "/auth"
 
 
 def handle_authenticated_user(pathname, local_data):
     logger.info("User logged in")
+    text = ""
+    header = dmc.Text(f"{text}", weight=600, size="xl", style={"fontSize": "28px", "fontFamily": "Virgil"})
     if pathname is None:
-        return dash.no_update, "/"
+        return dash.no_update, header, "/"
     elif pathname.startswith("/dashboard/"):
         dashboard_id = pathname.split("/")[-1]
         logger.info(f"dashboard_id: {dashboard_id}")
-        return create_dashboard_layout(dashboard_id=dashboard_id, local_data=local_data), pathname
+        # Load depictio depictio_dash_data from JSON
+        depictio_dash_data = load_depictio_data(dashboard_id, local_data)
+        logger.info(f"dashboard_id: {dashboard_id}")
+        # logger.info(f"depictio_dash_data: {depictio_dash_data}")
+        header = design_header(data=depictio_dash_data)
+
+    elif pathname == "/dashboards":
+        header = dmc.Text(f"Dashboards", weight=600, size="xl", style={"fontSize": "28px", "fontFamily": "Virgil", "padding": "20px 10px"})
+
+        return html.Div(id="test-dashboards"), header, pathname
+
+    elif pathname == "/datasets":
+        header = dmc.Text(f"Datasets", weight=600, size="xl", style={"fontSize": "28px", "fontFamily": "Virgil", "padding": "20px 10px"})
+        datasets = html.Div(id="datasets-list")
+        return datasets, header, pathname
+
+        return create_dashboard_layout(depictio_dash_data=depictio_dash_data, local_data=local_data), header, pathname
     elif pathname == "/profile":
-        return create_profile_layout(), pathname
+        return create_profile_layout(), header, pathname
     elif pathname == "/tokens":
-        return create_tokens_management_layout(), pathname
+        return create_tokens_management_layout(), header, pathname
     else:
-        return create_dashboards_management_layout(), pathname
+        return create_dashboards_management_layout(), header, pathname
 
 
 def create_dashboards_management_layout():
@@ -197,12 +275,7 @@ def create_tokens_management_layout():
     return tokens_management_layout
 
 
-def create_dashboard_layout(dashboard_id=None, local_data=None):
-    # Load depictio depictio_dash_data from JSON
-    depictio_dash_data = load_depictio_data(dashboard_id, local_data)
-    logger.info(f"dashboard_id: {dashboard_id}")
-    # logger.info(f"depictio_dash_data: {depictio_dash_data}")
-
+def create_dashboard_layout(depictio_dash_data=None, local_data=None):
     # Init layout and children if depictio_dash_data is available, else set to empty
     if depictio_dash_data:
         if "stored_layout_data" in depictio_dash_data:
@@ -215,18 +288,18 @@ def create_dashboard_layout(dashboard_id=None, local_data=None):
             init_children = list()
 
     logger.info(f"Loaded depictio init_layout: {init_layout}")
-    header, backend_components = design_header(depictio_dash_data)
+    # header, backend_components = design_header(depictio_dash_data)
 
     # Generate draggable layout
     core = design_draggable(depictio_dash_data, init_layout, init_children, local_data)
 
-    return dbc.Container(
+    return dmc.Container(
         [
             html.Div(
                 [
                     # Backend components & header
-                    backend_components,
-                    header,
+                    # backend_components,
+                    # header,
                     # Draggable layout
                     core,
                 ],
@@ -236,42 +309,106 @@ def create_dashboard_layout(dashboard_id=None, local_data=None):
             html.Div(id="test-output-visible"),
         ],
         fluid=True,
+        style={"display": "flex", "maxWidth": "100%", "flexGrow": "1", "maxHeight": "100%", "flexDirection": "column", "width": "100%", "height": "100%"},
     )
 
 
+def design_header_ui(data):
+    """
+    Design the header of the dashboard
+    """
+
+    header = dmc.Header(
+        id="header",
+        height=87,
+        children=[
+            dbc.Row(
+                [
+                    dbc.Col(dmc.Title("Homepage", order=2, color="black"), width=11, align="center", style={"textAlign": "left"}),
+                ],
+                style={"height": "100%"},
+            ),
+        ],
+    )
+
+    return header
+
+
+header = design_header_ui(data=None)
+
+
 def create_app_layout():
-    return dbc.Container(
+    from depictio.dash.layouts.sidebar import render_sidebar
+
+    navbar = render_sidebar("")
+
+    return dmc.Container(
         [
             dcc.Location(id="url", refresh=False),
             dcc.Store(id="session-store", storage_type="session", data={"logged_in": False, "email": None}),
             dcc.Store(id="local-store", storage_type="local", data={"logged_in": False, "access_token": None}),
             dcc.Store(id="url-store", storage_type="local", data={"last_pathname": "/"}),
-            html.Div(id="page-content"),
+            navbar,
+            dmc.Drawer(
+                title="",
+                id="drawer-simple",
+                padding="md",
+                zIndex=10000,
+                size=200,
+                overlayOpacity=0.1,
+                children=[],
+            ),
+            dmc.Container(
+                [
+                    header,
+                    dmc.Container(
+                        [
+                            html.Div(
+                                id="page-content",
+                                # full width and height
+                                style={"width": "100%", "height": "100%"},
+                            )
+                        ],
+                        id="page-container",
+                        p=0,
+                        fluid=True,
+                        style={
+                            "width": "100%",
+                            "height": "100%",
+                            "overflowY": "auto",  # Allow vertical scrolling
+                            "flexGrow": "1",
+                        },
+                    ),
+                ],
+                fluid=True,
+                size="100%",
+                p=0,
+                m=0,
+                style={"display": "flex", "maxWidth": "100%", "flexGrow": "1", "maxHeight": "100%", "flexDirection": "column", "overflow": "hidden"},
+                id="content-container",
+            ),
         ],
+        # size="100%",
         fluid=True,
+        p=0,
+        m=0,
+        style={
+            "display": "flex",
+            "maxWidth": "100%",
+            "maxHeight": "100%",
+            "flexGrow": "1",
+            "position": "absolute",
+            "top": 0,
+            "left": 0,
+            "width": "100%",
+            "height": "100%",
+            "overflow": "hidden",  # Hide overflow content
+        },
+        id="overall-container",
     )
 
 
 app.layout = create_app_layout
-
-# APP Layout
-# app.layout = dbc.Container(
-#     [
-#         html.Div(
-#             [
-#                 # Backend components & header
-#                 backend_components,
-#                 header,
-#                 # Draggable layout
-#                 core,
-#             ],
-#         ),
-#         html.Div(id="test-input"),
-#         html.Div(id="test-output", style={"display": "none"}),
-#         html.Div(id="test-output-visible"),
-#     ],
-#     fluid=True,
-# )
 
 
 if __name__ == "__main__":

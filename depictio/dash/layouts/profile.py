@@ -27,11 +27,11 @@ layout = dbc.Container(
                         dbc.Row(
                             [
                                 dbc.Col(dmc.Button("Logout", id="logout-button", variant="outline", color="red", style={"marginTop": "20px"}), align="left", width="auto"),
-                                dbc.Col(
-                                    html.A(dmc.Button("Back to Home", id="back-to-homepage", variant="outline", color="blue", style={"marginTop": "20px"}), href="/"),
-                                    align="left",
-                                    width="auto",
-                                ),
+                                # dbc.Col(
+                                #     html.A(dmc.Button("Back to Home", id="back-to-homepage", variant="outline", color="blue", style={"marginTop": "20px"}), href="/"),
+                                #     align="left",
+                                #     width="auto",
+                                # ),
                                 dbc.Col(
                                     html.A(dmc.Button("Edit password", id="edit-password", variant="outline", color="blue", style={"marginTop": "20px"})),
                                     align="left",
@@ -198,14 +198,11 @@ def register_profile_callbacks(app):
             return html.Div(), html.Div()
 
         avatar = html.A(
-            dmc.Tooltip(
-                dmc.Avatar(
-                    src="https://e7.pngegg.com/pngimages/799/987/png-clipart-computer-icons-avatar-icon-design-avatar-heroes" "-computer-wallpaper-thumbnail.png",
-                    size="lg",
-                    radius="xl",
-                ),
-                label="",
-                position="bottom",
+            dmc.Avatar(
+                # pastel blue: #AEC8FF
+                src=f"https://ui-avatars.com/api/?format=svg&name={user.get('email', 'N/A')}&background=AEC8FF&color=white&rounded=true&bold=true&format=svg&size=16",
+                size="lg",
+                radius="xl",
             )
         )
 

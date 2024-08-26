@@ -12,125 +12,7 @@ current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 def register_callbacks_header(app):
-    @app.callback(
-        Output("dummy-output", "children"),
-        Input("save-button-dashboard", "n_clicks"),
-        State("draggable", "layouts"),
-        State(
-            {
-                "type": "stored-metadata-component",
-                "index": dash.dependencies.ALL,
-            },
-            "data",
-        ),
-        # State("draggable", "children"),
-        State("stored-edit-dashboard-mode-button", "data"),
-        State("stored-add-button", "data"),
-        State({"type": "interactive-component-value", "index": ALL}, "value"),
-        State("url", "pathname"),
-        State("local-store", "data"),
-        prevent_initial_call=True,
-    )
-    def save_data_dashboard(
-        n_clicks,
-        stored_layout_data,
-        stored_metadata,
-        # children,
-        edit_dashboard_mode_button,
-        add_button,
-        interactive_component_values,
-        pathname,
-        local_store,
-    ):
-        logger.info(f"URL pathname: {pathname}")
-        if not local_store:
-            logger.warn("User not logged in.")
-            return dash.no_update
 
-        TOKEN = local_store["access_token"]
-        logger.info(f"save_data_dashboard - TOKEN: {TOKEN}")
-        # current_user = fetch_user_from_token(TOKEN)
-
-        if n_clicks:
-            dashboard_id = pathname.split("/")[-1]
-
-            logger.info(f"save_data_dashboard INSIDE")
-            logger.info(f"stored-metadata-component: {stored_metadata}")
-
-            # FIXME: check if some component are duplicated based on index value, if yes, remove them
-            stored_metadata_indexes = list()
-            for elem in stored_metadata:
-                if elem["index"] in stored_metadata_indexes:
-                    stored_metadata.remove(elem)
-                else:
-                    stored_metadata_indexes.append(elem["index"])
-
-            # Get existing metadata for the dashboard
-            dashboard_data_response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/dashboards/get/{dashboard_id}", headers={"Authorization": f"Bearer {TOKEN}"})
-            if dashboard_data_response.status_code == 200:
-                dashboard_data = dashboard_data_response.json()
-                logger.info(f"save_data_dashboard - Dashboard data: {dashboard_data}")
-                # Replace the existing metadata with the new metadata
-                dashboard_data["stored_metadata"] = stored_metadata
-                dashboard_data["stored_layout_data"] = stored_layout_data
-                dashboard_data["stored_edit_dashboard_mode_button"] = edit_dashboard_mode_button
-                dashboard_data["stored_add_button"] = add_button
-                dashboard_data["last_saved_ts"] = str(current_time)
-
-                logger.info(f"save_data_dashboard - Dashboard data: {dashboard_data}")
-
-                logger.info(f"Dashboard data: {dashboard_data}")
-
-                response = httpx.post(
-                    f"{API_BASE_URL}/depictio/api/v1/dashboards/save/{dashboard_id}",
-                    json=dashboard_data,
-                    headers={
-                        "Authorization": f"Bearer {TOKEN}",
-                    },
-                )
-                if response.status_code == 200:
-                    logger.warn("Dashboard data saved successfully.")
-                else:
-                    logger.warn(f"Failed to save dashboard data: {response.json()}")
-
-                return []
-
-            else:
-                logger.warn(f"Failed to fetch dashboard data: {dashboard_data_response.json()}")
-                return []
-
-        return dash.no_update
-
-    @app.callback(
-        Output("success-modal-dashboard", "is_open"),
-        [
-            Input("save-button-dashboard", "n_clicks"),
-            Input("success-modal-close", "n_clicks"),
-        ],
-        [State("success-modal-dashboard", "is_open")],
-    )
-    def toggle_success_modal_dashboard(n_save, n_close, is_open):
-        ctx = dash.callback_context
-
-        if not ctx.triggered:
-            raise dash.exceptions.PreventUpdate
-
-        trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
-        # logger.info(trigger_id, n_save, n_close)
-
-        if trigger_id == "save-button-dashboard":
-            if n_save is None or n_save == 0:
-                raise dash.exceptions.PreventUpdate
-            else:
-                return True
-
-        elif trigger_id == "success-modal-close":
-            if n_close is None or n_close == 0:
-                raise dash.exceptions.PreventUpdate
-            else:
-                return False
-
-        return is_open
 
     @app.callback(
         Output("add-button", "disabled"),
@@ -211,17 +93,7 @@ def register_callbacks_header(app):
             return not is_open
         return is_open
 
-    @app.callback(
-        Output("offcanvas-menu", "is_open"),
-        Input("open-offcanvas-menu-button", "n_clicks"),
-        State("offcanvas-menu", "is_open"),
-        prevent_initial_call=True,
-    )
-    def toggle_offcanvas_menu(n_clicks, is_open):
-        logger.info(f"toggle_offcanvas_menu: {n_clicks}, {is_open}")
-        if n_clicks:
-            return not is_open
-        return is_open
+
 
 
 def design_header(data):
@@ -236,7 +108,7 @@ def design_header(data):
         if "stored_edit_dashboard_mode_button" not in data:
             data["stored_edit_dashboard_mode_button"] = [int(0)]
 
-    init_nclicks_add_button = data["stored_add_button"] if data else {"count": 0}
+    init_nclicks_add_button = data["stored_add_button"] if data else {"count": 0, "initialized": False}
     init_nclicks_edit_dashboard_mode_button = data["stored_edit_dashboard_mode_button"] if data else [int(0)]
 
     # Check if data is available, if not set the buttons to disabled
@@ -331,35 +203,41 @@ def design_header(data):
     }
 
     title_style = {"fontWeight": "bold", "fontSize": "24px", "color": "#333"}
-    button_style = {"margin": "0 10px", "fontFamily": "Virgil"}
+    button_style = {"margin": "0 0px", "fontFamily": "Virgil", "marginTop": "5px"}
 
     # Right side of the header - Edit dashboard mode button
     # if data:
 
-    add_new_component_button = dmc.Button(
-        "Add component",
+    add_new_component_button = dmc.ActionIcon(
+        DashIconify(icon="ic:round-add-circle", width=35, color="#627bf2"),
+        # dmc.Button(
+        # "Add",
         id="add-button",
-        size="lg",
+        size="xl",
         radius="xl",
-        variant="gradient",
+        variant="subtle",
         n_clicks=init_nclicks_add_button["count"],
+        # style={"width": "120px", "fontFamily": "Virgil", "marginRight": "10px"},
         style=button_style,
         disabled=disabled,
-        leftIcon=DashIconify(icon="mdi:plus", width=16, color="white"),
+        # leftIcon=DashIconify(icon="mdi:plus", width=16, color="white"),
     )
 
-    save_button = dmc.Button(
-        "Save",
+    save_button = dmc.ActionIcon(
+        DashIconify(icon="ic:baseline-save", width=35, color="#a2d64e"),
+        # dmc.Button(
+        # "Save",
         id="save-button-dashboard",
-        size="lg",
+        size="xl",
         radius="xl",
-        variant="gradient",
+        variant="subtle",
         gradient={"from": "teal", "to": "lime", "deg": 105},
         n_clicks=0,
         disabled=disabled,
-        leftIcon=DashIconify(icon="mdi:content-save", width=16, color="white"),
+        style=button_style,
+        # leftIcon=DashIconify(icon="mdi:content-save", width=16, color="white"),
         # width of the button
-        style={"width": "200px", "fontFamily": "Virgil"},
+        # style={"width": "120px", "fontFamily": "Virgil"},
     )
 
     remove_all_components_button = dmc.Button(
@@ -378,71 +256,23 @@ def design_header(data):
 
     card_section = dbc.Row(
         [
-            dmc.Card(
+            dmc.Stack(
                 [
-                    dmc.CardSection(
-                        [
-                            dmc.Badge(f"Owner: {data['permissions']['owners'][0]['email']}", color="blue", leftSection=DashIconify(icon="mdi:account", width=16, color="grey")),
-                            dmc.Badge(f"Last saved: {data['last_saved_ts']}", color="green", leftSection=DashIconify(icon="mdi:clock-time-four-outline", width=16, color="grey")),
-                        ]
-                    ),
+                    # dmc.CardSection(
+                    # [
+                    dmc.Badge(f"Owner: {data['permissions']['owners'][0]['email']}", color="blue", leftSection=DashIconify(icon="mdi:account", width=16, color="grey")),
+                    dmc.Badge(f"Last saved: {data['last_saved_ts']}", color="green", leftSection=DashIconify(icon="mdi:clock-time-four-outline", width=16, color="grey")),
+                    # ]
+                    # ),
                 ],
+                justify="center",
+                align="flex-start",
+                spacing="xs",
             ),
         ],
     )
 
-    offcanvas_menu = dbc.Offcanvas(
-        id="offcanvas-menu",
-        title="Menu",
-        placement="start",
-        backdrop=False,
-        children=[
-            dmc.Group(
-                [
-                    dmc.Button(
-                        leftIcon=DashIconify(icon="mdi:home", width=20, color="white"),
-                        id="home-button",
-                        color="grey",
-                        variant="filled",
-                        style={"fontFamily": "default"},
-                        disabled=disabled,
-                        n_clicks=0,
-                    ),
-                    dmc.Text("Home", style={"fontFamily": "default"}),
-                ],
-                align="center",
-                spacing="sm",
-                style={"border": "1px solid lightgrey", "padding": "10px", "margin": "10px 0"},
-            ),
-            dmc.Group(
-                [
-                    dmc.Button(
-                        leftIcon=DashIconify(icon="mdi:account", width=20, color="white"),
-                        id="profile-button",
-                        color="grey",
-                        variant="filled",
-                        style={"fontFamily": "default"},
-                        disabled=disabled,
-                        n_clicks=0,
-                    ),
-                    dmc.Text("Profile", style={"fontFamily": "default"}),
-                ],
-                align="center",
-                spacing="sm",
-                style={"border": "1px solid lightgrey", "padding": "10px", "margin": "10px 0"},
-            ),
-        ],
-    )
 
-    open_offcanvas_menu_button = dmc.ActionIcon(
-        DashIconify(icon="mdi:menu", width=32, color="grey "),
-        id="open-offcanvas-menu-button",
-        size="xl",
-        radius="xl",
-        # color="grey",
-        variant="transparent",
-        style={"marginRight": "10px"},
-    )
 
     offcanvas_parameters = dbc.Offcanvas(
         id="offcanvas-parameters",
@@ -489,12 +319,13 @@ def design_header(data):
             ),
             dmc.Group(
                 [
-                    dmc.Button(
-                        leftIcon=DashIconify(icon="mdi:share-variant", width=20, color="white"),
+                    # dmc.Button(
+                    dmc.ActionIcon(
+                        DashIconify(icon="mdi:share-variant", width=20, color="white"),
                         id="share-button",
                         color="grey",
                         variant="filled",
-                        style={"fontFamily": "default"},
+                        # style={"fontFamily": "default"},
                         disabled=disabled,
                         n_clicks=0,
                     ),
@@ -508,32 +339,30 @@ def design_header(data):
     )
 
     open_offcanvas_parameters_button = dmc.ActionIcon(
-        DashIconify(icon="mdi:cog", width=32, color="white"),
+        DashIconify(icon="ic:baseline-settings", width=32, color="grey"),
         id="open-offcanvas-parameters-button",
         size="xl",
         radius="xl",
         color="grey",
-        variant="filled",
+        variant="subtle",
         style=button_style,
     )
 
     dummy_output = html.Div(id="dummy-output", style={"display": "none"})
     stepper_output = html.Div(id="stepper-output", style={"display": "none"})
 
-    # Add link to depictio logo to redirect to / page
-    depictio_logo = html.A(
-        html.Img(src=dash.get_asset_url("logo_icon.png"), height=40, style={"margin-left": "0px"}),
-        href="/",
-    )
-    # depictio_logo = html.Img(src=dash.get_asset_url("logo.png"), height=40, style={"margin-left": "0px"})
-
     # Store the number of clicks for the add button and edit dashboard mode button
     stores_add_edit = [
         dcc.Store(
             id="stored-add-button",
             # storage_type="memory",
-            storage_type="session",
+            storage_type="local",
             data=init_nclicks_add_button,
+        ),
+        dcc.Store(
+            id="initialized-add-button",
+            storage_type="memory",
+            data=False,
         ),
         dcc.Store(
             id="stored-edit-dashboard-mode-button",
@@ -543,144 +372,109 @@ def design_header(data):
         ),
     ]
 
-    title_style = {"fontWeight": "bold", "fontSize": "24px", "color": "#333"}
-    header = html.Div(
+    button_menu = dmc.Group(
         [
+                    dcc.Store(
+            id="initialized-navbar-button",
+            storage_type="memory",
+            data=False,
+        ),
+            dmc.MediaQuery(
+                [
+                    dmc.ActionIcon(
+                        DashIconify(
+                            id="sidebar-icon",
+                            icon="ep:d-arrow-left",
+                            width=34,
+                            height=34,
+                            color="#c2c7d0",
+                        ),
+                        variant="subtle",
+                        p=1,
+                        id="sidebar-button",
+                    )
+                ],
+                smallerThan="md",
+                styles={"display": "none"},
+            ),
+        ]
+    )
+
+    title_style = {"fontWeight": "bold", "fontSize": "24px", "color": "#333"}
+    header = dmc.Header(
+        [
+            offcanvas_parameters,
+            modal_save_button,
+            remove_all_components_button,
             dummy_output,
             stepper_output,
             html.Div(children=stores_add_edit),
-            open_offcanvas_menu_button,
-            offcanvas_menu,
-            dbc.Col(
-                [depictio_logo],
-                width=1,
-            ),
-            dbc.Col(
+            dmc.Grid(
                 [
-                    card_section,
-                ],
-                width=2,
-                align="end",
-                style={"paddingLeft": "10px"},
-            ),
-            dbc.Col(
-                [
-                    dmc.Text(f'{data["title"]}', style=title_style),
-                ],
-                width=2,
-                align="end",
-                style={"paddingLeft": "10px"},
-            ),
-            # dbc.Col(width=1),
-            dbc.Col(
-                [
-                    html.Div(
+                    # dmc.Col(
+                    #     [button_menu],
+                    #     # align="center",
+                    #     style={"paddingLeft": "20px"},
+                    #     span="content",
+                    # ),
+                    dmc.Col(
                         [
-                            add_new_component_button,
-                            modal_save_button,
-                            save_button,
-                            remove_all_components_button,
+                            dmc.Group([button_menu, card_section]),
                         ],
-                        style={"display": "flex", "alignItems": "center"},
-                    )
+                        style={"justify": "start"},
+                        span="content",
+                    ),
+                    dmc.Col(
+                        [
+                            dmc.Center(
+                                dmc.Title(
+                                    f'{data["title"]}',
+                                    order=1,  # Increase to order=1 for larger font size
+                                    style={
+                                        "color": "#333",  # Darker color for more emphasis
+                                        "fontWeight": "bold",  # Make the text bold
+                                        "fontSize": "24px",  # Increase font size
+                                        # "fontFamily": "Open Sans",  # Change the font family
+                                    },
+                                )
+                            ),
+                        ],
+                        span=8,
+                    ),
+                    dmc.Col(
+                        [
+                            html.Div(
+                                children=[
+                                    dmc.Group(
+                                        [
+                                            add_new_component_button,
+                                            save_button,
+                                            open_offcanvas_parameters_button,
+                                        ],
+                                        # justify="flex-end",
+                                        # align="stretch",
+                                        # style={"paddingTop": "5px"},
+                                        spacing="xs",
+                                        position="right",  # Aligns items to the right
+                                        style={"paddingTop": "5px"},
+                                    ),
+                                ],
+                            ),
+                        ],
+                        span="content",
+                        # offset=1
+                    ),
                 ],
-                width=6,
+                # justify="between",
+                # align="center",  # Ensure all elements are vertically centered
+                style={"height": "100%"},
+                align="center",
             ),
-            open_offcanvas_parameters_button,
-            offcanvas_parameters,
         ],
-        style=header_style,
+        height=80,  # Increase the header height for better prominence
     )
 
     return header, backend_components
 
 
-def enable_box_edit_mode(box, switch_state=True):
-    # logger.info(box)
-    # logger.info(box["props"])
-    btn_index = box["props"]["id"]["index"]
-    edit_button = dbc.Button(
-        "Edit",
-        id={
-            "type": "edit-box-button",
-            "index": f"{btn_index}",
-        },
-        color="secondary",
-        style={"margin-left": "12px"},
-        # size="lg",
-    )
-    from dash_iconify import DashIconify
 
-    remove_button = dmc.Button(
-        "Remove",
-        id={"type": "remove-box-button", "index": f"{btn_index}"},
-        color="red",
-        leftIcon=DashIconify(icon="mdi:trash-can-outline", width=16, color="white"),
-    )
-
-    if switch_state:
-        box_components_list = [remove_button, box]
-
-    else:
-        box_components_list = [box]
-
-    new_draggable_child = html.Div(
-        box_components_list,
-        id=f"box-{str(btn_index)}",
-    )
-
-    return new_draggable_child
-
-
-def enable_box_edit_mode_dev(sub_child, switch_state=True):
-    logger.info("enable_box_edit_mode_dev")
-    logger.info(switch_state)
-
-    # Extract the required substructure based on the depth analysis
-    box = sub_child["props"]["children"]
-    logger.info(box)
-
-    # Check if the children attribute is a list
-    if isinstance(box["props"]["children"], list):
-        logger.info("List")
-
-        # Identify if edit and remove buttons are present
-        edit_button_exists = any(child.get("props", {}).get("id", {}).get("type") == "edit-box-button" for child in box["props"]["children"])
-        remove_button_exists = any(child.get("props", {}).get("id", {}).get("type") == "remove-box-button" for child in box["props"]["children"])
-
-        logger.info(switch_state, edit_button_exists, remove_button_exists)
-
-        # If switch_state is true and buttons are not yet added, add them
-        if switch_state and not (edit_button_exists and remove_button_exists):
-            # Assuming that the ID for box is structured like: {'type': '...', 'index': 1}
-            logger.info("\n\n\n")
-            logger.info("Adding buttons")
-            logger.info(box["props"]["id"])
-            btn_index = box["props"]["id"]["index"]
-
-            edit_button = dbc.Button(
-                "Edit",
-                id={
-                    "type": "edit-box-button",
-                    "index": f"{btn_index}",
-                },
-                color="secondary",
-                style={"margin-left": "12px"},
-            )
-            remove_button = dbc.Button(
-                "Remove",
-                id={"type": "remove-box-button", "index": f"{btn_index}"},
-                color="danger",
-            )
-
-            # Place buttons at the beginning of the children list
-            box["props"]["children"] = [remove_button, edit_button] + box["props"]["children"]
-
-        # If switch_state is false and buttons are present, remove them
-        elif not switch_state and edit_button_exists and remove_button_exists:
-            # Assuming the last element is the main content box
-            content_box = box["props"]["children"][-1]
-            box["props"]["children"] = [content_box]
-
-    sub_child["props"]["children"] = box
-    return sub_child
