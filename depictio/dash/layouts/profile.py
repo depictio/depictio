@@ -1,11 +1,11 @@
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
-from dash import html, Input, Output, State
+from dash import html, Input, Output, State, dcc
 import dash
 from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_token
 from depictio.api.v1.endpoints.user_endpoints.utils import edit_password, check_password, logout_user
-from dash_extensions.enrich import html, Input, Output, State
+from dash_extensions.enrich import Output as enrich_Output, Input as enrich_Input, State as enrich_State
 from dash_extensions import EventListener
 from dash.exceptions import PreventUpdate
 
@@ -27,18 +27,13 @@ layout = dbc.Container(
                         dbc.Row(
                             [
                                 dbc.Col(dmc.Button("Logout", id="logout-button", variant="outline", color="red", style={"marginTop": "20px"}), align="left", width="auto"),
-                                # dbc.Col(
-                                #     html.A(dmc.Button("Back to Home", id="back-to-homepage", variant="outline", color="blue", style={"marginTop": "20px"}), href="/"),
-                                #     align="left",
-                                #     width="auto",
-                                # ),
                                 dbc.Col(
                                     html.A(dmc.Button("Edit password", id="edit-password", variant="outline", color="blue", style={"marginTop": "20px"})),
                                     align="left",
                                     width="auto",
                                 ),
                                 dbc.Col(
-                                    html.A(dmc.Button("CLI Agents", id="tokens-page-redirection", variant="outline", color="green", style={"marginTop": "20px"}), href="/tokens"),
+                                    dcc.Link(dmc.Button("CLI Agents", id="tokens-page-redirection", variant="outline", color="green", style={"marginTop": "20px"}), href="/tokens"),
                                     align="left",
                                     width="auto",
                                 ),
@@ -89,7 +84,7 @@ layout = dbc.Container(
 
 
 def register_profile_callbacks(app):
-    @app.callback(Output("save-password", "n_clicks"), Input("edit-password-modal-listener", "n_events"), State("edit-password-modal-listener", "event"))
+    @app.callback(enrich_Output("save-password", "n_clicks"), enrich_Input("edit-password-modal-listener", "n_events"), enrich_State("edit-password-modal-listener", "event"))
     def trigger_save_on_enter(n_events, e):
         if e is None or e["key"] != "Enter":
             raise PreventUpdate()
