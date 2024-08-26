@@ -90,7 +90,7 @@ def update_page_content(pathname):
                                 html.A(
                                     dmc.CardSection(
                                         dmc.Image(
-                                            src="assets/screenshots/admin@embl.de_1.png",
+                                            src="dev/navbar/assets/screenshots/admin@embl.de_1.png",
                                         )
                                     ),
                                     href="/dashboard/1",
