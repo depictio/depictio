@@ -12,8 +12,6 @@ current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 def register_callbacks_header(app):
-
-
     @app.callback(
         Output("add-button", "disabled"),
         Output("save-button-dashboard", "disabled"),
@@ -92,8 +90,6 @@ def register_callbacks_header(app):
         if n_clicks:
             return not is_open
         return is_open
-
-
 
 
 def design_header(data):
@@ -272,8 +268,6 @@ def design_header(data):
         ],
     )
 
-
-
     offcanvas_parameters = dbc.Offcanvas(
         id="offcanvas-parameters",
         title="Parameters",
@@ -374,11 +368,11 @@ def design_header(data):
 
     button_menu = dmc.Group(
         [
-                    dcc.Store(
-            id="initialized-navbar-button",
-            storage_type="memory",
-            data=False,
-        ),
+            dcc.Store(
+                id="initialized-navbar-button",
+                storage_type="memory",
+                data=False,
+            ),
             dmc.MediaQuery(
                 [
                     dmc.ActionIcon(
@@ -422,7 +416,7 @@ def design_header(data):
                             dmc.Group([button_menu, card_section]),
                         ],
                         style={"justify": "start"},
-                        span="content",
+                        span=3,
                     ),
                     dmc.Col(
                         [
@@ -439,7 +433,7 @@ def design_header(data):
                                 )
                             ),
                         ],
-                        span=8,
+                        span=7,
                     ),
                     dmc.Col(
                         [
@@ -461,20 +455,17 @@ def design_header(data):
                                 ],
                             ),
                         ],
-                        span="content",
+                        span=2,
                         # offset=1
                     ),
                 ],
                 # justify="between",
                 # align="center",  # Ensure all elements are vertically centered
-                style={"height": "100%"},
                 align="center",
             ),
         ],
-        height=80,  # Increase the header height for better prominence
+        height=80,
+    style={"width": "100%"},
     )
 
     return header, backend_components
-
-
-
