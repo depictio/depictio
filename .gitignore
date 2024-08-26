@@ -224,3 +224,5 @@ data/minio/
 depictio/tmp_token.pem
 user_data.json
 dev/celery/jobs.json
+depictio/dash/assets/screenshots/
+screenshot_*.png
