@@ -4,6 +4,7 @@ import dash_bootstrap_components as dbc
 from dash import html, dcc, Input, Output, State, ctx
 import httpx
 from dash_iconify import DashIconify
+import yaml
 
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_token
@@ -32,6 +33,9 @@ def render_workflows_list(workflows):
 
         for dc in wf["data_collections"]:
             icon = "mdi:table" if dc["config"]["type"].lower() == "table" else "mdi:file-document"
+            dc_config = yaml.dump(dc["config"], default_flow_style=False)
+            dc_config = f"""```yaml\n{dc_config}\n```"""
+
             data_collection_items.append(
                 dmc.Paper(
                     dmc.AccordionMultiple(
@@ -59,6 +63,30 @@ def render_workflows_list(workflows):
                                             dmc.Text(dc["config"]["type"], weight=500),
                                         ],
                                         spacing="xs",
+                                    ),
+                                    dmc.Accordion(
+                                        [
+                                            dmc.AccordionControl(
+                                                dmc.Text(
+                                                    "Configuration",
+                                                    weight=700,
+                                                    className="label-text",
+                                                    # move to the left
+                                                    # style={"marginLeft": "-10px"},
+                                                ),
+                                                # yaml icon
+                                                icon=DashIconify(icon="ic:baseline-settings-applications", width=20),
+                                            ),
+                                            dmc.AccordionPanel(
+                                                dmc.Paper(
+                                                    dcc.Markdown(id="dc-config-md", children=dc_config),
+                                                    className="p-3",
+                                                    radius="sm",
+                                                    withBorder=True,
+                                                    shadow="xs",
+                                                )
+                                            ),
+                                        ]
                                     ),
                                 ]
                             ),
