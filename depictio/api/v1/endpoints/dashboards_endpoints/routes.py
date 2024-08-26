@@ -108,11 +108,10 @@ async def save_dashboard(dashboard_id: str, data: dict, current_user=Depends(get
         # url = f"{DASH_BASE_URL}/{dashboard_id}"
         # from pyppeteer.errors import BrowserError
 
-
         # try:
         #     await asyncio.run(capture_screenshots(url, current_user))
         #     logger.info(f"Screenshot captured for dashboard ID: {dashboard_id}")
-        
+
         # except (BrowserError, RuntimeError) as e:
         #     logger.error(f"Failed to capture screenshot for dashboard ID: {dashboard_id} - {e}")
 
@@ -124,12 +123,10 @@ async def save_dashboard(dashboard_id: str, data: dict, current_user=Depends(get
         raise HTTPException(status_code=404, detail="Failed to insert or update dashboard data.")
 
 
-
 @dashboards_endpoint_router.get("/screenshot/{dashboard_id}")
 async def screenshot_dashboard(dashboard_id: str, current_user=Depends(get_current_user)):
     from playwright.async_api import async_playwright
 
-    
     # Folder where screenshots will be saved
     output_folder = "./depictio/dash/assets/screenshots"
 
@@ -142,83 +139,77 @@ async def screenshot_dashboard(dashboard_id: str, current_user=Depends(get_curre
     # os.makedirs(output_folder, exist_ok=True)
 
     try:
-
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
-            context = await browser.new_context()
+
+            # Define the viewport size (browser window size)
+            viewport_width = 1920
+            viewport_height = 1080
+
+            # Create a new context with the specified viewport size
+            context = await browser.new_context(
+                viewport={"width": viewport_width, "height": viewport_height}
+            )
+
             page = await context.new_page()
             logger.info(f"Browser: {browser}")
 
-            # Navigate to a blank page
-            # await page.goto(f"https://google.com",  wait_until="networkidle")
+            # Navigate to the URL
             await page.goto(f"{url}/auth", wait_until="networkidle")
             logger.info(f"Page URL: {url}/auth")
 
             token_data = {
                 "access_token": current_user.current_access_token,
                 "logged_in": True,
-                # "email": current_user.email,
             }
 
             token_data_json = json.dumps(token_data)
-
-
             logger.info(f"Token data: {token_data_json}")
 
             # Set data in the local storage
             await page.evaluate(f"""() => {{
                 localStorage.setItem('local-store', '{token_data_json}');
             }}""")
-            # Set data in the local storage
-            await page.evaluate(f"""() => {{
-                localStorage.setItem('TEST-PLAYWRIGHT', 'TEST');
-            }}""")
-            
-            # logger.info(f"Evaluate local storage: {token_data}")
 
-            # # Navigate to the URL
+            await page.reload()
+
+            # Navigate to the target dashboard page
             await page.goto(f"{url}/dashboard/{dashboard_id}", wait_until="networkidle")
             logger.info(f"Page URL: {url}/dashboard/{dashboard_id}")
 
-            # # # Wait for the page to load
-            await page.wait_for_selector("div#_dash-app-content")
-            logger.info(f"Wait for selector: div#_dash-app-content")
+            # Wait for the page content to load
+            await page.wait_for_selector("div#page-content")
+            logger.info(f"Wait for selector: div#page-content")
 
-            # Remove the debug menu
+            # Remove the debug menu if it exists
             await page.evaluate("""() => {
                 const debugMenuOuter = document.querySelector('.dash-debug-menu__outer');
                 if (debugMenuOuter) {
                     debugMenuOuter.remove();
                 }
-                
-            }""")
-            logger.info(f"Remove debug menu")
-
-            await page.evaluate("""() => {
-                const debugMenuOuter = document.querySelector('.dash-debug-menu');
-                if (debugMenuOuter) {
-                    debugMenuOuter.remove();
+                const debugMenu = document.querySelector('.dash-debug-menu');
+                if (debugMenu) {
+                    debugMenu.remove();
                 }
             }""")
+            logger.info(f"Removed debug menu")
 
-            logger.info(f"Remove debug menu")
+            # Capture a screenshot of the content below the 'div#page-content'
+            element = await page.query_selector("div#page-content")
+            if element:
+                user = current_user.email.split("_")[0]
+                output_file = f"{output_folder}/{user}_{dashboard_id}.png"
+                await element.screenshot(path=output_file)
+                logger.info(f"Screenshot captured for dashboard ID: {dashboard_id}")
+            else:
+                logger.error("Could not find 'div#page-content' element")
 
-            # Capture the screenshot
-            user = current_user.email.split("_")[0]
-            # Combine dashboard name and user name to create the output file name
-
-            output_file = f"{output_folder}/{user}_{dashboard_id}.png"
-            logger.info(f"Screenshot output file: {output_file}")
-            await page.screenshot(path=output_file, full_page=True)
-            logger.info(f"Screenshot captured for dashboard ID: {dashboard_id}")
             # Close the browser
             await browser.close()
-    
+
     except Exception as e:
         logger.error(f"Failed to capture screenshot for dashboard URL: {url} - {e}")
         raise e
-
-
 
 
 @dashboards_endpoint_router.delete("/delete/{dashboard_id}")
