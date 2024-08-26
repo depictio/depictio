@@ -87,7 +87,7 @@ def load_depictio_data(dashboard_id):
             logger.info(f"AFTER child : {child}")
 
             from dash import html
-            from depictio.dash.layouts.header import enable_box_edit_mode
+            from depictio.dash.layouts.edit import enable_box_edit_mode
 
             dashboard_data["stored_children_data"] = enable_box_edit_mode(child, switch_state=True)
             # logger.info(f"dashboard_data : {dashboard_data}")

@@ -30,9 +30,8 @@ from depictio.dash.layouts.stepper import (
 # Depictio layout imports for header
 from depictio.dash.layouts.header import (
     design_header,
-    enable_box_edit_mode,
-    # enable_box_edit_mode_dev,
 )
+from depictio.dash.layouts.edit import enable_box_edit_mode
 
 from depictio.dash.modules.figure_component.utils import plotly_vizu_dict
 
@@ -385,24 +384,46 @@ def register_callbacks_draggable(app):
     @app.callback(
         Output("test-output", "children"),
         Output("stored-add-button", "data"),
+        Output("initialized-add-button", "data"),
         Input("add-button", "n_clicks"),
         State("stored-add-button", "data"),
+        State("initialized-add-button", "data"),
         prevent_initial_call=True,
     )
-    def trigger_modal(add_button_nclicks, stored_add_button):
+    def trigger_modal(add_button_nclicks, stored_add_button, initialized_add_button):
         logger.info("\n\n")
         logger.info("Trigger modal")
         logger.info("n_clicks: {}".format(add_button_nclicks))
         logger.info("stored_add_button: {}".format(stored_add_button))
-        # update the stored add button count using current value + n_clicks - warning: do not reuse the same n_clicks value multiple times
-        stored_add_button["count"] += 1
-        logger.info("Updated stored_add_button: {}".format(stored_add_button))
-        index = stored_add_button["count"]
-        # Generate index from the number of clicks
-        # index = add_button_nclicks
-        current_draggable_children = add_new_component(str(index))
 
-        return current_draggable_children, stored_add_button
+        from dash import ctx
+
+        logger.info("CTX: {}".format(ctx))
+        logger.info("CTX triggered: {}".format(ctx.triggered))
+        logger.info("CTX triggered_id: {}".format(ctx.triggered_id))
+        logger.info("CTX triggered_props_id: {}".format(ctx.triggered_prop_ids))
+        logger.info("CTX args_grouping: {}".format(ctx.args_grouping))
+        logger.info("CTX inputs: {}".format(ctx.inputs))
+
+        triggered_input = ctx.triggered[0]["prop_id"].split(".")[0]
+        logger.info("triggered_input : {}".format(triggered_input))
+
+        if not initialized_add_button:
+            return dash.no_update, dash.no_update, True
+
+        if triggered_input == "add-button":
+
+            # update the stored add button count using current value + n_clicks - warning: do not reuse the same n_clicks value multiple times
+            stored_add_button["count"] += 1
+            logger.info("Updated stored_add_button: {}".format(stored_add_button))
+            index = stored_add_button["count"]
+            # Generate index from the number of clicks
+            # index = add_button_nclicks
+            current_draggable_children = add_new_component(str(index))
+
+            return current_draggable_children, stored_add_button, False
+        else:
+            return dash.no_update, dash.no_update, False
 
     # @app.callback(
     #     [
@@ -1094,7 +1115,7 @@ def design_draggable(data, init_layout, init_children, local_data):
         display_style = "none"  # Hide the draggable layout
         core_children = [message]
     else:
-        display_style = "block"  # Show the draggable layout
+        display_style = "flex"  # Show the draggable layout
         core_children = []
 
     # Create the draggable layout outside of the if-else to keep it in the DOM
@@ -1105,7 +1126,13 @@ def design_draggable(data, init_layout, init_children, local_data):
         children=init_children,
         isDraggable=True,
         isResizable=True,
-        style={"display": display_style},
+        # autoSize=True,
+        style={
+            "display": display_style,
+            "flex-grow": 1,
+            "width": "100%",
+            "height": "100%",
+        },
     )
 
     # Add draggable to the core children list whether it's visible or not
