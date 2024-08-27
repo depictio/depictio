@@ -62,7 +62,7 @@ def register_sidebar_callbacks(app):
     def update_active_state(pathname):
         if pathname == "/dashboards":
             return [True, False, False]
-        elif pathname == "/datasets":
+        elif pathname == "/workflows":
             return [False, True, False]
         elif pathname == "/admin":
             return [False, False, True]
@@ -105,20 +105,27 @@ def register_sidebar_callbacks(app):
         if pathname == "/auth":
             return []
 
-        response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/utils/status", headers={"Authorization": f"Bearer {local_store['access_token']}"})
-        if response.status_code != 200:
-            server_status_badge = dmc.Col(dmc.Badge("Server offline", variant="dot", color="red", size=14, style={"padding": "5px 5px"}), span="content")
-            return [server_status_badge]
-        else:
-            logger.info(f"Server status: {response.json()}")
-            server_status = response.json()["status"]
-            if server_status == "online":
-                server_status_badge = dmc.Col(dmc.Badge(f"Server online : {response.json()['version']}", variant="dot", color="green", size=14), span="content")
 
-                return [dmc.Group([server_status_badge], position="apart")]
-            else:
-                server_status_badge = dmc.Col(dmc.Badge("Server offline", variant="outline", color="red", size=14, style={"padding": "5px 5px"}), span="content")
+        try:
+            response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/utils/status", headers={"Authorization": f"Bearer {local_store['access_token']}"})
+            if response.status_code != 200:
+                server_status_badge = dmc.Col(dmc.Badge("Server offline", variant="dot", color="red", size=14, style={"padding": "5px 5px"}), span="content")
                 return [server_status_badge]
+            else:
+                logger.info(f"Server status: {response.json()}")
+                server_status = response.json()["status"]
+                if server_status == "online":
+                    server_status_badge = dmc.Col(dmc.Badge(f"Server online : {response.json()['version']}", variant="dot", color="green", size=14), span="content")
+
+                    return [dmc.Group([server_status_badge], position="apart")]
+                else:
+                    server_status_badge = dmc.Col(dmc.Badge("Server offline", variant="outline", color="red", size=14, style={"padding": "5px 5px"}), span="content")
+                    return [server_status_badge]
+        
+        except Exception as e:
+            logger.error(f"Error fetching server status: {e}")
+            server_status_badge = dmc.Col(dmc.Badge("Server offline", variant="outline", color="red", size=14, style={"padding": "5px 5px"}), span="content")
+            return [server_status_badge]
 
 
 def render_sidebar(email):
@@ -142,10 +149,10 @@ def render_sidebar(email):
                 style={"padding": "20px"},
             ),
             dmc.NavLink(
-                id={"type": "sidebar-link", "index": "datasets"},
-                label=dmc.Text("Datasets", size="lg", style={"fontSize": "16px"}),  # Using dmc.Text to set the font size
-                icon=DashIconify(icon="material-symbols:dataset", height=25),
-                href="/datasets",
+                id={"type": "sidebar-link", "index": "workflows"},
+                label=dmc.Text("Workflows", size="lg", style={"fontSize": "16px"}),  # Using dmc.Text to set the font size
+                icon=DashIconify(icon="hugeicons:workflow-square-01", height=25),
+                href="/workflows",
                 style={"padding": "20px"},
             ),
             dmc.NavLink(
