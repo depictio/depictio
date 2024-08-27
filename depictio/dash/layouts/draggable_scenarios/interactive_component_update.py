@@ -132,7 +132,7 @@ class UnionFind:
             self.parent[root2] = root1
 
 
-def update_interactive_component(stored_metadata_raw, interactive_components_dict, current_draggable_children, switch_state, TOKEN):
+def update_interactive_component(stored_metadata_raw, interactive_components_dict, current_draggable_children, switch_state, TOKEN, dashboard_id):
     helpers_mapping = {
         "card": build_card,
         "figure": build_figure,
@@ -255,7 +255,8 @@ def update_interactive_component(stored_metadata_raw, interactive_components_dic
             df_dict_processed[wf][join_key_tuple] = merged_df
         for e in stored_metadata:
             if e["component_type"] == "jbrowse":
-                build_jbrowse_df_mapping_dict(stored_metadata, df_dict_processed[wf])
+                logger.info(f"build_jbrowse_df_mapping_dict - access_token: {TOKEN}")
+                build_jbrowse_df_mapping_dict(stored_metadata, df_dict_processed[wf], access_token=TOKEN)
 
     # Initialize the children list with the interactive components
     # children = [
@@ -310,6 +311,9 @@ def update_interactive_component(stored_metadata_raw, interactive_components_dic
         elif component["component_type"] == "jbrowse":
             component["stored_metadata_jbrowse"] = stored_metadata_jbrowse_components
             component["refresh"] = True
+            component["access_token"] = TOKEN
+            component["dashboard_id"] = dashboard_id
+
 
             child = helpers_mapping[component["component_type"]](**component)
 
