@@ -5,26 +5,29 @@ from dash import html, dcc, Input, Output, State, ctx
 import httpx
 from dash_iconify import DashIconify
 import yaml
+import dash_ag_grid as dag
+import polars as pl
 
 from depictio.api.v1.configs.config import API_BASE_URL
+from depictio.api.v1.deltatables_utils import load_deltatable_lite
 from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_token
 from depictio.api.v1.configs.logging import logger
 
 
 def fetch_workflows(token):
-    # Fetch the datasets for the user
+    # Fetch the workflows for the user
     response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/workflows/get_all_workflows", headers={"Authorization": f"Bearer {token}"})
     logger.info(f"Response status code: {response.status_code}")
     if response.status_code == 200:
         return response.json()
     else:
-        logger.error(f"Failed to fetch datasets for current user.")
+        logger.error(f"Failed to fetch workflows for current user.")
         return []
 
 
-def render_workflows_list(workflows):
+def render_workflows_list(workflows, token):
     if not workflows:
-        return html.P("No datasets available.")
+        return html.P("No workflows available.")
 
     workflow_items = []
     for wf in workflows:
@@ -35,6 +38,41 @@ def render_workflows_list(workflows):
             icon = "mdi:table" if dc["config"]["type"].lower() == "table" else "mdi:file-document"
             dc_config = yaml.dump(dc["config"], default_flow_style=False)
             dc_config = f"""```yaml\n{dc_config}\n```"""
+
+            if dc["config"]["type"].lower() == "table":
+                preview_control = dmc.AccordionControl(
+                    dmc.Text(
+                        "Preview",
+                        weight=700,
+                        className="label-text",
+                        # move to the left
+                        # style={"marginLeft": "-10px"},
+                    ),
+                    # yaml icon
+                    icon=DashIconify(icon="material-symbols:preview", width=20),
+                )
+
+                df = load_deltatable_lite(workflow_id=wf["_id"], data_collection_id=dc["_id"], TOKEN=token)
+
+                columnDefs = [{"field": c, "headerName": c} for c in df.columns]
+
+                grid = dag.AgGrid(
+                    rowData=df.head(2000).to_pandas().to_dict("records"),
+                    columnDefs=columnDefs,
+                    dashGridOptions={
+                        "tooltipShowDelay": 500,
+                        "pagination": True,
+                        "paginationAutoPageSize": False,
+                        "animateRows": False,
+                    },
+                    columnSize="sizeToFit",
+                    defaultColDef={"resizable": True, "sortable": True, "filter": True},
+                    # use the parameters above
+                )
+                preview_panel = dmc.AccordionPanel(dmc.Paper(grid))
+            else:
+                preview_control = None
+                preview_panel = None
 
             data_collection_items.append(
                 dmc.Paper(
@@ -86,7 +124,17 @@ def render_workflows_list(workflows):
                                                     shadow="xs",
                                                 )
                                             ),
-                                        ]
+                                        ],
+                                        chevronPosition="right",
+                                        variant="contained",
+                                    ),
+                                    dmc.Accordion(
+                                        [
+                                            preview_control,
+                                            preview_panel,
+                                        ],
+                                        chevronPosition="right",
+                                        variant="contained",
                                     ),
                                 ]
                             ),
@@ -207,13 +255,13 @@ def render_workflows_list(workflows):
     )
 
 
-def register_datasets_callbacks(app):
+def register_workflows_callbacks(app):
     @app.callback(
-        Output("datasets-list", "children"),
+        Output("workflows-list", "children"),
         Input("url", "pathname"),
         State("local-store", "data"),
         prevent_initial_call=True,
     )
-    def update_datasets_list(pathname, local_store):
-        datasets = fetch_workflows(local_store["access_token"])
-        return render_workflows_list(datasets)
+    def update_workflows_list(pathname, local_store):
+        workflows = fetch_workflows(local_store["access_token"])
+        return render_workflows_list(workflows, local_store["access_token"])

@@ -326,7 +326,7 @@ def register_callbacks_draggable(app):
             logger.info("Interactive component triggered")
             logger.info("Interactive component values: {}".format(interactive_component_values))
 
-            new_children = update_interactive_component(stored_metadata, interactive_components_dict, draggable_children, switch_state=edit_dashboard_mode_button, TOKEN=TOKEN)
+            new_children = update_interactive_component(stored_metadata, interactive_components_dict, draggable_children, switch_state=edit_dashboard_mode_button, TOKEN=TOKEN, dashboard_id=dashboard_id)
             state_stored_draggable_children[dashboard_id] = new_children
 
             return new_children, dash.no_update, state_stored_draggable_children, dash.no_update
