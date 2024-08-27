@@ -109,9 +109,9 @@ from depictio.dash.layouts.save import register_callbacks_save
 
 register_callbacks_save(app)
 
-from depictio.dash.layouts.datasets_management import register_datasets_callbacks
+from depictio.dash.layouts.workflows_datasets_management import register_workflows_callbacks
 
-register_datasets_callbacks(app)
+register_workflows_callbacks(app)
 
 from depictio.dash.layouts.admin_management import register_admin_callbacks
 
@@ -181,10 +181,10 @@ def handle_authenticated_user(pathname, local_data):
         content = create_dashboards_management_layout()
         return content, header, pathname
 
-    elif pathname == "/datasets":
-        header = create_default_header("Datasets")
-        datasets = html.Div(id="datasets-list")
-        return datasets, header, pathname
+    elif pathname == "/workflows":
+        header = create_default_header("Workflows registered")
+        workflows = html.Div(id="workflows-list")
+        return workflows, header, pathname
 
     elif pathname == "/profile":
         header = create_default_header("Profile")
@@ -285,7 +285,7 @@ def design_header_ui(data):
         children=[
             dbc.Row(
                 [
-                    dbc.Col(dmc.Title("Homepage", order=2, color="black"), width=11, align="center", style={"textAlign": "left"}),
+                    dbc.Col(dmc.Title("", order=2, color="black"), width=11, align="center", style={"textAlign": "left"}),
                 ],
                 style={"height": "100%"},
             ),
