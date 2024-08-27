@@ -91,16 +91,16 @@ services:
     command: ["jupyter", "lab", "--config=/app/.jupyter/jupyter_notebook_config.py"]
 
 
-  # jbrowse2:
-  #   image: jbrowse2:latest
-  #   build:
-  #     dockerfile: docker-images/Dockerfile_jbrowse.dev.240424.dockerfile
-  #   ports: 
-  #     - 3000:3000
-  #     - 9010:9010
-  #   volumes:
-  #   #   - "./jbrowse-watcher-plugin:/usr/src/plugin"
-  #     - "./jbrowse-watcher-plugin/sessions:/usr/src/jbrowse/plugin/sessions"
+  jbrowse2:
+    image: jbrowse2:latest
+    build:
+      dockerfile: docker-images/Dockerfile_jbrowse.dev.240424.dockerfile
+    ports: 
+      - 3000:3000
+      - 9010:9010
+    volumes:
+      - "./jbrowse-watcher-plugin:/usr/src/plugin"
+      - "./jbrowse-watcher-plugin/sessions:/usr/src/jbrowse/plugin/sessions"
 
 
   # redis:

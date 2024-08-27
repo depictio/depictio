@@ -65,7 +65,7 @@ def load_depictio_data(dashboard_id, local_data):
             children = [enable_box_edit_mode(child.to_plotly_json(), switch_state=True) for child in children]
 
             children = update_interactive_component(
-                dashboard_data["stored_metadata"], interactive_components_dict, children, switch_state=True, TOKEN=local_data["access_token"]
+                dashboard_data["stored_metadata"], interactive_components_dict, children, switch_state=True, TOKEN=local_data["access_token"], dashboard_id=dashboard_id
             )
 
             # if children:
