@@ -4,12 +4,14 @@ import dash
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 from dash_iconify import DashIconify
+import httpx
 
 # Depictio imports
 from depictio.api.v1.configs.config import settings
 
 # Depictio components imports - design step
 from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_token
+from depictio.api.v1.endpoints.user_endpoints.utils import check_token_validity, purge_expired_tokens
 from depictio.dash.modules.card_component.frontend import register_callbacks_card_component
 from depictio.dash.modules.interactive_component.frontend import register_callbacks_interactive_component
 from depictio.dash.modules.figure_component.frontend import register_callbacks_figure_component
@@ -137,7 +139,9 @@ def return_create_dashboard_button(email):
     Output("page-content", "children"),
     Output("header", "children"),
     Output("url", "pathname"),
+    Output("local-store", "data", allow_duplicate=True),
     [Input("url", "pathname"), Input("local-store", "data")],
+    prevent_initial_call=True,
 )
 def display_page(pathname, local_data):
     trigger = ctx.triggered_id
@@ -145,7 +149,7 @@ def display_page(pathname, local_data):
     logger.info(f"Local Data: {local_data}")
     logger.info(f"URL Pathname: {pathname}")
 
-    if not local_data or not local_data.get("logged_in"):
+    if not local_data or not local_data.get("logged_in") or not check_token_validity(local_data["access_token"]):
         return handle_unauthenticated_user(pathname)
 
     # Default to /dashboards if pathname is None or "/"
@@ -161,47 +165,50 @@ def handle_unauthenticated_user(pathname):
     logger.info("User not logged in")
 
     # Redirect any path to the login/auth page
-    return create_users_management_layout(), header, "/auth"
+    return create_users_management_layout(), header, "/auth", dash.no_update
 
 
 def handle_authenticated_user(pathname, local_data):
     logger.info("User logged in")
+    logger.info(f"Local data: {local_data}")
+
+    response = purge_expired_tokens(local_data["access_token"])
 
     # Map the pathname to the appropriate content and header
     if pathname.startswith("/dashboard/"):
         dashboard_id = pathname.split("/")[-1]
         depictio_dash_data = load_depictio_data(dashboard_id, local_data)
         header = design_header(data=depictio_dash_data)
-        return create_dashboard_layout(depictio_dash_data=depictio_dash_data, local_data=local_data), header, pathname
+        return create_dashboard_layout(depictio_dash_data=depictio_dash_data, local_data=local_data), header, pathname, local_data
 
     elif pathname == "/dashboards":
         user = fetch_user_from_token(local_data["access_token"])
         create_button = return_create_dashboard_button(user.email)
         header = create_header_with_button("Dashboards", create_button)
         content = create_dashboards_management_layout()
-        return content, header, pathname
+        return content, header, pathname, local_data
 
     elif pathname == "/workflows":
         header = create_default_header("Workflows registered")
         workflows = html.Div(id="workflows-list")
-        return workflows, header, pathname
+        return workflows, header, pathname, local_data
 
     elif pathname == "/profile":
         header = create_default_header("Profile")
-        return create_profile_layout(), header, pathname
+        return create_profile_layout(), header, pathname, local_data
 
     elif pathname == "/tokens":
         header = create_default_header("Tokens Management")
-        return create_tokens_management_layout(), header, pathname
+        return create_tokens_management_layout(), header, pathname, local_data
 
     elif pathname == "/admin":
         header = create_default_header("Admin")
         admin = html.Div(id="admin-management-content")
-        return admin, header, pathname
-    
+        return admin, header, pathname, local_data
+
     else:
         # Fallback to dashboards if path is unrecognized
-        return dash.no_update, dash.no_update, "/dashboards"
+        return dash.no_update, dash.no_update, "/dashboards", local_data
 
 
 def create_default_header(text):
