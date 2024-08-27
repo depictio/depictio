@@ -57,26 +57,31 @@ def load_dashboards_from_db(token):
     if not token:
         raise ValueError("Token is required to load dashboards from the database.")
 
-    response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/dashboards/list", headers={"Authorization": f"Bearer {token}"})
+    try:
+        response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/dashboards/list", headers={"Authorization": f"Bearer {token}"})
 
-    if response.status_code == 200:
-        dashboards = response.json()
-        logger.info(f"dashboards: {dashboards}")
+        if response.status_code == 200:
+            dashboards = response.json()
+            logger.info(f"dashboards: {dashboards}")
 
-        # Extract dashboard IDs and determine the maximum dashboard_id
-        dashboard_ids = [int(dashboard["dashboard_id"]) for dashboard in dashboards if "dashboard_id" in dashboard]
+            # Extract dashboard IDs and determine the maximum dashboard_id
+            dashboard_ids = [int(dashboard["dashboard_id"]) for dashboard in dashboards if "dashboard_id" in dashboard]
 
-        # If there are no dashboards, start with index 1
-        if dashboard_ids:
-            next_index = max(dashboard_ids) + 1
+            # If there are no dashboards, start with index 1
+            if dashboard_ids:
+                next_index = max(dashboard_ids) + 1
+            else:
+                next_index = 1
+
+            logger.info(f"next_index: {next_index}")
+            return {"next_index": next_index, "dashboards": dashboards}
+
         else:
-            next_index = 1
-
-        logger.info(f"next_index: {next_index}")
-        return {"next_index": next_index, "dashboards": dashboards}
-
-    else:
-        raise ValueError(f"Failed to load dashboards from the database. Error: {response.text}")
+            raise ValueError(f"Failed to load dashboards from the database. Error: {response.text}")
+    
+    except Exception as e:
+        logger.error(f"Error loading dashboards from the database: {e}")
+        return {"next_index": 1, "dashboards": []}
 
 
 def insert_dashboard(dashboard_id, dashboard_data, token):
@@ -181,7 +186,7 @@ def register_callbacks_dashboards_management(app):
                             ],
                             style={"flex": "1"},
                         ),
-                        dcc.Link(
+                        html.A(
                             dmc.Button(
                                 f"View",
                                 id={"type": "view-dashboard-button", "index": dashboard["dashboard_id"]},
@@ -284,7 +289,7 @@ def register_callbacks_dashboards_management(app):
                         ],
                         style={"flex": "1"},
                     ),
-                    dcc.Link(
+                    html.A(
                         dmc.Button(
                             f"View",
                             id={"type": "view-dashboard-button", "index": dashboard["dashboard_id"]},
@@ -330,7 +335,7 @@ def register_callbacks_dashboards_management(app):
 
                 thumbnail = html.Div(
                     [
-                        dcc.Link(
+                        html.A(
                             dmc.CardSection([dmc.Center(dmc.Image(src=thumbnail_path, height=150, width=150, style={"padding": "20px 0px"}))]),
                             href=f"/dashboard/{dashboard['dashboard_id']}",
                         ),
@@ -338,7 +343,7 @@ def register_callbacks_dashboards_management(app):
                     ]
                 )
             else:
-                thumbnail = dcc.Link(dmc.CardSection(dmc.Image(src=thumbnail_path, height=250, width=450)), href=f"/dashboard/{dashboard['dashboard_id']}")
+                thumbnail = html.A(dmc.CardSection(dmc.Image(src=thumbnail_path, height=250, width=450)), href=f"/dashboard/{dashboard['dashboard_id']}")
 
             return thumbnail
 
@@ -400,7 +405,7 @@ def register_callbacks_dashboards_management(app):
                 return handle_dashboard_creation(dashboards, next_index, modal_data, user_data, current_userbase, store_data_list)
 
         if ctx.triggered_id.get("type") == "confirm-delete":
-            return handle_dashboard_deletion(dashboards, delete_ids_list, user_data, store_data_list)
+            return handle_dashboard_deletion(dashboards, delete_ids_list, user_data, store_data_list, current_userbase)
 
         return generate_dashboard_view_response(dashboards, next_index, store_data_list, current_userbase)
 
@@ -429,13 +434,13 @@ def register_callbacks_dashboards_management(app):
 
         return generate_dashboard_view_response(dashboards, next_index, store_data_list, current_userbase)
 
-    def handle_dashboard_deletion(dashboards, delete_ids_list, user_data, store_data_list):
+    def handle_dashboard_deletion(dashboards, delete_ids_list, user_data, store_data_list, current_userbase):
         ctx_triggered_dict = ctx.triggered[0]
         index_confirm_delete = eval(ctx_triggered_dict["prop_id"].split(".")[0])["index"]
         delete_dashboard(index_confirm_delete, user_data["access_token"])
 
-        dashboards = [dashboard for dashboard in dashboards if dashboard["dashboard_id"] != index_confirm_delete]
-        return generate_dashboard_view_response(dashboards, len(dashboards) + 1, store_data_list)
+        dashboards = [dashboard for dashboard in dashboards if dashboard.dashboard_id != index_confirm_delete]
+        return generate_dashboard_view_response(dashboards, len(dashboards) + 1, store_data_list, current_userbase)
 
     def generate_dashboard_view_response(dashboards, next_index, store_data_list, current_userbase):
         dashboards = [convert_objectid_to_str(dashboard.mongo()) for dashboard in dashboards]

@@ -200,11 +200,11 @@ def join_deltatables_dev(wf_id: str, joins: list, metadata: dict = dict(), TOKEN
     common_columns = list(set(loaded_dfs[dc_id1].columns).intersection(set(loaded_dfs[dc_id2].columns)))
     merged_df = loaded_dfs[dc_id1].join(loaded_dfs[dc_id2], on=common_columns, how=join_details["how"])
 
-    logger.info(f"Initial merged_df shape: {merged_df.shape}")
-    logger.info(f"Columns in merged_df: {merged_df.columns}")
-    logger.info(f"dc1 columns: {loaded_dfs[dc_id1].columns}")
-    logger.info(f"dc2 columns: {loaded_dfs[dc_id2].columns}")
-    logger.info(f"Common columns: {common_columns}")
+    # logger.info(f"Initial merged_df shape: {merged_df.shape}")
+    # logger.info(f"Columns in merged_df: {merged_df.columns}")
+    # logger.info(f"dc1 columns: {loaded_dfs[dc_id1].columns}")
+    # logger.info(f"dc2 columns: {loaded_dfs[dc_id2].columns}")
+    # logger.info(f"Common columns: {common_columns}")
 
     # Track which dataframes have been merged
     used_dfs = {dc_id1, dc_id2}
@@ -216,8 +216,8 @@ def join_deltatables_dev(wf_id: str, joins: list, metadata: dict = dict(), TOKEN
 
             if dc_id2 not in used_dfs and dc_id2 in loaded_dfs:
                 new_df = loaded_dfs[dc_id2]
-                logger.info(f"new_df shape: {new_df.shape}")
-                logger.info(f"new_df columns: {new_df.columns}")
+                # logger.info(f"new_df shape: {new_df.shape}")
+                # logger.info(f"new_df columns: {new_df.columns}")
                 used_dfs.add(dc_id2)
             elif dc_id1 not in used_dfs and dc_id1 in loaded_dfs:
                 new_df = loaded_dfs[dc_id1]
@@ -228,8 +228,8 @@ def join_deltatables_dev(wf_id: str, joins: list, metadata: dict = dict(), TOKEN
             common_columns = list(set(merged_df.columns).intersection(set(new_df.columns)))
             merged_df = merged_df.join(new_df, on=common_columns, how=join_details["how"])
 
-    logger.info(f"AFTER 2nd FOR LOOP - merged_df shape: {merged_df.shape}")
-    logger.info(f"Columns in merged_df: {merged_df.columns}")
-    logger.info(f"Common columns: {common_columns}")
+    # logger.info(f"AFTER 2nd FOR LOOP - merged_df shape: {merged_df.shape}")
+    # logger.info(f"Columns in merged_df: {merged_df.columns}")
+    # logger.info(f"Common columns: {common_columns}")
 
     return merged_df
