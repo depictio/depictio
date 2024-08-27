@@ -7,8 +7,10 @@ from depictio.api.v1.configs.config import API_BASE_URL, logger
 from dash import html, dcc
 import dash_bootstrap_components as dbc
 
+from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_token
 
-def build_jbrowse_df_mapping_dict(stored_metadata, df_dict_processed):
+
+def build_jbrowse_df_mapping_dict(stored_metadata, df_dict_processed, access_token):
     jbrowse_df_mapping_dict = collections.defaultdict(dict)
 
     stored_metadata_jbrowse_components = [e for e in stored_metadata if e["component_type"] == "jbrowse"]
@@ -16,19 +18,19 @@ def build_jbrowse_df_mapping_dict(stored_metadata, df_dict_processed):
     logger.info(f"{API_BASE_URL}")
     for e in stored_metadata:
         if e["component_type"] != "jbrowse":
-            logger.info(f"df_dict_processed keys {df_dict_processed.keys()}")
+            # logger.info(f"df_dict_processed keys {df_dict_processed.keys()}")
             # find df in df_dict_processed key (join) where e["dc_id"] is in the join["with_dc_id"]
             new_df = [df_dict_processed[key] for key in df_dict_processed if e["dc_id"] in "--".join(key)][0]
-            logger.info(f"new_df {new_df}")
+            # logger.info(f"new_df {new_df}")
             for jbrowse in stored_metadata_jbrowse_components:
                 if e["dc_id"] in jbrowse["dc_config"]["join"]["with_dc_id"]:
                     for col in jbrowse["dc_config"]["join"]["on_columns"]:
-                        logger.info(f"col {col}")
+                        # logger.info(f"col {col}")
                         jbrowse_df_mapping_dict[int(jbrowse["index"])][col] = list(new_df[col].unique())
     # save to a json file
     os.makedirs("data", exist_ok=True)
     json.dump(jbrowse_df_mapping_dict, open("data/jbrowse_df_mapping_dict.json", "w"), indent=4)
-    httpx.post(f"{API_BASE_URL}/depictio/api/v1/jbrowse/dynamic_mapping_dict", json=jbrowse_df_mapping_dict)
+    httpx.post(f"{API_BASE_URL}/depictio/api/v1/jbrowse/dynamic_mapping_dict", json=jbrowse_df_mapping_dict, headers={"Authorization": f"Bearer {access_token}"})
 
 
 def build_jbrowse_frame(index, children=None):
@@ -62,6 +64,7 @@ def build_jbrowse_frame(index, children=None):
             },
         )
 
+
 def build_jbrowse(**kwargs):
     wf_id = kwargs.get("wf_id")
     dc_id = kwargs.get("dc_id")
@@ -70,25 +73,38 @@ def build_jbrowse(**kwargs):
     stored_metadata_jbrowse = kwargs.get("stored_metadata_jbrowse", {})
     index = kwargs.get("index")
     build_frame = kwargs.get("build_frame", False)
-    access_token = kwargs.get("access_token") 
+    access_token = kwargs.get("access_token")
+    dashboard_id = kwargs.get("dashboard_id")
 
-    response = httpx.get(
-        f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_token",
-        headers={
-            "Authorization": f"Bearer {access_token}",
-        },
-    )
+    logger.info(f"build_jbrowse access_token {access_token}")
+    logger.info(f"build_jbrowse dc_config {dc_config}")
+    logger.info(f"build_jbrowse stored_metadata_jbrowse {stored_metadata_jbrowse}")
+    logger.info(f"build_jbrowse index {index}")
+    logger.info(f"build_jbrowse refresh {refresh}")
+    logger.info(f"build_jbrowse wf_id {wf_id}")
+    logger.info(f"build_jbrowse dc_id {dc_id}")
+    logger.info(f"build_jbrowse dashboard_id {dashboard_id}")
+    logger.info(f"build_jbrowse build_frame {build_frame}")
 
-    if response.status_code != 200:
-        raise Exception("Error fetching user")
+    user = fetch_user_from_token(access_token)
+    logger.info(f"user {user}")
 
-    elif response.status_code == 200:
-        # Session to define based on User ID & Dashboard ID
-        # TODO: define dashboard ID
+    # response = httpx.get(
+    #     f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_token",
+    #     headers={
+    #         "Authorization": f"Bearer {access_token}",
+    #     },
+    # )
 
-        user_id = response.json()["user_id"]
-        dashboard_id = "1"
-        session = f"{user_id}_{dashboard_id}.json"
+    # if response.status_code != 200:
+    #     raise Exception("Error fetching user")
+
+    # elif response.status_code == 200:
+    # Session to define based on User ID & Dashboard ID
+    # TODO: define dashboard ID
+
+    user_id = user.id
+    session = f"{user_id}_{dc_id}_lite.json"
 
     if refresh is False:
         updated_jbrowse_config = "loc=chr1:1-248956422&assembly=hg38"
@@ -101,27 +117,51 @@ def build_jbrowse(**kwargs):
 
         last_jbrowse_status = httpx.get(f"{API_BASE_URL}/depictio/api/v1/jbrowse/last_status")
         last_jbrowse_status = last_jbrowse_status.json()
-        print("last_jbrowse_status", last_jbrowse_status)
 
         # Cross jbrowse_df_mapping_dict and mapping_dict to update the jbrowse iframe
         track_ids = list()
         for e in stored_metadata_jbrowse:
-            mapping_dict = httpx.get(f"{API_BASE_URL}/depictio/api/v1/jbrowse/map_tracks_using_wildcards/{e['wf_id']}/{e['dc_id']}")
+            mapping_dict = httpx.get(
+                f"{API_BASE_URL}/depictio/api/v1/jbrowse/map_tracks_using_wildcards/{e['wf_id']}/{e['dc_id']}", headers={"Authorization": f"Bearer {access_token}"}
+            )
             mapping_dict = mapping_dict.json()
             for col in e["dc_config"]["join"]["on_columns"]:
                 for elem in jbrowse_df_mapping_dict[str(e["index"])][col]:
                     if elem in mapping_dict[e["dc_id"]][col]:
                         track_ids.append(mapping_dict[e["dc_id"]][col][elem])
 
+        logger.info(f"track_ids {track_ids}")
+
         if len(track_ids) > 50:
-            track_ids = track_ids[:50]
-        # print("track_ids", track_ids)
+            track_ids = list()
+
+        else:
+            response = httpx.post(
+                f"{API_BASE_URL}/depictio/api/v1/jbrowse/filter_config",
+                json={
+                    "tracks": track_ids,
+                    "dashboard_id": dashboard_id,
+                    "data_collection_id": dc_id,
+                },
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+
+            if response.status_code != 200:
+                logger.error(f"Error filtering config {response.json()}")
+                # pass
+            else:
+                logger.info(f"response {response.json()}")
+                session = response.json()["session"]
 
         updated_jbrowse_config = f'assembly={last_jbrowse_status["assembly"]}&loc={last_jbrowse_status["loc"]}'
         if track_ids:
             updated_jbrowse_config += f'&tracks={",".join(track_ids)}'
-        session = session.split(".")[0] + "_lite.json"
+        logger.info(f"updated_jbrowse_config {updated_jbrowse_config}")
+
+        # if not session.endswith("_lite.json"):
+        # session = session.split(".")[0] + "_lite.json"
         url = f"http://localhost:3000?config=http://localhost:9010/sessions/{session}&{updated_jbrowse_config}"
+        logger.info(f"url {url}")
 
     iframe = html.Iframe(
         src=f"{url}",
