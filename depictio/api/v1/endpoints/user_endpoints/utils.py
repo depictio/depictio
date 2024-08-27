@@ -168,6 +168,39 @@ def delete_token(email, token_id):
     return None
 
 
+def purge_expired_tokens(token):
+    if token:
+        # Clean existing expired token from DB
+        response = httpx.post(
+            f"{API_BASE_URL}/depictio/api/v1/auth/purge_expired_tokens",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        if response.status_code == 200:
+            logger.info(f"Expired tokens purged successfully.")
+            return response.json()
+        else:
+            logger.error(f"Error purging expired tokens: {response.text}")
+            return None
+    else:
+        logger.error(f"Token not found.")
+        return None
+
+
+def check_token_validity(token):
+    logger.info(f"Checking token validity.")
+    logger.info(f"Token: {token}")
+    response = httpx.post(
+        f"{API_BASE_URL}/depictio/api/v1/auth/check_token_validity",
+        json={"token": token},  # Sending the token in the body
+    )
+    if response.status_code == 200:
+        logger.info(f"Token is valid.")
+        return True
+    logger.error(f"Token is invalid.")
+    return False
+
+
 def fetch_user_from_token(token):
     logger.info(f"Fetching user from token.")
     response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_token", params={"token": token})
