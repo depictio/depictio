@@ -15,7 +15,7 @@ from depictio.dash.utils import (
     UNSELECTED_STYLE,
 )
 from depictio.api.v1.configs.config import API_BASE_URL
-
+from depictio.api.v1.configs.logging import logger
 
 def register_callbacks_jbrowse_component(app):
     @app.callback(
@@ -26,15 +26,19 @@ def register_callbacks_jbrowse_component(app):
             Input({"type": "btn-jbrowse", "index": MATCH}, "n_clicks"),
             Input({"type": "btn-jbrowse", "index": MATCH}, "id"),
             State("local-store", "data"),
+            State("url", "pathname"),
         ],
         prevent_initial_call=True,
     )
-    def update_jbrowse(wf_id, dc_id, n_clicks, id, data):
+    def update_jbrowse(wf_id, dc_id, n_clicks, id, data, pathname):
 
         if not data:
             return None
         
         TOKEN = data["access_token"]
+        logger.info(f"update_jbrowse TOKEN : {TOKEN}") 
+
+        dashboard_id = pathname.split("/")[-1]
 
         workflows = list_workflows(TOKEN)
 
@@ -61,6 +65,7 @@ def register_callbacks_jbrowse_component(app):
             "dc_id": data_collection_id,
             "dc_config": dc_specs["config"],
             "access_token": TOKEN,
+            "dashboard_id": dashboard_id,
         }
 
         jbrowse_body = build_jbrowse(**jbrowse_kwargs)
