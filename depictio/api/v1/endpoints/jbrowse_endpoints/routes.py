@@ -125,7 +125,7 @@ def update_jbrowse_config(config_path, new_tracks=[]):
 
         with open(config_path, "w") as file:
             json.dump(config, file, indent=4)
-        
+
         # FIXME: create a lite version of the config
         lite_config = config.copy()
         lite_config["tracks"] = lite_config["tracks"][:5]
@@ -324,11 +324,7 @@ async def create_trackset(
     # Update the JBrowse configuration
     jbrowse_config_dir = settings.jbrowse.config_dir
 
-    # Join on user and dashboard IDs
-    # TODO - retrieve dashboard ID
-    # Generate dashboard ID
-    dashboard_id = "1"  # Replace with actual dashboard ID
-    config_path = os.path.join(jbrowse_config_dir, f"{current_user.id}_{dashboard_id}.json")
+    config_path = os.path.join(jbrowse_config_dir, f"{current_user.id}_{data_collection_oid}.json")
 
     payload = update_jbrowse_config(config_path, new_tracks)
     if payload["type"] == "error":
@@ -350,8 +346,8 @@ async def log_message(log_data: LogData):
         jbrowse_url_args = construct_jbrowse_url(block, tracks)
         # logger.info(jbrowse_url_args)
 
-        start = round(int(block.start),0)
-        end = round(int(block.end),0)
+        start = round(int(block.start), 0)
+        end = round(int(block.end), 0)
 
         dict_jbrowse_url_args = {
             "assembly": block.assemblyName,
@@ -408,14 +404,13 @@ async def log_message(log_data: LogData):
 
 @jbrowse_endpoints_router.get("/last_status")
 async def get_jbrowse_logs():
-
     # Check if message exists in the queue
     # connection = pika.BlockingConnection(pika.ConnectionParameters(settings.rabbitmq.host))
     # channel = connection.channel()
 
     # # Fetch the message without auto acknowledgment
     # method_frame, header_frame, body = channel.basic_get(queue=settings.rabbitmq.queue, auto_ack=False)
-    
+
     # if method_frame:
     #     # Extract the timestamp from the header frame
 
@@ -438,11 +433,12 @@ async def get_jbrowse_logs():
     else:
         return {"message": "No logs available."}
 
+
 @jbrowse_endpoints_router.get("/map_tracks_using_wildcards/{workflow_id}/{data_collection_id}")
 async def map_tracks_using_wildcards(
     workflow_id: str,
     data_collection_id: str,
-    # current_user: str = Depends(get_current_user),
+    current_user: str = Depends(get_current_user),
 ):
     workflow_oid = ObjectId(workflow_id)
     data_collection_oid = ObjectId(data_collection_id)
@@ -453,7 +449,6 @@ async def map_tracks_using_wildcards(
     nested_dict = collections.defaultdict(lambda: collections.defaultdict(dict))
 
     files = files_collection.find({"data_collection._id": data_collection_oid})
-    logger.info("len", files_collection.count_documents({"data_collection._id": data_collection_oid}))
 
     for file in files:
         # logger.info(file)
@@ -465,14 +460,69 @@ async def map_tracks_using_wildcards(
     logger.info(len(nested_dict[data_collection_id]["cell"]))
     return nested_dict
 
+
+@jbrowse_endpoints_router.post("/filter_config")
+async def filter_config(
+    filter_params: dict,
+    current_user: str = Depends(get_current_user),
+):
+    tracks = filter_params.get("tracks", [])
+    # Update the JBrowse configuration
+    jbrowse_config_dir = settings.jbrowse.config_dir
+    data_collection_oid = filter_params.get("data_collection_id")
+
+    default_config_path = os.path.join(jbrowse_config_dir, f"{current_user.id}_{data_collection_oid}.json")
+    dashboard_id = filter_params.get("dashboard_id")
+
+    logger.info(f"Filtering tracks: {tracks}")
+    logger.info(f"Default config path: {default_config_path}")
+    logger.info(f"Dashboard ID: {dashboard_id}")
+    logger.info(f"Current user: {current_user.id}")
+    logger.info(f"Len tracks: {len(tracks)}")
+
+    if not tracks:
+        return {"message": "No tracks provided."}
+
+    if not default_config_path:
+        return {"message": "No default config provided."}
+
+    if not dashboard_id:
+        return {"message": "No dashboard ID provided."}
+
+    # Load the default config
+    config = json.load(open(default_config_path))
+
+    filtered_track_ids = list()
+    filtered_tracks = list()
+    for track in config["tracks"]:
+        if track["trackId"] in tracks:
+            if track["trackId"] not in filtered_track_ids:
+                filtered_track_ids.append(track["trackId"])
+                filtered_tracks.append(track)
+
+
+    logger.info(f"Filtered tracks: {filtered_tracks}")
+    config["tracks"] = filtered_tracks
+
+    # Construct the filtered config
+    output_path = default_config_path.replace(".json", f"_filtered_{dashboard_id}.json")
+    logger.info(f"Output path: {output_path}")
+
+    output_return_path = output_path.replace(f"{settings.jbrowse.config_dir}/", "")
+
+    with open(output_path, "w") as file:
+        json.dump(config, file, indent=4)
+
+    return {"message": "Filtered config saved successfully.", "session": output_return_path}
+
+
 @jbrowse_endpoints_router.post("/dynamic_mapping_dict")
 async def dynamic_mapping_dict(
     mapping_dict: dict,
-    # current_user: str = Depends(get_current_user),
+    current_user: str = Depends(get_current_user),
 ):
     mapping_dict = mapping_dict
     logger.info(mapping_dict)
-
 
     # Constructing the nested dictionary
     return {"message": "Mapping dictionary received."}
