@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from datetime import datetime
 
-from depictio.api.v1.endpoints.user_endpoints.core_functions import add_token_to_user, fetch_user_from_email, fetch_user_from_token
+from depictio.api.v1.endpoints.user_endpoints.core_functions import add_token_to_user, check_if_token_is_valid, fetch_user_from_email, fetch_user_from_token, purge_expired_tokens_from_user
 from depictio.api.v1.endpoints.user_endpoints.models import User, UserBase
 from depictio.api.v1.endpoints.user_endpoints.utils import add_token, check_password
 from depictio.api.v1.configs.logging import logger
@@ -256,6 +256,40 @@ async def delete_token(request: dict, current_user=Depends(get_current_user)):
 
     # Return success status
     return {"success": result.modified_count > 0}
+
+@auth_endpoint_router.post("/purge_expired_tokens")
+async def purge_expired_tokens_endpoint(current_user=Depends(get_current_user)):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Current user not found.")
+    
+    user_id = current_user.id
+    
+    result = purge_expired_tokens_from_user(user_id)
+
+    if result["success"]:
+        return {"success": True}
+    
+    else:
+        raise HTTPException(status_code=500, detail="Failed to purge expired tokens")
+
+
+@auth_endpoint_router.post("/check_token_validity")
+async def check_token_validity_endpoint(request: dict):
+    token = request.get("token")
+
+    logger.info(f"Checking token validity.")
+    logger.info(f"Token: {token}")
+    if not token:
+        raise HTTPException(status_code=400, detail="No token provided")
+    
+    is_valid = check_if_token_is_valid(token)
+
+    if not is_valid:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    return {"detail": "Token is valid"}
+
+    
 
 
 @auth_endpoint_router.post("/generate_agent_config")
