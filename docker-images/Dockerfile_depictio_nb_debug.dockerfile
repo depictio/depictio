@@ -1,5 +1,5 @@
 # Use the depictio:dev image as the base
-FROM depictio:dev
+FROM registry.embl.de/tweber/depictio/depictio:latest
 
 # Optionally, if Jupyter Lab is not included in your depictio.yaml,
 # you can install it directly using micromamba
