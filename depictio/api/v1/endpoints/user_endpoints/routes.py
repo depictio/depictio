@@ -318,8 +318,11 @@ def generate_agent_config(request: dict, current_user=Depends(get_current_user))
     # Depictio API config
     from depictio.api.v1.configs.config import API_BASE_URL
 
+    # FIXME: Temporary fix for local development - docker compose
+    tmp_api_base_url = API_BASE_URL.replace("depictio_backend", "localhost")
+
     depictio_agent_config = {
-        "api_base_url": API_BASE_URL,
+        "api_base_url": tmp_api_base_url,
         "user": current_userbase,
     }
     return depictio_agent_config
