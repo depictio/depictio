@@ -2,6 +2,7 @@ services:
   mongo:
     image: mongo:latest
     command: --dbpath /data/depictioDB --port 27018
+    user: "${UID}:${GID}"
     ports:
       - 27018:27018
     volumes:
@@ -10,13 +11,12 @@ services:
 
   minio:
     image: minio/minio:latest
+    user: "${UID}:${GID}"
     volumes:
       - "./minio_data:/data"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
     command: server /data --console-address :9001
     ports:
       - "9000:9000"
@@ -36,6 +36,7 @@ services:
       - ./minio_data:/minio_data
       - ./.env:/app/.env
     command: ["python", "depictio/dash/app.py"]
+    user: "${UID}:${GID}"
     depends_on:
       - mongo
       - minio
@@ -59,6 +60,7 @@ services:
       - ./configs:/configs
       - ./.env:/app/.env
     command: ["python", "depictio/api/run.py"]
+    user: "${UID}:${GID}"
     # environment:
     #   - JUPYTER_TOKEN='my_dev_token'
     depends_on:
