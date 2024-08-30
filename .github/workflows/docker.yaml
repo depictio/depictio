@@ -12,6 +12,8 @@ on:
           - info
           - warning
           - debug
+  push: 
+    branches: "*"
 
 jobs:
   build_and_push:
