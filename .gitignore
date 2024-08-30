@@ -230,3 +230,4 @@ user_data.json
 dev/celery/jobs.json
 depictio/dash/assets/screenshots/
 screenshot_*.png
+depictio/.depictio/default_admin_agent.yaml

@@ -1,7 +1,38 @@
 from datetime import datetime
 from bson import ObjectId
 from depictio.api.v1.configs.logging import logger
-from depictio.api.v1.endpoints.user_endpoints.models import User
+from depictio.api.v1.endpoints.user_endpoints.models import User, UserBase
+from depictio.api.v1.models.base import convert_objectid_to_str
+
+
+def generate_agent_config(current_user, request):
+    logger.info(f"Current user: {current_user}")
+
+    logger.info(f"Current user: {current_user}")
+    current_userbase = UserBase(
+        **current_user.dict(exclude={"tokens", "is_active", "is_verified", "last_login", "registration_date", "password", "current_access_token"})
+    )
+    logger.info(f"Current user base: {current_userbase}")
+    current_userbase = convert_objectid_to_str(current_userbase.dict())
+
+    # Keep only email and is_admin fields from user
+    token = request["token"]
+
+    # Add token to user
+    current_userbase["token"] = token
+
+    # Depictio API config
+    from depictio.api.v1.configs.config import API_BASE_URL
+
+    # FIXME: Temporary fix for local development - docker compose
+    tmp_api_base_url = API_BASE_URL.replace("depictio_backend", "localhost")
+
+    depictio_agent_config = {
+        "api_base_url": tmp_api_base_url,
+        "user": current_userbase,
+    }
+
+    return depictio_agent_config
 
 
 def add_token_to_user(user, token):
