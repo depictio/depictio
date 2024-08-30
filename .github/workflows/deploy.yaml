@@ -36,7 +36,7 @@ jobs:
           docker compose logs depictio_backend
 
       - name: Show agent config file
-        run: cat .depictio/default_admin_agent.yaml
+        run: cat depictio/.depictio/default_admin_agent.yaml
       
         # Clone the depictio-cli repository
       - name: Clone Depictio-CLI Repository
