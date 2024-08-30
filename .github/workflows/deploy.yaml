@@ -2,9 +2,7 @@ name: Deploy and Test Depictio
 
 on:
   push:
-    # all branches
-    branches:
-      - '*'
+    branches: "*"
   pull_request:
     branches: [main]
 
@@ -37,21 +35,10 @@ jobs:
           docker compose ps
           docker compose logs depictio_backend
 
-      - name: List and Display default_admin_agent.yaml
-        run: |
-          echo "Listing contents of .depictio directory:"
-          ls -la .depictio
-          
-          echo "Displaying contents of default_admin_agent.yaml:"
-          cat .depictio/default_admin_agent.yaml || echo "File not found!"
-
   ingest_data:
     runs-on: ubuntu-latest
     needs: setup
     steps:
-      - name: Checkout Repository Again
-        uses: actions/checkout@v2  # Ensure the repo is available in this job
-
       - name: Set Up Python Environment
         run: python -m venv depictio-cli-venv
 
@@ -63,14 +50,12 @@ jobs:
 
       - name: Ingest Data
         run: |
-          source depictio-cli-venv/bin/activate
-          # Use the known path to the agent config
           depictio-cli data setup \
-            --agent-config-path $(pwd)/.depictio/default_admin_agent.yaml \
+            --agent-config-path depictio/.depictio/default_admin_agent.yaml \
             --pipeline-config-path configs/mosaicatcher_pipeline/mosaicatcher_pipeline.yaml \
             --scan-files
 
       - name: Check Ingestion Success
         run: |
-          # Add any specific checks for ingestion success here
+          # Your check logic here
           echo "Data ingestion completed successfully"

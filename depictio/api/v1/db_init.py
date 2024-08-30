@@ -4,7 +4,8 @@ from datetime import time
 import os
 
 import yaml
-from depictio.api.v1.endpoints.user_endpoints.utils import generate_agent_config, hash_password, list_existing_tokens
+from depictio.api.v1.endpoints.user_endpoints.core_functions import generate_agent_config
+from depictio.api.v1.endpoints.user_endpoints.utils import hash_password, list_existing_tokens
 from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.endpoints.user_endpoints.models import User
 from depictio.api.v1.endpoints.user_endpoints.utils import add_token
@@ -46,21 +47,30 @@ def create_admin_user(user_dict=user_dict):
     # Check if default admin token exists
 
     if not users_collection.find_one({"email": user_dict["email"], "tokens.name": "default_admin_token"}):
+        user = users_collection.find_one({"email": user_dict["email"]})
+        logger.info(f"User: {user}")
+        user = User.from_mongo(user)
+        logger.info(f"User.from_mongo: {user}")
+
         logger.info("Creating default admin token")
         token_data = {"sub": user_dict["email"], "name": "default_admin_token", "token_lifetime": "long-lived"}
-        token = add_token()
+        token = add_token(token_data)
         logger.info("Default admin token created")
+        logger.info(f"Token: {token}")
+        token_data["access_token"] = token.access_token
+        token_data["expire_datetime"] = token.expire_datetime
 
         # Generate the agent config
 
-        agent_config = generate_agent_config(user.email, token_data, current_token=token.access_token)
+        agent_config = generate_agent_config(user, {"token": token_data})
         agent_config = yaml.dump(agent_config, default_flow_style=False)
 
         # Export the agent config to a file
-        os.makedirs("./.depictio", exist_ok=True)
-        with open("./.depictio/default_admin_agent.yaml", "w") as f:
+        logger.info(f"Creating .depictio directory in {os.getcwd()}")
+        os.makedirs("/app/depictio/.depictio", exist_ok=True)
+        with open("/app/depictio/.depictio/default_admin_agent.yaml", "w") as f:
             f.write(agent_config)
-        logger.info("Agent config exported to ~/.depictio/default_admin_agent.yaml")
+        logger.info("Agent config exported to /app/depictio/.depictio/default_admin_agent.yaml")
 
     else:
         logger.info("Default admin token already exists")
