@@ -24,16 +24,22 @@ jobs:
       - name: Set up Environment Variables
         run: echo "DEPICTIO_BACKEND_DATA_VOLUME_HOST=$(pwd)/depictio-data" >> .env
 
-      # - name: Start Docker Compose Services
-      #   run: docker compose up -d
+      - name: Start Docker Compose Services
+        run: docker compose up -d
 
-      # - name: Wait for Services to Start
-      #   run: sleep 30  # Adjust the wait time if necessary
+      - name: Wait for Services to Start
+        run: sleep 60  # Adjust the wait time if necessary
 
-      # - name: Verify Services Are Running
-      #   run: |
-      #     docker compose ps
-      #     docker compose logs depictio_backend
+      - name: Verify Services Are Running
+        run: |
+          docker compose ps
+          docker compose logs depictio_backend
+
+
+        # Clone the depictio-cli repository
+      - name: Clone Depictio-CLI Repository
+        run: git clone https://github.com/depictio/depictio-cli.git
+
 
       # Pwd & list files
       - name: Print Working Directory
@@ -42,12 +48,15 @@ jobs:
       - name: List Files
         run: ls -la
 
+
+      # List content of depictio
+      - name: List Depictio Directory
+        run: ls -lal depictio
+
       - name: Show agent config file
         run: cat depictio/.depictio/default_admin_agent.yaml
       
-        # Clone the depictio-cli repository
-      - name: Clone Depictio-CLI Repository
-        run: git clone https://github.com/depictio/depictio-cli.git
+
 
       # Go to the Depictio-CLI directory
       - name: Change Directory to Depictio-CLI
