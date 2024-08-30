@@ -67,8 +67,8 @@ class MinioConfig(BaseSettings):
     internal_endpoint: str = "http://minio"
     external_endpoint: str = "http://localhost"
     port: int = 9000
-    access_key: str = Field(default="minio")
-    secret_key: str = Field(default="minio123")
+    root_user: str = Field(default="minio")
+    root_password: str = Field(default="minio123")
     secure: bool = False
     bucket: str = "depictio-bucket"
     data_dir: str = "/depictio/minio_data"
