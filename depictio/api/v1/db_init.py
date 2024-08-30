@@ -1,19 +1,17 @@
 # Create a user if it does not exist
 
 from datetime import time
-from depictio.api.v1.endpoints.user_endpoints.utils import hash_password
+import os
+
+import yaml
+from depictio.api.v1.endpoints.user_endpoints.utils import generate_agent_config, hash_password, list_existing_tokens
 from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.endpoints.user_endpoints.models import User
 from depictio.api.v1.endpoints.user_endpoints.utils import add_token
 
 
+user_dict = {"username": "admin", "password": hash_password("changeme"), "is_admin": True, "email": "admin@embl.de"}
 
-user_dict = {
-    "username": "admin",
-    "password": hash_password("changeme"),
-    "is_admin": True,
-    "email": "admin@embl.de"
-}
 
 def create_admin_user(user_dict=user_dict):
     from depictio.api.v1.db import users_collection, client
@@ -49,8 +47,20 @@ def create_admin_user(user_dict=user_dict):
 
     if not users_collection.find_one({"email": user_dict["email"], "tokens.name": "default_admin_token"}):
         logger.info("Creating default admin token")
-        add_token({"sub": user_dict["email"], "name": "default_admin_token", "token_lifetime": "long-lived"})
+        token_data = {"sub": user_dict["email"], "name": "default_admin_token", "token_lifetime": "long-lived"}
+        token = add_token()
         logger.info("Default admin token created")
+
+        # Generate the agent config
+
+        agent_config = generate_agent_config(user.email, token_data, current_token=token.access_token)
+        agent_config = yaml.dump(agent_config, default_flow_style=False)
+
+        # Export the agent config to a file
+        os.makedirs("./.depictio", exist_ok=True)
+        with open("./.depictio/default_admin_agent.yaml", "w") as f:
+            f.write(agent_config)
+        logger.info("Agent config exported to ~/.depictio/default_admin_agent.yaml")
 
     else:
         logger.info("Default admin token already exists")
@@ -73,4 +83,3 @@ def initialize_db():
 
     else:
         logger.info("Initialization already done. Skipping...")
-
