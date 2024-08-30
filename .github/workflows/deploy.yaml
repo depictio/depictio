@@ -36,7 +36,7 @@ jobs:
           docker compose logs depictio_backend
 
       - name: Show agent config file
-        run: cat depictio/.depictio/default_admin_agent.yaml
+        run: cat .depictio/default_admin_agent.yaml
       
         # Clone the depictio-cli repository
       - name: Clone Depictio-CLI Repository
@@ -58,7 +58,7 @@ jobs:
       - name: Ingest Data
         run: |
           depictio-cli data setup \
-            --agent-config-path ../depictio/depictio/.depictio/default_admin_agent.yaml \
+            --agent-config-path ../depictio/.depictio/default_admin_agent.yaml \
             --pipeline-config-path configs/mosaicatcher_pipeline/mosaicatcher_pipeline.yaml \
             --scan-files
 
