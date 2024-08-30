@@ -24,9 +24,10 @@ services:
 
 
   depictio_frontend:
-    image: depictio:dev
-    build:
-      dockerfile: docker-images/Dockerfile_depictio.dockerfile
+    image: registry.git.embl.de/tweber/depictio/depictio:dev
+    # image: depictio:dev
+    # build:
+    #   dockerfile: docker-images/Dockerfile_depictio.dockerfile
     ports:
       - 5080:5080
     volumes:
@@ -46,9 +47,10 @@ services:
 
 
   depictio_backend:
-    image: depictio:dev
-    build:
-      dockerfile: docker-images/Dockerfile_depictio.dockerfile
+    image: registry.git.embl.de/tweber/depictio/depictio:dev
+    # image: depictio:dev
+    # build:
+    #   dockerfile: docker-images/Dockerfile_depictio.dockerfile
     ports:
       - 8058:8058
     volumes:
@@ -69,40 +71,44 @@ services:
       # - redis
       # - rabbitmq
 
-  depictio_nb:
-    image: depictio_nb:dev
-    build:
-      dockerfile: docker-images/Dockerfile_depictio_nb_debug.dockerfile
-    ports:
-      - 8888:8888
-    volumes:
-      - "${DEPICTIO_BACKEND_DATA_VOLUME_HOST}:${DEPICTIO_BACKEND_DATA_VOLUME_HOST}"
-      - ./depictio:/app/depictio
-      - ./data:/app/data
-      - ./minio_data:/minio_data
-      - ./jbrowse-watcher-plugin/sessions:/jbrowse-watcher-plugin/sessions
-      - ./dev:/app/dev
-      - ./.env:/app/.env
-      - ./dev/jup_nb/.jupyter:/app/.jupyter
-    depends_on:
-      - mongo
-      - minio
-      - depictio_backend
-      # - redis
-      # - rabbitmq
-    command: ["jupyter", "lab", "--config=/app/.jupyter/jupyter_notebook_config.py"]
-
 
   jbrowse2:
-    image: jbrowse2:latest
-    build:
-      dockerfile: docker-images/Dockerfile_jbrowse.dev.240424.dockerfile
+    image: registry.git.embl.de/tweber/depictio/jbrowse2:latest
+    # image: jbrowse2:latest
+    # build:
+    #   dockerfile: docker-images/Dockerfile_jbrowse.dev.240424.dockerfile
     ports: 
       - 3000:3000
       - 9010:9010
     volumes:
       - "./jbrowse-watcher-plugin:/usr/src/plugin"
       - "./jbrowse-watcher-plugin/sessions:/usr/src/jbrowse/plugin/sessions"
+
+
+  # depictio_nb:
+  #   image: registry.git.embl.de/tweber/depictio/depictio_nb:dev
+  #   # image: depictio_nb:dev
+  #   # build:
+  #   #   dockerfile: docker-images/Dockerfile_depictio_nb_debug.dockerfile
+  #   ports:
+  #     - 8888:8888
+  #   volumes:
+  #     - "${DEPICTIO_BACKEND_DATA_VOLUME_HOST}:${DEPICTIO_BACKEND_DATA_VOLUME_HOST}"
+  #     - ./depictio:/app/depictio
+  #     - ./data:/app/data
+  #     - ./minio_data:/minio_data
+  #     - ./jbrowse-watcher-plugin/sessions:/jbrowse-watcher-plugin/sessions
+  #     - ./dev:/app/dev
+  #     - ./.env:/app/.env
+  #     - ./dev/jup_nb/.jupyter:/app/.jupyter
+  #   depends_on:
+  #     - mongo
+  #     - minio
+  #     - depictio_backend
+  #     # - redis
+  #     # - rabbitmq
+  #   command: ["jupyter", "lab", "--config=/app/.jupyter/jupyter_notebook_config.py"]
+
 
 
   # redis:
