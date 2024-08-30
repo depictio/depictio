@@ -35,10 +35,17 @@ jobs:
           docker compose ps
           docker compose logs depictio_backend
 
-  ingest_data:
-    runs-on: ubuntu-latest
-    needs: setup
-    steps:
+      - name: Show agent config file
+        run: cat depictio/.depictio/default_admin_agent.yaml
+      
+        # Clone the depictio-cli repository
+      - name: Clone Depictio-CLI Repository
+        run: git clone https://github.com/depictio/depictio-cli.git
+
+      # Go to the Depictio-CLI directory
+      - name: Change Directory to Depictio-CLI
+        run: cd depictio-cli
+
       - name: Set Up Python Environment
         run: python -m venv depictio-cli-venv
 
@@ -51,7 +58,7 @@ jobs:
       - name: Ingest Data
         run: |
           depictio-cli data setup \
-            --agent-config-path depictio/.depictio/default_admin_agent.yaml \
+            --agent-config-path ../depictio/depictio/.depictio/default_admin_agent.yaml \
             --pipeline-config-path configs/mosaicatcher_pipeline/mosaicatcher_pipeline.yaml \
             --scan-files
 
