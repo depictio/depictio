@@ -1,0 +1,56 @@
+name: Build and Push Containers
+
+on:
+  workflow_dispatch:
+    inputs:
+      logLevel:
+          description: "Log level"
+          required: true
+          default: "warning"
+          type: choice
+          options:
+          - info
+          - warning
+          - debug
+
+
+jobs:
+  build_and_push:
+    name: Build and Push Images
+    runs-on: ubuntu-latest
+    env:
+      REGISTRY_URL: registry.git.embl.de/tweber  # Updated to use the correct namespace based on your instructions.
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set Up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Log in to Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.REGISTRY_URL }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      # Build and Push Depictio Image
+      - name: Build and Push Depictio Image
+        run: |
+          docker build -t ${{ env.REGISTRY_URL }}/depictio -f docker-images/Dockerfile_depictio.dockerfile .
+          docker push ${{ env.REGISTRY_URL }}/depictio
+
+      # Build and Push Depictio Jupyter Lab Image (dependent on the Depictio image)
+      - name: Build and Push Depictio Jupyter Lab Image
+        run: |
+          docker build -t ${{ env.REGISTRY_URL }}/depictio_nb -f docker-images/Dockerfile_depictio_nb_debug.dockerfile .
+          docker push ${{ env.REGISTRY_URL }}/depictio_nb
+
+      # Build and Push JBrowse2 Image
+      - name: Build and Push JBrowse2 Image
+        run: |
+          docker build -t ${{ env.REGISTRY_URL }}/jbrowse2 -f docker-images/Dockerfile_jbrowse.dev.240424.dockerfile .
+          docker push ${{ env.REGISTRY_URL }}/jbrowse2
+
+      - name: Verify Pushed Images
+        run: echo "Images have been successfully pushed to ${{ env.REGISTRY_URL }}"
