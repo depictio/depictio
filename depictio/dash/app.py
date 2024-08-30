@@ -165,7 +165,7 @@ def handle_unauthenticated_user(pathname):
     logger.info("User not logged in")
 
     # Redirect any path to the login/auth page
-    return create_users_management_layout(), header, "/auth", dash.no_update
+    return create_users_management_layout(), header, "/auth", {"logged_in": False, "access_token": None}
 
 
 def handle_authenticated_user(pathname, local_data):
