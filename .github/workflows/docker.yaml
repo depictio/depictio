@@ -28,7 +28,7 @@ jobs:
     name: Build and Push Depictio Image
     runs-on: ubuntu-latest
     env:
-      REGISTRY_URL: registry.git.embl.de/tweber  # Updated to use the correct namespace based on your instructions.
+      REGISTRY_URL: registry.git.embl.de/tweber/depictio  # Updated to use the correct namespace based on your instructions.
 
     steps:
       - uses: actions/checkout@v3
@@ -53,7 +53,7 @@ jobs:
     name: Build and Push JBrowse2 Image
     runs-on: ubuntu-latest
     env:
-      REGISTRY_URL: registry.git.embl.de/tweber  # Updated to use the correct namespace based on your instructions.
+      REGISTRY_URL: registry.git.embl.de/tweber/depictio  # Updated to use the correct namespace based on your instructions.
 
     steps:
       - uses: actions/checkout@v3
