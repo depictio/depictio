@@ -24,16 +24,23 @@ jobs:
       - name: Set up Environment Variables
         run: echo "DEPICTIO_BACKEND_DATA_VOLUME_HOST=$(pwd)/depictio-data" >> .env
 
-      - name: Start Docker Compose Services
-        run: docker compose up -d
+      # - name: Start Docker Compose Services
+      #   run: docker compose up -d
 
-      - name: Wait for Services to Start
-        run: sleep 30  # Adjust the wait time if necessary
+      # - name: Wait for Services to Start
+      #   run: sleep 30  # Adjust the wait time if necessary
 
-      - name: Verify Services Are Running
-        run: |
-          docker compose ps
-          docker compose logs depictio_backend
+      # - name: Verify Services Are Running
+      #   run: |
+      #     docker compose ps
+      #     docker compose logs depictio_backend
+
+      # Pwd & list files
+      - name: Print Working Directory
+        run: pwd
+      
+      - name: List Files
+        run: ls -la
 
       - name: Show agent config file
         run: cat depictio/.depictio/default_admin_agent.yaml
