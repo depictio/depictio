@@ -2,7 +2,9 @@ name: Deploy and Test Depictio
 
 on:
   push:
-    branches: [main]
+    # all branches
+    branches:
+      - '*'
   pull_request:
     branches: [main]
 
