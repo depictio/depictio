@@ -24,7 +24,7 @@ services:
 
 
   depictio_frontend:
-    image: registry.git.embl.de/tweber/depictio/depictio:dev
+    image: registry.git.embl.de/tweber/depictio/depictio:latest
     # image: depictio:dev
     # build:
     #   dockerfile: docker-images/Dockerfile_depictio.dockerfile
@@ -47,7 +47,7 @@ services:
 
 
   depictio_backend:
-    image: registry.git.embl.de/tweber/depictio/depictio:dev
+    image: registry.git.embl.de/tweber/depictio/depictio:latest
     # image: depictio:dev
     # build:
     #   dockerfile: docker-images/Dockerfile_depictio.dockerfile
