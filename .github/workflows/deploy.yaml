@@ -78,6 +78,8 @@ jobs:
           docker ps
           docker logs depictio-depictio_frontend-1
           docker logs depictio-depictio_backend-1
+          docker logs depictio-minio-1
+          docker logs depictio-mongo-1
 
 
 
@@ -92,6 +94,9 @@ jobs:
       
       - name: List Files
         run: ls -la
+
+      - name: List Files
+        run: ls -la depictioDB/
 
 
       # List content of depictio
