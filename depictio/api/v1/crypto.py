@@ -10,8 +10,8 @@ from depictio.api.v1.configs.logging import logger
 ALGORITHM = "RS256"
 
 # Key file paths
-private_key_path = "depictio/keys/private_key.pem"
-public_key_path = "depictio/keys/public_key.pem"
+private_key_path = "/app/depictio/depictio/keys/private_key.pem"
+public_key_path = "/app/depictio/depictio/keys/public_key.pem"
 
 def generate_keys():
     """Generate a new RSA private-public key pair."""
