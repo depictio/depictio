@@ -43,7 +43,7 @@ jobs:
 
       - name: Verify Permissions Inside Container
         run: |
-          docker exec -it depictio_backend bash -c "ls -la /app/depictio/keys"
+          docker exec -it depictio-depictio_backend-1 bash -c "ls -la /app/depictio/keys"
       
 
       - name: List Files
