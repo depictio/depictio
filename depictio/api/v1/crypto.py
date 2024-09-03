@@ -27,7 +27,6 @@ def generate_keys():
 
     # Ensure the directory exists and has the correct permissions
     os.makedirs(os.path.dirname(private_key_path), exist_ok=True)
-    os.chmod(os.path.dirname(private_key_path), 0o775)  # Set permissions
 
 
     private_key = rsa.generate_private_key(
