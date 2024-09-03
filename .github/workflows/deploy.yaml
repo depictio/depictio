@@ -15,6 +15,9 @@ jobs:
         with:
           submodules: recursive  # Clone with submodules
 
+      - name: Ownership of the Repository
+        run: sudo chown -R runner:docker .
+
       - name: Clone Example Data Repository
         run: git clone https://github.com/depictio/depictio-data.git
 
