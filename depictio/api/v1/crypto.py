@@ -16,6 +16,11 @@ public_key_path = "depictio/keys/public_key.pem"
 def generate_keys():
     """Generate a new RSA private-public key pair."""
 
+    # PWD
+    logger.info(f"PWD: {os.getcwd()}")
+    # List files in the directory
+    logger.info(f"Files in the directory: {os.listdir()}")
+
     # Ensure the directory exists and has the correct permissions
     os.makedirs(os.path.dirname(private_key_path), exist_ok=True)
     os.chmod(os.path.dirname(private_key_path), 0o775)  # Set permissions
