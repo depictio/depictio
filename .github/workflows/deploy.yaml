@@ -18,8 +18,11 @@ jobs:
       - name: Clone Example Data Repository
         run: git clone https://github.com/depictio/depictio-data.git
 
-      - name: Create MongoDB Data Directory
-        run: mkdir -p depictioDB/ && chown -R root:root depictioDB/ && chmod -R 775 depictioDB/
+      - name: Create and Set Permissions for depictioDB
+        run: |
+          sudo mkdir -p depictioDB/
+          sudo chown -R root:root depictioDB/
+          sudo chmod -R 775 depictioDB/
 
       - name: Set up Environment Variables
         run: echo "DEPICTIO_BACKEND_DATA_VOLUME_HOST=$(pwd)/depictio-data" >> .env
