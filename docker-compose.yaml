@@ -48,9 +48,6 @@ services:
 
   depictio_backend:
     image: registry.git.embl.de/tweber/depictio/depictio:latest
-    # image: depictio:dev
-    # build:
-    #   dockerfile: docker-images/Dockerfile_depictio.dockerfile
     ports:
       - 8058:8058
     volumes:
@@ -62,14 +59,10 @@ services:
       - ./configs:/configs
       - ./.env:/app/.env
     command: ["python", "depictio/api/run.py"]
-    user: "${UID}:${GID}"
-    # environment:
-    #   - JUPYTER_TOKEN='my_dev_token'
+    user: root:root
     depends_on:
       - mongo
       - minio
-      # - redis
-      # - rabbitmq
 
 
   jbrowse2:
