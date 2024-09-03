@@ -10,11 +10,17 @@ from depictio.api.v1.configs.logging import logger
 ALGORITHM = "RS256"
 
 # Key file paths
-private_key_path = "depictio/private_key.pem"
-public_key_path = "depictio/public_key.pem"
+private_key_path = "depictio/keys/private_key.pem"
+public_key_path = "depictio/keys/public_key.pem"
 
 def generate_keys():
     """Generate a new RSA private-public key pair."""
+
+    # Ensure the directory exists and has the correct permissions
+    os.makedirs(os.path.dirname(private_key_path), exist_ok=True)
+    os.chmod(os.path.dirname(private_key_path), 0o775)  # Set permissions
+
+
     private_key = rsa.generate_private_key(
         public_exponent=65537,
         key_size=2048,
