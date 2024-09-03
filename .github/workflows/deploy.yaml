@@ -33,6 +33,12 @@ jobs:
           sudo chmod -R 775 depictio/keys/
           sudo chown -R runner:docker depictio/keys/
 
+      - name: Create and Set Permissions for depictio/.depictio
+        run: |
+          sudo mkdir -p depictio/.depictio/
+          sudo chmod -R 775 depictio/.depictio/
+          sudo chown -R runner:docker depictio/.depictio/
+
 
 
       - name: Set up Environment Variables
