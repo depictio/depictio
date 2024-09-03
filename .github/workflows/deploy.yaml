@@ -38,6 +38,9 @@ jobs:
       - name: List Files
         run: ls -la
 
+      - name: List Files
+        run: ls -la depictio
+
       - name: Wait for Services to Start
         run: sleep 10  # Adjust the wait time if necessary
 
