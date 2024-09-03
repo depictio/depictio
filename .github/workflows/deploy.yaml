@@ -19,10 +19,7 @@ jobs:
         run: git clone https://github.com/depictio/depictio-data.git
 
       - name: Create MongoDB Data Directory
-        run: mkdir -p depictioDB/
-
-      - name: Set up Environment Variables
-        run: echo "DEPICTIO_BACKEND_DATA_VOLUME_HOST=$(pwd)/depictio-data" >> .env
+        run: mkdir -p depictioDB/ && chown -R $(id -u):$(id -g) depictioDB/ && chmod -R 775 depictioDB/
 
       - name: Start Docker Compose Services
         run: docker compose up -d
@@ -30,11 +27,16 @@ jobs:
       - name: Wait for Services to Start
         run: sleep 60  # Adjust the wait time if necessary
 
-      - name: Verify Services Are Running
+      # Step 5: Verify All Containers Are Running
+      - name: Check if all containers are running
         run: |
-          docker compose ps
-          docker compose logs depictio_backend
-
+          # Check if any containers are not in the 'Up' state
+          if ! docker compose ps | grep -q 'Up'; then
+            echo "One or more containers are not running. Failing the step."
+            docker compose ps
+            exit 1
+          fi
+        shell: bash
 
         # Clone the depictio-cli repository
       - name: Clone Depictio-CLI Repository
