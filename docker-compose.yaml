@@ -2,7 +2,7 @@ services:
   mongo:
     image: mongo:latest
     command: --dbpath /data/depictioDB --port 27018
-    user: "${UID}:${GID}"
+    user: root
     ports:
       - 27018:27018
     volumes:
@@ -11,7 +11,7 @@ services:
 
   minio:
     image: minio/minio:latest
-    user: "${UID}:${GID}"
+    user: root
     volumes:
       - "./minio_data:/data"
     environment:
