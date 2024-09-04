@@ -13,8 +13,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v2
         with:
-          submodules: recursive  # Clone with submodules
-
+          submodules: recursive # Clone with submodules
 
       - name: Clone Example Data Repository
         run: git clone https://github.com/depictio/depictio-data.git
@@ -31,7 +30,6 @@ jobs:
           sudo chown -R $(id -u):$(id -g) minio_data/
           sudo chmod -R 775 minio_data/
 
-
       - name: Create and Set Permissions for depictio/keys
         run: |
           sudo mkdir -p depictio/keys/
@@ -44,14 +42,13 @@ jobs:
           sudo chmod -R 775 depictio/.depictio/
           sudo chown -R runner:docker depictio/.depictio/
 
-
-          - name: Ownership of the Repository
-          run: |
-            # Change ownership to the current user and set proper permissions
-            ls -ld depictioDB minio_data
-            sudo chown -R $(id -u):$(id -g) depictioDB minio_data 
-            sudo chmod -R 775 depictioDB minio_data 
-            ls -ld depictioDB minio_data
+      - name: Ownership of the Repository
+        run: |
+          # Change ownership to the current user and set proper permissions
+          ls -ld depictioDB minio_data
+          sudo chown -R $(id -u):$(id -g) depictioDB minio_data 
+          sudo chmod -R 775 depictioDB minio_data 
+          ls -ld depictioDB minio_data
 
       - name: Set up Environment Variables
         run: echo "DEPICTIO_BACKEND_DATA_VOLUME_HOST=$(pwd)/depictio-data" >> .env
@@ -62,7 +59,6 @@ jobs:
       - name: Verify Permissions Inside Container
         run: |
           docker compose exec -T depictio_backend bash -c "ls -la /app/depictio/keys"
-      
 
       - name: List Files
         run: ls -la
@@ -71,7 +67,7 @@ jobs:
         run: ls -la depictio
 
       - name: Wait for Services to Start
-        run: sleep 10  # Adjust the wait time if necessary
+        run: sleep 10 # Adjust the wait time if necessary
 
       # Step 5: Verify All Containers Are Running
       - name: Check if all containers are running
@@ -83,8 +79,6 @@ jobs:
             exit 1
           fi
 
-
-
       - name: Make sure all Services Are Running
         run: |
           docker ps
@@ -93,23 +87,19 @@ jobs:
           docker logs depictio-minio-1
           docker logs depictio-mongo-1
 
-
-
         # Clone the depictio-cli repository
       - name: Clone Depictio-CLI Repository
         run: git clone https://github.com/depictio/depictio-cli.git
 
-
       # Pwd & list files
       - name: Print Working Directory
         run: pwd
-      
+
       - name: List Files
         run: ls -la
 
       - name: List Files
         run: ls -la depictioDB/
-
 
       # List content of depictio
       - name: List Depictio Directory
@@ -123,19 +113,13 @@ jobs:
       - name: List Depictio Directory
         run: ls -lal depictio/keys
 
-        
-
       # List content of depictio
       - name: List Depictio Directory
-        run: ls -lal ../ 
-
-
+        run: ls -lal ../
 
       - name: Show agent config file
         run: docker compose exec depictio_backend cat /app/depictio/.depictio/default_admin_agent.yaml
         # run: cat depictio/.depictio/default_admin_agent.yaml
-      
-
 
       # # Go to the Depictio-CLI directory
       # - name: Change Directory to Depictio-CLI
