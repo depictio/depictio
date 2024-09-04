@@ -42,9 +42,19 @@ jobs:
           sudo chmod -R 775 depictio/.depictio/
           sudo chown -R runner:docker depictio/.depictio/
 
+      - name: Set Environment Variables
+        run: |
+          echo "UID=$(id -u)" >> $GITHUB_ENV
+          echo "GID=$(id -g)" >> $GITHUB_ENV
+          echo "MINIO_ROOT_USER=minio" >> $GITHUB_ENV
+          echo "MINIO_ROOT_PASSWORD=minio123" >> $GITHUB_ENV
+        
+
       - name: Set up Environment Variables
         run: echo "DEPICTIO_BACKEND_DATA_VOLUME_HOST=$(pwd)/depictio-data" >> .env
 
+
+        
       - name: Start Docker Compose Services
         run: docker compose up -d
 
@@ -108,6 +118,17 @@ jobs:
       # List content of depictio
       - name: List Depictio Directory
         run: ls -lal ../
+
+      # Verify permissions inside MongoDB container
+      - name: Verify MongoDB Permissions Inside Container
+        run: |
+          docker compose exec -T mongo bash -c "ls -la /data/depictioDB"
+
+      # Verify permissions inside MinIO container
+      - name: Verify MinIO Permissions Inside Container
+        run: |
+          docker compose exec -T minio bash -c "ls -la /data"
+
 
       - name: Show agent config file
         run: docker compose exec depictio_backend cat /app/depictio/.depictio/default_admin_agent.yaml
