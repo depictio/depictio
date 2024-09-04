@@ -15,13 +15,6 @@ jobs:
         with:
           submodules: recursive  # Clone with submodules
 
-      - name: Ownership of the Repository
-        run: |
-          # Change ownership to the current user and set proper permissions
-          ls -ld depictioDB minio_data
-          sudo chown -R $(id -u):$(id -g) depictioDB minio_data depictio depictio-data
-          sudo chmod -R 775 depictioDB minio_data depictio depictio-data
-          ls -ld depictioDB minio_data
 
       - name: Clone Example Data Repository
         run: git clone https://github.com/depictio/depictio-data.git
@@ -29,8 +22,15 @@ jobs:
       - name: Create and Set Permissions for depictioDB
         run: |
           sudo mkdir -p depictioDB/
-          sudo chown -R root:root depictioDB/
+          sudo chown -R $(id -u):$(id -g) depictioDB/
           sudo chmod -R 775 depictioDB/
+
+      - name: Create and Set Permissions for minio_data
+        run: |
+          sudo mkdir -p minio_data/
+          sudo chown -R $(id -u):$(id -g) minio_data/
+          sudo chmod -R 775 minio_data/
+
 
       - name: Create and Set Permissions for depictio/keys
         run: |
@@ -45,6 +45,13 @@ jobs:
           sudo chown -R runner:docker depictio/.depictio/
 
 
+          - name: Ownership of the Repository
+          run: |
+            # Change ownership to the current user and set proper permissions
+            ls -ld depictioDB minio_data
+            sudo chown -R $(id -u):$(id -g) depictioDB minio_data 
+            sudo chmod -R 775 depictioDB minio_data 
+            ls -ld depictioDB minio_data
 
       - name: Set up Environment Variables
         run: echo "DEPICTIO_BACKEND_DATA_VOLUME_HOST=$(pwd)/depictio-data" >> .env
