@@ -109,6 +109,10 @@ jobs:
 
       # List content of depictio
       - name: List Depictio Directory
+        run: ls -lal depictio/.depictio
+
+      # List content of depictio
+      - name: List Depictio Directory
         run: ls -lal .
 
       # List content of depictio
@@ -134,27 +138,27 @@ jobs:
         run: docker compose exec depictio_backend cat /app/depictio/.depictio/default_admin_agent.yaml
         # run: cat depictio/.depictio/default_admin_agent.yaml
 
-      # # Go to the Depictio-CLI directory
-      # - name: Change Directory to Depictio-CLI
-      #   run: cd depictio-cli
+      # Go to the Depictio-CLI directory
+      - name: Change Directory to Depictio-CLI
+        run: cd depictio-cli
 
-      # - name: Set Up Python Environment
-      #   run: python -m venv depictio-cli-venv
+      - name: Set Up Python Environment
+        run: python -m venv depictio-cli-venv
 
-      # - name: Activate Virtual Environment and Install Depictio-CLI
-      #   run: |
-      #     source depictio-cli-venv/bin/activate
-      #     pip install -e .
-      #     export PYTHONPATH=$PYTHONPATH:$(pwd)/depictio-cli
+      - name: Activate Virtual Environment and Install Depictio-CLI
+        run: |
+          source depictio-cli-venv/bin/activate
+          pip install -e .
+          export PYTHONPATH=$PYTHONPATH:$(pwd)/depictio-cli
 
-      # - name: Ingest Data
-      #   run: |
-      #     depictio-cli data setup \
-      #       --agent-config-path ../depictio/.depictio/default_admin_agent.yaml \
-      #       --pipeline-config-path configs/mosaicatcher_pipeline/mosaicatcher_pipeline.yaml \
-      #       --scan-files
+      - name: Ingest Data
+        run: |
+          depictio-cli data setup \
+            --agent-config-path ../depictio/.depictio/default_admin_agent.yaml \
+            --pipeline-config-path configs/mosaicatcher_pipeline/mosaicatcher_pipeline.yaml \
+            --scan-files
 
-      # - name: Check Ingestion Success
-      #   run: |
-      #     # Your check logic here
-      #     echo "Data ingestion completed successfully"
+      - name: Check Ingestion Success
+        run: |
+          # Your check logic here
+          echo "Data ingestion completed successfully"
