@@ -16,7 +16,12 @@ jobs:
           submodules: recursive  # Clone with submodules
 
       - name: Ownership of the Repository
-        run: sudo chown -R runner:docker .
+        run: |
+          # Change ownership to the current user and set proper permissions
+          ls -ld depictioDB minio_data
+          sudo chown -R $(id -u):$(id -g) depictioDB minio_data depictio depictio-data
+          sudo chmod -R 775 depictioDB minio_data depictio depictio-data
+          ls -ld depictioDB minio_data
 
       - name: Clone Example Data Repository
         run: git clone https://github.com/depictio/depictio-data.git
