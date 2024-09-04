@@ -22,7 +22,7 @@ jobs:
         run: |
           sudo mkdir -p depictioDB/
           sudo chown -R $(id -u):$(id -g) depictioDB/
-          sudo chmod -R 775 depictioDB/
+          sudo chmod -R 777 depictioDB/
 
       - name: Create and Set Permissions for minio_data
         run: |
@@ -41,14 +41,6 @@ jobs:
           sudo mkdir -p depictio/.depictio/
           sudo chmod -R 775 depictio/.depictio/
           sudo chown -R runner:docker depictio/.depictio/
-
-      - name: Ownership of the Repository
-        run: |
-          # Change ownership to the current user and set proper permissions
-          ls -ld depictioDB minio_data
-          sudo chown -R $(id -u):$(id -g) depictioDB minio_data 
-          sudo chmod -R 775 depictioDB minio_data 
-          ls -ld depictioDB minio_data
 
       - name: Set up Environment Variables
         run: echo "DEPICTIO_BACKEND_DATA_VOLUME_HOST=$(pwd)/depictio-data" >> .env
