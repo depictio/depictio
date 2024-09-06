@@ -165,6 +165,14 @@ jobs:
           depictio-cli-venv/bin/pip install -e .
 
 
+      - name: Check Depictio Backend Health
+        run: |
+          # Add a simple curl request to check the API status
+          health_check=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/depictio/api/v1/health)
+          if [ "$health_check" != "200" ]; then
+            echo "Backend API is not healthy. Status code: $health_check"
+            exit 1
+          fi
 
 
       - name: Ingest Data
@@ -177,6 +185,11 @@ jobs:
             --agent-config-path ../depictio/.depictio/default_admin_agent.yaml \
             --pipeline-config-path configs/mosaicatcher_pipeline/mosaicatcher_pipeline.yaml \
             --scan-files
+
+      # Fetch backend logs to help troubleshoot JSON errors
+      - name: Fetch Depictio Backend Logs
+        run: |
+          docker compose logs depictio_backend
 
       - name: Check Ingestion Success
         run: echo "Data ingestion completed successfully"
