@@ -91,7 +91,7 @@ jobs:
 
         # Clone the depictio-cli repository
       - name: Clone Depictio-CLI Repository
-        run: git clone https://github.com/depictio/depictio-cli.git
+        run: git clone -b 19-fixing-pipeline-config-path-parameter-missing-in-dataupload https://github.com/depictio/depictio-cli.git
 
       # Pwd & list files
       - name: Print Working Directory
