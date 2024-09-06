@@ -173,6 +173,7 @@ jobs:
           
           # Remove quotes from the token if any
           token=$(echo $token | tr -d "'\"")
+          echo "Extracted token: $token"
 
           # Perform the health check using the extracted token
           health_check=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $token" http://localhost:8058/depictio/api/v1/utils/status)
@@ -181,25 +182,35 @@ jobs:
             echo "Backend API is not healthy. Status code: $health_check"
             exit 1
           else
+            
             echo "Backend API is healthy."
           fi
 
 
 
-      - name: Ingest Data
-        working-directory: depictio-cli
+      # Fetch the Depictio Backend logs after CLI execution
+      - name: Fetch Depictio Backend Logs Before CLI Run
+        if: always() # Ensure this runs no matter what
         run: |
-          # Check available scripts in the virtual environment's bin folder
-          ls -la depictio-cli-venv/bin/
-          # Run the CLI command using the executable script, not as a Python module
+          echo "Fetching logs before running CLI..."
+          docker compose logs depictio_backend
+
+      # Run the CLI command with continue-on-error to ensure subsequent steps run
+      - name: Ingest Data with Depictio-CLI
+        working-directory: depictio-cli
+        continue-on-error: true  # Continue workflow even if this step fails
+        run: |
+          # Run the CLI command with verbose logging
           depictio-cli-venv/bin/depictio-cli data setup \
             --agent-config-path ../depictio/.depictio/default_admin_agent.yaml \
             --pipeline-config-path configs/mosaicatcher_pipeline/mosaicatcher_pipeline.yaml \
-            --scan-files
+            --scan-files || { echo "Data setup failed. Exiting."; exit 1; }
 
-      # Fetch backend logs to help troubleshoot JSON errors
-      - name: Fetch Depictio Backend Logs
+      # Fetch backend logs regardless of CLI step outcome
+      - name: Fetch Depictio Backend Logs After CLI Run
+        if: always()  # Run this step no matter what happens previously
         run: |
+          echo "Fetching backend logs after CLI run..."
           docker compose logs depictio_backend
 
       - name: Check Ingestion Success
