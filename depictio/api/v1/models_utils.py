@@ -10,7 +10,7 @@ from depictio.api.v1.endpoints.datacollections_endpoints.models import DataColle
 from depictio.api.v1.endpoints.user_endpoints.models import Permission, User
 from depictio.api.v1.endpoints.workflow_endpoints.models import Workflow
 from depictio.api.v1.models.top_structure import RootConfig
-
+from depictio.api.v1.configs.logging import logger
 
 def get_config(filename: str):
     """
@@ -36,7 +36,14 @@ def validate_config(config: Dict, pydantic_model: Type[BaseModel]) -> BaseModel:
     if not isinstance(config, dict):
         raise ValueError("Invalid config. Must be a dictionary.")
     try:
-        data = pydantic_model(**config)
+        # List environment variables
+        logger.info(f"Env args: {os.environ}")
+
+        # Substitute environment variables in the format ${VAR_NAME}
+        substituted_content = os.path.expandvars(config)
+
+        # Load the config into a Pydantic model
+        data = pydantic_model(**substituted_content)
     except ValidationError as e:
         raise ValueError(f"Invalid config: {e}")
     return data
