@@ -140,25 +140,27 @@ jobs:
 
       # Go to the Depictio-CLI directory
       - name: Change Directory to Depictio-CLI
-        run: cd depictio-cli
+        working-directory: depictio-cli
+        run: pwd
 
       - name: Set Up Python Environment
         run: python -m venv depictio-cli-venv
 
       - name: Activate Virtual Environment and Install Depictio-CLI
+        working-directory: depictio-cli
         run: |
-          source depictio-cli-venv/bin/activate
-          pip install -e .
-          export PYTHONPATH=$PYTHONPATH:$(pwd)/depictio-cli
+          # Use the explicit path to python and pip in the virtual environment
+          depictio-cli-venv/bin/python -m pip install --upgrade pip
+          depictio-cli-venv/bin/pip install -e .
 
       - name: Ingest Data
+        working-directory: depictio-cli
         run: |
-          depictio-cli data setup \
+          # Use the explicit path to the virtual environment's python
+          depictio-cli-venv/bin/python -m depictio_cli data setup \
             --agent-config-path ../depictio/.depictio/default_admin_agent.yaml \
             --pipeline-config-path configs/mosaicatcher_pipeline/mosaicatcher_pipeline.yaml \
             --scan-files
 
       - name: Check Ingestion Success
-        run: |
-          # Your check logic here
-          echo "Data ingestion completed successfully"
+        run: echo "Data ingestion completed successfully"
