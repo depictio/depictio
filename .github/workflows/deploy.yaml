@@ -165,14 +165,25 @@ jobs:
           depictio-cli-venv/bin/pip install -e .
 
 
-      - name: Check Depictio Backend Health
+      # Extract the token and perform a health check with the token
+      - name: Extract Token and Check Depictio Backend Health
         run: |
-          # Add a simple curl request to check the API status
-          health_check=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8058/depictio/api/v1/utils/status)
+          # Extract the access token from the YAML file
+          token=$(docker compose exec depictio_backend bash -c "cat /app/depictio/.depictio/default_admin_agent.yaml" | grep 'access_token' | awk '{print $2}')
+          
+          # Remove quotes from the token if any
+          token=$(echo $token | tr -d "'\"")
+
+          # Perform the health check using the extracted token
+          health_check=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $token" http://localhost:8058/depictio/api/v1/utils/status)
+
           if [ "$health_check" != "200" ]; then
             echo "Backend API is not healthy. Status code: $health_check"
             exit 1
+          else
+            echo "Backend API is healthy."
           fi
+
 
 
       - name: Ingest Data
