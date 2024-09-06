@@ -140,15 +140,26 @@ jobs:
 
       # Go to the Depictio-CLI directory
       - name: Change Directory to Depictio-CLI
-        working-directory: depictio-cli
-        run: pwd
+        run: |
+          cd depictio-cli
+          pwd
+          ls -la
 
       - name: Set Up Python Environment
-        run: python -m venv depictio-cli-venv
+        working-directory: depictio-cli
+        run: |
+          # Check the current directory and confirm the presence of depictio-cli
+          pwd
+          ls -la
+          python -m venv depictio-cli-venv
+          # Check the virtual environment directory creation
+          ls -la depictio-cli-venv
 
       - name: Activate Virtual Environment and Install Depictio-CLI
         working-directory: depictio-cli
         run: |
+          # Check if the virtual environment's Python executable exists
+          ls -la depictio-cli-venv/bin/
           # Use the explicit path to python and pip in the virtual environment
           depictio-cli-venv/bin/python -m pip install --upgrade pip
           depictio-cli-venv/bin/pip install -e .
@@ -156,7 +167,6 @@ jobs:
       - name: Ingest Data
         working-directory: depictio-cli
         run: |
-          # Use the explicit path to the virtual environment's python
           depictio-cli-venv/bin/python -m depictio_cli data setup \
             --agent-config-path ../depictio/.depictio/default_admin_agent.yaml \
             --pipeline-config-path configs/mosaicatcher_pipeline/mosaicatcher_pipeline.yaml \
