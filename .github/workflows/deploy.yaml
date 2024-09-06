@@ -168,7 +168,7 @@ jobs:
       - name: Check Depictio Backend Health
         run: |
           # Add a simple curl request to check the API status
-          health_check=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/depictio/api/v1/health)
+          health_check=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8058/depictio/api/v1/utils/status)
           if [ "$health_check" != "200" ]; then
             echo "Backend API is not healthy. Status code: $health_check"
             exit 1
