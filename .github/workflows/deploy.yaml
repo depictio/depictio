@@ -164,10 +164,16 @@ jobs:
           depictio-cli-venv/bin/python -m pip install --upgrade pip
           depictio-cli-venv/bin/pip install -e .
 
+
+
+
       - name: Ingest Data
         working-directory: depictio-cli
         run: |
-          depictio-cli-venv/bin/python -m depictio_cli data setup \
+          # Check available scripts in the virtual environment's bin folder
+          ls -la depictio-cli-venv/bin/
+          # Run the CLI command using the executable script, not as a Python module
+          depictio-cli-venv/bin/depictio-cli data setup \
             --agent-config-path ../depictio/.depictio/default_admin_agent.yaml \
             --pipeline-config-path configs/mosaicatcher_pipeline/mosaicatcher_pipeline.yaml \
             --scan-files
