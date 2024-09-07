@@ -143,7 +143,8 @@ async def create_workflow(workflow: Workflow, current_user: str = Depends(get_cu
         )
 
     logger.info(f"workflow: {workflow}")
-    workflow.permissions["owners"] = [{"id": current_user.id, "email": current_user.email, "groups": current_user.groups}]
+    workflow.permissions.owners = [{"id": current_user.id, "email": current_user.email, "groups": current_user.groups}]
+    # workflow.permissions["owners"] = [{"id": current_user.id, "email": current_user.email, "groups": current_user.groups}]
 
     # Assign PyObjectId to workflow ID and data collection IDs
     workflow.id = ObjectId()
