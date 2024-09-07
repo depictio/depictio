@@ -65,7 +65,7 @@ def validate_config(config: Dict, pydantic_model: Type[BaseModel]) -> BaseModel:
         logger.info(f"Substituted Config: {substituted_config}")
 
         # Load the config into a Pydantic model
-        data = pydantic_model(**config)
+        data = pydantic_model(**substituted_config)
     except ValidationError as e:
         raise ValueError(f"Invalid config: {e}")
     return data
