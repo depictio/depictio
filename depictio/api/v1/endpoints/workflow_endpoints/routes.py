@@ -6,6 +6,7 @@ from depictio.api.v1.configs.config import logger
 from depictio.api.v1.db import workflows_collection
 from depictio.api.v1.endpoints.deltatables_endpoints.routes import delete_deltatable
 from depictio.api.v1.endpoints.files_endpoints.routes import delete_files
+from depictio.api.v1.endpoints.user_endpoints.models import UserBase
 from depictio.api.v1.endpoints.workflow_endpoints.utils import compare_models
 from depictio.api.v1.models.base import convert_objectid_to_str
 from depictio.api.v1.models.top_structure import Workflow
@@ -143,8 +144,12 @@ async def create_workflow(workflow: Workflow, current_user: str = Depends(get_cu
         )
 
     logger.info(f"workflow: {workflow}")
-    workflow.permissions.owners = [{"id": current_user.id, "email": current_user.email, "groups": current_user.groups}]
-    # workflow.permissions["owners"] = [{"id": current_user.id, "email": current_user.email, "groups": current_user.groups}]
+
+    # Correctly update the owners list in the permissions attribute
+    new_owner = UserBase(id=current_user.id, email=current_user.email, groups=current_user.groups)
+
+    # Replace or extend the owners list as needed
+    workflow.permissions.owners.append(new_owner)  # Appending the new owner
 
     # Assign PyObjectId to workflow ID and data collection IDs
     workflow.id = ObjectId()
