@@ -173,7 +173,10 @@ jobs:
           
           # Remove quotes from the token if any
           token=$(echo $token | tr -d "'\"")
-          echo "Extracted token: $token"
+
+          # Hash the token using SHA256 for safe logging
+          token_hash=$(echo -n "$token" | sha256sum)
+          echo "Extracted token hash: $token_hash"
 
           # Perform the health check using the extracted token
           health_check=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $token" http://localhost:8058/depictio/api/v1/utils/status)
@@ -206,12 +209,12 @@ jobs:
             --pipeline-config-path configs/mosaicatcher_pipeline/mosaicatcher_pipeline.yaml \
             --scan-files || { echo "Data setup failed. Exiting."; exit 1; }
 
-      # Fetch backend logs regardless of CLI step outcome
-      - name: Fetch Depictio Backend Logs After CLI Run
-        if: always()  # Run this step no matter what happens previously
-        run: |
-          echo "Fetching backend logs after CLI run..."
-          docker compose logs depictio_backend
 
+      - name: Check Workflow in MongoDB
+        run: |
+          docker compose exec -T mongo bash -c "
+            echo 'db.workflows.find().pretty()' | mongosh localhost:27018/depictioDB --quiet
+          "
+          
       - name: Check Ingestion Success
         run: echo "Data ingestion completed successfully"
