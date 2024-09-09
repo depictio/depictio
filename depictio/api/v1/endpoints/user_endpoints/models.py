@@ -138,7 +138,7 @@ class Group(BaseModel):
 
 
 class Permission(BaseModel):
-    owners: List[UserBase]
+    owners: List[UserBase] = set()  # Set default to empty set
     viewers: Optional[List[UserBase]] = set()  # Set default to empty set
 
     def dict(self, **kwargs):
@@ -159,8 +159,8 @@ class Permission(BaseModel):
     def validate_permissions(cls, values):
         owners = values.get("owners", set())
         viewers = values.get("viewers", set())
-        if not owners:
-            raise ValueError("At least one owner is required.")
+        # if not owners:
+        #     raise ValueError("At least one owner is required.")
 
         return values
 
