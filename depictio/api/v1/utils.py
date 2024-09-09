@@ -15,7 +15,7 @@ from depictio.api.v1.endpoints.files_endpoints.models import File
 from depictio.api.v1.endpoints.workflow_endpoints.models import WorkflowConfig, WorkflowRun
 from depictio.api.v1.models.top_structure import RootConfig
 from depictio.api.v1.models_utils import get_config, validate_all_workflows, validate_config
-
+from depictio.api.v1.configs.logging import logger
 
 # FIXME: update model & function using a list of dict instead of a dict
 def construct_full_regex(files_regex, regex_config):
@@ -23,23 +23,22 @@ def construct_full_regex(files_regex, regex_config):
     Construct the full regex using the wildcards defined in the config.
     """
     for wildcard in regex_config.wildcards:
-        print("wildcard", wildcard)
+        logger.debug(f"Wildcard: {wildcard}")
         placeholder = f"{{{wildcard.name}}}"  # e.g. {date}
         regex_pattern = wildcard.wildcard_regex
         files_regex = files_regex.replace(placeholder, f"({regex_pattern})")
-        print("files_regex", files_regex)
+        logger.debug(f"Files Regex: {files_regex}")
     return files_regex
 
 
 def regex_match(root, file, full_regex, data_collection):
     # Normalize the regex pattern to match both types of path separators
     normalized_regex = full_regex.replace("/", "\/")
-    print("normalized_regex")
-    print(root, file, full_regex, data_collection, data_collection.config.regex.type.lower())
+    logger.debug(f"Root: {root}, File: {file}, Full Regex: {full_regex}, Data Collection type: {data_collection.config.regex.type.lower()}")
     # If regex pattern is file-based, match the file name directly
     if data_collection.config.regex.type.lower() == "file-based":
         if re.match(normalized_regex, file):
-            print("MATCH - file-based")
+            logger.debug(f"Matched file - file-based: {file}")
             return True, re.match(normalized_regex, file)
     elif data_collection.config.regex.type.lower() == "path-based":
         # If regex pattern is path-based, match the full path
@@ -55,7 +54,7 @@ def scan_files(run_location: str, run_id: str, data_collection: DataCollection) 
     """
     # Get the workflow's parent_runs_location
 
-    print(f"Scanning files in {run_location}")
+    logger.debug(f"Scanning files in {run_location}")
 
     if not os.path.exists(run_location):
         raise ValueError(f"The directory '{run_location}' does not exist.")
@@ -73,9 +72,9 @@ def scan_files(run_location: str, run_id: str, data_collection: DataCollection) 
     # Scan the files
     for root, dirs, files in os.walk(run_location):
         for file in files:
-            print("root", root, "file", file, "full_regex", full_regex, "data_collection", data_collection)
+            logger.debug(f"Root: {root}, File: {file}, Full Regex: {full_regex}, Data Collection: {data_collection}")
             match, result = regex_match(root, file, full_regex, data_collection)
-            print("match", match, "result", result)
+            logger.debug(f"Match: {match}, Result: {result}")
             if match:
                 file_location = os.path.join(root, file)
                 filename = file
@@ -104,9 +103,8 @@ def scan_files(run_location: str, run_id: str, data_collection: DataCollection) 
                         wildcards_list.append({"name": wildcard.name, "value": result.group(j), "wildcard_regex": wildcard.wildcard_regex})
                     file_instance.wildcards = wildcards_list
 
-                # print(file_instance)
                 file_list.append(file_instance)
-    print("file_list", file_list)
+    logger.debug(f"File List: {file_list}")
     return file_list
 
 

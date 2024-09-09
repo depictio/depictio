@@ -21,10 +21,10 @@ def create_admin_user(user_dict=user_dict):
     for _ in range(5):
         try:
             client.server_info()
-            print("Connected to MongoDB")
+            logger.info("Connected to MongoDB")
             break
         except Exception as e:
-            print("Waiting for MongoDB to start...")
+            logger.warn("Waiting for MongoDB to start...")
             time.sleep(5)
     else:
         raise Exception("Could not connect to MongoDB")
