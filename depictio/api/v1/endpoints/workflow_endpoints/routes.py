@@ -35,8 +35,8 @@ async def get_all_workflows(current_user: str = Depends(get_current_user)):
     # Find workflows where current_user is either an owner or a viewer
     query = {
         "$or": [
-            {"permissions.owners.id": user_id},
-            {"permissions.viewers.id": user_id},
+            {"permissions.owners._id": user_id},
+            {"permissions.viewers._id": user_id},
         ]
     }
 
@@ -72,8 +72,8 @@ async def get_workflow_from_args(name: str, engine: str, current_user: str = Dep
         "name": name,
         "engine": engine,
         "$or": [
-            {"permissions.owners.id": user_id},
-            {"permissions.viewers.id": user_id},
+            {"permissions.owners._id": user_id},
+            {"permissions.viewers._id": user_id},
         ],
     }
 
