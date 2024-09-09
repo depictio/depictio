@@ -10,7 +10,8 @@ def generate_agent_config(current_user, request):
 
     logger.info(f"Current user: {current_user}")
     current_userbase = UserBase(
-        **current_user.dict(exclude={"tokens", "is_active", "is_verified", "last_login", "registration_date", "password", "current_access_token"})
+        current_user.dict()
+        # **current_user.dict(exclude={"tokens", "is_active", "is_verified", "last_login", "registration_date", "password", "current_access_token"})
     )
     logger.info(f"Current user base: {current_userbase}")
     current_userbase = convert_objectid_to_str(current_userbase.dict())
