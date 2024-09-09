@@ -62,8 +62,8 @@ async def validate_pipeline_config_endpoint(pipeline_config: dict = dict(), curr
     validated_pipeline_config = validate_config(pipeline_config, RootConfig)
 
     # For all workflows, add the current_user.id to the owners list
-    for workflow in validated_pipeline_config.workflows:
-        workflow.permissions["owners"].append(current_userbase)
+    # for workflow in validated_pipeline_config.workflows:
+    #     workflow.permissions["owners"].append(current_userbase)
 
     logger.info(f"Validated pipeline config: {validated_pipeline_config}")
     validated_pipeline_config = convert_objectid_to_str(validated_pipeline_config.dict())

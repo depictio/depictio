@@ -158,11 +158,11 @@ async def create_workflow(workflow: Workflow, current_user: str = Depends(get_cu
 
     logger.info(f"workflow: {workflow}")
 
-    # # Correctly update the owners list in the permissions attribute
-    # new_owner = UserBase(id=current_user.id, email=current_user.email, groups=current_user.groups)
+    # Correctly update the owners list in the permissions attribute
+    new_owner = UserBase(id=current_user.id, email=current_user.email, groups=current_user.groups)
 
-    # # Replace or extend the owners list as needed
-    # workflow.permissions.owners.append(new_owner)  # Appending the new owner
+    # Replace or extend the owners list as needed
+    workflow.permissions.owners.append(new_owner)  # Appending the new owner
 
     logger.info(f"workflow: {workflow}")
 
