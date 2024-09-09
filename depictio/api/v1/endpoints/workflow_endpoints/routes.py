@@ -166,6 +166,16 @@ async def create_workflow(workflow: Workflow, current_user: str = Depends(get_cu
 
     res = workflows_collection.insert_one(workflow.mongo())
     logger.info(f"res: {res}")
+
+    # check if the workflow was created in the DB
+    res = workflows_collection.find_one({"_id": workflow.id})
+    logger.info(f"res query : {res}")
+
+    # check if the workflow was created in the DB using the workflow_tag
+    res = workflows_collection.find_one({"workflow_tag": workflow.workflow_tag})
+    logger.info(f"res query tag : {res}")
+
+
     assert res.inserted_id == workflow.id
     return_dict = {str(workflow.id): [str(data_collection.id) for data_collection in workflow.data_collections]}
 
