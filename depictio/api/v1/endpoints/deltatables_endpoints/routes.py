@@ -163,7 +163,7 @@ async def aggregate_data(
     # Create a DeltaTableAggregated object
     destination_file_name = f"s3://{settings.minio.bucket}/{user_oid}/{workflow_oid}/{data_collection_oid}/"  # Destination path in MinIO
     # destination_file_name = f"{settings.minio.data_dir}/{settings.minio.bucket}/{user_oid}/{workflow_oid}/{data_collection_oid}/"  # Destination path in MinIO
-    os.makedirs(destination_file_name, exist_ok=True)
+    # os.makedirs(destination_file_name, exist_ok=True)
 
     # Get the user object to use as aggregation_by
     user = UserBase.from_mongo(users_collection.find_one({"_id": user_oid}))

@@ -88,9 +88,6 @@ async def scan_metadata(
     """
     Scan the files and retrieve metadata.
     """
-    logger.info("Scanning data collection")
-    logger.info(workflow_id)
-    logger.info(data_collection_id)
 
     if not workflow_id or not data_collection_id:
         raise HTTPException(
@@ -148,9 +145,7 @@ async def scan_data_collection(
     data_collection_id: str,
     current_user=Depends(get_current_user),
 ):
-    logger.info("Scanning data collection")
-    logger.info(workflow_id)
-    logger.info(data_collection_id)
+    logger.info(f"Scanning data collection {data_collection_id} of workflow {workflow_id}")
 
     if not workflow_id or not data_collection_id:
         raise HTTPException(
@@ -161,7 +156,7 @@ async def scan_data_collection(
     if not current_user:
         raise HTTPException(status_code=400, detail="Current user not found.")
 
-    logger.info(f"Current user: {current_user}")
+    logger.debug(f"Current user: {current_user}")
 
     (
         workflow_oid,
@@ -176,21 +171,17 @@ async def scan_data_collection(
         data_collection_id,
     )
 
-    logger.info(current_user)
     user_id = str(current_user.id)
-    logger.info(user_id)
 
     # Retrieve the workflow_config from the workflow
     locations = workflow.config.parent_runs_location
 
-    logger.info(locations)
+    logger.debug(f"Locations: {locations}")
 
     # Scan the runs and retrieve the files
 
-    new_tracks = []
-
     for location in locations:
-        logger.info(location)
+        logger.debug(f"Scanning location: {location}")
         runs_and_content = scan_runs(location, workflow.config, data_collection)
         runs_and_content = serialize_for_mongo(runs_and_content)
 
@@ -224,10 +215,6 @@ async def scan_data_collection(
                         "viewers": [],
                     }
 
-                    logger.info(f"\n")
-
-                    logger.info(f"User ID: {user_id}")
-                    logger.info(f"File: {file}")
 
                     # logger.info(data_collection.config.type)
 
@@ -239,7 +226,6 @@ async def scan_data_collection(
 
                     # Assuming user_oid is the ObjectId of the current user
                     existing_file = files_collection.find_one({"file_location": file["file_location"], "permissions.owners": {"$elemMatch": {"id": ObjectId(user_oid)}}})
-                    logger.info(f"Existing file: {existing_file}")
 
                     file = File(**file)
 
@@ -248,11 +234,11 @@ async def scan_data_collection(
                         # If the file does not exist, add it to the database
                         files_collection.insert_one(file.mongo())
                     else:
-                        logger.info(f"File already exists: {file.mongo()['file_location']}")
+                        logger.warn(f"File already exists: {file.mongo()['file_location']}")
                         file = File.from_mongo(existing_file)
 
-                    logger.info("File")
-                    logger.info(file)
+                    logger.debug(f"File: {file}")
+
 
         return {"message": f"Files successfully scanned and created for data_collection: {data_collection.id} of workflow: {workflow.id}"}
     else:
