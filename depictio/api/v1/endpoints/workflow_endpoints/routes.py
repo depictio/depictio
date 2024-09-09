@@ -151,16 +151,26 @@ async def create_workflow(workflow: Workflow, current_user: str = Depends(get_cu
     # Replace or extend the owners list as needed
     workflow.permissions.owners.append(new_owner)  # Appending the new owner
 
+    logger.info(f"workflow: {workflow}")
+
     # Assign PyObjectId to workflow ID and data collection IDs
     workflow.id = ObjectId()
+
+    logger.info(f"workflow: {workflow}")
+
     for data_collection in workflow.data_collections:
         data_collection.id = ObjectId()
     assert isinstance(workflow.id, ObjectId)
+
+    logger.info(f"Workflow: {workflow}")
+
     res = workflows_collection.insert_one(workflow.mongo())
+    logger.info(f"res: {res}")
     assert res.inserted_id == workflow.id
     return_dict = {str(workflow.id): [str(data_collection.id) for data_collection in workflow.data_collections]}
 
     return_dict = convert_objectid_to_str(workflow)
+    logger.info(f"return_dict: {return_dict}")
     return return_dict
 
 
