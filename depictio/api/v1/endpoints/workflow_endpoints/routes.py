@@ -121,7 +121,7 @@ async def get_workflow_from_id(workflow_id: str, current_user: str = Depends(get
 
 
 @workflows_endpoint_router.post("/create")
-async def create_workflow(workflow: Workflow, current_user: str = Depends(get_current_user)):
+async def create_workflow(workflow: dict, current_user: str = Depends(get_current_user)):
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
 
@@ -144,7 +144,8 @@ async def create_workflow(workflow: Workflow, current_user: str = Depends(get_cu
 
     existing_workflow = workflows_collection.find_one(
         {
-            "workflow_tag": workflow.workflow_tag,
+            "workflow_tag": workflow["workflow_tag"],
+            # "workflow_tag": workflow.workflow_tag,
             "permissions.owners.id": current_user.id,
         }
     )
@@ -153,7 +154,8 @@ async def create_workflow(workflow: Workflow, current_user: str = Depends(get_cu
     if existing_workflow:
         raise HTTPException(
             status_code=400,
-            detail=f"Workflow with name '{workflow.workflow_tag}' already exists. Use update option to modify it.",
+            # detail=f"Workflow with name '{workflow.workflow_tag}' already exists. Use update option to modify it.",
+            detail=f"Workflow with name '{workflow["workflow_tag"]}' already exists. Use update option to modify it.",
         )
 
     logger.info(f"workflow: {workflow}")
@@ -162,7 +164,10 @@ async def create_workflow(workflow: Workflow, current_user: str = Depends(get_cu
     new_owner = UserBase(id=current_user.id, email=current_user.email, groups=current_user.groups)
 
     # Replace or extend the owners list as needed
-    workflow.permissions.owners.append(new_owner)  # Appending the new owner
+    workflow["permissions"]["owners"].append(new_owner)  # Appending the new owner
+
+    # Convert the workflow to a Workflow object
+    workflow = Workflow(**workflow)
 
     logger.info(f"workflow: {workflow}")
 
