@@ -215,6 +215,12 @@ jobs:
           docker compose exec -T mongo bash -c "
             echo 'db.workflows.find().pretty()' | mongosh localhost:27018/depictioDB --quiet
           "
+
+      - name: Check Users in MongoDB
+        run: |
+          docker compose exec -T mongo bash -c "
+            echo 'db.users.find().pretty()' | mongosh localhost:27018/depictioDB --quiet
+          "
           
       - name: Check Ingestion Success
         run: echo "Data ingestion completed successfully"
