@@ -136,12 +136,9 @@ async def create_workflow(workflow: dict, current_user: str = Depends(get_curren
     token_hash = hashlib.sha256(current_access_token.encode()).hexdigest()
     logger.info(f"Token hash: {token_hash}")
 
-    
-
     # fetch user DB object from the token
     response_user = users_collection.find_one({"_id": ObjectId(current_user.id)})
     logger.info(f"response_user: {response_user}")
-
 
     if not workflow:
         raise HTTPException(status_code=400, detail="Workflow is required to create it.")
@@ -165,16 +162,21 @@ async def create_workflow(workflow: dict, current_user: str = Depends(get_curren
     # Correctly update the owners list in the permissions attribute
     new_owner = UserBase(id=current_user.id, email=current_user.email, groups=current_user.groups)
     logger.info(f"new_owner: {new_owner}")
-    new_owner = convert_objectid_to_str(new_owner.mongo())
-    logger.info(f"new_owner: {new_owner}")
+    # new_owner = convert_objectid_to_str(new_owner.mongo())
+    # logger.info(f"new_owner: {new_owner}")
 
     # Replace or extend the owners list as needed
-    workflow["permissions"]["owners"].append(new_owner)  # Appending the new owner
+    # workflow["permissions"]["owners"].append(new_owner)  # Appending the new owner
 
     logger.info(f"workflow: {workflow}")
 
     # Convert the workflow to a Workflow object
     workflow = Workflow(**workflow)
+
+    logger.info(f"workflow: {workflow}")
+
+    # Add the new owner to the permissions
+    workflow.permissions.owners.append(new_owner)
 
     logger.info(f"workflow: {workflow}")
 
@@ -201,7 +203,6 @@ async def create_workflow(workflow: dict, current_user: str = Depends(get_curren
     # check if the workflow was created in the DB using the workflow_tag
     res = workflows_collection.find_one({"workflow_tag": workflow.workflow_tag})
     logger.info(f"res query tag : {res}")
-
 
     return_dict = {str(workflow.id): [str(data_collection.id) for data_collection in workflow.data_collections]}
 
