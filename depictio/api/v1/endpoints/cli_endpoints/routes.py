@@ -45,7 +45,8 @@ async def validate_pipeline_config_endpoint(pipeline_config: dict = dict(), curr
         raise HTTPException(status_code=401, detail="Current user not found.")
 
     logger.info(f"Current user: {current_user}")
-    current_userbase = UserBase(**current_user.dict(exclude={"tokens", "is_active", "is_verified", "last_login", "registration_date", "password"}))
+    current_userbase = UserBase(**current_user.dict())
+    # current_userbase = UserBase(**current_user.dict(exclude={"tokens", "is_active", "is_verified", "last_login", "registration_date", "password"}))
     logger.info(f"Current user base: {current_userbase}")
 
     current_userbase = convert_objectid_to_str(current_userbase)
