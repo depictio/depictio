@@ -1,3 +1,4 @@
+import hashlib
 from bson import ObjectId
 from fastapi import HTTPException, Depends, APIRouter
 from pymongo import ReturnDocument
@@ -125,6 +126,13 @@ async def create_workflow(workflow: Workflow, current_user: str = Depends(get_cu
         raise HTTPException(status_code=401, detail="User not found.")
 
     logger.info(f"current_user: {current_user}")
+
+    current_access_token = current_user.current_access_token
+    # hash the token
+    token_hash = hashlib.sha256(current_access_token.encode()).hexdigest()
+    logger.info(f"Token hash: {token_hash}")
+
+    
 
     # fetch user DB object from the token
     response_user = users_collection.find_one({"_id": ObjectId(current_user.id)})

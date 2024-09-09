@@ -22,6 +22,7 @@ class Token(MongoModel):
     token_lifetime: str = "short-lived"
     expire_datetime: str
     name: Optional[str] = None
+    hash: Optional[str] = None
     # scope: Optional[str] = None
     # user_id: PyObjectId
 
@@ -31,7 +32,7 @@ class Token(MongoModel):
             return values  # Ensure we don't proceed if values is None
         values["_id"] = PyObjectId()
         return values
-
+    
     class Config:
         arbitrary_types_allowed = True
         json_encoders = {ObjectId: lambda v: str(v)}

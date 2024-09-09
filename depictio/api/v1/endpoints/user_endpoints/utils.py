@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import hashlib
 import httpx
 import jwt
 import bcrypt
@@ -124,6 +125,9 @@ def add_token(token_data: dict) -> dict:
     token, expire = create_access_token(token_data)
     token_data = {"access_token": token, "expire_datetime": expire.strftime("%Y-%m-%d %H:%M:%S"), "name": token_data["name"], "token_lifetime": token_data["token_lifetime"]}
 
+    # create hash from access token
+    token_data["hash"] = hashlib.sha256(token.encode()).hexdigest()
+
     logger.info(f"Adding token for user {email}.")
     user = find_user(email)
     logger.info(f"User: {user}")
@@ -231,7 +235,7 @@ def generate_agent_config(email, token, current_token):
 
     logger.info(f"Generating agent config for user {user}.")
     result = httpx.post(f"{API_BASE_URL}/depictio/api/v1/auth/generate_agent_config", json={"user": user, "token": token}, headers={"Authorization": f"Bearer {current_token}"})
-    logger.info(f"Result: {result.json()}")
+    # logger.info(f"Result: {result.json()}")
     if result.status_code == 200:
         logger.info(f"Agent config generated for user {user}.")
         return result.json()
