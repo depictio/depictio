@@ -155,7 +155,7 @@ async def create_workflow(workflow: dict, current_user: str = Depends(get_curren
         raise HTTPException(
             status_code=400,
             # detail=f"Workflow with name '{workflow.workflow_tag}' already exists. Use update option to modify it.",
-            detail=f"Workflow with name '{workflow["workflow_tag"]}' already exists. Use update option to modify it.",
+            detail=f"Workflow with name '{workflow['workflow_tag']}' already exists. Use update option to modify it.",
         )
 
     logger.info(f"workflow: {workflow}")
