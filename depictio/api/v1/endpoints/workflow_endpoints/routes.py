@@ -162,6 +162,7 @@ async def create_workflow(workflow: dict, current_user: str = Depends(get_curren
 
     # Correctly update the owners list in the permissions attribute
     new_owner = UserBase(id=current_user.id, email=current_user.email, groups=current_user.groups)
+    new_owner = new_owner.mongo()
 
     # Replace or extend the owners list as needed
     workflow["permissions"]["owners"].append(new_owner)  # Appending the new owner
