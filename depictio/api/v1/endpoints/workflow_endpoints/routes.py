@@ -3,7 +3,7 @@ from fastapi import HTTPException, Depends, APIRouter
 from pymongo import ReturnDocument
 
 from depictio.api.v1.configs.config import logger
-from depictio.api.v1.db import workflows_collection
+from depictio.api.v1.db import workflows_collection, users_collection
 from depictio.api.v1.endpoints.deltatables_endpoints.routes import delete_deltatable
 from depictio.api.v1.endpoints.files_endpoints.routes import delete_files
 from depictio.api.v1.endpoints.user_endpoints.models import UserBase
@@ -126,6 +126,11 @@ async def create_workflow(workflow: Workflow, current_user: str = Depends(get_cu
 
     logger.info(f"current_user: {current_user}")
 
+    # fetch user DB object from the token
+    response_user = users_collection.find_one({"_id": ObjectId(current_user.id)})
+    logger.info(f"response_user: {response_user}")
+
+
     if not workflow:
         raise HTTPException(status_code=400, detail="Workflow is required to create it.")
 
@@ -165,6 +170,8 @@ async def create_workflow(workflow: Workflow, current_user: str = Depends(get_cu
     logger.info(f"Workflow: {workflow}")
 
     res = workflows_collection.insert_one(workflow.mongo())
+    assert res.inserted_id == workflow.id
+
     logger.info(f"res: {res}")
 
     # check if the workflow was created in the DB
@@ -176,7 +183,6 @@ async def create_workflow(workflow: Workflow, current_user: str = Depends(get_cu
     logger.info(f"res query tag : {res}")
 
 
-    assert res.inserted_id == workflow.id
     return_dict = {str(workflow.id): [str(data_collection.id) for data_collection in workflow.data_collections]}
 
     return_dict = convert_objectid_to_str(workflow)
