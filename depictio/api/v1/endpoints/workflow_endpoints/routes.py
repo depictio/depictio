@@ -28,6 +28,10 @@ async def get_all_workflows(current_user: str = Depends(get_current_user)):
     # Assuming the 'current_user' now holds a 'user_id' as an ObjectId after being parsed in 'get_current_user'
     user_id = current_user.id  # This should be the ObjectId
 
+    # DEBUG - Find all workflows regardless of permissions
+    workflows_cursor = list(workflows_collection.find())
+    logger.info(f"workflows_cursor - ALL: {workflows_cursor}")
+
     # Find workflows where current_user is either an owner or a viewer
     query = {
         "$or": [
@@ -158,11 +162,11 @@ async def create_workflow(workflow: dict, current_user: str = Depends(get_curren
             detail=f"Workflow with name '{workflow['workflow_tag']}' already exists. Use update option to modify it.",
         )
 
-    logger.info(f"workflow: {workflow}")
-
     # Correctly update the owners list in the permissions attribute
     new_owner = UserBase(id=current_user.id, email=current_user.email, groups=current_user.groups)
+    logger.info(f"new_owner: {new_owner}")
     new_owner = convert_objectid_to_str(new_owner.mongo())
+    logger.info(f"new_owner: {new_owner}")
 
     # Replace or extend the owners list as needed
     workflow["permissions"]["owners"].append(new_owner)  # Appending the new owner
