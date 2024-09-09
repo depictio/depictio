@@ -210,17 +210,25 @@ jobs:
             --scan-files || { echo "Data setup failed. Exiting."; exit 1; }
 
 
+      # Fetch backend logs regardless of CLI step outcome
+      - name: Fetch Depictio Backend Logs After CLI Run
+        if: always()  # Run this step no matter what happens previously
+        run: |
+          echo "Fetching backend logs after CLI run..."
+          docker compose logs depictio_backend
+
       - name: Check Workflow in MongoDB
         run: |
           docker compose exec -T mongo bash -c "
             echo 'db.workflows.find().pretty()' | mongosh localhost:27018/depictioDB --quiet
           "
-
       - name: Check Users in MongoDB
         run: |
           docker compose exec -T mongo bash -c "
             echo 'db.users.find().pretty()' | mongosh localhost:27018/depictioDB --quiet
           "
-          
+    
+
+
       - name: Check Ingestion Success
         run: echo "Data ingestion completed successfully"
