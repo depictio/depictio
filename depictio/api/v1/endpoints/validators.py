@@ -22,7 +22,7 @@ def validate_workflow_and_collection(collection, user_id: str, workflow_id: str,
 
     # Retrieve the workflow
     workflow = collection.find_one(
-        {"_id": workflow_oid, "permissions.owners.id": user_oid},
+        {"_id": workflow_oid, "permissions.owners._id": user_oid},
     )
 
     # Check if the workflow exists
@@ -41,7 +41,7 @@ def validate_workflow_and_collection(collection, user_id: str, workflow_id: str,
         return workflow_oid, None, workflow, user_oid
 
     # Extract the correct data collection from the workflow's data_collections
-    data_collection = collection.find_one({"_id": workflow_oid, "permissions.owners.id": user_oid}, {"data_collections": {"$elemMatch": {"_id": data_collection_oid}}})
+    data_collection = collection.find_one({"_id": workflow_oid, "permissions.owners._id": user_oid}, {"data_collections": {"$elemMatch": {"_id": data_collection_oid}}})
     data_collection = data_collection.get("data_collections")[0]
 
     data_collection = convert_objectid_to_str(data_collection)
