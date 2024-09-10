@@ -1,7 +1,7 @@
 {
     "name": "depictio devcontainer",
     "dockerComposeFile": ["../docker-compose.yaml"],
-    "service": "docker_frontend",
+    "service": "depictio_frontend",
     "workspaceFolder": "/workspace",
     "extensions": [
       "ms-python.python",
