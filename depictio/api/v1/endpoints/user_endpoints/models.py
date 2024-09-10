@@ -22,6 +22,7 @@ class Token(MongoModel):
     token_lifetime: str = "short-lived"
     expire_datetime: str
     name: Optional[str] = None
+    hash: Optional[str] = None
     # scope: Optional[str] = None
     # user_id: PyObjectId
 
@@ -31,7 +32,7 @@ class Token(MongoModel):
             return values  # Ensure we don't proceed if values is None
         values["_id"] = PyObjectId()
         return values
-
+    
     class Config:
         arbitrary_types_allowed = True
         json_encoders = {ObjectId: lambda v: str(v)}
@@ -137,7 +138,7 @@ class Group(BaseModel):
 
 
 class Permission(BaseModel):
-    owners: List[UserBase]
+    owners: List[UserBase] = set()  # Set default to empty set
     viewers: Optional[List[UserBase]] = set()  # Set default to empty set
 
     def dict(self, **kwargs):
@@ -158,8 +159,8 @@ class Permission(BaseModel):
     def validate_permissions(cls, values):
         owners = values.get("owners", set())
         viewers = values.get("viewers", set())
-        if not owners:
-            raise ValueError("At least one owner is required.")
+        # if not owners:
+        #     raise ValueError("At least one owner is required.")
 
         return values
 

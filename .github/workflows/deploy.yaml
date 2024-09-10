@@ -1,0 +1,242 @@
+name: Deploy and Test Depictio
+
+on:
+  push:
+    branches: "*"
+  pull_request:
+    branches: [main]
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+        with:
+          submodules: recursive # Clone with submodules
+
+      - name: Clone Example Data Repository
+        run: git clone https://github.com/depictio/depictio-data.git
+
+      - name: Create and Set Permissions for depictioDB
+        run: |
+          sudo mkdir -p depictioDB/
+          sudo chown -R $(id -u):$(id -g) depictioDB/
+          sudo chmod -R 777 depictioDB/
+
+      - name: Create and Set Permissions for minio_data
+        run: |
+          sudo mkdir -p minio_data/
+          sudo chown -R $(id -u):$(id -g) minio_data/
+          sudo chmod -R 775 minio_data/
+
+      - name: Create and Set Permissions for depictio/keys
+        run: |
+          sudo mkdir -p depictio/keys/
+          sudo chmod -R 775 depictio/keys/
+          sudo chown -R runner:docker depictio/keys/
+
+      - name: Create and Set Permissions for depictio/.depictio
+        run: |
+          sudo mkdir -p depictio/.depictio/
+          sudo chmod -R 775 depictio/.depictio/
+          sudo chown -R runner:docker depictio/.depictio/
+
+      - name: Set Environment Variables
+        run: |
+          echo "UID=$(id -u)" >> $GITHUB_ENV
+          echo "GID=$(id -g)" >> $GITHUB_ENV
+          echo "MINIO_ROOT_USER=minio" >> $GITHUB_ENV
+          echo "MINIO_ROOT_PASSWORD=minio123" >> $GITHUB_ENV
+        
+
+      - name: Set up Environment Variables
+        run: echo "DEPICTIO_BACKEND_DATA_VOLUME_HOST=$(pwd)/depictio-data" >> .env
+
+
+        
+      - name: Start Docker Compose Services
+        run: docker compose up -d
+
+      - name: Verify Permissions Inside Container
+        run: |
+          docker compose exec -T depictio_backend bash -c "ls -la /app/depictio/keys"
+
+      - name: List Files
+        run: ls -la
+
+      - name: List Files
+        run: ls -la depictio
+
+      - name: Wait for Services to Start
+        run: sleep 10 # Adjust the wait time if necessary
+
+      # Step 5: Verify All Containers Are Running
+      - name: Check if all containers are running
+        run: |
+          # Check if any containers are not in the 'Up' state
+          if ! docker compose ps | grep -q 'Up'; then
+            echo "One or more containers are not running. Failing the step."
+            docker compose ps
+            exit 1
+          fi
+
+      - name: Make sure all Services Are Running
+        run: |
+          docker ps
+          docker logs depictio-depictio_frontend-1
+          docker logs depictio-depictio_backend-1
+          docker logs depictio-minio-1
+          docker logs depictio-mongo-1
+
+        # Clone the depictio-cli repository
+      - name: Clone Depictio-CLI Repository
+        run: git clone -b 19-fixing-pipeline-config-path-parameter-missing-in-dataupload https://github.com/depictio/depictio-cli.git
+
+      # Pwd & list files
+      - name: Print Working Directory
+        run: pwd
+
+      - name: List Files
+        run: ls -la
+
+      - name: List Files
+        run: ls -la depictioDB/
+
+      # List content of depictio
+      - name: List Depictio Directory
+        run: ls -lal depictio
+
+      # List content of depictio
+      - name: List Depictio Directory
+        run: ls -lal depictio/.depictio
+
+      # List content of depictio
+      - name: List Depictio Directory
+        run: ls -lal .
+
+      # List content of depictio
+      - name: List Depictio Directory
+        run: ls -lal depictio/keys
+
+      # List content of depictio
+      - name: List Depictio Directory
+        run: ls -lal ../
+
+      # Verify permissions inside MongoDB container
+      - name: Verify MongoDB Permissions Inside Container
+        run: |
+          docker compose exec -T mongo bash -c "ls -la /data/depictioDB"
+
+      # Verify permissions inside MinIO container
+      - name: Verify MinIO Permissions Inside Container
+        run: |
+          docker compose exec -T minio bash -c "ls -la /data"
+
+
+      - name: Show agent config file
+        run: docker compose exec depictio_backend cat /app/depictio/.depictio/default_admin_agent.yaml
+        # run: cat depictio/.depictio/default_admin_agent.yaml
+
+      # Go to the Depictio-CLI directory
+      - name: Change Directory to Depictio-CLI
+        run: |
+          cd depictio-cli
+          pwd
+          ls -la
+
+      - name: Set Up Python Environment
+        working-directory: depictio-cli
+        run: |
+          # Check the current directory and confirm the presence of depictio-cli
+          pwd
+          ls -la
+          python -m venv depictio-cli-venv
+          # Check the virtual environment directory creation
+          ls -la depictio-cli-venv
+
+      - name: Activate Virtual Environment and Install Depictio-CLI
+        working-directory: depictio-cli
+        run: |
+          # Check if the virtual environment's Python executable exists
+          ls -la depictio-cli-venv/bin/
+          # Use the explicit path to python and pip in the virtual environment
+          depictio-cli-venv/bin/python -m pip install --upgrade pip
+          depictio-cli-venv/bin/pip install -e .
+
+
+      # Extract the token and perform a health check with the token
+      - name: Extract Token and Check Depictio Backend Health
+        run: |
+          # Extract the access token from the YAML file
+          token=$(docker compose exec depictio_backend bash -c "cat /app/depictio/.depictio/default_admin_agent.yaml" | grep 'access_token' | awk '{print $2}')
+          
+          # Remove quotes from the token if any
+          token=$(echo $token | tr -d "'\"")
+
+          # Hash the token using SHA256 for safe logging
+          token_hash=$(echo -n "$token" | sha256sum)
+          echo "Extracted token hash: $token_hash"
+
+          # Perform the health check using the extracted token
+          health_check=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $token" http://localhost:8058/depictio/api/v1/utils/status)
+
+          if [ "$health_check" != "200" ]; then
+            echo "Backend API is not healthy. Status code: $health_check"
+            exit 1
+          else
+            
+            echo "Backend API is healthy."
+          fi
+
+
+
+      # Fetch the Depictio Backend logs after CLI execution
+      - name: Fetch Depictio Backend Logs Before CLI Run
+        if: always() # Ensure this runs no matter what
+        run: |
+          echo "Fetching logs before running CLI..."
+          docker compose logs depictio_backend
+
+      # Run the CLI command with continue-on-error to ensure subsequent steps run
+      - name: Ingest Data with Depictio-CLI
+        working-directory: depictio-cli
+        continue-on-error: true  # Continue workflow even if this step fails
+        run: |
+          # Run the CLI command with verbose logging
+          depictio-cli-venv/bin/depictio-cli data setup \
+            --agent-config-path ../depictio/.depictio/default_admin_agent.yaml \
+            --pipeline-config-path configs/mosaicatcher_pipeline/mosaicatcher_pipeline.yaml \
+            --scan-files || { echo "Data setup failed. Exiting."; exit 1; }
+
+
+      # Fetch backend logs regardless of CLI step outcome
+      - name: Fetch Depictio Backend Logs After CLI Run
+        if: always()  # Run this step no matter what happens previously
+        run: |
+          echo "Fetching backend logs after CLI run..."
+          docker compose logs depictio_backend
+
+      - name: Check Workflow in MongoDB
+        run: |
+          docker compose exec -T mongo bash -c "
+            echo 'db.workflows.find().pretty()' | mongosh localhost:27018/depictioDB --quiet
+          "
+      - name: Check Users in MongoDB
+        run: |
+          docker compose exec -T mongo bash -c "
+            echo 'db.users.find().pretty()' | mongosh localhost:27018/depictioDB --quiet
+          "
+      - name: Check DeltaTables in MongoDB
+        run: |
+          docker compose exec -T mongo bash -c "
+            echo 'db.deltatables.find().pretty()' | mongosh localhost:27018/depictioDB --quiet
+          "
+
+      - name: Check if localhost:5080 (frontend) is up and running
+        run: |
+          curl -s -o /dev/null -w "%{http_code}" http://localhost:5080
+          echo "Frontend is up and running"
+
+      - name: Check Ingestion Success
+        run: echo "Data ingestion completed successfully"

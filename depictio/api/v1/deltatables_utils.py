@@ -70,6 +70,7 @@ def load_deltatable_lite(workflow_id: ObjectId, data_collection_id: ObjectId, me
 
         # If metadata is None or empty, return the DataFrame without filtering
         if not metadata:
+            logger.info(f"No metadata for wf {workflow_id} DC {data_collection_id}")
             return pl.scan_delta(file_id, storage_options=minio_storage_options).collect().drop("depictio_aggregation_time")
 
         # Process metadata to generate filter list
