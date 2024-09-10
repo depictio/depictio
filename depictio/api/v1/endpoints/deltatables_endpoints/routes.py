@@ -174,7 +174,7 @@ async def aggregate_data(
     # Check if the DeltaTableAggregated exists, if not create a new one, else update the existing one
     logger.info("Checking if deltatable exists")
     if query_dt:
-        logger.info("DeltaTable exists")
+        logger.warn("DeltaTable exists")
         deltatable = DeltaTableAggregated.from_mongo(query_dt)
     else:
         logger.info("DeltaTable does not exist")
@@ -187,7 +187,7 @@ async def aggregate_data(
     # Read each file and append to data_frames list for futher aggregation
     data_frames = []
     for file_info in files:
-        logger.info(f"TESTTT : Reading file: {file_info.file_location}")
+        logger.debug(f"Reading file: {file_info.file_location}")
         data_frames.append(read_table_for_DC_table(file_info, dc_config, deltatable))
 
     # Aggregate data
