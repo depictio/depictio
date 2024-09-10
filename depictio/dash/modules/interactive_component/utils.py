@@ -5,7 +5,7 @@ import dash_mantine_components as dmc
 import dash_bootstrap_components as dbc
 
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
-
+from depictio.api.v1.configs.config import logger
 
 def build_interactive_frame(index, children=None):
     if not children:
@@ -112,9 +112,14 @@ def build_interactive(**kwargs):
 
     # If the aggregation value is TextInput
     elif interactive_component_type == "TextInput":
-        kwargs = ({"persistence_type": "local"},)
+        logger.debug("TextInput")
+        logger.debug(f"Value: {value}")
+        logger.debug(f"Value type: {type(value)}")
+        kwargs = {"persistence_type": "local"}
         if not value:
             value = ""
+        logger.debug(f"Value: {value}")
+        logger.debug(f"Value type: {type(value)}")
         kwargs.update({"value": value})
         interactive_component = func_name(
             placeholder="Your selected value",

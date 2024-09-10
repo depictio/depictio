@@ -167,16 +167,16 @@ def register_callbacks_draggable(app):
 
         ctx = dash.callback_context
 
-        logger.info("CTX: {}".format(ctx))
-        # logger.info("CTX triggered: {}".format(ctx.triggered))
-        logger.info("CTX triggered_id: {}".format(ctx.triggered_id))
+        logger.debug("CTX: {}".format(ctx))
+        # logger.debug("CTX triggered: {}".format(ctx.triggered))
+        logger.debug("CTX triggered_id: {}".format(ctx.triggered_id))
         logger.info("TYPE CTX triggered_id: {}".format(type(ctx.triggered_id)))
-        logger.info("CTX triggered_props_id: {}".format(ctx.triggered_prop_ids))
-        # logger.info("CTX args_grouping: {}".format(ctx.args_grouping))
-        # logger.info("CTX inputs: {}".format(ctx.inputs))
-        # logger.info("CTX inputs_list: {}".format(ctx.inputs_list))
-        # logger.info("CTX states: {}".format(ctx.states))
-        # logger.info("CTX states_list: {}".format(ctx.states_list))
+        logger.debug("CTX triggered_props_id: {}".format(ctx.triggered_prop_ids))
+        # logger.debug("CTX args_grouping: {}".format(ctx.args_grouping))
+        # logger.debug("CTX inputs: {}".format(ctx.inputs))
+        # logger.debug("CTX inputs_list: {}".format(ctx.inputs_list))
+        # logger.debug("CTX states: {}".format(ctx.states))
+        # logger.debug("CTX states_list: {}".format(ctx.states_list))
 
         if isinstance(ctx.triggered_id, dict):
             triggered_input = ctx.triggered_id["type"]
@@ -398,12 +398,12 @@ def register_callbacks_draggable(app):
 
         from dash import ctx
 
-        logger.info("CTX: {}".format(ctx))
-        logger.info("CTX triggered: {}".format(ctx.triggered))
-        logger.info("CTX triggered_id: {}".format(ctx.triggered_id))
-        logger.info("CTX triggered_props_id: {}".format(ctx.triggered_prop_ids))
-        logger.info("CTX args_grouping: {}".format(ctx.args_grouping))
-        logger.info("CTX inputs: {}".format(ctx.inputs))
+        logger.debug("CTX: {}".format(ctx))
+        logger.debug("CTX triggered: {}".format(ctx.triggered))
+        logger.debug("CTX triggered_id: {}".format(ctx.triggered_id))
+        logger.debug("CTX triggered_props_id: {}".format(ctx.triggered_prop_ids))
+        logger.debug("CTX args_grouping: {}".format(ctx.args_grouping))
+        logger.debug("CTX inputs: {}".format(ctx.inputs))
 
         triggered_input = ctx.triggered[0]["prop_id"].split(".")[0]
         logger.info("triggered_input : {}".format(triggered_input))
@@ -516,7 +516,7 @@ def register_callbacks_draggable(app):
     #     ctx = dash.callback_context
     #     ctx_triggered = ctx.triggered
     #     logger.info("\n\n")
-    #     logger.info("CTX triggered: {}".format(ctx_triggered))
+    #     logger.debug("CTX triggered: {}".format(ctx_triggered))
     #     triggered_input = ctx.triggered[0]["prop_id"].split(".")[0]
     #     logger.info("triggered_input : {}".format(triggered_input))
     #     logger.info("Switch state: {}".format(switch_state))
