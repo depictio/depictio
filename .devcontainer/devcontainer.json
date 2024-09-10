@@ -1,14 +1,13 @@
 {
     "name": "depictio devcontainer",
     "dockerComposeFile": ["../docker-compose.yaml"],
-    "service": "depictio_frontend",
-    "workspaceFolder": "/workspace",
     "extensions": [
       "ms-python.python",
       "ms-azuretools.vscode-docker",
       "ms-python.anaconda-extension-pack",
       "GitHub.copilot"
     ],
+    "forwardPorts": [8058,5080,9001],
     "settings": {
       "terminal.integrated.shell.linux": "/bin/bash"
     },
