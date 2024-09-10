@@ -227,8 +227,16 @@ jobs:
           docker compose exec -T mongo bash -c "
             echo 'db.users.find().pretty()' | mongosh localhost:27018/depictioDB --quiet
           "
-    
+      - name: Check DeltaTables in MongoDB
+        run: |
+          docker compose exec -T mongo bash -c "
+            echo 'db.deltatables.find().pretty()' | mongosh localhost:27018/depictioDB --quiet
+          "
 
+      - name: Check if localhost:5080 (frontend) is up and running
+        run: |
+          curl -s -o /dev/null -w "%{http_code}" http://localhost:5080
+          echo "Frontend is up and running"
 
       - name: Check Ingestion Success
         run: echo "Data ingestion completed successfully"
