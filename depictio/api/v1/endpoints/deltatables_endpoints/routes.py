@@ -161,7 +161,8 @@ async def aggregate_data(
     files = [File.from_mongo(file) for file in files]
 
     # Create a DeltaTableAggregated object
-    destination_file_name = f"s3://{settings.minio.bucket}/{user_oid}/{workflow_oid}/{data_collection_oid}/"  # Destination path in MinIO
+    destination_file_key = f"{user_oid}/{workflow_oid}/{data_collection_oid}/" 
+    destination_file_name = f"s3://{settings.minio.bucket}/{destination_file_key}" 
     # destination_file_name = f"{settings.minio.data_dir}/{settings.minio.bucket}/{user_oid}/{workflow_oid}/{data_collection_oid}/"  # Destination path in MinIO
     # os.makedirs(destination_file_name, exist_ok=True)
 
@@ -223,10 +224,11 @@ async def aggregate_data(
 
     # Get the size of the object in the bucket
     try:
-        filesize = get_s3_folder_size(bucket_name, destination_file_name)
-        logger.info(f"Size of the object '{destination_file_name}' in bucket '{bucket_name}' is {filesize} bytes.")
+        filesize = get_s3_folder_size(bucket_name, destination_file_key)
+        logger.info(f"Size of the object '{destination_file_key}' in bucket '{bucket_name}' is {filesize} bytes.")
     except HTTPException as e:
         logger.error(f"Failed to get the size of the object: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get the size of the object.")
 
     hash_str = f"{destination_file_name}{datetime.now()}{filesize}"
     hash_str = hash_str.encode("utf-8")
