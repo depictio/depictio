@@ -3,32 +3,29 @@ from fastapi import APIRouter, Depends, HTTPException
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.db import workflows_collection, data_collections_collection, runs_collection, files_collection, deltatables_collection, dashboards_collection
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
+from depictio.api.v1.endpoints.utils_endpoints.core_functions import create_bucket
 from depictio.api.v1.s3 import s3_client
+from depictio.api.v1.configs.logging import logger
 
 # Define the router
 utils_endpoint_router = APIRouter()
 
-
 @utils_endpoint_router.get("/create_bucket")
-async def create_bucket(current_user=Depends(get_current_user)):
+async def create_bucket_endpoint(current_user=Depends(get_current_user)):
     if not current_user:
+        logger.error("Current user not found.")
         raise HTTPException(status_code=401, detail="Current user not found.")
 
-    # Check if the user is an admin
-    if not current_user.is_admin:
-        raise HTTPException(status_code=401, detail="User is not an admin.")
 
-    bucket_name = settings.minio.bucket
-    # check if the bucket already exists
-    try:
-        s3_client.head_bucket(Bucket=bucket_name)
-        return {"message": "Bucket already exists"}
-    except Exception as e:
-        # Create a new bucket
-        s3_client.create_bucket(Bucket=bucket_name)
-        return {"message": "Bucket created"}
+    response = create_bucket(current_user)
+
+    if response.status_code == 200:
+        logger.info(response.detail)
+        return response
     else:
-        return {"message": "Bucket creation failed"}
+        logger.error(response.detail)
+        raise HTTPException(status_code=response.status_code, detail=response.detail)
+
 
 
 # TODO - remove this endpoint - only for testing purposes in order to drop the S3 bucket content & the DB collections

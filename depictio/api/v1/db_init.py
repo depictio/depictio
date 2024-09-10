@@ -9,6 +9,7 @@ from depictio.api.v1.endpoints.user_endpoints.utils import hash_password, list_e
 from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.endpoints.user_endpoints.models import User
 from depictio.api.v1.endpoints.user_endpoints.utils import add_token
+from depictio.api.v1.endpoints.utils_endpoints.core_functions import create_bucket
 
 
 user_dict = {"username": "admin", "password": hash_password("changeme"), "is_admin": True, "email": "admin@embl.de"}
@@ -39,9 +40,9 @@ def create_admin_user(user_dict=user_dict):
         logger.info(f"User: {user_dict}")
         user = User(**user_dict)
         logger.info(f"User: {user}")
-        user = user.mongo()
-        logger.info(f"User.mongo(): {user}")
-        users_collection.insert_one(user)
+        user_mongo = user.mongo()
+        logger.info(f"User.mongo(): {user_mongo}")
+        users_collection.insert_one(user_mongo)
         logger.info("Admin user added to the database")
 
     # Check if default admin token exists
@@ -49,8 +50,8 @@ def create_admin_user(user_dict=user_dict):
     if not users_collection.find_one({"email": user_dict["email"], "tokens.name": "default_admin_token"}):
         user = users_collection.find_one({"email": user_dict["email"]})
         logger.info(f"User: {user}")
-        user = User.from_mongo(user)
-        logger.info(f"User.from_mongo: {user}")
+        user_mongo = User.from_mongo(user)
+        logger.info(f"User.from_mongo: {user_mongo}")
 
         logger.info("Creating default admin token")
         token_data = {"sub": user_dict["email"], "name": "default_admin_token", "token_lifetime": "long-lived"}
@@ -62,7 +63,7 @@ def create_admin_user(user_dict=user_dict):
 
         # Generate the agent config
 
-        agent_config = generate_agent_config(user, {"token": token_data})
+        agent_config = generate_agent_config(user_mongo, {"token": token_data})
         agent_config = yaml.dump(agent_config, default_flow_style=False)
 
         # Export the agent config to a file
@@ -71,9 +72,11 @@ def create_admin_user(user_dict=user_dict):
         with open("/app/depictio/.depictio/default_admin_agent.yaml", "w") as f:
             f.write(agent_config)
         logger.info("Agent config exported to /app/depictio/.depictio/default_admin_agent.yaml")
+        return user
 
     else:
         logger.info("Default admin token already exists")
+        return None
 
 
 def initialize_db():
@@ -85,7 +88,11 @@ def initialize_db():
         logger.info("Running initial setup...")
 
         # Create the admin user
-        create_admin_user(user_dict)
+        admin_user = create_admin_user(user_dict)
+
+        if admin_user:
+            # Create a bucket if it does not exist
+            create_bucket(admin_user)
 
         # Insert the initialization status
         initialization_collection.insert_one({"initialized": True})
