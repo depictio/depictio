@@ -7,6 +7,26 @@ import polars as pl
 import os
 from depictio.api.v1.db import files_collection
 from depictio.api.v1.utils import numpy_to_python
+from botocore.exceptions import ClientError
+from fastapi import HTTPException
+from depictio.api.v1.s3 import s3_client
+
+def get_s3_object_size(bucket_name, key):
+    """
+    Retrieve the size of an object in an S3 bucket.
+
+    :param bucket_name: Name of the S3 bucket
+    :param key: Key (path) of the object in the bucket
+    :return: Size of the object in bytes
+    """
+    try:
+        response = s3_client.head_object(Bucket=bucket_name, Key=key)
+        return response['ContentLength']
+    except ClientError as e:
+        logger.error(f"Error fetching object size from S3: {str(e)}")
+        raise HTTPException(status_code=404, detail="Object not found in S3 bucket.")
+
+
 
 
 def read_table_for_DC_table(file_info, data_collection_config_raw, deltaTable):
@@ -36,12 +56,12 @@ def read_table_for_DC_table(file_info, data_collection_config_raw, deltaTable):
     # logger.info(df)
     raw_cols = df.columns
     no_run_id = False
-    logger.info(f"data_collection_config : {data_collection_config_raw}")
+    logger.debug(f"data_collection_config : {data_collection_config_raw}")
     if "metatype" in data_collection_config_raw and data_collection_config_raw["metatype"] != None:
-        logger.info(f'metatype : {data_collection_config_raw["metatype"]}')
+        logger.debug(f'metatype : {data_collection_config_raw["metatype"]}')
 
         if  data_collection_config_raw["metatype"].lower() == "metadata":
-            logger.info("Metadata file detected")
+            logger.debug("Metadata file detected")
             no_run_id = True
 
 
