@@ -25,13 +25,6 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
-.DS_Store
-
-# PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
-*.manifest
-*.spec
 
 # Installer logs
 pip-log.txt
@@ -56,17 +49,17 @@ cover/
 *.mo
 *.pot
 
-# Django stuff:
+# Django stuff
 *.log
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
 
-# Flask stuff:
+# Flask stuff
 instance/
 .webassets-cache
 
-# Scrapy stuff:
+# Scrapy stuff
 .scrapy
 
 # Sphinx documentation
@@ -84,33 +77,20 @@ profile_default/
 ipython_config.py
 
 # pyenv
-#   For a library or package, you might want to ignore these files since the code is
-#   intended to run in multiple environments; otherwise, check them in:
-# .python-version
+# Ignore .python-version for libraries; otherwise, include it for projects
+#.python-version
 
 # pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
 #Pipfile.lock
 
 # poetry
-#   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
 #poetry.lock
 
 # pdm
-#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
-#pdm.lock
-#   pdm stores project-wide configurations in .pdm.toml, but it is recommended to not include it
-#   in version control.
-#   https://pdm.fming.dev/#use-with-ide
 .pdm.toml
+#pdm.lock
 
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
+# PEP 582
 __pypackages__/
 
 # Celery stuff
@@ -121,7 +101,6 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-# .env
 .venv
 env/
 venv/
@@ -153,13 +132,15 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
-# PyCharm
-#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
-#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
-#  and can be added to the global gitignore or merged into this file.  For a more nuclear
-#  option (not recommended) you can uncomment the following to ignore the entire idea folder.
-#.idea/
+# PyInstaller
+*.manifest
+*.spec
+
+# PyCharm and other JetBrains IDEs
 .nfs*
+# Refer to the JetBrains-specific .gitignore: https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
+
+# Data and Logs
 depictioDB/
 depictioDB_bak/
 depictioDB_K8S/
@@ -167,67 +148,67 @@ diagnostic.data/
 journal/
 *.db
 dump.rdb
-# data/
-.DS_Store
 data_prepare.json
 data.json
-!data/
-# Dev
+data/depictio_data.json
+data/jbrowse_df_mapping_dict.json
+wf_data/
+data/minio/
+user_data.json
+data/depictio_data.json.bak
+*.b64
+
+# Heavy files
 *.parquet
 *.gz
 *.csv
 *.tsv
+
+# Dev
+bak/
 dev/jbrowse_dev/assets/multiqc/
 dev/jbrowse_dev/assets/
-
-wf_data/
-
-.env*
-!.env
-
-ldap_config/
-ldap_db/
+dev/flask-login/.env
 dev/token/private_key.pem
 dev/token/public_key.pem
 dev/token/token.txt
-docker-compose.yaml
-minio_data/
+dev/celery/jobs.json
+dev/dev_design_visu/data/
+dev/dev_delta/
+dashboards.json
+
+# Keys & sensitive data
 depictio/private_key.pem
 depictio/public_key.pem
-jbrowse2/
+depictio/tmp_token.pem
+depictio/keys/
+depictio/.depictio/default_admin_agent.yaml
+
+# Venv
+depictio-cli-venv/
+
+# Screenshots
+screenshot_*.png
+depictio/dash/assets/screenshots/
+
+# S3 
+minio_data/
 delta_dev/
 dev/dev_minio/
-dev/dev_design_visu/data/
+
+# JBrowse2
+jbrowse2/
 depictio/jbrowse2_configs/
 jbrowse-watcher-plugin/jbrowse2_sessions/
 jbrowse2_sessions/
 jbrowse2_configs/
-data/depictio_data.json
-data/jbrowse_df_mapping_dict.json
-dev/flask-login/.env
-
-bak/
-
-data/depictio_data.json.bak
-dev/dev_delta/
-dev/dev_delta/.DS_Store
-.DS_Store
-*.bak
-data/depictio_data.json.bak
-dev/dev_delta/
-dev/dev_delta/.DS_Store
-.DS_Store
-dev/dev_delta/.DS_Store
-depictio-cli-venv/
-jbrowse-watcher-plugin
-dashboards.json
-depictio-cli-venv/
 jbrowse-watcher-plugin/
-data/minio/
-*.b64
-depictio/tmp_token.pem
-user_data.json
-dev/celery/jobs.json
-depictio/dash/assets/screenshots/
-screenshot_*.png
-depictio/.depictio/default_admin_agent.yaml
+
+# macOS and system files
+.DS_Store
+
+# Misc
+.env*
+!.env
+ldap_config/
+ldap_db/
