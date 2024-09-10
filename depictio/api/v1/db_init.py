@@ -40,9 +40,9 @@ def create_admin_user(user_dict=user_dict):
         logger.info(f"User: {user_dict}")
         user = User(**user_dict)
         logger.info(f"User: {user}")
-        user_mongo = user.mongo()
-        logger.info(f"User.mongo(): {user_mongo}")
-        users_collection.insert_one(user_mongo)
+        user = user.mongo()
+        logger.info(f"User.mongo(): {user}")
+        users_collection.insert_one(user)
         logger.info("Admin user added to the database")
 
     # Check if default admin token exists
@@ -50,8 +50,8 @@ def create_admin_user(user_dict=user_dict):
     if not users_collection.find_one({"email": user_dict["email"], "tokens.name": "default_admin_token"}):
         user = users_collection.find_one({"email": user_dict["email"]})
         logger.info(f"User: {user}")
-        user_mongo = User.from_mongo(user)
-        logger.info(f"User.from_mongo: {user_mongo}")
+        user = User.from_mongo(user)
+        logger.info(f"User.from_mongo: {user}")
 
         logger.info("Creating default admin token")
         token_data = {"sub": user_dict["email"], "name": "default_admin_token", "token_lifetime": "long-lived"}
@@ -63,7 +63,7 @@ def create_admin_user(user_dict=user_dict):
 
         # Generate the agent config
 
-        agent_config = generate_agent_config(user_mongo, {"token": token_data})
+        agent_config = generate_agent_config(user, {"token": token_data})
         agent_config = yaml.dump(agent_config, default_flow_style=False)
 
         # Export the agent config to a file
