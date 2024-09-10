@@ -310,14 +310,20 @@ def register_callbacks_stepper_part_one(app):
         Input({"type": "get-started-example-basic", "index": MATCH}, "getRowsRequest"),
         Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
         Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+        State("local-store", "data"),
         prevent_initial_call=True,
     )
-    def infinite_scroll(request, workflow_selection, data_collection_selection):
+    def infinite_scroll(request, workflow_selection, data_collection_selection, local_store):
         # simulate slow callback
         # time.sleep(2)
 
         if request is None:
             return dash.no_update
+        
+        if local_store is None:
+            raise dash.exceptions.PreventUpdate
+        
+        TOKEN = local_store["access_token"]
 
         if workflow_selection is not None and data_collection_selection is not None:
 
