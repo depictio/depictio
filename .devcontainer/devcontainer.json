@@ -2,7 +2,6 @@
     "name": "depictio devcontainer",
     "dockerComposeFile": ["../docker-compose.yaml"],
     "service": "depictio_frontend",
-    "workspaceFolder": "/workspace",
     "extensions": [
       "ms-python.python",
       "ms-azuretools.vscode-docker",
