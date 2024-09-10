@@ -78,63 +78,76 @@ def render_workflows_list(workflows, token):
                 dmc.Paper(
                     dmc.AccordionMultiple(
                         [
-                            dmc.AccordionControl(dc["data_collection_tag"], icon=DashIconify(icon=icon, width=20)),
-                            dmc.AccordionPanel(
+                            dmc.Accordion(
                                 [
-                                    dmc.Group(
+                                    dmc.AccordionControl(dc["data_collection_tag"], icon=DashIconify(icon=icon, width=20)),
+                                    dmc.AccordionPanel(
                                         [
-                                            dmc.Text("Tag:", weight=700, className="label-text"),
-                                            dmc.Text(dc["data_collection_tag"], weight=500),
-                                        ],
-                                        spacing="xs",
-                                    ),
-                                    dmc.Group(
-                                        [
-                                            dmc.Text("Description:", weight=700, className="label-text"),
-                                            dmc.Text(dc["description"], weight=500),
-                                        ],
-                                        spacing="xs",
-                                    ),
-                                    dmc.Group(
-                                        [
-                                            dmc.Text("Type:", weight=700, className="label-text"),
-                                            dmc.Text(dc["config"]["type"], weight=500),
-                                        ],
-                                        spacing="xs",
-                                    ),
-                                    dmc.Accordion(
-                                        [
-                                            dmc.AccordionControl(
-                                                dmc.Text(
-                                                    "Configuration",
-                                                    weight=700,
-                                                    className="label-text",
-                                                    # move to the left
-                                                    # style={"marginLeft": "-10px"},
-                                                ),
-                                                # yaml icon
-                                                icon=DashIconify(icon="ic:baseline-settings-applications", width=20),
-                                            ),
-                                            dmc.AccordionPanel(
-                                                dmc.Paper(
-                                                    dcc.Markdown(id="dc-config-md", children=dc_config),
-                                                    className="p-3",
-                                                    radius="sm",
-                                                    withBorder=True,
-                                                    shadow="xs",
-                                                )
-                                            ),
-                                        ],
-                                        chevronPosition="right",
-                                        variant="contained",
-                                    ),
-                                    dmc.Accordion(
-                                        [
-                                            preview_control,
-                                            preview_panel,
-                                        ],
-                                        chevronPosition="right",
-                                        variant="contained",
+                                            dmc.Accordion(
+                                                [
+                                                    dmc.AccordionControl("Details", icon=DashIconify(icon="mdi:information-outline", width=20)),
+                                                    dmc.AccordionPanel(
+                                                        [
+                                                            dmc.Group(
+                                                                [
+                                                                    dmc.Text("Tag:", weight=700, className="label-text"),
+                                                                    dmc.Text(dc["data_collection_tag"], weight=500),
+                                                                ],
+                                                                spacing="xs",
+                                                            ),
+                                                            dmc.Group(
+                                                                [
+                                                                    dmc.Text("Description:", weight=700, className="label-text"),
+                                                                    dmc.Text(dc["description"], weight=500),
+                                                                ],
+                                                                spacing="xs",
+                                                            ),
+                                                            dmc.Group(
+                                                                [
+                                                                    dmc.Text("Type:", weight=700, className="label-text"),
+                                                                    dmc.Text(dc["config"]["type"], weight=500),
+                                                                ],
+                                                                spacing="xs",
+                                                            ),
+                                                        ]
+                                                    ),
+                                                    dmc.Accordion(
+                                                        [
+                                                            dmc.AccordionControl(
+                                                                dmc.Text(
+                                                                    "Configuration",
+                                                                    weight=700,
+                                                                    className="label-text",
+                                                                    # move to the left
+                                                                    # style={"marginLeft": "-10px"},
+                                                                ),
+                                                                # yaml icon
+                                                                icon=DashIconify(icon="ic:baseline-settings-applications", width=20),
+                                                            ),
+                                                            dmc.AccordionPanel(
+                                                                dmc.Paper(
+                                                                    dcc.Markdown(id="dc-config-md", children=dc_config),
+                                                                    className="p-3",
+                                                                    radius="sm",
+                                                                    withBorder=True,
+                                                                    shadow="xs",
+                                                                )
+                                                            ),
+                                                        ],
+                                                        chevronPosition="right",
+                                                        variant="contained",
+                                                    ),
+                                                    dmc.Accordion(
+                                                        [
+                                                            preview_control,
+                                                            preview_panel,
+                                                        ],
+                                                        chevronPosition="right",
+                                                        variant="contained",
+                                                    ),
+                                                ]
+                                            )
+                                        ]
                                     ),
                                 ]
                             ),
