@@ -5,12 +5,14 @@ from depictio.api.v1.endpoints.workflow_endpoints.routes import workflows_endpoi
 from depictio.api.v1.endpoints.datacollections_endpoints.routes import datacollections_endpoint_router
 from depictio.api.v1.endpoints.files_endpoints.routes import files_endpoint_router
 from depictio.api.v1.endpoints.deltatables_endpoints.routes import deltatables_endpoint_router
-from depictio.api.v1.endpoints.user_endpoints.auth import auth_endpoint_router
+from depictio.api.v1.endpoints.user_endpoints.routes import auth_endpoint_router
 from depictio.api.v1.endpoints.jbrowse_endpoints.routes import jbrowse_endpoints_router
 from depictio.api.v1.endpoints.utils_endpoints.routes import utils_endpoint_router
 from depictio.api.v1.endpoints.dashboards_endpoints.routes import dashboards_endpoint_router
+from depictio.api.v1.endpoints.cli_endpoints.routes import cli_endpoint_router
 
 router = APIRouter()
+
 
 # initialize_db(settings)
 router.include_router(
@@ -39,19 +41,28 @@ if settings.jbrowse.enabled:
         prefix="/jbrowse",
         tags=["JBrowse"],
     )
-router.include_router(
-    auth_endpoint_router,
-    prefix="/auth",
-    tags=["Authentication"],
-)
 
 router.include_router(
     utils_endpoint_router,
     prefix="/utils",
     tags=["Utils"],
 )
+
+router.include_router(
+    cli_endpoint_router,
+    prefix="/cli",
+    tags=["CLI"],
+)
+
 router.include_router(
     dashboards_endpoint_router,
     prefix="/dashboards",
     tags=["Dashboards"],
+)
+
+
+router.include_router(
+    auth_endpoint_router,
+    prefix="/auth",
+    tags=["Authentication"],
 )

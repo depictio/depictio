@@ -1,4 +1,4 @@
-from typing import List, Optional, Set
+from typing import Dict, List, Optional, Set
 from bson import ObjectId
 from pydantic import (
     BaseModel,
@@ -16,22 +16,26 @@ from depictio.api.v1.models.base import MongoModel, PyObjectId
 ##################
 
 
-class Token(BaseModel):
+class Token(MongoModel):
+    id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
     access_token: str
-    token_type: str
-    expires_in: Optional[int] = None
-    scope: Optional[str] = None
-    user_id: PyObjectId
+    token_lifetime: str = "short-lived"
+    expire_datetime: str
+    name: Optional[str] = None
+    hash: Optional[str] = None
+    # scope: Optional[str] = None
+    # user_id: PyObjectId
 
+    @root_validator(pre=True)
+    def set_default_id(cls, values):
+        if values is None or "_id" not in values or values["_id"] is None:
+            return values  # Ensure we don't proceed if values is None
+        values["_id"] = PyObjectId()
+        return values
+    
     class Config:
         arbitrary_types_allowed = True
-        json_encoders = {ObjectId: str}
-
-
-class TokenData(BaseModel):
-    user_id: PyObjectId
-    exp: Optional[int] = None
-    is_admin: bool = False
+        json_encoders = {ObjectId: lambda v: str(v)}
 
 
 ###################
@@ -39,31 +43,68 @@ class TokenData(BaseModel):
 ###################
 
 
-class User(MongoModel):
-    user_id: PyObjectId = Field(default_factory=PyObjectId)
-    # user_id: Optional[PyObjectId] = None
-    username: str
+class UserBase(MongoModel):
+    id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
     email: EmailStr
+    is_admin: bool = False
+    groups: List[str] = Field(default_factory=list)
 
     @root_validator(pre=True)
     def set_default_id(cls, values):
-        if values is None or "id" not in values or values["id"] is None:
+        if values is None or "_id" not in values or values["_id"] is None:
             return values  # Ensure we don't proceed if values is None
-        values["id"] = PyObjectId()
+        values["_id"] = PyObjectId()
         return values
+
+class User(UserBase):
+    # id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
+    # user_id: Optional[PyObjectId] = None
+    # username: str
+    # email: EmailStr
+    tokens: List[Token] = Field(default_factory=list)
+    current_access_token: Optional[str] = None
+    is_active: bool = True
+    # is_admin: bool = False
+    is_verified: bool = False
+    last_login: Optional[str] = None
+    registration_date: Optional[str] = None
+    # groups: Optional[List[PyObjectId]] = Field(default_factory=list)
+    password: str
+
+    @root_validator(pre=True)
+    def set_default_id(cls, values):
+        if values is None or "_id" not in values or values["_id"] is None:
+            return values  # Ensure we don't proceed if values is None
+        values["_id"] = PyObjectId()
+        return values
+
+    @validator("password", pre=True)
+    def hash_password(cls, v):
+        # check that the password is hashed
+        if v.startswith("$2b$"):
+            return v
 
     class Config:
         json_encoders = {ObjectId: lambda v: str(v)}
 
     def __hash__(self):
         # Hash based on the unique user_id
-        return hash(self.user_id)
+        return hash(self.id)
 
     def __eq__(self, other):
         # Equality based on the unique user_id
         if isinstance(other, User):
-            return self.user_id == other.user_id
+            return all(getattr(self, field) == getattr(other, field) for field in self.__fields__.keys() if field not in ["user_id", "registration_time"])
         return False
+
+    @root_validator
+    def add_admin_to_group(cls, values):
+        if values.get("is_admin"):
+            group_ids = values.get("groups", [])
+            if "admin" not in group_ids:
+                group_ids.append("admin")
+            values["groups"] = group_ids
+        return values
 
 
 class Group(BaseModel):
@@ -81,8 +122,8 @@ class Group(BaseModel):
     @root_validator(pre=True)
     def ensure_unique_member_ids(cls, values):
         members = values.get("members", [])
-        unique_members = {member.user_id: member for member in members}.values()
-        return {"members": set(unique_members)}
+        unique_members = {member.id: member for member in members}.values()
+        return {"members": set(unique_members)} 
 
     # This function validates that each user_id in the members is unique
     @root_validator
@@ -90,15 +131,15 @@ class Group(BaseModel):
         seen = set()
         members = values.get("members", [])
         for member in members:
-            if member.user_id in seen:
+            if member.id in seen:
                 raise ValueError("Duplicate user_id found in group members.")
-            seen.add(member.user_id)
+            seen.add(member.id)
         return values
 
 
 class Permission(BaseModel):
-    owners: List[User]
-    viewers: Optional[List[User]] = set()  # Set default to empty set
+    owners: List[UserBase] = set()  # Set default to empty set
+    viewers: Optional[List[UserBase]] = set()  # Set default to empty set
 
     def dict(self, **kwargs):
         # Generate list of owner and viewer dictionaries
@@ -109,8 +150,8 @@ class Permission(BaseModel):
     @validator("owners", "viewers", pre=True, each_item=True)
     def convert_dict_to_user(cls, v):
         if isinstance(v, dict):
-            return User(**v)  # Assuming `User` is a Pydantic model and can be instantiated like this
-        elif not isinstance(v, User):
+            return UserBase(**v)  # Assuming `User` is a Pydantic model and can be instantiated like this
+        elif not isinstance(v, UserBase):
             raise ValueError("Permissions should be assigned to User instances.")
         return v
 
@@ -118,8 +159,8 @@ class Permission(BaseModel):
     def validate_permissions(cls, values):
         owners = values.get("owners", set())
         viewers = values.get("viewers", set())
-        if not owners:
-            raise ValueError("At least one owner is required.")
+        # if not owners:
+        #     raise ValueError("At least one owner is required.")
 
         return values
 
@@ -128,8 +169,8 @@ class Permission(BaseModel):
     def ensure_owners_and_viewers_are_unique(cls, values):
         owners = values.get("owners", set())
         viewers = values.get("viewers", set())
-        owner_ids = {owner.user_id for owner in owners}
-        viewer_ids = {viewer.user_id for viewer in viewers}
+        owner_ids = {owner.id for owner in owners}
+        viewer_ids = {viewer.id for viewer in viewers}
 
         if not owner_ids.isdisjoint(viewer_ids):
             raise ValueError("A User cannot be both an owner and a viewer.")

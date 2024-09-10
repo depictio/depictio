@@ -9,8 +9,8 @@ import yaml
 import dash_ag_grid as dag
 
 from depictio.dash.utils import list_workflows, get_columns_from_data_collection, return_mongoid
-from depictio.api.v1.deltatables_utils import load_deltatable_lite, join_deltatables
-from depictio.api.v1.configs.config import API_BASE_URL, TOKEN, logger
+from depictio.api.v1.deltatables_utils import load_deltatable_lite
+from depictio.api.v1.configs.config import API_BASE_URL, logger
 
 
 def register_callbacks_stepper_part_one(app):
@@ -22,11 +22,17 @@ def register_callbacks_stepper_part_one(app):
         Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
         Input({"type": "btn-option", "index": MATCH, "value": ALL}, "n_clicks"),
         State({"type": "last-button", "index": MATCH}, "data"),
-        State({"type": "workflow-selection-label", "index": MATCH}, "id"),
+        State("local-store", "data"),
         prevent_initial_call=True,
     )
-    def update_step_1(workflow_selection, data_collection_selection, input_btn_values, component_selected, id):
+    def update_step_1(workflow_selection, data_collection_selection, input_btn_values, component_selected, local_store):
         # Use dcc.Store in store-list to get the latest button clicked using timestamps
+
+
+        if not local_store:
+            raise dash.exceptions.PreventUpdate
+        
+        TOKEN = local_store["access_token"]
 
         logger.info(f"CTX Triggered ID: {ctx.triggered_id}")
         logger.info(f"CTX triggered: {ctx.triggered}")
@@ -54,7 +60,7 @@ def register_callbacks_stepper_part_one(app):
 
         # logger.info(f"component_selected: {component_selected}")
 
-        workflow_id, data_collection_id = return_mongoid(workflow_tag=workflow_selection, data_collection_tag=data_collection_selection)
+        workflow_id, data_collection_id = return_mongoid(workflow_tag=workflow_selection, data_collection_tag=data_collection_selection, TOKEN=TOKEN)
         # workflows = list_workflows(TOKEN)
 
         # workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_selection][0]["_id"]
@@ -181,8 +187,9 @@ def register_callbacks_stepper_part_one(app):
 
             layout = [dc_main_info, html.Hr(), main_info, html.Hr()]
             if dc_specs["config"]["type"] == "Table":
-                df = load_deltatable_lite(workflow_id, data_collection_id)
-                cols = get_columns_from_data_collection(workflow_selection, data_collection_selection)
+                logger.info(f"PART 1 - TOKEN: {TOKEN}")
+                df = load_deltatable_lite(workflow_id, data_collection_id, TOKEN=TOKEN)
+                cols = get_columns_from_data_collection(workflow_selection, data_collection_selection, TOKEN)
                 logger.info(f"Columns: {cols}")
                 columnDefs = [{"field": c, "headerTooltip": f"Type: {e['type']}"} for c, e in cols.items()]
 
@@ -191,9 +198,11 @@ def register_callbacks_stepper_part_one(app):
                     if "description" in cols[col["field"]] and cols[col["field"]]["description"] is not None:
                         col["headerTooltip"] = f"{col['headerTooltip']}\nDescription: {cols[col['field']]['description']}"
 
-
-                run_nb = cols["depictio_run_id"]["specs"]["nunique"]
-                run_nb_title = dmc.Title(f"Run Nb : {run_nb}", order=3, align="left", weight=500)
+                if "depictio_run_id" in cols:
+                    run_nb = cols["depictio_run_id"]["specs"]["nunique"]
+                    run_nb_title = dmc.Title(f"Run Nb : {run_nb}", order=3, align="left", weight=500)
+                else:
+                    run_nb_title = dmc.Title("Run Nb : 0", order=3, align="left", weight=500)
 
                 data_previz_title = dmc.Title("Data previsualization", order=3, align="left", weight=500)
                 config_title = dmc.Title("Data collection configuration", order=3, align="left", weight=500)

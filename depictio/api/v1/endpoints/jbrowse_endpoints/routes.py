@@ -8,13 +8,13 @@ import subprocess
 from bson import ObjectId
 from fastapi import HTTPException, Depends, APIRouter
 import boto3
-import pika
+# import pika
 
 from botocore.exceptions import NoCredentialsError
 from depictio.api.v1.endpoints.files_endpoints.models import File
 
 from depictio.api.v1.endpoints.jbrowse_endpoints.models import LogData
-from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user
+from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.api.v1.endpoints.validators import validate_workflow_and_collection
 from depictio.api.v1.endpoints.workflow_endpoints.models import Workflow
 from depictio.api.v1.models.base import convert_objectid_to_str
@@ -101,14 +101,14 @@ def update_jbrowse_config(config_path, new_tracks=[]):
         with open(config_path, "r") as file:
             config = json.load(file)
     except FileNotFoundError:
-        logger.info(f"Config file {config_path} not found.")
+        logger.warn(f"Config file {config_path} not found.")
 
         # Use default JSON config for JBrowse2
         default_jbrowse_config_path = "/app/data/jbrowse2/config.json"
         config = json.load(open(default_jbrowse_config_path))
 
     except json.JSONDecodeError:
-        logger.info(f"Error decoding JSON from {config_path}.")
+        logger.warn(f"Error decoding JSON from {config_path}.")
 
     if "tracks" not in config:
         config["tracks"] = []
@@ -121,11 +121,11 @@ def update_jbrowse_config(config_path, new_tracks=[]):
     try:
         logger.info("updating config...")
         # plogger.info(config)
-        logger.info(config_path)
+        logger.debug(config_path)
 
         with open(config_path, "w") as file:
             json.dump(config, file, indent=4)
-        
+
         # FIXME: create a lite version of the config
         lite_config = config.copy()
         lite_config["tracks"] = lite_config["tracks"][:5]
@@ -137,7 +137,7 @@ def update_jbrowse_config(config_path, new_tracks=[]):
     except Exception as e:
         # Log the error
 
-        logger.info(f"Failed to save JBrowse config: {e}")
+        logger.error(f"Failed to save JBrowse config: {e}")
         return {"message": f"Failed to save JBrowse config: {e}", "type": "error"}
 
 
@@ -154,31 +154,31 @@ def update_jbrowse_config(config_path, new_tracks=[]):
 
 
 def upload_file_to_s3(bucket_name, file_location, s3_key):
-    logger.info(s3_client)
-    logger.info(s3_client.list_buckets())
-    logger.info(s3_client.list_objects_v2(Bucket=bucket_name, Prefix=s3_key))
-    logger.info(file_location, bucket_name, s3_key)
+    logger.debug(f"S3 client: {s3_client}")
+    logger.debug(f"List buckets: {s3_client.list_buckets()}")
+    logger.debug(f"List objects: {s3_client.list_objects_v2(Bucket=bucket_name, Prefix=s3_key)}")
+    logger.debug(f"File location: {file_location}, Bucket name: {bucket_name}, S3 key: {s3_key}")
 
     # check if the file exists
     if not os.path.exists(file_location):
-        logger.info(f"File {file_location} does not exist.")
+        logger.debug(f"File {file_location} does not exist.")
         return {"error": f"File {file_location} does not exist."}
 
     # check if file already exists in S3
     skip_upload = False
     if s3_client.list_objects_v2(Bucket=bucket_name, Prefix=s3_key).get("Contents"):
-        logger.info(f"File {s3_key} already exists in S3.")
+        logger.warn(f"File {s3_key} already exists in S3.")
         skip_upload = True
 
     if skip_upload is False:
         try:
             with open(file_location, "rb") as data:
                 s3_client.upload_fileobj(data, bucket_name, s3_key)
-            logger.info(f"File {file_location} uploaded to {s3_key}")
+            logger.debug(f"File {file_location} uploaded to {s3_key}")
         except NoCredentialsError:
             return {"error": "S3 credentials not available"}
         except Exception as e:
-            logger.info(f"Error uploading {file_location}: {e}")
+            logger.error(f"Error uploading {file_location}: {e}")
             return {"error": f"Failed to upload {file_location}"}
 
 
@@ -288,7 +288,7 @@ async def create_trackset(
 ):
     workflow_oid = ObjectId(workflow_id)
     data_collection_oid = ObjectId(data_collection_id)
-    user_oid = ObjectId(current_user.user_id)
+    user_oid = ObjectId(current_user.id)
     assert isinstance(workflow_oid, ObjectId)
     assert isinstance(data_collection_oid, ObjectId)
     assert isinstance(user_oid, ObjectId)
@@ -301,7 +301,7 @@ async def create_trackset(
         user_oid,
     ) = validate_workflow_and_collection(
         workflows_collection,
-        current_user.user_id,
+        current_user.id,
         workflow_id,
         data_collection_id,
     )
@@ -317,18 +317,14 @@ async def create_trackset(
     for file in files:
         file = File(**file)
 
-        track_config = handle_jbrowse_tracks(file, current_user.user_id, workflow_id, data_collection)
+        track_config = handle_jbrowse_tracks(file, current_user.id, workflow_id, data_collection)
         if track_config:
             new_tracks.append(track_config)
 
     # Update the JBrowse configuration
     jbrowse_config_dir = settings.jbrowse.config_dir
 
-    # Join on user and dashboard IDs
-    # TODO - retrieve dashboard ID
-    # Generate dashboard ID
-    dashboard_id = "1"  # Replace with actual dashboard ID
-    config_path = os.path.join(jbrowse_config_dir, f"{current_user.user_id}_{dashboard_id}.json")
+    config_path = os.path.join(jbrowse_config_dir, f"{current_user.id}_{data_collection_oid}.json")
 
     payload = update_jbrowse_config(config_path, new_tracks)
     if payload["type"] == "error":
@@ -339,8 +335,8 @@ async def create_trackset(
 
 @jbrowse_endpoints_router.post("/log")
 async def log_message(log_data: LogData):
-    logger.info(datetime.now(), log_data)  # Or store it in a database/file
-    logger.info(settings)
+    logger.debug(f"{datetime.now()}, {log_data}")  # Or store it in a database/file
+    logger.debug(settings)
 
     if log_data.coarseDynamicBlocks and log_data.selectedTracks:
         # Extract the first block and tracks
@@ -350,8 +346,8 @@ async def log_message(log_data: LogData):
         jbrowse_url_args = construct_jbrowse_url(block, tracks)
         # logger.info(jbrowse_url_args)
 
-        start = round(int(block.start),0)
-        end = round(int(block.end),0)
+        start = round(int(block.start), 0)
+        end = round(int(block.end), 0)
 
         dict_jbrowse_url_args = {
             "assembly": block.assemblyName,
@@ -408,14 +404,13 @@ async def log_message(log_data: LogData):
 
 @jbrowse_endpoints_router.get("/last_status")
 async def get_jbrowse_logs():
-
     # Check if message exists in the queue
     # connection = pika.BlockingConnection(pika.ConnectionParameters(settings.rabbitmq.host))
     # channel = connection.channel()
 
     # # Fetch the message without auto acknowledgment
     # method_frame, header_frame, body = channel.basic_get(queue=settings.rabbitmq.queue, auto_ack=False)
-    
+
     # if method_frame:
     #     # Extract the timestamp from the header frame
 
@@ -438,11 +433,12 @@ async def get_jbrowse_logs():
     else:
         return {"message": "No logs available."}
 
+
 @jbrowse_endpoints_router.get("/map_tracks_using_wildcards/{workflow_id}/{data_collection_id}")
 async def map_tracks_using_wildcards(
     workflow_id: str,
     data_collection_id: str,
-    # current_user: str = Depends(get_current_user),
+    current_user: str = Depends(get_current_user),
 ):
     workflow_oid = ObjectId(workflow_id)
     data_collection_oid = ObjectId(data_collection_id)
@@ -453,7 +449,6 @@ async def map_tracks_using_wildcards(
     nested_dict = collections.defaultdict(lambda: collections.defaultdict(dict))
 
     files = files_collection.find({"data_collection._id": data_collection_oid})
-    logger.info("len", files_collection.count_documents({"data_collection._id": data_collection_oid}))
 
     for file in files:
         # logger.info(file)
@@ -462,17 +457,72 @@ async def map_tracks_using_wildcards(
         for wildcard in file["wildcards"]:
             # if file["trackId"]:
             nested_dict[data_collection_id][wildcard["name"]][wildcard["value"]] = file["trackId"]
-    logger.info(len(nested_dict[data_collection_id]["cell"]))
+    logger.debug(len(nested_dict[data_collection_id]["cell"]))
     return nested_dict
+
+
+@jbrowse_endpoints_router.post("/filter_config")
+async def filter_config(
+    filter_params: dict,
+    current_user: str = Depends(get_current_user),
+):
+    tracks = filter_params.get("tracks", [])
+    # Update the JBrowse configuration
+    jbrowse_config_dir = settings.jbrowse.config_dir
+    data_collection_oid = filter_params.get("data_collection_id")
+
+    default_config_path = os.path.join(jbrowse_config_dir, f"{current_user.id}_{data_collection_oid}.json")
+    dashboard_id = filter_params.get("dashboard_id")
+
+    logger.debug(f"Filtering tracks: {tracks}")
+    logger.debug(f"Default config path: {default_config_path}")
+    logger.debug(f"Dashboard ID: {dashboard_id}")
+    logger.debug(f"Current user: {current_user.id}")
+    logger.debug(f"Len tracks: {len(tracks)}")
+
+    if not tracks:
+        return {"message": "No tracks provided."}
+
+    if not default_config_path:
+        return {"message": "No default config provided."}
+
+    if not dashboard_id:
+        return {"message": "No dashboard ID provided."}
+
+    # Load the default config
+    config = json.load(open(default_config_path))
+
+    filtered_track_ids = list()
+    filtered_tracks = list()
+    for track in config["tracks"]:
+        if track["trackId"] in tracks:
+            if track["trackId"] not in filtered_track_ids:
+                filtered_track_ids.append(track["trackId"])
+                filtered_tracks.append(track)
+
+
+    logger.debug(f"Filtered tracks: {filtered_tracks}")
+    config["tracks"] = filtered_tracks
+
+    # Construct the filtered config
+    output_path = default_config_path.replace(".json", f"_filtered_{dashboard_id}.json")
+    logger.debug(f"Output path: {output_path}")
+
+    output_return_path = output_path.replace(f"{settings.jbrowse.config_dir}/", "")
+
+    with open(output_path, "w") as file:
+        json.dump(config, file, indent=4)
+
+    return {"message": "Filtered config saved successfully.", "session": output_return_path}
+
 
 @jbrowse_endpoints_router.post("/dynamic_mapping_dict")
 async def dynamic_mapping_dict(
     mapping_dict: dict,
-    # current_user: str = Depends(get_current_user),
+    current_user: str = Depends(get_current_user),
 ):
     mapping_dict = mapping_dict
-    logger.info(mapping_dict)
-
+    logger.debug(mapping_dict)
 
     # Constructing the nested dictionary
     return {"message": "Mapping dictionary received."}

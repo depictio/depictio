@@ -1,0 +1,7 @@
+.mantine-NavLink-root .mantine-NavLink-children {
+    display: none;
+}
+
+.mantine-NavLink-root.mantine-NavLink-expanded > .mantine-NavLink-children {
+    display: block;
+}

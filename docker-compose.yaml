@@ -2,10 +2,107 @@ services:
   mongo:
     image: mongo:latest
     command: --dbpath /data/depictioDB --port 27018
+    user: "${UID}:${GID}"  # Run as the specified user (not root)
     ports:
       - 27018:27018
     volumes:
       - ./depictioDB:/data/depictioDB
+
+
+  minio:
+    image: minio/minio:latest
+    user: "${UID}:${GID}"  # Run as the specified user (not root)
+    volumes:
+      - "./minio_data:/data"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    command: server /data --console-address :9001
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+
+  depictio_frontend:
+    image: registry.git.embl.de/tweber/depictio/depictio:latest
+    # image: depictio:dev
+    # build:
+    #   dockerfile: docker-images/Dockerfile_depictio.dockerfile
+    ports:
+      - 5080:5080
+    volumes:
+      - ./depictio:/app/depictio
+      - ./configs:/configs
+      - ./data:/app/data
+      - ./minio_data:/minio_data
+      - ./.env:/app/.env
+    command: ["python", "depictio/dash/app.py"]
+    user: "${UID}:${GID}"
+    depends_on:
+      - mongo
+      - minio
+      - depictio_backend
+      # - redis
+      # - rabbitmq
+
+
+  depictio_backend:
+    image: registry.git.embl.de/tweber/depictio/depictio:latest
+    ports:
+      - 8058:8058
+    volumes:
+      - "${DEPICTIO_BACKEND_DATA_VOLUME_HOST}:${DEPICTIO_BACKEND_DATA_VOLUME_HOST}"
+      - ./depictio:/app/depictio
+      - ./data:/app/data
+      - ./minio_data:/minio_data
+      - ./jbrowse-watcher-plugin/sessions:/jbrowse-watcher-plugin/sessions
+      - ./configs:/configs
+      - ./.env:/app/.env
+    command: ["python", "depictio/api/run.py"]
+    user: "${UID}:${GID}"  # Run as the specified user (not root)
+    depends_on:
+      - mongo
+      - minio
+
+
+  jbrowse2:
+    image: registry.git.embl.de/tweber/depictio/jbrowse2:latest
+    # image: jbrowse2:latest
+    # build:
+    #   dockerfile: docker-images/Dockerfile_jbrowse.dev.240424.dockerfile
+    ports: 
+      - 3000:3000
+      - 9010:9010
+    volumes:
+      - "./jbrowse-watcher-plugin:/usr/src/plugin"
+      - "./jbrowse-watcher-plugin/sessions:/usr/src/jbrowse/plugin/sessions"
+
+
+  # depictio_nb:
+  #   image: registry.git.embl.de/tweber/depictio/depictio_nb:dev
+  #   # image: depictio_nb:dev
+  #   # build:
+  #   #   dockerfile: docker-images/Dockerfile_depictio_nb_debug.dockerfile
+  #   ports:
+  #     - 8888:8888
+  #   volumes:
+  #     - "${DEPICTIO_BACKEND_DATA_VOLUME_HOST}:${DEPICTIO_BACKEND_DATA_VOLUME_HOST}"
+  #     - ./depictio:/app/depictio
+  #     - ./data:/app/data
+  #     - ./minio_data:/minio_data
+  #     - ./jbrowse-watcher-plugin/sessions:/jbrowse-watcher-plugin/sessions
+  #     - ./dev:/app/dev
+  #     - ./.env:/app/.env
+  #     - ./dev/jup_nb/.jupyter:/app/.jupyter
+  #   depends_on:
+  #     - mongo
+  #     - minio
+  #     - depictio_backend
+  #     # - redis
+  #     # - rabbitmq
+  #   command: ["jupyter", "lab", "--config=/app/.jupyter/jupyter_notebook_config.py"]
+
+
 
   # redis:
   #   image: redis:latest
@@ -24,94 +121,3 @@ services:
   #   ports:
   #     - "5672:5672"
   #     - "15672:15672"
-
-  minio:
-    image: minio/minio:latest
-    volumes:
-      - "./minio_data:/data"
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
-    command: server /data --console-address :9001
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-
-
-
-  jbrowse2:
-    image: jbrowse2:latest
-    build:
-      dockerfile: docker-images/Dockerfile_jbrowse.dev.240424.dockerfile
-    ports: 
-      - 3000:3000
-      - 9010:9010
-    volumes:
-      - "./jbrowse-watcher-plugin:/usr/src/plugin"
-
-  depictio_frontend:
-    image: depictio:dev
-    build:
-      dockerfile: docker-images/Dockerfile_depictio.dockerfile
-    ports:
-      - 5080:5080
-    volumes:
-      - ./depictio:/app/depictio
-      - ./configs:/configs
-      - ./data:/app/data
-      - ./minio_data:/minio_data
-      - ./.env:/app/.env
-    command: ["python", "depictio/dash/app.py"]
-    depends_on:
-      - mongo
-      - minio
-      - depictio_backend
-      # - redis
-      # - rabbitmq
-
-
-  depictio_backend:
-    image: depictio:dev
-    build:
-      dockerfile: docker-images/Dockerfile_depictio.dockerfile
-    ports:
-      - 8058:8058
-    volumes:
-      - "${DEPICTIO_BACKEND_DATA_VOLUME_HOST}:${DEPICTIO_BACKEND_DATA_VOLUME_HOST}"
-      - ./depictio:/app/depictio
-      - ./data:/app/data
-      - ./minio_data:/minio_data
-      - ./jbrowse-watcher-plugin/sessions:/jbrowse-watcher-plugin/sessions
-      - ./configs:/configs
-      - ./.env:/app/.env
-    command: ["python", "depictio/api/run.py"]
-    depends_on:
-      - mongo
-      - minio
-      # - redis
-      # - rabbitmq
-
-  depictio_nb:
-    image: depictio_nb:dev
-    build:
-      dockerfile: docker-images/Dockerfile_depictio_nb_debug.dockerfile
-    ports:
-      - 8888:8888
-    volumes:
-      - "${DEPICTIO_BACKEND_DATA_VOLUME_HOST}:${DEPICTIO_BACKEND_DATA_VOLUME_HOST}"
-      - ./depictio:/app/depictio
-      - ./data:/app/data
-      - ./minio_data:/minio_data
-      - ./jbrowse-watcher-plugin/sessions:/jbrowse-watcher-plugin/sessions
-      - ./CLI_client/configs:/CLI_client/configs
-      - ./dev:/app/dev
-      - ./.env:/app/.env
-    depends_on:
-      - mongo
-      - minio
-      - depictio_backend
-      # - redis
-      # - rabbitmq
-    command: ["jupyter", "lab", "--ip=0.0.0.0", "--allow-root"]

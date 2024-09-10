@@ -20,22 +20,18 @@ def validate_workflow_and_collection(collection, user_id: str, workflow_id: str,
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-
     # Retrieve the workflow
     workflow = collection.find_one(
-        {"_id": workflow_oid, "permissions.owners.user_id": user_oid},
+        {"_id": workflow_oid, "permissions.owners._id": user_oid},
     )
 
-
-
-    
     # Check if the workflow exists
     if not workflow:
         raise HTTPException(
             status_code=404,
             detail=f"No workflows with id {workflow_id} found for the current user.",
         )
-    
+
     # Convert the workflow to a Workflow object
     workflow = convert_objectid_to_str(workflow)
     workflow = Workflow(**workflow)
@@ -44,9 +40,8 @@ def validate_workflow_and_collection(collection, user_id: str, workflow_id: str,
     if not data_collection_id:
         return workflow_oid, None, workflow, user_oid
 
-
     # Extract the correct data collection from the workflow's data_collections
-    data_collection = collection.find_one({"_id": workflow_oid, "permissions.owners.user_id": user_oid}, {"data_collections": {"$elemMatch": {"_id": data_collection_oid}}})
+    data_collection = collection.find_one({"_id": workflow_oid, "permissions.owners._id": user_oid}, {"data_collections": {"$elemMatch": {"_id": data_collection_oid}}})
     data_collection = data_collection.get("data_collections")[0]
 
     data_collection = convert_objectid_to_str(data_collection)
@@ -60,36 +55,3 @@ def validate_workflow_and_collection(collection, user_id: str, workflow_id: str,
         )
 
     return workflow_oid, data_collection_oid, workflow, data_collection, user_oid
-    # exit()
-    # # print("\n\n\n")
-    # # print("validate_workflow_and_collection")
-    # # print(query)
-    # # print(workflow_cursor)
-
-    # workflow = Workflow.from_mongo(workflow_cursor)
-    # # print(workflow)
-    # # print("\n\n\n")
-
-    # if not workflow_cursor:
-    #     raise HTTPException(
-    #         status_code=404,
-    #         detail=f"No workflows with id {workflow_oid} found for the current user.",
-    #     )
-
-    # if data_collection_id:
-    #     data_collection = next(
-    #         (dc for dc in workflow.data_collections if dc.id == data_collection_oid),
-    #         None
-    #     )
-
-    #     if data_collection is None:
-    #         raise HTTPException(
-    #             status_code=404,
-    #             detail=f"Data collection with id {data_collection_oid} not found in the workflow.",
-    #         )
-
-    #     # return workflow_oid, data_collection_oid, workflow, data_collection
-    #     return workflow_oid, data_collection_oid, workflow, data_collection, user_oid
-
-    # return workflow_oid, workflow
-    # # return workflow_oid, workflow, user_oid

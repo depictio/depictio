@@ -27,7 +27,8 @@ workflows:
       # TODO: to turn into a dict (location - regex)
       # The location of the runs - multiple locations can be specified
       parent_runs_location:
-        - "/Users/tweber/Gits/depictio-data/StrandSeq/HGSVC"
+        - "/Users/tweber/Data/mosaicatcher-pipeline"
+        # - "/Users/tweber/Gits/depictio-data/StrandSeq/HGSVC"
 
       # Regular expression to match the runs
       runs_regex: ".*"
@@ -92,7 +93,6 @@ workflows:
             # The list of data collections that are used to join the data collection
             with_dc:
               - "ashleys_labels"
-              - "mosaicatcher_samples_metadata"
 
       # Other data collections of type Table
       - data_collection_tag: "ashleys_labels"
@@ -107,18 +107,28 @@ workflows:
             polars_kwargs:
               separator: "\t"
       
-      # - data_collection_tag: "mosaicatcher_samples_metadata"
-      #   description: "Metadata file for MosaiCatcher samples"
-      #   config:
-      #     type: "Table"
-      #     metatype: "Metadata"
-      #     regex: 
-      #       pattern: "mosaicatcher_samples_metadata.csv"
-      #       type: "file-based"
-      #     dc_specific_properties:
-      #       format: "CSV"
-      #       polars_kwargs:
-      #         separator: ";"
+      - data_collection_tag: "mosaicatcher_samples_metadata"
+        description: "Metadata file for MosaiCatcher samples"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          regex: 
+            pattern: "mosaicatcher_samples_metadata.csv"
+            type: "file-based"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ";"
+          join:
+            # The columns that are used to join the data collections
+            on_columns:
+              - "sample"
+            # The type of join that is used to join the data collections
+            how: "inner"
+            # The list of data collections that are used to join the data collection
+            with_dc:
+              - "ashleys_labels"
+              - "mosaicatcher_stats"
 
 
       # Data collections of type JBrowse2

@@ -7,7 +7,7 @@ import httpx
 
 # Depictio imports
 from depictio.dash.utils import return_mongoid
-from depictio.api.v1.configs.config import API_BASE_URL, TOKEN
+from depictio.api.v1.configs.config import API_BASE_URL
 
 from depictio.dash.modules.card_component.utils import (
     agg_functions,
@@ -27,15 +27,21 @@ def register_callbacks_card_component(app):
             Input({"type": "card-dropdown-column", "index": MATCH}, "value"),
             Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
             Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+            State("local-store", "data"),
         ],
         prevent_initial_call=True,
     )
-    def update_aggregation_options(column_name, wf_tag, dc_tag):
+    def update_aggregation_options(column_name, wf_tag, dc_tag, local_data):
         """
         Callback to update aggregation dropdown options based on the selected column
         """
+        if not local_data:
+            return []
+        
+        TOKEN = local_data["access_token"]
+
         # Get the columns from the selected data collection
-        cols_json = get_columns_from_data_collection(wf_tag, dc_tag)
+        cols_json = get_columns_from_data_collection(wf_tag, dc_tag, TOKEN)
 
         if column_name is None:
             return []
@@ -70,15 +76,20 @@ def register_callbacks_card_component(app):
             State({"type": "workflow-selection-label", "index": MATCH}, "value"),
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
             State({"type": "card-dropdown-column", "index": MATCH}, "id"),
+            State("local-store", "data"),
         ],
         prevent_initial_call=True,
     )
-    def design_card_body(input_value, column_name, aggregation_value, wf_tag, dc_tag, id):
+    def design_card_body(input_value, column_name, aggregation_value, wf_tag, dc_tag, id, local_data):
         """
         Callback to update card body based on the selected column and aggregation
         """
 
-        # FIXME: This is a temporary solution to get the token
+        if not local_data:
+            return []
+
+        TOKEN = local_data["access_token"]
+
         headers = {
             "Authorization": f"Bearer {TOKEN}",
         }
@@ -88,10 +99,10 @@ def register_callbacks_card_component(app):
             return []
 
         # Get the columns from the selected data collection
-        cols_json = get_columns_from_data_collection(wf_tag, dc_tag)
+        cols_json = get_columns_from_data_collection(wf_tag, dc_tag, TOKEN)
 
         # Get the workflow and data collection ids from the tags selected
-        workflow_id, data_collection_id = return_mongoid(workflow_tag=wf_tag, data_collection_tag=dc_tag)
+        workflow_id, data_collection_id = return_mongoid(workflow_tag=wf_tag, data_collection_tag=dc_tag, TOKEN=TOKEN)
 
         # Get the data collection specs
         dc_specs = httpx.get(

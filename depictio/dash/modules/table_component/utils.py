@@ -5,6 +5,7 @@ import dash_ag_grid as dag
 
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
 from depictio.dash.utils import get_columns_from_data_collection
+from depictio.api.v1.configs.logging import logger
 
 
 def build_table_frame(index, children=None):
@@ -39,8 +40,6 @@ def build_table_frame(index, children=None):
         )
 
 
-from depictio.api.v1.configs.config import logger
-
 
 def build_table(**kwargs):
     logger.info("build_table")
@@ -54,9 +53,15 @@ def build_table(**kwargs):
     import polars as pl
 
     df = kwargs.get("df", pl.DataFrame())
+    TOKEN = kwargs.get("access_token")
+
+
+    df = kwargs.get("df", pl.DataFrame())
+
+
 
     if df.is_empty():
-        df = load_deltatable_lite(wf_id, dc_id)
+        df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
 
     # Add dah aggrid filters to the columns
     for c in cols:
@@ -127,7 +132,7 @@ def build_table(**kwargs):
     # Create the card body
     new_card_body = html.Div(
         [
-            div_table,
+            table_aggrid,
             store_component,
         ]
     )

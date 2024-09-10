@@ -1,21 +1,18 @@
-import collections
 from datetime import datetime
 import hashlib
 import os
-import shutil
 from bson import ObjectId
 from fastapi import HTTPException, Depends, APIRouter
-import deltalake
 import polars as pl
-import numpy as np
 
 from depictio.api.v1.configs.config import settings, logger
-from depictio.api.v1.db import db, workflows_collection, files_collection, users_collection, deltatables_collection
-from depictio.api.v1.s3 import s3_client, minio_storage_options
+from depictio.api.v1.db import workflows_collection, files_collection, users_collection, deltatables_collection
+from depictio.api.v1.endpoints.deltatables_endpoints.utils import get_s3_folder_size, precompute_columns_specs, read_table_for_DC_table
+from depictio.api.v1.s3 import minio_storage_options
 from depictio.api.v1.endpoints.deltatables_endpoints.models import Aggregation, DeltaTableAggregated
 from depictio.api.v1.endpoints.files_endpoints.models import File
-from depictio.api.v1.endpoints.user_endpoints.auth import get_current_user
-from depictio.api.v1.endpoints.user_endpoints.models import User
+from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
+from depictio.api.v1.endpoints.user_endpoints.models import UserBase
 from depictio.api.v1.endpoints.validators import validate_workflow_and_collection
 from depictio.api.v1.models.base import convert_objectid_to_str
 
@@ -23,7 +20,6 @@ from depictio.api.v1.models.base import convert_objectid_to_str
 from depictio.api.v1.utils import (
     # decode_token,
     # public_key_path,
-    numpy_to_python,
     serialize_for_mongo,
     agg_functions,
 )
@@ -33,7 +29,6 @@ deltatables_endpoint_router = APIRouter()
 
 
 @deltatables_endpoint_router.get("/get/{workflow_id}/{data_collection_id}")
-# @datacollections_endpoint_router.get("/files/{workflow_id}/{data_collection_id}", response_model=List[GridFSFileInfo])
 async def list_registered_files(
     workflow_id: str,
     data_collection_id: str,
@@ -51,7 +46,7 @@ async def list_registered_files(
         user_oid,
     ) = validate_workflow_and_collection(
         workflows_collection,
-        current_user.user_id,
+        current_user.id,
         workflow_id,
         data_collection_id,
     )
@@ -65,124 +60,7 @@ async def list_registered_files(
     return convert_objectid_to_str(deltatables)
 
 
-def read_table_for_DC_table(file_info, data_collection_config, deltaTable):
-    """
-    Read a table file and return a Polars DataFrame.
-    """
-    # logger.info("file_info")
-    # logger.info(file_info)
-    # logger.info("data_collection_config")
-    # logger.info(data_collection_config)
-    # if file_info.aggregated == True:
-    #     continue  # Skip already processed files
-
-    file_path = file_info.file_location
-
-    if data_collection_config["format"].lower() in ["csv", "tsv", "txt"]:
-            # Read the file using polars
-
-        df = pl.read_csv(
-            file_path,
-            **dict(data_collection_config["polars_kwargs"]),
-        )
-    elif data_collection_config["format"].lower() in ["parquet"]:
-        df = pl.read_parquet(file_path, **dict(data_collection_config["polars_kwargs"]))
-    
-    elif data_collection_config["format"].lower() in ["feather"]:
-        df = pl.read_feather(file_path, **dict(data_collection_config["polars_kwargs"]))
-    
-    elif data_collection_config["format"].lower() in ["xls", "xlsx"]:
-        df = pl.read_excel(file_path, **dict(data_collection_config["polars_kwargs"]))
-
-    # logger.info(df)
-    raw_cols = df.columns
-    df = df.with_columns(pl.lit(file_info.run_id).alias("depictio_run_id"))
-    df = df.select(["depictio_run_id"] + raw_cols)
-    # data_frames.append(df)
-
-    # Update the file_info in MongoDB to mark it as processed
-    files_collection.update_one(
-        {"_id": ObjectId(file_info.id)},
-        {
-            "$set": {
-                "aggregated": True,
-                "data_collection.deltatable": deltaTable.mongo(),
-            }
-        },
-    )
-    # logger.info("Updated file_info in MongoDB")
-    return df
-
-
-def upload_dir_to_s3(bucket_name, s3_folder, local_dir, s3_client):
-    """
-    Recursively uploads a directory to S3 preserving the directory structure.
-    """
-    for root, dirs, files in os.walk(local_dir):
-        for filename in files:
-            # construct the full local path
-            local_path = os.path.join(root, filename)
-
-            # construct the full S3 path
-            relative_path = os.path.relpath(local_path, local_dir)
-            s3_path = os.path.join(s3_folder, relative_path).replace("\\", "/")
-
-            # upload the file
-            logger.info(f"Uploading {local_path} to {bucket_name}/{s3_path}...")
-            s3_client.upload_file(local_path, bucket_name, s3_path)
-
-
-def precompute_columns_specs(aggregated_df: pl.DataFrame, agg_functions: dict):
-    """
-    Aggregate dataframes and return a list of dictionaries with column names, types and specs.
-    """
-    # TODO: performance improvement: use polars instead of pandas
-    aggregated_df = aggregated_df.to_pandas()
-
-    results = list()
-    # For each column in the DataFrame
-    for column in aggregated_df.columns:
-        tmp_dict = collections.defaultdict(dict)
-        tmp_dict["name"] = column
-        # Identify the column data type
-        col_type = str(aggregated_df[column].dtype).lower()
-        # logger.info(col_type)
-        tmp_dict["type"] = col_type.lower()
-        # logger.info(agg_functions)
-        # Check if the type exists in the agg_functions dict
-        if col_type in agg_functions:
-            methods = agg_functions[col_type]["card_methods"]
-
-            # Initialize an empty dictionary to store results
-
-            # For each method in the card_methods
-            for method_name, method_info in methods.items():
-                # logger.info(column, method_name)
-                pandas_method = method_info["pandas"]
-                # logger.info(pandas_method)
-                # Check if the method is callable or a string
-                if callable(pandas_method):
-                    result = pandas_method(aggregated_df[column])
-                    # logger.info(result)
-                elif isinstance(pandas_method, str):
-                    result = getattr(aggregated_df[column], pandas_method)()
-                    # logger.info(result)
-                else:
-                    continue  # Skip if method is not available
-
-                result = result.values if isinstance(result, np.ndarray) else result
-                # logger.info(result)
-                if method_name == "mode" and isinstance(result.values, np.ndarray):
-                    result = result[0]
-                tmp_dict["specs"][str(method_name)] = numpy_to_python(result)
-        results.append(tmp_dict)
-    logger.info(results)
-    return results
-
-
-
 @deltatables_endpoint_router.get("/specs/{workflow_id}/{data_collection_id}")
-# @workflows_endpoint_router.get("/get_workflows", response_model=List[Workflow])
 async def specs(
     workflow_id: str,
     data_collection_id: str,
@@ -200,7 +78,10 @@ async def specs(
         data_collection,
         user_oid,
     ) = validate_workflow_and_collection(
-         workflows_collection, current_user.user_id, workflow_id, data_collection_id, 
+        workflows_collection,
+        current_user.id,
+        workflow_id,
+        data_collection_id,
     )
 
     # Query to find deltatable associated with the data collection
@@ -212,9 +93,7 @@ async def specs(
     column_specs = deltatables["aggregation"][-1]["aggregation_columns_specs"]
 
     if not data_collection:
-        raise HTTPException(
-            status_code=404, detail="No workflows found for the current user."
-        )
+        raise HTTPException(status_code=404, detail="No workflows found for the current user.")
 
     return column_specs
 
@@ -227,6 +106,18 @@ async def aggregate_data(
 ):
     logger.info("Aggregating data...")
 
+    if not workflow_id or not data_collection_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Workflow ID and Data Collection ID are required",
+        )
+
+    if not current_user:
+        raise HTTPException(
+            status_code=401,
+            detail="Not authenticated",
+        )
+
     # Use the utility function to validate and retrieve necessary info
     (
         workflow_oid,
@@ -236,7 +127,7 @@ async def aggregate_data(
         user_oid,
     ) = validate_workflow_and_collection(
         workflows_collection,
-        current_user.user_id,
+        current_user.id,
         workflow_id,
         data_collection_id,
     )
@@ -248,6 +139,9 @@ async def aggregate_data(
     assert dc_config.type == "Table", "Data collection type must be Table"
     dc_config = convert_objectid_to_str(dc_config.mongo())
 
+    logger.debug(f"Data Collection Config: {dc_config}")
+    logger.debug(f"Data Collection ID: {data_collection_oid}")
+
     # Using the config, find files associated with the data collection
     files = list(
         files_collection.find(
@@ -257,6 +151,8 @@ async def aggregate_data(
         )
     )
 
+    logger.debug(f"Len of Files: {len(files)}")
+
     # Assert that files is a list and not empty
     assert isinstance(files, list)
     assert len(files) > 0
@@ -265,13 +161,13 @@ async def aggregate_data(
     files = [File.from_mongo(file) for file in files]
 
     # Create a DeltaTableAggregated object
-    # TODO: fix the data_dir - not working without due to Docker volumes
-    destination_file_name = f"s3://{settings.minio.bucket}/{user_oid}/{workflow_oid}/{data_collection_oid}/"  # Destination path in MinIO
+    destination_file_key = f"{user_oid}/{workflow_oid}/{data_collection_oid}/" 
+    destination_file_name = f"s3://{settings.minio.bucket}/{destination_file_key}" 
     # destination_file_name = f"{settings.minio.data_dir}/{settings.minio.bucket}/{user_oid}/{workflow_oid}/{data_collection_oid}/"  # Destination path in MinIO
-    os.makedirs(destination_file_name, exist_ok=True)
+    # os.makedirs(destination_file_name, exist_ok=True)
 
     # Get the user object to use as aggregation_by
-    user = User.from_mongo(users_collection.find_one({"_id": user_oid}))
+    user = UserBase.from_mongo(users_collection.find_one({"_id": user_oid}))
 
     # Check if a DeltaTableAggregated already exists in the deltatables_collection
     query_dt = deltatables_collection.find_one({"data_collection_id": data_collection_oid})
@@ -279,7 +175,7 @@ async def aggregate_data(
     # Check if the DeltaTableAggregated exists, if not create a new one, else update the existing one
     logger.info("Checking if deltatable exists")
     if query_dt:
-        logger.info("DeltaTable exists")
+        logger.warn("DeltaTable exists")
         deltatable = DeltaTableAggregated.from_mongo(query_dt)
     else:
         logger.info("DeltaTable does not exist")
@@ -292,7 +188,8 @@ async def aggregate_data(
     # Read each file and append to data_frames list for futher aggregation
     data_frames = []
     for file_info in files:
-        data_frames.append(read_table_for_DC_table(file_info, dc_config["dc_specific_properties"], deltatable))
+        logger.debug(f"Reading file: {file_info.file_location}")
+        data_frames.append(read_table_for_DC_table(file_info, dc_config, deltatable))
 
     # Aggregate data
     if not data_frames:
@@ -301,6 +198,8 @@ async def aggregate_data(
             detail=f"No files found for data_collection: {data_collection_id} of workflow: {workflow_id}.",
         )
 
+    logger.debug(f"data_frames : {data_frames}")
+
     # Aggregate the dataframes
     aggregated_df = pl.concat(data_frames)
 
@@ -308,31 +207,29 @@ async def aggregate_data(
     # Add timestamp column
     aggregated_df = aggregated_df.with_columns(depictio_aggregation_time=pl.lit(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
 
-    logger.info("aggregated_df")
-    logger.info(aggregated_df)
+    logger.debug(f"aggregated_df : {aggregated_df}")
 
-    # FIXME: solve the issue of writing to MinIO using polars
-    # TMP solution: write to Delta Lake locally and then upload to MinIO
-    # Write aggregated dataframe to Delta Lake
+    aggregated_df.write_delta(destination_file_name, mode="overwrite", storage_options=minio_storage_options, delta_write_options={"schema_mode": "overwrite"})
 
-    aggregated_df.write_delta(destination_file_name, mode="overwrite", storage_options=minio_storage_options, delta_write_options={"overwrite_schema": "True"})
-    # aggregated_df.write_delta(destination_file_name, mode="overwrite", overwrite_schema=True, storage_options=minio_storage_options)
-
-    # Upload the Delta Lake to MinIO
-    # upload_dir_to_s3(
-    #     settings.minio.bucket,
-    #     f"{user_oid}/{workflow_oid}/{data_collection_oid}",
-    #     destination_file_name,
-    #     s3_client,
-    # )
-
-    logger.info("Write complete to MinIO at destination: ", destination_file_name)
+    logger.info(f"Write complete to MinIO at destination: {destination_file_name}")
 
     # Precompute columns specs
     results = precompute_columns_specs(aggregated_df, agg_functions)
 
     # Compute the hash of the aggregated data using the filename, time, and size
-    filesize = os.path.getsize(destination_file_name)
+    # filesize = os.path.getsize(destination_file_name)
+
+    # Retrieve the bucket name from settings
+    bucket_name = settings.minio.bucket
+
+    # Get the size of the object in the bucket
+    try:
+        filesize = get_s3_folder_size(bucket_name, destination_file_key)
+        logger.info(f"Size of the object '{destination_file_key}' in bucket '{bucket_name}' is {filesize} bytes.")
+    except HTTPException as e:
+        logger.error(f"Failed to get the size of the object: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get the size of the object.")
+
     hash_str = f"{destination_file_name}{datetime.now()}{filesize}"
     hash_str = hash_str.encode("utf-8")
     hash_str = hashlib.sha256(hash_str).hexdigest()
@@ -349,11 +246,10 @@ async def aggregate_data(
         )
     )
 
-    logger.info("DeltaTableAggregated")
-    logger.info(deltatable)
+    logger.debug(f"DeltaTableAggregated : {deltatable}")
 
     if query_dt:
-        logger.info("Updating existing DeltaTableAggregated")
+        logger.warn("Updating existing DeltaTableAggregated")
         deltatables_collection.update_one(
             {"data_collection_id": data_collection_oid},
             {
@@ -365,8 +261,7 @@ async def aggregate_data(
         )
     else:
         logger.info("Inserting new DeltaTableAggregated")
-        # FIXME: fix id & _id issue
-        logger.info(serialize_for_mongo(deltatable))
+        logger.debug(serialize_for_mongo(deltatable))
         deltatables_collection.insert_one(serialize_for_mongo(deltatable))
 
     return {
@@ -386,14 +281,14 @@ async def delete_deltatable(
 
     workflow_oid = ObjectId(workflow_id)
     data_collection_oid = ObjectId(data_collection_id)
-    user_oid = ObjectId(current_user.user_id)  # This should be the ObjectId
+    user_oid = ObjectId(current_user.id)  # This should be the ObjectId
     assert isinstance(workflow_oid, ObjectId)
     assert isinstance(data_collection_oid, ObjectId)
     assert isinstance(user_oid, ObjectId)
     # Construct the query
     query = {
         "_id": workflow_oid,
-        "permissions.owners.user_id": user_oid,
+        "permissions.owners._id": user_oid,
         "data_collections._id": data_collection_oid,
     }
     logger.info(query)
