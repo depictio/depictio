@@ -1,7 +1,6 @@
-# List of all the possible aggregation methods for each data type and their corresponding input methods
-# TODO: reference in the documentation
 
 from dash import dcc, html
+import polars as pl
 import dash_mantine_components as dmc
 import dash_bootstrap_components as dbc
 
@@ -52,7 +51,16 @@ def build_interactive(**kwargs):
     interactive_component_type = kwargs.get("interactive_component_type")
     cols_json = kwargs.get("cols_json")
     value = kwargs.get("value", None)
+    df = kwargs.get("df", None)
     build_frame = kwargs.get("build_frame", False)
+    TOKEN = kwargs.get("access_token")
+    stepper = kwargs.get("stepper", False)
+
+    if stepper: 
+        value_div_type = "interactive-component-value-tmp"
+    else:
+        value_div_type = "interactive-component-value"
+
 
     func_name = agg_functions[column_type]["input_methods"][interactive_component_type]["component"]
 
@@ -75,7 +83,8 @@ def build_interactive(**kwargs):
     )
 
     # Load the delta table & get the specs
-    df = load_deltatable_lite(wf_id, dc_id)
+    if not isinstance(df, pl.DataFrame):
+        df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
 
     # Handling different aggregation values
 
@@ -83,9 +92,10 @@ def build_interactive(**kwargs):
 
     # If the aggregation value is Select, MultiSelect or SegmentedControl
     if interactive_component_type in ["Select", "MultiSelect", "SegmentedControl"]:
-        data = sorted(df[column_name].dropna().unique())
+        data = sorted(df[column_name].drop_nans().unique())
 
-        interactive_component = func_name(data=data, id={"type": "interactive-component-value", "index": str(index), "persistence_type": "local"})
+        # WARNING: This is a temporary solution to avoid modifying dashboard data - the -tmp suffix is added to the id and removed once clicked on the btn-done D
+        interactive_component = func_name(data=data, id={"type": value_div_type, "index": str(index), "persistence_type": "local"})
 
         # If the aggregation value is MultiSelect, make the component searchable and clearable
         if interactive_component_type == "MultiSelect":
@@ -96,7 +106,7 @@ def build_interactive(**kwargs):
             kwargs.update({"value": value})
             interactive_component = func_name(
                 data=data,
-                id={"type": "interactive-component-value", "index": str(index)},
+                id={"type": value_div_type, "index": str(index)},
                 **kwargs,
             )
 
@@ -108,7 +118,7 @@ def build_interactive(**kwargs):
         kwargs.update({"value": value})
         interactive_component = func_name(
             placeholder="Your selected value",
-            id={"type": "interactive-component-value", "index": str(index)},
+            id={"type": value_div_type, "index": str(index)},
             **kwargs,
         )
 
@@ -123,7 +133,7 @@ def build_interactive(**kwargs):
         kwargs = {
             "min": min_value,
             "max": max_value,
-            "id": {"type": "interactive-component-value", "index": str(index)},
+            "id": {"type": value_div_type, "index": str(index)},
             "persistence_type": "local",
         }
         if interactive_component_type == "RangeSlider":
@@ -152,6 +162,9 @@ def build_interactive(**kwargs):
         return new_interactive_component
     else:
         return build_interactive_frame(index=index, children=new_interactive_component)
+
+# List of all the possible aggregation methods for each data type and their corresponding input methods
+# TODO: reference in the documentation
 
 
 agg_functions = {

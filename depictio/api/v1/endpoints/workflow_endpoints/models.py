@@ -44,13 +44,6 @@ class WorkflowConfig(MongoModel):
         except re.error:
             raise ValueError("Invalid regex pattern")
 
-    # # Generate version validator - if no version specified, set to 1.0.0
-    # @validator("workflow_version", pre=True, always=True)
-    # def set_version(cls, value):
-    #     if value is None:
-    #         return "1.0.0"
-    #     return value
-
 
 class WorkflowRun(MongoModel):
     id: Optional[PyObjectId] = None
@@ -155,7 +148,7 @@ class Workflow(MongoModel):
     config: WorkflowConfig
     registration_time: datetime = datetime.now()
     # data_collection_ids: Optional[List[str]] = []
-    permissions: Optional[Permission]
+    permissions: Optional[Permission] = {"owners": [], "viewers": []}
     hash: Optional[str] = None  # Change this to expect a string
 
 

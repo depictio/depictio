@@ -2,9 +2,11 @@ name: depictio-condaenv
 channels:
   - conda-forge
   - plotly
-  - anaconda
+  - microsoft
 dependencies:
+  - colorlog
   - curl
+  - bcrypt
   - bleach
   - boto3
   - bson
@@ -29,7 +31,9 @@ dependencies:
   - redis-py
   - typer
   - uvicorn
-  # - deltalake
+  - deltalake
+  - pytest-playwright
+  - playwright
   - pip:  
     - pydantic[email]==1.10.10
     - dash-mantine-components==0.12.1
@@ -40,4 +44,5 @@ dependencies:
     - dash-auth==2.0.0
     - dash-ag-grid==2.2.0
     - pyjwt
+    - pytest-playwright
 

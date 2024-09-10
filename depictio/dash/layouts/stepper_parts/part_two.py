@@ -1,15 +1,11 @@
-import json
 from dash import html, Input, Output, State, ALL, MATCH, ctx, dcc
-import dash
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 from dash_iconify import DashIconify
-import httpx
-import yaml
 
 from depictio.dash.modules.table_component.frontend import create_stepper_table_button
-from depictio.dash.utils import UNSELECTED_STYLE, list_workflows, get_columns_from_data_collection
-from depictio.api.v1.configs.config import API_BASE_URL, TOKEN, logger
+from depictio.dash.utils import UNSELECTED_STYLE
+from depictio.api.v1.configs.config import logger
 
 # Depictio components imports - button step
 from depictio.dash.modules.figure_component.frontend import create_stepper_figure_button
@@ -107,9 +103,3 @@ def register_callbacks_stepper_part_two(app):
                 return id
         else:
             return last_button
-        # logger.info(f"{ctx.triggered}")
-        # logger.info(f"ctx.triggered_id: {ctx.triggered_id}")
-        # id = ctx.triggered_id["type"]
-        # logger.info(f"Triggered id: {id}")
-        # logger.info(f"Last button: {last_button}")
-        # return id

@@ -1,13 +1,11 @@
 # Import necessary libraries
 import httpx
 
-from dash import html, dcc, Input, Output, State, ALL, MATCH
+from dash import html, dcc, Input, Output, State, MATCH
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
-import pandas as pd
 from dash_iconify import DashIconify
-from depictio.dash.utils import list_workflows, return_mongoid
-from depictio.api.v1.deltatables_utils import load_deltatable_lite, join_deltatables
+from depictio.dash.utils import return_mongoid
 
 # Depictio imports
 from depictio.dash.modules.interactive_component.utils import (
@@ -16,13 +14,10 @@ from depictio.dash.modules.interactive_component.utils import (
     build_interactive_frame,
 )
 from depictio.dash.utils import (
-    SELECTED_STYLE,
     UNSELECTED_STYLE,
-    list_data_collections_for_dropdown,
-    list_workflows_for_dropdown,
     get_columns_from_data_collection,
 )
-from depictio.api.v1.configs.config import API_BASE_URL, TOKEN, logger
+from depictio.api.v1.configs.config import API_BASE_URL, logger
 
 
 def register_callbacks_interactive_component(app):
@@ -32,14 +27,20 @@ def register_callbacks_interactive_component(app):
             Input({"type": "input-dropdown-column", "index": MATCH}, "value"),
             Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
             Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+            State("local-store", "data"),
         ],
         prevent_initial_call=True,
     )
-    def update_aggregation_options(column_value, wf_tag, dc_tag):
+    def update_aggregation_options(column_value, wf_tag, dc_tag, local_data):
         """
         Callback to update aggregation dropdown options based on the selected column
         """
-        cols_json = get_columns_from_data_collection(wf_tag, dc_tag)
+        if not local_data:
+            return []
+        
+        TOKEN = local_data["access_token"]
+
+        cols_json = get_columns_from_data_collection(wf_tag, dc_tag, TOKEN)
         # print(cols_json)
 
         if column_value is None:
@@ -84,14 +85,22 @@ def register_callbacks_interactive_component(app):
             State({"type": "workflow-selection-label", "index": MATCH}, "value"),
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
             State({"type": "input-dropdown-method", "index": MATCH}, "id"),
+            State("local-store", "data"),
             # Input("interval", "n_intervals"),
         ],
         prevent_initial_call=True,
     )
-    def update_card_body(input_value, column_value, aggregation_value, wf_tag, dc_tag, id):
+    def update_card_body(input_value, column_value, aggregation_value, wf_tag, dc_tag, id, local_data):
         """
         Callback to update card body based on the selected column and aggregation
         """
+
+        if not local_data:
+            return []
+        
+        TOKEN = local_data["access_token"]
+
+
         headers = {
             "Authorization": f"Bearer {TOKEN}",
         }
@@ -101,14 +110,14 @@ def register_callbacks_interactive_component(app):
             return []
 
         # Get the type of the selected column, the aggregation method and the function name
-        cols_json = get_columns_from_data_collection(wf_tag, dc_tag)
+        cols_json = get_columns_from_data_collection(wf_tag, dc_tag, TOKEN)
         logger.info(f"Wf tag : {wf_tag}")
         logger.info(f"Dc tag : {dc_tag}")
         logger.info(f"Cols json : {cols_json}")
         column_type = cols_json[column_value]["type"]
 
         # Get the workflow and data collection IDs from the tags
-        workflow_id, data_collection_id = return_mongoid(workflow_tag=wf_tag, data_collection_tag=dc_tag)
+        workflow_id, data_collection_id = return_mongoid(workflow_tag=wf_tag, data_collection_tag=dc_tag, TOKEN=TOKEN)
 
         dc_specs = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
@@ -137,6 +146,8 @@ def register_callbacks_interactive_component(app):
             "column_type": column_type,
             "interactive_component_type": aggregation_value,
             "cols_json": cols_json,
+            "access_token": TOKEN,
+            "stepper": True,
         }
         new_interactive_component = build_interactive(**interactive_kwargs)
 

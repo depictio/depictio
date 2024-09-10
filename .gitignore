@@ -162,6 +162,7 @@ cython_debug/
 .nfs*
 depictioDB/
 depictioDB_bak/
+depictioDB_K8S/
 diagnostic.data/
 journal/
 *.db
@@ -182,6 +183,7 @@ dev/jbrowse_dev/assets/
 wf_data/
 
 .env*
+!.env
 
 ldap_config/
 ldap_db/
@@ -197,11 +199,14 @@ delta_dev/
 dev/dev_minio/
 dev/dev_design_visu/data/
 depictio/jbrowse2_configs/
+jbrowse-watcher-plugin/jbrowse2_sessions/
 jbrowse2_sessions/
 jbrowse2_configs/
 data/depictio_data.json
 data/jbrowse_df_mapping_dict.json
 dev/flask-login/.env
+
+bak/
 
 data/depictio_data.json.bak
 dev/dev_delta/
@@ -213,4 +218,16 @@ dev/dev_delta/
 dev/dev_delta/.DS_Store
 .DS_Store
 dev/dev_delta/.DS_Store
+depictio-cli-venv/
 jbrowse-watcher-plugin
+dashboards.json
+depictio-cli-venv/
+jbrowse-watcher-plugin/
+data/minio/
+*.b64
+depictio/tmp_token.pem
+user_data.json
+dev/celery/jobs.json
+depictio/dash/assets/screenshots/
+screenshot_*.png
+depictio/.depictio/default_admin_agent.yaml

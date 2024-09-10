@@ -9,9 +9,8 @@ import dash_ag_grid as dag
 # Depictio imports
 from depictio.dash.modules.table_component.utils import build_table, build_table_frame
 from depictio.dash.utils import return_mongoid
-from depictio.api.v1.deltatables_utils import load_deltatable_lite, join_deltatables
 
-from depictio.api.v1.configs.config import API_BASE_URL, TOKEN
+from depictio.api.v1.configs.config import API_BASE_URL
 
 from depictio.dash.utils import (
     UNSELECTED_STYLE,
@@ -30,21 +29,26 @@ def register_callbacks_table_component(app):
             Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
             Input({"type": "btn-table", "index": MATCH}, "n_clicks"),
             Input({"type": "btn-table", "index": MATCH}, "id"),
+            State("local-store", "data"),
         ],
         prevent_initial_call=True,
     )
-    def design_table_component(wf_tag, dc_tag, n_clicks, id):
+    def design_table_component(wf_tag, dc_tag, n_clicks, id, data):
         """
         Callback to update card body based on the selected column and aggregation
         """
 
-        # FIXME: This is a temporary solution to get the token
+        if not data:
+            return None
+        
+        TOKEN = data["access_token"]
+
         headers = {
             "Authorization": f"Bearer {TOKEN}",
         }
 
         # Get the workflow and data collection ids from the tags selected
-        workflow_id, data_collection_id = return_mongoid(workflow_tag=wf_tag, data_collection_tag=dc_tag)
+        workflow_id, data_collection_id = return_mongoid(workflow_tag=wf_tag, data_collection_tag=dc_tag, TOKEN=TOKEN)
 
         # Get the data collection specs
         dc_specs = httpx.get(
@@ -52,7 +56,7 @@ def register_callbacks_table_component(app):
             headers=headers,
         ).json()
 
-        cols_json = get_columns_from_data_collection(wf_tag, dc_tag)
+        cols_json = get_columns_from_data_collection(wf_tag, dc_tag, TOKEN)
 
         # Get the join tables for the selected workflow - used in store for metadata management
         # join_tables_for_wf = httpx.get(
@@ -73,6 +77,7 @@ def register_callbacks_table_component(app):
             "dc_id": data_collection_id,
             "dc_config": dc_specs["config"],
             "cols_json": cols_json,
+            "access_token": TOKEN,
         }
         new_table = build_table(**table_kwargs)
         return new_table

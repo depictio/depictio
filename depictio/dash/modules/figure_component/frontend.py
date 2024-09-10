@@ -1,28 +1,16 @@
 # Import necessary libraries
 import collections
-import numpy as np
-from dash import html, dcc, Input, Output, State, ALL, MATCH
+from dash import html, dcc, Input, Output, State, MATCH
 import dash
 import dash_bootstrap_components as dbc
-import dash_draggable
 import dash_mantine_components as dmc
-import inspect
-import pandas as pd
-import plotly.express as px
-import re
 from dash_iconify import DashIconify
-import ast
-from depictio.dash.utils import list_workflows, return_mongoid
+from depictio.dash.utils import list_workflows
 from depictio.dash.utils import (
-    SELECTED_STYLE,
     UNSELECTED_STYLE,
-    list_data_collections_for_dropdown,
-    list_workflows_for_dropdown,
     get_columns_from_data_collection,
 )
-from depictio.api.v1.deltatables_utils import load_deltatable_lite, join_deltatables
 
-from depictio.api.v1.configs.config import logger
 # Depictio imports
 from depictio.dash.modules.figure_component.utils import (
     build_figure,
@@ -32,13 +20,12 @@ from depictio.dash.modules.figure_component.utils import (
     plotly_bootstrap_mapping,
     secondary_common_params,
     base_elements,
-    secondary_common_params_lite,
     plotly_vizu_dict,
 )
 from depictio.dash.utils import (
     get_columns_from_data_collection,
 )
-from depictio.api.v1.configs.config import API_BASE_URL, TOKEN
+from depictio.api.v1.configs.config import API_BASE_URL
 
 
 def register_callbacks_figure_component(app):
@@ -54,7 +41,7 @@ def register_callbacks_figure_component(app):
             State({"type": "workflow-selection-label", "index": MATCH}, "value"),
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
         ],
-        [State({"type": "edit-button", "index": MATCH}, "id")],
+        [State({"type": "edit-button", "index": MATCH}, "id"), State("local-store", "data")],
         # prevent_initial_call=True,
     )
     def update_specific_params(
@@ -64,12 +51,18 @@ def register_callbacks_figure_component(app):
         workflow,
         data_collection,
         edit_button_id,
+        local_data,
     ):
         """
         Compute the specific parameters dropdowns based on the selected visualisation type
         """
+
+        if not local_data:
+            raise dash.exceptions.PreventUpdate
+        
+        TOKEN = local_data["access_token"]
         # Retrieve the columns from the selected data collection
-        columns_json = get_columns_from_data_collection(workflow, data_collection)
+        columns_json = get_columns_from_data_collection(workflow, data_collection, TOKEN)
         columns = list(columns_json.keys())
 
         # Get the value of the segmented control
@@ -426,7 +419,7 @@ def register_callbacks_figure_component(app):
     #     prevent_initial_call=True,
     # )
     # def test(input_segmented_control, workflow_id, data_collection_id, id):
-    #     from depictio.api.v1.configs.config import logger
+    #     from depictio.api.v1.configs.logging import logger
 
     #     logger.info(f"input_segmented_control: {input_segmented_control}")
     #     logger.info(f"workflow: {workflow_id}")
@@ -476,6 +469,7 @@ def register_callbacks_figure_component(app):
             State({"type": "workflow-selection-label", "index": MATCH}, "value"),
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
             State({"type": "segmented-control-visu-graph", "index": MATCH}, "id"),
+            State("local-store", "data"),
             # Input({"type": "tmp-x", "index": MATCH}, "value"),
             # [
             #     Input({"type": f"tmp-{e}", "index": MATCH}, "children")
@@ -494,11 +488,17 @@ def register_callbacks_figure_component(app):
         workflow = args[2]
         data_collection = args[3]
         id = args[4]
+        local_data = args[5]
+
+        if not local_data:
+            raise dash.exceptions.PreventUpdate
+
+        TOKEN = local_data["access_token"]
         # print(args)
         # print(id)
         # print("\n\n\n")
 
-        columns_json = get_columns_from_data_collection(workflow, data_collection)
+        columns_json = get_columns_from_data_collection(workflow, data_collection, TOKEN)
         # print(columns_json, type(columns_json))
 
         columns_specs_reformatted = collections.defaultdict(list)
@@ -560,7 +560,6 @@ def register_callbacks_figure_component(app):
         #     if data_collection_id in join_tables_for_wf:
         #         join_details = join_tables_for_wf[data_collection_id]
         #         dc_specs["config"]["join"] = join_details
-            
 
         # print("dc_specs")
         # print(dc_specs)
@@ -631,9 +630,6 @@ def register_callbacks_figure_component(app):
         # else:
         #     return dash.no_update, dash.no_update
 
-
-
-
         if dict_kwargs:
             figure_kwargs = {
                 "index": id["index"],
@@ -643,10 +639,12 @@ def register_callbacks_figure_component(app):
                 "dc_id": data_collection_id,
                 "dc_config": dc_specs["config"],
                 "visu_type": visu_type,
+                "access_token": TOKEN,
             }
             return build_figure(**figure_kwargs)
         else:
             raise dash.exceptions.PreventUpdate
+
 
 def design_figure(id):
     figure_row = [
