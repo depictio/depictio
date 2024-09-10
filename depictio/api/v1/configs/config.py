@@ -23,9 +23,9 @@ MONGODB_URL = f"mongodb://{settings.mongodb.service_name}:{settings.mongodb.port
 run_generate_keys()
 
 
-with open("depictio/private_key.pem", "rb") as f:
+with open("/app/depictio/keys/private_key.pem", "rb") as f:
     PRIVATE_KEY = f.read()
-with open("depictio/public_key.pem", "rb") as f:
+with open("/app/depictio/keys/public_key.pem", "rb") as f:
     PUBLIC_KEY = f.read()
 ALGORITHM = "RS256"
 

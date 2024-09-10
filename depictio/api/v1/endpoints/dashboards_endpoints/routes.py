@@ -29,7 +29,7 @@ async def get_dashboard(dashboard_id: str, current_user=Depends(get_current_user
         "dashboard_id": str(dashboard_id),
         "$or": [
             {"permissions.owners._id": user_id},
-            {"permissions.viewers.id": user_id},
+            {"permissions.viewers._id": user_id},
         ],
     }
 
@@ -147,9 +147,7 @@ async def screenshot_dashboard(dashboard_id: str, current_user=Depends(get_curre
             viewport_height = 1080
 
             # Create a new context with the specified viewport size
-            context = await browser.new_context(
-                viewport={"width": viewport_width, "height": viewport_height}
-            )
+            context = await browser.new_context(viewport={"width": viewport_width, "height": viewport_height})
 
             page = await context.new_page()
             logger.info(f"Browser: {browser}")
@@ -181,6 +179,17 @@ async def screenshot_dashboard(dashboard_id: str, current_user=Depends(get_curre
             await page.wait_for_selector("div#page-content")
             logger.info(f"Wait for selector: div#page-content")
 
+            # # Check if the iframe is present
+            # iframe_element = await page.query_selector('iframe[src*="jbrowse"]')  # Adjust the selector to match the iframe's source or other attributes
+
+            # if iframe_element:
+            #     # If the iframe is present, wait for its content to load
+            #     iframe = await iframe_element.content_frame()
+            #     await iframe.wait_for_selector("")  # Replace with a specific element inside the iframe
+            #     logger.info(f"Iframe loaded with element 'your-element-inside-iframe'")
+            # else:
+            #     logger.info("Iframe not found, proceeding without waiting for iframe content")
+
             # Remove the debug menu if it exists
             await page.evaluate("""() => {
                 const debugMenuOuter = document.querySelector('.dash-debug-menu__outer');
@@ -196,7 +205,11 @@ async def screenshot_dashboard(dashboard_id: str, current_user=Depends(get_curre
 
             # Capture a screenshot of the content below the 'div#page-content'
             element = await page.query_selector("div#page-content")
+
             if element:
+                # await page.wait_for_timeout(3000)
+                # logger.info(f"Wait for timeout: 3000")
+
                 user = current_user.email.split("_")[0]
                 output_file = f"{output_folder}/{user}_{dashboard_id}.png"
                 await element.screenshot(path=output_file)

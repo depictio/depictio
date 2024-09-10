@@ -7,6 +7,47 @@ import polars as pl
 import os
 from depictio.api.v1.db import files_collection
 from depictio.api.v1.utils import numpy_to_python
+from botocore.exceptions import ClientError
+from fastapi import HTTPException
+from depictio.api.v1.s3 import s3_client
+
+def get_s3_folder_size(bucket_name, prefix):
+    """
+    Calculate the total size of all objects within a given S3 folder (prefix).
+
+    :param bucket_name: Name of the S3 bucket
+    :param prefix: Prefix (path) of the folder in the bucket
+    :return: Total size of all objects in bytes or an error message if no objects are found
+    """
+    total_size = 0
+    try:
+        # List all objects within the given prefix
+        logger.info(f"Listing objects in folder '{prefix}' within bucket '{bucket_name}'.")
+        paginator = s3_client.get_paginator('list_objects_v2')
+        response_iterator = paginator.paginate(Bucket=bucket_name, Prefix=prefix)
+
+        # Sum the sizes of all objects found in the folder
+        objects_found = False
+        for page in response_iterator:
+            if 'Contents' in page:
+                objects_found = True
+                for obj in page['Contents']:
+                    total_size += obj['Size']
+                    logger.debug(f"Adding size of object: {obj['Key']} - {obj['Size']} bytes.")
+
+        if not objects_found:
+            logger.warning(f"No objects found in the folder '{prefix}'. It may be empty or not exist.")
+            raise HTTPException(status_code=404, detail="Folder is empty or does not exist.")
+
+        logger.info(f"Total size of objects in folder '{prefix}': {total_size} bytes.")
+        return total_size
+    except ClientError as e:
+        logger.error(f"Error listing objects in folder '{prefix}': {str(e)}")
+        raise HTTPException(status_code=500, detail="Error listing folder contents.")
+    except Exception as e:
+        logger.error(f"Unexpected error calculating folder size: {str(e)}")
+        raise HTTPException(status_code=500, detail="Unexpected error occurred while calculating folder size.")
+
 
 
 def read_table_for_DC_table(file_info, data_collection_config_raw, deltaTable):
@@ -36,12 +77,12 @@ def read_table_for_DC_table(file_info, data_collection_config_raw, deltaTable):
     # logger.info(df)
     raw_cols = df.columns
     no_run_id = False
-    logger.info(f"data_collection_config : {data_collection_config_raw}")
+    logger.debug(f"data_collection_config : {data_collection_config_raw}")
     if "metatype" in data_collection_config_raw and data_collection_config_raw["metatype"] != None:
-        logger.info(f'metatype : {data_collection_config_raw["metatype"]}')
+        logger.debug(f'metatype : {data_collection_config_raw["metatype"]}')
 
         if  data_collection_config_raw["metatype"].lower() == "metadata":
-            logger.info("Metadata file detected")
+            logger.debug("Metadata file detected")
             no_run_id = True
 
 

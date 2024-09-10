@@ -5,7 +5,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from datetime import datetime
 
-from depictio.api.v1.endpoints.user_endpoints.core_functions import add_token_to_user, check_if_token_is_valid, fetch_user_from_email, fetch_user_from_token, purge_expired_tokens_from_user
+from depictio.api.v1.endpoints.user_endpoints.core_functions import (
+    add_token_to_user,
+    check_if_token_is_valid,
+    fetch_user_from_email,
+    fetch_user_from_token,
+    generate_agent_config,
+    purge_expired_tokens_from_user,
+)
 from depictio.api.v1.endpoints.user_endpoints.models import User, UserBase
 from depictio.api.v1.endpoints.user_endpoints.utils import add_token, check_password
 from depictio.api.v1.configs.logging import logger
@@ -257,18 +264,19 @@ async def delete_token(request: dict, current_user=Depends(get_current_user)):
     # Return success status
     return {"success": result.modified_count > 0}
 
+
 @auth_endpoint_router.post("/purge_expired_tokens")
 async def purge_expired_tokens_endpoint(current_user=Depends(get_current_user)):
     if not current_user:
         raise HTTPException(status_code=401, detail="Current user not found.")
-    
+
     user_id = current_user.id
-    
+
     result = purge_expired_tokens_from_user(user_id)
 
     if result["success"]:
         return {"success": True}
-    
+
     else:
         raise HTTPException(status_code=500, detail="Failed to purge expired tokens")
 
@@ -281,7 +289,7 @@ async def check_token_validity_endpoint(request: dict):
     logger.info(f"Token: {token}")
     if not token:
         raise HTTPException(status_code=400, detail="No token provided")
-    
+
     is_valid = check_if_token_is_valid(token)
 
     if not is_valid:
@@ -289,40 +297,18 @@ async def check_token_validity_endpoint(request: dict):
 
     return {"detail": "Token is valid"}
 
-    
-
 
 @auth_endpoint_router.post("/generate_agent_config")
-def generate_agent_config(request: dict, current_user=Depends(get_current_user)):
+def generate_agent_config_endpoint(request: dict, current_user=Depends(get_current_user)):
     if not request:
         raise HTTPException(status_code=400, detail="No request provided")
+
+    if "token" not in request:
+        raise HTTPException(status_code=400, detail="No token provided")
 
     if not current_user:
         raise HTTPException(status_code=401, detail="Current user not found.")
 
-    logger.info(f"Current user: {current_user}")
+    depictio_agent_config = generate_agent_config(request, current_user)
 
-    logger.info(f"Current user: {current_user}")
-    current_userbase = UserBase(
-        **current_user.dict(exclude={"_id", "id", "tokens", "is_active", "is_verified", "last_login", "registration_date", "password", "current_access_token"})
-    )
-    logger.info(f"Current user base: {current_userbase}")
-    current_userbase = convert_objectid_to_str(current_userbase.dict())
-
-    # Keep only email and is_admin fields from user
-    token = request["token"]
-
-    # Add token to user
-    current_userbase["token"] = token
-
-    # Depictio API config
-    from depictio.api.v1.configs.config import API_BASE_URL
-
-    # FIXME: Temporary fix for local development - docker compose
-    tmp_api_base_url = API_BASE_URL.replace("depictio_backend", "localhost")
-
-    depictio_agent_config = {
-        "api_base_url": tmp_api_base_url,
-        "user": current_userbase,
-    }
     return depictio_agent_config
