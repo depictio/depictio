@@ -344,11 +344,17 @@ def register_callbacks_stepper_part_one(app):
         Output({"type": "table-aggrid", "index": MATCH}, "getRowsResponse"),
         Input({"type": "table-aggrid", "index": MATCH}, "getRowsRequest"),
         Input({"type": "stored-metadata-component", "index": MATCH}, "data"),
+        State("local-store", "data"),
         # prevent_initial_call=True,
     )
-    def infinite_scroll_component(request, stored_metadata):
+    def infinite_scroll_component(request, stored_metadata, local_store):
         # simulate slow callback
         # time.sleep(2)
+
+        if local_store is None:
+            raise dash.exceptions.PreventUpdate
+        
+        TOKEN = local_store["access_token"]
 
         if request is None:
             return dash.no_update
@@ -367,7 +373,7 @@ def register_callbacks_stepper_part_one(app):
             ).json()
 
             if dc_specs["config"]["type"] == "Table":
-                df = load_deltatable_lite(workflow_id, data_collection_id)
+                df = load_deltatable_lite(workflow_id, data_collection_id, TOKEN=TOKEN)
 
                 partial = df[request["startRow"] : request["endRow"]]
                 return {"rowData": partial.to_dicts(), "rowCount": df.shape[0]}
