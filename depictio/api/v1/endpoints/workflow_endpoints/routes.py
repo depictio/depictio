@@ -107,8 +107,8 @@ async def get_workflow_from_id(workflow_id: str, current_user: str = Depends(get
     query = {
         "_id": ObjectId(workflow_id),
         "$or": [
-            {"permissions.owners.id": user_id},
-            {"permissions.viewers.id": user_id},
+            {"permissions.owners._id": user_id},
+            {"permissions.viewers._id": user_id},
         ],
     }
     logger.info(f"query: {query}")
@@ -147,7 +147,7 @@ async def create_workflow(workflow: dict, current_user: str = Depends(get_curren
         {
             "workflow_tag": workflow["workflow_tag"],
             # "workflow_tag": workflow.workflow_tag,
-            "permissions.owners.id": current_user.id,
+            "permissions.owners._id": current_user.id,
         }
     )
     logger.info(f"existing_workflow: {existing_workflow}")
@@ -222,7 +222,7 @@ async def update_workflow(workflow: Workflow, current_user: str = Depends(get_cu
     existing_workflow = workflows_collection.find_one(
         {
             "workflow_tag": workflow.workflow_tag,
-            "permissions.owners.id": current_user.id,
+            "permissions.owners._id": current_user.id,
         }
     )
 
