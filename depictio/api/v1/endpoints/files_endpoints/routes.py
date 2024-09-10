@@ -62,7 +62,7 @@ async def list_registered_files(workflow_id: str, data_collection_id: str, curre
     # Construct the query
     query = {
         "_id": workflow_oid,
-        "permissions.owners.id": user_oid,
+        "permissions.owners._id": user_oid,
         "data_collections._id": data_collection_oid,
     }
     logger.info(query)
@@ -276,7 +276,7 @@ async def delete_files(
     # Construct the query
     query = {
         "_id": workflow_oid,
-        "permissions.owners.id": user_oid,
+        "permissions.owners._id": user_oid,
         "data_collections._id": data_collection_oid,
     }
     logger.info(query)
