@@ -7,7 +7,7 @@ import polars as pl
 
 from depictio.api.v1.configs.config import settings, logger
 from depictio.api.v1.db import workflows_collection, files_collection, users_collection, deltatables_collection
-from depictio.api.v1.endpoints.deltatables_endpoints.utils import precompute_columns_specs, read_table_for_DC_table
+from depictio.api.v1.endpoints.deltatables_endpoints.utils import get_s3_object_size, precompute_columns_specs, read_table_for_DC_table
 from depictio.api.v1.s3 import minio_storage_options
 from depictio.api.v1.endpoints.deltatables_endpoints.models import Aggregation, DeltaTableAggregated
 from depictio.api.v1.endpoints.files_endpoints.models import File
@@ -139,8 +139,8 @@ async def aggregate_data(
     assert dc_config.type == "Table", "Data collection type must be Table"
     dc_config = convert_objectid_to_str(dc_config.mongo())
 
-    logger.info(f"Data Collection Config: {dc_config}")
-    logger.info(f"Data Collection ID: {data_collection_oid}")
+    logger.debug(f"Data Collection Config: {dc_config}")
+    logger.debug(f"Data Collection ID: {data_collection_oid}")
 
     # Using the config, find files associated with the data collection
     files = list(
@@ -151,7 +151,7 @@ async def aggregate_data(
         )
     )
 
-    logger.info(f"Len of Files: {len(files)}")
+    logger.debug(f"Len of Files: {len(files)}")
 
     # Assert that files is a list and not empty
     assert isinstance(files, list)
@@ -197,7 +197,7 @@ async def aggregate_data(
             detail=f"No files found for data_collection: {data_collection_id} of workflow: {workflow_id}.",
         )
 
-    logger.info(f"data_frames : {data_frames}")
+    logger.debug(f"data_frames : {data_frames}")
 
     # Aggregate the dataframes
     aggregated_df = pl.concat(data_frames)
@@ -206,8 +206,7 @@ async def aggregate_data(
     # Add timestamp column
     aggregated_df = aggregated_df.with_columns(depictio_aggregation_time=pl.lit(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
 
-    logger.info("aggregated_df")
-    logger.info(aggregated_df)
+    logger.debug(f"aggregated_df : {aggregated_df}")
 
     aggregated_df.write_delta(destination_file_name, mode="overwrite", storage_options=minio_storage_options, delta_write_options={"schema_mode": "overwrite"})
 
@@ -217,7 +216,18 @@ async def aggregate_data(
     results = precompute_columns_specs(aggregated_df, agg_functions)
 
     # Compute the hash of the aggregated data using the filename, time, and size
-    filesize = os.path.getsize(destination_file_name)
+    # filesize = os.path.getsize(destination_file_name)
+
+    # Retrieve the bucket name from settings
+    bucket_name = settings.minio.bucket
+
+    # Get the size of the object in the bucket
+    try:
+        filesize = get_s3_object_size(bucket_name, destination_file_name)
+        logger.info(f"Size of the object '{destination_file_name}' in bucket '{bucket_name}' is {filesize} bytes.")
+    except HTTPException as e:
+        logger.error(f"Failed to get the size of the object: {str(e)}")
+
     hash_str = f"{destination_file_name}{datetime.now()}{filesize}"
     hash_str = hash_str.encode("utf-8")
     hash_str = hashlib.sha256(hash_str).hexdigest()
@@ -234,11 +244,10 @@ async def aggregate_data(
         )
     )
 
-    logger.info("DeltaTableAggregated")
-    logger.info(deltatable)
+    logger.debug(f"DeltaTableAggregated : {deltatable}")
 
     if query_dt:
-        logger.info("Updating existing DeltaTableAggregated")
+        logger.warn("Updating existing DeltaTableAggregated")
         deltatables_collection.update_one(
             {"data_collection_id": data_collection_oid},
             {
@@ -250,7 +259,7 @@ async def aggregate_data(
         )
     else:
         logger.info("Inserting new DeltaTableAggregated")
-        logger.info(serialize_for_mongo(deltatable))
+        logger.debug(serialize_for_mongo(deltatable))
         deltatables_collection.insert_one(serialize_for_mongo(deltatable))
 
     return {
