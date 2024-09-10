@@ -60,6 +60,15 @@ def build_figure(**kwargs):
     df = kwargs.get("df", pl.DataFrame())
     TOKEN = kwargs.get("access_token")
 
+    logger.info(f"Building figure with index {index}")
+    logger.info(f"Dict kwargs: {dict_kwargs}")
+    logger.info(f"Visu type: {visu_type}")
+    logger.info(f"WF ID: {wf_id}")
+    logger.info(f"DC ID: {dc_id}")
+    logger.info(f"DC config: {dc_config}")
+    logger.info(f"Build frame: {build_frame}")
+    logger.info(f"Dataframe: {df}")
+
 
 
     store_component_data = {
