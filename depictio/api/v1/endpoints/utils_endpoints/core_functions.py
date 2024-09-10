@@ -1,7 +1,7 @@
 from depictio.api.v1.configs.config import logger, settings
 from depictio.api.v1.s3 import s3_client
 from fastapi import HTTPException
-from boto3.exceptions import ClientError
+from botocore.exceptions import ClientError
 
 def create_bucket(current_user):
     """
