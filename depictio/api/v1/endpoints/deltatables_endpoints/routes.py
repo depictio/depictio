@@ -7,7 +7,7 @@ import polars as pl
 
 from depictio.api.v1.configs.config import settings, logger
 from depictio.api.v1.db import workflows_collection, files_collection, users_collection, deltatables_collection
-from depictio.api.v1.endpoints.deltatables_endpoints.utils import get_s3_object_size, precompute_columns_specs, read_table_for_DC_table
+from depictio.api.v1.endpoints.deltatables_endpoints.utils import get_s3_folder_size, precompute_columns_specs, read_table_for_DC_table
 from depictio.api.v1.s3 import minio_storage_options
 from depictio.api.v1.endpoints.deltatables_endpoints.models import Aggregation, DeltaTableAggregated
 from depictio.api.v1.endpoints.files_endpoints.models import File
@@ -223,7 +223,7 @@ async def aggregate_data(
 
     # Get the size of the object in the bucket
     try:
-        filesize = get_s3_object_size(bucket_name, destination_file_name)
+        filesize = get_s3_folder_size(bucket_name, destination_file_name)
         logger.info(f"Size of the object '{destination_file_name}' in bucket '{bucket_name}' is {filesize} bytes.")
     except HTTPException as e:
         logger.error(f"Failed to get the size of the object: {str(e)}")
