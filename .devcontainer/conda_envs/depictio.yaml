@@ -12,7 +12,7 @@ dependencies:
   - bson
   - dash
   - dash-bootstrap-components
-  - dash-mantine-components
+  # - dash-mantine-components
   - fastapi
   - fastparquet
   - httpx

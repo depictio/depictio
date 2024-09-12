@@ -50,11 +50,11 @@ services:
 
 
   depictio_frontend:
-    image: registry.git.embl.de/tweber/depictio/depictio:latest
+    # image: registry.git.embl.de/tweber/depictio/depictio:latest
     # platform: linux/arm64
     # image: depictio:dev
-    # build:
-    #   dockerfile: ../docker-images/Dockerfile_depictio.dockerfile
+    build:
+      dockerfile: ../docker-images/Dockerfile_depictio.dockerfile
     ports:
       - 5080:5080
     volumes:
@@ -74,11 +74,11 @@ services:
 
 
   depictio_backend:
-    image: registry.git.embl.de/tweber/depictio/depictio:latest
+    # image: registry.git.embl.de/tweber/depictio/depictio:latest
     # platform: linux/arm64
     # image: depictio:dev
-    # build:
-    #   dockerfile: ../docker-images/Dockerfile_depictio.dockerfile
+    build:
+      dockerfile: ../docker-images/Dockerfile_depictio.dockerfile
     ports:
       - 8058:8058
     volumes:

@@ -1,7 +1,7 @@
 {
     "name": "depictio devcontainer",
-    "dockerComposeFile": ["../docker-compose.yaml"], // Adjusting the path
-    "service": "depictio_frontend",
+    "dockerComposeFile": "docker-compose.yaml",
+    "service": "app", // devcontainer (additional container in the docker compose)
     "workspaceFolder": "/workspace",
     "extensions": [
         "ms-python.python",
@@ -12,7 +12,8 @@
     "settings": {
         "terminal.integrated.shell.linux": "/bin/bash"
     },
-    "postCreateCommand": "conda env create -f conda_envs/depictio_cli.yaml && ./download_depictio_data.sh",
+    "initializeCommand": "mkdir -p ../depictioDB/ && chmod -R 777 ../depictioDB/ && mkdir -p ../minio_data/ && chmod -R 775 ../minio_data/ && mkdir -p ../depictio/keys/ && chmod -R 775 ../depictio/keys/ && mkdir -p ../depictio/.depictio/ && chmod -R 775 ../depictio/.depictio/", // script to run before the containers are started
+    // "postCreateCommand": "post-create.sh", // script to run after the containers are started
     "forwardPorts": [
         27018,
         3000,
@@ -22,13 +23,21 @@
         9000,
         9001
     ],
-    "remoteUser": "vscode",
+    "remoteUser": "vscode", // user that must be in devcontainer
     "remoteEnv": {
         "MINIO_ROOT_USER": "${localEnv:MINIO_ROOT_USER}",
         "MINIO_ROOT_PASSWORD": "${localEnv:MINIO_ROOT_PASSWORD}",
-        "MINIO_ACCESS_KEY": "${localEnv:MINIO_ACCESS_KEY}",
-        "MINIO_SECRET_KEY": "${localEnv:MINIO_SECRET_KEY}",
         "DEPICTIO_BACKEND_DATA_VOLUME_HOST": "/workspace/depictio-data",
-        "AUTH_TMP_TOKEN": "${localEnv:AUTH_TMP_TOKEN}"
+    },
+    "containerEnv": {
+        "TC_HOST": "host.docker.internal",
+        "DOCKER_HOST": "unix:///var/run/docker.sock",
+        "MINIO_ROOT_USER": "${localEnv:MINIO_ROOT_USER}",
+        "MINIO_ROOT_PASSWORD": "${localEnv:MINIO_ROOT_PASSWORD}",
+        "DEPICTIO_BACKEND_DATA_VOLUME_HOST": "/workspace/depictio-data",
+    },
+    "features": {
+        // details can be found here: https://github.com/devcontainers/features/tree/main/src/docker-outside-of-docker
+        "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {} // docker outside of docker
     }
 }
