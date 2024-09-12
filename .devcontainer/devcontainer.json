@@ -1,7 +1,8 @@
 {
     "name": "depictio devcontainer",
-    "dockerComposeFile": ["../docker-compose.yaml"],
-    "service": "depictio_frontend",
+    "dockerComposeFile": "docker-compose.yaml",
+    "service": "app", // devcontainer (additional container in the docker compose)
+    "workspaceFolder": "/workspace",
     "extensions": [
       "ms-python.python",
       "ms-azuretools.vscode-docker",
@@ -12,7 +13,32 @@
     "settings": {
       "terminal.integrated.shell.linux": "/bin/bash"
     },
-    "preCreateCommand": "./.devcontainer/pre_create_setup.sh",
-    "postCreateCommand": "./.devcontainer/post_create_setup.sh"
-  }
-  
+    "initializeCommand": "mkdir -p ../depictioDB/ && chmod -R 777 ../depictioDB/ && mkdir -p ../minio_data/ && chmod -R 775 ../minio_data/ && mkdir -p ../depictio/keys/ && chmod -R 775 ../depictio/keys/ && mkdir -p ../depictio/.depictio/ && chmod -R 775 ../depictio/.depictio/", // script to run before the containers are started
+    // "postCreateCommand": "post-create.sh", // script to run after the containers are started
+    "forwardPorts": [
+        27018,
+        3000,
+        9010,
+        5080,
+        8058,
+        9000,
+        9001
+    ],
+    "remoteUser": "vscode", // user that must be in devcontainer
+    "remoteEnv": {
+        "MINIO_ROOT_USER": "${localEnv:MINIO_ROOT_USER}",
+        "MINIO_ROOT_PASSWORD": "${localEnv:MINIO_ROOT_PASSWORD}",
+        "DEPICTIO_BACKEND_DATA_VOLUME_HOST": "/workspace/depictio-data",
+    },
+    "containerEnv": {
+        "TC_HOST": "host.docker.internal",
+        "DOCKER_HOST": "unix:///var/run/docker.sock",
+        "MINIO_ROOT_USER": "${localEnv:MINIO_ROOT_USER}",
+        "MINIO_ROOT_PASSWORD": "${localEnv:MINIO_ROOT_PASSWORD}",
+        "DEPICTIO_BACKEND_DATA_VOLUME_HOST": "/workspace/depictio-data",
+    },
+    "features": {
+        // details can be found here: https://github.com/devcontainers/features/tree/main/src/docker-outside-of-docker
+        "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {} // docker outside of docker
+    }
+}
