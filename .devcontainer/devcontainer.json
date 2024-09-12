@@ -4,13 +4,14 @@
     "service": "app", // devcontainer (additional container in the docker compose)
     "workspaceFolder": "/workspace",
     "extensions": [
-        "ms-python.python",
-        "ms-azuretools.vscode-docker",
-        "ms-python.anaconda-extension-pack",
-        "GitHub.copilot"
+      "ms-python.python",
+      "ms-azuretools.vscode-docker",
+      "ms-python.anaconda-extension-pack",
+      "GitHub.copilot"
     ],
+    "forwardPorts": [8058,5080,9001],
     "settings": {
-        "terminal.integrated.shell.linux": "/bin/bash"
+      "terminal.integrated.shell.linux": "/bin/bash"
     },
     "initializeCommand": "mkdir -p ../depictioDB/ && chmod -R 777 ../depictioDB/ && mkdir -p ../minio_data/ && chmod -R 775 ../minio_data/ && mkdir -p ../depictio/keys/ && chmod -R 775 ../depictio/keys/ && mkdir -p ../depictio/.depictio/ && chmod -R 775 ../depictio/.depictio/", // script to run before the containers are started
     // "postCreateCommand": "post-create.sh", // script to run after the containers are started
