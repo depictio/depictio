@@ -33,15 +33,25 @@ RUN micromamba shell init -s bash -p /opt/conda/envs/depictio && \
 # -----------------------------
 USER root
 RUN bash -c 'whoami'
-RUN bash -c '/opt/conda/envs/depictio/bin/playwright install --with-deps'
 
-# -----------------------------
-# Install Additional Tools
-# -----------------------------
-RUN apt-get update && apt-get install -y \
+
+# Ensure /etc/apt/sources.list exists and configure it
+RUN if [ ! -f /etc/apt/sources.list ]; then \
+      echo "deb http://deb.debian.org/debian buster main" > /etc/apt/sources.list; \
+    fi
+
+# Optionally switch to an alternative Debian mirror
+RUN sed -i 's|http://deb.debian.org|http://ftp.us.debian.org|g' /etc/apt/sources.list
+
+# Install dependencies using apt
+RUN apt-get update && apt-get install --fix-missing -y \
     xvfb xauth \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+
+RUN bash -c '/opt/conda/envs/depictio/bin/playwright install --with-deps'
+
 
 USER $MAMBA_USER
 RUN bash -c 'whoami'
