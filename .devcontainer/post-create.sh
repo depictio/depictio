@@ -10,6 +10,12 @@ python -m venv depictio-cli-venv
 depictio-cli-venv/bin/python -m pip install --upgrade pip
 depictio-cli-venv/bin/pip install -e .
 
+# Update hostname referenced in ../depictio/.depictio/default_admin_agent.yaml from localhost to depictio_backend
+sed -i 's/localhost/depictio_backend/g' ../depictio/.depictio/default_admin_agent.yaml
+
+# Display the contents of the updated default_admin_agent.yaml file
+cat ../depictio/.depictio/default_admin_agent.yaml
+
 # Run depictio-cli data setup with configurations
 depictio-cli-venv/bin/depictio-cli data setup \
   --agent-config-path ../depictio/.depictio/default_admin_agent.yaml \

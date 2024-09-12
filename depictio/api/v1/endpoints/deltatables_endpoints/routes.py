@@ -175,7 +175,7 @@ async def aggregate_data(
     # Check if the DeltaTableAggregated exists, if not create a new one, else update the existing one
     logger.info("Checking if deltatable exists")
     if query_dt:
-        logger.warn("DeltaTable exists")
+        logger.warning("DeltaTable exists")
         deltatable = DeltaTableAggregated.from_mongo(query_dt)
     else:
         logger.info("DeltaTable does not exist")
@@ -249,7 +249,7 @@ async def aggregate_data(
     logger.debug(f"DeltaTableAggregated : {deltatable}")
 
     if query_dt:
-        logger.warn("Updating existing DeltaTableAggregated")
+        logger.warning("Updating existing DeltaTableAggregated")
         deltatables_collection.update_one(
             {"data_collection_id": data_collection_oid},
             {

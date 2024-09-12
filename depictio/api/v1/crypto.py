@@ -22,36 +22,40 @@ def generate_keys():
     logger.info(f"Files in the directory: {os.listdir()}")
     # List files in depictio/
     logger.info(f"Files in depictio/: {os.listdir('/app/depictio')}")
-    # List files in os.path.dirname(private_key_path)
-    logger.info(f"Files in {os.path.dirname(private_key_path)}: {os.listdir(os.path.dirname(private_key_path))}")
 
     # Ensure the directory exists and has the correct permissions
     os.makedirs(os.path.dirname(private_key_path), exist_ok=True)
 
+    if not os.path.exists(os.path.dirname(private_key_path)):
+        logger.error(f"Directory {os.path.dirname(private_key_path)} does not exist.")
+    else:
 
-    private_key = rsa.generate_private_key(
-        public_exponent=65537,
-        key_size=2048,
-        backend=default_backend()
-    )
-    public_key = private_key.public_key()
+        # List files in os.path.dirname(private_key_path)
+        logger.info(f"Files in {os.path.dirname(private_key_path)}: {os.listdir(os.path.dirname(private_key_path))}")
 
-    # Save the private key
-    with open(private_key_path, "wb") as f:
-        f.write(private_key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.TraditionalOpenSSL,
-            encryption_algorithm=serialization.NoEncryption()
-        ))
+        private_key = rsa.generate_private_key(
+            public_exponent=65537,
+            key_size=2048,
+            backend=default_backend()
+        )
+        public_key = private_key.public_key()
 
-    # Save the public key
-    with open(public_key_path, "wb") as f:
-        f.write(public_key.public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo
-        ))
+        # Save the private key
+        with open(private_key_path, "wb") as f:
+            f.write(private_key.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.TraditionalOpenSSL,
+                encryption_algorithm=serialization.NoEncryption()
+            ))
 
-    logger.info("Generated new RSA key pair.")
+        # Save the public key
+        with open(public_key_path, "wb") as f:
+            f.write(public_key.public_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo
+            ))
+
+        logger.info("Generated new RSA key pair.")
 
 def run_generate_keys():
     # Check if key files exist, generate if they don't
