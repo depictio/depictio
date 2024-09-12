@@ -234,7 +234,7 @@ async def scan_data_collection(
                         # If the file does not exist, add it to the database
                         files_collection.insert_one(file.mongo())
                     else:
-                        logger.warn(f"File already exists: {file.mongo()['file_location']}")
+                        logger.warning(f"File already exists: {file.mongo()['file_location']}")
                         file = File.from_mongo(existing_file)
 
                     logger.debug(f"File: {file}")

@@ -41,7 +41,7 @@ def register_callbacks_save(app):
     ):
         logger.info(f"URL pathname: {pathname}")
         if not local_store:
-            logger.warn("User not logged in.")
+            logger.warning("User not logged in.")
             return dash.no_update
 
         TOKEN = local_store["access_token"]
@@ -87,9 +87,9 @@ def register_callbacks_save(app):
                     },
                 )
                 if response.status_code == 200:
-                    logger.warn("Dashboard data saved successfully.")
+                    logger.warning("Dashboard data saved successfully.")
                 else:
-                    logger.warn(f"Failed to save dashboard data: {response.json()}")
+                    logger.warning(f"Failed to save dashboard data: {response.json()}")
 
                 # Screenshot the dashboard
                 screenshot_response = httpx.get(
@@ -99,14 +99,14 @@ def register_callbacks_save(app):
                     },
                 )
                 if screenshot_response.status_code == 200:
-                    logger.warn("Dashboard screenshot saved successfully.")
+                    logger.warning("Dashboard screenshot saved successfully.")
                 else:
-                    logger.warn(f"Failed to save dashboard screenshot: {screenshot_response.json()}")
+                    logger.warning(f"Failed to save dashboard screenshot: {screenshot_response.json()}")
 
                 return []
 
             else:
-                logger.warn(f"Failed to fetch dashboard data: {dashboard_data_response.json()}")
+                logger.warning(f"Failed to fetch dashboard data: {dashboard_data_response.json()}")
                 return []
 
         return dash.no_update

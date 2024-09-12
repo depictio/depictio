@@ -13,7 +13,8 @@
     "settings": {
       "terminal.integrated.shell.linux": "/bin/bash"
     },
-    "initializeCommand": "mkdir -p ../depictioDB/ && chmod -R 777 ../depictioDB/ && mkdir -p ../minio_data/ && chmod -R 775 ../minio_data/ && mkdir -p ../depictio/keys/ && chmod -R 775 ../depictio/keys/ && mkdir -p ../depictio/.depictio/ && chmod -R 775 ../depictio/.depictio/", // script to run before the containers are started
+    // "initializeCommand": "init", // script to run before the containers are started
+    "initializeCommand": "mkdir -p ../depictioDB/ && chmod -R 777 ../depictioDB/ && mkdir -p ../minio_data/ && chmod -R 775 ../minio_data/ && mkdir -p ../depictio/keys/ && chmod -R 775 ../depictio/keys/ && mkdir -p ../depictio/.depictio/ && chmod -R 775 ../depictio/.depictio/ && echo DEPICTIO_BACKEND_DATA_VOLUME_HOST='/app/depictio-data' >> .env", // script to run before the containers are started
     // "postCreateCommand": "post-create.sh", // script to run after the containers are started
     "forwardPorts": [
         27018,
@@ -26,15 +27,15 @@
     ],
     "remoteUser": "vscode", // user that must be in devcontainer
     "remoteEnv": {
-        "MINIO_ROOT_USER": "${localEnv:MINIO_ROOT_USER}",
-        "MINIO_ROOT_PASSWORD": "${localEnv:MINIO_ROOT_PASSWORD}",
+        "MINIO_ROOT_USER": "minio",
+        "MINIO_ROOT_PASSWORD": "minio123",
         "DEPICTIO_BACKEND_DATA_VOLUME_HOST": "/workspace/depictio-data",
     },
     "containerEnv": {
         "TC_HOST": "host.docker.internal",
         "DOCKER_HOST": "unix:///var/run/docker.sock",
-        "MINIO_ROOT_USER": "${localEnv:MINIO_ROOT_USER}",
-        "MINIO_ROOT_PASSWORD": "${localEnv:MINIO_ROOT_PASSWORD}",
+        "MINIO_ROOT_USER": "minio",
+        "MINIO_ROOT_PASSWORD": "minio123",
         "DEPICTIO_BACKEND_DATA_VOLUME_HOST": "/workspace/depictio-data",
     },
     "features": {

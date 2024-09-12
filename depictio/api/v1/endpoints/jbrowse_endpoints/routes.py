@@ -101,14 +101,14 @@ def update_jbrowse_config(config_path, new_tracks=[]):
         with open(config_path, "r") as file:
             config = json.load(file)
     except FileNotFoundError:
-        logger.warn(f"Config file {config_path} not found.")
+        logger.warning(f"Config file {config_path} not found.")
 
         # Use default JSON config for JBrowse2
         default_jbrowse_config_path = "/app/data/jbrowse2/config.json"
         config = json.load(open(default_jbrowse_config_path))
 
     except json.JSONDecodeError:
-        logger.warn(f"Error decoding JSON from {config_path}.")
+        logger.warning(f"Error decoding JSON from {config_path}.")
 
     if "tracks" not in config:
         config["tracks"] = []
@@ -167,7 +167,7 @@ def upload_file_to_s3(bucket_name, file_location, s3_key):
     # check if file already exists in S3
     skip_upload = False
     if s3_client.list_objects_v2(Bucket=bucket_name, Prefix=s3_key).get("Contents"):
-        logger.warn(f"File {s3_key} already exists in S3.")
+        logger.warning(f"File {s3_key} already exists in S3.")
         skip_upload = True
 
     if skip_upload is False:

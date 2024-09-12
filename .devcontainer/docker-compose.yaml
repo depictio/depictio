@@ -10,7 +10,8 @@ services:
       - host.docker.internal:host-gateway
 
     volumes:
-      - ..:/workspace:cached
+      # - "/workspace/depictio-data:/workspace/depictio-data"
+      - ..:/workspace
 
     # Overrides default command so things don't shut down after the process ends.
     command: sleep infinity
@@ -83,8 +84,8 @@ services:
       - 8058:8058
     volumes:
       # - "${DEPICTIO_BACKEND_DATA_VOLUME_HOST}:${DEPICTIO_BACKEND_DATA_VOLUME_HOST}"
+      # - "/workspace/depictio-data:/app/depictio-data"
       - ../depictio:/app/depictio
-      - ../data:/app/data
       - ../minio_data:/minio_data
       - ../jbrowse-watcher-plugin/sessions:/jbrowse-watcher-plugin/sessions
       - ../configs:/configs

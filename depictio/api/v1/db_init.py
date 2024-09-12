@@ -25,7 +25,7 @@ def create_admin_user(user_dict=user_dict):
             logger.info("Connected to MongoDB")
             break
         except Exception as e:
-            logger.warn("Waiting for MongoDB to start...")
+            logger.warning("Waiting for MongoDB to start...")
             time.sleep(5)
     else:
         raise Exception("Could not connect to MongoDB")
