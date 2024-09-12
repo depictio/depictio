@@ -24,10 +24,10 @@ services:
 
 
   depictio_frontend:
-    image: registry.git.embl.de/tweber/depictio/depictio:latest
+    # image: registry.git.embl.de/tweber/depictio/depictio:latest
     # image: depictio:dev
-    # build:
-    #   dockerfile: docker-images/Dockerfile_depictio.dockerfile
+    build:
+      dockerfile: docker-images/Dockerfile_depictio.dockerfile
     ports:
       - 5080:5080
     volumes:
@@ -47,7 +47,9 @@ services:
 
 
   depictio_backend:
-    image: registry.git.embl.de/tweber/depictio/depictio:latest
+    # image: registry.git.embl.de/tweber/depictio/depictio:latest
+    build:
+      dockerfile: docker-images/Dockerfile_depictio.dockerfile
     ports:
       - 8058:8058
     volumes:
@@ -66,10 +68,10 @@ services:
 
 
   jbrowse2:
-    image: registry.git.embl.de/tweber/depictio/jbrowse2:latest
+    # image: registry.git.embl.de/tweber/depictio/jbrowse2:latest
     # image: jbrowse2:latest
-    # build:
-    #   dockerfile: docker-images/Dockerfile_jbrowse.dev.240424.dockerfile
+    build:
+      dockerfile: docker-images/Dockerfile_jbrowse.dev.240424.dockerfile
     ports: 
       - 3000:3000
       - 9010:9010
