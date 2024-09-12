@@ -3,19 +3,22 @@
     "dockerComposeFile": "docker-compose.yaml",
     "service": "app", // devcontainer (additional container in the docker compose)
     "workspaceFolder": "/workspace",
-    "extensions": [
-      "ms-python.python",
-      "ms-azuretools.vscode-docker",
-      "ms-python.anaconda-extension-pack",
-      "GitHub.copilot"
-    ],
-    "forwardPorts": [8058,5080,9001],
-    "settings": {
-      "terminal.integrated.shell.linux": "/bin/bash"
+    "customizations": {
+      "vscode": {
+        "extensions": [
+          "ms-python.python",
+          "ms-azuretools.vscode-docker",
+          "ms-python.anaconda-extension-pack",
+          "GitHub.copilot"
+        ],
+        "settings": {
+          "terminal.integrated.shell.linux": "/bin/bash"
+        }
+      }
     },
     // "initializeCommand": "init", // script to run before the containers are started
-    "initializeCommand": "mkdir -p ../depictioDB/ && chmod -R 777 ../depictioDB/ && mkdir -p ../minio_data/ && chmod -R 775 ../minio_data/ && mkdir -p ../depictio/keys/ && chmod -R 775 ../depictio/keys/ && mkdir -p ../depictio/.depictio/ && chmod -R 775 ../depictio/.depictio/ && echo DEPICTIO_BACKEND_DATA_VOLUME_HOST='/app/depictio-data' >> .env", // script to run before the containers are started
-    // "postCreateCommand": "post-create.sh", // script to run after the containers are started
+    "initializeCommand": ".devcontainer/pre_create_setup.sh",
+    "postCreateCommand": "post-create.sh", // script to run after the containers are started
     "forwardPorts": [
         27018,
         3000,
