@@ -22,10 +22,11 @@ def register_callbacks_stepper_part_one(app):
         Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
         Input({"type": "btn-option", "index": MATCH, "value": ALL}, "n_clicks"),
         State({"type": "last-button", "index": MATCH}, "data"),
+        State({"type": "workflow-selection-label", "index": MATCH}, "id"),
         State("local-store", "data"),
         prevent_initial_call=True,
     )
-    def update_step_1(workflow_selection, data_collection_selection, input_btn_values, component_selected, local_store):
+    def update_step_1(workflow_selection, data_collection_selection, input_btn_values, component_selected, id, local_store):
         # Use dcc.Store in store-list to get the latest button clicked using timestamps
 
 
@@ -326,8 +327,10 @@ def register_callbacks_stepper_part_one(app):
         TOKEN = local_store["access_token"]
 
         if workflow_selection is not None and data_collection_selection is not None:
+            logger.info(f"Workflow: {workflow_selection}")
+            logger.info(f"Data collection: {data_collection_selection}")
 
-            workflow_id, data_collection_id = return_mongoid(workflow_tag=workflow_selection, data_collection_tag=data_collection_selection)
+            workflow_id, data_collection_id = return_mongoid(workflow_tag=workflow_selection, data_collection_tag=data_collection_selection, TOKEN=TOKEN)
 
             dc_specs = httpx.get(
                 f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
@@ -337,7 +340,7 @@ def register_callbacks_stepper_part_one(app):
             ).json()
 
             if dc_specs["config"]["type"] == "Table":
-                df = load_deltatable_lite(workflow_id, data_collection_id)
+                df = load_deltatable_lite(workflow_id, data_collection_id, TOKEN=TOKEN)
 
                 partial = df[request["startRow"] : request["endRow"]]
                 return {"rowData": partial.to_dicts(), "rowCount": df.shape[0]}
