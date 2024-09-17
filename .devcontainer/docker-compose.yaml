@@ -83,7 +83,7 @@ services:
       - 8058:8058
     volumes:
       # - "${DEPICTIO_BACKEND_DATA_VOLUME_HOST}:${DEPICTIO_BACKEND_DATA_VOLUME_HOST}"
-      - ../depictio-data:/app/depictio-data
+      - ../depictio-example-data:/app/depictio-example-data
       - ../depictio:/app/depictio
       - ../minio_data:/minio_data
       - ../jbrowse-watcher-plugin/sessions:/jbrowse-watcher-plugin/sessions
