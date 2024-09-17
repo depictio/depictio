@@ -60,7 +60,8 @@ jobs:
         
 
       - name: Set up Environment Variables
-        run: echo "DEPICTIO_BACKEND_EXAMPLE_DATA_VOLUME_HOST=$(pwd)/depictio-example-data" >> .env
+        #run: echo "DEPICTIO_BACKEND_EXAMPLE_DATA_VOLUME_HOST=$(pwd)/depictio-example-data" >> .env
+        run: echo "DEPICTIO_BACKEND_EXAMPLE_DATA_VOLUME_HOST=/home/runner/work/depictio/depictio/depictio-example-data" >> .env
 
 
         
