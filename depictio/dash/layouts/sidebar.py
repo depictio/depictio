@@ -105,7 +105,6 @@ def register_sidebar_callbacks(app):
         if pathname == "/auth":
             return []
 
-
         try:
             response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/utils/status", headers={"Authorization": f"Bearer {local_store['access_token']}"})
             if response.status_code != 200:
@@ -121,11 +120,29 @@ def register_sidebar_callbacks(app):
                 else:
                     server_status_badge = dmc.Col(dmc.Badge("Server offline", variant="outline", color="red", size=14, style={"padding": "5px 5px"}), span="content")
                     return [server_status_badge]
-        
+
         except Exception as e:
             logger.error(f"Error fetching server status: {e}")
             server_status_badge = dmc.Col(dmc.Badge("Server offline", variant="outline", color="red", size=14, style={"padding": "5px 5px"}), span="content")
             return [server_status_badge]
+
+    @app.callback(
+        Output({"type": "sidebar-link", "index": "administration"}, "style"),
+        Input("url", "pathname"),
+        State("local-store", "data"),
+        prevent_initial_call=True,
+    )
+    def show_admin_link(pathname, local_store):
+        if pathname == "/auth":
+            return dash.no_update
+
+        current_user = fetch_user_from_token(local_store["access_token"])
+        if current_user.is_admin:
+            return {"padding": "20px"}
+        else:
+            return {"padding": "20px", "display": "none"}
+
+    # {"padding": "20px", "display": "none"}
 
 
 def render_sidebar(email):
@@ -160,7 +177,7 @@ def render_sidebar(email):
                 label=dmc.Text("Administration", size="lg", style={"fontSize": "16px"}),  # Using dmc.Text to set the font size
                 icon=DashIconify(icon="material-symbols:settings", height=25),
                 href="/admin",
-                style={"padding": "20px"},
+                style={"padding": "20px", "display": "none"},
             ),
         ],
         style={"white-space": "nowrap", "margin-top": "20px", "flexGrow": "1", "overflowY": "auto"},

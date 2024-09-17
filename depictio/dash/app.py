@@ -213,6 +213,16 @@ def handle_authenticated_user(pathname, local_data):
         return create_tokens_management_layout(), header, pathname, local_data
 
     elif pathname == "/admin":
+        # Check if user is admin
+        user = fetch_user_from_token(local_data["access_token"])
+        if not user.is_admin:
+            # Fallback to dashboards if user is not admin
+            content = create_dashboards_management_layout()
+            create_button = return_create_dashboard_button(user.email)
+            header = create_header_with_button("Dashboards", create_button)
+
+            return content, header, "/dashboards", local_data
+
         header = create_default_header("Admin")
         admin = html.Div(id="admin-management-content")
         return admin, header, pathname, local_data
