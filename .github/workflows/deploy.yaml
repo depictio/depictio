@@ -25,7 +25,7 @@ jobs:
           submodules: recursive # Clone with submodules
 
       - name: Clone Example Data Repository
-        run: git clone https://github.com/depictio/depictio-data.git
+        run: rm -rdf depictio-data && git clone https://github.com/depictio/depictio-data.git
 
       - name: Create and Set Permissions for depictioDB
         run: |
