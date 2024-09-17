@@ -8,7 +8,6 @@ services:
     volumes:
       - ./depictioDB:/data/depictioDB
 
-
   minio:
     image: minio/minio:latest
     user: "${UID}:${GID}"  # Run as the specified user (not root)
@@ -22,10 +21,8 @@ services:
       - "9000:9000"
       - "9001:9001"
 
-
   depictio_frontend:
     # image: registry.git.embl.de/tweber/depictio/depictio:latest
-    # image: depictio:dev
     build:
       dockerfile: docker-images/Dockerfile_depictio.dockerfile
     ports:
@@ -42,9 +39,6 @@ services:
       - mongo
       - minio
       - depictio_backend
-      # - redis
-      # - rabbitmq
-
 
   depictio_backend:
     # image: registry.git.embl.de/tweber/depictio/depictio:latest
@@ -53,7 +47,8 @@ services:
     ports:
       - 8058:8058
     volumes:
-      - "${DEPICTIO_BACKEND_DATA_VOLUME_HOST}:${DEPICTIO_BACKEND_DATA_VOLUME_HOST}"
+      - ${DEPICTIO_BACKEND_DATA_VOLUME_HOST}:${DEPICTIO_BACKEND_DATA_VOLUME_HOST}
+      - $PWD/depictio-example-data:/app/depictio-example-data
       - ./depictio:/app/depictio
       - ./data:/app/data
       - ./minio_data:/minio_data
@@ -66,10 +61,8 @@ services:
       - mongo
       - minio
 
-
   jbrowse2:
     # image: registry.git.embl.de/tweber/depictio/jbrowse2:latest
-    # image: jbrowse2:latest
     build:
       dockerfile: docker-images/Dockerfile_jbrowse.dev.240424.dockerfile
     ports: 
@@ -78,48 +71,3 @@ services:
     volumes:
       - "./jbrowse-watcher-plugin:/usr/src/plugin"
       - "./jbrowse-watcher-plugin/sessions:/usr/src/jbrowse/plugin/sessions"
-
-
-  # depictio_nb:
-  #   image: registry.git.embl.de/tweber/depictio/depictio_nb:dev
-  #   # image: depictio_nb:dev
-  #   # build:
-  #   #   dockerfile: docker-images/Dockerfile_depictio_nb_debug.dockerfile
-  #   ports:
-  #     - 8888:8888
-  #   volumes:
-  #     - "${DEPICTIO_BACKEND_DATA_VOLUME_HOST}:${DEPICTIO_BACKEND_DATA_VOLUME_HOST}"
-  #     - ./depictio:/app/depictio
-  #     - ./data:/app/data
-  #     - ./minio_data:/minio_data
-  #     - ./jbrowse-watcher-plugin/sessions:/jbrowse-watcher-plugin/sessions
-  #     - ./dev:/app/dev
-  #     - ./.env:/app/.env
-  #     - ./dev/jup_nb/.jupyter:/app/.jupyter
-  #   depends_on:
-  #     - mongo
-  #     - minio
-  #     - depictio_backend
-  #     # - redis
-  #     # - rabbitmq
-  #   command: ["jupyter", "lab", "--config=/app/.jupyter/jupyter_notebook_config.py"]
-
-
-
-  # redis:
-  #   image: redis:latest
-  #   command: redis-server
-  #   ports:
-  #     - 6379:6379
-
-  # redis-cli-monitor:
-  #   image: redis:latest
-  #   command: redis-cli -h redis monitor
-  #   depends_on:
-  #     - redis
-
-  # rabbitmq:
-  #   image: rabbitmq:3-management
-  #   ports:
-  #     - "5672:5672"
-  #     - "15672:15672"

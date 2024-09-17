@@ -1,6 +1,6 @@
 [submodule "jbrowse-watcher-plugin"]
 	path = jbrowse-watcher-plugin
 	url = https://github.com/weber8thomas/jbrowse-watcher-plugin
-[submodule "depictio-data"]
-	path = depictio-data
-	url = https://github.com/depictio/depictio-data
+[submodule "depictio-example-data"]
+	path = depictio-example-data
+	url = https://github.com/depictio/depictio-example-data
