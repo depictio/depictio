@@ -19,6 +19,8 @@ def fetch_workflows(token):
     response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/workflows/get_all_workflows", headers={"Authorization": f"Bearer {token}"})
     logger.info(f"Response status code: {response.status_code}")
     if response.status_code == 200:
+        logger.info(f"Successfully fetched workflows for current user.") 
+        logger.debug(f"Response: {response.json()}")   
         return response.json()
     else:
         logger.error(f"Failed to fetch workflows for current user.")
