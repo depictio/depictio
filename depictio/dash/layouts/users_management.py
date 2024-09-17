@@ -133,7 +133,7 @@ layout = html.Div(
         dcc.Store(id="modal-open-store", data=True),  # Store to control modal state (open or close)
         dmc.Modal(
             id="auth-modal",
-            opened=True,
+            opened=False,
             centered=True,
             children=EventListener([dmc.Center(id="modal-content")], events=[event], logging=True, id="auth-modal-listener"),
             withCloseButton=False,
@@ -228,10 +228,19 @@ def register_callbacks_users_management(app):
     ):
         button_id = ctx.triggered[0]["prop_id"].split(".")[0]
 
-        # session_data = logout_user()
+        logger.debug(f"Button ID: {button_id}")
+        logger.debug(f"Current state: {current_state}")
+        logger.debug(f"Local data: {local_data}")
+        logger.debug(f"Modal open: {modal_open}")
+        logger.debug(f"Login email: {login_email}")
+        logger.debug(f"Login password: {login_password}")
+        logger.debug(f"Register email: {register_email}")
+        logger.debug(f"Register password: {register_password}")
+        logger.debug(f"Register confirm password: {register_confirm_password}")
 
         # If user is already logged in, do not show the login form
         if local_data and local_data.get("logged_in", False):
+            logger.info("User is already logged in.")
             return False, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
         # If no button was clicked, return the current state
@@ -239,40 +248,44 @@ def register_callbacks_users_management(app):
             return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
         # Handle button clicks
-        # If the register button was clicked, open the register form
         if button_id == "open-register-form":
             logger.info("Opening register form")
             modal_state = "register"
             content = render_register_form()
-            logger.info(f"content: {content}")
-            return modal_open, content, dash.no_update, modal_state, dash.no_update, local_data
-        # If the login button was clicked, open the login form
-        elif button_id == "open-login-form" or not ctx.triggered:
+            return True, content, dash.no_update, modal_state, True, dash.no_update
+
+        elif button_id == "open-login-form":
+            logger.info("Opening login form")
             modal_state = "login"
             content = render_login_form()
-            return modal_open, content, dash.no_update, modal_state, dash.no_update, local_data
-        # If the login button was clicked, validate the login
-        elif button_id == "login-button":
-            feedback_message, modal_open, session_data, local_data = validate_login(login_email, login_password)
-            if not modal_open:
-                content = dash.no_update
-            else:
-                content = render_login_form()
-            return modal_open, content, dmc.Text(feedback_message, color="red" if modal_open else "green"), current_state, modal_open, local_data
-        # If the register button was clicked, handle the registration
-        elif button_id == "register-button":
-            feedback_message, modal_open = handle_registration(register_email, register_password, register_confirm_password)
-            if not modal_open:
-                modal_state = "login"
-                content = render_login_form()
-            else:
-                modal_state = "register"
-                content = render_register_form()
-            return modal_open, content, dmc.Text(feedback_message, color="red" if modal_open else "green"), modal_state, modal_open, local_data
-        # If the logout button was clicked, log the user out
-        # elif button_id == "logout-button":
-        #     modal_open = True
-        #     content = render_login_form()
-        #     return modal_open, content, dash.no_update, current_state, modal_open, session_data
+            return True, content, dash.no_update, modal_state, True, dash.no_update
 
+        elif button_id == "login-button":
+            feedback_message, modal_open_new, session_data, local_data_new = validate_login(login_email, login_password)
+            if not modal_open_new:
+                content = render_login_form()
+            else:
+                content = render_login_form()
+            return modal_open_new, content, dmc.Text(feedback_message, color="red" if modal_open_new else "green"), current_state, modal_open_new, local_data_new
+
+        elif button_id == "register-button":
+            feedback_message, modal_open_new = handle_registration(register_email, register_password, register_confirm_password)
+            
+            logger.debug(f"Feedback message: {feedback_message}")
+            logger.debug(f"Modal open new: {modal_open_new}")
+
+
+            # if not modal_open_new:
+            #     modal_state = "login"
+            #     content = render_login_form()
+            # else:
+            #     modal_state = "register"
+            content = render_register_form()
+            # logger.debug(f"Modal state: {modal_state}")
+            # logger.debug(f"Content: {content}")
+
+            return True, content, dmc.Text(feedback_message, color="red" if modal_open_new else "green"), dash.no_update, dash.no_update, dash.no_update
+            # return modal_open_new, content, dmc.Text(feedback_message, color="red" if modal_open_new else "green"), modal_state, modal_open_new, local_data
+
+        logger.warning("No button clicked.")
         return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
