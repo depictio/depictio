@@ -127,10 +127,10 @@ def fetch_user_from_email(email: str, return_tokens: bool = False) -> User:
     else:
         # Find the user in the database and exclude the tokens field
         user = users_collection.find_one({"email": email}, {"tokens": 0})
-    logger.info(f"Fetching user with email: {email} : {user}")
+    logger.debug(f"Fetching user with email: {email} : {user}")
     user = User.from_mongo(user)
-    logger.info("After conversion to User model")
-    logger.info(user)
+    logger.debug("After conversion to User model")
+    logger.debug(user)
 
     if user:
         # user = user.dict()
@@ -140,7 +140,7 @@ def fetch_user_from_email(email: str, return_tokens: bool = False) -> User:
 
 
 def fetch_user_from_token(token: str) -> User:
-    logger.info(f"Fetching user from token {token}")
+    logger.debug(f"Fetching user from token {token}")
     from depictio.api.v1.db import users_collection  # Move import inside the function
 
     if not token:
@@ -152,12 +152,12 @@ def fetch_user_from_token(token: str) -> User:
     if not user:
         return None
 
-    logger.info(f"Fetching user with token: {token} : {user}")
+    logger.debug(f"Fetching user with token: {token} : {user}")
     user = User.from_mongo(user)
-    logger.info("After conversion to User model")
-    logger.info(f"Current access token: {token}")
+    logger.debug("After conversion to User model")
+    logger.debug(f"Current access token: {token}")
     user.current_access_token = token
-    logger.info(user)
+    logger.debug(user)
 
     if user:
         return user
