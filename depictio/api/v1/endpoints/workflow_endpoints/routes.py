@@ -37,6 +37,7 @@ async def get_all_workflows(current_user: str = Depends(get_current_user)):
         "$or": [
             {"permissions.owners._id": user_id},
             {"permissions.viewers._id": user_id},
+            {"permissions.viewers": "*"},  # This makes workflows with "*" publicly accessible
         ]
     }
 
@@ -74,6 +75,7 @@ async def get_workflow_from_args(name: str, engine: str, current_user: str = Dep
         "$or": [
             {"permissions.owners._id": user_id},
             {"permissions.viewers._id": user_id},
+            {"permissions.viewers": "*"},  # This makes workflows with "*" publicly accessible
         ],
     }
 
@@ -109,6 +111,8 @@ async def get_workflow_from_id(workflow_id: str, current_user: str = Depends(get
         "$or": [
             {"permissions.owners._id": user_id},
             {"permissions.viewers._id": user_id},
+            {"permissions.viewers": "*"},  # This makes workflows with "*" publicly accessible
+
         ],
     }
     logger.info(f"query: {query}")
