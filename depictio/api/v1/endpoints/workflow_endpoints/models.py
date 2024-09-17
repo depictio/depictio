@@ -14,10 +14,12 @@ from depictio.api.v1.endpoints.files_endpoints.models import File
 from depictio.api.v1.endpoints.user_endpoints.models import Permission
 from depictio.api.v1.models.base import DirectoryPath, HashModel, MongoModel, PyObjectId
 from depictio.api.v1.endpoints.datacollections_endpoints.models import DataCollection
-
+from depictio.api.v1.configs.logging import logger
 class WorkflowConfig(MongoModel):
     # id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
-    parent_runs_location: List[DirectoryPath]
+    # parent_runs_location: List[DirectoryPath]
+    # FIXME: Change parent_runs_location to a list of DirectoryPath
+    parent_runs_location: List[str]
     workflow_version: Optional[str]
     config: Optional[Dict]
     runs_regex: Optional[str]
@@ -29,11 +31,14 @@ class WorkflowConfig(MongoModel):
             raise ValueError("run_location must be a list")
         for location in value:
             if not os.path.exists(location):
-                raise ValueError(f"The directory '{location}' does not exist.")
+                # raise ValueError(f"The directory '{location}' does not exist.")
+                logger.warning(f"The directory '{location}' does not exist.")
             if not os.path.isdir(location):
-                raise ValueError(f"'{location}' is not a directory.")
+                # raise ValueError(f"'{location}' is not a directory.")
+                logger.warning(f"'{location}' is not a directory.")
             if not os.access(location, os.R_OK):
-                raise ValueError(f"'{location}' is not readable.")
+                # raise ValueError(f"'{location}' is not readable.")
+                logger.warning(f"'{location}' is not readable.")
         return value
 
     @validator("runs_regex")
