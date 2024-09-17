@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Union
 from bson import ObjectId
 from pydantic import (
     BaseModel,
@@ -136,41 +136,42 @@ class Group(BaseModel):
             seen.add(member.id)
         return values
 
-
 class Permission(BaseModel):
-    owners: List[UserBase] = set()  # Set default to empty set
-    viewers: Optional[List[UserBase]] = set()  # Set default to empty set
+    owners: List[UserBase] = []  # Default to an empty list
+    viewers: Optional[List[Union[UserBase, str]]] = []  # Allow string wildcard "*" in viewers
 
     def dict(self, **kwargs):
         # Generate list of owner and viewer dictionaries
         owners_list = [owner.dict(**kwargs) for owner in self.owners]
-        viewers_list = [viewer.dict(**kwargs) for viewer in self.viewers]
+        viewers_list = [viewer.dict(**kwargs) if isinstance(viewer, UserBase) else viewer for viewer in self.viewers]
         return {"owners": owners_list, "viewers": viewers_list}
 
     @validator("owners", "viewers", pre=True, each_item=True)
     def convert_dict_to_user(cls, v):
         if isinstance(v, dict):
-            return UserBase(**v)  # Assuming `User` is a Pydantic model and can be instantiated like this
+            return UserBase(**v)  # Assuming `UserBase` can be instantiated from a dict
+        elif isinstance(v, str) and v == "*":
+            return v  # Allow wildcard "*" for public workflows in viewers
         elif not isinstance(v, UserBase):
-            raise ValueError("Permissions should be assigned to User instances.")
+            raise ValueError("Owners must be UserBase instances, and viewers must be either UserBase or '*'")
         return v
 
     @root_validator(pre=True)
     def validate_permissions(cls, values):
-        owners = values.get("owners", set())
-        viewers = values.get("viewers", set())
+        owners = values.get("owners", [])
+        viewers = values.get("viewers", [])
+        # Uncomment the following line if you want to enforce at least one owner.
         # if not owners:
         #     raise ValueError("At least one owner is required.")
-
         return values
 
     # Here we ensure that there are no duplicate users across owners and viewers
     @root_validator
     def ensure_owners_and_viewers_are_unique(cls, values):
-        owners = values.get("owners", set())
-        viewers = values.get("viewers", set())
+        owners = values.get("owners", [])
+        viewers = values.get("viewers", [])
         owner_ids = {owner.id for owner in owners}
-        viewer_ids = {viewer.id for viewer in viewers}
+        viewer_ids = {viewer.id for viewer in viewers if isinstance(viewer, UserBase)}
 
         if not owner_ids.isdisjoint(viewer_ids):
             raise ValueError("A User cannot be both an owner and a viewer.")
