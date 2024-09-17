@@ -87,6 +87,7 @@ def load_deltatable_lite(workflow_id: ObjectId, data_collection_id: ObjectId, me
             return pl.scan_delta(file_id, storage_options=minio_storage_options).collect().drop("depictio_aggregation_time")
 
     else:
+        logger.error(f"Error loading deltatable for workflow {workflow_id} and data collection {data_collection_id} : {response.json()}")
         raise Exception("Error loading deltatable")
 
 
