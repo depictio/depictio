@@ -145,16 +145,27 @@ def return_create_dashboard_button(email):
 )
 def display_page(pathname, local_data):
     trigger = ctx.triggered_id
-    logger.info(f"Trigger: {trigger}")
-    logger.info(f"Local Data: {local_data}")
-    logger.info(f"URL Pathname: {pathname}")
+    logger.debug(f"Trigger: {trigger}")
+    logger.debug(f"Local Data: {local_data}")
+    logger.debug(f"URL Pathname: {pathname}")
 
     if not local_data or not local_data.get("logged_in") or not check_token_validity(local_data["access_token"]):
+        logger.debug("DISPLAY PAGE - User not logged in")
+        logger.debug("DISPLAY PAGE - Redirect to /auth")
         return handle_unauthenticated_user(pathname)
 
     # Default to /dashboards if pathname is None or "/"
-    if pathname is None or pathname == "/":
+    if pathname is None or pathname == "/" or pathname == "/auth":
+        logger.debug("DISPLAY PAGE - Pathname is None or /")
+        logger.debug("DISPLAY PAGE - Redirect to /dashboards")
         pathname = "/dashboards"
+
+    logger.debug(f"DISPLAY PAGE - Pathname: {pathname}")
+    logger.debug(f"DISPLAY PAGE - Local Data: {local_data}")
+    logger.debug(f"DISPLAY PAGE - Access Token: {local_data['access_token']}")
+    logger.debug(f"DISPLAY PAGE - Logged In: {local_data['logged_in']}")
+    logger.debug(f"DISPLAY PAGE - Check Token Validity: {check_token_validity(local_data['access_token'])}")
+    logger.debug(f"DISPLAY PAGE - HANDLE AUTHENTICATED USER")
 
     # Handle authenticated user logic
     return handle_authenticated_user(pathname, local_data)
