@@ -53,6 +53,7 @@ class WorkflowConfig(MongoModel):
 class WorkflowRun(MongoModel):
     id: Optional[PyObjectId] = None
     # id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
+    workflow_id: PyObjectId
     run_tag: str
     files: List[File] = []
     workflow_config: WorkflowConfig

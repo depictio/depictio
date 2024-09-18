@@ -171,6 +171,13 @@ async def scan_data_collection(
         data_collection_id,
     )
 
+    logger.debug(f"Workflow: {workflow}")
+    logger.debug(f"Data collection: {data_collection}")
+    logger.debug(f"User: {current_user}")
+    logger.debug(f"User OID: {user_oid}")
+    logger.debug(f"Workflow OID: {workflow_oid}")
+    logger.debug(f"Data collection OID: {data_collection_oid}")
+
     user_id = str(current_user.id)
 
     # Retrieve the workflow_config from the workflow
@@ -182,8 +189,10 @@ async def scan_data_collection(
 
     for location in locations:
         logger.debug(f"Scanning location: {location}")
-        runs_and_content = scan_runs(location, workflow.config, data_collection)
+        runs_and_content = scan_runs(location, workflow.config, data_collection, workflow_oid)
         runs_and_content = serialize_for_mongo(runs_and_content)
+        logger.debug(f"Runs and content: {runs_and_content}")
+
 
         # Check if the scan was successful and the result is a list of dictionaries
         if isinstance(runs_and_content, list) and all(isinstance(item, dict) for item in runs_and_content):
@@ -196,8 +205,12 @@ async def scan_data_collection(
                 # Insert the run into runs_collection and retrieve its id
 
                 run = WorkflowRun(**run)
+                logger.info(f"Run: {run}")
+                logger.info(f"Run.mongo: {run.mongo()}")
+                logger.info(f"type(run.mongo()): {type(run.mongo())}")
+                logger.info(f"Run.mongo['workflow_id']: {run.mongo()['workflow_id']}")
 
-                existing_run = runs_collection.find_one({"run_tag": run.mongo()["run_tag"]})
+                existing_run = runs_collection.find_one({"run_tag": run.mongo()["run_tag"], "workflow_id": run.mongo()["workflow_id"]})
                 if existing_run:
                     logger.info(f"Run already exists: {existing_run}")
                     run_id = existing_run["_id"]
@@ -209,12 +222,11 @@ async def scan_data_collection(
                     run_id = inserted_run.inserted_id
 
                 # Add run_id to each file before inserting
-                for file in sorted(files, key=lambda x: x["file_location"]):
+                for file in sorted(files, key=lambda x: x["file_location"])[:1]:
                     file["permissions"] = {
                         "owners": [{"id": user_oid, "email": current_user.email, "groups": current_user.groups, "is_admin": current_user.is_admin}],
                         "viewers": [],
                     }
-
 
                     # logger.info(data_collection.config.type)
 
@@ -225,9 +237,19 @@ async def scan_data_collection(
                     # Check if the file already exists in the database
 
                     # Assuming user_oid is the ObjectId of the current user
-                    existing_file = files_collection.find_one({"file_location": file["file_location"], "permissions.owners": {"$elemMatch": {"id": ObjectId(user_oid)}}})
+
+                    existing_file_query = {
+                        "file_location": file["file_location"],
+                        "data_collection.id": data_collection_oid,
+                        "permissions.owners": {"$elemMatch": {"id": ObjectId(user_oid)}},
+                    }
+
+                    existing_file = files_collection.find_one(existing_file_query)
 
                     file = File(**file)
+
+                    logger.debug(f"Existing file query: {existing_file_query}")
+                    logger.debug(f"Existing file: {existing_file}")
 
                     if not existing_file:
                         file.id = ObjectId()
@@ -239,7 +261,6 @@ async def scan_data_collection(
 
                     logger.debug(f"File: {file}")
 
-
         return {"message": f"Files successfully scanned and created for data_collection: {data_collection.id} of workflow: {workflow.id}"}
     else:
         return {"Warning: runs_and_content is not a list of dictionaries."}
@@ -249,7 +270,7 @@ async def scan_data_collection(
 async def delete_files(
     workflow_id: str,
     data_collection_id: str,
-    current_user= Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
     """
     Delete all files from GridFS.
