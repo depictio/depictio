@@ -63,18 +63,24 @@ def scan_files(run_location: str, run_id: str, data_collection: DataCollection) 
 
     file_list = list()
 
+    logger.debug(f"Data Collection: {data_collection}")
+    logger.debug(f"Regex Pattern: {data_collection.config.regex.pattern}")
+    logger.debug(f"Wildcards: {data_collection.config.regex.wildcards}")    
+
     # Construct the full regex using the wildcards defined in the config
+    full_regex = None
     if data_collection.config.regex.wildcards:
         full_regex = construct_full_regex(data_collection.config.regex.pattern, data_collection.config.regex)
     else:
         full_regex = data_collection.config.regex.pattern
 
+    logger.debug(f"Full Regex: {full_regex}")
+
+
     # Scan the files
     for root, dirs, files in os.walk(run_location):
         for file in files:
-            logger.debug(f"Root: {root}, File: {file}, Full Regex: {full_regex}, Data Collection: {data_collection}")
             match, result = regex_match(root, file, full_regex, data_collection)
-            logger.debug(f"Match: {match}, Result: {result}")
             if match:
                 file_location = os.path.join(root, file)
                 filename = file
@@ -97,6 +103,8 @@ def scan_files(run_location: str, run_id: str, data_collection: DataCollection) 
                     data_collection=data_collection,
                     run_id=run_id,
                 )
+                logger.debug(f"File Instance: {file_instance}")
+
                 if data_collection.config.regex.wildcards and data_collection.config.type == "JBrowse2":
                     wildcards_list = list()
                     for j, wildcard in enumerate(data_collection.config.regex.wildcards, start=1):
@@ -104,6 +112,8 @@ def scan_files(run_location: str, run_id: str, data_collection: DataCollection) 
                     file_instance.wildcards = wildcards_list
 
                 file_list.append(file_instance)
+
+
     logger.debug(f"File List: {file_list}")
     return file_list
 
@@ -112,6 +122,7 @@ def scan_runs(
     parent_runs_location,
     workflow_config: WorkflowConfig,
     data_collection: DataCollection,
+    workflow_id: str,
 ) -> List[WorkflowRun]:
     """
     Scan the runs for a given workflow.
@@ -132,6 +143,7 @@ def scan_runs(
                 execution_time = datetime.fromtimestamp(os.path.getctime(run_location))
 
                 workflow_run = WorkflowRun(
+                    workflow_id=workflow_id,
                     run_tag=run,
                     files=files,
                     workflow_config=workflow_config,
@@ -167,6 +179,7 @@ def populate_database(config_path: str, workflow_id: str, data_collection_id: st
         parent_runs_location=workflow.config.parent_runs_location,
         workflow_config=workflow.config,
         data_collection=data_collection,
+        workflow_id=workflow_id,
     )
 
     return runs_and_content
