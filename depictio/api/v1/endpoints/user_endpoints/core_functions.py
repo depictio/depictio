@@ -6,14 +6,22 @@ from depictio.api.v1.models.base import convert_objectid_to_str
 
 
 def generate_agent_config(current_user, request):
-    logger.info(f"Current user: {current_user}")
+    logger.debug(f"Current user type: {type(current_user)}")
+    logger.debug(f"Current user: {current_user}")
+    logger.debug(f"Request: {request}")
 
-    logger.info(f"Current user: {current_user}")
+
+    # convert to dict if it is a User object
+    if isinstance(current_user, User):
+        current_user = current_user.dict()
+    
+
     current_userbase = UserBase(
-        **current_user.dict()
+        **current_user
         # **current_user.dict(exclude={"tokens", "is_active", "is_verified", "last_login", "registration_date", "password", "current_access_token"})
     )
-    logger.info(f"Current user base: {current_userbase}")
+
+    logger.debug(f"Current user base: {current_userbase}")
     current_userbase = convert_objectid_to_str(current_userbase.dict())
 
     # Keep only email and is_admin fields from user
