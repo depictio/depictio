@@ -155,7 +155,7 @@ def add_token(token_data: dict) -> dict:
     return token
 
 
-def delete_token(email, token_id):
+def delete_token(email, token_id, current_token):
     logger.info(f"Deleting token for user {email}.")
     user = find_user(email)
     user = convert_objectid_to_str(user.dict())
@@ -163,7 +163,7 @@ def delete_token(email, token_id):
     if user:
         logger.info(f"Deleting token for user {email}.")
         request_body = {"user": user, "token_id": token_id}
-        response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/auth/delete_token", json=request_body)
+        response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/auth/delete_token", json=request_body, headers={"Authorization": f"Bearer {current_token}"})
         if response.status_code == 200:
             logger.info(f"Token deleted for user {email}.")
         else:
