@@ -182,7 +182,7 @@ def register_tokens_management_callbacks(app):
             if delete_token_id in [str(t["id"]) for t in tokens]:
                 # del tokens[token_to_delete]
                 # token_to_delete = None
-                delete_token(user.email, delete_token_id)
+                delete_token(user.email, delete_token_id, local_store["access_token"])
                 tokens = [e for e in tokens if str(e["id"]) != delete_token_id]
 
             return False, False, render_tokens_list(tokens), False, "", {}, ""

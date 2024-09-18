@@ -309,6 +309,6 @@ def generate_agent_config_endpoint(request: dict, current_user=Depends(get_curre
     if not current_user:
         raise HTTPException(status_code=401, detail="Current user not found.")
 
-    depictio_agent_config = generate_agent_config(request, current_user)
+    depictio_agent_config = generate_agent_config(current_user=current_user, request=request)
 
     return depictio_agent_config
