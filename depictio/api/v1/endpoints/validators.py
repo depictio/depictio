@@ -4,9 +4,10 @@ from depictio.api.v1.endpoints.datacollections_endpoints.models import DataColle
 
 from depictio.api.v1.endpoints.workflow_endpoints.models import Workflow
 from depictio.api.v1.models.base import convert_objectid_to_str
+from depictio.api.v1.configs.logging import logger
 
 
-def validate_workflow_and_collection(collection, user_id: str, workflow_id: str, data_collection_id: str = None):
+def validate_workflow_and_collection(collection, user_id: str, workflow_id: str, data_collection_id: str = None, permissions: dict = None):
     """
     Validates the existence of a workflow and a specific data collection within it.
     Raises HTTPException if the validation fails.
@@ -25,13 +26,18 @@ def validate_workflow_and_collection(collection, user_id: str, workflow_id: str,
     #     {"_id": workflow_oid, "permissions.owners._id": user_oid},
     # )
 
+    if not permissions:
+        permissions = {
+            "$or": [
+                {"permissions.owners._id": user_id},
+                {"permissions.viewers._id": user_id},
+                {"permissions.viewers": "*"},  # This makes workflows with "*" publicly accessible
+            ],
+        }
+
     query = {
         "_id": ObjectId(workflow_id),
-        "$or": [
-            {"permissions.owners._id": user_id},
-            {"permissions.viewers._id": user_id},
-            {"permissions.viewers": "*"},  # This makes workflows with "*" publicly accessible
-        ],
+        **permissions,
     }
 
     workflow = collection.find_one(query)
@@ -54,25 +60,47 @@ def validate_workflow_and_collection(collection, user_id: str, workflow_id: str,
     # Extract the correct data collection from the workflow's data_collections
     dc_query = {
         "_id": ObjectId(workflow_id),
-        "$or": [
-            {"permissions.owners._id": user_id},
-            {"permissions.viewers._id": user_id},
-            {"permissions.viewers": "*"},  # This makes workflows with "*" publicly accessible
-        ],
-        "data_collections": {"$elemMatch": {"_id": data_collection_oid}},
+        # "$or": [
+        #     {"permissions.owners._id": user_id},
+        #     # {"permissions.viewers._id": user_id},
+        #     # {"permissions.viewers": "*"},  # This makes workflows with "*" publicly accessible
+        # ],
+        "data_collections._id": data_collection_oid,  # Directly match the _id inside data_collections
     }
 
-    data_collection = collection.find_one(dc_query)
-    data_collection = data_collection.get("data_collections")[0]
+    logger.info(f"Data collection query: {dc_query}")
+    logger.info(f"Data collection id: {data_collection_id}")
+    logger.info(f"Workflow id: {workflow_id}")
+    logger.info(f"User id: {user_id}")
+    logger.info(f"Data collection oid: {data_collection_oid}")
+    logger.info(f"Workflow oid: {workflow_oid}")
 
-    data_collection = convert_objectid_to_str(data_collection)
-    data_collection = DataCollection(**data_collection)
+    # Using positional operator to return only the matching data collection from the array
+    workflow_dc = collection.find_one(dc_query, {"data_collections.$": 1})
 
-    # Check if the data collection exists
-    if not data_collection:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Data collection with id {data_collection_id} not found in the workflow.",
-        )
+    if workflow_dc:
+        logger.info(f"workflow_dc: {workflow_dc}")
+
+        data_collection = workflow_dc.get("data_collections", [])[0]  # The matched data collection
+        logger.info(f"Data collection: {data_collection}")
+
+        # data_collection = collection.find_one(dc_query)
+        logger.info(f"Data collection: {data_collection}")
+        # data_collection = data_collection.get("data_collections")[0]
+        logger.info(f"Data collection: {data_collection}")
+
+        data_collection = convert_objectid_to_str(data_collection)
+        data_collection = DataCollection(**data_collection)
+
+        # Check if the data collection exists
+        if not data_collection:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Data collection with id {data_collection_id} not found in the workflow.",
+            )
+
+    else:
+        logger.error(f"No matching workflow found for workflow_id: {workflow_id} and data_collection_oid: {data_collection_oid}")
+        data_collection = None
 
     return workflow_oid, data_collection_oid, workflow, data_collection, user_oid
