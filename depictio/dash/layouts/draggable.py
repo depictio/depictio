@@ -302,7 +302,8 @@ def register_callbacks_draggable(app):
             logger.info(f"Updated draggable layouts: {draggable_layouts}")
             state_stored_draggable_children[dashboard_id] = draggable_children
             state_stored_draggable_layouts[dashboard_id] = draggable_layouts
-            return draggable_children, draggable_layouts, state_stored_draggable_children, state_stored_draggable_layouts
+            return draggable_children, draggable_layouts, dash.no_update, dash.no_update
+            # return draggable_children, draggable_layouts, state_stored_draggable_children, state_stored_draggable_layouts
         #     else:
         #         return dash.no_update, dash.no_update, dash.no_update, dash.no_update
         # # elif triggered_input == "draggable":
@@ -318,7 +319,8 @@ def register_callbacks_draggable(app):
                 state_stored_draggable_children[dashboard_id] = draggable_children
                 state_stored_draggable_layouts[dashboard_id] = new_layouts
 
-                return draggable_children, new_layouts, state_stored_draggable_children, state_stored_draggable_layouts
+                return draggable_children, new_layouts, dash.no_update, dash.no_update
+                # return draggable_children, new_layouts, state_stored_draggable_children, state_stored_draggable_layouts
             else:
                 return dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
@@ -329,7 +331,8 @@ def register_callbacks_draggable(app):
             new_children = update_interactive_component(stored_metadata, interactive_components_dict, draggable_children, switch_state=edit_dashboard_mode_button, TOKEN=TOKEN, dashboard_id=dashboard_id)
             state_stored_draggable_children[dashboard_id] = new_children
 
-            return new_children, dash.no_update, state_stored_draggable_children, dash.no_update
+            return new_children, dash.no_update, dash.no_update, dash.no_update
+            # return new_children, dash.no_update, state_stored_draggable_children, dash.no_update
 
         elif "edit-dashboard-mode-button" in triggered_input:
             logger.info(f"Edit dashboard mode button triggered: {edit_dashboard_mode_button}")
@@ -341,22 +344,23 @@ def register_callbacks_draggable(app):
                 new_children.append(child)
                 state_stored_draggable_children[dashboard_id] = new_children
 
-            return new_children, dash.no_update, state_stored_draggable_children, dash.no_update
+            return new_children, dash.no_update, dash.no_update, dash.no_update
+            # return new_children, dash.no_update, state_stored_draggable_children, dash.no_update
 
-        elif triggered_input == "stored-draggable-children":
-            if state_stored_draggable_layouts and state_stored_draggable_children:
-                if dashboard_id in state_stored_draggable_children:
-                    return (
-                        state_stored_draggable_children[dashboard_id],
-                        state_stored_draggable_layouts[dashboard_id],
-                        state_stored_draggable_children,
-                        state_stored_draggable_layouts,
-                    )
-                else:
-                    return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+        # elif triggered_input == "stored-draggable-children":
+        #     if state_stored_draggable_layouts and state_stored_draggable_children:
+        #         if dashboard_id in state_stored_draggable_children:
+        #             return (
+        #                 state_stored_draggable_children[dashboard_id],
+        #                 state_stored_draggable_layouts[dashboard_id],
+        #                 state_stored_draggable_children,
+        #                 state_stored_draggable_layouts,
+        #             )
+        #         else:
+        #             return dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
-            else:
-                return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+        #     else:
+        #         return dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
         elif triggered_input == "remove-box-button":
             logger.info("Remove box button clicked")
@@ -372,11 +376,13 @@ def register_callbacks_draggable(app):
 
             # logger.info("Updated draggable children: {}".format(updated_children))
 
-            return updated_children, draggable_layouts, state_stored_draggable_children, state_stored_draggable_layouts
+            return updated_children, draggable_layouts, dash.no_update, dash.no_update
+            # return updated_children, draggable_layouts, state_stored_draggable_children, state_stored_draggable_layouts
 
         elif triggered_input == "remove-all-components-button":
             logger.info("Remove all components button clicked")
-            return [], {}, {}, {}
+            return [], {}, dash.no_update, dash.no_update
+            # return [], {}, {}, {}
 
         else:
             return dash.no_update, dash.no_update, dash.no_update, dash.no_update

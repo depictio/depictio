@@ -1,5 +1,7 @@
 from dash import dcc, html
 import dash_bootstrap_components as dbc
+import dash_mantine_components as dmc
+from dash_iconify import DashIconify
 import inspect
 import plotly.express as px
 import re
@@ -39,14 +41,21 @@ def build_figure_frame(index, children=None):
             },
         )
 
+
 def render_figure(dict_kwargs, visu_type, df):
     if dict_kwargs and visu_type.lower() in plotly_vizu_dict and df is not None:
-        figure = plotly_vizu_dict[visu_type.lower()](df, **dict_kwargs)
+        # if visu_type.lower() == "scatter":
+        #     dict_kwargs["render_mode"] = "webgl"
+        if df.shape[0] > 1000:
+            figure = plotly_vizu_dict[visu_type.lower()](df.sample(1000), **dict_kwargs)
+        else:
+            figure = plotly_vizu_dict[visu_type.lower()](df, **dict_kwargs)
         return figure
     else:
         # return empty figure
         # raise ValueError("Error in render_figure")
         return px.scatter()
+
 
 def build_figure(**kwargs):
     index = kwargs.get("index")
@@ -57,6 +66,7 @@ def build_figure(**kwargs):
     dc_config = kwargs.get("dc_config")
     build_frame = kwargs.get("build_frame", False)
     import polars as pl
+
     df = kwargs.get("df", pl.DataFrame())
     TOKEN = kwargs.get("access_token")
 
@@ -68,8 +78,6 @@ def build_figure(**kwargs):
     logger.info(f"DC config: {dc_config}")
     logger.info(f"Build frame: {build_frame}")
     logger.info(f"Dataframe: {df}")
-
-
 
     store_component_data = {
         "index": str(index),
@@ -85,6 +93,11 @@ def build_figure(**kwargs):
     # wf_id, dc_id = return_mongoid(workflow_id=wf_id, data_collection_id=dc_id)
     if df.is_empty():
         df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
+
+    style_partial_data_displayed = {"display": "none"}
+    if build_frame:
+        if df.shape[0] > 1000:
+            style_partial_data_displayed = {"display": "block"}
 
     figure = render_figure(dict_kwargs, visu_type, df)
 
@@ -103,6 +116,25 @@ def build_figure(**kwargs):
                     "type": "stored-metadata-component",
                     "index": index,
                 },
+            ),
+            dmc.Tooltip(
+                children=dmc.Badge(
+                    "Partial data displayed",
+                    id={"type": "partial-data-displayed", "index": index},
+                    style=style_partial_data_displayed,
+                    leftSection=DashIconify(
+                        icon="mdi:alert-circle",
+                        width=20,
+                    ),
+                    # sx={"paddingLeft": 0},
+                    size="lg",
+                    radius="xl",
+                    color="orange",
+                    fullWidth=False
+                ),
+                label="Scatter plots are only displayed with a maximum of 1000 points.",
+                position="top",
+                openDelay=500,
             ),
         ]
     )
