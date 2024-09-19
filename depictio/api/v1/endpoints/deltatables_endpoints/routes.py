@@ -51,6 +51,13 @@ async def list_registered_files(
         data_collection_id,
     )
 
+    logger.debug(f"Workflow: {workflow}")
+    logger.debug(f"Data Collection: {data_collection}")
+    logger.debug(f"User: {user_oid}")
+    logger.debug(f"Workflow ID: {workflow_oid}")
+    logger.debug(f"Data Collection ID: {data_collection_oid}")
+    logger.debug(f"Current User: {current_user}")
+
     # Query to find deltatable associated with the data collection
     query = {"data_collection_id": data_collection_oid}
     deltatable_cursor = deltatables_collection.find(query)

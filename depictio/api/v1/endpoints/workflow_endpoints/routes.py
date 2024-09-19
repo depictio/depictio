@@ -1,4 +1,5 @@
 import hashlib
+import json
 from bson import ObjectId
 from fastapi import HTTPException, Depends, APIRouter
 from pymongo import ReturnDocument
@@ -46,14 +47,30 @@ async def get_all_workflows(current_user: str = Depends(get_current_user)):
     logger.info(f"workflows_cursor: {workflows_cursor}")
     if not workflows_cursor or len(workflows_cursor) == 0:
         return []
-    workflows = [Workflow(**convert_objectid_to_str(w)) for w in workflows_cursor]
+    workflows = [convert_objectid_to_str(w) for w in workflows_cursor]
+    logger.info(f"workflows: {workflows}")
+    # workflows = [Workflow(**convert_objectid_to_str(w)) for w in workflows_cursor]
     return workflows
 
 
 @workflows_endpoint_router.get("/get/from_args")
-async def get_workflow_from_args(name: str, engine: str, current_user: str = Depends(get_current_user)):
+async def get_workflow_from_args(name: str, engine: str, permissions: str = None, current_user: str = Depends(get_current_user)):
     logger.info(f"workflow_name: {name}")
     logger.info(f"workflow_engine: {engine}")
+    logger.info(f"permissions: {permissions}")
+
+    # Parse the permissions if provided
+    if permissions:
+        try:
+            logger.info(f"permissions: {permissions}")
+            permissions_request = json.loads(permissions)
+            logger.info(f"permissions_request: {permissions_request}")
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid JSON in permissions")
+    else:
+        permissions_request = None
+
+    logger.info(f"Name: {name}, Engine: {engine}, Permissions: {permissions_request}, User: {current_user}")
 
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
@@ -68,16 +85,45 @@ async def get_workflow_from_args(name: str, engine: str, current_user: str = Dep
     # Assuming the 'current_user' now holds a 'user_id' as an ObjectId after being parsed in 'get_current_user'
     user_id = current_user.id
 
-    # Find workflows where current_user is either an owner or a viewer
-    query = {
+    base_query = {
         "name": name,
         "engine": engine,
+    }
+
+    base_permissions = {
         "$or": [
             {"permissions.owners._id": user_id},
             {"permissions.viewers._id": user_id},
             {"permissions.viewers": "*"},  # This makes workflows with "*" publicly accessible
-        ],
+        ]
     }
+
+    if permissions_request:
+        logger.info(f"permissions_request: {permissions_request}")
+        logger.info(f"type(permissions_request): {type(permissions_request)}")
+        logger.info(f"permissions_request['$or']: {permissions_request['$or']}")
+
+        # turn the user_id into an ObjectId
+        for elem in permissions_request["$or"]:
+            for k, v in elem.items():
+                if k == "permissions.owners._id" or k == "permissions.viewers._id":
+                    permissions_request["$or"][k] = ObjectId(v)
+
+        query = {
+            **base_query,
+            **permissions_request,
+        }
+    else:
+        query = {
+            **base_query,
+            **base_permissions,
+        }
+
+    # Find workflows where current_user is either an owner or a viewer
+    # query = {
+    #     "name": name,
+    #     "engine": engine,
+    # }
 
     # Retrieve the workflows & convert them to Workflow objects to validate the model
     workflows = list(workflows_collection.find(query))
@@ -112,7 +158,6 @@ async def get_workflow_from_id(workflow_id: str, current_user: str = Depends(get
             {"permissions.owners._id": user_id},
             {"permissions.viewers._id": user_id},
             {"permissions.viewers": "*"},  # This makes workflows with "*" publicly accessible
-
         ],
     }
     logger.info(f"query: {query}")
