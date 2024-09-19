@@ -19,8 +19,8 @@ def fetch_workflows(token):
     response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/workflows/get_all_workflows", headers={"Authorization": f"Bearer {token}"})
     logger.info(f"Response status code: {response.status_code}")
     if response.status_code == 200:
-        logger.info(f"Successfully fetched workflows for current user.") 
-        logger.debug(f"Response: {response.json()}")   
+        logger.info(f"Successfully fetched workflows for current user.")
+        logger.debug(f"Response: {response.json()}")
         return response.json()
     else:
         logger.error(f"Failed to fetch workflows for current user.")
@@ -31,8 +31,30 @@ def render_workflows_list(workflows, token):
     if not workflows:
         return html.P("No workflows available.")
 
-    workflow_items = []
+    current_user = fetch_user_from_token(token)
+
+    logger.info(f"Current user: {current_user}")
+    logger.info(f"Workflows: {workflows}")
+    workflows_owner_perspective = [wf for wf in workflows if str(current_user.id) in [str(o["_id"]) for o in wf["permissions"]["owners"]]]
+
+    workflows_owner_perspective = list()
     for wf in workflows:
+        logger.info(f"Workflow: {wf}")
+        owners_ids = [str(o["_id"]) for o in wf["permissions"]["owners"]]
+        logger.info(f"Owners IDs: {owners_ids}")
+        if str(current_user.id) in owners_ids:
+            logger.info(f"User is owner of workflow.")
+            workflows_owner_perspective.append(wf)
+
+    workflows_viewer_perspective = [
+        wf
+        for wf in workflows
+        if str(current_user.id) in wf["permissions"]["viewers"] or "*" in wf["permissions"]["viewers"] and wf["_id"] not in [w["_id"] for w in workflows_owner_perspective]
+    ]
+    logger.info(f"Workflows owner perspective: {workflows_owner_perspective}")
+
+    workflow_items = []
+    for wf in workflows_viewer_perspective:
         # Create data collection items
         data_collection_items = []
 
@@ -224,6 +246,13 @@ def render_workflows_list(workflows, token):
                                                         ],
                                                         spacing="xs",
                                                     ),
+                                                    dmc.Group(
+                                                        [
+                                                            dmc.Text("Viewers:", weight=700, className="label-text"),
+                                                            dmc.Text(str(wf["permissions"]["viewers"]), weight=500),
+                                                        ],
+                                                        spacing="xs",
+                                                    ),
                                                 ],
                                                 className="dataset-details p-3",
                                             ),
@@ -279,4 +308,4 @@ def register_workflows_callbacks(app):
     )
     def update_workflows_list(pathname, local_store):
         workflows = fetch_workflows(local_store["access_token"])
-        return render_workflows_list(workflows, local_store["access_token"])
+        return html.Div([dmc.Title("Workflows owned:"), render_workflows_list(workflows, local_store["access_token"])])
