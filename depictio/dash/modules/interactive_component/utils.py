@@ -83,8 +83,8 @@ def build_interactive(**kwargs):
     )
 
     # Load the delta table & get the specs
-    if not isinstance(df, pl.DataFrame):
-        df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
+    # if not isinstance(df, pl.DataFrame):
+    df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
 
     # Handling different aggregation values
 
@@ -151,7 +151,7 @@ def build_interactive(**kwargs):
         kwargs.update({"value": value})
         # If the number of unique values is less than 30, use the unique values as marks
         if interactive_component_type == "Slider":
-            marks = {str(elem): str(elem) for elem in df[column_name].unique()} if df[column_name].nunique() < 30 else {}
+            marks = {str(elem): str(elem) for elem in df[column_name].unique()} if df[column_name].n_unique() < 30 else {}
             kwargs.update({"marks": marks, "step": None, "included": False})
         interactive_component = func_name(**kwargs)
 
