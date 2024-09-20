@@ -178,11 +178,11 @@ agg_functions = {
         "input_methods": {
             "Slider": {
                 "component": dcc.Slider,
-                "description": "Single value slider",
+                "description": "Single value slider: will return data equal to the selected value",
             },
             "RangeSlider": {
                 "component": dcc.RangeSlider,
-                "description": "Two values slider",
+                "description": "Two values slider: will return data between the two selected values",
             },
         },
     },
@@ -191,11 +191,11 @@ agg_functions = {
         "input_methods": {
             "Slider": {
                 "component": dcc.Slider,
-                "description": "Single value slider",
+                "description": "Single value slider: will return data equal to the selected value",
             },
             "RangeSlider": {
                 "component": dcc.RangeSlider,
-                "description": "Two values slider",
+                "description": "Two values slider: will return data between the two selected values",
             },
         },
     },
@@ -205,7 +205,7 @@ agg_functions = {
         "input_methods": {
             "Checkbox": {
                 "component": dmc.Checkbox,
-                "description": "Checkbox",
+                "description": "Checkbox: True or False",
             },
             "Switch": {
                 "component": dmc.Switch,
@@ -230,19 +230,19 @@ agg_functions = {
         "input_methods": {
             "TextInput": {
                 "component": dmc.TextInput,
-                "description": "Text input box",
+                "description": "Text input: will return corresponding data to the exact text or regular expression",
             },
             "Select": {
                 "component": dmc.Select,
-                "description": "Select",
+                "description": "Select: will return corresponding data to the selected value",
             },
             "MultiSelect": {
                 "component": dmc.MultiSelect,
-                "description": "MultiSelect",
+                "description": "MultiSelect: will return corresponding data to the selected values",
             },
             "SegmentedControl": {
                 "component": dmc.SegmentedControl,
-                "description": "SegmentedControl",
+                "description": "SegmentedControl: will return corresponding data to the selected value",
             },
         },
         "description": "Text or mixed numeric or non-numeric values",
