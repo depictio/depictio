@@ -1,10 +1,12 @@
 # Import necessary libraries
 import collections
 from dash import html, dcc, Input, Output, State, MATCH
+import httpx
 import dash
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 from dash_iconify import DashIconify
+
 from depictio.dash.utils import list_workflows
 from depictio.dash.utils import (
     UNSELECTED_STYLE,
@@ -27,9 +29,7 @@ from depictio.dash.utils import (
 )
 from depictio.api.v1.configs.config import API_BASE_URL
 
-
 def register_callbacks_figure_component(app):
-    # Define the callback to update the specific parameters dropdowns
     @dash.callback(
         [
             Output({"type": "collapse", "index": MATCH}, "children"),
@@ -59,7 +59,7 @@ def register_callbacks_figure_component(app):
 
         if not local_data:
             raise dash.exceptions.PreventUpdate
-        
+
         TOKEN = local_data["access_token"]
         # Retrieve the columns from the selected data collection
         columns_json = get_columns_from_data_collection(workflow, data_collection, TOKEN)
@@ -74,18 +74,17 @@ def register_callbacks_figure_component(app):
         elif value is not None:
             specific_params_options = [{"label": param_name, "value": param_name} for param_name in specific_params[value]]
 
-            specific_params_dropdowns = list()
+            specific_params_dropdowns = []
             for e in specific_params[value]:
                 processed_type_tmp = param_info[value][e]["processed_type"]
                 allowed_types = ["str", "int", "float", "column"]
                 if processed_type_tmp in allowed_types:
                     input_fct = plotly_bootstrap_mapping[processed_type_tmp]
-                    tmp_options = dict()
+                    tmp_options = {}
 
                     if processed_type_tmp == "column":
                         tmp_options = {
                             "options": columns,
-                            # "options": list(df.columns),
                             "value": None,
                             "persistence": True,
                             "id": {
@@ -93,7 +92,7 @@ def register_callbacks_figure_component(app):
                                 "index": edit_button_id["index"],
                             },
                         }
-                    if processed_type_tmp == "str":
+                    elif processed_type_tmp == "str":
                         tmp_options = {
                             "placeholder": e,
                             "type": "text",
@@ -104,7 +103,7 @@ def register_callbacks_figure_component(app):
                             },
                             "value": None,
                         }
-                    if processed_type_tmp in ["int", "float"]:
+                    elif processed_type_tmp in ["int", "float"]:
                         tmp_options = {
                             "placeholder": e,
                             "type": "number",
@@ -115,29 +114,49 @@ def register_callbacks_figure_component(app):
                             },
                             "value": None,
                         }
+
                     input_fct_with_params = input_fct(**tmp_options)
+                    
+                    # Retrieve the description for the tooltip
+                    tooltip_label = param_info[value][e].get("description", "TEST")
+
+                    # Create a Tooltip for the title
+                    title_with_tooltip = dmc.Tooltip(
+                        label=tooltip_label,
+                        # position="left",
+                        multiline=True,
+                        transition="pop",
+                        withArrow=True,
+                        width=600,
+                        openDelay=100,
+                        closeDelay=100,
+                        # transitionDuration=150,
+                        zIndex=1000,
+                        children=e,  # The parameter name
+                    )
+
                     accordion_item = dbc.AccordionItem(
                         [dbc.Row(input_fct_with_params)],
                         className="my-2",
-                        title=e,
+                        title=title_with_tooltip,  # Embed Tooltip in title
                     )
+
                     specific_params_dropdowns.append(accordion_item)
 
-            secondary_common_params_dropdowns = list()
-            primary_common_params_dropdowns = list()
+            # Repeat similar changes for secondary and primary common params
+            secondary_common_params_dropdowns = []
+            primary_common_params_dropdowns = []
             for e in secondary_common_params:
-                # print(e)
                 processed_type_tmp = param_info[value][e]["processed_type"]
-                # allowed_types = ["str", "int", "float", "column", "list"]
                 allowed_types = ["str", "int", "float", "column"]
                 if processed_type_tmp in allowed_types:
                     input_fct = plotly_bootstrap_mapping[processed_type_tmp]
-                    tmp_options = dict()
+
+                    tmp_options = {}
 
                     if processed_type_tmp == "column":
                         tmp_options = {
                             "options": columns,
-                            # "options": list(df.columns),
                             "value": None,
                             "persistence": True,
                             "style": {"width": "100%"},
@@ -146,7 +165,7 @@ def register_callbacks_figure_component(app):
                                 "index": edit_button_id["index"],
                             },
                         }
-                    if processed_type_tmp == "str":
+                    elif processed_type_tmp == "str":
                         tmp_options = {
                             "placeholder": e,
                             "type": "text",
@@ -157,7 +176,7 @@ def register_callbacks_figure_component(app):
                             },
                             "value": None,
                         }
-                    if processed_type_tmp in ["int", "float"]:
+                    elif processed_type_tmp in ["int", "float"]:
                         tmp_options = {
                             "placeholder": e,
                             "type": "number",
@@ -169,33 +188,35 @@ def register_callbacks_figure_component(app):
                             "value": None,
                         }
 
-                    # if processed_type_tmp is "list":
-                    #     tmp_options = {
-                    #         # "options": list(df.columns),
-                    #         # "value": None,
-                    #         "persistence": True,
-                    #         "id": {
-                    #             "type": f"tmp-{e}",
-                    #             "index": edit_button_id["index"],
-                    #         },
-                    #     }
-
                     input_fct_with_params = input_fct(**tmp_options)
 
-                    # input_fct_with_params = dmc.Tooltip(
-                    #     children=[input_fct(**tmp_options)], label="TEST"
-                    # )
+                    # Retrieve the description for the tooltip
+                    tooltip_label = param_info[value][e].get("description", "")
+
+                    # Create a Tooltip for the title
+                    title_with_tooltip = dmc.Tooltip(
+                        label=tooltip_label,
+                        # position="left",
+                        multiline=True,
+                        transition="pop",
+                        withArrow=True,
+                        width=600,
+                        openDelay=100,
+                        closeDelay=100,
+                        # transitionDuration=150,
+                        zIndex=1000,
+                        children=e,  # The parameter name
+                    )
                     accordion_item = dbc.AccordionItem(
                         [dbc.Row(input_fct_with_params, style={"width": "100%"})],
                         className="my-2",
-                        title=e,
+                        title=title_with_tooltip,  # Embed Tooltip in title
                     )
+
                     if e not in base_elements:
                         secondary_common_params_dropdowns.append(accordion_item)
                     else:
                         primary_common_params_dropdowns.append(accordion_item)
-
-            # print(secondary_common_params_dropdowns)
 
             primary_common_params_layout = [
                 dbc.Accordion(
@@ -234,6 +255,7 @@ def register_callbacks_figure_component(app):
                     start_collapsed=True,
                 )
             ]
+
             dynamic_specific_params_layout = [
                 dbc.Accordion(
                     dbc.AccordionItem(
@@ -252,6 +274,7 @@ def register_callbacks_figure_component(app):
                     start_collapsed=True,
                 )
             ]
+
             return [primary_common_params_layout + secondary_common_params_layout + dynamic_specific_params_layout]
         else:
             return html.Div()
@@ -307,26 +330,13 @@ def register_callbacks_figure_component(app):
         # prevent_initial_call=True,
     )
     def get_values_to_generate_kwargs(*args):
-        # print("get_values_to_generate_kwargs")
-        # print(args)
-        # print("\n")
-
         children = args[0]
-        # print(children)
-        # visu_type = args[1]
-        # print(children)
+
         existing_kwargs = args[-1]
-        # print('\n\n\n')
-        # print("existing_kwargs")
-        # print(existing_kwargs)
 
         accordion_primary_common_params_args = dict()
         accordion_secondary_common_params_args = dict()
         specific_params_args = dict()
-        # print(existing_kwargs)
-        # print(children)
-
-        # l[0]["props"]["children"]["props"]["children"][0]["props"]["children"][0]
 
         if children:
             # accordion_secondary_common_params = children[0]["props"]["children"]["props"]["children"]
@@ -334,46 +344,16 @@ def register_callbacks_figure_component(app):
 
             # accordion_secondary_common_params = children[1]["props"]["children"]
             if accordion_primary_common_params:
-                # print("TOTO")
                 accordion_primary_common_params = [param["props"]["children"][0]["props"]["children"] for param in accordion_primary_common_params]
-
                 accordion_primary_common_params_args = {elem["props"]["id"]["type"].replace("tmp-", ""): elem["props"]["value"] for elem in accordion_primary_common_params}
-
-                # print(accordion_primary_common_params_args)
-                # print(accordion_primary_common_params)
-
-                # print(accordion_secondary_common_params)
-                # return accordion_secondary_common_params_args
             accordion_secondary_common_params = children[1]["props"]["children"]["props"]["children"][0]["props"]["children"]
-
-            # accordion_secondary_common_params = children[1]["props"]["children"]
             if accordion_secondary_common_params:
-                # print("TOTO")
                 accordion_secondary_common_params = [param["props"]["children"][0]["props"]["children"] for param in accordion_secondary_common_params]
-
                 accordion_secondary_common_params_args = {elem["props"]["id"]["type"].replace("tmp-", ""): elem["props"]["value"] for elem in accordion_secondary_common_params}
-                # print(accordion_secondary_common_params_args)
-                # if not {
-                #     k: v
-                #     for k, v in accordion_secondary_common_params_args.items()
-                #     if v is not None
-                # }:
-                #     accordion_secondary_common_params_args = {
-                #         **accordion_secondary_common_params_args,
-                #         **existing_kwargs,
-                #     }
-                # print(accordion_secondary_common_params_args)
-                # print(accordion_secondary_common_params)
-                # return accordion_secondary_common_params_args
             specific_params = children[2]["props"]["children"]["props"]["children"][0]["props"]["children"]
-
-            # accordion_secondary_common_params = children[1]["props"]["children"]
             if specific_params:
-                # print("specific_params")
                 specific_params = [param["props"]["children"][0]["props"]["children"] for param in specific_params]
-
                 specific_params_args = {elem["props"]["id"]["type"].replace("tmp-", ""): elem["props"]["value"] for elem in specific_params}
-                # print(specific_params_args)
 
             return_dict = dict(
                 **specific_params_args,
@@ -387,81 +367,16 @@ def register_callbacks_figure_component(app):
                     **return_dict,
                     **existing_kwargs,
                 }
-                # print("BLANK DICT, ROLLBACK TO EXISTING KWARGS")
-                # print(return_dict)
 
             if return_dict:
-                # print("RETURNING DICT")
-                # print(return_dict)
-                # print(accordion_secondary_common_params)
                 return return_dict
             else:
-                # print("EXISTING KWARGS")
                 return existing_kwargs
 
-            # else:
-            #     return existing_kwargs
         else:
             return existing_kwargs
 
-            # accordion_specific_params = args[0][3]
-
-    # @app.callback(
-    #     [
-    #         Output({"type": "figure-body", "index": MATCH}, "children"),
-    #     ],
-    #     [
-    #         Input({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
-    #         State({"type": "workflow-selection-label", "index": MATCH}, "value"),
-    #         State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
-    #         State({"type": "segmented-control-visu-graph", "index": MATCH}, "id"),
-    #     ],
-    #     prevent_initial_call=True,
-    # )
-    # def test(input_segmented_control, workflow_id, data_collection_id, id):
-    #     from depictio.api.v1.configs.logging import logger
-
-    #     logger.info(f"input_segmented_control: {input_segmented_control}")
-    #     logger.info(f"workflow: {workflow_id}")
-    #     logger.info(f"data_collection: {data_collection_id}")
-    #     logger.info(f"id: {id}")
-
-    #     store_component_data = {
-    #         "index": id["index"],
-    #         "component_type": "graph",
-    #         # "dict_kwargs": dict_kwargs,
-    #         "input_segmented_control": input_segmented_control,
-    #         "wf_id": workflow_id,
-    #         "dc_id": data_collection_id,
-    #         # "dc_config": dc_specs["config"],
-    #     }
-
-    #     output_div = dcc.Graph(
-    #                 figure=px.scatter(x=np.random.rand(10), y=np.random.rand(10)),
-    #                 id={"type": "graph", "index": id["index"]},
-    #             )
-
-    #     # html.Div(
-    #     #     [
-    #     #         dcc.Graph(
-    #     #             figure=px.scatter(x=np.random.rand(10), y=np.random.rand(10)),
-    #     #             id={"type": "graph", "index": id["index"]},
-    #     #         ),
-    #     #         dcc.Store(
-    #     #             data=store_component_data,
-    #     #             id={
-    #     #                 "type": "stored-metadata-component",
-    #     #                 "index": id["index"],
-    #     #             },
-    #     #         ),
-    #     #     ]
-    #     # )
-
-    #     return [output_div]
-
     @app.callback(
-        # Output({"type": "graph", "index": MATCH}, "figure"),
-        # Output({"type": "stored-metadata-component", "index": MATCH}, "data"),
         Output({"type": "figure-body", "index": MATCH}, "children"),
         [
             Input({"type": "dict_kwargs", "index": MATCH}, "data"),
@@ -470,18 +385,10 @@ def register_callbacks_figure_component(app):
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
             State({"type": "segmented-control-visu-graph", "index": MATCH}, "id"),
             State("local-store", "data"),
-            # Input({"type": "tmp-x", "index": MATCH}, "value"),
-            # [
-            #     Input({"type": f"tmp-{e}", "index": MATCH}, "children")
-            #     for e in secondary_common_params_lite
-            # ],
-            # Input("interval", "n_intervals"),
         ],
         prevent_initial_call=True,
     )
     def update_figure(*args):
-        # print("\n\n\n")
-        # print("update_figure")
         dict_kwargs = args[0]
 
         visu_type = args[1]
@@ -494,17 +401,11 @@ def register_callbacks_figure_component(app):
             raise dash.exceptions.PreventUpdate
 
         TOKEN = local_data["access_token"]
-        # print(args)
-        # print(id)
-        # print("\n\n\n")
 
         columns_json = get_columns_from_data_collection(workflow, data_collection, TOKEN)
-        # print(columns_json, type(columns_json))
 
         columns_specs_reformatted = collections.defaultdict(list)
         {columns_specs_reformatted[v["type"]].append(k) for k, v in columns_json.items()}
-        # print("columns_specs_reformatted")
-        # print(columns_specs_reformatted)
 
         x_col, color_col, y_col = None, None, None
 
@@ -520,21 +421,8 @@ def register_callbacks_figure_component(app):
         # if dict_kwargs is empty, fill it with default values
         if not dict_kwargs:
             dict_kwargs = {"x": x_col, "y": y_col, "color": color_col}
-            # print(dict_kwargs)
-
-        # print("update figure 2")
-        # print(dict_kwargs)
-        # print(visu_type)
-        # # print(app._callback_list)
-
-        import httpx
-
-        # API_BASE_URL = "http://localhost:8058"
-        # API_BASE_URL = "http://host.docker.internal:8058"
 
         workflows = list_workflows(TOKEN)
-        # print("workflows")
-        # print(workflows)
 
         workflow_id = [e for e in workflows if e["workflow_tag"] == workflow][0]["_id"]
         data_collection_id = [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["data_collection_tag"] == data_collection][0]["_id"]
@@ -554,81 +442,6 @@ def register_callbacks_figure_component(app):
             f"{API_BASE_URL}/depictio/api/v1/workflows/get_join_tables/{workflow_id}",
             headers=headers,
         )
-
-        # if join_tables_for_wf.status_code == 200:
-        #     join_tables_for_wf = join_tables_for_wf.json()
-        #     if data_collection_id in join_tables_for_wf:
-        #         join_details = join_tables_for_wf[data_collection_id]
-        #         dc_specs["config"]["join"] = join_details
-
-        # print("dc_specs")
-        # print(dc_specs)
-        # print(visu_type)
-
-        # # Get the type of the selected column
-        # column_type = cols_json[column_value]["type"]
-
-        # v = cols_json[column_value]["specs"][aggregation_value]
-
-        # try:
-        #     v = round(float(v), 2)
-        # except:
-        #     pass
-
-        # store_component_data = {
-        #     "index": id["index"],
-        #     "component_type": "graph",
-        #     "dict_kwargs": dict_kwargs,
-        #     "visu_type": visu_type,
-        #     "wf_id": workflow_id,
-        #     "dc_id": data_collection_id,
-        #     "dc_config": dc_specs["config"],
-        # }
-        # # print(store_component_data)
-
-        # # print(dict_kwargs)
-        # dict_kwargs = {k: v for k, v in dict_kwargs.items() if v is not None}
-        # wf_id, dc_id = return_mongoid(workflow_tag=workflow, data_collection_tag=data_collection)
-        # df = load_deltatable_lite(wf_id, dc_id)
-
-        # # print("df")
-        # # print(df)
-        # # print("\n\n\n")
-        # # print(dict_kwargs)
-        # if dict_kwargs:
-        #     figure = plotly_vizu_dict[visu_type.lower()](df, **dict_kwargs)
-        #     # figure = px.scatter(df, **dict_kwargs)
-        #     # print(figure)
-        #     # figure.update_layout(uirevision=1)
-        #     # print("TOTO")
-
-        #     # return [figure]
-
-        #     return html.Div(
-        #         [
-        #             dcc.Graph(
-        #                 # figure,
-        #                 figure=figure,
-        #                 id={"type": "graph", "index": id["index"]},
-        #                 config={"editable": True, "scrollZoom": True},
-        #             ),
-        #             # f"TEST-GRAPH-{id['index']}",
-        #             dcc.Store(
-        #                 data=store_component_data,
-        #                 id={
-        #                     "type": "stored-metadata-component",
-        #                     "index": id["index"],
-        #                 },
-        #             ),
-        #         ]
-        #     )
-        # else:
-        #     raise dash.exceptions.PreventUpdate
-        # print("\n")
-
-        # accordion_specific_params = args[0][3]
-        # else:
-        #     return dash.no_update, dash.no_update
 
         if dict_kwargs:
             figure_kwargs = {
@@ -673,56 +486,16 @@ def design_figure(id):
             [
                 dbc.Col(
                     [
-                        # dcc.Store(
-                        #     id={
-                        #         "type": "stored-metadata-component",
-                        #         "index": id["index"],
-                        #     }
-                        # ),
                         html.Div(
                             build_figure_frame(index=id["index"]),
-                            # dbc.Card(
-                            #     dbc.CardBody(
-                            #         id={
-                            #             "type": "figure-body",
-                            #             "index": id["index"],
-                            #         }
-                            #     ),
-                            #     style={"width": "100%"},
-                            #     id={
-                            #         "type": "figure-component",
-                            #         "index": id["index"],
-                            #     },
-                            # ),
                             id={
                                 "type": "component-container",
                                 "index": id["index"],
                             },
-                            # html.Div(
-                            #     children=[
-                            #         dcc.Store(
-                            #             id={
-                            #                 "type": "stored-metadata-component",
-                            #                 "index": id["index"],
-                            #             }
-                            #         ),
-                            #         dcc.Graph(
-                            #             id={"type": "graph", "index": id["index"]},
-                            #             config={"editable": True, "scrollZoom": True},
-                            #         ),
-                            #     ],
-                            #     style={"width": "100%"},
-                            #     id={
-                            #         "type": "graph-component",
-                            #         "index": id["index"],
-                            #     },
-                            # ),
-                            # id={"type": "component-container", "index": id["index"]},
                         ),
                     ],
                     width="auto",
                 ),
-                # dbc.Col(width=0.5),
                 dbc.Col(
                     [
                         html.Br(),
@@ -801,11 +574,6 @@ def create_stepper_figure_button(n, disabled=False):
                 "value": "Figure",
             },
             n_clicks=0,
-            # style={
-            #     "display": "inline-block",
-            #     "width": "250px",
-            #     "height": "100px",
-            # },
             style=UNSELECTED_STYLE,
             size="xl",
             color="grape",
