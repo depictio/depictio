@@ -17,7 +17,7 @@ from depictio.api.v1.configs.config import API_BASE_URL, logger
 from depictio.dash.layouts.draggable_scenarios.interactive_component_update import update_interactive_component
 from depictio.dash.layouts.stepper import create_stepper_output
 from depictio.dash.utils import analyze_structure_and_get_deepest_type
-from depictio.dash.layouts.draggable_scenarios.restore_dashboard import load_depictio_data
+from depictio.dash.layouts.draggable_scenarios.restore_dashboard import load_depictio_data, render_dashboard
 
 
 # Depictio layout imports for stepper
@@ -302,7 +302,7 @@ def register_callbacks_draggable(app):
             logger.info(f"Updated draggable layouts: {draggable_layouts}")
             state_stored_draggable_children[dashboard_id] = draggable_children
             state_stored_draggable_layouts[dashboard_id] = draggable_layouts
-            return draggable_children, draggable_layouts, dash.no_update, dash.no_update
+            return draggable_children, draggable_layouts, dash.no_update, state_stored_draggable_layouts
             # return draggable_children, draggable_layouts, state_stored_draggable_children, state_stored_draggable_layouts
         #     else:
         #         return dash.no_update, dash.no_update, dash.no_update, dash.no_update
@@ -319,7 +319,7 @@ def register_callbacks_draggable(app):
                 state_stored_draggable_children[dashboard_id] = draggable_children
                 state_stored_draggable_layouts[dashboard_id] = new_layouts
 
-                return draggable_children, new_layouts, dash.no_update, dash.no_update
+                return draggable_children, new_layouts, dash.no_update, state_stored_draggable_layouts
                 # return draggable_children, new_layouts, state_stored_draggable_children, state_stored_draggable_layouts
             else:
                 return dash.no_update, dash.no_update, dash.no_update, dash.no_update
@@ -347,20 +347,26 @@ def register_callbacks_draggable(app):
             return new_children, dash.no_update, dash.no_update, dash.no_update
             # return new_children, dash.no_update, state_stored_draggable_children, dash.no_update
 
-        # elif triggered_input == "stored-draggable-children":
-        #     if state_stored_draggable_layouts and state_stored_draggable_children:
-        #         if dashboard_id in state_stored_draggable_children:
-        #             return (
-        #                 state_stored_draggable_children[dashboard_id],
-        #                 state_stored_draggable_layouts[dashboard_id],
-        #                 state_stored_draggable_children,
-        #                 state_stored_draggable_layouts,
-        #             )
-        #         else:
-        #             return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+        elif triggered_input == "stored-draggable-layouts":
+            logger.info("Stored draggable layouts triggered")
+            logger.info("Input draggable layouts: {}".format(input_draggable_layouts))
+            logger.info("State stored draggable layouts: {}".format(state_stored_draggable_layouts))
 
-        #     else:
-        #         return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+            if state_stored_draggable_layouts:
+                if dashboard_id in state_stored_draggable_layouts:
+                    children = render_dashboard(stored_metadata, dashboard_id, TOKEN)
+
+                    return (
+                        children,
+                        state_stored_draggable_layouts[dashboard_id],
+                        dash.no_update,
+                        state_stored_draggable_layouts,
+                    )
+                else:
+                    return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+            else:
+                return dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
         elif triggered_input == "remove-box-button":
             logger.info("Remove box button clicked")
@@ -376,12 +382,13 @@ def register_callbacks_draggable(app):
 
             # logger.info("Updated draggable children: {}".format(updated_children))
 
-            return updated_children, draggable_layouts, dash.no_update, dash.no_update
+            return updated_children, draggable_layouts, dash.no_update, state_stored_draggable_layouts
             # return updated_children, draggable_layouts, state_stored_draggable_children, state_stored_draggable_layouts
 
         elif triggered_input == "remove-all-components-button":
             logger.info("Remove all components button clicked")
-            return [], {}, dash.no_update, dash.no_update
+            state_stored_draggable_layouts[dashboard_id] = {}
+            return [], {}, dash.no_update, state_stored_draggable_layouts
             # return [], {}, {}, {}
 
         else:
