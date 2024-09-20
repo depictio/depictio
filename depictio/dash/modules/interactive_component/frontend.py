@@ -37,7 +37,7 @@ def register_callbacks_interactive_component(app):
         """
         if not local_data:
             return []
-        
+
         TOKEN = local_data["access_token"]
 
         cols_json = get_columns_from_data_collection(wf_tag, dc_tag, TOKEN)
@@ -78,6 +78,7 @@ def register_callbacks_interactive_component(app):
 
     @app.callback(
         Output({"type": "input-body", "index": MATCH}, "children"),
+        Output({"type": "interactive-description", "index": MATCH}, "children"),
         [
             Input({"type": "input-title", "index": MATCH}, "value"),
             Input({"type": "input-dropdown-column", "index": MATCH}, "value"),
@@ -97,17 +98,44 @@ def register_callbacks_interactive_component(app):
 
         if not local_data:
             return []
-        
-        TOKEN = local_data["access_token"]
 
+        TOKEN = local_data["access_token"]
 
         headers = {
             "Authorization": f"Bearer {TOKEN}",
         }
 
-        # If any of the input values is None, return an empty list
+        # Get the columns from the selected data collection
+        cols_json = get_columns_from_data_collection(wf_tag, dc_tag, TOKEN)
+        logger.info(f"cols_json: {cols_json}")
+
+        # If any of the input values are None, return an empty list
         if input_value is None or column_value is None or aggregation_value is None or wf_tag is None or dc_tag is None:
-            return []
+            return ([], None)
+
+        # Get the type of the selected column
+        column_type = cols_json[column_value]["type"]
+
+        interactive_description = html.Div(
+            children=[
+                html.Hr(),
+                dmc.Tooltip(
+                    children=dmc.Badge(
+                        children="Interactive component description", leftSection=DashIconify(icon="mdi:information", color="grey", width=20), color="gray", radius="lg"
+                    ),
+                    label=agg_functions[str(column_type)]["input_methods"][aggregation_value]["description"],
+                    multiline=True,
+                    width=300,
+                    transition="pop",
+                    transitionDuration=300,
+                    position="right",
+                    withArrow=True,
+                    openDelay=500,
+                    closeDelay=500,
+                    color="gray",
+                ),
+            ]
+        )
 
         # Get the type of the selected column, the aggregation method and the function name
         cols_json = get_columns_from_data_collection(wf_tag, dc_tag, TOKEN)
@@ -124,18 +152,6 @@ def register_callbacks_interactive_component(app):
             headers=headers,
         ).json()
 
-        # join_tables_for_wf = httpx.get(
-        #     f"{API_BASE_URL}/depictio/api/v1/datacollections/get_join_tables/{workflow_id}",
-        #     headers=headers,
-        # )
-
-        # # Get the join tables for the selected workflow - used in store for metadata management
-        # if join_tables_for_wf.status_code == 200:
-        #     join_tables_for_wf = join_tables_for_wf.json()
-        #     if data_collection_id in join_tables_for_wf:
-        #         join_details = join_tables_for_wf[data_collection_id]
-        #         dc_specs["config"]["join"] = join_details
-
         interactive_kwargs = {
             "index": id["index"],
             "title": input_value,
@@ -151,7 +167,7 @@ def register_callbacks_interactive_component(app):
         }
         new_interactive_component = build_interactive(**interactive_kwargs)
 
-        return new_interactive_component
+        return new_interactive_component, interactive_description
 
 
 def design_interactive(id, df):
@@ -184,6 +200,12 @@ def design_interactive(id, df):
                                 "index": id["index"],
                             },
                             value=None,
+                        ),
+                        html.Div(
+                            id={
+                                "type": "interactive-description",
+                                "index": id["index"],
+                            },
                         ),
                     ],
                 ),
