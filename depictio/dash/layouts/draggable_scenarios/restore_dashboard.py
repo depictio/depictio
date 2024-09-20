@@ -1,3 +1,5 @@
+import httpx
+from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.dash.layouts.draggable_scenarios.interactive_component_update import update_interactive_component
 from depictio.dash.modules.card_component.utils import build_card
 from depictio.dash.modules.figure_component.utils import build_figure
@@ -30,7 +32,20 @@ def load_depictio_data(dashboard_id, local_data):
         logger.warning("Access token not found.")
         return None
 
-    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    # dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+
+    response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/dashboards/get/{dashboard_id}", headers={"Authorization": f"Bearer {local_data['access_token']}"})
+
+    if response.status_code == 200:
+        dashboard_data = response.json()
+    else:
+        logger.error(f"Failed to fetch dashboard data: Code {response.status_code} - {response.text}")
+        raise ValueError(f"Failed to fetch dashboard data: {response.status_code}")
+        dashboard_data = {
+
+        }
+        return None
+
     logger.info(f"load_depictio_data : {dashboard_data}")
     # logger.info(f"dashboard_data : {dashboard_data}")
 
