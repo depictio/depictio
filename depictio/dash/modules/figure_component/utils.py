@@ -96,7 +96,7 @@ def build_figure(**kwargs):
 
     style_partial_data_displayed = {"display": "none"}
     if build_frame:
-        if df.shape[0] > 1000:
+        if visu_type.lower() == "scatter" and df.shape[0] > 1000:
             style_partial_data_displayed = {"display": "block"}
 
     figure = render_figure(dict_kwargs, visu_type, df)
