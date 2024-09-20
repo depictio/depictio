@@ -8,7 +8,7 @@ import httpx
 # Depictio imports
 from depictio.dash.utils import return_mongoid
 from depictio.api.v1.configs.config import API_BASE_URL
-
+from depictio.api.v1.configs.logging import logger
 from depictio.dash.modules.card_component.utils import (
     agg_functions,
     build_card,
@@ -37,7 +37,7 @@ def register_callbacks_card_component(app):
         """
         if not local_data:
             return []
-        
+
         TOKEN = local_data["access_token"]
 
         # Get the columns from the selected data collection
@@ -69,6 +69,7 @@ def register_callbacks_card_component(app):
     # Callback to update card body based on the selected column and aggregation
     @app.callback(
         Output({"type": "card-body", "index": MATCH}, "children"),
+        Output({"type": "aggregation-description", "index": MATCH}, "children"),
         [
             Input({"type": "card-input", "index": MATCH}, "value"),
             Input({"type": "card-dropdown-column", "index": MATCH}, "value"),
@@ -94,12 +95,35 @@ def register_callbacks_card_component(app):
             "Authorization": f"Bearer {TOKEN}",
         }
 
-        # If any of the input values are None, return an empty list
-        if input_value is None or column_name is None or aggregation_value is None or wf_tag is None or dc_tag is None:
-            return []
-
         # Get the columns from the selected data collection
         cols_json = get_columns_from_data_collection(wf_tag, dc_tag, TOKEN)
+        logger.info(f"cols_json: {cols_json}")
+
+        # If any of the input values are None, return an empty list
+        if input_value is None or column_name is None or aggregation_value is None or wf_tag is None or dc_tag is None:
+            return ([], None)
+
+        # Get the type of the selected column
+        column_type = cols_json[column_name]["type"]
+
+        aggregation_description = html.Div(
+            children=[
+                html.Hr(),
+                dmc.Tooltip(
+                    children=dmc.Badge(children="Aggregation description", leftSection=DashIconify(icon="mdi:information", color="grey", width=20), color="gray", radius="lg"),
+                    label=agg_functions[str(column_type)]["card_methods"][aggregation_value]["description"],
+                    multiline=True,
+                    width=300,
+                    transition="pop",
+                    transitionDuration=300,
+                    position="right",
+                    withArrow=True,
+                    openDelay=500,
+                    closeDelay=500,
+                    color="gray",
+                ),
+            ]
+        )
 
         # Get the workflow and data collection ids from the tags selected
         workflow_id, data_collection_id = return_mongoid(workflow_tag=wf_tag, data_collection_tag=dc_tag, TOKEN=TOKEN)
@@ -109,19 +133,6 @@ def register_callbacks_card_component(app):
             f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
             headers=headers,
         ).json()
-
-        # Get the join tables for the selected workflow - used in store for metadata management
-        # join_tables_for_wf = httpx.get(
-        #     f"{API_BASE_URL}/depictio/api/v1/workflows/get_join_tables/{workflow_id}",
-        #     headers=headers,
-        # )
-
-        # # If the request is successful, get the join details for the selected data collection
-        # if join_tables_for_wf.status_code == 200:
-        #     join_tables_for_wf = join_tables_for_wf.json()
-        #     if data_collection_id in join_tables_for_wf:
-        #         join_details = join_tables_for_wf[data_collection_id]
-        #         dc_specs["config"]["join"] = join_details
 
         # Get the type of the selected column and the value for the selected aggregation
         column_type = cols_json[column_name]["type"]
@@ -141,7 +152,7 @@ def register_callbacks_card_component(app):
 
         new_card_body = build_card(**card_kwargs)
 
-        return new_card_body
+        return new_card_body, aggregation_description
 
 
 def design_card(id, df):
@@ -180,7 +191,7 @@ def design_card(id, df):
                         ),
                         html.Div(
                             id={
-                                # "type": "debug-print",
+                                "type": "aggregation-description",
                                 "index": id["index"],
                             },
                         ),
