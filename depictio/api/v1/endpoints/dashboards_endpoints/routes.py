@@ -29,7 +29,7 @@ async def get_dashboard(dashboard_id: str, current_user=Depends(get_current_user
         "dashboard_id": str(dashboard_id),
         "$or": [
             {"permissions.owners._id": user_id},
-            {"permissions.viewers._id": user_id},
+            # {"permissions.viewers._id": user_id},
         ],
     }
 
