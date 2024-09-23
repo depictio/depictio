@@ -318,6 +318,12 @@ def register_callbacks_stepper_part_one(app):
         # simulate slow callback
         # time.sleep(2)
 
+        logger.debug(f"Request: {request}")
+        logger.debug(f"Workflow: {workflow_selection}")
+        logger.debug(f"Data collection: {data_collection_selection}")
+        logger.debug(f"Local store: {local_store}")
+    
+
         if request is None:
             return dash.no_update
         
@@ -332,47 +338,8 @@ def register_callbacks_stepper_part_one(app):
 
             workflow_id, data_collection_id = return_mongoid(workflow_tag=workflow_selection, data_collection_tag=data_collection_selection, TOKEN=TOKEN)
 
-            dc_specs = httpx.get(
-                f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
-                headers={
-                    "Authorization": f"Bearer {TOKEN}",
-                },
-            ).json()
-
-            if dc_specs["config"]["type"] == "Table":
-                df = load_deltatable_lite(workflow_id, data_collection_id, TOKEN=TOKEN)
-
-                partial = df[request["startRow"] : request["endRow"]]
-                return {"rowData": partial.to_dicts(), "rowCount": df.shape[0]}
-            else:
-                return dash.no_update
-        else:
-            return dash.no_update
-
-    @app.callback(
-        Output({"type": "table-aggrid", "index": MATCH}, "getRowsResponse"),
-        Input({"type": "table-aggrid", "index": MATCH}, "getRowsRequest"),
-        Input({"type": "stored-metadata-component", "index": MATCH}, "data"),
-        State("local-store", "data"),
-        # prevent_initial_call=True,
-    )
-    def infinite_scroll_component(request, stored_metadata, local_store):
-        # simulate slow callback
-        # time.sleep(2)
-
-        if local_store is None:
-            raise dash.exceptions.PreventUpdate
-        
-        TOKEN = local_store["access_token"]
-
-        if request is None:
-            return dash.no_update
-
-        if stored_metadata is not None:
-            logger.info(f"Stored metadata: {stored_metadata}")
-
-            workflow_id = stored_metadata["wf_id"]
-            data_collection_id = stored_metadata["dc_id"]
+            logger.debug(f"Workflow ID: {workflow_id}")
+            logger.debug(f"Data collection ID: {data_collection_id}")
 
             dc_specs = httpx.get(
                 f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
@@ -381,12 +348,23 @@ def register_callbacks_stepper_part_one(app):
                 },
             ).json()
 
+            logger.debug(f"DC specs: {dc_specs}")
+            
+
             if dc_specs["config"]["type"] == "Table":
                 df = load_deltatable_lite(workflow_id, data_collection_id, TOKEN=TOKEN)
+                logger.debug(f"DF: {df}")
+                logger.debug(f"Request: {request}")
+                
 
                 partial = df[request["startRow"] : request["endRow"]]
-                return {"rowData": partial.to_dicts(), "rowCount": df.shape[0]}
+                logger.debug(f"Partial: {partial}")
+                rows_response = {"rowData": partial.to_dicts(), "rowCount": df.shape[0]}
+                logger.debug(f"Rows response: {rows_response}")
+                return rows_response
             else:
                 return dash.no_update
         else:
             return dash.no_update
+
+
