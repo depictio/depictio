@@ -211,7 +211,14 @@ async def screenshot_dashboard(dashboard_id: str, current_user=Depends(get_curre
                 # logger.info(f"Wait for timeout: 3000")
 
                 user = current_user.email.split("_")[0]
-                output_file = f"{output_folder}/{user}_{dashboard_id}.png"
+                user_id = current_user.id
+
+                # find corresponding mongoid for the dashboard
+                dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id, "permissions.owners._id": user_id})
+                logger.info(f"Dashboard data: {dashboard_data}")
+                dashboard_monogo_id = dashboard_data["_id"]
+
+                output_file = f"{output_folder}/{user_id}_{dashboard_monogo_id}.png"
                 await element.screenshot(path=output_file)
                 logger.info(f"Screenshot captured for dashboard ID: {dashboard_id}")
             else:
