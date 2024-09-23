@@ -517,12 +517,12 @@ def design_figure(id):
                                         ),
                                         dbc.Col(
                                             dmc.ActionIcon(
-                                                DashIconify(icon="mdi:refresh", width=0),
+                                                DashIconify(icon="mdi:refresh", width=30),
                                                 id={
                                                     "type": "refresh-button",
                                                     "index": id["index"],
                                                 },
-                                                size="lg",
+                                                size="xl",
                                                 style={"align": "center"},
                                                 n_clicks=0,
                                             )
