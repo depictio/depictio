@@ -5,11 +5,14 @@ import dash_mantine_components as dmc
 from dash_iconify import DashIconify
 import httpx
 import dash_ag_grid as dag
+import dash
+import pandas as pd
 
 # Depictio imports
+from depictio.api.v1.deltatables_utils import convert_filter_model_to_metadata, load_deltatable_lite
 from depictio.dash.modules.table_component.utils import build_table, build_table_frame
 from depictio.dash.utils import return_mongoid
-
+from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.configs.config import API_BASE_URL
 
 from depictio.dash.utils import (
@@ -21,6 +24,56 @@ from depictio.dash.utils import (
 
 
 def register_callbacks_table_component(app):
+    @app.callback(
+        Output({"type": "table-aggrid", "index": MATCH}, "getRowsResponse"),
+        Input({"type": "table-aggrid", "index": MATCH}, "getRowsRequest"),
+        Input({"type": "stored-metadata-component", "index": MATCH}, "data"),
+        State("local-store", "data"),
+        prevent_initial_call=True,
+    )
+    def infinite_scroll_component(request, stored_metadata, local_store):
+        # simulate slow callback
+        # time.sleep(2)
+
+        logger.info(f"Request: {request}")
+
+        if local_store is None:
+            raise dash.exceptions.PreventUpdate
+
+        TOKEN = local_store["access_token"]
+
+        if request is None:
+            return dash.no_update
+
+        if stored_metadata is not None:
+            logger.info(f"Stored metadata: {stored_metadata}")
+
+            workflow_id = stored_metadata["wf_id"]
+            data_collection_id = stored_metadata["dc_id"]
+
+            dc_specs = httpx.get(
+                f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
+                headers={
+                    "Authorization": f"Bearer {TOKEN}",
+                },
+            ).json()
+
+            # Initialize metadata list by converting filterModel
+            if "filterModel" in request and request["filterModel"]:
+                metadata = convert_filter_model_to_metadata(request["filterModel"])
+            else:
+                metadata = dict()
+
+            if dc_specs["config"]["type"] == "Table":
+                df = load_deltatable_lite(workflow_id, data_collection_id, metadata=metadata, TOKEN=TOKEN)
+
+                partial = df[request["startRow"] : request["endRow"]]
+                return {"rowData": partial.to_dicts(), "rowCount": df.shape[0]}
+            else:
+                return dash.no_update
+        else:
+            return dash.no_update
+
     # Callback to update card body based on the selected column and aggregation
     @app.callback(
         Output({"type": "table-body", "index": MATCH}, "children"),
@@ -40,7 +93,7 @@ def register_callbacks_table_component(app):
 
         if not data:
             return None
-        
+
         TOKEN = data["access_token"]
 
         headers = {
