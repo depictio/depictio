@@ -50,6 +50,76 @@ def process_metadata_and_filter(metadata):
     return filter_list
 
 
+
+def convert_filter_model_to_metadata(filter_model):
+    """
+    Convert dash_ag_grid filterModel to a metadata list compatible with Polars filtering.
+    """
+    metadata = []
+    for column, filter_details in filter_model.items():
+        filter_type = filter_details.get("filterType", "text")
+        operator = filter_details.get("type", "contains")
+        value = filter_details.get("filter")
+        filter_to = filter_details.get("filterTo")
+
+        if operator == "inRange":
+            # Range filter corresponds to RangeSlider
+            interactive_component_type = "RangeSlider"
+            if value is not None and filter_to is not None:
+                metadata.append({
+                    "metadata": {
+                        "interactive_component_type": interactive_component_type,
+                        "column_name": column,
+                        "min_value": value,
+                        "max_value": filter_to
+                    },
+                    "value": [value, filter_to]
+                })
+        elif operator in ["equals", "notEqual", "greaterThan", "greaterThanOrEqual", "lessThan", "lessThanOrEqual"]:
+            # Numerical or exact match filters
+            if filter_type == "number":
+                interactive_component_type = "Slider"
+                metadata.append({
+                    "metadata": {
+                        "interactive_component_type": interactive_component_type,
+                        "column_name": column,
+                    },
+                    "value": value
+                })
+            else:
+                # Non-number filters treated as TextInput
+                interactive_component_type = "TextInput"
+                metadata.append({
+                    "metadata": {
+                        "interactive_component_type": interactive_component_type,
+                        "column_name": column,
+                    },
+                    "value": value
+                })
+        elif operator in ["contains", "notContains", "startsWith", "notStartsWith", "endsWith", "notEndsWith"]:
+            # String filters
+            interactive_component_type = "TextInput"
+            metadata.append({
+                "metadata": {
+                    "interactive_component_type": interactive_component_type,
+                    "column_name": column,
+                },
+                "value": value
+            })
+        elif operator in ["blank", "notBlank"]:
+            # Special filters for null values
+            interactive_component_type = "Select"  # Assuming a select component to choose between blank/notBlank
+            metadata.append({
+                "metadata": {
+                    "interactive_component_type": interactive_component_type,
+                    "column_name": column,
+                },
+                "value": None  # Value not needed for blank/notBlank
+            })
+        # Extend with more operators as needed
+
+    return metadata
+
 def load_deltatable_lite(workflow_id: ObjectId, data_collection_id: ObjectId, metadata: dict = dict(), TOKEN: str = None):
 
     # Turn objectid to string
@@ -71,7 +141,8 @@ def load_deltatable_lite(workflow_id: ObjectId, data_collection_id: ObjectId, me
         # If metadata is None or empty, return the DataFrame without filtering
         if not metadata:
             logger.info(f"No metadata for wf {workflow_id} DC {data_collection_id}")
-            return pl.scan_delta(file_id, storage_options=minio_storage_options).collect().drop("depictio_aggregation_time")
+            return pl.scan_delta(file_id, storage_options=minio_storage_options).collect()
+            # return pl.scan_delta(file_id, storage_options=minio_storage_options).collect().drop("depictio_aggregation_time")
 
         # Process metadata to generate filter list
         filter_list = process_metadata_and_filter(metadata)
