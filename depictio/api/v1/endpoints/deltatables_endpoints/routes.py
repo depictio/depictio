@@ -149,14 +149,42 @@ async def aggregate_data(
     logger.debug(f"Data Collection Config: {dc_config}")
     logger.debug(f"Data Collection ID: {data_collection_oid}")
 
-    # Using the config, find files associated with the data collection
-    files = list(
-        files_collection.find(
-            {
-                "data_collection._id": data_collection_oid,
+    # Define the aggregation pipeline
+    pipeline = [
+        {"$match": {"data_collection._id": data_collection_oid}},
+        {
+            "$sort": {
+                "file_location": 1,  # Sort by filename ascending
+                "creation_time": -1,  # Then sort by creation_time descending
             }
-        )
-    )
+        },
+        {
+            "$group": {
+                "_id": "$file_location",  # Group by filename
+                "latest_document": {"$first": "$$ROOT"},  # Select the first document in each group
+            }
+        },
+        {
+            "$replaceRoot": {"newRoot": "$latest_document"}  # Replace root with the latest document
+        },
+        {
+            "$sort": {
+                "file_location": 1  # Optional: Sort the final results by filename ascending
+            }
+        },
+    ]
+
+    # Execute the aggregation pipeline
+    files = list(files_collection.aggregate(pipeline))
+
+    # Using the config, find files associated with the data collection
+    # files = list(
+    #     files_collection.find(
+    #         {
+    #             "data_collection._id": data_collection_oid,
+    #         }
+    #     )
+    # )
 
     logger.debug(f"Len of Files: {len(files)}")
 
@@ -168,8 +196,8 @@ async def aggregate_data(
     files = [File.from_mongo(file) for file in files]
 
     # Create a DeltaTableAggregated object
-    destination_file_key = f"{user_oid}/{workflow_oid}/{data_collection_oid}/" 
-    destination_file_name = f"s3://{settings.minio.bucket}/{destination_file_key}" 
+    destination_file_key = f"{user_oid}/{workflow_oid}/{data_collection_oid}/"
+    destination_file_name = f"s3://{settings.minio.bucket}/{destination_file_key}"
     # destination_file_name = f"{settings.minio.data_dir}/{settings.minio.bucket}/{user_oid}/{workflow_oid}/{data_collection_oid}/"  # Destination path in MinIO
     # os.makedirs(destination_file_name, exist_ok=True)
 
@@ -272,7 +300,7 @@ async def aggregate_data(
         deltatables_collection.insert_one(serialize_for_mongo(deltatable))
 
     return {
-        "message": f"Data successfully aggregated and saved for data_collection: {data_collection_id} of workflow: {workflow_id}, aggregation id: {deltatable.id}",
+        "message": f"Data successfully aggregated and saved for data_collection: {data_collection_id} of workflow: {workflow_id}, aggregation id: {deltatable.id}, including {len(files)} files.",
     }
 
 
