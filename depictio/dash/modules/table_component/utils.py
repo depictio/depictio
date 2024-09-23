@@ -1,3 +1,4 @@
+import polars as pl
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 from dash import html, dcc
@@ -50,7 +51,6 @@ def build_table(**kwargs):
     dc_config = kwargs.get("dc_config")
     cols = kwargs.get("cols_json")
     build_frame = kwargs.get("build_frame", False)
-    import polars as pl
 
     df = kwargs.get("df", pl.DataFrame())
     TOKEN = kwargs.get("access_token")
@@ -97,18 +97,11 @@ def build_table(**kwargs):
             "maxConcurrentDatasourceRequests": 2,
             "infiniteInitialRowCount": 1,
             "rowSelection": "multiple",
+            "enableCellTextSelection": True, "ensureDomOrder": True
         },
         # columnSize="sizeToFit",
         defaultColDef={"resizable": True, "sortable": True, "filter": True},
         # use the parameters above
-    )
-
-    title = f"Table for {wf_id} - {dc_id}"
-    div_table = html.Div(
-        [
-            dmc.Title(title, order=5, weight=500),
-            table_aggrid,
-        ]
     )
 
     # Metadata management - Create a store component to store the metadata of the card
