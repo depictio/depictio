@@ -78,7 +78,7 @@ def load_dashboards_from_db(token):
 
         else:
             raise ValueError(f"Failed to load dashboards from the database. Error: {response.text}")
-    
+
     except Exception as e:
         logger.error(f"Error loading dashboards from the database: {e}")
         return {"next_index": 1, "dashboards": []}
@@ -242,7 +242,7 @@ def register_callbacks_dashboards_management(app):
         logger.info(f"dashboards_view: {dashboards_view}")
         return dashboards_view
 
-    def create_homepage_view(dashboards, email):
+    def create_homepage_view(dashboards, user_id):
         logger.info(f"dashboards: {dashboards}")
 
         # dashboards = [convert_objectid_to_str(dashboard.mongo()) for dashboard in dashboards]
@@ -313,7 +313,7 @@ def register_callbacks_dashboards_management(app):
             )
             return group
 
-        def return_thumbnail(email, dashboard):
+        def return_thumbnail(user_id, dashboard):
             import os
 
             import sys
@@ -321,7 +321,9 @@ def register_callbacks_dashboards_management(app):
             # log current working directory
             logger.info(f"Current working directory: {os.getcwd()}")
 
-            thumbnail_path = f"assets/screenshots/{email}_{dashboard['dashboard_id']}.png"
+            logger.info(f"sys.path: {sys.path}")
+            logger.info(f"dashboard: {dashboard}")
+            thumbnail_path = f"assets/screenshots/{user_id}_{dashboard['_id']}.png"
             thumbnail_path_check = f"depictio/dash/{thumbnail_path}"
 
             logger.info(f"Thumbnail path: {thumbnail_path_check}")
@@ -347,18 +349,18 @@ def register_callbacks_dashboards_management(app):
 
             return thumbnail
 
-        def loop_over_dashboards(email, dashboards):
+        def loop_over_dashboards(user_id, dashboards):
             view = list()
             for dashboard in dashboards:
                 modal = modal_delete_dashboard(dashboard)
                 buttons = create_buttons(dashboard)
-                thumbnail = return_thumbnail(email, dashboard)
+                thumbnail = return_thumbnail(user_id, dashboard)
                 view.append(
                     dmc.Card(
                         withBorder=True,
                         shadow="sm",
                         radius="md",
-                        style={"width": 500},
+                        style={"width": 480},
                         children=[
                             thumbnail,
                             buttons,
@@ -368,7 +370,16 @@ def register_callbacks_dashboards_management(app):
                 )
             return view
 
-        dashboards_view = dmc.SimpleGrid(loop_over_dashboards(email, dashboards), cols=3, spacing="xl", verticalSpacing="xl")
+        dashboards_view = dmc.SimpleGrid(
+            loop_over_dashboards(user_id, dashboards),
+            cols=3,
+            spacing="xl",
+            verticalSpacing="xl",
+            # breakpoints=[
+            #     {"maxWidth": 1450, "cols": 2},  # Two columns on medium screens
+            #     {"maxWidth": 768, "cols": 1},  # One column on small screens
+            # ],
+        )
         # logger.info(f"dashboards_view: {dashboards_view}")
 
         return html.Div([dmc.Grid([title], justify="space-between", align="center"), html.Hr(), dashboards_view])
@@ -444,7 +455,8 @@ def register_callbacks_dashboards_management(app):
 
     def generate_dashboard_view_response(dashboards, next_index, store_data_list, current_userbase):
         dashboards = [convert_objectid_to_str(dashboard.mongo()) for dashboard in dashboards]
-        dashboards_view = create_homepage_view(dashboards, current_userbase.email)
+        logger.info(f"dashboards: {dashboards}")
+        dashboards_view = create_homepage_view(dashboards, current_userbase.id)
         new_index_data = {"next_index": next_index, "dashboards": dashboards}
 
         logger.info(f"Generated dashboard view: {dashboards_view}")
