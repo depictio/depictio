@@ -111,7 +111,7 @@ from depictio.dash.layouts.save import register_callbacks_save
 
 register_callbacks_save(app)
 
-from depictio.dash.layouts.workflows_datasets_management import register_workflows_callbacks
+from depictio.dash.layouts.projects import register_workflows_callbacks
 
 register_workflows_callbacks(app)
 
@@ -119,6 +119,10 @@ from depictio.dash.layouts.admin_management import register_admin_callbacks
 
 register_admin_callbacks(app)
 
+
+from depictio.dash.layouts.projects import register_projects_callbacks
+
+# register_projects_callbacks(app)
 
 def return_create_dashboard_button(email):
     create_button = dmc.Button(
@@ -199,10 +203,10 @@ def handle_authenticated_user(pathname, local_data):
         content = create_dashboards_management_layout()
         return content, header, pathname, local_data
 
-    elif pathname == "/workflows":
-        header = create_default_header("Workflows registered")
-        workflows = html.Div(id="workflows-list")
-        return workflows, header, pathname, local_data
+    elif pathname == "/projects":
+        header = create_default_header("Projects registered")
+        projects = html.Div(id="projects-list")
+        return projects, header, pathname, local_data
 
     elif pathname == "/profile":
         header = create_default_header("Profile")
