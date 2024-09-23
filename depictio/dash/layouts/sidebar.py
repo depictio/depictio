@@ -62,7 +62,7 @@ def register_sidebar_callbacks(app):
     def update_active_state(pathname):
         if pathname == "/dashboards":
             return [True, False, False]
-        elif pathname == "/workflows":
+        elif pathname == "/projects":
             return [False, True, False]
         elif pathname == "/admin":
             return [False, False, True]
@@ -166,10 +166,10 @@ def render_sidebar(email):
                 style={"padding": "20px"},
             ),
             dmc.NavLink(
-                id={"type": "sidebar-link", "index": "workflows"},
-                label=dmc.Text("Workflows", size="lg", style={"fontSize": "16px"}),  # Using dmc.Text to set the font size
-                icon=DashIconify(icon="hugeicons:workflow-square-01", height=25),
-                href="/workflows",
+                id={"type": "sidebar-link", "index": "projects"},
+                label=dmc.Text("Projects", size="lg", style={"fontSize": "16px"}),  # Using dmc.Text to set the font size
+                icon=DashIconify(icon="mdi:jira", height=25),
+                href="/projects",
                 style={"padding": "20px"},
             ),
             dmc.NavLink(

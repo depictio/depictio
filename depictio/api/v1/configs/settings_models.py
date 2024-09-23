@@ -5,6 +5,7 @@ from depictio.api.v1.configs.logging import logger
 
 class Collections(BaseSettings):
     """Collections names in MongoDB."""
+    projects_collection: str = "projects"
     data_collection: str = "data_collections"
     workflow_collection: str = "workflows"
     runs_collection: str = "runs"
