@@ -1,5 +1,5 @@
 # Import necessary libraries
-from dash import html, dcc, Input, Output, State, MATCH
+from dash import html, dcc, Input, Output, State, MATCH, ALL
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 from dash_iconify import DashIconify
@@ -10,6 +10,7 @@ import pandas as pd
 
 # Depictio imports
 from depictio.api.v1.deltatables_utils import convert_filter_model_to_metadata, load_deltatable_lite
+from depictio.dash.layouts.draggable_scenarios.restore_dashboard import return_interactive_components_dict
 from depictio.dash.modules.table_component.utils import build_table, build_table_frame
 from depictio.dash.utils import return_mongoid
 from depictio.api.v1.configs.logging import logger
@@ -26,53 +27,88 @@ from depictio.dash.utils import (
 def register_callbacks_table_component(app):
     @app.callback(
         Output({"type": "table-aggrid", "index": MATCH}, "getRowsResponse"),
+        Input("interactive-values-store", "data"),
         Input({"type": "table-aggrid", "index": MATCH}, "getRowsRequest"),
-        Input({"type": "stored-metadata-component", "index": MATCH}, "data"),
+        State({"type": "stored-metadata-component", "index": MATCH}, "data"),
         State("local-store", "data"),
+        State("url", "pathname"),
         prevent_initial_call=True,
     )
-    def infinite_scroll_component(request, stored_metadata, local_store):
+    def infinite_scroll_component(interactive_values, request, stored_metadata, local_store, pathname):
         # simulate slow callback
         # time.sleep(2)
 
-        logger.info(f"Request: {request}")
+        dashboard_id = pathname.split("/")[-1]
 
-        if local_store is None:
-            raise dash.exceptions.PreventUpdate
+        logger.info(f"Interactive values: {interactive_values}")
+        if "interactive_components_values" not in interactive_values:
+            interactive_values_data = None
+        else:
+            interactive_values_data = interactive_values["interactive_components_values"]
+
+            # Make sure all the interactive values are in the correct format
+            interactive_values_data = [e for e in interactive_values_data if e["metadata"]["component_type"] == "interactive"]
+        logger.info(f"Interactive values data: {interactive_values_data}")
+        logger.info(f"Request: {request}")
+        logger.info(f"Stored metadata: {stored_metadata}")
+        logger.info(f"Local store: {local_store}")
+
+        # if local_store is None:
+        #     raise dash.exceptions.PreventUpdate
 
         TOKEN = local_store["access_token"]
 
-        if request is None:
-            return dash.no_update
+        # if request is None:
+        #     return dash.no_update
 
-        if stored_metadata is not None:
-            logger.info(f"Stored metadata: {stored_metadata}")
+        # if stored_metadata_all is not None:
+        logger.info(f"Stored metadata: {stored_metadata}")
 
-            workflow_id = stored_metadata["wf_id"]
-            data_collection_id = stored_metadata["dc_id"]
+        workflow_id = stored_metadata["wf_id"]
+        data_collection_id = stored_metadata["dc_id"]
 
-            dc_specs = httpx.get(
-                f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
-                headers={
-                    "Authorization": f"Bearer {TOKEN}",
-                },
-            ).json()
+        dc_specs = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
+            headers={
+                "Authorization": f"Bearer {TOKEN}",
+            },
+        ).json()
 
-            # Initialize metadata list by converting filterModel
-            if "filterModel" in request and request["filterModel"]:
+        # Initialize metadata list by converting filterModel
+        if request:
+            if "filterModel" in request:
+                # if request["filterModel"]:
                 metadata = convert_filter_model_to_metadata(request["filterModel"])
-            else:
-                metadata = dict()
-
-            if dc_specs["config"]["type"] == "Table":
-                df = load_deltatable_lite(workflow_id, data_collection_id, metadata=metadata, TOKEN=TOKEN)
-
-                partial = df[request["startRow"] : request["endRow"]]
-                return {"rowData": partial.to_dicts(), "rowCount": df.shape[0]}
-            else:
-                return dash.no_update
         else:
-            return dash.no_update
+            metadata = list()
+
+        logger.info(f"Metadata generated from filter model: {metadata}")
+
+        if interactive_values_data:
+            # Combine both metadata and stored metadata
+            metadata += interactive_values_data
+
+        # logger.info(f"Metadata: {metadata}")
+        # logger.info(f"Stored metadata: {stored_metadata}")
+
+        # if dc_specs["config"]["type"] == "Table":
+        df = load_deltatable_lite(workflow_id, data_collection_id, metadata=metadata, TOKEN=TOKEN)
+
+        from dash import ctx
+        import polars as pl
+
+        triggered_id = ctx.triggered_id
+        logger.info(f"Triggered ID: {triggered_id}")
+
+        if request is None:
+            partial = df[:100]
+        else:
+            partial = df[request["startRow"] : request["endRow"]]
+        return {"rowData": partial.to_dicts(), "rowCount": df.shape[0]}
+        # else:
+        #     return dash.no_update
+        # else:
+        #     return dash.no_update
 
     # Callback to update card body based on the selected column and aggregation
     @app.callback(
