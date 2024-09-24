@@ -122,7 +122,8 @@ register_admin_callbacks(app)
 
 from depictio.dash.layouts.projects import register_projects_callbacks
 
-# register_projects_callbacks(app)
+register_projects_callbacks(app)
+
 
 def return_create_dashboard_button(email):
     create_button = dmc.Button(
