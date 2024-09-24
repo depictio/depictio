@@ -36,8 +36,11 @@ def process_metadata_and_filter(metadata):
     filter_list = []
 
     for i, component in enumerate(metadata):
-        # logger.info(f"i: {i}")
-        # logger.info(f"component: {component}")
+        if "metadata" not in component:
+            logger.info(f"Component {i} does not have metadata key : {component}")
+            continue
+        logger.info(f"i: {i}")
+        logger.info(f"component: {component}")
         interactive_component_type = component["metadata"]["interactive_component_type"]
         column_name = component["metadata"]["column_name"]
         # logger.info(f"interactive_component_type: {interactive_component_type}")
