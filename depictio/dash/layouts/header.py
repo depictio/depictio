@@ -122,8 +122,10 @@ def design_header(data):
                 data={},
             ),
             dcc.Store(id="stored-draggable-layouts", storage_type="session", data={}),
+            dcc.Store(id="interactive-values-store", storage_type="session", data={}),
         ]
     )
+
 
     # Modal for success message when clicking the save button
     modal_save_button = dbc.Modal(
