@@ -1,3 +1,4 @@
+import collections
 import httpx
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.dash.layouts.draggable_scenarios.interactive_component_update import update_interactive_component
@@ -22,8 +23,29 @@ build_functions = {
 
 def return_interactive_components_dict(dashboard_data):
     # logger.info(f"Dashboard data: {dashboard_data}")
-    interactive_components_dict = {e["index"]: {"value": e["value"], "metadata": e} for e in dashboard_data if e["component_type"] == "interactive"}
-    # logger.info(f"Interactive components dict: {interactive_components_dict}")
+    
+    logger.info(f"Dashboard data: {dashboard_data}")
+    logger.info(f"Dashboard data type: {type(dashboard_data)}")
+
+    interactive_components_dict = collections.defaultdict(dict)
+
+    for e in dashboard_data:
+        logger.info(f"e: {e}")
+
+        if "component_type" not in e:
+            logger.info(f"Component type not found in e: {e}")
+            continue
+
+        if e["component_type"] == "interactive":
+            logger.info(f"e: {e}")
+            logger.info(f"e['value']: {e['value']}")
+            logger.info(f"e['component_type']: {e['component_type']}")
+            interactive_components_dict[e["index"]] = {"value": e["value"], "metadata": e}
+        
+
+
+    # interactive_components_dict = {e["index"]: {"value": e["value"], "metadata": e} for e in dashboard_data if e["component_type"] == "interactive"}
+    logger.info(f"Interactive components dict: {interactive_components_dict}")
     return interactive_components_dict
 
 
