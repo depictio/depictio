@@ -1,39 +1,21 @@
-import ast
-from copy import deepcopy
-import json
-import os
-import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 from dash_iconify import DashIconify
 import dash_draggable
-from dash import html, dcc, Input, Output, State, ALL, MATCH
+from dash import html, Input, Output, State, ALL
 import dash
 import httpx
-import numpy as np
 from depictio.dash.layouts.draggable_scenarios.add_component import add_new_component
 
 from depictio.api.v1.configs.config import API_BASE_URL, logger
 
 from depictio.dash.layouts.draggable_scenarios.interactive_component_update import update_interactive_component
-from depictio.dash.layouts.stepper import create_stepper_output
-from depictio.dash.utils import analyze_structure_and_get_deepest_type
-from depictio.dash.layouts.draggable_scenarios.restore_dashboard import load_depictio_data, render_dashboard
+from depictio.dash.layouts.draggable_scenarios.restore_dashboard import render_dashboard
 
 
 # Depictio layout imports for stepper
-from depictio.dash.layouts.stepper import (
-    # create_stepper_dropdowns,
-    # create_stepper_buttons,
-    create_stepper_output,
-)
 
 # Depictio layout imports for header
-from depictio.dash.layouts.header import (
-    design_header,
-)
 from depictio.dash.layouts.edit import enable_box_edit_mode
-
-from depictio.dash.modules.figure_component.utils import plotly_vizu_dict
 
 
 # Mapping of component types to their respective dimensions (width and height)
@@ -328,7 +310,9 @@ def register_callbacks_draggable(app):
             logger.info("Interactive component triggered")
             logger.info("Interactive component values: {}".format(interactive_component_values))
 
-            new_children = update_interactive_component(stored_metadata, interactive_components_dict, draggable_children, switch_state=edit_dashboard_mode_button, TOKEN=TOKEN, dashboard_id=dashboard_id)
+            new_children = update_interactive_component(
+                stored_metadata, interactive_components_dict, draggable_children, switch_state=edit_dashboard_mode_button, TOKEN=TOKEN, dashboard_id=dashboard_id
+            )
             state_stored_draggable_children[dashboard_id] = new_children
 
             return new_children, dash.no_update, dash.no_update, dash.no_update
@@ -425,7 +409,6 @@ def register_callbacks_draggable(app):
             return dash.no_update, dash.no_update, True
 
         if triggered_input == "add-button":
-
             # update the stored add button count using current value + n_clicks - warning: do not reuse the same n_clicks value multiple times
             stored_add_button["count"] += 1
             logger.info("Updated stored_add_button: {}".format(stored_add_button))
@@ -438,647 +421,44 @@ def register_callbacks_draggable(app):
         else:
             return dash.no_update, dash.no_update, False
 
-    # @app.callback(
-    #     [
-    #         Output("test-output", "children"),
-    #         # Output("draggable", "children"),
-    #         # Output("draggable", "layouts"),
-    #         # Output("stored-layout", "data"),
-    #         # Output("stored-children", "data"),
-    #         # Output("stored-edit-dashboard-mode-button", "data"),
-    #         # Output("stored-add-button", "data"),
-    #     ],
-    #     [
-    #         Input(
-    #             {
-    #                 "type": "btn-done",
-    #                 "index": dash.dependencies.ALL,
-    #             },
-    #             "n_clicks",
-    #         ),
-    #         State(
-    #             {
-    #                 "type": "interactive-component",
-    #                 "index": dash.dependencies.ALL,
-    #             },
-    #             "id",
-    #         ),
-    #         State(
-    #             {
-    #                 "type": "stored-metadata-component",
-    #                 "index": dash.dependencies.ALL,
-    #             },
-    #             "data",
-    #         ),
-    #         Input("add-button", "n_clicks"),
-    #         Input("edit-dashboard-mode-button", "checked"),
-    #         State("stored-add-button", "data"),
-    #         Input(
-    #             {"type": "remove-box-button", "index": dash.dependencies.ALL},
-    #             "n_clicks",
-    #         ),
-    #         Input(
-    #             {
-    #                 "type": "interactive-component",
-    #                 "index": dash.dependencies.ALL,
-    #             },
-    #             "value",
-    #         ),
-    #         Input("stored-layout", "data"),
-    #         Input("stored-children", "data"),
-    #         Input("draggable", "layouts"),
-    #     ],
-    #     [
-    #         State("test-input", "children"),
-    #         State("test-input", "style"),
-    #         State("stored-layout", "data"),
-    #         State("stored-children", "data"),
-    #         State("stored-edit-dashboard-mode-button", "data"),
-    #         State("toggle-interactivity-button", "checked"),
-    #         Input("remove-all-components-button", "n_clicks"),
-    #     ],
-    #     prevent_initial_call=True,
-    # )
-    # def update_draggable_children(
-    #     *args,
-    # ):
-    #     # Getting the arguments
+    @app.callback(
+        Output("interactive-values-store", "data"),
+        Input({"type": "interactive-component-value", "index": ALL}, "value"),
+        State({"type": "interactive-component-value", "index": ALL}, "id"),
+        State({"type": "stored-metadata-component", "index": ALL}, "data"),
+        State("url", "pathname"),
+        prevent_initial_call=True,
+    )
+    def update_interactive_values_store(interactive_values, ids, stored_metadata, pathname):
+        logger.info("Callback 'update_interactive_values_store' triggered.")
+        logger.info(f"Interactive values: {interactive_values}")
+        logger.info(f"Interactive ids: {ids}")
+        logger.info(f"Stored metadata: {stored_metadata}")
+        stored_metadata_interactive = [e for e in stored_metadata if e["component_type"] == "interactive"]
+        logger.info(f"Stored metadata interactive: {stored_metadata_interactive}")
 
-    #     btn_done = args[0]
-    #     interactive_component_ids = args[1]
-    #     stored_metadata = args[2]
-    #     add_button_nclicks = args[3]
-    #     switch_state = args[4]
-    #     stored_add_button = args[5]
-    #     remove_box_button_values = args[6]
-    #     interactive_component_values = args[7]
-    #     stored_layout_data = args[8]
-    #     stored_children_data = args[9]  # Commented out, adjust if including it again
-    #     new_layouts = args[10]
-    #     current_draggable_children = args[11]
-    #     current_draggable_children = []
-    #     current_layouts = args[12]
-    #     current_layouts = {}
-    #     stored_layout = args[13]
-    #     stored_figures = args[14]  # Commented out, adjust if including it again
-    #     stored_edit_dashboard = args[15]
-    #     toggle_interactivity_button = args[16]
-    #     remove_all_components_button = args[17]
+        # Extract dashboard_id from the URL pathname
+        try:
+            dashboard_id = pathname.split("/")[-1]
+            logger.info(f"Dashboard ID: {dashboard_id}")
+        except Exception as e:
+            logger.error(f"Error extracting dashboard_id from pathname '{pathname}': {e}")
+            raise dash.exceptions.PreventUpdate
 
-    #     # Check if the callback was triggered by an input or a state
-    #     ctx = dash.callback_context
-    #     ctx_triggered = ctx.triggered
-    #     logger.info("\n\n")
-    #     logger.debug("CTX triggered: {}".format(ctx_triggered))
-    #     triggered_input = ctx.triggered[0]["prop_id"].split(".")[0]
-    #     logger.info("triggered_input : {}".format(triggered_input))
-    #     logger.info("Switch state: {}".format(switch_state))
-    #     # Set the switch state index to 0 if switch_state is True, else set it to -1
+        # Ensure that the lengths of interactive_values, ids, and stored_metadata match
+        if not (len(interactive_values) == len(ids) == len(stored_metadata_interactive)):
+            logger.error("Mismatch in lengths of interactive_values, ids, and stored_metadata.")
+            raise dash.exceptions.PreventUpdate
 
-    #     # Create a dictionary to store the values of the interactive components
-    #     stored_metadata_interactive = [e for e in stored_metadata if e["component_type"] == "interactive_component"]
-    #     interactive_components_dict = {
-    #         id["index"]: {"value": value, "metadata": metadata}
-    #         for (id, value, metadata) in zip(
-    #             interactive_component_ids,
-    #             interactive_component_values,
-    #             stored_metadata_interactive,
-    #         )
-    #     }
+        # Combine interactive_values with their corresponding metadata
+        components = []
+        for value, metadata in zip(interactive_values, stored_metadata_interactive):
+            if metadata is None:
+                logger.warning(f"Metadata is None for a component with value: {value}")
+                continue
+            components.append({"value": value, "metadata": metadata, "index": metadata["index"]})
 
-    #     # Check if the value of the interactive component is not None
-    #     check_value = False
-    #     if "interactive-component" in triggered_input:
-    #         triggered_input_eval = ast.literal_eval(triggered_input)
-    #         triggered_input_eval_index = int(triggered_input_eval["index"])
-
-    #         value = interactive_components_dict[triggered_input_eval_index]["value"]
-    #         # Handle the case of the TextInput component
-    #         if interactive_components_dict[triggered_input_eval_index]["metadata"]["interactive_component_type"] != "TextInput":
-    #             check_value = True if value is not None else False
-    #         else:
-    #             check_value = True if value is not "" else False
-
-    #     # Create a dictionary to store the values of the other components
-    #     other_components_dict = {
-    #         id["index"]: {"value": value, "metadata": metadata}
-    #         for (id, value, metadata) in zip(
-    #             interactive_component_ids,
-    #             interactive_component_values,
-    #             stored_metadata_interactive,
-    #         )
-    #     }
-
-    #     new_draggable_children = []
-
-    #     logger.info("Current draggable children: {}".format(current_draggable_children))
-
-    #     # if type(current_draggable_children) is list:
-    #     #     for child in current_draggable_children:
-    #     #         for sub_child in child["props"]["children"]:
-    #     #             if sub_child["props"]["id"]["type"] == "add-content":
-    #     #                 child["props"]["children"] = [sub_child]
-    #     #                 continue
-
-    #     max_depth, deepest_type = analyze_structure_and_get_deepest_type(current_draggable_children)
-    #     logger.info("\n\n")
-    #     logger.info(f"Max depth: {max_depth}")
-    #     logger.info(f"Deepest type: {deepest_type}")
-
-    #     # Add a new box to the dashboard
-    #     if triggered_input == "add-button":
-    #         current_draggable_children, current_layouts, stored_add_button = add_new_component(
-    #             add_button_nclicks,
-    #             stored_add_button,
-    #             current_draggable_children,
-    #             current_layouts,
-    #             stored_edit_dashboard,
-    #             ctx,
-    #         )
-
-    #         return current_draggable_children
-    #         # )
-    #     # [], {}
-    #     # current_draggable_children,
-    #     # current_layouts,
-    #     # [],
-    #     # # current_layouts,
-    #     # [],
-    #     # # current_draggable_children,
-    #     # stored_edit_dashboard,
-    #     # stored_add_button,
-    #     # # elif "btn-done" in triggered_input:
-    #     # #     logger.info("\n\n\n")
-    #     # #     logger.info(f"btn-done {btn_done}")
-
-    #     # #     max_depth, deepest_type = analyze_structure_and_get_deepest_type(
-
-    #     # #     return (
-    #     # #         current_draggable_children,
-    #     # #         current_layouts,
-    #     # #         stored_layout,
-    #     # #         stored_figures,
-    #     # #         stored_edit_dashboard,
-    #     # #         stored_add_button,
-    #     # #     )
-
-    #     # elif "interactive-component" in triggered_input and check_value and toggle_interactivity_button:
-    #     #     updated_draggable_children = update_interactive_component(stored_metadata, interactive_components_dict, plotly_vizu_dict, join_deltatables, current_draggable_children)
-
-    #     #     # output_children = deepcopy(updated_draggable_children)
-
-    #     #     # with open("/app/data/interactive-component.json", "w") as file:
-    #     #     #     json.dump(serialize_dash_component(output_children), file, indent=4)
-
-    #     #     return (
-    #     #         updated_draggable_children,
-    #     #         current_layouts,
-    #     #         # current_layouts,
-    #     #         # updated_draggable_children,
-    #     #         # stored_edit_dashboard,
-    #     #         # stored_add_button,
-    #     #     )
-    #     # # if the remove button was clicked, return an empty list to remove all the plots
-
-    #     # # elif "remove-" in triggered_input and [e for e in remove_box_button_values if e]:
-    #     # #     print("\nREMOVE")
-    #     # #     print("Triggered Input:", triggered_input)
-
-    #     # #     input_id_dict = ast.literal_eval(triggered_input)
-    #     # #     input_id = input_id_dict["index"]
-    #     # #     print("Input ID:", input_id)
-
-    #     # #     # Use list comprehension to filter
-    #     # #     current_draggable_children = [child for child in current_draggable_children if child["props"]["id"] != input_id]
-
-    #     # #     # elif "remove-" in triggered_input and [e for e in args[-10] if e]:
-    #     # #     #     print("\nREMOVE")
-    #     # #     #     print(triggered_input, type(triggered_input))
-    #     # #     #     # print(current_draggable_children)
-    #     # #     #     input_id = ast.literal_eval(triggered_input)["index"]
-    #     # #     #     print(input_id)
-
-    #     # #     #     # new_filter_dict = filter_dict
-    #     # #     #     # print(new_filter_dict)
-
-    #     # #     #     # Use a list comprehension to filter out the child with the matching ID
-    #     # #     #     current_draggable_children = [
-    #     # #     #         child for child in current_draggable_children
-    #     # #     #         if "-".join(child["props"]["id"].split("-")[1:]) != "-".join(input_id.split("-")[1:])
-    #     # #     #     ]
-    #     # #     # for child in current_draggable_children:
-    #     # #     #     print(child)
-    #     # #     #     # print("-".join(child["props"]["id"].split("-")[1:]))
-    #     # #     #     # print("-".join(input_id.split("-")[1:]))
-    #     # #     #     if "-".join(child["props"]["id"].split("-")[1:]) == "-".join(
-    #     # #     #         input_id.split("-")[1:]
-    #     # #     #     ):
-    #     # #     #         current_draggable_children.remove(child)
-    #     # #     #         input_id = "-".join(input_id.split("-")[2:])
-
-    #     # #     #         # Remove the corresponding entry from filter dictionary
-    #     # #     #         tmp_input_id = "-".join(input_id.split("-")[1:])
-    #     # #     #         if "-".join(input_id.split("-")[1:]) in new_filter_dict:
-    #     # #     #             del new_filter_dict[tmp_input_id]
-    #     # #     #         print(new_filter_dict)
-
-    #     # #     # updated_draggable_children = []
-
-    #     # #     # for j, child in enumerate(current_draggable_children):
-    #     # #     #     if child["props"]["id"].replace("draggable-", "") == input_id:
-    #     # #     #         updated_draggable_children.append(child)
-    #     # #     #     elif (
-    #     # #     #         child["props"]["id"].replace("draggable-", "") != input_id
-    #     # #     #         and "-input" not in child["props"]["id"]
-    #     # #     #     ):
-    #     # #     #         # print(child["props"]["id"]["index"])
-    #     # #     #         index = -1 if switch_state is True else 0
-    #     # #     #         graph = child["props"]["children"][index]
-    #     # #     #         if type(graph["props"]["id"]) is str:
-    #     # #     #             print("TEST")
-    #     # #     #             # Extract the figure type and its corresponding function
-    #     # #     #             figure_type = "-".join(graph["props"]["id"].split("-")[2:])
-    #     # #     #             graph_id = graph["props"]["id"]
-    #     # #     #             updated_fig = create_initial_figure(
-    #     # #     #                 df,
-    #     # #     #                 figure_type,
-    #     # #     #                 input_id="-".join(input_id.split("-")[2:]),
-    #     # #     #                 filter=new_filter_dict,
-    #     # #     #             )
-
-    #     # #     #             if "-card" in graph_id:
-    #     # #     #                 graph["props"]["children"] = updated_fig
-
-    #     # #     #             else:
-    #     # #     #                 graph["props"]["figure"] = updated_fig
-    #     # #     #             rm_button = dbc.Button(
-    #     # #     #                 "Remove",
-    #     # #     #                 id={
-    #     # #     #                     "type": "remove-button",
-    #     # #     #                     "index": child["props"]["id"],
-    #     # #     #                 },
-    #     # #     #                 color="danger",
-    #     # #     #             )
-    #     # #     #             edit_button = dbc.Button(
-    #     # #     #                 "Edit",
-    #     # #     #                 id={
-    #     # #     #                     "type": "edit-button",
-    #     # #     #                     "index": child["props"]["id"],
-    #     # #     #                 },
-    #     # #     #                 color="secondary",
-    #     # #     #                 style={"margin-left": "10px"},
-    #     # #     #             )
-    #     # #     #             children = (
-    #     # #     #                 [rm_button, edit_button, graph]
-    #     # #     #                 if switch_state is True
-    #     # #     #                 else [graph]
-    #     # #     #             )
-    #     # #     #             updated_child = html.Div(
-    #     # #     #                 children=children,
-    #     # #     #                 id=child["props"]["id"],
-    #     # #     #             )
-
-    #     # #     #             updated_draggable_children.append(updated_child)
-    #     # #     #     else:
-    #     # #     #         updated_draggable_children.append(child)
-
-    #     # #     return (
-    #     # #         current_draggable_children,
-    #     # #         new_layouts,
-    #     # #         # selected_year,
-    #     # #         new_layouts,
-    #     # #         current_draggable_children,
-    #     # #         stored_edit_dashboard,
-    #     # #         stored_add_button,
-    #     # #         # selected_year,
-    #     # #     )
-    #     # #     # return (
-    #     # #     #     updated_draggable_children,
-    #     # #     #     current_layouts,
-    #     # #     #     current_layouts,
-    #     # #     #     updated_draggable_children,
-    #     # #     # )
-
-    #     # # elif "remove-all-components-button" in triggered_input:
-    #     # #     return (
-    #     # #         [],
-    #     # #         {},
-    #     # #         {},
-    #     # #         [],
-    #     # #         stored_edit_dashboard,
-    #     # #         stored_add_button,
-    #     # #     )
-
-    #     # # elif triggered_input == "stored-layout" or triggered_input == "stored-children":
-    #     # #     if stored_layout_data and stored_children_data:
-    #     # #         return (
-    #     # #             stored_children_data,
-    #     # #             stored_layout_data,
-    #     # #             stored_layout_data,
-    #     # #             stored_children_data,
-    #     # #             stored_edit_dashboard,
-    #     # #             stored_add_button,
-    #     # #         )
-    #     # #     else:
-    #     # #         # Load data from the file if it exists
-    #     # #         # loaded_data = None
-    #     # #         loaded_data = load_depictio_data()
-    #     # #         if loaded_data:
-    #     # #             return (
-    #     # #                 loaded_data["stored_children_data"],
-    #     # #                 loaded_data["stored_layout_data"],
-    #     # #                 loaded_data["stored_layout_data"],
-    #     # #                 loaded_data["stored_children_data"],
-    #     # #                 stored_edit_dashboard,
-    #     # #                 stored_add_button,
-    #     # #             )
-    #     # #         else:
-    #     # #             return (
-    #     # #                 current_draggable_children,
-    #     # #                 {},
-    #     # #                 stored_layout,
-    #     # #                 stored_figures,
-    #     # #                 stored_edit_dashboard,
-    #     # #                 stored_add_button,
-    #     # #             )
-
-    #     # elif triggered_input == "draggable":
-    #     #     # for child in current_draggable_children:
-    #     #     logger.info(f"current_draggable_children: {current_draggable_children}")
-    #     #     logger.info(f"current_layout: {current_layouts}")
-    #     #     #     print(child)
-    #     #     return current_draggable_children
-    #     # (
-    #     #         # dash.no_update,
-    #     #         current_draggable_children
-    #     #         # new_layouts,
-    #     #         # selected_year,
-    #     #         # new_layouts,
-    #     #         # dash.no_update,
-    #     #         # # current_draggable_children,
-    #     #         # stored_edit_dashboard,
-    #     #         # stored_add_button,
-    #     #         # selected_year,
-    #     #     )
-
-    #     # # div_index = 4 if box_type == "segmented-control-visu-graph" else 2
-    #     # # if box_type:
-    #     # #     if box_type == "segmented-control-visu-graph":
-    #     # #         child = children[div_index]["props"]["children"][0]["props"][
-    #     # #             "children"
-    #     # #         ]  # Figure
-    #     # #         child["props"]["id"]["type"] = (
-    #     # #             "updated-" + child["props"]["id"]["type"]
-    #     # #         )  # Figure
-
-    #     # #         # print(child)
-    #     # #         print("OK")
-    #     # #     elif box_type == "card":
-    #     # #         # print(children)
-    #     # #         child = children[div_index]["props"]["children"][1]["props"]["children"][
-    #     # #             1
-    #     # #         ]  # Card
-    #     # #         print(child)
-    #     # #         child["props"]["children"]["props"]["id"]["type"] = (
-    #     # #             "updated-" + child["props"]["children"]["props"]["id"]["type"]
-    #     # #         )  # Figure
-    #     # #     elif box_type == "input":
-    #     # #         # print(children)
-    #     # #         child = children[div_index]["props"]["children"][1]["props"]["children"][
-    #     # #             1
-    #     # #         ]  # Card
-    #     # #         print(child)
-    #     # #         child["props"]["children"]["props"]["id"]["type"] = (
-    #     # #             "updated-" + child["props"]["children"]["props"]["id"]["type"]
-
-    #     # # edit_button = dmc.Button(
-    #     # #     "Edit",
-    #     # #     id={
-    #     # #         "type": "edit-button",
-    #     # #         "index": f"edit-{btn_index}",
-    #     # #     },
-    #     # #     color="gray",
-    #     # #     variant="filled",
-    #     # #     leftIcon=DashIconify(icon="basil:edit-solid", color="white"),
-    #     # # )
-
-    #     # # remove_button = dmc.Button(
-    #     # #     "Remove",
-    #     # #     id={"type": "remove-button", "index": f"remove-{btn_index}"},
-    #     # #     color="red",
-    #     # #     variant="filled",
-    #     # #     leftIcon=DashIconify(icon="jam:trash", color="white"),
-    #     # # )
-
-    #     # # new_draggable_child = html.Div(
-    #     # #     [
-    #     # #         html.Div([remove_button, edit_button]),
-    #     # #         child,
-    #     # #     ],
-    #     # #     id=f"draggable-{btn_id}",
-    #     # # )
-
-    #     # # elif triggered_input == "edit-dashboard-mode-button":
-    #     # #     for child in current_draggable_children:
-    #     # #         # Get the deepest element type
-    #     # #         (
-    #     # #             max_depth,
-    #     # #             deepest_element_type,
-    #     # #         ) = analyze_structure_and_get_deepest_type(child)
-    #     # #         # print("\n")
-    #     # #         # print("analyze_structure_and_get_deepest_type")
-    #     # #         # print(max_depth, deepest_element_type)
-
-    #     # #         if deepest_element_type in ["graph", "table-aggrid", "card-value", "interactive-component", "iframe-jbrowse"]:
-    #     # #             if not switch_state:
-    #     # #                 child["props"]["children"][0]["props"]["children"]["props"]["children"] = [child["props"]["children"][0]["props"]["children"]["props"]["children"][-1]]
-    #     # #             else:
-    #     # #                 child["props"]["children"][0]["props"]["children"]["props"]["children"] = [
-    #     # #                     dmc.Button(
-    #     # #                         "Remove",
-    #     # #                         id={"type": "remove-box-button", "index": str(child["props"]["children"][0]["props"]["children"]["props"]["children"][-1]["props"]["id"]["index"])},
-    #     # #                         color="red",
-    #     # #                         leftIcon=DashIconify(icon="mdi:trash-can-outline", width=16, color="white"),
-    #     # #                     ),
-    #     # #                     child["props"]["children"][0]["props"]["children"]["props"]["children"][-1],
-    #     # #                 ]
-    #     # #         # elif deepest_element_type == "iframe-jbrowse":
-    #     # #         #     if not switch_state:
-    #     # #         #         child["props"]["children"][0]["props"]["children"]["props"]["children"] = [child["props"]["children"][0]["props"]["children"]["props"]["children"][-1]]
-    #     # #         #     else:
-    #     # #         #         child["props"]["children"][0]["props"]["children"]["props"]["children"] = [
-    #     # #         #             dmc.Button(
-    #     # #         #                 "Remove",
-    #     # #         #                 id={"type": "remove-box-button", "index": str(child["props"]["children"][0]["props"]["children"]["props"]["children"][-1]["props"]["id"]["index"])},
-    #     # #         #                 color="red",
-    #     # #         #                 leftIcon=DashIconify(icon="mdi:trash-can-outline", width=16, color="white"),
-    #     # #         #             ),
-    #     # #         #             child["props"]["children"][0]["props"]["children"]["props"]["children"][-1],
-    #     # #         #         ]
-
-    #     # #     # print("\n\n")
-
-    #     # #     # switch_state = True if len(ctx.triggered[0]["value"]) > 0 else False
-    #     # #     # print(switch_state)
-    #     # #     # print(stored_edit_dashboard)
-    #     # #     # print(current_draggable_children)
-    #     # #     # assuming the switch state is added as the first argument in args
-    #     # #     # updated_draggable_children = []
-    #     # #     # updated_draggable_children = current_draggable_children
-    #     # #     # print("\n\n")
-    #     # #     # print("edit-dashboard-mode-button")
-    #     # #     # print(switch_state)
-    #     # #     # print(stored_edit_dashboard)
-
-    #     # #     # stored_edit_dashboard = switch_state
-
-    #     # #     # # analyze_structure(current_draggable_children)
-    #     # #     # # print(current_draggable_children[0]["props"]["children"])
-    #     # #     # # print(len(current_draggable_children[0]["props"]["children"]))
-    #     # #     # # print(
-    #     # #     # #     current_draggable_children[0]["props"]["children"][:-1],
-    #     # #     # #     type(current_draggable_children[0]["props"]["children"][:-1]),
-    #     # #     # #     len(current_draggable_children[0]["props"]["children"][:-1]),
-    #     # #     # # )
-    #     # #     # for j, child in enumerate(current_draggable_children):
-    #     # #     #     for i, sub_child in enumerate(child["props"]["children"]):
-    #     # #     #         if i != (len(child["props"]["children"]) - 1):
-    #     # #     #             try:
-    #     # #     #                 updated_sub_child = enable_box_edit_mode_dev(sub_child, switch_state)
-    #     # #     #             except Exception as e:
-    #     # #     #                 print(f"Error when calling enable_box_edit_mode_dev: {e}")
-    #     # #     #             # print(updated_sub_child)
-    #     # #     #             child["props"]["children"][i] = updated_sub_child
-    #     # #     #         else:
-    #     # #     #             child["props"]["children"][i] = sub_child
-    #     # #     #     updated_draggable_children.append(child)
-    #     # #     # if j != (len(current_draggable_children)-1):
-    #     # #     #         print("\n\n")
-    #     # #     #         print("updated_child")
-
-    #     # #     #         print(child)
-
-    #     # #     #         print("\n\n")
-    #     # #     #         print("\n\n")
-    #     # #     #         print("\n\n")
-    #     # #     #         print("\n\n")
-    #     # #     #         print("\n\n")
-    #     # #     #         analyze_structure(child)
-
-    #     # #     #         print(child)
-    #     # #     #         print(switch_state)
-    #     # #     #         try:
-    #     # #     # updated_child = enable_box_edit_mode_dev(child, switch_state)
-    #     # #     #         except Exception as e:
-    #     # #     #             print(f"Error when calling enable_box_edit_mode_dev: {e}")
-    #     # #     #         # print(updated_child)
-    #     # #     #         print("\n\n")
-
-    #     # #     # print(len(child))
-    #     # #     # print(child["props"]["id"])
-    #     # #     # print(len(child["props"]["children"]))
-    #     # #     # graph = child["props"]["children"][0]["props"]["children"][
-    #     # #     #     -2
-    #     # #     # ]  # Assuming graph is always the last child
-    #     # #     #     graph = child["props"]["children"][0]["props"]["children"][0]["props"]["children"]
-    #     # #     #     print(child["props"]["children"])
-    #     # #     # if switch_state:  # If switch is 'on', add the remove button
-    #     # #     #     # if "graph" in child["props"]["id"]:
-    #     # #     #     graph = child["props"]["children"][0]
-    #     # #     #     # print(graph["props"]["id"])
-
-    #     # #     #     edit_button = dmc.Button(
-    #     # #     #         "Edit",
-    #     # #     #         id={
-    #     # #     #             "type": "edit-button",
-    #     # #     #             "index": child["props"]["id"],
-    #     # #     #         },
-    #     # #     #         color="gray",
-    #     # #     #         variant="filled",
-    #     # #     #         leftIcon=DashIconify(icon="basil:edit-solid", color="white"),
-    #     # #     #     )
-
-    #     # #     #     remove_button = dmc.Button(
-    #     # #     #         "Remove",
-    #     # #     #         id={"type": "remove-button", "index": child["props"]["id"]},
-    #     # #     #         color="red",
-    #     # #     #         variant="filled",
-    #     # #     #         leftIcon=DashIconify(icon="jam:trash", color="white"),
-    #     # #     #     )
-
-    #     # #     #     updated_child = html.Div(
-    #     # #     #         [
-    #     # #     #             remove_button,
-    #     # #     #             edit_button,
-    #     # #     #             graph,
-    #     # #     #         ],
-    #     # #     #         id=child["props"]["id"],
-    #     # #     #     )
-
-    #     # #     #     # remove_button = dbc.Button(
-    #     # #     #     #     "Remove",
-    #     # #     #     #     id={
-    #     # #     #     #         "type": "remove-button",
-    #     # #     #     #         "index": child["props"]["id"],
-    #     # #     #     #     },
-    #     # #     #     #     color="danger",
-    #     # #     #     # )
-    #     # #     #     # edit_button = dbc.Button(
-    #     # #     #     #     "Edit",
-    #     # #     #     #     id={
-    #     # #     #     #         "type": "edit-button",
-    #     # #     #     #         "index": child["props"]["id"],
-    #     # #     #     #     },
-    #     # #     #     #     color="secondary",
-    #     # #     #     #     style={"margin-left": "10px"},
-    #     # #     #     # )
-
-    #     # #     #     # updated_child = html.Div(
-    #     # #     #     #     [remove_button, edit_button, graph],
-    #     # #     #     #     id=child["props"]["id"],
-    #     # #     #     # )
-    #     # #     # elif (
-    #     # #     #     switch_state is False and stored_edit_dashboard["count"] == 0
-    #     # #     # ):  # If switch is 'off', remove the button
-    #     # #     #     graph = child["props"]["children"][0]["props"]["children"]["props"][
-    #     # #     #         "children"
-    #     # #     #     ][2]
-    #     # #     #     # print(graph["props"]["id"])
-
-    #     # #     #     updated_child = html.Div(
-    #     # #     #         [graph],
-    #     # #     #         id=child["props"]["id"],
-    #     # #     #     )
-    #     # #     # else:
-    #     # #     #     graph = child["props"]["children"][-1]
-    #     # #     #     # print(child["props"]["id"])
-
-    #     # #     #     updated_child = html.Div(
-    #     # #     #         [graph],
-    #     # #     #         id=child["props"]["id"],
-    #     # #     #     )
-    #     # #     # updated_draggable_children.append(updated_child)
-    #     # #     # else:
-    #     # #     #     updated_draggable_children.append(child)
-    #     # #     # updated_draggable_children.append(child)
-
-    #     # #     return (
-    #     # #         current_draggable_children,
-    #     # #         new_layouts,
-    #     # #         # selected_year,
-    #     # #         new_layouts,
-    #     # #         current_draggable_children,
-    #     # #         stored_edit_dashboard,
-    #     # #         stored_add_button,
-    #     # #         # selected_year,
-    #     # #     )
-
-    #     # # # Add an else condition to return the current layout when there's no triggering input
-    #     # else:
-    #     #     raise dash.exceptions.PreventUpdate
-
-    #     else:
-    #         return dash.no_update
+        return {"interactive_components_values": components}
 
 
 def design_draggable(data, init_layout, init_children, local_data):
