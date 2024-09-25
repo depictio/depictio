@@ -1,0 +1,582 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: depictio-secrets
+  namespace: datasci-depictio-project
+type: Opaque
+data:
+  MINIO_ROOT_USER: bWluaW8=
+  MINIO_ROOT_PASSWORD: bWluaW8xMjM=
+# ---
+# apiVersion: v1
+# kind: PersistentVolume
+# metadata:
+#   name: mongo-pv
+#   labels:
+#     type: local
+# spec:
+#   storageClassName: manual
+#   capacity:
+#     storage: 1Gi # Adjust the size as needed
+#   accessModes:
+#     - ReadWriteOnce
+#   hostPath:
+#     path: "/Users/tweber/Gits/depictio/depictioDB_K8S"
+
+
+---
+# Ingress for Depictio
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls.certresolver: sectigo
+  name: depictio-ing
+  namespace: datasci-depictio-project
+spec:
+  ingressClassName: internal-users
+  rules:
+    - host: demo.depictio.embl.org
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: depictio-frontend
+                port:
+                  name: http
+    - host: api.demo.depictio.embl.org
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: depictio-backend
+                port:
+                  name: http
+  tls:
+    - hosts:
+        - demo.depictio.embl.org
+        - api.demo.depictio.embl.org
+
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongo
+  namespace: datasci-depictio-project
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongo
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: mongo
+    spec:
+      containers:
+        - name: mongo
+          image: mongo:latest
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "0.5"
+            limits:
+              memory: "2Gi"
+              cpu: "1"
+          args:
+            ["mongod", "--dbpath", "/data/depictioDB", "--port", "27018"]
+          ports:
+            - containerPort: 27018
+          volumeMounts:
+            - name: mongo-storage
+              mountPath: /data/depictioDB
+      volumes:
+        - name: mongo-storage
+          # emptyDir: {}
+          persistentVolumeClaim:
+            claimName: mongo-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongo
+  namespace: datasci-depictio-project
+spec:
+  type: LoadBalancer # Or use LoadBalancer if you're using Minikube with a cloud provider's driver
+  ports:
+    - name: db
+      port: 27018
+      targetPort: 27018
+  selector:
+    app: mongo
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio
+  namespace: datasci-depictio-project
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      containers:
+        - name: minio
+          image: minio/minio:latest
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "0.5"
+            limits:
+              memory: "2Gi"
+              cpu: "1"
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: depictio-secrets
+                  key: MINIO_ROOT_USER
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: depictio-secrets
+                  key: MINIO_ROOT_PASSWORD
+          args: ["server", "/data", "--console-address", ":9001"]
+          ports:
+            - containerPort: 9000
+            - containerPort: 9001
+          volumeMounts:
+            - name: minio-storage
+              mountPath: /data
+      volumes:
+        - name: minio-storage
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: datasci-depictio-project
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 9000
+      name: http
+      targetPort: 9000
+    - port: 9001
+      name: console
+      targetPort: 9001
+  selector:
+    app: minio
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: depictio-backend
+  namespace: datasci-depictio-project
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: depictio-backend
+  template:
+    metadata:
+      labels:
+        app: depictio-backend
+    spec:
+      securityContext:
+      #   runAsNonRoot: true
+        # runAsUser: 1000
+        fsGroup: 2000
+        # seccompProfile:
+        #   type: RuntimeDefault
+      containers:
+        - name: depictio-backend
+          image: registry.git.embl.de/tweber/depictio/depictio:v0.0.1
+          imagePullPolicy: Always
+          # securityContext:
+          #   allowPrivilegeEscalation: false
+          #   # capabilities:
+          #   #   drop:
+          #   #     - ALL
+          #   runAsNonRoot: true
+          #   # runAsUser: 1000
+          #   # seccompProfile:
+          #   #   type: RuntimeDefault
+          env:
+            - name: DEPICTIO_CONFIG_BACKEND_LOCATION
+              value: "/app/depictio/api/v1/configs/config_backend_k8s_embl_backend.yaml"
+            - name: DEPICTIO_BACKEND_PORT
+              value: "8058"
+            - name: DEPICTIO_FRONTEND_PORT
+              value: "80" 
+            - name: DEPICTIO_FRONTEND_SERVICE_NAME
+              value: "depictio-frontend"
+          # command: ["/bin/bash"]
+          command: ["python", "/app/depictio/api/run.py"]
+          ports:
+            - containerPort: 8058
+          volumeMounts:
+            # - name: depictio-src
+            #   mountPath: /app/depictio
+            - name: config-volume
+              mountPath: /app/depictio/api/v1/configs/config_backend_k8s_embl_backend.yaml
+              subPath: config_backend_k8s_embl_backend.yaml
+            - name: data
+              mountPath: /app/data
+            - name: minio-data
+              mountPath: /app/minio_data
+            - name: configs
+              mountPath: /app/configs
+            - name: kubernetes
+              mountPath: /app/kubernetes
+
+            - name: depictio-example-data  # New Volume Mount
+              mountPath: /app/depictio-example-data        
+
+
+            - name: depictio-screenshots  # New Volume Mount
+              mountPath: /app/depictio/dash/assets/screenshots
+
+            
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "0.5"
+            limits:
+              memory: "2Gi"
+              cpu: "1"
+      volumes:
+        # - name: depictio-src
+        #   persistentVolumeClaim:
+        #     claimName: depictio-src-pvc
+        - name: config-volume
+          configMap:
+            name: depictio-backend-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: depictio-data-pvc
+        - name: minio-data
+          persistentVolumeClaim:
+            claimName: depictio-minio-data-pvc
+        - name: configs
+          persistentVolumeClaim:
+            claimName: depictio-configs-pvc
+        - name: kubernetes
+          persistentVolumeClaim:
+            claimName: depictio-kubernetes-pvc
+        - name: depictio-example-data  # New Volume
+          persistentVolumeClaim:
+            claimName: depictio-example-data-pvc
+
+        - name: depictio-screenshots  # New Volume
+          persistentVolumeClaim:
+            claimName: depictio-screenshots-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: depictio-backend
+  namespace: datasci-depictio-project
+spec:
+  selector:
+    app: depictio-backend
+  type: ClusterIP
+  # type: LoadBalancer
+  ports:
+    - port: 80
+      targetPort: 8058
+      protocol: TCP
+      name: http
+    - port: 443
+      targetPort: 8058
+      protocol: TCP
+      name: https
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: depictio-frontend
+  namespace: datasci-depictio-project
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: depictio-frontend
+  template:
+    metadata:
+      labels:
+        app: depictio-frontend
+    spec:
+      # securityContext:
+      #   runAsNonRoot: true
+      #   runAsUser: 1000
+        # fsGroup: 2000
+      #   seccompProfile:
+      #     type: RuntimeDefault
+      containers:
+        - name: depictio-frontend
+          image: registry.git.embl.de/tweber/depictio/depictio:v0.0.1
+          imagePullPolicy: Always
+
+          # securityContext:
+          #   allowPrivilegeEscalation: false
+          #   capabilities:
+          #     drop:
+          #       - ALL
+          #   runAsNonRoot: true
+          #   runAsUser: 1000
+          #   seccompProfile:
+          #     type: RuntimeDefault
+          env:
+            - name: DEPICTIO_CONFIG_BACKEND_LOCATION
+              value: "/app/depictio/api/v1/configs/config_backend_k8s_embl_frontend.yaml"
+            - name: DEPICTIO_BACKEND_PORT
+              value: "80"
+            - name: DEPICTIO_FRONTEND_PORT
+              value: "5080"
+          command: ["python", "/app/depictio/dash/app.py"]
+          ports:
+            - containerPort: 5080
+          volumeMounts:
+            # - name: depictio-src
+            #   mountPath: /app/depictio
+            - name: config-volume
+              mountPath: /app/depictio/api/v1/configs/config_backend_k8s_embl_frontend.yaml
+              subPath: config_backend_k8s_embl_frontend.yaml
+            - name: data
+              mountPath: /app/data
+            - name: minio-data
+              mountPath: /app/minio_data
+            - name: configs
+              mountPath: /app/configs
+
+            - name: depictio-example-data  # New Volume Mount
+              mountPath: /app/depictio-example-data        
+            
+            - name: depictio-screenshots  # New Volume Mount
+              mountPath: /app/depictio/dash/assets/screenshots
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "0.5"
+            limits:
+              memory: "2Gi"
+              cpu: "1"
+      volumes:
+        # - name: depictio-src
+        #   persistentVolumeClaim:
+        #     claimName: depictio-src-pvc
+        - name: config-volume
+          configMap:
+            name: depictio-frontend-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: depictio-data-pvc
+        - name: minio-data
+          persistentVolumeClaim:
+            claimName: depictio-minio-data-pvc
+        - name: configs
+          persistentVolumeClaim:
+            claimName: depictio-configs-pvc
+        - name: depictio-example-data  # New Volume
+          persistentVolumeClaim:
+            claimName: depictio-example-data-pvc
+        - name: depictio-screenshots  # New Volume
+          persistentVolumeClaim:
+            claimName: depictio-screenshots-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: depictio-frontend
+  namespace: datasci-depictio-project
+spec:
+  # type: LoadBalancer
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 5080
+      protocol: TCP
+      name: http
+    - port: 443
+      targetPort: 5080
+      protocol: TCP
+      name: https
+  selector:
+    app: depictio-frontend
+
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: depictio-src-pvc
+  namespace: datasci-depictio-project
+spec:
+  storageClassName: basic-csi
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi  # Adjust as needed
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: depictio-data-pvc
+  namespace: datasci-depictio-project
+spec:
+  storageClassName: basic-csi
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi  # Adjust as needed
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: depictio-minio-data-pvc
+  namespace: datasci-depictio-project
+spec:
+  storageClassName: basic-csi
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi  # Adjust as needed
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: depictio-configs-pvc
+  namespace: datasci-depictio-project
+spec:
+  storageClassName: basic-csi
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi  # Adjust as needed
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: depictio-kubernetes-pvc
+  namespace: datasci-depictio-project
+spec:
+  storageClassName: basic-csi
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi  # Adjust as needed
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongo-pvc
+spec:
+  storageClassName: basic-csi
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi # Adjust the size as needed
+---
+# MinIO PersistentVolumeClaim
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: minio-pvc
+  namespace: datasci-depictio-project
+spec:
+  storageClassName: basic-csi
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: depictio-example-data-pvc
+  namespace: datasci-depictio-project
+spec:
+  storageClassName: basic-csi
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi  # Adjust the size as needed
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: depictio-screenshots-pvc
+  namespace: datasci-depictio-project
+spec:
+  storageClassName: basic-csi
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi  # Adjust the size as needed
+
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: depictio-frontend-config
+  namespace: datasci-depictio-project
+data:
+  config_backend_k8s_embl_frontend.yaml: |
+    # Paste the content of your updated config_backend_k8s.yaml here
+    fastapi:
+      port: 80
+      service_name: "depictio-backend"
+    dash:
+      port: 5080
+      service_name: "depictio-frontend"
+    jbrowse:
+      data_dir: "/data"
+      config_dir: "/jbrowse-watcher-plugin/sessions"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: depictio-backend-config
+  namespace: datasci-depictio-project
+data:
+  config_backend_k8s_embl_backend.yaml: |
+    # Paste the content of your updated config_backend_k8s.yaml here
+    fastapi:
+      port: 8058
+      service_name: "depictio-backend"
+    dash:
+      port: 80
+      service_name: "depictio-frontend"
+    jbrowse:
+      data_dir: "/data"
+      config_dir: "/jbrowse-watcher-plugin/sessions"
+
