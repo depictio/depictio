@@ -128,7 +128,7 @@ async def screenshot_dashboard(dashboard_id: str, current_user=Depends(get_curre
     from playwright.async_api import async_playwright
 
     # Folder where screenshots will be saved
-    output_folder = "./depictio/dash/assets/screenshots"
+    output_folder = "/app/depictio/dash/assets/screenshots"
 
     # DASH_BASE_URL = "http://localhost:5080"
     url = f"{DASH_BASE_URL}"
