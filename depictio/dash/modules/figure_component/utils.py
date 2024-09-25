@@ -42,12 +42,12 @@ def build_figure_frame(index, children=None):
         )
 
 
-def render_figure(dict_kwargs, visu_type, df):
+def render_figure(dict_kwargs, visu_type, df, cutoff=10000):
     if dict_kwargs and visu_type.lower() in plotly_vizu_dict and df is not None:
         # if visu_type.lower() == "scatter":
         #     dict_kwargs["render_mode"] = "webgl"
-        if df.shape[0] > 1000:
-            figure = plotly_vizu_dict[visu_type.lower()](df.sample(1000), **dict_kwargs)
+        if df.shape[0] > cutoff:
+            figure = plotly_vizu_dict[visu_type.lower()](df.sample(cutoff), **dict_kwargs)
         else:
             figure = plotly_vizu_dict[visu_type.lower()](df, **dict_kwargs)
         return figure
@@ -95,8 +95,9 @@ def build_figure(**kwargs):
         df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
 
     style_partial_data_displayed = {"display": "none"}
+    cutoff = 10000
     if build_frame:
-        if visu_type.lower() == "scatter" and df.shape[0] > 1000:
+        if visu_type.lower() == "scatter" and df.shape[0] > cutoff:
             style_partial_data_displayed = {"display": "block"}
 
     figure = render_figure(dict_kwargs, visu_type, df)

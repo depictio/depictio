@@ -1,6 +1,6 @@
 fastapi:
   port: 8058
-  service_name: "depictio-backend.depictio"
+  service_name: "depictio-backend"
 
 dash:
   port: 5080
