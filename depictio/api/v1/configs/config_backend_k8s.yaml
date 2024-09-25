@@ -1,5 +1,5 @@
 fastapi:
-  port: 80
+  port: 8058
   service_name: "depictio-backend.depictio"
 
 dash:
