@@ -30,7 +30,8 @@ def return_design_component(component_selected, id, df, btn_component):
     elif component_selected == "Interactive":
         return design_interactive(id, df), btn_component
     elif component_selected == "JBrowse2":
-        return design_jbrowse(id), btn_component
+        return dash.no_update, btn_component
+        # return design_jbrowse(id), btn_component
     elif component_selected == "Table":
         return design_table(id), btn_component
     # TODO: implement the following components
@@ -112,8 +113,10 @@ def register_callbacks_stepper_part_three(app):
 
                     id = ids[btn_index[0]]
                     return return_design_component(component_selected, id, df, btn_component)
-                elif component_selected == "JBrowse2":
-                    return design_jbrowse(ids[btn_index[0]]), btn_component
+                # elif component_selected == "JBrowse2":
+                #     return design_jbrowse(ids[btn_index[0]]), btn_component
+                    # return html.Div("Not implemented yet"), btn_component
+
                 else:
                     return html.Div("Not implemented yet"), btn_component
             else:
@@ -133,9 +136,9 @@ def register_callbacks_stepper_part_three(app):
                         df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
 
                         return return_design_component(last_button, id, df, btn_component)
-                    elif last_button == "JBrowse2":
-                        id = ids[components_list.index(last_button)]
-                        return design_jbrowse(id), btn_component
+                    # elif last_button == "JBrowse2":
+                    #     id = ids[components_list.index(last_button)]
+                    #     return design_jbrowse(id), btn_component
                     else:
                         return html.Div("Not implemented yet"), btn_component
 
