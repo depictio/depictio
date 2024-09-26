@@ -7,8 +7,6 @@ from datetime import datetime
 
 
 def register_callbacks_save(app):
-
-
     @app.callback(
         Output("dummy-output", "children"),
         Input("save-button-dashboard", "n_clicks"),
@@ -97,6 +95,7 @@ def register_callbacks_save(app):
                     headers={
                         "Authorization": f"Bearer {TOKEN}",
                     },
+                    timeout=60.0,  # Timeout set to 60 seconds
                 )
                 if screenshot_response.status_code == 200:
                     logger.warning("Dashboard screenshot saved successfully.")
