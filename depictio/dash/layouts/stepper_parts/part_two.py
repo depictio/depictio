@@ -34,7 +34,7 @@ def register_callbacks_stepper_part_two(app):
                 style=UNSELECTED_STYLE,
                 color="orange",
                 leftIcon=DashIconify(icon="ph:graph-fill", color="white"),
-                disabled=False,
+                disabled=True,
             )
         )
 
@@ -45,7 +45,7 @@ def register_callbacks_stepper_part_two(app):
                 style=UNSELECTED_STYLE,
                 color="red",
                 leftIcon=DashIconify(icon="gridicons:globe", color="white"),
-                disabled=False,
+                disabled=True,
             )
         )
 
