@@ -54,10 +54,15 @@ def build_table(**kwargs):
 
     df = kwargs.get("df", pl.DataFrame())
     TOKEN = kwargs.get("access_token")
-
+    stepper = kwargs.get("stepper", False)
 
     df = kwargs.get("df", pl.DataFrame())
 
+
+    # if stepper: 
+    #     value_div_type = "table-aggrid-tmp"
+    # else:
+    value_div_type = "table-aggrid"
 
 
     if df.is_empty():
@@ -79,9 +84,9 @@ def build_table(**kwargs):
 
     # Prepare ag grid table
     table_aggrid = dag.AgGrid(
-        id={"type": "table-aggrid", "index": str(index)},
-        # rowData=df.to_pandas().to_dict("records"),
-        rowModelType="infinite",
+        id={"type": value_div_type, "index": str(index)},
+        rowData=df.to_pandas().to_dict("records"),
+        # rowModelType="infinite",
         columnDefs=columnDefs,
         dashGridOptions={
             "tooltipShowDelay": 500,
@@ -89,13 +94,13 @@ def build_table(**kwargs):
             "paginationAutoPageSize": False,
             "animateRows": False,
             # The number of rows rendered outside the viewable area the grid renders.
-            "rowBuffer": 0,
-            # How many blocks to keep in the store. Default is no limit, so every requested block is kept.
-            "maxBlocksInCache": 2,
-            "cacheBlockSize": 100,
-            "cacheOverflowSize": 2,
-            "maxConcurrentDatasourceRequests": 2,
-            "infiniteInitialRowCount": 1,
+            # "rowBuffer": 0,
+            # # How many blocks to keep in the store. Default is no limit, so every requested block is kept.
+            # "maxBlocksInCache": 2,
+            # "cacheBlockSize": 100,
+            # "cacheOverflowSize": 2,
+            # "maxConcurrentDatasourceRequests": 2,
+            # "infiniteInitialRowCount": 1,
             "rowSelection": "multiple",
             "enableCellTextSelection": True, "ensureDomOrder": True
         },

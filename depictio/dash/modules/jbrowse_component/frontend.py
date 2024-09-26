@@ -120,7 +120,7 @@ def create_stepper_jbrowse_button(n, disabled=False):
             size="xl",
             color="yellow",
             leftIcon=DashIconify(icon="material-symbols:table-rows-narrow-rounded", color="white"),
-            disabled=disabled,
+            disabled=True,
         )
     )
     store = dcc.Store(
