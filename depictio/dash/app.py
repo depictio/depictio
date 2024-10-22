@@ -287,7 +287,7 @@ def create_admin_header(text):
                                         ),
                                         dmc.Tab(
                                             "Projects",
-                                            icon=DashIconify(icon="mdi:folder-open", width=20, height=20),
+                                            icon=DashIconify(icon="mdi:jira", width=20, height=20),
                                             value="projects",
                                             # value="projects",
                                             # component=dcc.Link("Projects", href="/admin/projects", style={"textDecoration": "none", "color": "inherit"})
