@@ -360,7 +360,14 @@ def register_callbacks_dashboards_management(app):
                         withBorder=True,
                         shadow="sm",
                         radius="md",
-                        style={"width": 480},
+                        # style={"width": 480},
+                        # Remove fixed width to allow flexibility
+                        style={
+                            "width": "100%",
+                            "height": "100%",
+                            "display": "flex",
+                            "flexDirection": "column",
+                        },
                         children=[
                             thumbnail,
                             buttons,
@@ -372,17 +379,22 @@ def register_callbacks_dashboards_management(app):
 
         dashboards_view = dmc.SimpleGrid(
             loop_over_dashboards(user_id, dashboards),
-            cols=3,
+            cols=3,  # Default number of columns
             spacing="xl",
             verticalSpacing="xl",
-            # breakpoints=[
-            #     {"maxWidth": 1450, "cols": 2},  # Two columns on medium screens
-            #     {"maxWidth": 768, "cols": 1},  # One column on small screens
-            # ],
+            breakpoints=[
+                {"maxWidth": 1600, "cols": 3},  # Large screens
+                {"maxWidth": 1200, "cols": 2},  # Medium screens
+                {"maxWidth": 768, "cols": 1},  # Small screens
+            ],
+            style={"width": "100%"},
         )
-        # logger.info(f"dashboards_view: {dashboards_view}")
 
-        return html.Div([dmc.Grid([title], justify="space-between", align="center"), html.Hr(), dashboards_view])
+        # Optional: Add padding to the parent div for better spacing on smaller screens
+        return html.Div(
+            [dmc.Grid([title], justify="space-between", align="center", style={"width": "100%", "padding": "20px 0"}), html.Hr(), dashboards_view],
+            style={"width": "100%", "padding": "0 20px"},
+        )
 
     @app.callback(
         [Output({"type": "dashboard-list", "index": ALL}, "children"), Output({"type": "dashboard-index-store", "index": ALL}, "data")],
