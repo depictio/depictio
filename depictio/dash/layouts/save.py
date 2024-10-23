@@ -24,6 +24,7 @@ def register_callbacks_save(app):
         State({"type": "interactive-component-value", "index": ALL}, "value"),
         State("url", "pathname"),
         State("local-store", "data"),
+        Input("interval-component", "n_intervals"),
         prevent_initial_call=True,
     )
     def save_data_dashboard(
@@ -36,6 +37,7 @@ def register_callbacks_save(app):
         interactive_component_values,
         pathname,
         local_store,
+        n_intervals,
     ):
         logger.info(f"URL pathname: {pathname}")
         if not local_store:
@@ -46,7 +48,7 @@ def register_callbacks_save(app):
         logger.info(f"save_data_dashboard - TOKEN: {TOKEN}")
         # current_user = fetch_user_from_token(TOKEN)
 
-        if n_clicks:
+        if n_clicks or n_intervals:
             dashboard_id = pathname.split("/")[-1]
 
             logger.info(f"save_data_dashboard INSIDE")
@@ -89,20 +91,24 @@ def register_callbacks_save(app):
                 else:
                     logger.warning(f"Failed to save dashboard data: {response.json()}")
 
-                # Screenshot the dashboard
-                screenshot_response = httpx.get(
-                    f"{API_BASE_URL}/depictio/api/v1/dashboards/screenshot/{dashboard_id}",
-                    headers={
-                        "Authorization": f"Bearer {TOKEN}",
-                    },
-                    timeout=60.0,  # Timeout set to 60 seconds
-                )
-                if screenshot_response.status_code == 200:
-                    logger.warning("Dashboard screenshot saved successfully.")
-                else:
-                    logger.warning(f"Failed to save dashboard screenshot: {screenshot_response.json()}")
+                if n_clicks:
+                    # Screenshot the dashboard
+                    screenshot_response = httpx.get(
+                        f"{API_BASE_URL}/depictio/api/v1/dashboards/screenshot/{dashboard_id}",
+                        headers={
+                            "Authorization": f"Bearer {TOKEN}",
+                        },
+                        timeout=60.0,  # Timeout set to 60 seconds
+                    )
+                    if screenshot_response.status_code == 200:
+                        logger.warning("Dashboard screenshot saved successfully.")
+                    else:
+                        logger.warning(f"Failed to save dashboard screenshot: {screenshot_response.json()}")
 
-                return []
+                    return []
+                
+                else:   
+                    return []
 
             else:
                 logger.warning(f"Failed to fetch dashboard data: {dashboard_data_response.json()}")
