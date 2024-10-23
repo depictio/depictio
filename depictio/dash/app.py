@@ -228,7 +228,7 @@ def handle_authenticated_user(pathname, local_data):
 
             return content, header, "/dashboards", local_data
 
-        header = create_default_header("Admin")
+        header = create_admin_header("Admin")
         admin = html.Div(id="admin-management-content")
         return admin, header, pathname, local_data
 
@@ -239,6 +239,88 @@ def handle_authenticated_user(pathname, local_data):
 
 def create_default_header(text):
     return dmc.Text(text, weight=600, size="xl", style={"fontSize": "28px", "fontFamily": "Virgil", "padding": "20px 10px"})
+
+
+def create_admin_header(text):
+    """
+    Creates an admin header with a title and navigation tabs for Users, Projects, and Dashboards.
+
+    Parameters:
+    - text (str): The title text to display in the header.
+
+    Returns:
+    - dmc.Header: A Dash Mantine Components Header containing the title and navigation tabs.
+    """
+    header = dmc.Header(
+        height=60,  # Height of the header
+        # padding="xs",  # Padding inside the header
+        children=[
+            dmc.Container(
+                fluid=True,  # Make the container fluid (full-width)
+                children=[
+                    dmc.Group(
+                        position="apart",  # Space between the title and tabs
+                        align="center",
+                        style={"height": "100%"},
+                        children=[
+                            # Title Section
+                            # dmc.Title(
+                            #     text,
+                            #     order=3,  # Corresponds to h3
+                            #     size="h3",
+                            #     weight=700,
+                            #     color="dark",
+                            # ),
+                            # Navigation Tabs
+                            dmc.Tabs(
+                                value="users",  # Default active tab
+                                id="admin-tabs",  # ID for the tabs component
+                                # onTabChange=lambda value: dash.callback_context.triggered,  # Placeholder for callback
+                                children=dmc.TabsList(
+                                    [
+                                        dmc.Tab(
+                                            "Users",
+                                            icon=DashIconify(icon="mdi:account-group", width=20, height=20),
+                                            value="users",
+                                            # value="users",
+                                            # component=dcc.Link("Users", href="/admin/users", style={"textDecoration": "none", "color": "inherit"})
+                                        ),
+                                        dmc.Tab(
+                                            "Projects",
+                                            icon=DashIconify(icon="mdi:jira", width=20, height=20),
+                                            value="projects",
+                                            # value="projects",
+                                            # component=dcc.Link("Projects", href="/admin/projects", style={"textDecoration": "none", "color": "inherit"})
+                                        ),
+                                        dmc.Tab(
+                                            "Dashboards",
+                                            icon=DashIconify(icon="mdi:view-dashboard", width=20, height=20),
+                                            value="dashboards",
+                                            # value="dashboards",
+                                            # component=dcc.Link("Dashboards", href="/admin/dashboards", style={"textDecoration": "none", "color": "inherit"})
+                                        ),
+                                        dmc.TabsPanel(value="users", id="admin-tabs-users"),
+                                        dmc.TabsPanel(value="projects", id="admin-tabs-projects"),
+                                        dmc.TabsPanel(value="dashboards", id="admin-tabs-dashboards"),
+                                    ]
+                                ),
+                                # orientation="horizontal",
+                                radius="md",
+                                # variant="outline",
+                                # grow=True,
+                                # styles={
+                                #     "tab": {"fontSize": "14px", "padding": "8px 12px"},
+                                #     "tabActive": {"backgroundColor": "var(--mantine-color-blue-light)", "color": "var(--mantine-color-blue-dark)"},
+                                # }
+                            ),
+                        ],
+                    )
+                ],
+            )
+        ],
+        # fixed=True,  # Fix the header to the top
+    )
+    return header
 
 
 def create_header_with_button(text, button):

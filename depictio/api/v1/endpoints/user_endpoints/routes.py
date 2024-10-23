@@ -312,3 +312,16 @@ def generate_agent_config_endpoint(request: dict, current_user=Depends(get_curre
     depictio_agent_config = generate_agent_config(current_user=current_user, request=request)
 
     return depictio_agent_config
+
+
+@auth_endpoint_router.get("/list")
+def list_users(current_user=Depends(get_current_user)):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Current user not found.")
+    # Check if the current user is an admin
+    if not current_user.is_admin:
+        raise HTTPException(status_code=401, detail="Current user is not an admin.")
+    
+    users = users_collection.find()
+    users = [convert_objectid_to_str(user) for user in users]
+    return users
