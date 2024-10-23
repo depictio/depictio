@@ -378,6 +378,7 @@ def register_callbacks_draggable(app):
         else:
             return dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
+    # Callback to handle Add Button clicks
     @app.callback(
         Output("test-output", "children"),
         Output("stored-add-button", "data"),
@@ -388,39 +389,37 @@ def register_callbacks_draggable(app):
         prevent_initial_call=True,
     )
     def trigger_modal(add_button_nclicks, stored_add_button, initialized_add_button):
-        logger.info("\n\n")
-        logger.info("Trigger modal")
-        logger.info("n_clicks: {}".format(add_button_nclicks))
-        logger.info("stored_add_button: {}".format(stored_add_button))
+        logger.info("\n\nTrigger modal")
+        logger.info(f"n_clicks: {add_button_nclicks}")
+        logger.info(f"stored_add_button: {stored_add_button}")
+        logger.info(f"initialized_add_button: {initialized_add_button}")
 
         from dash import ctx
 
-        logger.debug("CTX: {}".format(ctx))
-        logger.debug("CTX triggered: {}".format(ctx.triggered))
-        logger.debug("CTX triggered_id: {}".format(ctx.triggered_id))
-        logger.debug("CTX triggered_props_id: {}".format(ctx.triggered_prop_ids))
-        logger.debug("CTX args_grouping: {}".format(ctx.args_grouping))
-        logger.debug("CTX inputs: {}".format(ctx.inputs))
-
-        triggered_input = ctx.triggered[0]["prop_id"].split(".")[0]
-        logger.info("triggered_input : {}".format(triggered_input))
-
         if not initialized_add_button:
+            logger.info("Initializing add button")
             return dash.no_update, dash.no_update, True
 
+        if add_button_nclicks is None:
+            logger.info("No clicks detected")
+            return dash.no_update, dash.no_update, True
+
+        triggered_input = ctx.triggered[0]["prop_id"].split(".")[0]
+        logger.info(f"triggered_input: {triggered_input}")
+
         if triggered_input == "add-button":
-            # update the stored add button count using current value + n_clicks - warning: do not reuse the same n_clicks value multiple times
+            # Update the stored add button count
             stored_add_button["count"] += 1
-            logger.info("Updated stored_add_button: {}".format(stored_add_button))
+            logger.info(f"Updated stored_add_button: {stored_add_button}")
             index = stored_add_button["count"]
-            # Generate index from the number of clicks
-            # index = add_button_nclicks
+
+            # Generate and return the new component
             current_draggable_children = add_new_component(str(index))
-
-            return current_draggable_children, stored_add_button, False
+            return current_draggable_children, stored_add_button, True  # Keep initialized_add_button as True
         else:
-            return dash.no_update, dash.no_update, False
-
+            logger.warning(f"Unexpected triggered_input: {triggered_input}")
+            return dash.no_update, dash.no_update, True
+        
     @app.callback(
         Output("interactive-values-store", "data"),
         Input({"type": "interactive-component-value", "index": ALL}, "value"),
