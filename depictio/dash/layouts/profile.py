@@ -68,7 +68,7 @@ layout = dbc.Container(
                             ),
                             dmc.PasswordInput(placeholder="New Password", label="New Password", id="new-password"),
                             dmc.PasswordInput(placeholder="Confirm New Password", label="Confirm New Password", id="confirm-new-password"),
-                            dmc.Text(id="message-password", color="red", style={"display": "none"}),
+                            dmc.Text(id="message-password", c="red", style={"display": "none"}),
                             dmc.Button("Save", color="blue", id="save-password"),
                         ]
                     ),

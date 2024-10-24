@@ -18,7 +18,7 @@ def render_login_form():
     return dmc.Stack(
         [
             dmc.Center(html.Img(src=dash.get_asset_url("logo.png"), height=60, style={"margin-left": "0px"})),  # Center the logo
-            dmc.Center(dmc.Title("Welcome to Depictio :", order=2, style={"fontFamily": "Virgil"}, align="center")),
+            dmc.Center(dmc.Title("Welcome to Depictio :", order=2, style={"fontFamily": "Virgil"})),
             dmc.Space(h=10),
             dmc.TextInput(label="Email:", id="register-email", placeholder="Enter your email", style={"width": "100%", "display": "none"}),
             dmc.PasswordInput(label="Password:", id="register-password", placeholder="Enter your password", style={"width": "100%", "display": "none"}),
@@ -35,11 +35,11 @@ def render_login_form():
                     html.A(dmc.Button("Register", radius="md", variant="outline", color="gray", fullWidth=True), id="open-register-form"),
                     html.A(dmc.Button("", radius="md", variant="outline", color="gray", fullWidth=True), id="open-login-form", style={"display": "none"}),
                 ],
-                position="center",
+                justify="center",
                 mt="1rem",
             ),
         ],
-        spacing="1rem",
+        # spacing="1rem",
         style={"width": "100%"},
     )
 
@@ -48,7 +48,7 @@ def render_register_form():
     return dmc.Stack(
         [
             dmc.Center(html.Img(src=dash.get_asset_url("logo.png"), height=60, style={"margin-left": "0px"})),  # Center the logo
-            dmc.Center(dmc.Title("Please register :", order=2, style={"fontFamily": "Virgil"}, align="center")),
+            dmc.Center(dmc.Title("Please register :", order=2, style={"fontFamily": "Virgil"})),
             dmc.Space(h=10),
             dmc.TextInput(label="Email:", id="register-email", placeholder="Enter your email", style={"width": "100%"}),
             dmc.PasswordInput(label="Password:", id="register-password", placeholder="Enter your password", style={"width": "100%"}),
@@ -65,11 +65,11 @@ def render_register_form():
                     html.A(dmc.Button("", radius="md", variant="outline", color="gray", fullWidth=True), id="open-register-form", style={"display": "none"}),
                     html.A(dmc.Button("Back to Login", radius="md", variant="outline", color="gray", fullWidth=True), id="open-login-form"),
                 ],
-                position="center",
+                justify="center",
                 mt="1rem",
             ),
         ],
-        spacing="1rem",
+        # spacing="1rem",
         style={"width": "100%"},
     )
 
@@ -139,6 +139,7 @@ layout = html.Div(
             withCloseButton=False,
             closeOnEscape=False,
             closeOnClickOutside=False,
+
             size="lg",
         ),
         # html.Div(id="landing-page-content"),
@@ -266,7 +267,7 @@ def register_callbacks_users_management(app):
                 content = render_login_form()
             else:
                 content = render_login_form()
-            return modal_open_new, content, dmc.Text(feedback_message, color="red" if modal_open_new else "green"), current_state, modal_open_new, local_data_new
+            return modal_open_new, content, dmc.Text(feedback_message, c="red" if modal_open_new else "green"), current_state, modal_open_new, local_data_new
 
         elif button_id == "register-button":
             feedback_message, modal_open_new = handle_registration(register_email, register_password, register_confirm_password)

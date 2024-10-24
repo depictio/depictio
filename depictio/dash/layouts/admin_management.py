@@ -43,7 +43,7 @@ def render_userwise_layout(user):
                         [
                             dmc.Group(
                                 [
-                                    dmc.Text(user.email, weight=500, size="lg", style={"flex": 1}),
+                                    dmc.Text(user.email, fw=500, size="lg", style={"flex": 1}),
                                     dmc.Badge(
                                         badge_label,
                                         color=badge_color,
@@ -52,7 +52,7 @@ def render_userwise_layout(user):
                                         radius="sm",
                                     ),
                                 ],
-                                position="apart",
+                                justify="apart",
                             ),
                         ]
                     ),
@@ -60,33 +60,33 @@ def render_userwise_layout(user):
                         [
                             dmc.Group(
                                 spacing="xs",
-                                position="apart",
+                                justify="apart",
                                 children=[
                                     dmc.Stack(
-                                        spacing="xs",
+                                        # spacing="xs",
                                         style={"marginBottom": "15px"},
                                         children=[
                                             dmc.Group(
                                                 [
-                                                    dmc.Text("Registration Date: ", weight=700, size="sm"),
+                                                    dmc.Text("Registration Date: ", fw=700, size="sm"),
                                                     dmc.Text(registration_date, size="sm"),
                                                 ]
                                             ),
                                             dmc.Group(
                                                 [
-                                                    dmc.Text("Last Login: ", weight=700, size="sm"),
+                                                    dmc.Text("Last Login: ", fw=700, size="sm"),
                                                     dmc.Text(last_login, size="sm"),
                                                 ]
                                             ),
                                             dmc.Group(
                                                 [
-                                                    dmc.Text("Groups: ", weight=700, size="sm"),
+                                                    dmc.Text("Groups: ", fw=700, size="sm"),
                                                     dmc.List([dmc.ListItem(group) for group in user.groups] if user.groups else [dmc.ListItem("None")], size="sm"),
                                                 ]
                                             ),
                                             dmc.Group(
                                                 [
-                                                    dmc.Text("Account Status: ", weight=700, size="sm"),
+                                                    dmc.Text("Account Status: ", fw=700, size="sm"),
                                                     dmc.Badge(
                                                         "Active" if user.is_active else "Inactive",
                                                         color="green" if user.is_active else "red",
@@ -98,7 +98,7 @@ def render_userwise_layout(user):
                                             ),
                                             dmc.Group(
                                                 [
-                                                    dmc.Text("Verified: ", weight=700, size="sm"),
+                                                    dmc.Text("Verified: ", fw=700, size="sm"),
                                                     dmc.Text("Yes" if user.is_verified else "No", size="sm"),
                                                 ]
                                             ),

@@ -126,7 +126,6 @@ def design_header(data):
         ]
     )
 
-
     # Modal for success message when clicking the save button
     modal_save_button = dbc.Modal(
         [
@@ -171,7 +170,7 @@ def design_header(data):
                         "Share this dashboard by copying the link below:",
                         className="text-primary",
                     ),
-                    dmc.TextInput(type="text", value="https://depict.io/dashboard/1", style={"width": "100%"}, icon=DashIconify(icon="mdi:link", width=16, color="grey")),
+                    dmc.TextInput(value="https://depict.io/dashboard/1", style={"width": "100%"}, leftSection=DashIconify(icon="mdi:link", width=16, color="grey")),
                 ],
                 style={"background-color": "#F0F8FF"},
             ),
@@ -218,7 +217,7 @@ def design_header(data):
         # style={"width": "120px", "fontFamily": "Virgil", "marginRight": "10px"},
         style=button_style,
         disabled=disabled,
-        # leftIcon=DashIconify(icon="mdi:plus", width=16, color="white"),
+        # leftSection=DashIconify(icon="mdi:plus", width=16, color="white"),
     )
 
     save_button = dmc.ActionIcon(
@@ -233,7 +232,7 @@ def design_header(data):
         n_clicks=0,
         disabled=disabled,
         style=button_style,
-        # leftIcon=DashIconify(icon="mdi:content-save", width=16, color="white"),
+        # leftSection=DashIconify(icon="mdi:content-save", width=16, color="white"),
         # width of the button
         # style={"width": "120px", "fontFamily": "Virgil"},
     )
@@ -241,7 +240,7 @@ def design_header(data):
     remove_all_components_button = dmc.Button(
         "Remove all components",
         id="remove-all-components-button",
-        leftIcon=DashIconify(icon="mdi:trash-can-outline", width=16, color="white"),
+        leftSection=DashIconify(icon="mdi:trash-can-outline", width=16, color="white"),
         size="lg",
         radius="xl",
         variant="gradient",
@@ -265,7 +264,7 @@ def design_header(data):
                 ],
                 justify="center",
                 align="flex-start",
-                spacing="xs",
+                # spacing="xs",
             ),
         ],
     )
@@ -283,7 +282,7 @@ def design_header(data):
                     value=f"{data['version']}",
                     label="Dashboard version",
                     style={"width": 150, "padding": "0 10px"},
-                    icon=DashIconify(icon="mdi:format-list-bulleted-square", width=16, color=dmc.theme.DEFAULT_COLORS["blue"][5]),
+                    leftSection=DashIconify(icon="mdi:format-list-bulleted-square", width=16),
                     # rightSection=DashIconify(icon="radix-icons:chevron-down"),
                 )
             ),
@@ -297,7 +296,7 @@ def design_header(data):
                     dmc.Text("Edit dashboard", style={"fontFamily": "default"}),
                 ],
                 align="center",
-                spacing="sm",
+                # spacing="sm",
                 style={"border": "1px solid lightgrey", "padding": "10px", "margin": "10px 0"},
             ),
             dmc.Group(
@@ -310,7 +309,20 @@ def design_header(data):
                     dmc.Text("Toggle interactivity", style={"fontFamily": "default"}),
                 ],
                 align="center",
-                spacing="sm",
+                # spacing="sm",
+                style={"border": "1px solid lightgrey", "padding": "10px", "margin": "10px 0"},
+            ),
+            dmc.Group(
+                [
+                    dmc.Switch(
+                        id="toggle-autosave-button",
+                        checked=True,
+                        color="pink",
+                    ),
+                    dmc.Text("Toggle autosave", style={"fontFamily": "default"}),
+                ],
+                align="center",
+                # spacing="sm",
                 style={"border": "1px solid lightgrey", "padding": "10px", "margin": "10px 0"},
             ),
             dmc.Group(
@@ -328,7 +340,7 @@ def design_header(data):
                     dmc.Text("Share", style={"fontFamily": "default"}),
                 ],
                 align="center",
-                spacing="sm",
+                # spacing="sm",
                 style={"border": "1px solid lightgrey", "padding": "10px", "margin": "10px 0"},
             ),
         ],
@@ -375,8 +387,8 @@ def design_header(data):
                 storage_type="memory",
                 data=False,
             ),
-            dmc.MediaQuery(
-                [
+            # dmc.MediaQuery(
+            #     [
                     dmc.ActionIcon(
                         DashIconify(
                             id="sidebar-icon",
@@ -389,85 +401,85 @@ def design_header(data):
                         p=1,
                         id="sidebar-button",
                     )
-                ],
-                smallerThan="md",
-                styles={"display": "none"},
-            ),
+            #     ],
+            #     smallerThan="md",
+            #     styles={"display": "none"},
+            # ),
         ]
     )
 
     title_style = {"fontWeight": "bold", "fontSize": "24px", "color": "#333"}
-    header = dmc.Header(
-        [
-            offcanvas_parameters,
-            modal_save_button,
-            remove_all_components_button,
-            dummy_output,
-            stepper_output,
-            html.Div(children=stores_add_edit),
-            dmc.Grid(
+    header = dmc.AppShellHeader(
                 [
-                    # dmc.Col(
-                    #     [button_menu],
-                    #     # align="center",
-                    #     style={"paddingLeft": "20px"},
-                    #     span="content",
-                    # ),
-                    dmc.Col(
+                    offcanvas_parameters,
+                    modal_save_button,
+                    remove_all_components_button,
+                    dummy_output,
+                    stepper_output,
+                    html.Div(children=stores_add_edit),
+                    dmc.Grid(
                         [
-                            dmc.Group([button_menu, card_section]),
-                        ],
-                        style={"justify": "start"},
-                        span=3,
-                    ),
-                    dmc.Col(
-                        [
-                            dmc.Center(
-                                dmc.Title(
-                                    f'{data["title"]}',
-                                    order=1,  # Increase to order=1 for larger font size
-                                    style={
-                                        "color": "#333",  # Darker color for more emphasis
-                                        "fontWeight": "bold",  # Make the text bold
-                                        "fontSize": "24px",  # Increase font size
-                                        # "fontFamily": "Open Sans",  # Change the font family
-                                    },
-                                )
+                            # dmc.GridCol(
+                            #     [button_menu],
+                            #     # align="center",
+                            #     style={"paddingLeft": "20px"},
+                            #     span="content",
+                            # ),
+                            dmc.GridCol(
+                                [
+                                    dmc.Group([button_menu, card_section]),
+                                ],
+                                style={"justify": "start"},
+                                span=3,
                             ),
-                        ],
-                        span=7,
-                    ),
-                    dmc.Col(
-                        [
-                            html.Div(
-                                children=[
-                                    dmc.Group(
-                                        [
-                                            add_new_component_button,
-                                            save_button,
-                                            open_offcanvas_parameters_button,
-                                        ],
-                                        # justify="flex-end",
-                                        # align="stretch",
-                                        # style={"paddingTop": "5px"},
-                                        spacing="xs",
-                                        position="right",  # Aligns items to the right
-                                        style={"paddingTop": "5px"},
+                            dmc.GridCol(
+                                [
+                                    dmc.Center(
+                                        dmc.Title(
+                                            f'{data["title"]}',
+                                            order=1,  # Increase to order=1 for larger font size
+                                            style={
+                                                "color": "#333",  # Darker color for more emphasis
+                                                "fontWeight": "bold",  # Make the text bold
+                                                "fontSize": "24px",  # Increase font size
+                                                # "fontFamily": "Open Sans",  # Change the font family
+                                            },
+                                        )
                                     ),
                                 ],
+                                span=7,
+                            ),
+                            dmc.GridCol(
+                                [
+                                    html.Div(
+                                        children=[
+                                            dmc.Group(
+                                                [
+                                                    add_new_component_button,
+                                                    save_button,
+                                                    open_offcanvas_parameters_button,
+                                                ],
+                                                # justify="flex-end",
+                                                # align="stretch",
+                                                # style={"paddingTop": "5px"},
+                                                # spacing="xs",
+                                                justify="right",  # Aligns items to the right
+                                                style={"paddingTop": "5px"},
+                                            ),
+                                        ],
+                                    ),
+                                ],
+                                span=2,
+                                # offset=1
                             ),
                         ],
-                        span=2,
-                        # offset=1
+                        # justify="between",
+                        # align="center",  # Ensure all elements are vertically centered
+                        align="center",
                     ),
                 ],
-                # justify="between",
-                # align="center",  # Ensure all elements are vertically centered
-                align="center",
-            ),
-        ],
-        height=80,
-    style={"width": "100%"},
-    )
+                # height=80,
+                style={"width": "100%"},
+            )
 
     return header, backend_components

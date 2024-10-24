@@ -189,8 +189,8 @@ def create_stepper_output(n, active):
             html.Hr(),
             dbc.Row(
                 [
-                    dbc.Col(dmc.Title("Component selected:", order=3, align="left", weight=500), width=4),
-                    dbc.Col(dmc.Text("None", id={"type": "component-selected", "index": n}, size="xl", align="left", weight=500), width=8),
+                    dbc.Col(dmc.Title("Component selected:", order=3), width=4),
+                    dbc.Col(dmc.Text("None", id={"type": "component-selected", "index": n}, size="xl", align="left", fw=500), width=8),
                 ],
                 style={"align-items": "center"},
             ),
@@ -311,7 +311,7 @@ def create_stepper_output(n, active):
                                     "align": "center",
                                     "height": "100px",
                                 },
-                                leftIcon=DashIconify(icon="bi:check-circle", width=30, color="white"),
+                                leftSection=DashIconify(icon="bi:check-circle", width=30, color="white"),
                             ),
                         ]
                     ),
@@ -321,7 +321,7 @@ def create_stepper_output(n, active):
     )
 
     stepper_footer = dmc.Group(
-        position="center",
+        justify="center",
         mt="xl",
         children=[
             dmc.Button(

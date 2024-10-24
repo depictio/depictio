@@ -112,7 +112,7 @@ app.layout = dmc.MantineProvider(
                 ),
                 dmc.Container(
                     [
-                        dmc.Header(
+                        dmc.AppShellHeader(
                             height=60,
                             children=[
                                 dmc.Group(

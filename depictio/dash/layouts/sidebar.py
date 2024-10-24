@@ -108,22 +108,22 @@ def register_sidebar_callbacks(app):
         try:
             response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/utils/status", headers={"Authorization": f"Bearer {local_store['access_token']}"})
             if response.status_code != 200:
-                server_status_badge = dmc.Col(dmc.Badge("Server offline", variant="dot", color="red", size=14, style={"padding": "5px 5px"}), span="content")
+                server_status_badge = dmc.GridCol(dmc.Badge("Server offline", variant="dot", color="red", size="lg", style={"padding": "5px 5px"}), span="content")
                 return [server_status_badge]
             else:
                 logger.info(f"Server status: {response.json()}")
                 server_status = response.json()["status"]
                 if server_status == "online":
-                    server_status_badge = dmc.Col(dmc.Badge(f"Server online : {response.json()['version']}", variant="dot", color="green", size=14), span="content")
+                    server_status_badge = dmc.GridCol(dmc.Badge(f"Server online : {response.json()['version']}", variant="dot", color="green", size="lg"), span="content")
 
-                    return [dmc.Group([server_status_badge], position="apart")]
+                    return [dmc.Group([server_status_badge], justify="apart")]
                 else:
-                    server_status_badge = dmc.Col(dmc.Badge("Server offline", variant="outline", color="red", size=14, style={"padding": "5px 5px"}), span="content")
+                    server_status_badge = dmc.GridCol(dmc.Badge("Server offline", variant="outline", color="red", size="lg", style={"padding": "5px 5px"}), span="content")
                     return [server_status_badge]
 
         except Exception as e:
             logger.error(f"Error fetching server status: {e}")
-            server_status_badge = dmc.Col(dmc.Badge("Server offline", variant="outline", color="red", size=14, style={"padding": "5px 5px"}), span="content")
+            server_status_badge = dmc.GridCol(dmc.Badge("Server offline", variant="outline", color="red", size="lg", style={"padding": "5px 5px"}), span="content")
             return [server_status_badge]
 
     @app.callback(
@@ -161,21 +161,21 @@ def render_sidebar(email):
             dmc.NavLink(
                 id={"type": "sidebar-link", "index": "dashboards"},
                 label=dmc.Text("Dashboards", size="lg", style={"fontSize": "16px"}),  # Using dmc.Text to set the font size
-                icon=DashIconify(icon="material-symbols:dashboard", height=25),
+                leftSection=DashIconify(icon="material-symbols:dashboard", height=25),
                 href="/dashboards",
                 style={"padding": "20px"},
             ),
             dmc.NavLink(
                 id={"type": "sidebar-link", "index": "projects"},
                 label=dmc.Text("Projects", size="lg", style={"fontSize": "16px"}),  # Using dmc.Text to set the font size
-                icon=DashIconify(icon="mdi:jira", height=25),
+                leftSection=DashIconify(icon="mdi:jira", height=25),
                 href="/projects",
                 style={"padding": "20px"},
             ),
             dmc.NavLink(
                 id={"type": "sidebar-link", "index": "administration"},
                 label=dmc.Text("Administration", size="lg", style={"fontSize": "16px"}),  # Using dmc.Text to set the font size
-                icon=DashIconify(icon="material-symbols:settings", height=25),
+                leftSection=DashIconify(icon="material-symbols:settings", height=25),
                 href="/admin",
                 style={"padding": "20px", "display": "none"},
             ),
@@ -209,21 +209,21 @@ def render_sidebar(email):
         },
     )
 
-    navbar = dmc.Navbar(
-        p="md",
-        fixed=False,
-        width={"base": 300},
-        hidden=True,
-        hiddenBreakpoint="md",
-        position="right",
-        height="100vh",
-        id="sidebar",
-        style={
-            "overflow": "hidden",
-            "transition": "width 0.3s ease-in-out",
-            "display": "flex",
-            "flexDirection": "column",
-        },
+    navbar = html.Div(
+        # p="md",
+        # fixed=False,
+        # width={"base": 300},
+        # hidden=True,
+        # hiddenBreakpoint="md",
+        # position="right",
+        # height="100vh",
+        # id="sidebar",
+        # style={
+        #     "overflow": "hidden",
+        #     "transition": "width 0.3s ease-in-out",
+        #     "display": "flex",
+        #     "flexDirection": "column",
+        # },
         children=[dmc.Center([depictio_logo]), sidebar_links, sidebar_footer],
     )
 

@@ -24,9 +24,13 @@ RUN micromamba create -n depictio -f depictio.yaml && \
 # -----------------------------
 ARG MAMBA_DOCKERFILE_ACTIVATE=1
 
-RUN micromamba shell init -s bash -p /opt/conda/envs/depictio && \
+# RUN micromamba shell init -s bash -p /opt/conda/envs/depictio && \
+#     echo "source activate depictio" >> ~/.bashrc && \
+#     echo "conda list" >> ~/.bashrc
+RUN micromamba shell init -s bash && \
     echo "source activate depictio" >> ~/.bashrc && \
     echo "conda list" >> ~/.bashrc
+
 
 # -----------------------------
 # Install Playwright Dependencies
@@ -61,6 +65,7 @@ RUN bash -c 'whoami'
 # -----------------------------
 ENV PATH="/opt/conda/envs/depictio/bin:${PATH}"
 ENV PYTHONPATH="${PYTHONPATH}:/mnt"
+ENV REACT_VERSION="18.2.0"
 
 # -----------------------------
 # Install Playwright

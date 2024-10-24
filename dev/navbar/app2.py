@@ -167,7 +167,7 @@ def design_header(data):
         ]
     )
 
-    header = dmc.Header(
+    header = dmc.AppShellHeader(
         id="header",
         height=87,
         children=[

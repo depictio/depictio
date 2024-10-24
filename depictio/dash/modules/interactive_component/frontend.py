@@ -268,7 +268,7 @@ def create_stepper_interactive_button(n, disabled=False):
             style=UNSELECTED_STYLE,
             size="xl",
             color="indigo",
-            leftIcon=DashIconify(icon="bx:slider-alt", color="white"),
+            leftSection=DashIconify(icon="bx:slider-alt", color="white"),
             disabled=disabled,
         )
     )

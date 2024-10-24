@@ -258,7 +258,7 @@ def create_stepper_card_button(n, disabled=False):
             style=UNSELECTED_STYLE,
             size="xl",
             color="violet",
-            leftIcon=DashIconify(icon="formkit:number", color="white"),
+            leftSection=DashIconify(icon="formkit:number", color="white"),
             disabled=disabled,
         )
     )

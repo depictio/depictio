@@ -122,7 +122,7 @@ def register_tokens_management_callbacks(app):
             token_data = add_token({"sub": user.email, "name": token_name, "token_lifetime": "long-lived"})
 
             if not token_data:
-                div = dmc.Title("Failed to create agent. Agent with that name already exists.", color="red", order=3)
+                div = dmc.Title("Failed to create agent. Agent with that name already exists.", c="red", order=3)
 
                 return False, False, render_tokens_list(tokens), True, div, delete_token_id, ""
 
@@ -148,7 +148,7 @@ def register_tokens_management_callbacks(app):
 
             div_agent_config = html.Div(
                 [
-                    dmc.Title("Agent Created", color="blue", order=3),
+                    dmc.Title("Agent Created", c="blue", order=3),
                     dcc.Markdown(id="agent-config-md", children=agent_config),
                     dcc.Clipboard(
                         target_id="agent-config-md",

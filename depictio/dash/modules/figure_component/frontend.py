@@ -577,7 +577,7 @@ def create_stepper_figure_button(n, disabled=False):
             style=UNSELECTED_STYLE,
             size="xl",
             color="grape",
-            leftIcon=DashIconify(icon="mdi:graph-box"),
+            leftSection=DashIconify(icon="mdi:graph-box"),
             disabled=disabled,
         )
     )

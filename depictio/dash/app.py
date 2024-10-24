@@ -40,22 +40,33 @@ from depictio.dash.layouts.draggable_scenarios.restore_dashboard import load_dep
 
 from depictio.api.v1.configs.logging import logger
 
+print(dmc.__version__)
+
+# Dash Mantine 0.14
+dash._dash_renderer._set_react_version("18.2.0")
+print(dash.__version__)
+
+# dmc_stylesheets = [
+#     dmc.styles.DATES,
+#     dmc.styles.CODE_HIGHLIGHT,
+#     dmc.styles.CHARTS,
+#     dmc.styles.CAROUSEL,
+#     dmc.styles.NOTIFICATIONS,
+#     dmc.styles.NPROGRESS,
+# ]
+
+other_stylesheets = [
+    dbc.themes.BOOTSTRAP,
+    {
+        "href": "https://fonts.googleapis.com/icon?family=Material+Icons",
+        "rel": "stylesheet",
+    },
+]
+
+combined_stylesheets = other_stylesheets + [dmc.styles.ALL]
 
 # Start the app
-app = dash.Dash(
-    __name__,
-    requests_pathname_prefix="/",
-    external_stylesheets=[
-        dbc.themes.BOOTSTRAP,
-        {
-            "href": "https://fonts.googleapis.com/icon?family=Material+Icons",
-            "rel": "stylesheet",
-        },
-    ],
-    suppress_callback_exceptions=True,
-    title="Depictio",
-    update_title="Depictio"
-)
+app = dash.Dash(__name__, requests_pathname_prefix="/", external_stylesheets=combined_stylesheets, suppress_callback_exceptions=True, title="Depictio", update_title="Depictio")
 
 server = app.server  # This is the Flask server instance
 
@@ -239,7 +250,7 @@ def handle_authenticated_user(pathname, local_data):
 
 
 def create_default_header(text):
-    return dmc.Text(text, weight=600, size="xl", style={"fontSize": "28px", "fontFamily": "Virgil", "padding": "20px 10px"})
+    return dmc.Text(text, fw=600, size="xl", style={"fontSize": "28px", "fontFamily": "Virgil", "padding": "20px 10px"})
 
 
 def create_admin_header(text):
@@ -250,17 +261,17 @@ def create_admin_header(text):
     - text (str): The title text to display in the header.
 
     Returns:
-    - dmc.Header: A Dash Mantine Components Header containing the title and navigation tabs.
+    - dmc.AppShellHeader: A Dash Mantine Components Header containing the title and navigation tabs.
     """
-    header = dmc.Header(
-        height=60,  # Height of the header
+    header = dmc.AppShellHeader(
+        # height=60,  # Height of the header
         # padding="xs",  # Padding inside the header
         children=[
             dmc.Container(
                 fluid=True,  # Make the container fluid (full-width)
                 children=[
                     dmc.Group(
-                        position="apart",  # Space between the title and tabs
+                        justify="apart",  # Space between the title and tabs
                         align="center",
                         style={"height": "100%"},
                         children=[
@@ -269,7 +280,7 @@ def create_admin_header(text):
                             #     text,
                             #     order=3,  # Corresponds to h3
                             #     size="h3",
-                            #     weight=700,
+                            #     fw=700,
                             #     color="dark",
                             # ),
                             # Navigation Tabs
@@ -279,23 +290,23 @@ def create_admin_header(text):
                                 # onTabChange=lambda value: dash.callback_context.triggered,  # Placeholder for callback
                                 children=dmc.TabsList(
                                     [
-                                        dmc.Tab(
+                                        dmc.TabsTab(
                                             "Users",
-                                            icon=DashIconify(icon="mdi:account-group", width=20, height=20),
+                                            leftSection=DashIconify(icon="mdi:account-group", width=20, height=20),
                                             value="users",
                                             # value="users",
                                             # component=dcc.Link("Users", href="/admin/users", style={"textDecoration": "none", "color": "inherit"})
                                         ),
-                                        dmc.Tab(
+                                        dmc.TabsTab(
                                             "Projects",
-                                            icon=DashIconify(icon="mdi:jira", width=20, height=20),
+                                            leftSection=DashIconify(icon="mdi:jira", width=20, height=20),
                                             value="projects",
                                             # value="projects",
                                             # component=dcc.Link("Projects", href="/admin/projects", style={"textDecoration": "none", "color": "inherit"})
                                         ),
-                                        dmc.Tab(
+                                        dmc.TabsTab(
                                             "Dashboards",
-                                            icon=DashIconify(icon="mdi:view-dashboard", width=20, height=20),
+                                            leftSection=DashIconify(icon="mdi:view-dashboard", width=20, height=20),
                                             value="dashboards",
                                             # value="dashboards",
                                             # component=dcc.Link("Dashboards", href="/admin/dashboards", style={"textDecoration": "none", "color": "inherit"})
@@ -330,7 +341,7 @@ def create_header_with_button(text, button):
             create_default_header(text),
             button,
         ],
-        position="apart",
+        justify="space-between",
         align="center",
         style={"backgroundColor": "#fff"},
     )
@@ -395,20 +406,22 @@ def design_header_ui(data):
     Design the header of the dashboard
     """
 
-    header = dmc.Header(
-        id="header",
-        height=87,
-        children=[
-            dbc.Row(
-                [
-                    dbc.Col(dmc.Title("", order=2, color="black"), width=11, align="center", style={"textAlign": "left"}),
-                ],
-                style={"height": "100%"},
-            ),
+    core_header = dbc.Row(
+        [
+            dbc.Col(dmc.Title("", order=2, c="black"), width=11, align="center", style={"textAlign": "left"}),
         ],
+        style={"height": "100%"},
     )
 
-    return header
+    # header = dmc.AppShellHeader(
+    #     id="header",
+    #     # height=87,
+    #     children=[
+
+    #     ],
+    # )
+
+    return core_header
 
 
 header = design_header_ui(data=None)
@@ -419,72 +432,88 @@ def create_app_layout():
 
     navbar = render_sidebar("")
 
-    return dmc.Container(
-        [
-            dcc.Location(id="url", refresh=False),
-            dcc.Store(id="local-store", storage_type="local", data={"logged_in": False, "access_token": None}),
-            dcc.Interval(id="interval-component", interval=1 * 2000, n_intervals=0),
-            navbar,
-            dmc.Drawer(
-                title="",
-                id="drawer-simple",
-                padding="md",
-                zIndex=10000,
-                size=200,
-                overlayOpacity=0.1,
-                children=[],
-            ),
+    return dmc.AppShell(
+        children=[
             dmc.Container(
                 [
-                    header,
-                    dmc.Container(
-                        [
-                            html.Div(
-                                id="page-content",
-                                # full width and height
-                                style={"width": "100%", "height": "100%"},
-                            )
-                        ],
-                        id="page-container",
-                        p=0,
-                        fluid=True,
-                        style={
-                            "width": "100%",
-                            "height": "100%",
-                            "overflowY": "auto",  # Allow vertical scrolling
-                            "flexGrow": "1",
-                        },
+                    # html.Div("Hello World"),
+                    dcc.Location(id="url", refresh=False),
+                    dcc.Store(id="local-store", storage_type="local", data={"logged_in": False, "access_token": None}),
+                    dcc.Interval(id="interval-component", interval=1 * 2000, n_intervals=0),
+                    dmc.AppShellNavbar(navbar, id="sidebar"),
+                    # dmc.Drawer(
+                    #     title="",
+                    #     id="drawer-simple",
+                    #     padding="md",
+                    #     zIndex=10000,
+                    #     size=200,
+                    #     # overlayOpacity=0.1,
+                    #     children=[],
+                    # ),
+                    # dmc.Container(
+                    #     [
+                    dmc.AppShellHeader(header, id="header", style={"inset-inline-start": "var(--app-shell-navbar-offset, 0)"}),
+                    dmc.AppShellMain(
+                        dmc.Container(
+                            [
+                                html.Div(
+                                    id="page-content",
+                                    # full width and height
+                                    style={"width": "100%", "height": "100%"},
+                                )
+                            ],
+                            id="page-container",
+                            p=0,
+                            fluid=True,
+                            style={
+                                "width": "100%",
+                                "height": "100%",
+                                "overflowY": "auto",  # Allow vertical scrolling
+                                "flexGrow": "1",
+                            },
+                        )
                     ),
+                    #     ],
+                    #     fluid=True,
+                    #     size="100%",
+                    #     p=0,
+                    #     m=0,
+                    #     style={"display": "flex", "maxWidth": "100%", "flexGrow": "1", "maxHeight": "100%", "flexDirection": "column", "overflow": "hidden"},
+                    #     id="content-container",
+                    # ),
                 ],
+                # size="100%",
                 fluid=True,
-                size="100%",
                 p=0,
                 m=0,
-                style={"display": "flex", "maxWidth": "100%", "flexGrow": "1", "maxHeight": "100%", "flexDirection": "column", "overflow": "hidden"},
-                id="content-container",
-            ),
+                style={
+                    "display": "flex",
+                    "maxWidth": "100%",
+                    "maxHeight": "100%",
+                    "flexGrow": "1",
+                    "position": "absolute",
+                    "top": 0,
+                    "left": 0,
+                    "width": "100%",
+                    "height": "100%",
+                    "overflow": "hidden",  # Hide overflow content
+                },
+                id="overall-container",
+            )
         ],
-        # size="100%",
-        fluid=True,
-        p=0,
-        m=0,
-        style={
-            "display": "flex",
-            "maxWidth": "100%",
-            "maxHeight": "100%",
-            "flexGrow": "1",
-            "position": "absolute",
-            "top": 0,
-            "left": 0,
-            "width": "100%",
-            "height": "100%",
-            "overflow": "hidden",  # Hide overflow content
-        },
-        id="overall-container",
+        header={"height": 80},
+        navbar={"width": 300, "top": 0},
     )
 
 
-app.layout = create_app_layout
+def create_dummy_layout():
+    return html.Div("Hello World")
+
+
+# app.layout = dmc.MantineProvider(children=[create_dummy_layout()])
+# app.layout = dmc.MantineProvider(children=[dmc.Container(html.Div("Hello World"))])
+app.layout = dmc.MantineProvider(children=create_app_layout())
+# app.layout =
 
 
 if __name__ == "__main__":

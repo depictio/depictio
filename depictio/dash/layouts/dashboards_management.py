@@ -44,8 +44,8 @@ layout = html.Div(
             closeOnEscape=False,
             withCloseButton=True,
             zIndex=10000,
-            overlayOpacity=0.3,  # Set lower opacity for the overlay
-            overlayColor="black",  # Set overlay color (e.g., black)
+            # overlayOpacity=0.3,  # Set lower opacity for the overlay
+            # overlayColor="black",  # Set overlay color (e.g., black)
         ),
         html.Div(id="landing-page"),  # Initially hidden
     ]
@@ -117,12 +117,13 @@ def delete_dashboard(dashboard_id, token):
 
 def render_welcome_section(email):
     style = {
-        "border": f"1px solid {dmc.theme.DEFAULT_COLORS['indigo'][4]}",
+        # "border": f"1px solid {dmc.theme.DEFAULT_COLORS['indigo'][4]}",
+        "border": f"1px solid",
         "textAlign": "center",
     }
     return dmc.Grid(
         children=[
-            dmc.Col(
+            dmc.GridCol(
                 dcc.Link(
                     dmc.Tooltip(
                         dmc.Avatar(
@@ -138,9 +139,9 @@ def render_welcome_section(email):
                 ),
                 span="content",
             ),
-            dmc.Col(
+            dmc.GridCol(
                 [
-                    dmc.Title(f"Welcome, {email}!", order=2, align="center"),
+                    dmc.Title(f"Welcome, {email}!", order=2),
                     dmc.Center(
                         dmc.Button(
                             "+ New Dashboard",
@@ -206,7 +207,7 @@ def register_callbacks_dashboards_management(app):
                             id={"type": "delete-confirmation-modal", "index": dashboard["dashboard_id"]},
                             centered=True,
                             children=[
-                                dmc.Title("Are you sure you want to delete this dashboard?", order=3, color="black", style={"marginBottom": 20}),
+                                dmc.Title("Are you sure you want to delete this dashboard?", order=3, c="black", style={"marginBottom": 20}),
                                 dmc.Button(
                                     "Delete",
                                     id={
@@ -228,7 +229,7 @@ def register_callbacks_dashboards_management(app):
                         ),
                     ],
                     align="center",
-                    position="apart",
+                    justify="apart",
                     grow=False,
                     noWrap=False,
                     style={"width": "100%"},
@@ -255,7 +256,7 @@ def register_callbacks_dashboards_management(app):
                 id={"type": "delete-confirmation-modal", "index": dashboard["dashboard_id"]},
                 centered=True,
                 children=[
-                    dmc.Title("Are you sure you want to delete this dashboard?", order=3, color="black", style={"marginBottom": 20}),
+                    dmc.Title("Are you sure you want to delete this dashboard?", order=3, c="black", style={"marginBottom": 20}),
                     dmc.Button(
                         "Delete",
                         id={
@@ -306,7 +307,7 @@ def register_callbacks_dashboards_management(app):
                     ),
                 ]
                 # align="center",
-                # position="apart",
+                # justify="apart",
                 # grow=False,
                 # noWrap=False,
                 # style={"width": "100%"},
@@ -338,14 +339,14 @@ def register_callbacks_dashboards_management(app):
                 thumbnail = html.Div(
                     [
                         html.A(
-                            dmc.CardSection([dmc.Center(dmc.Image(src=thumbnail_path, height=150, width=150, style={"padding": "20px 0px"}))]),
+                            dmc.CardSection([dmc.Center(dmc.Image(src=thumbnail_path, h=150, w=150, style={"padding": "20px 0px"}))]),
                             href=f"/dashboard/{dashboard['dashboard_id']}",
                         ),
-                        dmc.Text("No thumbnail available yet", size=18, align="center", color="gray", style={"fontFamily": "Virgil"}),
+                        dmc.Text("No thumbnail available yet", size=18, c="gray", style={"fontFamily": "Virgil"}),
                     ]
                 )
             else:
-                thumbnail = html.A(dmc.CardSection(dmc.Image(src=thumbnail_path, height=250, width=450)), href=f"/dashboard/{dashboard['dashboard_id']}")
+                thumbnail = html.A(dmc.CardSection(dmc.Image(src=thumbnail_path, h=250, w=450)), href=f"/dashboard/{dashboard['dashboard_id']}")
 
             return thumbnail
 
@@ -360,6 +361,7 @@ def register_callbacks_dashboards_management(app):
                         withBorder=True,
                         shadow="sm",
                         radius="md",
+                        h=300,
                         # style={"width": 480},
                         # Remove fixed width to allow flexibility
                         style={
@@ -379,14 +381,14 @@ def register_callbacks_dashboards_management(app):
 
         dashboards_view = dmc.SimpleGrid(
             loop_over_dashboards(user_id, dashboards),
-            cols=3,  # Default number of columns
+            cols={"base": 1, "sm": 2, "lg": 3},
             spacing="xl",
             verticalSpacing="xl",
-            breakpoints=[
-                {"maxWidth": 1600, "cols": 3},  # Large screens
-                {"maxWidth": 1200, "cols": 2},  # Medium screens
-                {"maxWidth": 768, "cols": 1},  # Small screens
-            ],
+            # breakpoints=[
+            #     {"maxWidth": 1600, "cols": 3},  # Large screens
+            #     {"maxWidth": 1200, "cols": 2},  # Medium screens
+            #     {"maxWidth": 768, "cols": 1},  # Small screens
+            # ],
             style={"width": "100%"},
         )
 
@@ -574,7 +576,7 @@ def register_callbacks_dashboards_management(app):
         return not opened
 
     @app.callback(
-        Output("landing-page", "children"),
+        Output("landing-page", "children"), 
         [
             Input("url", "pathname"),
             Input("local-store", "data"),

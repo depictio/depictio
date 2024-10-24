@@ -186,7 +186,7 @@ def design_table(id):
                     style=UNSELECTED_STYLE,
                     size="xl",
                     color="green",
-                    leftIcon=DashIconify(icon="material-symbols:table-rows-narrow-rounded", color="white"),
+                    leftSection=DashIconify(icon="material-symbols:table-rows-narrow-rounded", color="white"),
                 )
             ),
         ),
@@ -255,7 +255,7 @@ def create_stepper_table_button(n, disabled=False):
             style=UNSELECTED_STYLE,
             size="xl",
             color="green",
-            leftIcon=DashIconify(icon="octicon:table-24", color="white"),
+            leftSection=DashIconify(icon="octicon:table-24", color="white"),
             disabled=disabled,
         )
     )
