@@ -5,6 +5,7 @@ from dash import html, Input, Output, State, ALL
 import dash
 import httpx
 from depictio.dash.layouts.draggable_scenarios.add_component import add_new_component
+from depictio.dash.layouts.edit import edit_component
 
 from depictio.api.v1.configs.config import API_BASE_URL, logger
 
@@ -16,6 +17,7 @@ from depictio.dash.layouts.draggable_scenarios.restore_dashboard import render_d
 
 # Depictio layout imports for header
 from depictio.dash.layouts.edit import enable_box_edit_mode
+from depictio.dash.utils import get_component_data
 
 
 # Mapping of component types to their respective dimensions (width and height)
@@ -64,6 +66,13 @@ def register_callbacks_draggable(app):
             },
             "n_clicks",
         ),
+        Input(
+            {
+                "type": "btn-done-edit",
+                "index": ALL,
+            },
+            "n_clicks",
+        ),
         State(
             {
                 "type": "interactive-component-value",
@@ -104,6 +113,13 @@ def register_callbacks_draggable(app):
             {"type": "remove-box-button", "index": ALL},
             "n_clicks",
         ),
+        Input(
+            {
+                "type": "edit-box-button",
+                "index": ALL,
+            },
+            "n_clicks",
+        ),
         Input("remove-all-components-button", "n_clicks"),
         State("toggle-interactivity-button", "checked"),
         State("edit-dashboard-mode-button", "checked"),
@@ -114,6 +130,7 @@ def register_callbacks_draggable(app):
     )
     def populate_draggable(
         btn_done_clicks,
+        btn_done_edit_clicks,
         interactive_component_ids,
         interactive_component_values,
         stored_add_button,
@@ -127,6 +144,7 @@ def register_callbacks_draggable(app):
         input_stored_draggable_children,
         input_stored_draggable_layouts,
         remove_box_button_values,
+        edit_box_button_values,
         remove_all_components_button,
         toggle_interactivity_button,
         edit_dashboard_mode_button,
@@ -258,7 +276,7 @@ def register_callbacks_draggable(app):
                 logger.info(f"Child type: {child_type}")
                 # child types: card-component (w:3,h:4), interactive-component (w:6,h:6), graph-component (w:9,h:8)
                 if child_index not in existing_ids:
-                    child = enable_box_edit_mode(child, True)
+                    child = enable_box_edit_mode(child, True, dashboard_id=dashboard_id, TOKEN=TOKEN)
                     draggable_children.append(child)
                     child_id = f"box-{str(child_index)}"
 
@@ -318,18 +336,18 @@ def register_callbacks_draggable(app):
             return new_children, dash.no_update, dash.no_update, dash.no_update
             # return new_children, dash.no_update, state_stored_draggable_children, dash.no_update
 
-        elif "edit-dashboard-mode-button" in triggered_input:
-            logger.info(f"Edit dashboard mode button triggered: {edit_dashboard_mode_button}")
-            new_children = list()
-            # logger.info("Current draggable children: {}".format(draggable_children))
-            logger.info("Len Current draggable children: {}".format(len(draggable_children)))
-            for child in draggable_children:
-                child = enable_box_edit_mode(child["props"]["children"][-1], edit_dashboard_mode_button)
-                new_children.append(child)
-                state_stored_draggable_children[dashboard_id] = new_children
+        # elif "edit-dashboard-mode-button" in triggered_input:
+        #     logger.info(f"Edit dashboard mode button triggered: {edit_dashboard_mode_button}")
+        #     new_children = list()
+        #     # logger.info("Current draggable children: {}".format(draggable_children))
+        #     logger.info("Len Current draggable children: {}".format(len(draggable_children)))
+        #     for child in draggable_children:
+        #         child = enable_box_edit_mode(child["props"]["children"][-1], edit_dashboard_mode_button)
+        #         new_children.append(child)
+        #         state_stored_draggable_children[dashboard_id] = new_children
 
-            return new_children, dash.no_update, dash.no_update, dash.no_update
-            # return new_children, dash.no_update, state_stored_draggable_children, dash.no_update
+        #     return new_children, dash.no_update, dash.no_update, dash.no_update
+        #     # return new_children, dash.no_update, state_stored_draggable_children, dash.no_update
 
         elif triggered_input == "stored-draggable-layouts":
             logger.info("Stored draggable layouts triggered")
@@ -369,6 +387,81 @@ def register_callbacks_draggable(app):
             return updated_children, draggable_layouts, dash.no_update, state_stored_draggable_layouts
             # return updated_children, draggable_layouts, state_stored_draggable_children, state_stored_draggable_layouts
 
+        elif triggered_input == "edit-box-button":
+            logger.warning("Edit box button clicked")
+
+            input_id = ctx.triggered_id["index"]
+            logger.info("Input ID: {}".format(input_id))
+
+
+            component_data = get_component_data(input_id=input_id, dashboard_id=dashboard_id, TOKEN=TOKEN)
+            logger.info(f"Component data: {component_data}")
+
+            # Create the modal for editing
+            edited_modal = edit_component(str(input_id), active=1, component_data=component_data, TOKEN=TOKEN)
+
+            updated_children = []
+            for child in draggable_children:
+                if child["props"]["id"] == f"box-{input_id}":
+                    logger.info("Found child to edit")
+                    # Ensure that children is a list. If not, convert it to a list.
+                    # existing_children = child["props"]["children"]
+                    # if not isinstance(existing_children, list):
+                    #     existing_children = [existing_children]
+                    # # Append the modal to the existing children
+                    # child["props"]["children"] = existing_children + [edited_modal]
+                    child["props"]["children"] = edited_modal
+
+                    # child["props"]["id"] = f"box-{input_id}-tmp"
+                updated_children.append(child)
+
+            return updated_children, draggable_layouts, dash.no_update, dash.no_update
+
+        elif triggered_input == "btn-done-edit":
+            index = ctx.triggered_id["index"]
+            logger.info(f"Btn done edit clicked for index: {index}")
+
+            edited_child = None
+
+            for child in test_container:
+                logger.info(f"Child: {child}")
+                logger.info(f"Child props: {child['props']}")
+                logger.info(f"Child props id: {child['props']['id']}")
+                logger.info(f"Child props id index: {child['props']['id']['index']}")
+                child_index = int(child["props"]["id"]["index"])
+
+                if str(child_index) == str(index):
+                    # logger.info(f"Child: {child}")
+
+                    child_type = child["props"]["id"]["type"]
+
+                    logger.info(f"Child type: {child_type}")
+
+                    if child_type == "interactive-component":
+                        logger.info(f"Interactive component found: {child}")
+                        # WARNING: This is a temporary fix to remove the '-tmp' suffix from the id
+                        if child["props"]["children"]["props"]["children"]["props"]["children"][1]["props"]["id"]["type"].endswith("-tmp"):
+                            child["props"]["children"]["props"]["children"]["props"]["children"][1]["props"]["id"]["type"] = child["props"]["children"]["props"]["children"][
+                                "props"
+                            ]["children"][1]["props"]["id"]["type"].replace("-tmp", "")
+
+                    logger.info(f"Child index: {child_index}")
+                    logger.info(f"Child type: {child_type}")
+                    # child types: card-component (w:3,h:4), interactive-component (w:6,h:6), graph-component (w:9,h:8)
+                    # if child_index not in existing_ids:
+                    #     child = enable_box_edit_mode(child, True)
+                    logger.info(f"Child: {child}")
+                    edited_child = enable_box_edit_mode(child, True)
+
+            updated_children = list()
+            for child in draggable_children:
+                if child["props"]["id"] == f"box-{index}":
+                    logger.info("Found child to edit")
+                    child["props"]["children"] = edited_child
+                updated_children.append(child)
+
+            return updated_children, draggable_layouts, dash.no_update, dash.no_update
+
         elif triggered_input == "remove-all-components-button":
             logger.info("Remove all components button clicked")
             state_stored_draggable_layouts[dashboard_id] = {}
@@ -378,31 +471,65 @@ def register_callbacks_draggable(app):
         else:
             return dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
+    from dash import MATCH
+
+    # @app.callback(
+    #     Output({"type": "last-button", "index": MATCH}, "data", allow_duplicate=True),
+    #     Input({"type": "edit-box-button", "index": MATCH}, "n_clicks"),
+    #     State({"type": "last-button", "index": MATCH}, "data"),
+    #     prevent_initial_call=True,
+    # )
+    # def update_last_button_using_edit_box_button_value(edit_button_nclicks, last_button):
+    #     logger.info(f"Edit button id: {edit_button_nclicks}")
+    #     logger.info(f"Last button: {last_button}")
+    #     return "Figure"
+
     # Callback to handle Add Button clicks
     @app.callback(
         Output("test-output", "children"),
         Output("stored-add-button", "data"),
         Output("initialized-add-button", "data"),
+        # Output("initialized-edit-button", "data"),
         Input("add-button", "n_clicks"),
+        # Input({"type": "edit-box-button", "index": ALL}, "n_clicks"),
         State("stored-add-button", "data"),
         State("initialized-add-button", "data"),
+        # State("initialized-edit-button", "data"),
         prevent_initial_call=True,
     )
-    def trigger_modal(add_button_nclicks, stored_add_button, initialized_add_button):
+    def trigger_modal(
+        add_button_nclicks,
+        #   edit_button_nclicks,
+        stored_add_button,
+        initialized_add_button,
+        # initialized_edit_button,
+    ):
         logger.info("\n\nTrigger modal")
         logger.info(f"n_clicks: {add_button_nclicks}")
         logger.info(f"stored_add_button: {stored_add_button}")
         logger.info(f"initialized_add_button: {initialized_add_button}")
+        # logger.info(f"edit_button_nclicks: {edit_button_nclicks}")
+        # logger.info(f"initialized_edit_button: {initialized_edit_button}")
 
         from dash import ctx
 
         if not initialized_add_button:
             logger.info("Initializing add button")
             return dash.no_update, dash.no_update, True
+            # return dash.no_update, dash.no_update, True, dash.no_update
+
+        # if not initialized_edit_button:
+        #     logger.info("Initializing edit button")
+        #     return dash.no_update, dash.no_update, dash.no_update, True
 
         if add_button_nclicks is None:
             logger.info("No clicks detected")
+            # return dash.no_update, dash.no_update, True, dash.no_update
             return dash.no_update, dash.no_update, True
+
+        # if edit_button_nclicks is None:
+        #     logger.info("No clicks detected")
+        #     return dash.no_update, dash.no_update, dash.no_update, True
 
         triggered_input = ctx.triggered[0]["prop_id"].split(".")[0]
         logger.info(f"triggered_input: {triggered_input}")
@@ -412,14 +539,22 @@ def register_callbacks_draggable(app):
             stored_add_button["count"] += 1
             logger.info(f"Updated stored_add_button: {stored_add_button}")
             index = stored_add_button["count"]
-
-            # Generate and return the new component
             current_draggable_children = add_new_component(str(index))
-            return current_draggable_children, stored_add_button, True  # Keep initialized_add_button as True
+
+            return current_draggable_children, stored_add_button, True
+            # return current_draggable_children, stored_add_button, True, dash.no_update
+
+        # elif "edit-box-button" in triggered_input:
+        #     # Generate and return the new component
+        #     index = str(eval(triggered_input)["index"])
+        #     logger.info(f"Edit button clicked for index: {index}")
+        #     current_draggable_children = edit_component(str(index), active=0)
+
+        #     return current_draggable_children, stored_add_button, dash.no_update, True
         else:
             logger.warning(f"Unexpected triggered_input: {triggered_input}")
-            return dash.no_update, dash.no_update, True
-        
+            return dash.no_update, dash.no_update, True, True
+
     @app.callback(
         Output("interactive-values-store", "data"),
         Input({"type": "interactive-component-value", "index": ALL}, "value"),
