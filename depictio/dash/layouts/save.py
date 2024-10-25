@@ -25,6 +25,20 @@ def register_callbacks_save(app):
         State("url", "pathname"),
         State("local-store", "data"),
         Input("interval-component", "n_intervals"),
+        Input(
+            {
+                "type": "btn-done",
+                "index": ALL,
+            },
+            "n_clicks",
+        ),
+        Input(
+            {
+                "type": "btn-done-edit",
+                "index": ALL,
+            },
+            "n_clicks",
+        ),
         prevent_initial_call=True,
     )
     def save_data_dashboard(
@@ -38,6 +52,8 @@ def register_callbacks_save(app):
         pathname,
         local_store,
         n_intervals,
+        n_clicks_done,
+        n_clicks_done_edit,
     ):
         logger.info(f"URL pathname: {pathname}")
         if not local_store:
@@ -48,7 +64,13 @@ def register_callbacks_save(app):
         logger.info(f"save_data_dashboard - TOKEN: {TOKEN}")
         # current_user = fetch_user_from_token(TOKEN)
 
-        if n_clicks or n_intervals:
+        from dash import ctx
+
+        triggered_id = ctx.triggered[0]["prop_id"].split(".")[0]
+
+        # if n_clicks:
+        if (triggered_id == "save-button-dashboard") or ("btn-done" in triggered_id) or ("btn-done-edit" in triggered_id):
+            # if n_clicks or n_intervals:
             dashboard_id = pathname.split("/")[-1]
 
             logger.info(f"save_data_dashboard INSIDE")
@@ -106,8 +128,8 @@ def register_callbacks_save(app):
                         logger.warning(f"Failed to save dashboard screenshot: {screenshot_response.json()}")
 
                     return []
-                
-                else:   
+
+                else:
                     return []
 
             else:
