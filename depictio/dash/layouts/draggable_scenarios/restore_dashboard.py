@@ -76,7 +76,7 @@ def render_dashboard(stored_metadata, dashboard_id, TOKEN):
 
     interactive_components_dict = return_interactive_components_dict(stored_metadata)
 
-    children = [enable_box_edit_mode(child.to_plotly_json(), switch_state=True) for child in children]
+    children = [enable_box_edit_mode(child.to_plotly_json(), switch_state=True, dashboard_id=dashboard_id, TOKEN=TOKEN) for child in children]
 
     children = update_interactive_component(stored_metadata, interactive_components_dict, children, switch_state=True, TOKEN=TOKEN, dashboard_id=dashboard_id)
     return children

@@ -303,7 +303,7 @@ def update_interactive_component(stored_metadata_raw, interactive_components_dic
             child = helpers_mapping[component["component_type"]](**component)
             if component["component_type"] == "card":
                 logger.info(f"Card CHILD - {child}")
-            child = enable_box_edit_mode(child.to_plotly_json(), switch_state=switch_state)
+            child = enable_box_edit_mode(child.to_plotly_json(), switch_state=switch_state, dashboard_id=dashboard_id, TOKEN=TOKEN)
             children.append(child)
 
 
@@ -319,7 +319,7 @@ def update_interactive_component(stored_metadata_raw, interactive_components_dic
 
             logger.info(f"JBROWSE CHILD - {child}")
 
-            child = enable_box_edit_mode(child.to_plotly_json(), switch_state=switch_state)
+            child = enable_box_edit_mode(child.to_plotly_json(), switch_state=switch_state, dashboard_id=dashboard_id, TOKEN=TOKEN)
             children.append(child)
 
 
