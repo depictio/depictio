@@ -29,11 +29,11 @@ def return_design_component(component_selected, id, df, btn_component):
         return design_card(id, df), btn_component
     elif component_selected == "Interactive":
         return design_interactive(id, df), btn_component
+    elif component_selected == "Table":
+        return design_table(id), btn_component
     elif component_selected == "JBrowse2":
         return dash.no_update, btn_component
         # return design_jbrowse(id), btn_component
-    elif component_selected == "Table":
-        return design_table(id), btn_component
     # TODO: implement the following components
     elif component_selected == "Graph":
         return dash.no_update, btn_component
