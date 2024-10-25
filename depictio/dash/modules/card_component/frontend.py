@@ -6,7 +6,7 @@ from dash_iconify import DashIconify
 import httpx
 
 # Depictio imports
-from depictio.dash.utils import return_mongoid
+from depictio.dash.utils import get_component_data, return_mongoid
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging import logger
 from depictio.dash.modules.card_component.utils import (
@@ -25,13 +25,15 @@ def register_callbacks_card_component(app):
         Output({"type": "card-dropdown-aggregation", "index": MATCH}, "data"),
         [
             Input({"type": "card-dropdown-column", "index": MATCH}, "value"),
-            Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
-            Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+            State({"type": "workflow-selection-label", "index": MATCH}, "value"),
+            State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+            State({"type": "card-dropdown-column", "index": MATCH}, "id"),
             State("local-store", "data"),
+            State("url", "pathname"),
         ],
         prevent_initial_call=True,
     )
-    def update_aggregation_options(column_name, wf_tag, dc_tag, local_data):
+    def update_aggregation_options(column_name, wf_tag, dc_tag, component_id, local_data, pathname):
         """
         Callback to update aggregation dropdown options based on the selected column
         """
@@ -39,6 +41,10 @@ def register_callbacks_card_component(app):
             return []
 
         TOKEN = local_data["access_token"]
+
+
+
+
 
         # Get the columns from the selected data collection
         cols_json = get_columns_from_data_collection(wf_tag, dc_tag, TOKEN)
@@ -78,18 +84,32 @@ def register_callbacks_card_component(app):
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
             State({"type": "card-dropdown-column", "index": MATCH}, "id"),
             State("local-store", "data"),
+            State("url", "pathname"),
         ],
         prevent_initial_call=True,
     )
-    def design_card_body(input_value, column_name, aggregation_value, wf_tag, dc_tag, id, local_data):
+    def design_card_body(input_value, column_name, aggregation_value, wf_tag, dc_tag, id, local_data, pathname):
         """
         Callback to update card body based on the selected column and aggregation
         """
+
+
+
 
         if not local_data:
             return []
 
         TOKEN = local_data["access_token"]
+
+        input_id = id["index"]
+
+        dashboard_id = pathname.split("/")[-1]
+
+        component_data = get_component_data(input_id=input_id, dashboard_id=dashboard_id, TOKEN=TOKEN)
+            
+
+        logger.info(f"component_data: {component_data}")
+
 
         headers = {
             "Authorization": f"Bearer {TOKEN}",
@@ -99,9 +119,21 @@ def register_callbacks_card_component(app):
         cols_json = get_columns_from_data_collection(wf_tag, dc_tag, TOKEN)
         logger.info(f"cols_json: {cols_json}")
 
+
+
         # If any of the input values are None, return an empty list
         if input_value is None or column_name is None or aggregation_value is None or wf_tag is None or dc_tag is None:
-            return ([], None)
+            if not component_data:
+                return ([], None)
+            else:
+
+                column_name = component_data["column_name"]
+                aggregation_value = component_data["aggregation"]
+                input_value = component_data["title"]
+                logger.info("COMPOENNT DATA")
+                logger.info(f"column_name: {column_name}")
+                logger.info(f"aggregation_value: {aggregation_value}")
+                logger.info(f"input_value: {input_value}")
 
         # Get the type of the selected column
         column_type = cols_json[column_name]["type"]
