@@ -92,6 +92,39 @@ def register_callbacks_header(app):
         return is_open
 
 
+    # @app.callback(
+    #     Output("stored_metadata", "data"),
+    #     Input("url", "pathname"),  # Assuming you have a URL component triggering on page load
+    #     prevent_initial_call=True
+    # )
+    # def load_stored_metadata(pathname):
+    #     """
+    #     Load stored_metadata from MongoDB and store it in the 'stored_metadata' dcc.Store.
+    #     """
+    #     try:
+    #         dashboard_id = pathname.split("/")[-1]
+    #         logger.info(f"Loading stored_metadata for dashboard_id: {dashboard_id}")
+
+
+    #         from depictio.api.v1.db import dashboards_collection
+    #         dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    #         if not dashboard:
+    #             logger.error(f"Dashboard with ID {dashboard_id} not found.")
+    #             return dash.no_update
+
+    #         stored_metadata = dashboard.get("stored_metadata", [])
+    #         if not stored_metadata:
+    #             logger.warning(f"No stored_metadata found for dashboard_id: {dashboard_id}.")
+    #             return []
+
+    #         logger.info(f"Loaded stored_metadata: {stored_metadata}")
+    #         return stored_metadata
+
+    #     except Exception as e:
+    #         logger.exception("Failed to load stored_metadata from MongoDB.")
+    #         return dash.no_update
+
+
 def design_header(data):
     """
     Design the header of the dashboard
@@ -121,11 +154,12 @@ def design_header(data):
                 storage_type="session",
                 data={},
             ),
+            dcc.Store(id="stored-edit-component", data=None, storage_type="memory"),
+            # dcc.Store(id="stored_metadata", data=None, storage_type="memory"),
             dcc.Store(id="stored-draggable-layouts", storage_type="session", data={}),
             dcc.Store(id="interactive-values-store", storage_type="session", data={}),
         ]
     )
-
 
     # Modal for success message when clicking the save button
     modal_save_button = dbc.Modal(
@@ -360,6 +394,11 @@ def design_header(data):
             storage_type="memory",
             data=False,
         ),
+        # dcc.Store(
+        #     id="initialized-edit-button",
+        #     storage_type="memory",
+        #     data=False,
+        # ),
         dcc.Store(
             id="stored-edit-dashboard-mode-button",
             # storage_type="memory",
@@ -467,7 +506,8 @@ def design_header(data):
             ),
         ],
         height=80,
-    style={"width": "100%"},
+        style={"width": "100%"},
+        withBorder=False,
     )
 
     return header, backend_components
