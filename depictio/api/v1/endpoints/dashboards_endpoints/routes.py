@@ -249,3 +249,51 @@ async def delete_dashboard(dashboard_id: str, current_user=Depends(get_current_u
         return {"message": f"Dashboard with ID '{dashboard_id}' deleted successfully."}
     else:
         raise HTTPException(status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found.")
+
+
+@dashboards_endpoint_router.get("/get_component_data/{dashboard_id}/{component_id}")
+async def get_component_data_endpoint(dashboard_id: str, component_id: str, current_user=Depends(get_current_user)):
+    """
+    Fetch component data related to a component ID.
+    """
+
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Current user not found.")
+
+    user_id = current_user.id
+    logger.info(f"Current user ID: {user_id}")
+
+    # Find dashboards where current_user is either an owner or a viewer
+    query = {
+        "dashboard_id": str(dashboard_id),
+        "$or": [
+            {"permissions.owners._id": user_id},
+            # {"permissions.viewers._id": user_id},
+        ],
+    }
+
+    dashboard_data = dashboards_collection.find_one(query)
+
+    logger.info(f"Dashboard data: {dashboard_data}")
+
+    dashboard_data = DashboardData.from_mongo(dashboard_data)
+    logger.info(f"Dashboard data from mongo: {dashboard_data}")
+
+    if not dashboard_data:
+        raise HTTPException(status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found.")
+
+    # Extract stored_metadata
+    stored_metadata = dashboard_data.stored_metadata
+    if not stored_metadata:
+        logger.error(f"No stored_metadata found in dashboard {dashboard_id}.")
+        return None
+
+    # Find the component metadata by component_id
+    component_metadata = next((item for item in stored_metadata if item.get("index") == component_id), None)
+    if not component_metadata:
+        logger.error(f"Component with ID {component_id} not found in stored_metadata.")
+        return None
+
+    logger.info(f"Component metadata found: {component_metadata}")
+
+    return component_metadata
