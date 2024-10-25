@@ -51,6 +51,14 @@ def get_size(obj, seen=None):
         size += sum([get_size(i, seen) for i in obj])
     return size
 
+def get_component_data(input_id, dashboard_id, TOKEN):
+    response = httpx.get(
+        f"{API_BASE_URL}/depictio/api/v1/dashboards/get_component_data/{dashboard_id}/{input_id}",
+        headers={"Authorization": f"Bearer {TOKEN}"},
+    )
+    logger.info(f"Code: {response.status_code}")
+    logger.info(f"Response: {response.json()}")
+    return response.json()
 
 def load_depictio_data_mongo(dashboard_id: str):
     url = f"{API_BASE_URL}/depictio/api/v1/dashboards/get/{dashboard_id}"
@@ -122,13 +130,13 @@ def list_workflows(token: str = None):
 #         return data_collections_dict_for_dropdown
 
 
-# def return_wf_tag_from_id(workflow_id: ObjectId, workflows: list = None):
-#     if not workflows:
-#         workflows = list_workflows(TOKEN)
-#     else:
-#         workflows = [convert_objectid_to_str(workflow.mongo()) for workflow in workflows]
+def return_wf_tag_from_id(workflow_id: ObjectId, workflows: list = None, TOKEN: str = None):
+    if not workflows:
+        workflows = list_workflows(TOKEN)
+    else:
+        workflows = [convert_objectid_to_str(workflow.mongo()) for workflow in workflows]
 
-#     return [e for e in workflows if e["_id"] == workflow_id][0]["workflow_tag"]
+    return [e for e in workflows if e["_id"] == workflow_id][0]["workflow_tag"]
 
 
 def return_dc_tag_from_id(workflow_id: ObjectId, data_collection_id: ObjectId, workflows: list = None, TOKEN: str = None):
