@@ -1,3 +1,4 @@
+import uuid
 from bson import ObjectId
 import numpy as np
 from depictio.api.v1.configs.config import API_BASE_URL
@@ -29,6 +30,10 @@ UNSELECTED_STYLE = {
     "opacity": 1,
     "fontFamily": "Virgil",
 }
+
+# Helper Functions
+def generate_unique_index():
+    return str(uuid.uuid4())
 
 
 def get_size(obj, seen=None):
@@ -146,6 +151,7 @@ def return_dc_tag_from_id(workflow_id: ObjectId, data_collection_id: ObjectId, w
     # workflows = [convert_objectid_to_str(workflow.mongo()) for workflow in workflows]
     # print("data_collection_id", data_collection_id)
     return [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["_id"] == data_collection_id][0]["data_collection_tag"]
+
 
 
 def return_mongoid(
