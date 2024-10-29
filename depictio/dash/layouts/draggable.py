@@ -1,7 +1,9 @@
+import copy
+import json
+from dash import html, Input, Output, State, ALL, MATCH, ctx, dcc
 import dash_mantine_components as dmc
 from dash_iconify import DashIconify
 import dash_draggable
-from dash import html, Input, Output, State, ALL
 import dash
 import httpx
 from depictio.dash.layouts.draggable_scenarios.add_component import add_new_component
@@ -17,11 +19,12 @@ from depictio.dash.layouts.draggable_scenarios.restore_dashboard import render_d
 
 # Depictio layout imports for header
 from depictio.dash.layouts.edit import enable_box_edit_mode
-from depictio.dash.utils import get_component_data
+from depictio.dash.utils import generate_unique_index, get_component_data, return_dc_tag_from_id, return_mongoid, return_wf_tag_from_id
 
 
 # Mapping of component types to their respective dimensions (width and height)
 component_dimensions = {"card-component": {"w": 3, "h": 4}, "interactive-component": {"w": 6, "h": 6}, "graph-component": {"w": 9, "h": 8}}
+required_breakpoints = ["xl", "lg", "sm", "md", "xs", "xxs"]
 
 
 def calculate_new_layout_position(child_type, existing_layouts, child_id, n):
@@ -53,6 +56,127 @@ def remove_duplicates_by_index(components):
 
 
 def register_callbacks_draggable(app):
+    from dash import callback_context
+
+    @app.callback(
+        Output("local-store-components-metadata", "data"),
+        [
+            Input({"type": "workflow-selection-label", "index": ALL}, "value"),
+            Input({"type": "datacollection-selection-label", "index": ALL}, "value"),
+            Input("url", "pathname"),
+        ],
+        [
+            State("local-store", "data"),  # Contains 'access_token'
+            State("local-store-components-metadata", "data"),  # Existing components' data
+            State({"type": "workflow-selection-label", "index": ALL}, "id"),
+            State({"type": "datacollection-selection-label", "index": ALL}, "id"),
+        ],
+        prevent_initial_call=True,
+    )
+    def store_wf_dc_selection(wf_values, dc_values, pathname, local_store, components_store, wf_ids, dc_ids):
+        """
+        Callback to store all components' workflow and data collection data in a centralized store.
+        Updates the store whenever any workflow or data collection dropdown changes.
+
+        Args:
+            wf_values (list): List of selected workflow values from all dropdowns.
+            dc_values (list): List of selected data collection values from all dropdowns.
+            pathname (str): Current URL pathname.
+            local_store (dict): Data from 'local-store', expected to contain 'access_token'.
+            components_store (dict): Existing components' wf/dc data.
+            wf_ids (list): List of IDs for workflow dropdowns.
+            dc_ids (list): List of IDs for datacollection dropdowns.
+
+        Returns:
+            dict: Updated components' wf/dc data.
+        """
+        logger.info("Entering store_wf_dc_selection callback")
+        logger.debug(f"Workflow values: {wf_values}")
+        logger.debug(f"Data collection values: {dc_values}")
+        logger.debug(f"URL pathname: {pathname}")
+        logger.debug(f"Local store data: {local_store}")
+        logger.debug(f"Components store data before update: {components_store}")
+
+        # Validate access token
+        if not local_store or "access_token" not in local_store:
+            logger.error("Local data or access_token is missing.")
+            return components_store  # No update
+
+        TOKEN = local_store["access_token"]
+
+        # Initialize components_store if empty
+        if not components_store:
+            components_store = {}
+
+        # Process workflow selections
+        for wf_val, wf_id in zip(wf_values, wf_ids):
+            # Parse the ID safely
+            try:
+                trigger_id = wf_id
+            # except json.JSONDecodeError as e:
+            #     logger.error(f"Error parsing workflow ID '{wf_id}': {e}")
+            #     continue  # Skip this iteration
+            except Exception as e:
+                logger.error(f"Error parsing workflow ID '{wf_id}': {e}")
+                continue
+
+            trigger_index = str(trigger_id.get("index"))
+            if not trigger_index:
+                logger.error(f"Invalid workflow ID: {trigger_id}")
+                continue  # Skip this iteration
+
+            # Update workflow tag
+            components_store.setdefault(trigger_index, {})
+            components_store[trigger_index]["wf_tag"] = wf_val
+
+            # Fetch corresponding wf_id and dc_id
+            dc_tag = components_store[trigger_index].get("dc_tag", "")
+            try:
+                wf_id_fetched, dc_id_fetched = return_mongoid(workflow_tag=wf_val, data_collection_tag=dc_tag, TOKEN=TOKEN)
+                components_store[trigger_index]["wf_id"] = wf_id_fetched
+                components_store[trigger_index]["dc_id"] = dc_id_fetched
+                logger.debug(f"Updated component '{trigger_index}' with wf_id: {wf_id_fetched}, dc_id: {dc_id_fetched}")
+            except Exception as e:
+                logger.error(f"Error retrieving IDs for component '{trigger_index}': {e}")
+                components_store[trigger_index]["wf_id"] = ""
+                components_store[trigger_index]["dc_id"] = ""
+
+        # Process datacollection selections
+        for dc_val, dc_id in zip(dc_values, dc_ids):
+            # Parse the ID safely
+            try:
+                trigger_id = dc_id
+            # except json.JSONDecodeError as e:
+            #     logger.error(f"Error parsing datacollection ID '{dc_id}': {e}")
+            #     continue  # Skip this iteration
+            except Exception as e:
+                logger.error(f"Error parsing datacollection ID '{dc_id}': {e}")
+                continue  # Skip this iteration
+
+            trigger_index = str(trigger_id.get("index"))
+            if not trigger_index:
+                logger.error(f"Invalid datacollection ID: {trigger_id}")
+                continue  # Skip this iteration
+
+            # Update datacollection tag
+            components_store.setdefault(trigger_index, {})
+            components_store[trigger_index]["dc_tag"] = dc_val
+
+            # Fetch corresponding wf_id and dc_id
+            wf_tag = components_store[trigger_index].get("wf_tag", "")
+            try:
+                wf_id_fetched, dc_id_fetched = return_mongoid(workflow_tag=wf_tag, data_collection_tag=dc_val, TOKEN=TOKEN)
+                components_store[trigger_index]["wf_id"] = wf_id_fetched
+                components_store[trigger_index]["dc_id"] = dc_id_fetched
+                logger.debug(f"Updated component '{trigger_index}' with wf_id: {wf_id_fetched}, dc_id: {dc_id_fetched}")
+            except Exception as e:
+                logger.error(f"Error retrieving IDs for component '{trigger_index}': {e}")
+                components_store[trigger_index]["wf_id"] = ""
+                components_store[trigger_index]["dc_id"] = ""
+
+        logger.debug(f"Components store data after update: {components_store}")
+        return components_store
+
     @app.callback(
         Output("draggable", "children"),
         Output("draggable", "layouts"),
@@ -120,6 +244,13 @@ def register_callbacks_draggable(app):
             },
             "n_clicks",
         ),
+        Input(
+            {
+                "type": "duplicate-box-button",
+                "index": ALL,
+            },
+            "n_clicks",
+        ),
         Input("remove-all-components-button", "n_clicks"),
         State("toggle-interactivity-button", "checked"),
         State("edit-dashboard-mode-button", "checked"),
@@ -145,6 +276,7 @@ def register_callbacks_draggable(app):
         input_stored_draggable_layouts,
         remove_box_button_values,
         edit_box_button_values,
+        duplicate_box_button_values,
         remove_all_components_button,
         toggle_interactivity_button,
         edit_dashboard_mode_button,
@@ -251,7 +383,6 @@ def register_callbacks_draggable(app):
             logger.info(f"n: {n}")
 
             # Ensure all necessary breakpoints are initialized
-            required_breakpoints = ["xl", "lg", "sm", "md", "xs", "xxs"]
             for bp in required_breakpoints:
                 if bp not in draggable_layouts:
                     draggable_layouts[bp] = []
@@ -276,7 +407,7 @@ def register_callbacks_draggable(app):
                 logger.info(f"Child type: {child_type}")
                 # child types: card-component (w:3,h:4), interactive-component (w:6,h:6), graph-component (w:9,h:8)
                 if child_index not in existing_ids:
-                    child = enable_box_edit_mode(child, True, dashboard_id=dashboard_id, TOKEN=TOKEN)
+                    child = enable_box_edit_mode(child, True, dashboard_id=dashboard_id, fresh=True, TOKEN=TOKEN)
                     draggable_children.append(child)
                     child_id = f"box-{str(child_index)}"
 
@@ -284,7 +415,7 @@ def register_callbacks_draggable(app):
                     new_layout_item = calculate_new_layout_position(child_type, draggable_layouts, child_id, n)
 
                     # Update necessary breakpoints, this example only updates 'lg' for simplicity
-                    draggable_layouts["lg"].append(new_layout_item)
+                    # draggable_layouts["lg"].append(new_layout_item)
 
                     # new_layout_item = {
                     #     "i": child_id,
@@ -379,7 +510,7 @@ def register_callbacks_draggable(app):
             # logger.info("Current draggable children: {}".format(draggable_children))
             updated_children = [child for child in draggable_children if child["props"]["id"] != f"box-{input_id}"]
 
-            state_stored_draggable_children[dashboard_id] = updated_children
+            # state_stored_draggable_children[dashboard_id] = updated_children
             state_stored_draggable_layouts[dashboard_id] = draggable_layouts
 
             # logger.info("Updated draggable children: {}".format(updated_children))
@@ -392,7 +523,6 @@ def register_callbacks_draggable(app):
 
             input_id = ctx.triggered_id["index"]
             logger.info("Input ID: {}".format(input_id))
-
 
             component_data = get_component_data(input_id=input_id, dashboard_id=dashboard_id, TOKEN=TOKEN)
             logger.info(f"Component data: {component_data}")
@@ -428,7 +558,7 @@ def register_callbacks_draggable(app):
                 logger.info(f"Child props: {child['props']}")
                 logger.info(f"Child props id: {child['props']['id']}")
                 logger.info(f"Child props id index: {child['props']['id']['index']}")
-                child_index = int(child["props"]["id"]["index"])
+                child_index = str(child["props"]["id"]["index"])
 
                 if str(child_index) == str(index):
                     # logger.info(f"Child: {child}")
@@ -452,6 +582,7 @@ def register_callbacks_draggable(app):
                     #     child = enable_box_edit_mode(child, True)
                     logger.info(f"Child: {child}")
                     edited_child = enable_box_edit_mode(child, True)
+                    logger.info(f"Edited child: {edited_child}")
 
             updated_children = list()
             for child in draggable_children:
@@ -462,6 +593,83 @@ def register_callbacks_draggable(app):
 
             return updated_children, draggable_layouts, dash.no_update, dash.no_update
 
+        elif triggered_input == "duplicate-box-button":
+            triggered_index = ctx.triggered_id["index"]
+
+            logger.info(f"Duplicating component with index: {triggered_index}")
+            # Duplicate the component
+            component_to_duplicate = None
+            for child in draggable_children:
+                if child["props"]["id"] == f"box-{triggered_index}":
+                    component_to_duplicate = child
+                    break
+
+            if component_to_duplicate is None:
+                logger.error(f"No component found with id 'box-{triggered_index}' to duplicate.")
+                return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+            # Generate a new unique ID for the duplicated component
+            new_index = generate_unique_index()
+            # new_index = "200"
+            child_id = f"box-{new_index}"
+
+            # Create a deep copy of the component to duplicate
+            duplicated_component = copy.deepcopy(component_to_duplicate)
+
+            # Update the duplicated component's ID to the new ID
+            duplicated_component["props"]["id"] = child_id
+
+            # extract the metadata from the parent component
+            metadata = None
+            for metadata_child in stored_metadata:
+                if metadata_child["index"] == triggered_index:
+                    metadata = metadata_child
+                    logger.info(f"Metadata found: {metadata}")
+                    break
+            metadata["index"] = new_index
+            new_store = dcc.Store(id={"type": "stored-metadata-component", "index": new_index}, data=metadata)
+
+            duplicated_component["props"]["children"]["props"]["children"] += [new_store]
+
+            # Update any nested component IDs within the duplicated component
+            def update_nested_ids(component, old_index, new_index):
+                if isinstance(component, dict):
+                    for key, value in component.items():
+                        if key == "id" and isinstance(value, dict):
+                            if value.get("index") == old_index:
+                                value["index"] = new_index
+                        elif isinstance(value, dict):
+                            update_nested_ids(value, old_index, new_index)
+                        elif isinstance(value, list):
+                            for item in value:
+                                update_nested_ids(item, old_index, new_index)
+                elif isinstance(component, list):
+                    for item in component:
+                        update_nested_ids(item, old_index, new_index)
+
+            update_nested_ids(duplicated_component, triggered_index, new_index)
+
+            # Append the duplicated component to the updated children
+            updated_children = list(draggable_children)
+            updated_children.append(duplicated_component)
+
+            # Calculate the new layout position
+            # 'child_type' corresponds to the 'type' in the component's ID
+            existing_layouts = draggable_layouts  # Current layouts before adding the new one
+            n = len(updated_children)  # Position based on the number of components
+
+            new_layout = calculate_new_layout_position("", existing_layouts, child_id, n)
+
+            for key in required_breakpoints:
+                draggable_layouts[key].append(new_layout)
+
+            logger.info(f"Duplicated component with new id 'box-{new_index}' and assigned layout {new_layout}")
+
+            # state_stored_draggable_children[dashboard_id] = updated_children
+            state_stored_draggable_layouts[dashboard_id] = draggable_layouts
+
+            return updated_children, draggable_layouts, dash.no_update, state_stored_draggable_layouts
+
         elif triggered_input == "remove-all-components-button":
             logger.info("Remove all components button clicked")
             state_stored_draggable_layouts[dashboard_id] = {}
@@ -470,8 +678,6 @@ def register_callbacks_draggable(app):
 
         else:
             return dash.no_update, dash.no_update, dash.no_update, dash.no_update
-
-    from dash import MATCH
 
     # @app.callback(
     #     Output({"type": "last-button", "index": MATCH}, "data", allow_duplicate=True),
@@ -574,7 +780,7 @@ def register_callbacks_draggable(app):
         # Extract dashboard_id from the URL pathname
         try:
             dashboard_id = pathname.split("/")[-1]
-            logger.info(f"Dashboard ID: {dashboard_id}")
+            logger.debug(f"Dashboard ID: {dashboard_id}")
         except Exception as e:
             logger.error(f"Error extracting dashboard_id from pathname '{pathname}': {e}")
             raise dash.exceptions.PreventUpdate
@@ -592,7 +798,10 @@ def register_callbacks_draggable(app):
                 continue
             components.append({"value": value, "metadata": metadata, "index": metadata["index"]})
 
-        return {"interactive_components_values": components}
+        output_data = {"interactive_components_values": components}
+
+        logger.info(f"Output data: {output_data}")
+        return output_data
 
 
 def design_draggable(data, init_layout, init_children, local_data):
