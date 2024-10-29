@@ -71,6 +71,7 @@ def build_interactive(**kwargs):
             "component_type": "interactive",
             "interactive_component_type": interactive_component_type,
             "index": str(index),
+            "title": title,
             "wf_id": wf_id,
             "dc_id": dc_id,
             "dc_config": dc_config,

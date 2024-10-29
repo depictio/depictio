@@ -5,7 +5,7 @@ from dash import html, dcc, Input, Output, State, MATCH
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 from dash_iconify import DashIconify
-from depictio.dash.utils import return_mongoid
+from depictio.dash.utils import get_component_data, return_mongoid
 
 # Depictio imports
 from depictio.dash.modules.interactive_component.utils import (
@@ -27,11 +27,13 @@ def register_callbacks_interactive_component(app):
             Input({"type": "input-dropdown-column", "index": MATCH}, "value"),
             Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
             Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+            State({"type": "input-dropdown-method", "index": MATCH}, "id"),
             State("local-store", "data"),
+            State("url", "pathname"),
         ],
         prevent_initial_call=True,
     )
-    def update_aggregation_options(column_value, wf_tag, dc_tag, local_data):
+    def update_aggregation_options(column_value, wf_tag, dc_tag, id, local_data, pathname):
         """
         Callback to update aggregation dropdown options based on the selected column
         """
@@ -87,11 +89,12 @@ def register_callbacks_interactive_component(app):
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
             State({"type": "input-dropdown-method", "index": MATCH}, "id"),
             State("local-store", "data"),
+            State("url", "pathname"),
             # Input("interval", "n_intervals"),
         ],
         prevent_initial_call=True,
     )
-    def update_card_body(input_value, column_value, aggregation_value, wf_tag, dc_tag, id, local_data):
+    def update_card_body(input_value, column_value, aggregation_value, wf_tag, dc_tag, id, local_data, pathname):
         """
         Callback to update card body based on the selected column and aggregation
         """
@@ -105,13 +108,30 @@ def register_callbacks_interactive_component(app):
             "Authorization": f"Bearer {TOKEN}",
         }
 
+        dashboard_id = pathname.split("/")[-1]
+        input_id = id["index"]
+
+        component_data = get_component_data(input_id=input_id, dashboard_id=dashboard_id, TOKEN=TOKEN)
+
+        # Check if value was already assigned
+        value = None
+
         # Get the columns from the selected data collection
         cols_json = get_columns_from_data_collection(wf_tag, dc_tag, TOKEN)
         logger.info(f"cols_json: {cols_json}")
 
         # If any of the input values are None, return an empty list
         if input_value is None or column_value is None or aggregation_value is None or wf_tag is None or dc_tag is None:
-            return ([], None)
+            if not component_data:
+                return ([], None)
+            else:
+                input_value = component_data["title"]
+                column_value = component_data["column_name"]
+                aggregation_value = component_data["interactive_component_type"]
+                value = component_data.get("value", None)
+                logger.info(f"component_data: {component_data}")
+                logger.info(f"input_value: {input_value}")
+                logger.info(f"column_value: {column_value}")
 
         # Get the type of the selected column
         column_type = cols_json[column_value]["type"]
@@ -165,6 +185,9 @@ def register_callbacks_interactive_component(app):
             "access_token": TOKEN,
             "stepper": True,
         }
+        if value:
+            interactive_kwargs["value"] = value
+
         new_interactive_component = build_interactive(**interactive_kwargs)
 
         return new_interactive_component, interactive_description
