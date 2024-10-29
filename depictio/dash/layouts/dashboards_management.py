@@ -4,6 +4,7 @@ from bson import ObjectId
 import dash
 from dash import html, dcc, ctx, MATCH, Input, Output, State, ALL
 import dash_mantine_components as dmc
+import dash_bootstrap_components as dbc
 from dash_iconify import DashIconify
 import httpx
 
@@ -115,6 +116,42 @@ def delete_dashboard(dashboard_id, token):
         raise ValueError(f"Failed to delete dashboard from the database. Error: {response.text}")
 
 
+def edit_dashboard_name(new_name, dashboard_id, dashboards, token):
+    logger.info(f"Editing dashboard name for dashboard ID: {dashboard_id}")
+    logger.info(f"dashboards: {dashboards}")
+    logger.info(f"token: {token}")
+
+    updated_dashboards = list()
+
+    # Iterate over the dashboards to find the dashboard with the matching ID and update the name
+    for dashboard in dashboards:
+        if dashboard.dashboard_id == dashboard_id:
+            logger.info(f"Found dashboard to edit: {dashboard}")
+            dashboard.title = new_name
+            dashboard_to_edit = dashboard
+        updated_dashboards.append(dashboard)
+
+    logger.info(f"dashboard_to_edit: {dashboard_to_edit}")
+
+    logger.info(f"dashboard_to_edit.mongo(): {dashboard_to_edit.mongo()}")
+
+    logger.info(f"convert_objectid_to_str(dashboard_to_edit.mongo()) {convert_objectid_to_str(dashboard_to_edit.mongo())}")
+
+    response = httpx.post(
+        f"{API_BASE_URL}/depictio/api/v1/dashboards/save/{dashboard_id}", headers={"Authorization": f"Bearer {token}"}, json=convert_objectid_to_str(dashboard_to_edit.mongo())
+    )
+
+    if response.status_code == 200:
+        logger.info(f"Successfully edited dashboard name: {dashboard}")
+
+    else:
+        raise ValueError(f"Failed to edit dashboard name in the database. Error: {response.text}")
+
+    logger.info(f"updated_dashboards: {updated_dashboards}")
+
+    return updated_dashboards
+
+
 def render_welcome_section(email):
     style = {
         "border": f"1px solid {dmc.theme.DEFAULT_COLORS['indigo'][4]}",
@@ -179,7 +216,7 @@ def register_callbacks_dashboards_management(app):
                     [
                         html.Div(
                             [
-                                dmc.Title(dashboard["title"], order=5),
+                                dmc.Center(dmc.Title(dashboard["title"], order=5)),
                                 # dmc.Text(f"Last Modified: {dashboard['last_modified']}"),
                                 dmc.Text(f"Version: {dashboard['version']}"),
                                 dmc.Text(f"Owner: {dashboard['permissions']['owners'][0]['email']}"),
@@ -277,39 +314,84 @@ def register_callbacks_dashboards_management(app):
             )
             return modal
 
+        def modal_edit_name_dashboard(dashboard):
+            modal = dmc.Modal(
+                id={"type": "edit-password-modal", "index": dashboard["dashboard_id"]},
+                opened=False,
+                centered=True,
+                withCloseButton=True,
+                closeOnEscape=True,
+                closeOnClickOutside=True,
+                size="lg",
+                title="Edit Dashboard name",
+                style={"fontSize": 16},
+                children=[
+                    dmc.TextInput(placeholder="New name", label="New name", id={"type": "new-name-dashboard", "index": dashboard["dashboard_id"]}),
+                    dmc.Text(id={"type": "message-edit-name-dashboard", "index": dashboard["dashboard_id"]}, color="red", style={"display": "none"}),
+                    dmc.Center(dmc.Button("Save", color="blue", id={"type": "save-edit-name-dashboard", "index": dashboard["dashboard_id"]}, style={"margin": "10px 0"})),
+                ],
+            )
+            return modal
+
         def create_buttons(dashboard):
-            group = dmc.Group(
+            group = html.Div(
                 [
-                    html.Div(
+                    dmc.Group(
                         [
-                            dmc.Title(dashboard["title"], order=5),
-                            # dmc.Text(f"Last Modified: {dashboard['last_modified']}"),
-                            dmc.Text(f"Version: {dashboard['version']}"),
-                            dmc.Text(f"Owner: {dashboard['permissions']['owners'][0]['email']}"),
-                        ],
-                        style={"flex": "1"},
+                            html.Div(
+                                [
+                                    dmc.Title(dashboard["title"], order=5),
+                                    # dmc.Text(f"Last Modified: {dashboard['last_modified']}"),
+                                    # dmc.Text(f"Version: {dashboard['version']}"),
+                                    # dmc.Text(f"Owner: {dashboard['permissions']['owners'][0]['email']}"),
+                                ],
+                                style={"flex": "1"},
+                            )
+                        ]
                     ),
-                    html.A(
-                        dmc.Button(
-                            f"View",
-                            id={"type": "view-dashboard-button", "index": dashboard["dashboard_id"]},
-                            variant="outline",
-                            color="dark",
-                        ),
-                        href=f"/dashboard/{dashboard['dashboard_id']}",
-                    ),
-                    dmc.Button(
-                        "Delete",
-                        id={"type": "delete-dashboard-button", "index": dashboard["dashboard_id"]},
-                        variant="outline",
-                        color="red",
+                    dmc.Space(h=10),
+                    dmc.Group(
+                        [
+                            html.A(
+                                dmc.Button(
+                                    f"View",
+                                    id={"type": "view-dashboard-button", "index": dashboard["dashboard_id"]},
+                                    variant="outline",
+                                    color="dark",
+                                    # style={"fontFamily": "Virgil"},
+                                    # leftIcon=DashIconify(icon="mdi:eye", width=12, color="black"),
+                                ),
+                                href=f"/dashboard/{dashboard['dashboard_id']}",
+                            ),
+                            dmc.Button(
+                                "Edit name",
+                                id={"type": "edit-dashboard-button", "index": dashboard["dashboard_id"]},
+                                variant="outline",
+                                color="blue",
+                                # style={"fontFamily": "Virgil"},
+                            ),
+                            dmc.Button(
+                                "Duplicate",
+                                id={"type": "duplicate-dashboard-button", "index": dashboard["dashboard_id"]},
+                                variant="outline",
+                                color="gray",
+                                # style={"fontFamily": "Virgil"},
+                            ),
+                            dmc.Button(
+                                "Delete",
+                                id={"type": "delete-dashboard-button", "index": dashboard["dashboard_id"]},
+                                variant="outline",
+                                color="red",
+                                # style={"fontFamily": "Virgil"},
+                            ),
+                        ]
+                        # align="center",
+                        # position="apart",
+                        # grow=False,
+                        # noWrap=False,
+                        # style={"width": "100%"},
                     ),
                 ]
-                # align="center",
-                # position="apart",
-                # grow=False,
-                # noWrap=False,
-                # style={"width": "100%"},
             )
             return group
 
@@ -323,9 +405,9 @@ def register_callbacks_dashboards_management(app):
 
             logger.info(f"sys.path: {sys.path}")
             logger.info(f"dashboard: {dashboard}")
-            
+
             # Define the output folder where screenshots are saved
-            output_folder = '/app/depictio/dash/static/screenshots'  # Directly set to the desired path
+            output_folder = "/app/depictio/dash/static/screenshots"  # Directly set to the desired path
             # output_folder = os.path.join(os.path.dirname(__file__), 'static', 'screenshots')
 
             # Define the filename and paths
@@ -334,7 +416,6 @@ def register_callbacks_dashboards_management(app):
             thumbnail_fs_path = os.path.join(output_folder, filename)
             # URL path for the Image src
             thumbnail_url = f"/static/screenshots/{filename}"
-
 
             # thumbnail_path = f"assets/screenshots/{user_id}_{dashboard['_id']}.png"
             # thumbnail_path_check = f"depictio/dash/{thumbnail_path}"
@@ -352,22 +433,24 @@ def register_callbacks_dashboards_management(app):
                 thumbnail = html.Div(
                     [
                         html.A(
-                            dmc.CardSection([dmc.Center(dmc.Image(src=default_thumbnail_url, height=150, width=150, style={"padding": "20px 0px"}))]),
+                            dmc.CardSection([dmc.Center(dmc.Image(src=default_thumbnail_url, height=220, width=220, style={"padding": "0px 0px"}))]),
                             href=f"/dashboard/{dashboard['dashboard_id']}",
                         ),
                         dmc.Text("No thumbnail available yet", size=18, align="center", color="gray", style={"fontFamily": "Virgil"}),
                     ]
                 )
             else:
-                thumbnail = html.A(dmc.CardSection(dmc.Image(src=thumbnail_url, height=250, width=450)), href=f"/dashboard/{dashboard['dashboard_id']}")
+                thumbnail = html.A(dmc.CardSection(dmc.Image(src=thumbnail_url, height=250, width=400)), href=f"/dashboard/{dashboard['dashboard_id']}")
 
             return thumbnail
 
         def loop_over_dashboards(user_id, dashboards):
             view = list()
             for dashboard in dashboards:
-                modal = modal_delete_dashboard(dashboard)
+                delete_modal = modal_delete_dashboard(dashboard)
+                edit_name_modal = modal_edit_name_dashboard(dashboard)
                 buttons = create_buttons(dashboard)
+
                 thumbnail = return_thumbnail(user_id, dashboard)
                 view.append(
                     dmc.Card(
@@ -382,11 +465,7 @@ def register_callbacks_dashboards_management(app):
                             "display": "flex",
                             "flexDirection": "column",
                         },
-                        children=[
-                            thumbnail,
-                            buttons,
-                            modal,
-                        ],
+                        children=[thumbnail, buttons, delete_modal, edit_name_modal],
                     )
                 )
             return view
@@ -406,7 +485,10 @@ def register_callbacks_dashboards_management(app):
 
         # Optional: Add padding to the parent div for better spacing on smaller screens
         return html.Div(
-            [dmc.Grid([title], justify="space-between", align="center", style={"width": "100%", "padding": "20px 0"}), html.Hr(), dashboards_view],
+            [
+                # dmc.Grid([title], justify="space-between", align="center", style={"width": "100%", "padding": "20px 0"}), html.Hr(),
+                dashboards_view
+            ],
             style={"width": "100%", "padding": "0 20px"},
         )
 
@@ -414,16 +496,21 @@ def register_callbacks_dashboards_management(app):
         [Output({"type": "dashboard-list", "index": ALL}, "children"), Output({"type": "dashboard-index-store", "index": ALL}, "data")],
         [
             Input({"type": "confirm-delete", "index": ALL}, "n_clicks"),
+            Input({"type": "save-edit-name-dashboard", "index": ALL}, "n_clicks"),
         ],
         [
             State({"type": "create-dashboard-button", "index": ALL}, "id"),
             State({"type": "dashboard-index-store", "index": ALL}, "data"),
             State({"type": "confirm-delete", "index": ALL}, "index"),
+            State({"type": "new-name-dashboard", "index": ALL}, "value"),
+            State({"type": "new-name-dashboard", "index": ALL}, "id"),
             State("local-store", "data"),
             Input("dashboard-modal-store", "data"),
         ],
     )
-    def update_dashboards(delete_n_clicks_list, create_ids_list, store_data_list, delete_ids_list, user_data, modal_data):
+    def update_dashboards(
+        delete_n_clicks_list, edit_n_clicks_list, create_ids_list, store_data_list, delete_ids_list, new_name_list_values, new_name_list_ids, user_data, modal_data
+    ):
         logger.info("\nupdate_dashboards triggered")
         log_context_info()
 
@@ -431,7 +518,7 @@ def register_callbacks_dashboards_management(app):
         current_userbase = UserBase(**current_user.dict(exclude={"tokens", "is_active", "is_verified", "last_login", "registration_date", "password"}))
 
         index_data = load_dashboards_from_db(user_data["access_token"])
-        dashboards = [DashboardData(**dashboard) for dashboard in index_data.get("dashboards", [])]
+        dashboards = [DashboardData.from_mongo(dashboard) for dashboard in index_data.get("dashboards", [])]
         next_index = index_data.get("next_index", 1)
 
         if not ctx.triggered_id:
@@ -443,6 +530,16 @@ def register_callbacks_dashboards_management(app):
 
         if ctx.triggered_id.get("type") == "confirm-delete":
             return handle_dashboard_deletion(dashboards, delete_ids_list, user_data, store_data_list, current_userbase)
+
+        if ctx.triggered_id.get("type") == "save-edit-name-dashboard":
+            logger.info("Edit dashboard button clicked")
+            # Extract the new name from the input field
+            index = ctx.triggered_id["index"]
+
+            # Iterate over the new_name_list to find the new name corresponding to the index
+            new_name = [value for value, id in zip(new_name_list_values, new_name_list_ids) if id["index"] == index][0]
+
+            return handle_dashboard_edit(new_name, dashboards, user_data, store_data_list, current_userbase)
 
         return generate_dashboard_view_response(dashboards, next_index, store_data_list, current_userbase)
 
@@ -479,6 +576,15 @@ def register_callbacks_dashboards_management(app):
         dashboards = [dashboard for dashboard in dashboards if dashboard.dashboard_id != index_confirm_delete]
         return generate_dashboard_view_response(dashboards, len(dashboards) + 1, store_data_list, current_userbase)
 
+    def handle_dashboard_edit(new_name, dashboards, user_data, store_data_list, current_userbase):
+        logger.info("Edit dashboard button clicked")
+        ctx_triggered_dict = ctx.triggered[0]
+        index_edit = eval(ctx_triggered_dict["prop_id"].split(".")[0])["index"]
+        logger.info(f"index_edit: {index_edit}")
+        updated_dashboards = edit_dashboard_name(new_name, index_edit, dashboards, user_data["access_token"])
+
+        return generate_dashboard_view_response(updated_dashboards, len(updated_dashboards) + 1, store_data_list, current_userbase)
+
     def generate_dashboard_view_response(dashboards, next_index, store_data_list, current_userbase):
         dashboards = [convert_objectid_to_str(dashboard.mongo()) for dashboard in dashboards]
         logger.info(f"dashboards: {dashboards}")
@@ -487,6 +593,15 @@ def register_callbacks_dashboards_management(app):
 
         logger.info(f"Generated dashboard view: {dashboards_view}")
         return [dashboards_view] * len(store_data_list), [new_index_data] * len(store_data_list)
+
+    @app.callback(
+        Output({"type": "edit-password-modal", "index": MATCH}, "opened"),
+        [Input({"type": "edit-dashboard-button", "index": MATCH}, "n_clicks")],
+        [State({"type": "edit-password-modal", "index": MATCH}, "opened")],
+        prevent_initial_call=True,
+    )
+    def open_edit_password_modal(n_clicks, opened):
+        return not opened
 
     @app.callback(
         [Output("dashboard-modal-store", "data"), Output("dashboard-modal", "opened"), Output("init-create-dashboard-button", "data"), Output("unique-title-warning", "style")],
