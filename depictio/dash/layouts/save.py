@@ -1,9 +1,10 @@
+import httpx
+from datetime import datetime
+import os, sys
 from dash import html, dcc, Input, Output, State, ALL
 import dash
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging import logger
-import httpx
-from datetime import datetime
 
 
 def register_callbacks_save(app):
@@ -24,7 +25,7 @@ def register_callbacks_save(app):
         State({"type": "interactive-component-value", "index": ALL}, "value"),
         State("url", "pathname"),
         State("local-store", "data"),
-        Input("interval-component", "n_intervals"),
+        # Input("interval-component", "n_intervals"),
         Input(
             {
                 "type": "btn-done",
@@ -39,6 +40,10 @@ def register_callbacks_save(app):
             },
             "n_clicks",
         ),
+        Input(
+            {"type": "remove-box-button", "index": ALL},
+            "n_clicks",
+        ),
         prevent_initial_call=True,
     )
     def save_data_dashboard(
@@ -51,17 +56,18 @@ def register_callbacks_save(app):
         interactive_component_values,
         pathname,
         local_store,
-        n_intervals,
+        # n_intervals,
         n_clicks_done,
         n_clicks_done_edit,
+        n_clicks_remove,
     ):
-        logger.info(f"URL pathname: {pathname}")
+        logger.debug(f"URL pathname: {pathname}")
         if not local_store:
             logger.warning("User not logged in.")
             return dash.no_update
 
         TOKEN = local_store["access_token"]
-        logger.info(f"save_data_dashboard - TOKEN: {TOKEN}")
+        logger.debug(f"save_data_dashboard - TOKEN: {TOKEN}")
         # current_user = fetch_user_from_token(TOKEN)
 
         from dash import ctx
@@ -69,12 +75,12 @@ def register_callbacks_save(app):
         triggered_id = ctx.triggered[0]["prop_id"].split(".")[0]
 
         # if n_clicks:
-        if (triggered_id == "save-button-dashboard") or ("btn-done" in triggered_id) or ("btn-done-edit" in triggered_id):
+        if (triggered_id == "save-button-dashboard") or ("btn-done" in triggered_id) or ("btn-done-edit" in triggered_id) or ("remove-box-button" in triggered_id):
             # if n_clicks or n_intervals:
             dashboard_id = pathname.split("/")[-1]
 
-            logger.info(f"save_data_dashboard INSIDE")
-            logger.info(f"stored-metadata-component: {stored_metadata}")
+            logger.debug(f"save_data_dashboard INSIDE")
+            logger.debug(f"stored-metadata-component: {stored_metadata}")
 
             # FIXME: check if some component are duplicated based on index value, if yes, remove them
             stored_metadata_indexes = list()
@@ -88,7 +94,7 @@ def register_callbacks_save(app):
             dashboard_data_response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/dashboards/get/{dashboard_id}", headers={"Authorization": f"Bearer {TOKEN}"})
             if dashboard_data_response.status_code == 200:
                 dashboard_data = dashboard_data_response.json()
-                logger.info(f"save_data_dashboard - Dashboard data: {dashboard_data}")
+                logger.debug(f"save_data_dashboard - Dashboard data: {dashboard_data}")
                 # Replace the existing metadata with the new metadata
                 dashboard_data["stored_metadata"] = stored_metadata
                 dashboard_data["stored_layout_data"] = stored_layout_data
@@ -97,9 +103,9 @@ def register_callbacks_save(app):
                 current_time = datetime.now()
                 dashboard_data["last_saved_ts"] = str(current_time)
 
-                logger.info(f"save_data_dashboard - Dashboard data: {dashboard_data}")
+                logger.debug(f"save_data_dashboard - Dashboard data: {dashboard_data}")
 
-                logger.info(f"Dashboard data: {dashboard_data}")
+                logger.debug(f"Dashboard data: {dashboard_data}")
 
                 response = httpx.post(
                     f"{API_BASE_URL}/depictio/api/v1/dashboards/save/{dashboard_id}",
@@ -109,7 +115,7 @@ def register_callbacks_save(app):
                     },
                 )
                 if response.status_code == 200:
-                    logger.warning("Dashboard data saved successfully.")
+                    logger.info(f"Dashboard data saved successfully for dashboard {dashboard_id}.")
                 else:
                     logger.warning(f"Failed to save dashboard data: {response.json()}")
 
@@ -123,18 +129,18 @@ def register_callbacks_save(app):
                         timeout=60.0,  # Timeout set to 60 seconds
                     )
                     if screenshot_response.status_code == 200:
-                        logger.warning("Dashboard screenshot saved successfully.")
+                        logger.info("Dashboard screenshot saved successfully.")
                     else:
                         logger.warning(f"Failed to save dashboard screenshot: {screenshot_response.json()}")
 
-                    return []
+                    return dash.no_update
 
-                else:
-                    return []
+                # else:
+                return dash.no_update
 
             else:
                 logger.warning(f"Failed to fetch dashboard data: {dashboard_data_response.json()}")
-                return []
+                return dash.no_update
 
         return dash.no_update
 
