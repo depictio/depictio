@@ -1,5 +1,7 @@
 import json
+import os, sys
 from fastapi import Depends, HTTPException, APIRouter
+
 
 from depictio.api.v1.configs.config import API_BASE_URL, DASH_BASE_URL
 from depictio.api.v1.db import dashboards_collection
@@ -22,7 +24,7 @@ async def get_dashboard(dashboard_id: str, current_user=Depends(get_current_user
         raise HTTPException(status_code=401, detail="Current user not found.")
 
     user_id = current_user.id
-    logger.info(f"Current user ID: {user_id}")
+    logger.debug(f"Current user ID: {user_id}")
 
     # Find dashboards where current_user is either an owner or a viewer
     query = {
@@ -35,10 +37,10 @@ async def get_dashboard(dashboard_id: str, current_user=Depends(get_current_user
 
     dashboard_data = dashboards_collection.find_one(query)
 
-    logger.info(f"Dashboard data: {dashboard_data}")
+    logger.debug(f"Dashboard data: {dashboard_data}")
 
     dashboard_data = DashboardData.from_mongo(dashboard_data)
-    logger.info(f"Dashboard data from mongo: {dashboard_data}")
+    logger.debug(f"Dashboard data from mongo: {dashboard_data}")
 
     if not dashboard_data:
         raise HTTPException(status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found.")
@@ -56,7 +58,7 @@ async def list_dashboards(current_user=Depends(get_current_user)):
         raise HTTPException(status_code=401, detail="Current user not found.")
 
     user_id = current_user.id
-    logger.info(f"Current user ID: {user_id}")
+    logger.debug(f"Current user ID: {user_id}")
 
     result = load_dashboards_from_db(owner=user_id)
 
@@ -73,9 +75,9 @@ async def save_dashboard(dashboard_id: str, data: dict, current_user=Depends(get
     Check if an entry with the same dashboard_id exists, if not, insert, if yes, update.
     """
 
-    logger.info(f"Dashboard ID: {dashboard_id}")
-    logger.info(f"Data: {data}")
-    logger.info(f"Current user: {current_user}")
+    logger.debug(f"Dashboard ID: {dashboard_id}")
+    logger.debug(f"Data: {data}")
+    logger.debug(f"Current user: {current_user}")
 
     if not current_user:
         raise HTTPException(status_code=401, detail="Current user not found.")
@@ -85,7 +87,7 @@ async def save_dashboard(dashboard_id: str, data: dict, current_user=Depends(get
 
     user_id = current_user.id
 
-    logger.info(f"Data to save: {data}")
+    logger.debug(f"Data to save: {data}")
 
     data = DashboardData.from_mongo(data)
 
@@ -128,15 +130,20 @@ async def screenshot_dashboard(dashboard_id: str, current_user=Depends(get_curre
     from playwright.async_api import async_playwright
 
     # Folder where screenshots will be saved
-    output_folder = "/app/depictio/dash/assets/screenshots"
+    # output_folder = "/app/depictio/dash/assets/screenshots"
+
+    # Define the shared static directory
+    output_folder = '/app/depictio/dash/static/screenshots'  # Directly set to the desired path
+    logger.info(f"Output folder: {output_folder}")
+
+    # Ensure the directory exists
+    os.makedirs(output_folder, exist_ok=True)
+
 
     # DASH_BASE_URL = "http://localhost:5080"
     url = f"{DASH_BASE_URL}"
     # url = f"{DASH_BASE_URL}/{dashboard_id}"
     logger.info(f"Dashboard URL: {url}")
-
-    # # Create the output folder if it doesn't exist
-    # os.makedirs(output_folder, exist_ok=True)
 
     try:
         async with async_playwright() as p:
@@ -219,6 +226,7 @@ async def screenshot_dashboard(dashboard_id: str, current_user=Depends(get_curre
                 dashboard_monogo_id = dashboard_data["_id"]
 
                 output_file = f"{output_folder}/{user_id}_{dashboard_monogo_id}.png"
+                logger.info(f"Output file: {output_file}")
                 await element.screenshot(path=output_file)
                 logger.info(f"Screenshot captured for dashboard ID: {dashboard_id}")
             else:
