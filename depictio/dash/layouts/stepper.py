@@ -1,4 +1,4 @@
-from dash import html, Input, Output, State, ALL, MATCH, ctx
+from dash import html, Input, Output, State, ALL, MATCH, ctx, dcc
 import dash
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
@@ -306,16 +306,22 @@ def create_stepper_output_edit(n, active, component_data, TOKEN):
         # elif component_selected == "Table":
         #     return design_table(id)
 
-    card = return_design_component(component_selected=component_data["component_type"].capitalize(), id=id, df=df)
+    component_selected = component_data["component_type"].capitalize()
+    card = return_design_component(component_selected=component_selected, id=id, df=df)
+
+    # if component_selected != "Card":
+    modal_body = [select_row, dbc.Row(card)]
+    # else:
+    #     modal_body = [dbc.Row(card)]
 
     modal = html.Div(
         [
             dbc.Modal(
-                # id={"type": "modal-edit", "index": n},
+                id={"type": "modal-edit", "index": n},
                 children=[
                     dbc.ModalHeader(html.H5("Edit your dashboard component"), close_button=False),
                     dbc.ModalBody(
-                        [select_row, dbc.Row(card)],
+                        modal_body,
                         # id={"type": "modal-body-edit", "index": n},
                         style={
                             "display": "flex",
