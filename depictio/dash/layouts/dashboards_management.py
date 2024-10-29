@@ -1,5 +1,7 @@
 from datetime import datetime
 import json
+import os
+import shutil
 from bson import ObjectId
 import dash
 from dash import html, dcc, ctx, MATCH, Input, Output, State, ALL
@@ -497,6 +499,7 @@ def register_callbacks_dashboards_management(app):
         [
             Input({"type": "confirm-delete", "index": ALL}, "n_clicks"),
             Input({"type": "save-edit-name-dashboard", "index": ALL}, "n_clicks"),
+            Input({"type": "duplicate-dashboard-button", "index": ALL}, "n_clicks"),
         ],
         [
             State({"type": "create-dashboard-button", "index": ALL}, "id"),
@@ -509,7 +512,16 @@ def register_callbacks_dashboards_management(app):
         ],
     )
     def update_dashboards(
-        delete_n_clicks_list, edit_n_clicks_list, create_ids_list, store_data_list, delete_ids_list, new_name_list_values, new_name_list_ids, user_data, modal_data
+        delete_n_clicks_list,
+        edit_n_clicks_list,
+        duplicate_n_clicks_list,
+        create_ids_list,
+        store_data_list,
+        delete_ids_list,
+        new_name_list_values,
+        new_name_list_ids,
+        user_data,
+        modal_data,
     ):
         logger.info("\nupdate_dashboards triggered")
         log_context_info()
@@ -519,6 +531,7 @@ def register_callbacks_dashboards_management(app):
 
         index_data = load_dashboards_from_db(user_data["access_token"])
         dashboards = [DashboardData.from_mongo(dashboard) for dashboard in index_data.get("dashboards", [])]
+        logger.info(f"dashboards: {dashboards}")
         next_index = index_data.get("next_index", 1)
 
         if not ctx.triggered_id:
@@ -530,6 +543,9 @@ def register_callbacks_dashboards_management(app):
 
         if ctx.triggered_id.get("type") == "confirm-delete":
             return handle_dashboard_deletion(dashboards, delete_ids_list, user_data, store_data_list, current_userbase)
+
+        if ctx.triggered_id.get("type") == "duplicate-dashboard-button":
+            return handle_dashboard_duplication(dashboards, user_data, store_data_list, current_userbase)
 
         if ctx.triggered_id.get("type") == "save-edit-name-dashboard":
             logger.info("Edit dashboard button clicked")
@@ -575,6 +591,46 @@ def register_callbacks_dashboards_management(app):
 
         dashboards = [dashboard for dashboard in dashboards if dashboard.dashboard_id != index_confirm_delete]
         return generate_dashboard_view_response(dashboards, len(dashboards) + 1, store_data_list, current_userbase)
+
+    def handle_dashboard_duplication(dashboards, user_data, store_data_list, current_userbase):
+        logger.info("Duplicate dashboard button clicked")
+        ctx_triggered_dict = ctx.triggered[0]
+        index_duplicate = eval(ctx_triggered_dict["prop_id"].split(".")[0])["index"]
+        logger.info(f"index_duplicate: {index_duplicate}")
+        logger.info(f"User data: {user_data}")
+        logger.info(f"current_userbase: {current_userbase}")
+
+        updated_dashboards = list()
+        for dashboard in dashboards:
+            updated_dashboards.append(dashboard)
+            if dashboard.dashboard_id == index_duplicate:
+                logger.info(f"Found dashboard to duplicate: {dashboard}")
+
+                # Load full dashboard data from the database
+                dashboard_data_response = httpx.get(
+                    f"{API_BASE_URL}/depictio/api/v1/dashboards/get/{index_duplicate}", headers={"Authorization": f"Bearer {user_data['access_token']}"}
+                ).json()
+
+                # deep copy the dashboard object
+                new_dashboard = DashboardData.from_mongo(dashboard_data_response)
+                new_dashboard.id = ObjectId()
+                new_dashboard.title = f"{dashboard.title} (copy)"
+                new_dashboard.dashboard_id = str(len(dashboards) + 1)
+                updated_dashboards.append(new_dashboard)
+                insert_dashboard(new_dashboard.dashboard_id, new_dashboard.mongo(), user_data["access_token"])
+
+                # Copy thumbnail
+                thumbnail_filename = f"{str(current_userbase.id)}_{str(dashboard.id)}.png"
+                thumbnail_fs_path = f"/app/depictio/dash/static/screenshots/{thumbnail_filename}"
+
+                if not os.path.exists(thumbnail_fs_path):
+                    logger.warning(f"Thumbnail not found at path: {thumbnail_fs_path}")
+                else:
+                    # Copy the thumbnail to the new dashboard ID
+                    new_thumbnail_fs_path = f"/app/depictio/dash/static/screenshots/{str(current_userbase.id)}_{str(new_dashboard.id)}.png"
+                    shutil.copy(thumbnail_fs_path, new_thumbnail_fs_path)
+
+        return generate_dashboard_view_response(updated_dashboards, len(updated_dashboards) + 1, store_data_list, current_userbase)
 
     def handle_dashboard_edit(new_name, dashboards, user_data, store_data_list, current_userbase):
         logger.info("Edit dashboard button clicked")
