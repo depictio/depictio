@@ -323,29 +323,43 @@ def register_callbacks_dashboards_management(app):
 
             logger.info(f"sys.path: {sys.path}")
             logger.info(f"dashboard: {dashboard}")
-            thumbnail_path = f"assets/screenshots/{user_id}_{dashboard['_id']}.png"
-            thumbnail_path_check = f"depictio/dash/{thumbnail_path}"
+            
+            # Define the output folder where screenshots are saved
+            output_folder = '/app/depictio/dash/static/screenshots'  # Directly set to the desired path
+            # output_folder = os.path.join(os.path.dirname(__file__), 'static', 'screenshots')
 
-            logger.info(f"Thumbnail path: {thumbnail_path_check}")
-            logger.info(f"Thumbnail exists: {os.path.exists(thumbnail_path_check)}")
+            # Define the filename and paths
+            filename = f"{user_id}_{dashboard['_id']}.png"
+            # Filesystem path to check existence
+            thumbnail_fs_path = os.path.join(output_folder, filename)
+            # URL path for the Image src
+            thumbnail_url = f"/static/screenshots/{filename}"
 
-            # Check if the thumbnail exists in the assets folder, if not, create a placeholder
-            if not os.path.exists(thumbnail_path_check):
-                logger.warning(f"Thumbnail not found at path: {thumbnail_path}")
-                # thumbnail_path = "assets/screenshots/admin@embl.de_2.png"
-                thumbnail_path = "assets/default_thumbnail.png"
+
+            # thumbnail_path = f"assets/screenshots/{user_id}_{dashboard['_id']}.png"
+            # thumbnail_path_check = f"depictio/dash/{thumbnail_path}"
+
+            logger.info(f"Thumbnail filesystem path: {thumbnail_fs_path}")
+            logger.info(f"Thumbnail URL path: {thumbnail_url}")
+            logger.info(f"Thumbnail exists: {os.path.exists(thumbnail_fs_path)}")
+
+            # Check if the thumbnail exists in the static/screenshots folder
+            if not os.path.exists(thumbnail_fs_path):
+                logger.warning(f"Thumbnail not found at path: {thumbnail_fs_path}")
+                # Use the default thumbnail from static/
+                default_thumbnail_url = "/assets/default_thumbnail.png"
 
                 thumbnail = html.Div(
                     [
                         html.A(
-                            dmc.CardSection([dmc.Center(dmc.Image(src=thumbnail_path, height=150, width=150, style={"padding": "20px 0px"}))]),
+                            dmc.CardSection([dmc.Center(dmc.Image(src=default_thumbnail_url, height=150, width=150, style={"padding": "20px 0px"}))]),
                             href=f"/dashboard/{dashboard['dashboard_id']}",
                         ),
                         dmc.Text("No thumbnail available yet", size=18, align="center", color="gray", style={"fontFamily": "Virgil"}),
                     ]
                 )
             else:
-                thumbnail = html.A(dmc.CardSection(dmc.Image(src=thumbnail_path, height=250, width=450)), href=f"/dashboard/{dashboard['dashboard_id']}")
+                thumbnail = html.A(dmc.CardSection(dmc.Image(src=thumbnail_url, height=250, width=450)), href=f"/dashboard/{dashboard['dashboard_id']}")
 
             return thumbnail
 
