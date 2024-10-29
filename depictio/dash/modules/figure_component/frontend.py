@@ -7,11 +7,13 @@ import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 from dash_iconify import DashIconify
 
-from depictio.dash.utils import list_workflows
+from depictio.dash.utils import get_component_data, list_workflows
 from depictio.dash.utils import (
     UNSELECTED_STYLE,
     get_columns_from_data_collection,
 )
+
+from depictio.api.v1.configs.logging import logger
 
 # Depictio imports
 from depictio.dash.modules.figure_component.utils import (
@@ -29,6 +31,7 @@ from depictio.dash.utils import (
 )
 from depictio.api.v1.configs.config import API_BASE_URL
 
+
 def register_callbacks_figure_component(app):
     @dash.callback(
         [
@@ -41,7 +44,7 @@ def register_callbacks_figure_component(app):
             State({"type": "workflow-selection-label", "index": MATCH}, "value"),
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
         ],
-        [State({"type": "edit-button", "index": MATCH}, "id"), State("local-store", "data")],
+        [State({"type": "edit-button", "index": MATCH}, "id"), State("local-store", "data"), State("url", "pathname")],
         # prevent_initial_call=True,
     )
     def update_specific_params(
@@ -52,6 +55,7 @@ def register_callbacks_figure_component(app):
         data_collection,
         edit_button_id,
         local_data,
+        pathname,
     ):
         """
         Compute the specific parameters dropdowns based on the selected visualisation type
@@ -64,6 +68,18 @@ def register_callbacks_figure_component(app):
         # Retrieve the columns from the selected data collection
         columns_json = get_columns_from_data_collection(workflow, data_collection, TOKEN)
         columns = list(columns_json.keys())
+
+        dashboard_id = pathname.split("/")[-1]
+        input_id = edit_button_id["index"]
+
+        component_data = get_component_data(input_id=input_id, dashboard_id=dashboard_id, TOKEN=TOKEN)
+
+        if not visu_type:
+            if not component_data:
+                visu_type = [e.capitalize() for e in sorted(plotly_vizu_dict.keys())][-1]
+            else:
+                visu_type = component_data["visu_type"]
+        logger.info(f"visu_type: {visu_type}")
 
         # Get the value of the segmented control
         value = visu_type.lower()
@@ -116,7 +132,7 @@ def register_callbacks_figure_component(app):
                         }
 
                     input_fct_with_params = input_fct(**tmp_options)
-                    
+
                     # Retrieve the description for the tooltip
                     tooltip_label = param_info[value][e].get("description", "TEST")
 
@@ -385,6 +401,7 @@ def register_callbacks_figure_component(app):
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
             State({"type": "segmented-control-visu-graph", "index": MATCH}, "id"),
             State("local-store", "data"),
+            State("url", "pathname"),
         ],
         prevent_initial_call=True,
     )
@@ -396,11 +413,17 @@ def register_callbacks_figure_component(app):
         data_collection = args[3]
         id = args[4]
         local_data = args[5]
+        pathname = args[6]
 
         if not local_data:
             raise dash.exceptions.PreventUpdate
 
         TOKEN = local_data["access_token"]
+
+        dashboard_id = pathname.split("/")[-1]
+        input_id = id["index"]
+
+        component_data = get_component_data(input_id=input_id, dashboard_id=dashboard_id, TOKEN=TOKEN)
 
         columns_json = get_columns_from_data_collection(workflow, data_collection, TOKEN)
 
@@ -418,9 +441,20 @@ def register_callbacks_figure_component(app):
         elif columns_specs_reformatted["float64"]:
             y_col = columns_specs_reformatted["float64"][0]
 
-        # if dict_kwargs is empty, fill it with default values
+        logger.info(f"visu_type: {visu_type}")
+        logger.info(f"dict_kwargs: {dict_kwargs}")
+
+        if not visu_type:
+            visu_type = [e.capitalize() for e in sorted(plotly_vizu_dict.keys())][-1]
+
+            if component_data:
+                visu_type = component_data["visu_type"]
+
         if not dict_kwargs:
             dict_kwargs = {"x": x_col, "y": y_col, "color": color_col}
+
+            if component_data:
+                dict_kwargs = component_data["dict_kwargs"]
 
         workflows = list_workflows(TOKEN)
 
@@ -443,6 +477,9 @@ def register_callbacks_figure_component(app):
             headers=headers,
         )
 
+        logger.info(f"dict_kwargs: {dict_kwargs}")
+        logger.info(f"visu_type: {visu_type}")
+
         if dict_kwargs:
             figure_kwargs = {
                 "index": id["index"],
@@ -459,7 +496,7 @@ def register_callbacks_figure_component(app):
             raise dash.exceptions.PreventUpdate
 
 
-def design_figure(id):
+def design_figure(id, component_data=None):
     figure_row = [
         dbc.Row(
             [
@@ -476,7 +513,8 @@ def design_figure(id):
                     persistence=True,
                     persistence_type="memory",
                     # FIXME: the default value is not the first element of the list - set to scatter plot (last element)
-                    value=[e.capitalize() for e in sorted(plotly_vizu_dict.keys())][-1],
+                    # value=[e.capitalize() for e in sorted(plotly_vizu_dict.keys())][-1],
+                    value=component_data["visu_type"] if component_data else [e.capitalize() for e in sorted(plotly_vizu_dict.keys())][-1],
                 ),
             ],
             style={"height": "5%"},

@@ -5,11 +5,29 @@ from depictio.api.v1.configs.logging import logger
 
 
 def compute_value(data, column_name, aggregation):
-    # FIXME : optimisation
+    logger.info(f"Computing value for {column_name} with {aggregation}")
+    
+    # FIXME: optimization - consider checking if data is already a pandas DataFrame
     data = data.to_pandas()
-    new_value = data[column_name].agg(aggregation)
-    if type(new_value) is np.float64:
-        new_value = round(new_value, 2)
+    
+    if aggregation == 'mode':
+        mode_series = data[column_name].mode()
+        if not mode_series.empty:
+            new_value = mode_series.iloc[0]
+            logger.info(f"Computed mode: {new_value}")
+            logger.info(f"Type of mode value: {type(new_value)}")
+        else:
+            new_value = None
+            logger.info("No mode found; returning None")
+    else:
+        new_value = data[column_name].agg(aggregation)
+        logger.info(f"New value: {new_value}")
+        logger.info(f"Type of new value: {type(new_value)}")
+        
+        if isinstance(new_value, np.float64):
+            new_value = round(new_value, 2)
+            logger.info(f"New value rounded: {new_value}")
+    
     return new_value
 
 

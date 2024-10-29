@@ -22,9 +22,11 @@ services:
       - "9001:9001"
 
   depictio_frontend:
+    image: depictio:stable
     # image: registry.git.embl.de/tweber/depictio/depictio:latest
     build:
       dockerfile: docker-images/Dockerfile_depictio.dockerfile
+      context: .
     ports:
       - 5080:5080
     volumes:
@@ -42,8 +44,10 @@ services:
 
   depictio_backend:
     # image: registry.git.embl.de/tweber/depictio/depictio:latest
+    image: depictio:stable
     build:
       dockerfile: docker-images/Dockerfile_depictio.dockerfile
+      context: .
     ports:
       - 8058:8058
     volumes:

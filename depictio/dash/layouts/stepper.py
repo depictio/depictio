@@ -1,12 +1,20 @@
-from dash import html, Input, Output, State, ALL, MATCH, ctx
+from dash import html, Input, Output, State, ALL, MATCH, ctx, dcc
 import dash
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 from dash_iconify import DashIconify
 import httpx
+import pandas as pd
 
 # Depictio imports
 from depictio.api.v1.configs.config import API_BASE_URL, logger
+from depictio.api.v1.deltatables_utils import load_deltatable_lite
+from depictio.dash.modules.card_component.frontend import design_card
+from depictio.dash.modules.figure_component.frontend import design_figure
+from depictio.dash.modules.interactive_component.frontend import design_interactive
+
+# from depictio.dash.modules.table_component.frontend import design_table
+from depictio.dash.utils import get_component_data, return_dc_tag_from_id, return_mongoid, return_wf_tag_from_id
 
 
 min_step = 0
@@ -46,6 +54,7 @@ def register_callbacks_stepper(app):
 
         else:
             component_selected = "None"
+        # component_selected = "Card"
 
         all_wf_dc = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/workflows/get_all_workflows",
@@ -60,7 +69,9 @@ def register_callbacks_stepper(app):
         }
 
         logger.info(f"Component selected: {component_selected}")
-        valid_wfs = sorted({wf["workflow_tag"] for wf in all_wf_dc for dc in wf["data_collections"] if component_selected in mapping_component_data_collection[dc["config"]["type"]]})
+        valid_wfs = sorted(
+            {wf["workflow_tag"] for wf in all_wf_dc for dc in wf["data_collections"] if component_selected in mapping_component_data_collection[dc["config"]["type"]]}
+        )
         logger.info(f"valid_wfs: {valid_wfs}")
 
         # Return the data and the first value if the data is not empty
@@ -68,6 +79,53 @@ def register_callbacks_stepper(app):
             return valid_wfs, valid_wfs[0]
         else:
             return dash.no_update, dash.no_update
+
+    # @app.callback(
+    #     Output({"type": "workflow-selection-label-edit", "index": MATCH}, "data"),
+    #     Output({"type": "workflow-selection-label-edit", "index": MATCH}, "value"),
+    #     Input({"type": "stepper-step-1-edit", "index": MATCH}, "active"),
+    #     State("local-store", "data"),
+    # )
+    # def set_workflow_options(active_step, local_store):
+    #     logger.info(f"CTX Triggered ID: {ctx.triggered_id}")
+    #     logger.info(f"CTX triggered: {ctx.triggered}")
+
+    #     if not local_store:
+    #         raise dash.exceptions.PreventUpdate
+
+    #     TOKEN = local_store["access_token"]
+
+    #     if isinstance(ctx.triggered_id, dict):
+    #         if ctx.triggered_id["type"] == "btn-option":
+    #             component_selected = ctx.triggered_id["value"]
+
+    #     else:
+    #         component_selected = "None"
+    #     component_selected = "Card"
+
+    #     all_wf_dc = httpx.get(
+    #         f"{API_BASE_URL}/depictio/api/v1/workflows/get_all_workflows",
+    #         headers={
+    #             "Authorization": f"Bearer {TOKEN}",
+    #         },
+    #     ).json()
+
+    #     mapping_component_data_collection = {
+    #         "Table": ["Figure", "Card", "Interactive", "Table"],
+    #         "JBrowse2": ["JBrowse2"],
+    #     }
+
+    #     logger.info(f"Component selected: {component_selected}")
+    #     valid_wfs = sorted(
+    #         {wf["workflow_tag"] for wf in all_wf_dc for dc in wf["data_collections"] if component_selected in mapping_component_data_collection[dc["config"]["type"]]}
+    #     )
+    #     logger.info(f"valid_wfs: {valid_wfs}")
+
+    #     # Return the data and the first value if the data is not empty
+    #     if valid_wfs:
+    #         return valid_wfs, valid_wfs[0]
+    #     else:
+    #         return dash.no_update, dash.no_update
 
     @app.callback(
         Output({"type": "datacollection-selection-label", "index": MATCH}, "data"),
@@ -84,7 +142,7 @@ def register_callbacks_stepper(app):
 
         if not local_store:
             raise dash.exceptions.PreventUpdate
-        
+
         TOKEN = local_store["access_token"]
 
         if isinstance(ctx.triggered_id, dict):
@@ -93,6 +151,7 @@ def register_callbacks_stepper(app):
 
         else:
             component_selected = "None"
+        # component_selected = "Card"
 
         all_wf_dc = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/workflows/get_all_workflows",
@@ -108,10 +167,10 @@ def register_callbacks_stepper(app):
         }
 
         logger.info(f"Component selected: {component_selected}")
-        valid_dcs = sorted({dc["data_collection_tag"] for dc in selected_wf_data["data_collections"] if component_selected in mapping_component_data_collection[dc["config"]["type"]]})
+        valid_dcs = sorted(
+            {dc["data_collection_tag"] for dc in selected_wf_data["data_collections"] if component_selected in mapping_component_data_collection[dc["config"]["type"]]}
+        )
         logger.info(f"valid_dcs: {valid_dcs}")
-
-
 
         logger.info("ID: {}".format(id))
         if not selected_workflow:
@@ -179,10 +238,146 @@ def register_callbacks_stepper(app):
         return next_step, disable_next
 
 
+def create_stepper_output_edit(n, active, component_data, TOKEN):
+    logger.info(f"Component data: {component_data}")
+    id = {"type": f"{component_data['component_type']}-component", "index": n}
+
+    wf_tag = return_wf_tag_from_id(component_data["wf_id"], TOKEN=TOKEN)
+    dc_tag = return_dc_tag_from_id(workflow_id=component_data["wf_id"], data_collection_id=component_data["dc_id"], TOKEN=TOKEN)
+
+    select_row = dbc.Row(
+        [
+            dbc.Col(
+                # Workflow selection dropdown
+                dmc.Select(
+                    id={"type": "workflow-selection-label", "index": n},
+                    # value=workflow_selection,
+                    value=wf_tag,
+                    label=html.H4(
+                        [
+                            DashIconify(icon="flat-color-icons:workflow"),
+                            "Workflow selection",
+                        ]
+                    ),
+                    style={
+                        "height": "100%",
+                        "display": "none",
+                        "width": "100%",
+                    },
+                )
+            ),
+            dbc.Col(
+                # Data collection selection dropdown
+                dmc.Select(
+                    id={
+                        "type": "datacollection-selection-label",
+                        "index": n,
+                    },
+                    # value=datacollection_selection,
+                    value=dc_tag,
+                    label=html.H4(
+                        [
+                            DashIconify(icon="bxs:data"),
+                            "Data collection selection",
+                        ]
+                    ),
+                    style={
+                        "height": "100%",
+                        "width": "100%",
+                        "display": "none",
+                    },
+                )
+            ),
+        ],
+        style={"display": "none"},
+    )
+
+    logger.info(f"Select row: {select_row}")
+
+    df = load_deltatable_lite(component_data["wf_id"], component_data["dc_id"], TOKEN=TOKEN)
+
+    def return_design_component(component_selected, id, df):
+        if component_selected == "Figure":
+            return design_figure(id, component_data=component_data)
+        elif component_selected == "Card":
+            return design_card(id, df)
+        elif component_selected == "Interactive":
+            return design_interactive(id, df)
+        # elif component_selected == "Table":
+        #     return design_table(id)
+
+    component_selected = component_data["component_type"].capitalize()
+    card = return_design_component(component_selected=component_selected, id=id, df=df)
+
+    # if component_selected != "Card":
+    modal_body = [select_row, dbc.Row(card)]
+    # else:
+    #     modal_body = [dbc.Row(card)]
+
+    modal = html.Div(
+        [
+            dbc.Modal(
+                id={"type": "modal-edit", "index": n},
+                children=[
+                    dbc.ModalHeader(html.H5("Edit your dashboard component"), close_button=False),
+                    dbc.ModalBody(
+                        modal_body,
+                        # id={"type": "modal-body-edit", "index": n},
+                        style={
+                            "display": "flex",
+                            "justify-content": "center",
+                            "align-items": "center",
+                            "flex-direction": "column",
+                            "height": "100%",
+                            "width": "100%",
+                        },
+                    ),
+                    dbc.ModalFooter(
+                        [
+                            dmc.Center(
+                                dmc.Button(
+                                    "Confirm Edit",
+                                    id={"type": "btn-done-edit", "index": n},
+                                    n_clicks=0,
+                                    size="xl",
+                                    leftIcon=DashIconify(icon="bi:check-circle", width=30, color="white"),
+                                )
+                            ),
+                        ],
+                        style={
+                            "display": "flex",
+                            "justify-content": "center",
+                            "align-items": "center",
+                            "width": "100%",
+                            "height": "100%",  # Set height to fill available space
+                            "padding": "1rem",  # Optional: adjust padding for spacing
+                        },
+                    ),
+                ],
+                is_open=True,
+                size="xl",
+                backdrop=False,
+                keyboard=False,
+                style={
+                    "height": "100%",
+                    "width": "100%",
+                },
+            ),
+        ],
+        id=n,
+    )
+
+    return modal
+
 
 def create_stepper_output(n, active):
     logger.info(f"Creating stepper output for index {n}")
     logger.info(f"Active step: {active}")
+
+    # # Use component_data to pre-populate stepper if editing
+    # component_selected = component_data.get("component_selected", "None") if component_data else "None"
+    # workflow_selection = component_data.get("workflow_selection", "")
+    # datacollection_selection = component_data.get("datacollection_selection", "")
 
     stepper_dropdowns = html.Div(
         [
@@ -201,6 +396,7 @@ def create_stepper_output(n, active):
                         # Workflow selection dropdown
                         dmc.Select(
                             id={"type": "workflow-selection-label", "index": n},
+                            # value=workflow_selection,
                             label=html.H4(
                                 [
                                     DashIconify(icon="flat-color-icons:workflow"),
@@ -221,6 +417,7 @@ def create_stepper_output(n, active):
                                 "type": "datacollection-selection-label",
                                 "index": n,
                             },
+                            # value=datacollection_selection,
                             label=html.H4(
                                 [
                                     DashIconify(icon="bxs:data"),
@@ -262,62 +459,64 @@ def create_stepper_output(n, active):
         ]
     )
 
+    step_one = dmc.StepperStep(
+        label="Component selection",
+        description="Select your component type",
+        children=buttons_list,
+        id={"type": "stepper-step-2", "index": n},
+    )
+
+    step_two = dmc.StepperStep(
+        label="Data selection",
+        description="Select your workflow and data collection",
+        children=stepper_dropdowns,
+        # loading=True,
+        id={"type": "stepper-step-1", "index": n},
+    )
+    step_three = dmc.StepperStep(
+        label="Design your component",
+        description="Customize your component as you wish",
+        # loading=True,
+        children=html.Div(
+            id={
+                "type": "output-stepper-step-3",
+                "index": n,
+            }
+        ),
+        id={"type": "stepper-step-3", "index": n},
+    )
+    step_completed = dmc.StepperCompleted(
+        children=[
+            dmc.Center(
+                [
+                    dmc.Button(
+                        "Add to dashboard",
+                        id={
+                            "type": "btn-done",
+                            "index": n,
+                        },
+                        n_clicks=0,
+                        size="xl",
+                        style={
+                            "display": "block",
+                            "align": "center",
+                            "height": "100px",
+                        },
+                        leftIcon=DashIconify(icon="bi:check-circle", width=30, color="white"),
+                    ),
+                ]
+            ),
+        ],
+    )
+
+    steps = [step_one, step_two, step_three, step_completed]
 
     stepper = dmc.Stepper(
         id={"type": "stepper-basic-usage", "index": n},
         active=active,
         # color="green",
         breakpoint="sm",
-        children=[
-            dmc.StepperStep(
-                label="Component selection",
-                description="Select your component type",
-                children=buttons_list,
-                id={"type": "stepper-step-2", "index": n},
-            ),
-            dmc.StepperStep(
-                label="Data selection",
-                description="Select your workflow and data collection",
-                children=stepper_dropdowns,
-                # loading=True,
-                id={"type": "stepper-step-1", "index": n},
-            ),
-            dmc.StepperStep(
-                label="Design your component",
-                description="Customize your component as you wish",
-                # loading=True,
-                children=html.Div(
-                    id={
-                        "type": "output-stepper-step-3",
-                        "index": n,
-                    }
-                ),
-                id={"type": "stepper-step-3", "index": n},
-            ),
-            dmc.StepperCompleted(
-                children=[
-                    dmc.Center(
-                        [
-                            dmc.Button(
-                                "Add to dashboard",
-                                id={
-                                    "type": "btn-done",
-                                    "index": n,
-                                },
-                                n_clicks=0,
-                                size="xl",
-                                style={
-                                    "display": "block",
-                                    "align": "center",
-                                    "height": "100px",
-                                },
-                                leftIcon=DashIconify(icon="bi:check-circle", width=30, color="white"),
-                            ),
-                        ]
-                    ),
-                ],
-            ),
-        ],
+        children=steps,
     )
 
     stepper_footer = dmc.Group(
@@ -369,5 +568,6 @@ def create_stepper_output(n, active):
         ],
         id=n,
     )
+    logger.info(f"TEST MODAL: {modal}")
 
     return modal

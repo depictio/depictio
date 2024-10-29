@@ -423,7 +423,7 @@ def create_app_layout():
         [
             dcc.Location(id="url", refresh=False),
             dcc.Store(id="local-store", storage_type="local", data={"logged_in": False, "access_token": None}),
-            dcc.Interval(id="interval-component", interval=1 * 2000, n_intervals=0),
+            dcc.Interval(id="interval-component", interval=60 * 60 * 1000, n_intervals=0),
             navbar,
             dmc.Drawer(
                 title="",
