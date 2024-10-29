@@ -15,7 +15,7 @@ def edit_component(index, active=0, component_data=None, TOKEN=None):
     return current_draggable_children
 
 
-def enable_box_edit_mode(box, switch_state=True, dashboard_id=None, TOKEN=None):
+def enable_box_edit_mode(box, switch_state=True, dashboard_id=None, fresh=False, TOKEN=None):
     # logger.info(box)
     # logger.info(box["props"])
     btn_index = box["props"]["id"]["index"]
@@ -51,6 +51,14 @@ def enable_box_edit_mode(box, switch_state=True, dashboard_id=None, TOKEN=None):
         color="blue",
         leftIcon=DashIconify(icon="mdi:pen", width=16, color="white"),
     )
+
+    duplicate_button = dmc.Button(
+        "Duplicate",
+        id={"type": "duplicate-box-button", "index": f"{btn_index}"},
+        color="gray",
+        leftIcon=DashIconify(icon="mdi:content-copy", width=16, color="white"),
+    )
+
     category_button = dmc.Select(
         # label="Category",
         placeholder="Select category type",
@@ -66,10 +74,12 @@ def enable_box_edit_mode(box, switch_state=True, dashboard_id=None, TOKEN=None):
     )
 
     if switch_state:
-        buttons = dmc.Group([remove_button, category_button], grow=False, spacing="xl", style={"margin-left": "12px"})
-        if component_type:
-            if component_type != "table":
-                buttons = dmc.Group([remove_button, edit_button, category_button], grow=False, spacing="xl", style={"margin-left": "12px"})
+        # buttons = dmc.Group([remove_button, category_button], grow=False, spacing="xl", style={"margin-left": "12px"})
+        # if component_type:
+        #     if component_type != "table":
+        buttons = dmc.Group([remove_button, edit_button, duplicate_button], grow=False, spacing="xl", style={"margin-left": "12px"})
+        if fresh:
+            buttons = dmc.Group([remove_button], grow=False, spacing="xl", style={"margin-left": "12px"})
         box_components_list = dmc.Stack([buttons, box], spacing="md")
 
     else:
