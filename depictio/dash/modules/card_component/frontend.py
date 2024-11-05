@@ -7,7 +7,8 @@ from dash_iconify import DashIconify
 import httpx
 
 # Depictio imports
-from depictio.dash.utils import get_component_data, return_dc_tag_from_id, return_mongoid, return_wf_tag_from_id
+from depictio.api.v1.deltatables_utils import load_deltatable_lite
+from depictio.dash.utils import get_component_data, load_depictio_data_mongo, return_dc_tag_from_id, return_mongoid, return_wf_tag_from_id
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging import logger
 from depictio.dash.modules.card_component.utils import (
@@ -104,6 +105,7 @@ def register_callbacks_card_component(app):
             State({"type": "workflow-selection-label", "index": MATCH}, "value"),
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
             # State("local-store-components-metadata", "data"),
+            State("current-edit-parent-index", "data"),  # Retrieve parent_index
             State({"type": "card-dropdown-column", "index": MATCH}, "id"),
             State("local-store", "data"),
             State("url", "pathname"),
@@ -111,7 +113,7 @@ def register_callbacks_card_component(app):
         prevent_initial_call=True,
     )
     # def design_card_body(input_value, column_name, aggregation_value, wf_dc_store, id, local_data, pathname):
-    def design_card_body(input_value, column_name, aggregation_value, wf_tag, dc_tag, id, local_data, pathname):
+    def design_card_body(input_value, column_name, aggregation_value, wf_tag, dc_tag, parent_index, id, local_data, pathname):
         """
         Callback to update card body based on the selected column and aggregation
         """
@@ -134,11 +136,11 @@ def register_callbacks_card_component(app):
         dashboard_id = pathname.split("/")[-1]
         logger.info(f"dashboard_id: {dashboard_id}")
 
-        component_data = get_component_data(input_id=input_id, dashboard_id=dashboard_id, TOKEN=TOKEN)
+        component_data = get_component_data(input_id=parent_index, dashboard_id=dashboard_id, TOKEN=TOKEN)
 
         if not component_data:
             if not wf_tag or not dc_tag:
-            # if not wf_dc_store:
+                # if not wf_dc_store:
                 return ([], None)
 
             else:
@@ -202,6 +204,14 @@ def register_callbacks_card_component(app):
         # Get the workflow and data collection ids from the tags selected
         workflow_id, data_collection_id = return_mongoid(workflow_tag=wf_tag, data_collection_tag=dc_tag, TOKEN=TOKEN)
 
+        if dashboard_id:
+            dashboard_data = load_depictio_data_mongo(dashboard_id, TOKEN=TOKEN)
+            logger.info(f"dashboard_data: {dashboard_data}")
+            relevant_metadata = [m for m in dashboard_data["stored_metadata"] if m["dc_id"] == data_collection_id and m["component_type"] == "interactive"]
+            logger.info(f"relevant_metadata: {relevant_metadata}")
+            test_df = load_deltatable_lite(workflow_id, data_collection_id, relevant_metadata, TOKEN=TOKEN)
+            logger.info(f"test_df: {test_df}")
+
         # Get the data collection specs
         dc_specs = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
@@ -223,6 +233,9 @@ def register_callbacks_card_component(app):
             "aggregation": aggregation_value,
             "value": v,
         }
+
+        if parent_index:
+            card_kwargs["parent_index"] = parent_index
 
         new_card_body = build_card(**card_kwargs)
 
