@@ -54,7 +54,6 @@ app = dash.Dash(
     ],
     suppress_callback_exceptions=True,
     title="Depictio",
-    update_title="Depictio"
 )
 
 server = app.server  # This is the Flask server instance
@@ -428,6 +427,7 @@ def create_app_layout():
                 data={},
                 storage_type="local",
             ),
+            dcc.Store(id="current-edit-parent-index", storage_type="memory"),
             dcc.Interval(id="interval-component", interval=60 * 60 * 1000, n_intervals=0),
             navbar,
             dmc.Drawer(

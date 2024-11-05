@@ -43,6 +43,7 @@ def register_callbacks_figure_component(app):
             Input({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
             State({"type": "workflow-selection-label", "index": MATCH}, "value"),
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+            State("current-edit-parent-index", "data"),  # Retrieve parent_index
         ],
         [State({"type": "edit-button", "index": MATCH}, "id"), State("local-store", "data"), State("url", "pathname")],
         # prevent_initial_call=True,
@@ -53,6 +54,7 @@ def register_callbacks_figure_component(app):
         visu_type,
         workflow,
         data_collection,
+        parent_index,
         edit_button_id,
         local_data,
         pathname,
@@ -72,7 +74,7 @@ def register_callbacks_figure_component(app):
         dashboard_id = pathname.split("/")[-1]
         input_id = edit_button_id["index"]
 
-        component_data = get_component_data(input_id=input_id, dashboard_id=dashboard_id, TOKEN=TOKEN)
+        component_data = get_component_data(input_id=parent_index, dashboard_id=dashboard_id, TOKEN=TOKEN)
 
         if not visu_type:
             if not component_data:
@@ -342,13 +344,26 @@ def register_callbacks_figure_component(app):
             Input({"type": "collapse", "index": MATCH}, "children"),
             # Input("interval", "n_intervals"),
         ],
-        [State({"type": "dict_kwargs", "index": MATCH}, "data")],
+        [
+            State({"type": "dict_kwargs", "index": MATCH}, "data"),
+            State("current-edit-parent-index", "data"),  # Retrieve parent_index
+            State("local-store", "data"),
+            State("url", "pathname"),
+        ],
         # prevent_initial_call=True,
     )
-    def get_values_to_generate_kwargs(*args):
-        children = args[0]
+    def get_values_to_generate_kwargs(children, existing_kwargs, parent_index, local_data, pathname):
+        if not local_data:
+            raise dash.exceptions.PreventUpdate
 
-        existing_kwargs = args[-1]
+        TOKEN = local_data["access_token"]
+
+        dashboard_id = pathname.split("/")[-1]
+
+        component_data = get_component_data(input_id=parent_index, dashboard_id=dashboard_id, TOKEN=TOKEN)
+        if component_data:
+            if "dict_kwargs" in component_data:
+                existing_kwargs = component_data["dict_kwargs"]
 
         accordion_primary_common_params_args = dict()
         accordion_secondary_common_params_args = dict()
@@ -400,6 +415,7 @@ def register_callbacks_figure_component(app):
             State({"type": "workflow-selection-label", "index": MATCH}, "value"),
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
             State({"type": "segmented-control-visu-graph", "index": MATCH}, "id"),
+            State("current-edit-parent-index", "data"),  # Retrieve parent_index
             State("local-store", "data"),
             State("url", "pathname"),
         ],
@@ -412,8 +428,9 @@ def register_callbacks_figure_component(app):
         workflow = args[2]
         data_collection = args[3]
         id = args[4]
-        local_data = args[5]
-        pathname = args[6]
+        parent_index = args[5]
+        local_data = args[6]
+        pathname = args[7]
 
         if not local_data:
             raise dash.exceptions.PreventUpdate
@@ -423,7 +440,10 @@ def register_callbacks_figure_component(app):
         dashboard_id = pathname.split("/")[-1]
         input_id = id["index"]
 
-        component_data = get_component_data(input_id=input_id, dashboard_id=dashboard_id, TOKEN=TOKEN)
+        logger.info(f"input_id: {input_id}")
+        logger.info(f"parent_index: {parent_index}")
+        component_data = get_component_data(input_id=parent_index, dashboard_id=dashboard_id, TOKEN=TOKEN)
+        logger.info(f"component_data: {component_data}")
 
         columns_json = get_columns_from_data_collection(workflow, data_collection, TOKEN)
 
@@ -441,7 +461,6 @@ def register_callbacks_figure_component(app):
         elif columns_specs_reformatted["float64"]:
             y_col = columns_specs_reformatted["float64"][0]
 
-        logger.info(f"visu_type: {visu_type}")
         logger.info(f"dict_kwargs: {dict_kwargs}")
 
         if not visu_type:
@@ -455,6 +474,8 @@ def register_callbacks_figure_component(app):
 
             if component_data:
                 dict_kwargs = component_data["dict_kwargs"]
+        logger.info(f"visu_type: {visu_type}")
+        logger.info(f"dict_kwargs: {dict_kwargs}")
 
         workflows = list_workflows(TOKEN)
 
@@ -491,6 +512,10 @@ def register_callbacks_figure_component(app):
                 "visu_type": visu_type,
                 "access_token": TOKEN,
             }
+
+            if parent_index:
+                figure_kwargs["parent_index"] = parent_index
+
             return build_figure(**figure_kwargs)
         else:
             raise dash.exceptions.PreventUpdate

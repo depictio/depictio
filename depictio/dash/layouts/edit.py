@@ -7,10 +7,10 @@ from depictio.dash.layouts.stepper import create_stepper_output_edit
 from depictio.dash.utils import get_component_data
 
 
-def edit_component(index, active=0, component_data=None, TOKEN=None):
-    logger.info(f"Editing component {index}")
+def edit_component(index, parent_id, active=0, component_data=None, TOKEN=None):
+    logger.info(f"Editing component {parent_id}")
 
-    current_draggable_children = create_stepper_output_edit(index, active, component_data, TOKEN)
+    current_draggable_children = create_stepper_output_edit(index, parent_id, active, component_data, TOKEN)
 
     return current_draggable_children
 
@@ -38,25 +38,34 @@ def enable_box_edit_mode(box, switch_state=True, dashboard_id=None, fresh=False,
     )
     from dash_iconify import DashIconify
 
-    remove_button = dmc.Button(
-        "Remove",
+    remove_button = dmc.ActionIcon(
+        # remove_button = dmc.Button(
+        # "Remove",
         id={"type": "remove-box-button", "index": f"{btn_index}"},
         color="red",
-        leftIcon=DashIconify(icon="mdi:trash-can-outline", width=16, color="white"),
+        variant="filled",
+        children=DashIconify(icon="mdi:trash-can-outline", width=16, color="white"),
+        # leftIcon=DashIconify(icon="mdi:trash-can-outline", width=16, color="white"),
     )
 
-    edit_button = dmc.Button(
-        "Edit",
+    edit_button = dmc.ActionIcon(
+        # edit_button = dmc.Button(
+        # "Edit",
         id={"type": "edit-box-button", "index": f"{btn_index}"},
         color="blue",
-        leftIcon=DashIconify(icon="mdi:pen", width=16, color="white"),
+        variant="filled",
+        children=DashIconify(icon="mdi:pen", width=16, color="white"),
+        # leftIcon=DashIconify(icon="mdi:pen", width=16, color="white"),
     )
 
-    duplicate_button = dmc.Button(
-        "Duplicate",
+    duplicate_button = dmc.ActionIcon(
+        # duplicate_button = dmc.Button(
+        # "Duplicate",
         id={"type": "duplicate-box-button", "index": f"{btn_index}"},
         color="gray",
-        leftIcon=DashIconify(icon="mdi:content-copy", width=16, color="white"),
+        variant="filled",
+        children=DashIconify(icon="mdi:content-copy", width=16, color="white"),
+        # leftIcon=DashIconify(icon="mdi:content-copy", width=16, color="white"),
     )
 
     category_button = dmc.Select(
@@ -77,7 +86,7 @@ def enable_box_edit_mode(box, switch_state=True, dashboard_id=None, fresh=False,
         # buttons = dmc.Group([remove_button, category_button], grow=False, spacing="xl", style={"margin-left": "12px"})
         # if component_type:
         #     if component_type != "table":
-        buttons = dmc.Group([remove_button, edit_button, duplicate_button], grow=False, spacing="xl", style={"margin-left": "12px"})
+        buttons = dmc.Group([remove_button, edit_button, duplicate_button], grow=False, spacing="xs", style={"margin-left": "12px"})
         if fresh:
             buttons = dmc.Group([remove_button], grow=False, spacing="xl", style={"margin-left": "12px"})
         box_components_list = dmc.Stack([buttons, box], spacing="md")
@@ -88,6 +97,17 @@ def enable_box_edit_mode(box, switch_state=True, dashboard_id=None, fresh=False,
     new_draggable_child = html.Div(
         box_components_list,
         id=f"box-{str(btn_index)}",
+        style={
+            # "overflowY": "auto",
+            "overflowY": "hidden",  # Hide overflow to prevent scrollbar
+            "width": "100%",  # Ensure it takes full width of the parent
+            "height": "auto",  # Ensure it takes full height of the parent
+            # "height": "100%",  # Ensure it takes full height of the parent
+            "display": "flex",  # Use flexbox for better layout control
+            "flexDirection": "column",  # Arrange children vertically
+            # "padding": "5px",  # Reduce padding to save space
+            "boxSizing": "border-box",  # Include padding in the element's total width and height
+        },
     )
 
     return new_draggable_child
