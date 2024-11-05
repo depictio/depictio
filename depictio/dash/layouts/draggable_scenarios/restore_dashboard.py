@@ -23,33 +23,31 @@ build_functions = {
 
 def return_interactive_components_dict(dashboard_data):
     # logger.info(f"Dashboard data: {dashboard_data}")
-    
-    logger.info(f"Dashboard data: {dashboard_data}")
-    logger.info(f"Dashboard data type: {type(dashboard_data)}")
+
+    logger.debug(f"Dashboard data: {dashboard_data}")
+    logger.debug(f"Dashboard data type: {type(dashboard_data)}")
 
     interactive_components_dict = collections.defaultdict(dict)
 
     for e in dashboard_data:
-        logger.info(f"e: {e}")
+        logger.debug(f"e: {e}")
 
         if "component_type" not in e:
-            logger.info(f"Component type not found in e: {e}")
+            logger.debug(f"Component type not found in e: {e}")
             continue
 
         if e["component_type"] == "interactive":
-            logger.info(f"e: {e}")
-            logger.info(f"e['value']: {e['value']}")
-            logger.info(f"e['component_type']: {e['component_type']}")
+            logger.debug(f"e: {e}")
+            logger.debug(f"e['value']: {e['value']}")
+            logger.debug(f"e['component_type']: {e['component_type']}")
             interactive_components_dict[e["index"]] = {"value": e["value"], "metadata": e}
-        
-
 
     # interactive_components_dict = {e["index"]: {"value": e["value"], "metadata": e} for e in dashboard_data if e["component_type"] == "interactive"}
-    logger.info(f"Interactive components dict: {interactive_components_dict}")
+    logger.debug(f"Interactive components dict: {interactive_components_dict}")
     return interactive_components_dict
 
 
-def render_dashboard(stored_metadata, dashboard_id, TOKEN):
+def render_dashboard(stored_metadata, edit_components_button, dashboard_id, TOKEN):
     children = list()
 
     for child_metadata in stored_metadata:
@@ -76,9 +74,9 @@ def render_dashboard(stored_metadata, dashboard_id, TOKEN):
 
     interactive_components_dict = return_interactive_components_dict(stored_metadata)
 
-    children = [enable_box_edit_mode(child.to_plotly_json(), switch_state=True, dashboard_id=dashboard_id, TOKEN=TOKEN) for child in children]
+    children = [enable_box_edit_mode(child.to_plotly_json(), switch_state=edit_components_button, dashboard_id=dashboard_id, TOKEN=TOKEN) for child in children]
 
-    children = update_interactive_component(stored_metadata, interactive_components_dict, children, switch_state=True, TOKEN=TOKEN, dashboard_id=dashboard_id)
+    children = update_interactive_component(stored_metadata, interactive_components_dict, children, switch_state=edit_components_button, TOKEN=TOKEN, dashboard_id=dashboard_id)
     return children
 
 
@@ -98,8 +96,19 @@ def load_depictio_data(dashboard_id, local_data):
     logger.debug(f"load_depictio_data : {dashboard_data}")
 
     if dashboard_data:
+        if "buttons_data" not in dashboard_data:
+            dashboard_data["buttons_data"] = {"edit_components_button": True, "edit_dashboard_mode_button": True, "add_button": {"count": 0}}
+
+        buttons = ["edit_components_button", "edit_dashboard_mode_button", "add_button"]
+        for button in buttons:
+            if button not in dashboard_data["buttons_data"]:
+                if button == "add_button":
+                    dashboard_data["buttons_data"][button] = {"count": 0}
+                else:
+                    dashboard_data["buttons_data"][button] = True
+
         if "stored_metadata" in dashboard_data:
-            children = render_dashboard(dashboard_data["stored_metadata"], dashboard_id, local_data["access_token"])
+            children = render_dashboard(dashboard_data["stored_metadata"], dashboard_data["buttons_data"]["edit_components_button"], dashboard_id, local_data["access_token"])
 
             dashboard_data["stored_children_data"] = children
 
