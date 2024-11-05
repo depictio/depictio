@@ -238,7 +238,7 @@ def register_callbacks_stepper(app):
         return next_step, disable_next
 
 
-def create_stepper_output_edit(n, active, component_data, TOKEN):
+def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
     logger.info(f"Component data: {component_data}")
     id = {"type": f"{component_data['component_type']}-component", "index": n}
 
@@ -295,6 +295,7 @@ def create_stepper_output_edit(n, active, component_data, TOKEN):
     logger.info(f"Select row: {select_row}")
 
     df = load_deltatable_lite(component_data["wf_id"], component_data["dc_id"], TOKEN=TOKEN)
+    logger.info(f"DF: {df}")
 
     def return_design_component(component_selected, id, df):
         if component_selected == "Figure":
@@ -308,64 +309,62 @@ def create_stepper_output_edit(n, active, component_data, TOKEN):
 
     component_selected = component_data["component_type"].capitalize()
     card = return_design_component(component_selected=component_selected, id=id, df=df)
+    logger.info(f"Card: {card}")
 
     # if component_selected != "Card":
     modal_body = [select_row, dbc.Row(card)]
     # else:
     #     modal_body = [dbc.Row(card)]
 
-    modal = html.Div(
-        [
-            dbc.Modal(
-                id={"type": "modal-edit", "index": n},
-                children=[
-                    dbc.ModalHeader(html.H5("Edit your dashboard component"), close_button=False),
-                    dbc.ModalBody(
-                        modal_body,
-                        # id={"type": "modal-body-edit", "index": n},
-                        style={
-                            "display": "flex",
-                            "justify-content": "center",
-                            "align-items": "center",
-                            "flex-direction": "column",
-                            "height": "100%",
-                            "width": "100%",
-                        },
-                    ),
-                    dbc.ModalFooter(
-                        [
-                            dmc.Center(
-                                dmc.Button(
-                                    "Confirm Edit",
-                                    id={"type": "btn-done-edit", "index": n},
-                                    n_clicks=0,
-                                    size="xl",
-                                    leftIcon=DashIconify(icon="bi:check-circle", width=30, color="white"),
-                                )
-                            ),
-                        ],
-                        style={
-                            "display": "flex",
-                            "justify-content": "center",
-                            "align-items": "center",
-                            "width": "100%",
-                            "height": "100%",  # Set height to fill available space
-                            "padding": "1rem",  # Optional: adjust padding for spacing
-                        },
-                    ),
-                ],
-                is_open=True,
-                size="xl",
-                backdrop=False,
-                keyboard=False,
+    modal = dbc.Modal(
+        id={"type": "modal-edit", "index": n},
+        children=[
+            dbc.ModalHeader(html.H5("Edit your dashboard component"), close_button=False),
+            dbc.ModalBody(
+                modal_body,
+                # id={"type": "modal-body-edit", "index": n},
                 style={
+                    "display": "flex",
+                    "justify-content": "center",
+                    "align-items": "center",
+                    "flex-direction": "column",
                     "height": "100%",
                     "width": "100%",
                 },
             ),
+            dbc.ModalFooter(
+                [
+                    dmc.Center(
+                        dmc.Button(
+                            "Confirm Edit",
+                            id={"type": "btn-done-edit", "index": n},
+                            # id={"type": "btn-done-edit", "index": n},
+                            n_clicks=0,
+                            size="xl",
+                            leftIcon=DashIconify(icon="bi:check-circle", width=30, color="white"),
+                        )
+                    ),
+                ],
+                style={
+                    "display": "flex",
+                    "justify-content": "center",
+                    "align-items": "center",
+                    "width": "100%",
+                    "height": "100%",  # Set height to fill available space
+                    "padding": "1rem",  # Optional: adjust padding for spacing
+                },
+            ),
         ],
-        id=n,
+        is_open=True,
+        size="xl",
+        backdrop=False,
+        keyboard=False,
+        style={
+            "height": "100%",
+            "width": "100%",
+        },
     )
+    logger.info(f"TEST MODAL: {modal}")
 
     return modal
 
