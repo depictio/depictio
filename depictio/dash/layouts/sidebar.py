@@ -212,7 +212,7 @@ def render_sidebar(email):
     navbar = dmc.Navbar(
         p="md",
         fixed=False,
-        width={"base": 300},
+        width={"base": 220},
         hidden=True,
         hiddenBreakpoint="md",
         position="right",
