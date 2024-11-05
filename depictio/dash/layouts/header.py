@@ -91,7 +91,6 @@ def register_callbacks_header(app):
             return not is_open
         return is_open
 
-
     # @app.callback(
     #     Output("stored_metadata", "data"),
     #     Input("url", "pathname"),  # Assuming you have a URL component triggering on page load
@@ -104,7 +103,6 @@ def register_callbacks_header(app):
     #     try:
     #         dashboard_id = pathname.split("/")[-1]
     #         logger.info(f"Loading stored_metadata for dashboard_id: {dashboard_id}")
-
 
     #         from depictio.api.v1.db import dashboards_collection
     #         dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})
@@ -137,7 +135,7 @@ def design_header(data):
         if "stored_edit_dashboard_mode_button" not in data:
             data["stored_edit_dashboard_mode_button"] = [int(0)]
 
-    init_nclicks_add_button = data["stored_add_button"] if data else {"count": 0, "initialized": False}
+    init_nclicks_add_button = data["stored_add_button"] if data else {"count": 0, "initialized": False, "id": ""}
     init_nclicks_edit_dashboard_mode_button = data["stored_edit_dashboard_mode_button"] if data else [int(0)]
 
     # Check if data is available, if not set the buttons to disabled
@@ -276,15 +274,20 @@ def design_header(data):
         "Remove all components",
         id="remove-all-components-button",
         leftIcon=DashIconify(icon="mdi:trash-can-outline", width=16, color="white"),
-        size="lg",
+        size="xs",
         radius="xl",
         variant="gradient",
         gradient={"from": "red", "to": "pink", "deg": 105},
         # style=button_style,
         # Hide
-        style={"display": "none"},
+        # style={"display": "none"},
         disabled=disabled,
     )
+
+    if data["last_saved_ts"] == "":
+        formated_ts = "Never"
+    else:
+        formated_ts = datetime.datetime.strptime(data["last_saved_ts"].split(".")[0], "%Y-%m-%d %H:%M:%S")
 
     card_section = dbc.Row(
         [
@@ -293,7 +296,7 @@ def design_header(data):
                     # dmc.CardSection(
                     # [
                     dmc.Badge(f"Owner: {data['permissions']['owners'][0]['email']}", color="blue", leftSection=DashIconify(icon="mdi:account", width=16, color="grey")),
-                    dmc.Badge(f"Last saved: {data['last_saved_ts']}", color="green", leftSection=DashIconify(icon="mdi:clock-time-four-outline", width=16, color="grey")),
+                    dmc.Badge(f"Last saved: {formated_ts}", color="green", leftSection=DashIconify(icon="mdi:clock-time-four-outline", width=16, color="grey")),
                     # ]
                     # ),
                 ],
@@ -308,7 +311,7 @@ def design_header(data):
         id="offcanvas-parameters",
         title="Parameters",
         placement="end",
-        backdrop=False,
+        backdrop=True,
         children=[
             dmc.Group(
                 dmc.Select(
@@ -316,7 +319,7 @@ def design_header(data):
                     data=[f"{data['version']}"],
                     value=f"{data['version']}",
                     label="Dashboard version",
-                    style={"width": 150, "padding": "0 10px"},
+                    style={"width": 150, "padding": "0 10px", "display": "none"},
                     icon=DashIconify(icon="mdi:format-list-bulleted-square", width=16, color=dmc.theme.DEFAULT_COLORS["blue"][5]),
                     # rightSection=DashIconify(icon="radix-icons:chevron-down"),
                 )
@@ -325,14 +328,27 @@ def design_header(data):
                 [
                     dmc.Switch(
                         id="edit-dashboard-mode-button",
-                        checked=True,
+                        checked=data["buttons_data"]["edit_dashboard_mode_button"],
                         color="teal",
                     ),
-                    dmc.Text("Edit dashboard", style={"fontFamily": "default"}),
+                    dmc.Text("Edit dashboard layout", style={"fontFamily": "default"}),
                 ],
                 align="center",
                 spacing="sm",
-                style={"border": "1px solid lightgrey", "padding": "10px", "margin": "10px 0"},
+                style={"padding": "10px", "margin": "10px 0"},
+            ),
+            dmc.Group(
+                [
+                    dmc.Switch(
+                        id="edit-components-mode-button",
+                        checked=data["buttons_data"]["edit_components_button"],
+                        color="blue",
+                    ),
+                    dmc.Text("Display components options", style={"fontFamily": "default"}),
+                ],
+                align="center",
+                spacing="sm",
+                style={"padding": "10px", "margin": "10px 0"},
             ),
             dmc.Group(
                 [
@@ -345,8 +361,9 @@ def design_header(data):
                 ],
                 align="center",
                 spacing="sm",
-                style={"border": "1px solid lightgrey", "padding": "10px", "margin": "10px 0"},
+                style={"padding": "10px", "margin": "10px 0"},
             ),
+            dmc.Group([remove_all_components_button], align="center", spacing="sm", style={"padding": "10px", "margin": "10px 0"}),
             dmc.Group(
                 [
                     # dmc.Button(
@@ -355,7 +372,6 @@ def design_header(data):
                         id="share-button",
                         color="grey",
                         variant="filled",
-                        # style={"fontFamily": "default"},
                         disabled=disabled,
                         n_clicks=0,
                     ),
@@ -363,7 +379,7 @@ def design_header(data):
                 ],
                 align="center",
                 spacing="sm",
-                style={"border": "1px solid lightgrey", "padding": "10px", "margin": "10px 0"},
+                style={"padding": "10px", "margin": "10px 0", "display": "none"},
             ),
         ],
     )
@@ -379,6 +395,7 @@ def design_header(data):
     )
 
     dummy_output = html.Div(id="dummy-output", style={"display": "none"})
+    dummy_output2 = html.Div(id="dummy-output2", style={"display": "none"})
     stepper_output = html.Div(id="stepper-output", style={"display": "none"})
 
     # Store the number of clicks for the add button and edit dashboard mode button
@@ -440,8 +457,8 @@ def design_header(data):
         [
             offcanvas_parameters,
             modal_save_button,
-            remove_all_components_button,
             dummy_output,
+            dummy_output2,
             stepper_output,
             html.Div(children=stores_add_edit),
             dmc.Grid(
