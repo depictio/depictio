@@ -88,13 +88,14 @@ def register_callbacks_interactive_component(app):
             State({"type": "workflow-selection-label", "index": MATCH}, "value"),
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
             State({"type": "input-dropdown-method", "index": MATCH}, "id"),
+            State("current-edit-parent-index", "data"),  # Retrieve parent_index
             State("local-store", "data"),
             State("url", "pathname"),
             # Input("interval", "n_intervals"),
         ],
         prevent_initial_call=True,
     )
-    def update_card_body(input_value, column_value, aggregation_value, wf_tag, dc_tag, id, local_data, pathname):
+    def update_card_body(input_value, column_value, aggregation_value, wf_tag, dc_tag, id, parent_index, local_data, pathname):
         """
         Callback to update card body based on the selected column and aggregation
         """
@@ -111,7 +112,7 @@ def register_callbacks_interactive_component(app):
         dashboard_id = pathname.split("/")[-1]
         input_id = id["index"]
 
-        component_data = get_component_data(input_id=input_id, dashboard_id=dashboard_id, TOKEN=TOKEN)
+        component_data = get_component_data(input_id=parent_index, dashboard_id=dashboard_id, TOKEN=TOKEN)
 
         # Check if value was already assigned
         value = None
@@ -184,7 +185,9 @@ def register_callbacks_interactive_component(app):
             "cols_json": cols_json,
             "access_token": TOKEN,
             "stepper": True,
+            "parent_index": parent_index,
         }
+
         if value:
             interactive_kwargs["value"] = value
 
