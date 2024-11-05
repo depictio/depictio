@@ -6,11 +6,11 @@ from depictio.api.v1.configs.logging import logger
 
 def compute_value(data, column_name, aggregation):
     logger.info(f"Computing value for {column_name} with {aggregation}")
-    
+
     # FIXME: optimization - consider checking if data is already a pandas DataFrame
     data = data.to_pandas()
-    
-    if aggregation == 'mode':
+
+    if aggregation == "mode":
         mode_series = data[column_name].mode()
         if not mode_series.empty:
             new_value = mode_series.iloc[0]
@@ -23,11 +23,11 @@ def compute_value(data, column_name, aggregation):
         new_value = data[column_name].agg(aggregation)
         logger.info(f"New value: {new_value}")
         logger.info(f"Type of new value: {type(new_value)}")
-        
+
         if isinstance(new_value, np.float64):
             new_value = round(new_value, 2)
             logger.info(f"New value rounded: {new_value}")
-    
+
     return new_value
 
 
@@ -38,9 +38,25 @@ def build_card_frame(index, children=None):
                 id={
                     "type": "card-body",
                     "index": index,
-                }
+                },
+                style={
+                    "padding": "5px",  # Reduce padding inside the card body
+                    "display": "flex",
+                    "flexDirection": "column",
+                    "justifyContent": "center",
+                    # "height": "100%",  # Make sure it fills the parent container
+                },
             ),
-            style={"width": "100%"},
+            style={
+                "width": "100%",
+                "height": "100%",  # Ensure the card fills the container's height
+                "padding": "0",  # Remove default padding
+                "margin": "0",  # Remove default margin
+                "boxShadow": "none",  # Optional: Remove shadow for a cleaner look
+                "border": "1px solid #ddd",  # Optional: Add a light border
+                # "borderRadius": "4px",  # Optional: Slightly round the corners
+                # "border": "0px",  # Optional: Remove border
+            },
             id={
                 "type": "card-component",
                 "index": index,
@@ -54,8 +70,24 @@ def build_card_frame(index, children=None):
                     "type": "card-body",
                     "index": index,
                 },
+                style={
+                    "padding": "5px",  # Reduce padding inside the card body
+                    "display": "flex",
+                    "flexDirection": "column",
+                    "justifyContent": "center",
+                    # "height": "100%",  # Make sure it fills the parent container
+                },
             ),
-            style={"width": "100%"},
+            style={
+                "width": "100%",
+                "height": "100%",  # Ensure the card fills the container's height
+                "padding": "0",  # Remove default padding
+                "margin": "0",  # Remove default margin
+                "boxShadow": "none",  # Optional: Remove shadow for a cleaner look
+                "border": "1px solid #ddd",  # Optional: Add a light border
+                # "borderRadius": "4px",  # Optional: Slightly round the corners
+                # "border-width": "0px",  # Optional: Remove border
+            },
             id={
                 "type": "card-component",
                 "index": index,
@@ -79,6 +111,9 @@ def build_card(**kwargs):
 
     if refresh:
         data = kwargs.get("df")
+
+
+
         v = compute_value(data, column_name, aggregation)
 
     try:
@@ -103,6 +138,7 @@ def build_card(**kwargs):
             "column_type": column_type,
             "column_name": column_name,
             "value": v,
+            "parent_index": kwargs.get("parent_index", None),
         },
     )
 
