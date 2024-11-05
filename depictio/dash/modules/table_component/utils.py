@@ -16,9 +16,25 @@ def build_table_frame(index, children=None):
                 id={
                     "type": "table-body",
                     "index": index,
-                }
+                },
+                style={
+                    "padding": "5px",  # Reduce padding inside the card body
+                    "display": "flex",
+                    "flexDirection": "column",
+                    "justifyContent": "center",
+                    "height": "100%",  # Make sure it fills the parent container
+                },
             ),
-            style={"width": "100%"},
+            style={
+                "width": "100%",
+                "height": "100%",  # Ensure the card fills the container's height
+                "padding": "0",  # Remove default padding
+                "margin": "0",  # Remove default margin
+                "boxShadow": "none",  # Optional: Remove shadow for a cleaner look
+                # "border": "1px solid #ddd",  # Optional: Add a light border
+                # "borderRadius": "4px",  # Optional: Slightly round the corners
+                "border": "0px",  # Optional: Remove border
+            },
             id={
                 "type": "table-component",
                 "index": index,
@@ -32,14 +48,29 @@ def build_table_frame(index, children=None):
                     "type": "table-body",
                     "index": index,
                 },
+                style={
+                    "padding": "5px",  # Reduce padding inside the card body
+                    "display": "flex",
+                    "flexDirection": "column",
+                    "justifyContent": "center",
+                    "height": "100%",  # Make sure it fills the parent container
+                },
             ),
-            style={"width": "100%"},
+            style={
+                "width": "100%",
+                "height": "100%",  # Ensure the card fills the container's height
+                "padding": "0",  # Remove default padding
+                "margin": "0",  # Remove default margin
+                "boxShadow": "none",  # Optional: Remove shadow for a cleaner look
+                # "border": "1px solid #ddd",  # Optional: Add a light border
+                # "borderRadius": "4px",  # Optional: Slightly round the corners
+                "border": "0px",  # Optional: Remove border
+            },
             id={
                 "type": "table-component",
                 "index": index,
             },
         )
-
 
 
 def build_table(**kwargs):
@@ -58,12 +89,10 @@ def build_table(**kwargs):
 
     df = kwargs.get("df", pl.DataFrame())
 
-
-    # if stepper: 
+    # if stepper:
     #     value_div_type = "table-aggrid-tmp"
     # else:
     value_div_type = "table-aggrid"
-
 
     if df.is_empty():
         df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
@@ -102,7 +131,8 @@ def build_table(**kwargs):
             # "maxConcurrentDatasourceRequests": 2,
             # "infiniteInitialRowCount": 1,
             "rowSelection": "multiple",
-            "enableCellTextSelection": True, "ensureDomOrder": True
+            "enableCellTextSelection": True,
+            "ensureDomOrder": True,
         },
         # columnSize="sizeToFit",
         defaultColDef={"resizable": True, "sortable": True, "filter": True},
