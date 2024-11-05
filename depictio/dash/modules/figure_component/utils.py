@@ -17,9 +17,25 @@ def build_figure_frame(index, children=None):
                 id={
                     "type": "figure-body",
                     "index": index,
-                }
+                },
+                style={
+                    "padding": "5px",  # Reduce padding inside the card body
+                    "display": "flex",
+                    "flexDirection": "column",
+                    "justifyContent": "center",
+                    "height": "100%",  # Make sure it fills the parent container
+                },
             ),
-            style={"width": "100%"},
+            style={
+                "width": "100%",
+                "height": "100%",  # Ensure the card fills the container's height
+                "padding": "0",  # Remove default padding
+                "margin": "0",  # Remove default margin
+                "boxShadow": "none",  # Optional: Remove shadow for a cleaner look
+                # "border": "1px solid #ddd",  # Optional: Add a light border
+                # "borderRadius": "4px",  # Optional: Slightly round the corners
+                "border": "0px",  # Optional: Remove border
+            },
             id={
                 "type": "figure-component",
                 "index": index,
@@ -33,8 +49,24 @@ def build_figure_frame(index, children=None):
                     "type": "figure-body",
                     "index": index,
                 },
+                style={
+                    "padding": "5px",  # Reduce padding inside the card body
+                    "display": "flex",
+                    "flexDirection": "column",
+                    "justifyContent": "center",
+                    "height": "100%",  # Make sure it fills the parent container
+                },
             ),
-            style={"width": "100%"},
+            style={
+                "width": "100%",
+                "height": "100%",  # Ensure the card fills the container's height
+                "padding": "0",  # Remove default padding
+                "margin": "0",  # Remove default margin
+                "boxShadow": "none",  # Optional: Remove shadow for a cleaner look
+                # "border": "1px solid #ddd",  # Optional: Add a light border
+                # "borderRadius": "4px",  # Optional: Slightly round the corners
+                "border": "0px",  # Optional: Remove border
+            },
             id={
                 "type": "figure-component",
                 "index": index,
@@ -65,6 +97,7 @@ def build_figure(**kwargs):
     dc_id = kwargs.get("dc_id")
     dc_config = kwargs.get("dc_config")
     build_frame = kwargs.get("build_frame", False)
+    parent_index = kwargs.get("parent_index", None)
     import polars as pl
 
     df = kwargs.get("df", pl.DataFrame())
@@ -87,7 +120,10 @@ def build_figure(**kwargs):
         "wf_id": wf_id,
         "dc_id": dc_id,
         "dc_config": dc_config,
+        "parent_index": parent_index,
     }
+    
+
     dict_kwargs = {k: v for k, v in dict_kwargs.items() if v is not None}
 
     # wf_id, dc_id = return_mongoid(workflow_id=wf_id, data_collection_id=dc_id)
@@ -131,9 +167,9 @@ def build_figure(**kwargs):
                     size="lg",
                     radius="xl",
                     color="orange",
-                    fullWidth=False
+                    fullWidth=False,
                 ),
-                label="Scatter plots are only displayed with a maximum of 1000 points.",
+                label=f"Scatter plots are only displayed with a maximum of {cutoff} points.",
                 position="top",
                 openDelay=500,
             ),
