@@ -54,7 +54,7 @@ app = dash.Dash(
     ],
     suppress_callback_exceptions=True,
     title="Depictio",
-    update_title="Depictio"
+    # update_title="Depictio"
 )
 
 server = app.server  # This is the Flask server instance
@@ -139,6 +139,16 @@ def return_create_dashboard_button(email):
         radius="md",
     )
     return create_button
+
+
+# @app.callback(
+#     Output("height-store", "data"),
+#     Input("event-listener", "event"),
+# )
+# def update_heights(event):
+#     if event and "detail" in event:
+#         return event["detail"]
+#     return {}
 
 
 @app.callback(
@@ -419,15 +429,28 @@ def create_app_layout():
 
     navbar = render_sidebar("")
 
+    # from dash_extensions import EventListener
+
+    # hidden_store = dcc.Store(id="height-store", data={})
+
+    # return html.Div(
+    #     [
+    #         EventListener(
+    #             id="event-listener",
+    #             events=[{"event": "update-heights", "props": ["detail"]}],
+    #             children=[
     return dmc.Container(
         [
+            # hidden_store,
             dcc.Location(id="url", refresh=False),
             dcc.Store(id="local-store", storage_type="local", data={"logged_in": False, "access_token": None}),
+            dcc.Store(id="scroll-trigger"),
             dcc.Store(
                 id="local-store-components-metadata",
                 data={},
                 storage_type="local",
             ),
+            dcc.Store(id="current-edit-parent-index", storage_type="memory"),
             dcc.Interval(id="interval-component", interval=60 * 60 * 1000, n_intervals=0),
             navbar,
             dmc.Drawer(
@@ -487,6 +510,10 @@ def create_app_layout():
         },
         id="overall-container",
     )
+    #             ],
+    #         )
+    #     ]
+    # )
 
 
 app.layout = create_app_layout
