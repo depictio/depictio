@@ -11,7 +11,7 @@ def register_callbacks_save(app):
     @app.callback(
         Output("dummy-output", "children"),
         Input("save-button-dashboard", "n_clicks"),
-        State("draggable", "layouts"),
+        Input("draggable", "layouts"),
         State(
             {
                 "type": "stored-metadata-component",
@@ -21,6 +21,8 @@ def register_callbacks_save(app):
         ),
         # State("draggable", "children"),
         State("stored-edit-dashboard-mode-button", "data"),
+        Input("edit-dashboard-mode-button", "checked"),
+        Input("edit-components-mode-button", "checked"),
         State("stored-add-button", "data"),
         State({"type": "interactive-component-value", "index": ALL}, "value"),
         State("url", "pathname"),
@@ -44,6 +46,7 @@ def register_callbacks_save(app):
             {"type": "remove-box-button", "index": ALL},
             "n_clicks",
         ),
+        Input("remove-all-components-button", "n_clicks"),
         prevent_initial_call=True,
     )
     def save_data_dashboard(
@@ -52,6 +55,8 @@ def register_callbacks_save(app):
         stored_metadata,
         # children,
         edit_dashboard_mode_button,
+        edit_dashboard_mode_button_checked,
+        edit_components_mode_button_checked,
         add_button,
         interactive_component_values,
         pathname,
@@ -60,6 +65,7 @@ def register_callbacks_save(app):
         n_clicks_done,
         n_clicks_done_edit,
         n_clicks_remove,
+        n_clicks_remove_all,
     ):
         logger.debug(f"URL pathname: {pathname}")
         if not local_store:
@@ -73,14 +79,23 @@ def register_callbacks_save(app):
         from dash import ctx
 
         triggered_id = ctx.triggered[0]["prop_id"].split(".")[0]
+        logger.info(f"save_data_dashboard - Triggered ID: {triggered_id}")
 
         # if n_clicks:
-        if (triggered_id == "save-button-dashboard") or ("btn-done" in triggered_id) or ("btn-done-edit" in triggered_id) or ("remove-box-button" in triggered_id):
+        if (
+            (triggered_id == "save-button-dashboard")
+            or ("btn-done" in triggered_id)
+            or ("btn-done-edit" in triggered_id)
+            or ("remove-box-button" in triggered_id)
+            or ("remove-all-components-button" in triggered_id)
+            or (triggered_id == "edit-components-mode-button")
+            or (triggered_id == "draggable")
+        ) and edit_dashboard_mode_button_checked:
             # if n_clicks or n_intervals:
             dashboard_id = pathname.split("/")[-1]
 
             logger.debug(f"save_data_dashboard INSIDE")
-            logger.debug(f"stored-metadata-component: {stored_metadata}")
+            logger.info(f"stored-metadata-component: {stored_metadata}")
 
             # FIXME: check if some component are duplicated based on index value, if yes, remove them
             stored_metadata_indexes = list()
@@ -90,16 +105,28 @@ def register_callbacks_save(app):
                 else:
                     stored_metadata_indexes.append(elem["index"])
 
+            if "btn-done-edit" in triggered_id:
+                parent_indexes = [elem["parent_index"] for elem in stored_metadata if elem["parent_index"]]
+                stored_metadata = [elem for elem in stored_metadata if elem["index"] not in parent_indexes]
+
             # Get existing metadata for the dashboard
             dashboard_data_response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/dashboards/get/{dashboard_id}", headers={"Authorization": f"Bearer {TOKEN}"})
             if dashboard_data_response.status_code == 200:
                 dashboard_data = dashboard_data_response.json()
                 logger.debug(f"save_data_dashboard - Dashboard data: {dashboard_data}")
                 # Replace the existing metadata with the new metadata
+
+                if "draggable" in triggered_id:
+                    stored_metadata = dashboard_data["stored_metadata"]
+
                 dashboard_data["stored_metadata"] = stored_metadata
                 dashboard_data["stored_layout_data"] = stored_layout_data
                 dashboard_data["stored_edit_dashboard_mode_button"] = edit_dashboard_mode_button
                 dashboard_data["stored_add_button"] = add_button
+                dashboard_data["buttons_data"]["edit_components_button"] = edit_components_mode_button_checked
+                dashboard_data["buttons_data"]["add_components_button"] = add_button
+                dashboard_data["buttons_data"]["edit_dashboard_mode_button"] = edit_dashboard_mode_button_checked
+
                 current_time = datetime.now()
                 dashboard_data["last_saved_ts"] = str(current_time)
 
