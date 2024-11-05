@@ -16,6 +16,11 @@ class DashboardData(MongoModel):
     stored_layout_data: Dict = {}
     stored_metadata: List = []
     stored_edit_dashboard_mode_button: List = []
+    buttons_data: Dict = {
+        "edit_components_button": True,
+        "add_components_button": {"count": 0},
+        "edit_dashboard_mode_button": True,
+    }
     stored_add_button: Dict = {"count": 0}
     title: str
     permissions: Permission = {"owners": [], "viewers": []}
