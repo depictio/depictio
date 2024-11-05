@@ -36,13 +36,16 @@ def process_metadata_and_filter(metadata):
     filter_list = []
 
     for i, component in enumerate(metadata):
-        if "metadata" not in component:
-            logger.info(f"Component {i} does not have metadata key : {component}")
-            continue
-        logger.info(f"i: {i}")
-        logger.info(f"component: {component}")
-        interactive_component_type = component["metadata"]["interactive_component_type"]
-        column_name = component["metadata"]["column_name"]
+        if "metadata" in component:
+            # logger.info(f"Component {i} does not have metadata key : {component}")
+            # continue
+            logger.info(f"i: {i}")
+            logger.info(f"component: {component}")
+            interactive_component_type = component["metadata"]["interactive_component_type"]
+            column_name = component["metadata"]["column_name"]
+        else:
+            interactive_component_type = component["interactive_component_type"]
+            column_name = component["column_name"]
         # logger.info(f"interactive_component_type: {interactive_component_type}")
         # logger.info(f"column_name: {column_name}")
         value = component["value"]
@@ -51,7 +54,6 @@ def process_metadata_and_filter(metadata):
 
     # Apply the filters to the DataFrame
     return filter_list
-
 
 
 def convert_filter_model_to_metadata(filter_model):
@@ -69,62 +71,67 @@ def convert_filter_model_to_metadata(filter_model):
             # Range filter corresponds to RangeSlider
             interactive_component_type = "RangeSlider"
             if value is not None and filter_to is not None:
-                metadata.append({
-                    "metadata": {
-                        "interactive_component_type": interactive_component_type,
-                        "column_name": column,
-                        "min_value": value,
-                        "max_value": filter_to
-                    },
-                    "value": [value, filter_to]
-                })
+                metadata.append(
+                    {
+                        "metadata": {"interactive_component_type": interactive_component_type, "column_name": column, "min_value": value, "max_value": filter_to},
+                        "value": [value, filter_to],
+                    }
+                )
         elif operator in ["equals", "notEqual", "greaterThan", "greaterThanOrEqual", "lessThan", "lessThanOrEqual"]:
             # Numerical or exact match filters
             if filter_type == "number":
                 interactive_component_type = "Slider"
-                metadata.append({
-                    "metadata": {
-                        "interactive_component_type": interactive_component_type,
-                        "column_name": column,
-                    },
-                    "value": value
-                })
+                metadata.append(
+                    {
+                        "metadata": {
+                            "interactive_component_type": interactive_component_type,
+                            "column_name": column,
+                        },
+                        "value": value,
+                    }
+                )
             else:
                 # Non-number filters treated as TextInput
                 interactive_component_type = "TextInput"
-                metadata.append({
+                metadata.append(
+                    {
+                        "metadata": {
+                            "interactive_component_type": interactive_component_type,
+                            "column_name": column,
+                        },
+                        "value": value,
+                    }
+                )
+        elif operator in ["contains", "notContains", "startsWith", "notStartsWith", "endsWith", "notEndsWith"]:
+            # String filters
+            interactive_component_type = "TextInput"
+            metadata.append(
+                {
                     "metadata": {
                         "interactive_component_type": interactive_component_type,
                         "column_name": column,
                     },
-                    "value": value
-                })
-        elif operator in ["contains", "notContains", "startsWith", "notStartsWith", "endsWith", "notEndsWith"]:
-            # String filters
-            interactive_component_type = "TextInput"
-            metadata.append({
-                "metadata": {
-                    "interactive_component_type": interactive_component_type,
-                    "column_name": column,
-                },
-                "value": value
-            })
+                    "value": value,
+                }
+            )
         elif operator in ["blank", "notBlank"]:
             # Special filters for null values
             interactive_component_type = "Select"  # Assuming a select component to choose between blank/notBlank
-            metadata.append({
-                "metadata": {
-                    "interactive_component_type": interactive_component_type,
-                    "column_name": column,
-                },
-                "value": None  # Value not needed for blank/notBlank
-            })
+            metadata.append(
+                {
+                    "metadata": {
+                        "interactive_component_type": interactive_component_type,
+                        "column_name": column,
+                    },
+                    "value": None,  # Value not needed for blank/notBlank
+                }
+            )
         # Extend with more operators as needed
 
     return metadata
 
-def load_deltatable_lite(workflow_id: ObjectId, data_collection_id: ObjectId, metadata: dict = dict(), TOKEN: str = None):
 
+def load_deltatable_lite(workflow_id: ObjectId, data_collection_id: ObjectId, metadata: dict = dict(), TOKEN: str = None):
     # Turn objectid to string
     workflow_id = str(workflow_id)
     data_collection_id = str(data_collection_id)
@@ -140,6 +147,10 @@ def load_deltatable_lite(workflow_id: ObjectId, data_collection_id: ObjectId, me
     # Check if the response is successful
     if response.status_code == 200:
         file_id = response.json()["delta_table_location"]
+        logger.info(f"Loading deltatable for workflow {workflow_id} and data collection {data_collection_id} and metadata: {metadata} from file_id: {file_id}")
+
+        raw_df = pl.scan_delta(file_id, storage_options=minio_storage_options).collect()
+        logger.info(f"Raw df: {raw_df}")
 
         # If metadata is None or empty, return the DataFrame without filtering
         if not metadata:
@@ -166,12 +177,9 @@ def load_deltatable_lite(workflow_id: ObjectId, data_collection_id: ObjectId, me
 
 
 def iterative_join(workflow_id: ObjectId, joins_dict: dict, metadata_dict: dict, TOKEN: str = None):
-
     logger.info(f"worfklow_id: {workflow_id}")
     logger.info(f"joins_dict: {joins_dict}")
     logger.info(f"metadata_dict: {metadata_dict}")
-
-
 
     # Initialize a dictionary to store loaded dataframes
     loaded_dfs = {}
@@ -191,6 +199,7 @@ def iterative_join(workflow_id: ObjectId, joins_dict: dict, metadata_dict: dict,
                     values_dict[e["metadata"]["dc_id"]] = e["value"]
                 logger.info(f"Loading dataframe for dc_id: {dc_id} with metadata: {relevant_metadata}")
                 loaded_dfs[dc_id] = load_deltatable_lite(workflow_id, dc_id, relevant_metadata, TOKEN=TOKEN)
+                logger.info(f"Loaded df : {loaded_dfs[dc_id]}")
                 logger.info(f"Loaded dataframe for dc_id: {dc_id} with shape: {loaded_dfs[dc_id].shape}")
     logger.info(f"values_dict: {values_dict}")
 
@@ -304,8 +313,11 @@ def join_deltatables_dev(wf_id: str, joins: list, metadata: dict = dict(), TOKEN
             common_columns = list(set(merged_df.columns).intersection(set(new_df.columns)))
             merged_df = merged_df.join(new_df, on=common_columns, how=join_details["how"])
 
-    # logger.info(f"AFTER 2nd FOR LOOP - merged_df shape: {merged_df.shape}")
-    # logger.info(f"Columns in merged_df: {merged_df.columns}")
-    # logger.info(f"Common columns: {common_columns}")
+    logger.info(f"AFTER 2nd FOR LOOP - merged_df shape: {merged_df.shape}")
+    logger.info(f"Columns in merged_df: {merged_df.columns}")
+    logger.info(f"Common columns: {common_columns}")
+    logger.info(f"Used dataframes: {used_dfs}")
+    logger.info(f"Loaded dataframes: {loaded_dfs.keys()}")
+    logger.info(f"Merged df: {merged_df}")
 
     return merged_df
