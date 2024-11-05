@@ -1,4 +1,3 @@
-
 from dash import dcc, html
 import polars as pl
 import dash_mantine_components as dmc
@@ -7,6 +6,7 @@ import dash_bootstrap_components as dbc
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
 from depictio.api.v1.configs.config import logger
 
+
 def build_interactive_frame(index, children=None):
     if not children:
         return dbc.Card(
@@ -14,9 +14,25 @@ def build_interactive_frame(index, children=None):
                 id={
                     "type": "input-body",
                     "index": index,
-                }
+                },
+                style={
+                    "padding": "5px",  # Reduce padding inside the card body
+                    "display": "flex",
+                    "flexDirection": "column",
+                    "justifyContent": "center",
+                    "height": "100%",  # Make sure it fills the parent container
+                },
             ),
-            style={"width": "100%"},
+            style={
+                "width": "100%",
+                "height": "100%",  # Ensure the card fills the container's height
+                "padding": "0",  # Remove default padding
+                "margin": "0",  # Remove default margin
+                "boxShadow": "none",  # Optional: Remove shadow for a cleaner look
+                # "border": "1px solid #ddd",  # Optional: Add a light border
+                # "borderRadius": "4px",  # Optional: Slightly round the corners
+                "border": "0px",  # Optional: Remove border
+            },
             id={
                 "type": "interactive-component",
                 "index": index,
@@ -30,8 +46,24 @@ def build_interactive_frame(index, children=None):
                     "type": "input-body",
                     "index": index,
                 },
+                style={
+                    "padding": "5px",  # Reduce padding inside the card body
+                    "display": "flex",
+                    "flexDirection": "column",
+                    "justifyContent": "center",
+                    "height": "100%",  # Make sure it fills the parent container
+                },
             ),
-            style={"width": "100%"},
+            style={
+                "width": "100%",
+                "height": "100%",  # Ensure the card fills the container's height
+                "padding": "0",  # Remove default padding
+                "margin": "0",  # Remove default margin
+                "boxShadow": "none",  # Optional: Remove shadow for a cleaner look
+                # "border": "1px solid #ddd",  # Optional: Add a light border
+                # "borderRadius": "4px",  # Optional: Slightly round the corners
+                "border": "0px",  # Optional: Remove border
+            },
             id={
                 "type": "interactive-component",
                 "index": index,
@@ -55,12 +87,12 @@ def build_interactive(**kwargs):
     build_frame = kwargs.get("build_frame", False)
     TOKEN = kwargs.get("access_token")
     stepper = kwargs.get("stepper", False)
+    parent_index = kwargs.get("parent_index", None)
 
-    if stepper: 
+    if stepper:
         value_div_type = "interactive-component-value-tmp"
     else:
         value_div_type = "interactive-component-value"
-
 
     func_name = agg_functions[column_type]["input_methods"][interactive_component_type]["component"]
 
@@ -79,6 +111,7 @@ def build_interactive(**kwargs):
             "column_type": column_type,
             "cols_json": cols_json,
             "value": value,
+            "parent_index": parent_index,
         },
         storage_type="memory",
     )
@@ -100,7 +133,6 @@ def build_interactive(**kwargs):
 
         # If the aggregation value is MultiSelect, make the component searchable and clearable
         if interactive_component_type == "MultiSelect":
-
             kwargs = {"searchable": True, "clearable": True, "clearSearchOnChange": False, "persistence_type": "local"}
             if not value:
                 value = []
@@ -168,6 +200,7 @@ def build_interactive(**kwargs):
         return new_interactive_component
     else:
         return build_interactive_frame(index=index, children=new_interactive_component)
+
 
 # List of all the possible aggregation methods for each data type and their corresponding input methods
 # TODO: reference in the documentation
