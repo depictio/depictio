@@ -23,6 +23,7 @@ def enable_box_edit_mode(box, switch_state=True, dashboard_id=None, fresh=False,
     component_type = None
     if dashboard_id and TOKEN:
         component_data = get_component_data(input_id=btn_index, dashboard_id=dashboard_id, TOKEN=TOKEN)
+        logger.info(f"ENABLE BOX EDIT MODE - component_data: {component_data}")
         if component_data:
             component_type = component_data.get("component_type", None)
 
@@ -82,13 +83,23 @@ def enable_box_edit_mode(box, switch_state=True, dashboard_id=None, fresh=False,
         # leftSection=DashIconify(icon="mdi:trash-can-outline", width=16, color="white"),
     )
 
+    reset_selection_button = dmc.ActionIcon(
+        id={"type": "reset-selection-graph-button", "index": f"{btn_index}"},
+        color="orange",
+        variant="filled",
+        children=DashIconify(icon="bx:reset", width=16, color="white"),
+    )
+
     if switch_state:
         # buttons = dmc.Group([remove_button, category_button], grow=False, spacing="xl", style={"margin-left": "12px"})
         # if component_type:
         #     if component_type != "table":
         buttons = dmc.Group([remove_button, edit_button, duplicate_button], grow=False, spacing="xs", style={"margin-left": "12px"})
-        if fresh:
-            buttons = dmc.Group([remove_button], grow=False, spacing="xl", style={"margin-left": "12px"})
+
+        if component_type == "figure":
+            buttons = dmc.Group([remove_button, edit_button, duplicate_button, reset_selection_button], grow=False, spacing="xs", style={"margin-left": "12px"})
+        # if fresh:
+        #     buttons = dmc.Group([remove_button], grow=False, spacing="xl", style={"margin-left": "12px"})
         box_components_list = dmc.Stack([buttons, box], spacing="md")
 
     else:
