@@ -31,6 +31,7 @@ UNSELECTED_STYLE = {
     "fontFamily": "Virgil",
 }
 
+
 # Helper Functions
 def generate_unique_index():
     return str(uuid.uuid4())
@@ -56,6 +57,7 @@ def get_size(obj, seen=None):
         size += sum([get_size(i, seen) for i in obj])
     return size
 
+
 def get_component_data(input_id, dashboard_id, TOKEN):
     response = httpx.get(
         f"{API_BASE_URL}/depictio/api/v1/dashboards/get_component_data/{dashboard_id}/{input_id}",
@@ -65,10 +67,11 @@ def get_component_data(input_id, dashboard_id, TOKEN):
     logger.info(f"Response: {response.json()}")
     return response.json()
 
-def load_depictio_data_mongo(dashboard_id: str):
+
+def load_depictio_data_mongo(dashboard_id: str, TOKEN: str):
     url = f"{API_BASE_URL}/depictio/api/v1/dashboards/get/{dashboard_id}"
     try:
-        response = httpx.get(url)
+        response = httpx.get(url, headers={"Authorization": f"Bearer {TOKEN}"})
         if response.status_code == 200:
             response = response.json()
             return response
@@ -151,7 +154,6 @@ def return_dc_tag_from_id(workflow_id: ObjectId, data_collection_id: ObjectId, w
     # workflows = [convert_objectid_to_str(workflow.mongo()) for workflow in workflows]
     # print("data_collection_id", data_collection_id)
     return [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["_id"] == data_collection_id][0]["data_collection_tag"]
-
 
 
 def return_mongoid(
