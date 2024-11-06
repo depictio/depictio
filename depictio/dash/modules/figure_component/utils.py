@@ -5,6 +5,7 @@ from dash_iconify import DashIconify
 import inspect
 import plotly.express as px
 import re
+import polars as pl
 
 from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
@@ -74,34 +75,55 @@ def build_figure_frame(index, children=None):
         )
 
 
-def render_figure(dict_kwargs, visu_type, df, cutoff=10000):
+def render_figure(dict_kwargs, visu_type, df, cutoff=10000, selected_point=None):
     if dict_kwargs and visu_type.lower() in plotly_vizu_dict and df is not None:
-        # if visu_type.lower() == "scatter":
-        #     dict_kwargs["render_mode"] = "webgl"
-        if df.shape[0] > cutoff:
-            figure = plotly_vizu_dict[visu_type.lower()](df.sample(cutoff), **dict_kwargs)
+        if df.height > cutoff:
+            figure = plotly_vizu_dict[visu_type.lower()](df.sample(n=cutoff, seed=0).to_pandas(), **dict_kwargs)
         else:
-            figure = plotly_vizu_dict[visu_type.lower()](df, **dict_kwargs)
-        return figure
+            figure = plotly_vizu_dict[visu_type.lower()](df.to_pandas(), **dict_kwargs)
     else:
-        # return empty figure
-        # raise ValueError("Error in render_figure")
-        return px.scatter()
+        figure = px.scatter()
+
+    if selected_point:
+        selected_x = selected_point["x"]
+        selected_y = selected_point["y"]
+        # selected_label = selected_point['text']
+
+        # Update marker colors
+        figure.update_traces(
+            marker=dict(
+                color=["red" if (x == selected_x and y == selected_y) else "blue" for x, y in zip(df[dict_kwargs["x"]], df[dict_kwargs["y"]])],
+                # size=[15 if (x == selected_x and y == selected_y) else 10 for x, y in zip(df[dict_kwargs['x']], df[dict_kwargs['y']])],
+                opacity=[1.0 if (x == selected_x and y == selected_y) else 0.3 for x, y in zip(df[dict_kwargs["x"]], df[dict_kwargs["y"]])],
+            )
+        )
+
+        # Add annotation for the selected point
+        # figure.add_annotation(
+        #     x=selected_x,
+        #     y=selected_y,
+        #     text=f"({selected_x}, {selected_y})",
+        #     showarrow=True,
+        #     arrowhead=1
+        # )
+
+    return figure
 
 
 def build_figure(**kwargs):
     index = kwargs.get("index")
-    dict_kwargs = kwargs.get("dict_kwargs")
-    visu_type = kwargs.get("visu_type")
+    dict_kwargs = kwargs.get("dict_kwargs", {})
+    visu_type = kwargs.get("visu_type", "scatter")
     wf_id = kwargs.get("wf_id")
     dc_id = kwargs.get("dc_id")
     dc_config = kwargs.get("dc_config")
     build_frame = kwargs.get("build_frame", False)
     parent_index = kwargs.get("parent_index", None)
-    import polars as pl
-
     df = kwargs.get("df", pl.DataFrame())
     TOKEN = kwargs.get("access_token")
+    filter_applied = kwargs.get("filter_applied", False)
+
+    selected_point = kwargs.get("selected_point")  # New parameter for selected point
 
     logger.info(f"Building figure with index {index}")
     logger.info(f"Dict kwargs: {dict_kwargs}")
@@ -110,7 +132,7 @@ def build_figure(**kwargs):
     logger.info(f"DC ID: {dc_id}")
     logger.info(f"DC config: {dc_config}")
     logger.info(f"Build frame: {build_frame}")
-    logger.info(f"Dataframe: {df}")
+    logger.info(f"Selected Point: {selected_point}")
 
     store_component_data = {
         "index": str(index),
@@ -121,8 +143,8 @@ def build_figure(**kwargs):
         "dc_id": dc_id,
         "dc_config": dc_config,
         "parent_index": parent_index,
+        "filter_applied": filter_applied,
     }
-    
 
     dict_kwargs = {k: v for k, v in dict_kwargs.items() if v is not None}
 
@@ -136,10 +158,63 @@ def build_figure(**kwargs):
         if visu_type.lower() == "scatter" and df.shape[0] > cutoff:
             style_partial_data_displayed = {"display": "block"}
 
+    # figure = render_figure(dict_kwargs, visu_type, df)
+
+    # selected_point = df.sample(n=1).to_dicts()[0]
+    # logger.info(f"Selected point: {selected_point}")
+    # logger.info(f"Dict kwargs: {dict_kwargs}")
+    # selected_point = {"x": selected_point[dict_kwargs["x"]], "y": selected_point[dict_kwargs["y"]]}
+
     figure = render_figure(dict_kwargs, visu_type, df)
+
+    partial_data_badge = dmc.Tooltip(
+        children=dmc.Badge(
+            "Partial data displayed",
+            id={"type": "graph-partial-data-displayed", "index": index},
+            style=style_partial_data_displayed,
+            leftSection=DashIconify(
+                icon="mdi:alert-circle",
+                width=20,
+            ),
+            # sx={"paddingLeft": 0},
+            size="lg",
+            radius="xl",
+            color="red",
+            fullWidth=False,
+        ),
+        label=f"Scatter plots are only displayed with a maximum of {cutoff} points.",
+        position="top",
+        openDelay=500,
+    )
+    # dc_config["filter_applied"] = True
+    filter_badge_style = {"display": "none"} if not filter_applied else {"display": "block"}
+    logger.info(f"Filter applied: {filter_applied}")
+    logger.info(f"Filter badge style: {filter_badge_style}")
+
+    filter_badge = dmc.Tooltip(
+        children=dmc.Badge(
+            "Filter applied",
+            id={"type": "graph-filter-badge", "index": index},
+            style=filter_badge_style,
+            leftSection=DashIconify(
+                icon="mdi:filter",
+                width=20,
+            ),
+            size="lg",
+            radius="xl",
+            color="orange",
+            fullWidth=False,
+        ),
+        label="Data displayed in the plot was filtered.",
+        position="top",
+        openDelay=500,
+    )
+
+    row_badges = dbc.Row(dmc.Group([partial_data_badge, filter_badge], grow=False, spacing="xl", style={"margin-left": "12px"}))
 
     figure_div = html.Div(
         [
+            row_badges,
             dcc.Graph(
                 # figure,
                 figure=figure,
@@ -153,25 +228,6 @@ def build_figure(**kwargs):
                     "type": "stored-metadata-component",
                     "index": index,
                 },
-            ),
-            dmc.Tooltip(
-                children=dmc.Badge(
-                    "Partial data displayed",
-                    id={"type": "partial-data-displayed", "index": index},
-                    style=style_partial_data_displayed,
-                    leftSection=DashIconify(
-                        icon="mdi:alert-circle",
-                        width=20,
-                    ),
-                    # sx={"paddingLeft": 0},
-                    size="lg",
-                    radius="xl",
-                    color="orange",
-                    fullWidth=False,
-                ),
-                label=f"Scatter plots are only displayed with a maximum of {cutoff} points.",
-                position="top",
-                openDelay=500,
             ),
         ]
     )
