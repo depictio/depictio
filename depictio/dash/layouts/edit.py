@@ -15,17 +15,32 @@ def edit_component(index, parent_id, active=0, component_data=None, TOKEN=None):
     return current_draggable_children
 
 
-def enable_box_edit_mode(box, switch_state=True, dashboard_id=None, fresh=False, TOKEN=None):
+def enable_box_edit_mode(
+    box,
+    switch_state=True,
+    dashboard_id=None,
+    fresh=False,
+    component_data=dict(),
+    TOKEN=None,
+):
     # logger.info(box)
     # logger.info(box["props"])
     btn_index = box["props"]["id"]["index"]
 
+    logger.info(f"ENABLE BOX EDIT MODE - index: {btn_index}")
+    logger.info(f"ENABLE BOX EDIT MODE - component_data: {component_data}")
+
+
     component_type = None
-    if dashboard_id and TOKEN:
-        component_data = get_component_data(input_id=btn_index, dashboard_id=dashboard_id, TOKEN=TOKEN)
-        logger.info(f"ENABLE BOX EDIT MODE - component_data: {component_data}")
-        if component_data:
-            component_type = component_data.get("component_type", None)
+    if not component_data:
+        if dashboard_id and TOKEN:
+            component_data = get_component_data(input_id=btn_index, dashboard_id=dashboard_id, TOKEN=TOKEN)
+            logger.info(f"ENABLE BOX EDIT MODE - component_data: {component_data}")
+            if component_data:
+                component_type = component_data.get("component_type", None)
+    else:
+        component_type = component_data.get("component_type", None)
+    logger.info(f"ENABLE BOX EDIT MODE - index - component_type: {btn_index} - {component_type}")
 
     edit_button = dbc.Button(
         "Edit",
@@ -95,9 +110,16 @@ def enable_box_edit_mode(box, switch_state=True, dashboard_id=None, fresh=False,
         # if component_type:
         #     if component_type != "table":
         buttons = dmc.Group([remove_button, edit_button, duplicate_button], grow=False, spacing="xs", style={"margin-left": "12px"})
+        logger.info(f"ENABLE BOX EDIT MODE - component_type: {component_type}")
 
-        if component_type == "figure":
-            buttons = dmc.Group([remove_button, edit_button, duplicate_button, reset_selection_button], grow=False, spacing="xs", style={"margin-left": "12px"})
+        if component_type:
+            if component_type == "figure" and component_data.get("visu_type", None).lower() == "scatter":
+                buttons = dmc.Group([remove_button, edit_button, duplicate_button, reset_selection_button], grow=False, spacing="xs", style={"margin-left": "12px"})
+
+            elif component_type == "table":
+                buttons = dmc.Group([remove_button, duplicate_button], grow=False, spacing="xs", style={"margin-left": "12px"})
+        else:
+            buttons = dmc.Group([remove_button, duplicate_button], grow=False, spacing="xs", style={"margin-left": "12px"})
         # if fresh:
         #     buttons = dmc.Group([remove_button], grow=False, spacing="xl", style={"margin-left": "12px"})
         box_components_list = dmc.Stack([buttons, box], spacing="md")
