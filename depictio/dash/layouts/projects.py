@@ -132,7 +132,7 @@ def render_data_collection(dc, workflow_id, token):
         logger.info(f"df shape: {df.shape} for {workflow_id}/{dc['_id']} with name {dc['data_collection_tag']}")
         columnDefs = [{"field": c, "headerName": c} for c in df.columns]
         grid = dag.AgGrid(
-            rowData=df.to_pandas().to_dict("records"),
+            rowData=df.to_pandas().head(100).to_dict("records"),
             id={"type": "project-dc-table", "index": f"{workflow_id}/{dc['_id']}"},
             # Uncomment the following lines to enable infinite scrolling
             # rowModelType="infinite",
