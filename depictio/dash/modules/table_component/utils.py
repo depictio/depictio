@@ -140,18 +140,20 @@ def build_table(**kwargs):
     )
 
     # Metadata management - Create a store component to store the metadata of the card
+    store_index = index.replace("-tmp", "")
     store_component = dcc.Store(
         id={
             "type": "stored-metadata-component",
-            "index": str(index),
+            "index": str(store_index),
         },
         data={
-            "index": str(index),
+            "index": str(store_index),
             "component_type": "table",
             "wf_id": wf_id,
             "dc_id": dc_id,
             "dc_config": dc_config,
             "cols_json": cols,
+            "parent_index": None,
         },
     )
 
