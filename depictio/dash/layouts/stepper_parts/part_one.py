@@ -210,8 +210,9 @@ def register_callbacks_stepper_part_one(app):
                 # print(df.head(20).to_dict("records"))
                 # cellClicked, cellDoubleClicked, cellRendererData, cellValueChanged, className, columnDefs, columnSize, columnSizeOptions, columnState, csvExportParams, dangerously_allow_code, dashGridOptions, defaultColDef, deleteSelectedRows, deselectAll, detailCellRendererParams, enableEnterpriseModules, exportDataAsCsv, filterModel, getDetailRequest, getDetailResponse, getRowId, getRowStyle, getRowsRequest, getRowsResponse, id, licenseKey, masterDetail, paginationGoTo, paginationInfo, persisted_props, persistence, persistence_type, resetColumnState, rowClass, rowClassRules, rowData, rowModelType, rowStyle, rowTransaction, scrollTo, selectAll, selectedRows, style, suppressDragLeaveHidesColumns, updateColumnState, virtualRowData
                 grid = dag.AgGrid(
-                    id={"type": "get-started-example-basic", "index": id["index"]},
-                    rowModelType="infinite",
+                    # id={"type": "get-started-example-basic", "index": id["index"]},
+                    # rowModelType="infinite",
+                    rowData=df.to_pandas().head(100).to_dict("records"),
                     columnDefs=columnDefs,
                     dashGridOptions={
                         "tooltipShowDelay": 500,
@@ -219,16 +220,16 @@ def register_callbacks_stepper_part_one(app):
                         "paginationAutoPageSize": False,
                         "animateRows": False,
                         # The number of rows rendered outside the viewable area the grid renders.
-                        "rowBuffer": 0,
-                        # How many blocks to keep in the store. Default is no limit, so every requested block is kept.
-                        "maxBlocksInCache": 2,
-                        "cacheBlockSize": 100,
-                        "cacheOverflowSize": 2,
-                        "maxConcurrentDatasourceRequests": 2,
-                        "infiniteInitialRowCount": 1,
-                        "rowSelection": "multiple",
+                        # "rowBuffer": 0,
+                        # # How many blocks to keep in the store. Default is no limit, so every requested block is kept.
+                        # "maxBlocksInCache": 2,
+                        # "cacheBlockSize": 100,
+                        # "cacheOverflowSize": 2,
+                        # "maxConcurrentDatasourceRequests": 2,
+                        # "infiniteInitialRowCount": 1,
+                        # "rowSelection": "multiple",
                     },
-                    columnSize="sizeToFit",
+                    # columnSize="sizeToFit",
                     defaultColDef={"resizable": True, "sortable": True, "filter": True},
                     # use the parameters above
                 )
@@ -306,65 +307,60 @@ def register_callbacks_stepper_part_one(app):
             leftSection=DashIconify(icon=component_metadata_dict[component_selected]["icon"], width=15, color=component_metadata_dict[component_selected]["color"]),
         )
 
-    @app.callback(
-        Output({"type": "get-started-example-basic", "index": MATCH}, "getRowsResponse"),
-        Input({"type": "get-started-example-basic", "index": MATCH}, "getRowsRequest"),
-        Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
-        Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
-        State("local-store", "data"),
-        prevent_initial_call=True,
-    )
-    def infinite_scroll(request, workflow_selection, data_collection_selection, local_store):
-        # simulate slow callback
-        # time.sleep(2)
+    # @app.callback(
+    #     Output({"type": "get-started-example-basic", "index": MATCH}, "getRowsResponse"),
+    #     Input({"type": "get-started-example-basic", "index": MATCH}, "getRowsRequest"),
+    #     Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
+    #     Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+    #     State("local-store", "data"),
+    #     prevent_initial_call=True,
+    # )
+    # def infinite_scroll(request, workflow_selection, data_collection_selection, local_store):
+    #     # simulate slow callback
+    #     # time.sleep(2)
 
-        logger.debug(f"Request: {request}")
-        logger.debug(f"Workflow: {workflow_selection}")
-        logger.debug(f"Data collection: {data_collection_selection}")
-        logger.debug(f"Local store: {local_store}")
-    
+    #     logger.debug(f"Request: {request}")
+    #     logger.debug(f"Workflow: {workflow_selection}")
+    #     logger.debug(f"Data collection: {data_collection_selection}")
+    #     logger.debug(f"Local store: {local_store}")
 
-        if request is None:
-            return dash.no_update
-        
-        if local_store is None:
-            raise dash.exceptions.PreventUpdate
-        
-        TOKEN = local_store["access_token"]
+    #     if request is None:
+    #         return dash.no_update
 
-        if workflow_selection is not None and data_collection_selection is not None:
-            logger.info(f"Workflow: {workflow_selection}")
-            logger.info(f"Data collection: {data_collection_selection}")
+    #     if local_store is None:
+    #         raise dash.exceptions.PreventUpdate
 
-            workflow_id, data_collection_id = return_mongoid(workflow_tag=workflow_selection, data_collection_tag=data_collection_selection, TOKEN=TOKEN)
+    #     TOKEN = local_store["access_token"]
 
-            logger.debug(f"Workflow ID: {workflow_id}")
-            logger.debug(f"Data collection ID: {data_collection_id}")
+    #     if workflow_selection is not None and data_collection_selection is not None:
+    #         logger.info(f"Workflow: {workflow_selection}")
+    #         logger.info(f"Data collection: {data_collection_selection}")
 
-            dc_specs = httpx.get(
-                f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
-                headers={
-                    "Authorization": f"Bearer {TOKEN}",
-                },
-            ).json()
+    #         workflow_id, data_collection_id = return_mongoid(workflow_tag=workflow_selection, data_collection_tag=data_collection_selection, TOKEN=TOKEN)
 
-            logger.debug(f"DC specs: {dc_specs}")
-            
+    #         logger.debug(f"Workflow ID: {workflow_id}")
+    #         logger.debug(f"Data collection ID: {data_collection_id}")
 
-            if dc_specs["config"]["type"] == "Table":
-                df = load_deltatable_lite(workflow_id, data_collection_id, TOKEN=TOKEN)
-                logger.debug(f"DF: {df}")
-                logger.debug(f"Request: {request}")
-                
+    #         dc_specs = httpx.get(
+    #             f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
+    #             headers={
+    #                 "Authorization": f"Bearer {TOKEN}",
+    #             },
+    #         ).json()
 
-                partial = df[request["startRow"] : request["endRow"]]
-                logger.debug(f"Partial: {partial}")
-                rows_response = {"rowData": partial.to_dicts(), "rowCount": df.shape[0]}
-                logger.debug(f"Rows response: {rows_response}")
-                return rows_response
-            else:
-                return dash.no_update
-        else:
-            return dash.no_update
+    #         logger.debug(f"DC specs: {dc_specs}")
 
+    #         if dc_specs["config"]["type"] == "Table":
+    #             df = load_deltatable_lite(workflow_id, data_collection_id, TOKEN=TOKEN)
+    #             logger.debug(f"DF: {df}")
+    #             logger.debug(f"Request: {request}")
 
+    #             partial = df[request["startRow"] : request["endRow"]]
+    #             logger.debug(f"Partial: {partial}")
+    #             rows_response = {"rowData": partial.to_dicts(), "rowCount": df.shape[0]}
+    #             logger.debug(f"Rows response: {rows_response}")
+    #             return rows_response
+    #         else:
+    #             return dash.no_update
+    #     else:
+    #         return dash.no_update
