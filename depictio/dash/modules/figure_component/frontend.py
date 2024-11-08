@@ -100,10 +100,15 @@ def register_callbacks_figure_component(app):
                     input_fct = plotly_bootstrap_mapping[processed_type_tmp]
                     tmp_options = {}
 
+                    former_value = None
+                    if component_data:
+                        if e in component_data["dict_kwargs"]:
+                            former_value = component_data["dict_kwargs"][e]
+
                     if processed_type_tmp == "column":
                         tmp_options = {
                             "options": columns,
-                            "value": None,
+                            "value": former_value,
                             "persistence": True,
                             "id": {
                                 "type": f"tmp-{e}",
@@ -119,7 +124,7 @@ def register_callbacks_figure_component(app):
                                 "type": f"tmp-{e}",
                                 "index": edit_button_id["index"],
                             },
-                            "value": None,
+                            "value": former_value,
                         }
                     elif processed_type_tmp in ["int", "float"]:
                         tmp_options = {
@@ -130,7 +135,7 @@ def register_callbacks_figure_component(app):
                                 "type": f"tmp-{e}",
                                 "index": edit_button_id["index"],
                             },
-                            "value": None,
+                            "value": former_value,
                         }
 
                     input_fct_with_params = input_fct(**tmp_options)
@@ -172,10 +177,16 @@ def register_callbacks_figure_component(app):
 
                     tmp_options = {}
 
+                    former_value = None
+                    if component_data:
+                        if e in component_data["dict_kwargs"]:
+                            former_value = component_data["dict_kwargs"][e]
+                            logger.info(f"former_value: {former_value}")
+
                     if processed_type_tmp == "column":
                         tmp_options = {
                             "options": columns,
-                            "value": None,
+                            "value": former_value,
                             "persistence": True,
                             "style": {"width": "100%"},
                             "id": {
@@ -192,7 +203,7 @@ def register_callbacks_figure_component(app):
                                 "type": f"tmp-{e}",
                                 "index": edit_button_id["index"],
                             },
-                            "value": None,
+                            "value": former_value,
                         }
                     elif processed_type_tmp in ["int", "float"]:
                         tmp_options = {
@@ -203,7 +214,7 @@ def register_callbacks_figure_component(app):
                                 "type": f"tmp-{e}",
                                 "index": edit_button_id["index"],
                             },
-                            "value": None,
+                            "value": former_value,
                         }
 
                     input_fct_with_params = input_fct(**tmp_options)
@@ -235,6 +246,7 @@ def register_callbacks_figure_component(app):
                         secondary_common_params_dropdowns.append(accordion_item)
                     else:
                         primary_common_params_dropdowns.append(accordion_item)
+
 
             primary_common_params_layout = [
                 dbc.Accordion(
@@ -364,10 +376,13 @@ def register_callbacks_figure_component(app):
         if component_data:
             if "dict_kwargs" in component_data:
                 existing_kwargs = component_data["dict_kwargs"]
+                logger.info(f"existing_kwargs: {existing_kwargs}")
 
         accordion_primary_common_params_args = dict()
         accordion_secondary_common_params_args = dict()
         specific_params_args = dict()
+
+        logger.info(f"children: {children}")
 
         if children:
             # accordion_secondary_common_params = children[0]["props"]["children"]["props"]["children"]
@@ -393,6 +408,8 @@ def register_callbacks_figure_component(app):
             )
             return_dict = {k: v for k, v in return_dict.items() if v is not None}
 
+            logger.info(f"return_dict: {return_dict}")
+
             if not return_dict:
                 return_dict = {
                     **return_dict,
@@ -405,6 +422,7 @@ def register_callbacks_figure_component(app):
                 return existing_kwargs
 
         else:
+            logger.info(f"RETURN existing_kwargs: {existing_kwargs}")
             return existing_kwargs
 
     @app.callback(
