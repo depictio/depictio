@@ -8,11 +8,12 @@ import dash_draggable
 import dash
 import httpx
 from depictio.dash.layouts.draggable_scenarios.add_component import add_new_component
+from depictio.dash.layouts.draggable_scenarios.graphs_interactivity import refresh_children_based_on_click_data, refresh_children_based_on_selected_data
 from depictio.dash.layouts.edit import edit_component
 
 from depictio.api.v1.configs.config import API_BASE_URL, logger
 
-from depictio.dash.layouts.draggable_scenarios.interactive_component_update import update_interactive_component
+from depictio.dash.layouts.draggable_scenarios.interactive_component_update import render_raw_children, update_interactive_component
 from depictio.dash.layouts.draggable_scenarios.restore_dashboard import render_dashboard
 
 
@@ -24,14 +25,16 @@ from depictio.dash.utils import generate_unique_index, get_columns_from_data_col
 
 
 # Mapping of component types to their respective dimensions (width and height)
-component_dimensions = {"card-component": {"w": 2, "h": 5}, "interactive-component": {"w": 5, "h": 3}, "graph-component": {"w": 6, "h": 13}}
+component_dimensions = {"card": {"w": 2, "h": 5}, "interactive": {"w": 5, "h": 4}, "figure": {"w": 6, "h": 14}, "table": {"w": 6, "h": 14}}
 required_breakpoints = ["xl", "lg", "sm", "md", "xs", "xxs"]
 
 
 def calculate_new_layout_position(child_type, existing_layouts, child_id, n):
     """Calculate position for new layout item based on existing ones and type."""
     # Get the default dimensions from the type
+    logger.info(f"Calculating new layout position for {child_type} with {n} existing components")
     dimensions = component_dimensions.get(child_type, {"w": 6, "h": 5})  # Default if type not found
+    logger.info(f"Dimensions: {dimensions}")
 
     # Simple positioning logic: place items in rows based on their index
     columns_per_row = 12  # Assuming a 12-column layout grid
@@ -195,257 +198,6 @@ def register_callbacks_draggable(app):
         logger.debug(f"Components store data after update: {components_store}")
         return components_store
 
-    import uuid
-    import logging
-
-    # Initialize logger
-    logging.basicConfig(level=logging.INFO)
-    logger = logging.getLogger(__name__)
-
-    def process_click_data(dict_graph_data, interactive_components_dict, TOKEN):
-        """
-        Process clickData from a Plotly graph and update the interactive_components_dict with new filters.
-
-        Parameters:
-        - dict_graph_data (dict): Contains the clicked point data and metadata.
-        - interactive_components_dict (dict): Existing interactive components to be updated.
-
-        Returns:
-        - dict: Updated interactive_components_dict with new filter entries.
-        """
-
-        # Extract clicked point data
-        point = dict_graph_data.get("value", {})
-        metadata = dict_graph_data.get("metadata", {})
-
-        logger.info(f"Processing click data: {point}")
-        logger.info(f"Metadata: {metadata}")
-
-        # Extract dict_kwargs from metadata to identify the columns mapped to x and y
-        dict_kwargs = metadata.get("dict_kwargs", {})
-        x_column = dict_kwargs.get("x")
-        y_column = dict_kwargs.get("y")
-
-        logger.info(f"Processing click data for columns: x={x_column}, y={y_column}")
-
-        # Extract the x and y values from click data
-        x_value = point.get("x")
-        y_value = point.get("y")
-
-        logger.info(f"Clicked point values: x={x_value}, y={y_value}")
-
-        # Extract columns_description from metadata to determine column types
-        columns_description = metadata.get("dc_config", {}).get("columns_description", {})
-
-        wf_tag = return_wf_tag_from_id(metadata.get("wf_id"), TOKEN=TOKEN)
-        dc_tag = return_dc_tag_from_id(metadata.get("wf_id"), metadata.get("dc_id"), TOKEN=TOKEN)
-        cols_json = get_columns_from_data_collection(wf_tag, dc_tag, TOKEN)
-        logger.info(f"Columns JSON: {cols_json}")
-
-        # Get column types; default to 'object' (categorical) if not specified
-        x_col_type = cols_json.get(x_column, {}).get("type", "object")
-        y_col_type = cols_json.get(y_column, {}).get("type", "object")
-
-        logger.info(f"Column types: {x_column}={x_col_type}, {y_column}={y_col_type}")
-
-        # Initialize a dictionary to hold new filter entries
-        new_filters = {}
-
-        # Function to generate unique keys for new filters
-        def generate_filter_key(column_name):
-            return f"filter_{column_name}_{uuid.uuid4()}"
-
-        # Process x_value
-        if x_value is not None and x_column:
-            if x_col_type in ["int64", "float64"]:
-                # Numerical column, use Slider for exact match
-                new_key = generate_filter_key(x_column)
-                new_filters[new_key] = {
-                    "metadata": {
-                        "interactive_component_type": "Slider",
-                        "column_name": x_column,
-                        "wf_id": metadata.get("wf_id"),
-                        "dc_id": metadata.get("dc_id"),
-                    },
-                    "value": x_value,
-                }
-                logger.info(f"Added numerical filter for {x_column}: {x_value}")
-            else:
-                # Categorical column, use Select for is_in filter
-                new_key = generate_filter_key(x_column)
-                new_filters[new_key] = {
-                    "metadata": {
-                        "interactive_component_type": "Select",
-                        "column_name": x_column,
-                        "wf_id": metadata.get("wf_id"),
-                        "dc_id": metadata.get("dc_id"),
-                    },
-                    "value": [x_value],  # is_in expects a list
-                }
-                logger.info(f"Added categorical filter for {x_column}: {x_value}")
-
-        # Process y_value
-        if y_value is not None and y_column:
-            if y_col_type in ["int64", "float64"]:
-                # Numerical column, use Slider for exact match
-                new_key = generate_filter_key(y_column)
-                new_filters[new_key] = {
-                    "metadata": {
-                        "interactive_component_type": "Slider",
-                        "column_name": y_column,
-                        "wf_id": metadata.get("wf_id"),
-                        "dc_id": metadata.get("dc_id"),
-                    },
-                    "value": y_value,
-                }
-                logger.info(f"Added numerical filter for {y_column}: {y_value}")
-            else:
-                # Categorical column, use Select for is_in filter
-                new_key = generate_filter_key(y_column)
-                new_filters[new_key] = {
-                    "metadata": {
-                        "interactive_component_type": "Select",
-                        "column_name": y_column,
-                        "wf_id": metadata.get("wf_id"),
-                        "dc_id": metadata.get("dc_id"),
-                    },
-                    "value": [y_value],  # is_in expects a list
-                }
-                logger.info(f"Added categorical filter for {y_column}: {y_value}")
-
-        # Update the interactive_components_dict with new filters
-        interactive_components_dict.update(new_filters)
-
-        logger.info(f"Updated interactive_components_dict: {interactive_components_dict}")
-
-        return interactive_components_dict
-
-
-    def process_selected_data(dict_graph_data, interactive_components_dict, TOKEN):
-        """
-        Process selectedData from a Plotly graph and update the interactive_components_dict with new filters.
-
-        Parameters:
-        - dict_graph_data (dict): Contains the list of selected points data and metadata.
-        - interactive_components_dict (dict): Existing interactive components to be updated.
-        - TOKEN (str): Access token for authentication (if needed).
-
-        Returns:
-        - dict: Updated interactive_components_dict with new filter entries.
-        """
-
-        # Extract selected points data
-        points = dict_graph_data.get("value", [])
-        metadata = dict_graph_data.get("metadata", {})
-
-        logger.info(f"Processing selected data with {len(points)} points.")
-        logger.info(f"Metadata: {metadata}")
-
-        # Extract dict_kwargs from metadata to identify the columns mapped to x and y
-        dict_kwargs = metadata.get("dict_kwargs", {})
-        x_column = dict_kwargs.get("x")
-        y_column = dict_kwargs.get("y")
-
-        logger.info(f"Processing selected data for columns: x={x_column}, y={y_column}")
-
-        # Extract unique x and y values from selected points
-        x_values = set(point.get("x") for point in points if "x" in point)
-        y_values = set(point.get("y") for point in points if "y" in point)
-
-        logger.info(f"Unique selected x values: {x_values}")
-        logger.info(f"Unique selected y values: {y_values}")
-
-        # Extract columns_description from metadata to determine column types
-        columns_description = metadata.get("dc_config", {}).get("columns_description", {})
-
-        # Fetch column types from data collection (assuming helper functions exist)
-        wf_tag = return_wf_tag_from_id(metadata.get("wf_id"), TOKEN=TOKEN)
-        dc_tag = return_dc_tag_from_id(metadata.get("wf_id"), metadata.get("dc_id"), TOKEN=TOKEN)
-        cols_json = get_columns_from_data_collection(wf_tag, dc_tag, TOKEN)
-        logger.info(f"Columns JSON: {cols_json}")
-
-        # Get column types; default to 'object' (categorical) if not specified
-        x_col_type = cols_json.get(x_column, {}).get("type", "object")
-        y_col_type = cols_json.get(y_column, {}).get("type", "object")
-
-        logger.info(f"Column types: {x_column}={x_col_type}, {y_column}={y_col_type}")
-
-        # Initialize a dictionary to hold new filter entries
-        new_filters = {}
-
-        # Function to generate unique keys for new filters
-        def generate_filter_key(column_name):
-            return f"filter_{column_name}_{uuid.uuid4()}"
-
-        # Process x_values
-        if x_values and x_column:
-            if x_col_type in ["int64", "float64"]:
-                # Numerical column, use RangeSlider to encompass selected values
-                min_val = min(x_values)
-                max_val = max(x_values)
-                new_key = generate_filter_key(x_column)
-                new_filters[new_key] = {
-                    "metadata": {
-                        "interactive_component_type": "RangeSlider",
-                        "column_name": x_column,
-                        "wf_id": metadata.get("wf_id"),
-                        "dc_id": metadata.get("dc_id"),
-                    },
-                    "value": [min_val, max_val],
-                }
-                logger.info(f"Added RangeSlider filter for {x_column}: [{min_val}, {max_val}]")
-            else:
-                # Categorical column, use Select for is_in filter
-                new_key = generate_filter_key(x_column)
-                new_filters[new_key] = {
-                    "metadata": {
-                        "interactive_component_type": "Select",
-                        "column_name": x_column,
-                        "wf_id": metadata.get("wf_id"),
-                        "dc_id": metadata.get("dc_id"),
-                    },
-                    "value": list(x_values),  # is_in expects a list
-                }
-                logger.info(f"Added Select filter for {x_column}: {list(x_values)}")
-
-        # Process y_values
-        if y_values and y_column:
-            if y_col_type in ["int64", "float64"]:
-                # Numerical column, use RangeSlider to encompass selected values
-                min_val = min(y_values)
-                max_val = max(y_values)
-                new_key = generate_filter_key(y_column)
-                new_filters[new_key] = {
-                    "metadata": {
-                        "interactive_component_type": "RangeSlider",
-                        "column_name": y_column,
-                        "wf_id": metadata.get("wf_id"),
-                        "dc_id": metadata.get("dc_id"),
-                    },
-                    "value": [min_val, max_val],
-                }
-                logger.info(f"Added RangeSlider filter for {y_column}: [{min_val}, {max_val}]")
-            else:
-                # Categorical column, use Select for is_in filter
-                new_key = generate_filter_key(y_column)
-                new_filters[new_key] = {
-                    "metadata": {
-                        "interactive_component_type": "Select",
-                        "column_name": y_column,
-                        "wf_id": metadata.get("wf_id"),
-                        "dc_id": metadata.get("dc_id"),
-                    },
-                    "value": list(y_values),  # is_in expects a list
-                }
-                logger.info(f"Added Select filter for {y_column}: {list(y_values)}")
-
-        # Update the interactive_components_dict with new filters
-        interactive_components_dict.update(new_filters)
-
-        logger.info(f"Updated interactive_components_dict: {interactive_components_dict}")
-
-        return interactive_components_dict
-
     @app.callback(
         Output("draggable", "children"),
         Output("draggable", "layouts"),
@@ -563,6 +315,7 @@ def register_callbacks_draggable(app):
             },
             "n_clicks",
         ),
+        Input("reset-all-filters-button", "n_clicks"),
         Input("remove-all-components-button", "n_clicks"),
         State("toggle-interactivity-button", "checked"),
         State("edit-dashboard-mode-button", "checked"),
@@ -598,6 +351,7 @@ def register_callbacks_draggable(app):
         tmp_edit_component_metadata_values,
         duplicate_box_button_values,
         reset_selection_graph_button_values,
+        reset_all_filters_button,
         remove_all_components_button,
         toggle_interactivity_button,
         edit_dashboard_mode_button,
@@ -617,9 +371,6 @@ def register_callbacks_draggable(app):
             state_stored_draggable_children = {}
 
         TOKEN = local_data["access_token"]
-
-        # logger.info("btn_done_clicks: {}".format(btn_done_clicks))
-        # logger.info("stored_add_button: {}".format(stored_add_button))
 
         ctx = dash.callback_context
 
@@ -645,30 +396,12 @@ def register_callbacks_draggable(app):
             triggered_input = None
             triggered_input_dict = None
 
-        # logger.info("triggered_input : {}".format(triggered_input))
-        # logger.info("type of triggered_input: {}".format(type(triggered_input)))
-
-        # logger.info(f"toggle_interactivity_button: {toggle_interactivity_button}")
-
-        # Check if the value of the interactive component is not None
-        check_value = False
-        # remove duplicate of stored_metadata based on index
-        index_list = []
-
         # FIXME: Remove duplicates from stored_metadata
         # Remove duplicates from stored_metadata
-        # logger.info("Stored metadata: {}".format(stored_metadata))
-        # logger.info(f"Length of stored metadata: {len(stored_metadata)}")
         stored_metadata = remove_duplicates_by_index(stored_metadata)
-        # logger.info("CLEANED Stored metadata: {}".format(stored_metadata))
-        # logger.info(f"Length of cleaned stored metadata: {len(stored_metadata)}")
-        # logger.info(f"URL PATHNAME: {pathname}")
+
         dashboard_id = pathname.split("/")[-1]
         stored_metadata_interactive = [e for e in stored_metadata if e["component_type"] == "interactive"]
-
-        # logger.info("Interactive component values: {}".format(interactive_component_values))
-        # logger.info("Interactive component ids: {}".format(interactive_component_ids))
-        # logger.info("Stored metadata interactive: {}".format(stored_metadata_interactive))
 
         interactive_components_dict = {
             id["index"]: {"value": value, "metadata": metadata}
@@ -678,250 +411,146 @@ def register_callbacks_draggable(app):
                 stored_metadata_interactive,
             )
         }
-        # logger.info(f"Interactive components dict: {interactive_components_dict}")
 
+        # Can be "btn-done" or "btn-done-edit" or "graph" ..
         if triggered_input:
-            if "graph" in triggered_input:
-                ctx_triggered = ctx.triggered
-                ctx_triggered = ctx_triggered[0]
-                ctx_triggered_prop_id = ctx_triggered["prop_id"]
-                logger.info(f"triggered_input: {triggered_input}")
-                logger.info(f"CTX triggered: {ctx_triggered}")
-                logger.info(f"CTX triggered type : {type(ctx_triggered)}")
-                logger.info(f"CTX triggered prop_id: {ctx_triggered_prop_id}")
-                ctx_triggered_prop_id_index = eval(ctx_triggered_prop_id.split(".")[0])["index"]
-                logger.info(f"CTX triggered prop_id index: {ctx_triggered_prop_id_index}")
-                tests__ = ["selectedData" in ctx_triggered_prop_id, "clickData" in ctx_triggered_prop_id, "relayoutData" in ctx_triggered_prop_id]
-                tests__ = ["clickData" in ctx_triggered_prop_id]
-
-                logger.info(f"{tests__}")
-                if any(tests__):
-                    logger.info(f"Graph triggered input: {triggered_input}")
-                    logger.info(f"Graph click data: {graph_click_data}")
-                    logger.info(f"Graph ids: {graph_ids}")
-                    logger.info(f"Interactive components dict: {interactive_components_dict}")
-
-                    clickData = graph_click_data[0]
-
-                    if clickData and "points" in clickData and len(clickData["points"]) > 0:
-                        # Extract the first clicked point
-                        clicked_point = clickData["points"][0]
-                        logger.info(f"Clicked point data: {clicked_point}")
-
-                        # Construct dict_graph_data as per the process_click_data function
-                        dict_graph_data = {"value": clicked_point, "metadata": [e for e in stored_metadata if e["index"] == ctx_triggered_prop_id_index][0]}
-
-                        # Update interactive_components_dict using the process_click_data function
-                        updated_interactive_components = process_click_data(dict_graph_data, interactive_components_dict, TOKEN)
-
-                        # Prepare selected_point data to store
-                        selected_point = {"x": clicked_point.get("x"), "y": clicked_point.get("y"), "text": clicked_point.get("text", "")}
-
-                        logger.info(f"Selected point: {selected_point}")
-
-                        logger.info(f"Updated interactive components: {updated_interactive_components}")
-
-                        for metadata in stored_metadata:
-                            if metadata["index"] == ctx_triggered_prop_id_index:
-                                metadata["filter_applied"] = True
-                        logger.info(f"TMP Stored metadata: {stored_metadata}")
-
-                        new_children = update_interactive_component(
-                            stored_metadata, updated_interactive_components, draggable_children, switch_state=edit_components_mode_button, TOKEN=TOKEN, dashboard_id=dashboard_id
-                        )
-                        # state_stored_draggable_children[dashboard_id] = new_children
-
-                        return new_children, dash.no_update, dash.no_update, dash.no_update, dash.no_update
-
-                elif "selectedData" in ctx_triggered_prop_id:
-                    selectedData = graph_selected_data[0]
-                    logger.info(f"Selected data: {selectedData}")
-    
-                    if selectedData and "points" in selectedData and len(selectedData["points"]) > 0:
-                        selected_points = selectedData["points"]
-                        logger.info(f"Selected points data: {selected_points}")
-    
-                        # Construct dict_graph_data for multiple points
-                        dict_graph_data = {
-                            "value": selected_points,
-                            "metadata": next(
-                                (e for e in stored_metadata if e["index"] == ctx_triggered_prop_id_index), 
-                                None
-                            )
-                        }
-    
-                        if dict_graph_data["metadata"] is None:
-                            logger.error("Metadata not found for the triggered graph.")
-                            return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
-    
-                        # Update interactive_components_dict using the process_selected_data function
-                        updated_interactive_components = process_selected_data(dict_graph_data, interactive_components_dict, TOKEN)
-    
-                        logger.info(f"Updated interactive components: {updated_interactive_components}")
-    
-
-                        for metadata in stored_metadata:
-                            if metadata["index"] == ctx_triggered_prop_id_index:
-                                metadata["filter_applied"] = True
-
-                        new_children = update_interactive_component(
-                            stored_metadata, 
-                            updated_interactive_components, 
-                            draggable_children, 
-                            switch_state=edit_components_mode_button, 
-                            TOKEN=TOKEN, 
-                            dashboard_id=dashboard_id
-                        )
-
-                        logger.info(f"New children len : {len(new_children)}")
-                        # state_stored_draggable_children[dashboard_id] = new_children
-    
-                        return new_children, dash.no_update, dash.no_update, dash.no_update, dash.no_update
-                    elif "relayoutData" in ctx_triggered_prop_id:
-                        return draggable_children, dash.no_update, dash.no_update, dash.no_update, dash.no_update
-                    else:
-                        return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
-                elif "relayoutData" in ctx_triggered_prop_id:
-                    logger.info(f"Relayout data: {graph_relayout_data}")
-                    return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
-
-                elif "reset-selection-graph-button" in triggered_input:
-                    logger.info(f"Reset selection graph triggered input: {triggered_input}")
-
-                    logger.info("Interactive component triggered")
-                    logger.info("Interactive component values: {}".format(interactive_component_values))
-
-                    for metadata in stored_metadata:
-                        if metadata["index"] == ctx_triggered_prop_id_index:
-                            metadata["filter_applied"] = False
-                    logger.info(f"TMP Stored metadata: {stored_metadata}")
-
-                    new_children = update_interactive_component(
-                        stored_metadata, interactive_components_dict, draggable_children, switch_state=edit_components_mode_button, TOKEN=TOKEN, dashboard_id=dashboard_id
-                    )
-                    # state_stored_draggable_children[dashboard_id] = new_children
-
-                    return new_children, dash.no_update, dash.no_update, dash.no_update, dash.no_update
-                    # return new_childr
-
-                    # return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
-                else:
-                    return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
-            # else:
-            #     logger.info(f"Triggered input: {triggered_input}")
-            #     logger.info(f"Triggered input dict: {triggered_input_dict}")
-            #     return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
-
-            if triggered_input == "interactive-component":
-                if interactive_components_dict:
-                    logger.info(f"Interactive component triggered input: {triggered_input}")
-                    logger.info(f"Interactive components dict: {interactive_components_dict}")
-                    triggered_input_eval_index = int(triggered_input_dict["index"])
-                    logger.info(f"Triggered input eval index: {triggered_input_eval_index}")
-                    if triggered_input_eval_index in interactive_components_dict:
-                        value = interactive_components_dict[triggered_input_eval_index]["value"]
-                        logger.info(f"Value: {value}")
-                        # Handle the case of the TextInput component
-                        if interactive_components_dict[triggered_input_eval_index]["metadata"]["interactive_component_type"] != "TextInput":
-                            check_value = True if value is not None else False
-                        else:
-                            check_value = True if value is not "" else False
-                        logger.info(f"Check value: {check_value}")
-
-            # # if triggered_input["type"] == "btn-done":
+            # Handle scenarios where the user clicks on the "Done" button to add a new component
             if triggered_input == "btn-done":
-                # if btn_done_clicks:
-                #     if btn_done_clicks[-1] > 0:
-                logger.info("\n\n")
-                logger.info("Populate draggable")
+                logger.info("Done button clicked")
 
-                logger.info("stored_metadata: {}".format(stored_metadata))
-                # logger.info("stored_children: {}".format(test_container))
-                # logger.info("draggable_children: {}".format(draggable_children))
-                logger.info("draggable_layouts: {}".format(draggable_layouts))
+                triggered_index = triggered_input_dict["index"]
 
-                existing_ids = {str(child["props"]["id"]) for child in draggable_children}
-                n = len(draggable_children)
+                tmp_stored_metadata = [e for e in stored_metadata if f'{e["index"]}-tmp' == f"{triggered_index}"]
 
-                logger.info(f"Existing ids: {existing_ids}")
-                logger.info(f"n: {n}")
+                if not tmp_stored_metadata:
+                    return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+                child_metadata = tmp_stored_metadata[0]
+                child_index = child_metadata["index"]
+                child_type = child_metadata["component_type"]
 
-                # Ensure all necessary breakpoints are initialized
-                for bp in required_breakpoints:
-                    if bp not in draggable_layouts:
-                        draggable_layouts[bp] = []
+                children, indexes = render_raw_children(
+                    tmp_stored_metadata[0],
+                    switch_state=edit_components_mode_button,
+                    dashboard_id=dashboard_id,
+                    TOKEN=TOKEN,
+                )
+                child = children
 
-                for child in test_container:
-                    # logger.info(f"Child: {child}")
-                    child_index = str(child["props"]["id"]["index"])
-
-                    child_type = child["props"]["id"]["type"]
-
-                    logger.info(f"Child type: {child_type}")
-
-                    if child_type == "interactive-component":
-                        logger.info(f"Interactive component found: {child}")
-                        # WARNING: This is a temporary fix to remove the '-tmp' suffix from the id
-                        if child["props"]["children"]["props"]["children"]["props"]["children"][1]["props"]["id"]["type"].endswith("-tmp"):
-                            child["props"]["children"]["props"]["children"]["props"]["children"][1]["props"]["id"]["type"] = child["props"]["children"]["props"]["children"][
-                                "props"
-                            ]["children"][1]["props"]["id"]["type"].replace("-tmp", "")
-
-                    logger.info(f"Child index: {child_index}")
-                    logger.info(f"Child type: {child_type}")
-                    # child types: card-component (w:3,h:4), interactive-component (w:6,h:6), graph-component (w:9,h:8)
-                    if child_index not in existing_ids:
-                        child = enable_box_edit_mode(child, edit_components_mode_button, dashboard_id=dashboard_id, fresh=False, TOKEN=TOKEN)
-                        draggable_children.append(child)
-                        child_id = f"box-{str(child_index)}"
-
-                        # Calculate layout item position and size based on type
-                        new_layout_item = calculate_new_layout_position(child_type, draggable_layouts, child_id, n)
-
-                        # Update necessary breakpoints, this example only updates 'lg' for simplicity
-                        # draggable_layouts["lg"].append(new_layout_item)
-
-                        # new_layout_item = {
-                        #     "i": child_id,
-                        #     "x": 10 * (n % 2),
-                        #     "y": n * 10,
-                        #     "w": 6,
-                        #     "h": 5,
-                        # }
-
-                        for key in required_breakpoints:
-                            draggable_layouts[key].append(new_layout_item)
-                        n += 1
-
-                # logger.info(f"Updated draggable children: {draggable_children}")
-                logger.info(f"Updated draggable layouts: {draggable_layouts}")
-                state_stored_draggable_children[dashboard_id] = draggable_children
+                draggable_children.append(child)
+                child_id = f"box-{str(indexes)}"
+                logger.info(f"Child type: {child_type}")
+                new_layout_item = calculate_new_layout_position(child_type, draggable_layouts, child_id, len(draggable_children))
+                for key in required_breakpoints:
+                    if key not in draggable_layouts:
+                        draggable_layouts[key] = []
+                    draggable_layouts[key].append(new_layout_item)
                 state_stored_draggable_layouts[dashboard_id] = draggable_layouts
-                return draggable_children, draggable_layouts, dash.no_update, state_stored_draggable_layouts, dash.no_update
-                # return draggable_children, draggable_layouts, state_stored_draggable_children, state_stored_draggable_layouts
-            #     else:
-            #         return dash.no_update, dash.no_update, dash.no_update, dash.no_update
-            # # elif triggered_input == "draggable":
-            # #     return draggable_children, draggable_layouts
 
+                return draggable_children, draggable_layouts, dash.no_update, state_stored_draggable_layouts, dash.no_update
+
+            # Handle scenarios where the user adjusts the layout of the draggable components
             elif triggered_input == "draggable":
+                logger.info("Draggable callback triggered")
                 ctx_triggered_props_id = ctx.triggered_prop_ids
                 if "draggable.layouts" in ctx_triggered_props_id:
                     new_layouts = input_draggable_layouts
-                    # logger.info(f"state_stored_draggable_layouts: {state_stored_draggable_layouts}")
-                    # logger.info(f"state_stored_draggable_children: {state_stored_draggable_children}")
-                    logger.info(f"dashboard_id: {dashboard_id}")
                     state_stored_draggable_children[dashboard_id] = draggable_children
                     state_stored_draggable_layouts[dashboard_id] = new_layouts
 
                     return draggable_children, new_layouts, dash.no_update, state_stored_draggable_layouts, dash.no_update
-                    # return draggable_children, new_layouts, state_stored_draggable_children, state_stored_draggable_layouts
+                else:
+                    return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+            # Handle scenarios where the user clicks/select on a graph
+            elif "graph" in triggered_input:
+                logger.info("Graph callback triggered")
+                ctx_triggered = ctx.triggered
+                ctx_triggered = ctx_triggered[0]
+                ctx_triggered_prop_id = ctx_triggered["prop_id"]
+                ctx_triggered_prop_id_index = eval(ctx_triggered_prop_id.split(".")[0])["index"]
+
+                graph_metadata = [e for e in stored_metadata if e["index"] == ctx_triggered_prop_id_index]
+                if graph_metadata:
+                    graph_metadata = graph_metadata[0]
+                else:
+                    return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+                # Restrict the callback to only scatter plots
+                if graph_metadata["visu_type"].lower() == "scatter":
+                    # Handle scenarios where the user clicks on a specific point on the graph
+                    if "clickData" in ctx_triggered_prop_id:
+                        logger.info("Click data triggered")
+                        updated_children = refresh_children_based_on_click_data(
+                            graph_click_data=graph_click_data,
+                            graph_ids=graph_ids,
+                            ctx_triggered_prop_id_index=ctx_triggered_prop_id_index,
+                            stored_metadata=stored_metadata,
+                            interactive_components_dict=interactive_components_dict,
+                            draggable_children=draggable_children,
+                            edit_components_mode_button=edit_components_mode_button,
+                            TOKEN=TOKEN,
+                            dashboard_id=dashboard_id,
+                        )
+                        if updated_children:
+                            return updated_children, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+                        else:
+                            return draggable_children, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+                    # Handle scenarios where the user selects a range on the graph
+                    elif "selectedData" in ctx_triggered_prop_id:
+                        logger.info("Selected data triggered")
+                        updated_children = refresh_children_based_on_selected_data(
+                            graph_selected_data=graph_selected_data,
+                            graph_ids=graph_ids,
+                            ctx_triggered_prop_id_index=ctx_triggered_prop_id_index,
+                            stored_metadata=stored_metadata,
+                            interactive_components_dict=interactive_components_dict,
+                            draggable_children=draggable_children,
+                            edit_components_mode_button=edit_components_mode_button,
+                            TOKEN=TOKEN,
+                            dashboard_id=dashboard_id,
+                        )
+                        if updated_children:
+                            return updated_children, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+                        else:
+                            return draggable_children, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+                    # Handle scenarios where the user relayouts the graph
+                    # TODO: Implement this
+                    elif "relayoutData" in ctx_triggered_prop_id:
+                        logger.info("Relayout data triggered")
+                        return draggable_children, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+                    # Handle scenarios where the user resets the selection on the graph using a button
+                    elif "reset-selection-graph-button" in triggered_input:
+                        logger.info("Reset selection graph button triggered")
+                        for metadata in stored_metadata:
+                            if metadata["index"] == ctx_triggered_prop_id_index:
+                                metadata["filter_applied"] = False
+                        logger.info("Stored metadata: {}".format(stored_metadata))
+                        logger.info("Interactive components dict: {}".format(interactive_components_dict))
+
+                        new_children = update_interactive_component(
+                            stored_metadata, interactive_components_dict, draggable_children, switch_state=edit_components_mode_button, TOKEN=TOKEN, dashboard_id=dashboard_id
+                        )
+                        return new_children, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+                    else:
+                        return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
                 else:
                     return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
             elif "interactive-component" in triggered_input and toggle_interactivity_button:
                 logger.info("Interactive component triggered")
-                logger.info("Interactive component values: {}".format(interactive_component_values))
+
+                def clean_stored_metadata(stored_metadata):
+                    # Remove duplicates from stored_metadata by checking parent_index and index
+                    stored_metadata = remove_duplicates_by_index(stored_metadata)
+                    parent_indexes = set([e["parent_index"] for e in stored_metadata if "parent_index" in e and e["parent_index"] is not None])
+                    # remove parent indexes that are also child indexes
+                    stored_metadata = [e for e in stored_metadata if e["index"] not in parent_indexes]
+                    return stored_metadata
+
+                stored_metadata = clean_stored_metadata(stored_metadata)
 
                 new_children = update_interactive_component(
                     stored_metadata, interactive_components_dict, draggable_children, switch_state=edit_components_mode_button, TOKEN=TOKEN, dashboard_id=dashboard_id
@@ -936,38 +565,19 @@ def register_callbacks_draggable(app):
                 new_children = list()
                 # logger.info("Current draggable children: {}".format(draggable_children))
                 logger.info("Len Current draggable children: {}".format(len(draggable_children)))
-                for child in draggable_children:
+                for child, child_metadata in zip(draggable_children, stored_metadata):
                     logger.info("Child: {}".format(child))
                     logger.info("Child props: {}".format(child["props"]))
                     logger.info("Child props children: {}".format(child["props"]["children"]))
                     if type(child["props"]["children"]) is dict:
-                        child = enable_box_edit_mode(child["props"]["children"]["props"]["children"][-1], edit_components_mode_button)
+                        child = enable_box_edit_mode(child["props"]["children"]["props"]["children"][-1], edit_components_mode_button, component_data=child_metadata)
                     elif type(child["props"]["children"]) is list:
-                        child = enable_box_edit_mode(child["props"]["children"][-1], edit_components_mode_button)
+                        child = enable_box_edit_mode(child["props"]["children"][-1], edit_components_mode_button, component_data=child_metadata)
                     new_children.append(child)
                     state_stored_draggable_children[dashboard_id] = new_children
 
                 return new_children, dash.no_update, dash.no_update, dash.no_update, dash.no_update
                 # return new_children, dash.no_update, state_stored_draggable_children, dash.no_update
-
-            # elif triggered_input == "height-store":
-            #     if not height_store:
-            #         return draggable_layouts
-
-            #     # Copy the existing layout to modify
-            #     new_layouts = draggable_layouts.copy()
-
-            #     # Iterate over each breakpoint (e.g., 'default', 'lg', etc.)
-            #     for breakpoint in new_layouts:
-            #         for item in new_layouts[breakpoint]:
-            #             item_id = item['i']
-            #             if item_id in height_store:
-            #                 # Convert pixel height to grid units
-            #                 row_height = 30  # Must match the rowHeight prop
-            #                 new_h = max(1, height_store[item_id] // row_height)
-            #                 item['h'] = new_h
-
-            #     return draggable_children, new_layouts, dash.no_update, new_layouts
 
             elif triggered_input == "stored-draggable-layouts":
                 logger.info("Stored draggable layouts triggered")
@@ -988,63 +598,41 @@ def register_callbacks_draggable(app):
             elif triggered_input == "remove-box-button":
                 logger.info("Remove box button clicked")
                 input_id = ctx.triggered_id["index"]
-                logger.info("Input ID: {}".format(input_id))
 
-                # Use list comprehension to filter
-                # logger.info("Current draggable children: {}".format(draggable_children))
                 updated_children = [child for child in draggable_children if child["props"]["id"] != f"box-{input_id}"]
-
-                # state_stored_draggable_children[dashboard_id] = updated_children
                 state_stored_draggable_layouts[dashboard_id] = draggable_layouts
-
-                # logger.info("Updated draggable children: {}".format(updated_children))
 
                 return updated_children, draggable_layouts, dash.no_update, state_stored_draggable_layouts, dash.no_update
                 # return updated_children, draggable_layouts, state_stored_draggable_children, state_stored_draggable_layouts
 
             elif triggered_input == "edit-box-button":
-                logger.warning("Edit box button clicked")
+                logger.info("Edit box button clicked")
 
                 input_id = ctx.triggered_id["index"]
-                logger.info("Input ID: {}".format(input_id))
 
                 component_data = get_component_data(input_id=input_id, dashboard_id=dashboard_id, TOKEN=TOKEN)
-                logger.info(f"Component data: {component_data}")
 
                 if component_data:
                     component_data["parent_index"] = input_id
                 else:
                     component_data = {"parent_index": input_id}
 
-                logger.info(f"Component data: {component_data}")
-
-                # Create the modal for editing
                 new_id = generate_unique_index()
-                logger.info(f"New ID: {new_id}")
                 edited_modal = edit_component(new_id, parent_id=input_id, active=1, component_data=component_data, TOKEN=TOKEN)
-                logger.info(f"Edited modal: {edited_modal}")
-                # edited_modal = edit_component(str(input_id), active=1, component_data=component_data, TOKEN=TOKEN)
 
                 updated_children = []
                 # logger.info(f"Draggable children: {draggable_children}")
                 for child in draggable_children:
                     logger.info(f"Child props id: {child['props']['id']}")
                     if child["props"]["id"] == f"box-{input_id}":
-                        logger.info("Found child to edit")
-                        # Ensure that children is a list. If not, convert it to a list.
-                        # existing_children = child["props"]["children"]
-                        # if not isinstance(existing_children, list):
-                        #     existing_children = [existing_children]
-                        # # Append the modal to the existing children
-                        # child["props"]["children"] = existing_children + [edited_modal]
                         child["props"]["children"] = edited_modal
 
-                        # child["props"]["id"] = f"box-{input_id}-tmp"
                     updated_children.append(child)
 
                 return updated_children, draggable_layouts, dash.no_update, dash.no_update, input_id
 
             elif triggered_input == "btn-done-edit":
+                logger.info("Done edit button clicked")
                 index = ctx.triggered_id["index"]
 
                 edited_child = None
@@ -1052,38 +640,20 @@ def register_callbacks_draggable(app):
 
                 for metadata in stored_metadata:
                     if str(metadata["index"]) == str(index):
-                        logger.info(f"Metadata found: {metadata}")
                         parent_index = metadata["parent_index"]
-                        logger.info(f"Parent index: {parent_index}")
-
+                        parent_metadata = metadata
                 for child, metadata in zip(test_container, stored_metadata):
                     child_index = str(child["props"]["id"]["index"])
-
                     if str(child_index) == str(index):
-                        child_type = child["props"]["id"]["type"]
+                        edited_child = enable_box_edit_mode(child, edit_components_mode_button, dashboard_id=dashboard_id, fresh=False, component_data=parent_metadata, TOKEN=TOKEN)
 
-                        logger.info(f"Child type: {child_type}")
-
-                        if child_type == "interactive-component":
-                            logger.info(f"Interactive component found: {child}")
-                            # WARNING: This is a temporary fix to remove the '-tmp' suffix from the id
-                            if child["props"]["children"]["props"]["children"]["props"]["children"][1]["props"]["id"]["type"].endswith("-tmp"):
-                                child["props"]["children"]["props"]["children"]["props"]["children"][1]["props"]["id"]["type"] = child["props"]["children"]["props"]["children"][
-                                    "props"
-                                ]["children"][1]["props"]["id"]["type"].replace("-tmp", "")
-
-                        edited_child = enable_box_edit_mode(child, edit_components_mode_button, dashboard_id=dashboard_id, fresh=False, TOKEN=TOKEN)
-
-                        # logger.info(f"Edited child: {edited_child}")
                 if parent_index:
                     updated_children = list()
                     for child in draggable_children:
                         if child["props"]["id"] == f"box-{parent_index}":
-                            # logger.info("Found child to edit")
                             updated_children.append(edited_child)  # Replace the entire child
                         else:
                             updated_children.append(child)
-                        # logger.info(f"AFTER UPDATE - child id: {child['props']['id']}")
 
                     for bp in required_breakpoints:
                         for layout in draggable_layouts[bp]:
@@ -1091,20 +661,6 @@ def register_callbacks_draggable(app):
                                 layout["i"] = f"box-{index}"
                                 break
 
-                    response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/dashboards/get/{dashboard_id}", headers={"Authorization": f"Bearer {TOKEN}"})
-                    if response.status_code == 200:
-                        dashboard_data = response.json()
-                        logger.info(f"AFTER UPDATE - Dashboard data: {dashboard_data}")
-                        # dashboard_data["components"] = updated_children
-                        # response = httpx.put(f"{API_BASE_URL}/depictio/api/v1/dashboards/update/{dashboard_id}", headers={"Authorization": f"Bearer {TOKEN}"}, json=dashboard_data)
-                        # if response.status_code == 200:
-                        #     logger.info(f"Dashboard updated successfully: {response.json()}")
-                        # else:
-                        #     logger.error(f"Error updating dashboard: {response.json()}")
-
-                    logger.info(f"Edited component with new id 'box-{index}' and assigned layout {layout}")
-
-                    # state_stored_draggable_children[dashboard_id] = updated_children
                     state_stored_draggable_layouts[dashboard_id] = draggable_layouts
 
                 else:
@@ -1113,10 +669,9 @@ def register_callbacks_draggable(app):
                 return updated_children, draggable_layouts, dash.no_update, state_stored_draggable_layouts, ""
 
             elif triggered_input == "duplicate-box-button":
+                logger.info("Duplicate box button clicked")
                 triggered_index = ctx.triggered_id["index"]
 
-                logger.info(f"Duplicating component with index: {triggered_index}")
-                # Duplicate the component
                 component_to_duplicate = None
                 for child in draggable_children:
                     if child["props"]["id"] == f"box-{triggered_index}":
@@ -1129,7 +684,6 @@ def register_callbacks_draggable(app):
 
                 # Generate a new unique ID for the duplicated component
                 new_index = generate_unique_index()
-                # new_index = "200"
                 child_id = f"box-{new_index}"
 
                 # Create a deep copy of the component to duplicate
@@ -1147,10 +701,7 @@ def register_callbacks_draggable(app):
                         break
                 metadata["index"] = new_index
                 new_store = dcc.Store(id={"type": "stored-metadata-component", "index": new_index}, data=metadata)
-                logger.info(f"New store: {new_store}")
-                logger.info(f"duplicated_component: {duplicated_component}")
-                logger.info(f"duplicated_component children: {duplicated_component['props']['children']}")
-                logger.info(f"duplicated_component children children: {duplicated_component['props']['children']['props']['children']}")
+
                 if type(duplicated_component["props"]["children"]["props"]["children"]) == list:
                     duplicated_component["props"]["children"]["props"]["children"] += [new_store]
                 elif type(duplicated_component["props"]["children"]["props"]["children"]) == dict:
@@ -1167,7 +718,7 @@ def register_callbacks_draggable(app):
                 existing_layouts = draggable_layouts  # Current layouts before adding the new one
                 n = len(updated_children)  # Position based on the number of components
 
-                new_layout = calculate_new_layout_position("", existing_layouts, child_id, n)
+                new_layout = calculate_new_layout_position(f'{metadata["component_type"]}-component', existing_layouts, child_id, n)
 
                 for key in required_breakpoints:
                     draggable_layouts[key].append(new_layout)
@@ -1184,6 +735,18 @@ def register_callbacks_draggable(app):
                 state_stored_draggable_layouts[dashboard_id] = {}
                 return [], {}, dash.no_update, state_stored_draggable_layouts, dash.no_update
                 # return [], {}, {}, {}
+            elif triggered_input == "reset-all-filters-button":
+                logger.info("Reset all filters button clicked")
+                new_children = list()
+                for metadata in stored_metadata:
+                    metadata["filter_applied"] = False
+
+                    new_child, index = render_raw_children(metadata, edit_components_mode_button, dashboard_id, TOKEN=TOKEN)
+                    new_children.append(new_child)
+
+                # state_stored_draggable_children[dashboard_id] = new_children
+
+                return new_children, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
         else:
             return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
@@ -1254,6 +817,7 @@ def register_callbacks_draggable(app):
             logger.info(f"Updated stored_add_button: {stored_add_button}")
             # index = stored_add_button["count"]
             index = generate_unique_index()
+            index = f"{index}-tmp"
             stored_add_button["id"] = index
             # stored_add_button["count"] += 1
 

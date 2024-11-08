@@ -1,7 +1,25 @@
 from dash import html, dcc
 import dash_bootstrap_components as dbc
 import numpy as np
+import pandas as pd
 from depictio.api.v1.configs.logging import logger
+
+# Mapping from custom aggregation names to pandas functions
+AGGREGATION_MAPPING = {
+    "count": "count",
+    "sum": "sum",
+    "average": "mean",
+    "median": "median",
+    "min": "min",
+    "max": "max",
+    "range": "range",  # Special handling
+    "variance": "var",
+    "std_dev": "std",
+    "skewness": "skew",
+    "kurtosis": "kurt",
+    "percentile": "quantile",
+    # Add more mappings if necessary
+}
 
 
 def compute_value(data, column_name, aggregation):
@@ -19,13 +37,35 @@ def compute_value(data, column_name, aggregation):
         else:
             new_value = None
             logger.info("No mode found; returning None")
+    elif aggregation == "range":
+        series = data[column_name]
+        if pd.api.types.is_numeric_dtype(series):
+            new_value = series.max() - series.min()
+            logger.info(f"Computed range: {new_value} (Type: {type(new_value)})")
+        else:
+            logger.error(f"Range aggregation is not supported for non-numeric column '{column_name}'.")
+            new_value = None
+
     else:
-        new_value = data[column_name].agg(aggregation)
-        logger.info(f"New value: {new_value}")
-        logger.info(f"Type of new value: {type(new_value)}")
+        pandas_agg = AGGREGATION_MAPPING.get(aggregation)
+
+        if not pandas_agg:
+            logger.error(f"Aggregation '{aggregation}' is not supported.")
+            return None
+        elif pandas_agg == "range":
+            # This case is already handled above
+            logger.error(f"Aggregation '{aggregation}' requires special handling and should not reach here.")
+            return None
+        else:
+            try:
+                new_value = data[column_name].agg(pandas_agg)
+                logger.info(f"Computed {aggregation} ({pandas_agg}): {new_value} (Type: {type(new_value)})")
+            except AttributeError as e:
+                logger.error(f"Aggregation function '{pandas_agg}' failed: {e}")
+                new_value = None
 
         if isinstance(new_value, np.float64):
-            new_value = round(new_value, 2)
+            new_value = round(new_value, 4)
             logger.info(f"New value rounded: {new_value}")
 
     return new_value
@@ -108,27 +148,45 @@ def build_card(**kwargs):
     v = kwargs.get("value")
     build_frame = kwargs.get("build_frame", False)
     refresh = kwargs.get("refresh", False)
+    stepper = kwargs.get("stepper", False)
 
-    if refresh:
-        data = kwargs.get("df")
+    # if stepper:
+    #     index = f"{index}-tmp"
+    # else:
+    index = index
 
+    logger.info(f"Card kwargs: {kwargs}")
 
+    if refresh or not v:
+        import polars as pl
+
+        data = kwargs.get("df", pl.DataFrame())
+
+        if data.is_empty():
+            from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+            data = load_deltatable_lite(
+                workflow_id=wf_id,
+                data_collection_id=dc_id,
+                TOKEN=kwargs.get("access_token"),
+            )
 
         v = compute_value(data, column_name, aggregation)
 
     try:
-        v = round(float(v), 2)
+        v = round(float(v), 4)
     except:
         pass
 
     # Metadata management - Create a store component to store the metadata of the card
+    store_index = index.replace("-tmp", "")
     store_component = dcc.Store(
         id={
             "type": "stored-metadata-component",
-            "index": str(index),
+            "index": str(store_index),
         },
         data={
-            "index": str(index),
+            "index": str(store_index),
             "component_type": "card",
             "title": title,
             "wf_id": wf_id,
@@ -174,7 +232,6 @@ def build_card(**kwargs):
 
 # List of all the possible aggregation methods for each data type
 # TODO: reference in the documentation
-
 agg_functions = {
     "int64": {
         "title": "Integer",
@@ -183,11 +240,6 @@ agg_functions = {
                 "pandas": "count",
                 "numpy": "count_nonzero",
                 "description": "Counts the number of non-NA cells",
-            },
-            "unique": {
-                "pandas": "nunique",
-                "numpy": None,
-                "description": "Number of distinct elements",
             },
             "sum": {
                 "pandas": "sum",
@@ -215,7 +267,7 @@ agg_functions = {
                 "description": "Maximum of non-NA values",
             },
             "range": {
-                "pandas": lambda x: x.max() - x.min(),
+                "pandas": "range",  # Special handling in compute_value
                 "numpy": "ptp",
                 "description": "Range of non-NA values",
             },
@@ -229,11 +281,6 @@ agg_functions = {
                 "numpy": "std",
                 "description": "Standard Deviation of non-NA values",
             },
-            "percentile": {
-                "pandas": "quantile",
-                "numpy": "percentile",
-                "description": "Percentiles of non-NA values",
-            },
             "skewness": {
                 "pandas": "skew",
                 "numpy": None,
@@ -244,11 +291,6 @@ agg_functions = {
                 "numpy": None,
                 "description": "Kurtosis of non-NA values",
             },
-            # "cumulative_sum": {
-            #     "pandas": "cumsum",
-            #     "numpy": "cumsum",
-            #     "description": "Cumulative sum of non-NA values",
-            # },
         },
     },
     "float64": {

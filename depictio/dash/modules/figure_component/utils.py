@@ -59,6 +59,7 @@ def build_figure_frame(index, children=None):
                 },
             ),
             style={
+                "overflowX": "hidden",
                 "width": "100%",
                 "height": "100%",  # Ensure the card fills the container's height
                 "padding": "0",  # Remove default padding
@@ -75,7 +76,7 @@ def build_figure_frame(index, children=None):
         )
 
 
-def render_figure(dict_kwargs, visu_type, df, cutoff=10000, selected_point=None):
+def render_figure(dict_kwargs, visu_type, df, cutoff=100000, selected_point=None):
     if dict_kwargs and visu_type.lower() in plotly_vizu_dict and df is not None:
         if df.height > cutoff:
             figure = plotly_vizu_dict[visu_type.lower()](df.sample(n=cutoff, seed=0).to_pandas(), **dict_kwargs)
@@ -134,8 +135,10 @@ def build_figure(**kwargs):
     logger.info(f"Build frame: {build_frame}")
     logger.info(f"Selected Point: {selected_point}")
 
+    store_index = index.replace("-tmp", "")
+
     store_component_data = {
-        "index": str(index),
+        "index": str(store_index),
         "component_type": "figure",
         "dict_kwargs": dict_kwargs,
         "visu_type": visu_type,
@@ -153,7 +156,7 @@ def build_figure(**kwargs):
         df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
 
     style_partial_data_displayed = {"display": "none"}
-    cutoff = 10000
+    cutoff = 100000
     if build_frame:
         if visu_type.lower() == "scatter" and df.shape[0] > cutoff:
             style_partial_data_displayed = {"display": "block"}
@@ -187,7 +190,10 @@ def build_figure(**kwargs):
         openDelay=500,
     )
     # dc_config["filter_applied"] = True
-    filter_badge_style = {"display": "none"} if not filter_applied else {"display": "block"}
+    filter_badge_style = {"display": "none"}
+    if filter_applied:
+        if visu_type.lower() == "scatter":
+            filter_badge_style = {"display": "block"}
     logger.info(f"Filter applied: {filter_applied}")
     logger.info(f"Filter badge style: {filter_badge_style}")
 
@@ -210,7 +216,11 @@ def build_figure(**kwargs):
         openDelay=500,
     )
 
-    row_badges = dbc.Row(dmc.Group([partial_data_badge, filter_badge], grow=False, spacing="xl", style={"margin-left": "12px"}))
+    
+    row_badges = html.Div()
+    if build_frame:
+        row_badges = dbc.Row(dmc.Group([partial_data_badge, filter_badge], grow=False, spacing="xl", style={"margin-left": "12px"}))
+
 
     figure_div = html.Div(
         [

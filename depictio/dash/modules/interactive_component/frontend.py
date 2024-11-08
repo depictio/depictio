@@ -78,6 +78,24 @@ def register_callbacks_interactive_component(app):
     def reset_aggregation_value(column_value):
         return None
 
+
+    @app.callback(
+        Output({"type": "btn-done-edit", "index": MATCH}, "disabled", allow_duplicate=True),
+        [
+            Input({"type": "input-title", "index": MATCH}, "value"),
+            Input({"type": "input-dropdown-column", "index": MATCH}, "value"),
+            Input({"type": "input-dropdown-method", "index": MATCH}, "value"),
+        ],
+        prevent_initial_call=True,
+    )
+    def disable_done_button(column_name, column_value, aggregation):
+        """
+        Callback to disable the done button if any of the inputs are None
+        """
+        if column_value and aggregation:
+            return False
+        return True
+
     @app.callback(
         Output({"type": "input-body", "index": MATCH}, "children"),
         Output({"type": "interactive-description", "index": MATCH}, "children"),
@@ -93,7 +111,7 @@ def register_callbacks_interactive_component(app):
             State("url", "pathname"),
             # Input("interval", "n_intervals"),
         ],
-        prevent_initial_call=True,
+        # prevent_initial_call=True,
     )
     def update_card_body(input_value, column_value, aggregation_value, wf_tag, dc_tag, id, parent_index, local_data, pathname):
         """
@@ -126,13 +144,16 @@ def register_callbacks_interactive_component(app):
             if not component_data:
                 return ([], None)
             else:
-                input_value = component_data["title"]
+                input_value = component_data.get("title", "")
                 column_value = component_data["column_name"]
                 aggregation_value = component_data["interactive_component_type"]
                 value = component_data.get("value", None)
                 logger.info(f"component_data: {component_data}")
                 logger.info(f"input_value: {input_value}")
                 logger.info(f"column_value: {column_value}")
+                logger.info(f"aggregation_value: {aggregation_value}")
+                logger.info(f"value: {value}")
+
 
         # Get the type of the selected column
         column_type = cols_json[column_value]["type"]
