@@ -8,9 +8,6 @@ import sys
 
 from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.models.base import convert_objectid_to_str
-from depictio.dash.modules.card_component.utils import build_card
-from depictio.dash.modules.figure_component.utils import build_figure
-from depictio.dash.modules.interactive_component.utils import build_interactive
 
 
 SELECTED_STYLE = {
@@ -65,7 +62,12 @@ def get_component_data(input_id, dashboard_id, TOKEN):
     )
     logger.info(f"Code: {response.status_code}")
     logger.info(f"Response: {response.json()}")
-    return response.json()
+
+    if response.status_code == 200:
+        return response.json()
+    else:
+        return None
+
 
 
 def load_depictio_data_mongo(dashboard_id: str, TOKEN: str):

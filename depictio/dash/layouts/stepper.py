@@ -342,6 +342,7 @@ def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
                             n_clicks=0,
                             size="xl",
                             leftIcon=DashIconify(icon="bi:check-circle", width=30, color="white"),
+                            disabled=True,
                         )
                     ),
                 ],

@@ -239,7 +239,8 @@ def design_header(data):
     # if data:
 
     add_new_component_button = dmc.ActionIcon(
-        DashIconify(icon="ic:round-add-circle", width=35, color="#627bf2"),
+        DashIconify(icon="material-symbols:add", width=35, color="gray"),
+        # DashIconify(icon="ic:round-add-circle", width=35, color="#627bf2"),
         # dmc.Button(
         # "Add",
         id="add-button",
@@ -247,6 +248,7 @@ def design_header(data):
         radius="xl",
         variant="subtle",
         n_clicks=init_nclicks_add_button["count"],
+        # color="blue",
         # style={"width": "120px", "fontFamily": "Virgil", "marginRight": "10px"},
         style=button_style,
         disabled=disabled,
@@ -254,14 +256,16 @@ def design_header(data):
     )
 
     save_button = dmc.ActionIcon(
-        DashIconify(icon="ic:baseline-save", width=35, color="#a2d64e"),
+        DashIconify(icon="ic:baseline-save", width=35, color="gray"),
         # dmc.Button(
         # "Save",
         id="save-button-dashboard",
         size="xl",
         radius="xl",
         variant="subtle",
-        gradient={"from": "teal", "to": "lime", "deg": 105},
+        # variant="filled",
+        # color="teal",
+        # gradient={"from": "teal", "to": "lime", "deg": 105},
         n_clicks=0,
         disabled=disabled,
         style=button_style,
@@ -274,7 +278,7 @@ def design_header(data):
         "Remove all components",
         id="remove-all-components-button",
         leftIcon=DashIconify(icon="mdi:trash-can-outline", width=16, color="white"),
-        size="xs",
+        size="md",
         radius="xl",
         variant="gradient",
         gradient={"from": "red", "to": "pink", "deg": 105},
@@ -282,6 +286,7 @@ def design_header(data):
         # Hide
         # style={"display": "none"},
         disabled=disabled,
+        fullWidth=True,
     )
 
     if data["last_saved_ts"] == "":
@@ -307,12 +312,9 @@ def design_header(data):
         ],
     )
 
-    offcanvas_parameters = dbc.Offcanvas(
-        id="offcanvas-parameters",
-        title="Parameters",
-        placement="end",
-        backdrop=True,
-        children=[
+    toggle_switches_group = html.Div(
+        [
+            dmc.Title("Switches", order=4),
             dmc.Group(
                 dmc.Select(
                     id="dashboard-version",
@@ -329,7 +331,7 @@ def design_header(data):
                     dmc.Switch(
                         id="edit-dashboard-mode-button",
                         checked=data["buttons_data"]["edit_dashboard_mode_button"],
-                        color="teal",
+                        color="gray",
                     ),
                     dmc.Text("Edit dashboard layout", style={"fontFamily": "default"}),
                 ],
@@ -342,7 +344,7 @@ def design_header(data):
                     dmc.Switch(
                         id="edit-components-mode-button",
                         checked=data["buttons_data"]["edit_components_button"],
-                        color="blue",
+                        color="gray",
                     ),
                     dmc.Text("Display components options", style={"fontFamily": "default"}),
                 ],
@@ -355,7 +357,7 @@ def design_header(data):
                     dmc.Switch(
                         id="toggle-interactivity-button",
                         checked=True,
-                        color="orange",
+                        color="gray",
                     ),
                     dmc.Text("Toggle interactivity", style={"fontFamily": "default"}),
                 ],
@@ -363,7 +365,31 @@ def design_header(data):
                 spacing="sm",
                 style={"padding": "10px", "margin": "10px 0"},
             ),
+        ]
+    )
+
+    buttons_group = html.Div(
+        [
+            dmc.Title("Buttons", order=4),
             dmc.Group([remove_all_components_button], align="center", spacing="sm", style={"padding": "10px", "margin": "10px 0"}),
+            dmc.Group(
+                [
+                    dmc.Button(
+                        "Reset all filters",
+                        id="reset-all-filters-button",
+                        leftIcon=DashIconify(icon="bx:reset", width=16, color="white"),
+                        size="md",
+                        radius="xl",
+                        variant="gradient",
+                        gradient={"from": "orange", "to": "yellow", "deg": 105},
+                        # style=button_style,
+                        # Hide
+                        # style={"display": "none"},
+                        disabled=disabled,
+                        fullWidth=True,
+                    )
+                ]
+            ),
             dmc.Group(
                 [
                     # dmc.Button(
@@ -381,15 +407,24 @@ def design_header(data):
                 spacing="sm",
                 style={"padding": "10px", "margin": "10px 0", "display": "none"},
             ),
-        ],
+        ]
+    )
+
+    offcanvas_parameters = dbc.Offcanvas(
+        id="offcanvas-parameters",
+        title="Parameters",
+        placement="end",
+        backdrop=True,
+        children=[toggle_switches_group, buttons_group],
     )
 
     open_offcanvas_parameters_button = dmc.ActionIcon(
-        DashIconify(icon="ic:baseline-settings", width=32, color="grey"),
+        DashIconify(icon="ic:baseline-settings", width=35, color="gray"),
         id="open-offcanvas-parameters-button",
         size="xl",
         radius="xl",
-        color="grey",
+        # color="gray",
+        # variant="filled",
         variant="subtle",
         style=button_style,
     )

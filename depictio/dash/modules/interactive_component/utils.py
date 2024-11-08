@@ -89,6 +89,10 @@ def build_interactive(**kwargs):
     stepper = kwargs.get("stepper", False)
     parent_index = kwargs.get("parent_index", None)
 
+
+    logger.info(f"Interactive - kwargs: {kwargs}")
+    
+
     if stepper:
         value_div_type = "interactive-component-value-tmp"
     else:
@@ -97,12 +101,14 @@ def build_interactive(**kwargs):
     func_name = agg_functions[column_type]["input_methods"][interactive_component_type]["component"]
 
     # Common Store Component
+    store_index = index.replace("-tmp", "")
+
     store_component = dcc.Store(
-        id={"type": "stored-metadata-component", "index": str(index)},
+        id={"type": "stored-metadata-component", "index": str(store_index)},
         data={
             "component_type": "interactive",
             "interactive_component_type": interactive_component_type,
-            "index": str(index),
+            "index": str(store_index),
             "title": title,
             "wf_id": wf_id,
             "dc_id": dc_id,
@@ -145,14 +151,14 @@ def build_interactive(**kwargs):
 
     # If the aggregation value is TextInput
     elif interactive_component_type == "TextInput":
-        logger.debug("TextInput")
-        logger.debug(f"Value: {value}")
-        logger.debug(f"Value type: {type(value)}")
+        logger.info("TextInput")
+        logger.info(f"Value: {value}")
+        logger.info(f"Value type: {type(value)}")
         kwargs = {"persistence_type": "local"}
         if not value:
             value = ""
-        logger.debug(f"Value: {value}")
-        logger.debug(f"Value type: {type(value)}")
+        logger.info(f"Value: {value}")
+        logger.info(f"Value type: {type(value)}")
         kwargs.update({"value": value})
         interactive_component = func_name(
             placeholder="Your selected value",
@@ -193,6 +199,8 @@ def build_interactive(**kwargs):
         card_title = html.H5(f"{interactive_component_type} on {column_name}")
     else:
         card_title = html.H5(f"{title}")
+
+    logger.info(f"Interactive - store_component: {store_component}")
 
     new_interactive_component = html.Div([card_title, interactive_component, store_component])
 
