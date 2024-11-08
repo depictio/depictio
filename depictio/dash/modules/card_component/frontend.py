@@ -1,13 +1,11 @@
 # Import necessary libraries
 from dash import html, dcc, Input, Output, State, MATCH
-import dash
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 from dash_iconify import DashIconify
 import httpx
 
 # Depictio imports
-from depictio.api.v1.deltatables_utils import load_deltatable_lite
 from depictio.dash.utils import get_component_data, load_depictio_data_mongo, return_dc_tag_from_id, return_mongoid, return_wf_tag_from_id
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging import logger
@@ -93,6 +91,21 @@ def register_callbacks_card_component(app):
     )
     def reset_aggregation_value(column_name):
         return None
+    
+    @app.callback(
+        Output({"type": "btn-done-edit", "index": MATCH}, "disabled"),
+        [
+            Input({"type": "card-input", "index": MATCH}, "value"),
+            Input({"type": "card-dropdown-column", "index": MATCH}, "value"),
+            Input({"type": "card-dropdown-aggregation", "index": MATCH}, "value"),
+        ],
+        prevent_initial_call=True,
+    )
+    def disable_done_button(title, column_name, aggregation):
+        if column_name and aggregation:
+            return False
+        return True
+
 
     # Callback to update card body based on the selected column and aggregation
     @app.callback(
@@ -110,7 +123,7 @@ def register_callbacks_card_component(app):
             State("local-store", "data"),
             State("url", "pathname"),
         ],
-        prevent_initial_call=True,
+        # prevent_initial_call=True,
     )
     # def design_card_body(input_value, column_name, aggregation_value, wf_dc_store, id, local_data, pathname):
     def design_card_body(input_value, column_name, aggregation_value, wf_tag, dc_tag, parent_index, id, local_data, pathname):
@@ -155,6 +168,9 @@ def register_callbacks_card_component(app):
             dc_tag = return_dc_tag_from_id(wf_id, dc_id, TOKEN=TOKEN)
             logger.info(f"wf_tag: {wf_tag}")
             logger.info(f"dc_tag: {dc_tag}")
+
+
+
 
         logger.info(f"component_data: {component_data}")
 
@@ -204,13 +220,18 @@ def register_callbacks_card_component(app):
         # Get the workflow and data collection ids from the tags selected
         workflow_id, data_collection_id = return_mongoid(workflow_tag=wf_tag, data_collection_tag=dc_tag, TOKEN=TOKEN)
 
+        # stored_metadata_interactive = []
+        # if stored_metadata:
+        #     stored_metadata_interactive = [e for e in stored_metadata if e["component_type"] == "interactive" and e["wf_id"] == workflow_id and e["dc_id"] == data_collection_id]
+
+
+
+
         if dashboard_id:
             dashboard_data = load_depictio_data_mongo(dashboard_id, TOKEN=TOKEN)
             logger.info(f"dashboard_data: {dashboard_data}")
-            relevant_metadata = [m for m in dashboard_data["stored_metadata"] if m["dc_id"] == data_collection_id and m["component_type"] == "interactive"]
-            logger.info(f"relevant_metadata: {relevant_metadata}")
-            test_df = load_deltatable_lite(workflow_id, data_collection_id, relevant_metadata, TOKEN=TOKEN)
-            logger.info(f"test_df: {test_df}")
+            relevant_metadata = [m for m in dashboard_data["stored_metadata"] if m["wf_id"] == workflow_id and m["component_type"] == "interactive"]
+            logger.info(f"BUILD CARD - relevant_metadata: {relevant_metadata}")
 
         # Get the data collection specs
         dc_specs = httpx.get(
@@ -222,6 +243,11 @@ def register_callbacks_card_component(app):
         column_type = cols_json[column_name]["type"]
         v = cols_json[column_name]["specs"][aggregation_value]
 
+
+
+        dashboard_data
+
+
         card_kwargs = {
             "index": id["index"],
             "title": input_value,
@@ -231,8 +257,15 @@ def register_callbacks_card_component(app):
             "column_name": column_name,
             "column_type": column_type,
             "aggregation": aggregation_value,
-            "value": v,
+            # "value": v,
+            "access_token": TOKEN,
+            "stepper": True,   
         }
+
+        if relevant_metadata:
+            card_kwargs["dashboard_metadata"] = relevant_metadata
+        
+        logger.info(f"card_kwargs: {card_kwargs}")
 
         if parent_index:
             card_kwargs["parent_index"] = parent_index
@@ -243,7 +276,6 @@ def register_callbacks_card_component(app):
 
 
 def design_card(id, df):
-    id["index"] = str(id["index"])
     left_column = dbc.Col(
         [
             html.H5("Card edit menu"),
