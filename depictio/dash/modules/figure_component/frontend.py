@@ -247,7 +247,6 @@ def register_callbacks_figure_component(app):
                     else:
                         primary_common_params_dropdowns.append(accordion_item)
 
-
             primary_common_params_layout = [
                 dbc.Accordion(
                     dbc.AccordionItem(
@@ -349,6 +348,18 @@ def register_callbacks_figure_component(app):
             return False
         else:
             return True
+
+    @app.callback(
+        Output({"type": "btn-done-edit", "index": MATCH}, "disabled", allow_duplicate=True),
+        [
+            Input({"type": "dict_kwargs", "index": MATCH}, "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def disable_done_button(value):
+        if value:
+            return False
+        return True
 
     @app.callback(
         Output({"type": "dict_kwargs", "index": MATCH}, "data"),
