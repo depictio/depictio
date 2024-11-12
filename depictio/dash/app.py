@@ -194,7 +194,7 @@ def handle_authenticated_user(pathname, local_data):
     if pathname.startswith("/dashboard/"):
         dashboard_id = pathname.split("/")[-1]
         depictio_dash_data = load_depictio_data(dashboard_id, local_data)
-        header = design_header(data=depictio_dash_data)
+        header = design_header(data=depictio_dash_data, local_store=local_data)
         return create_dashboard_layout(depictio_dash_data=depictio_dash_data, local_data=local_data), header, pathname, local_data
 
     elif pathname == "/dashboards":
