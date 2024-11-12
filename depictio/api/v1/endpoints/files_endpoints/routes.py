@@ -132,9 +132,9 @@ async def scan_metadata(
                 file.id = ObjectId()
                 files_collection.insert_one(file.mongo())
             else:
-                logger.info(f"File already exists: {file['file_location']}")
+                logger.warning(f"File already exists: {file['file_location']}")
                 file = File.from_mongo(existing_file)
-                logger.info("from mongo", file)
+                logger.debug(f"from mongo: {file}")
 
     return {"message": f"Files successfully scanned and created for data_collection: {data_collection.id} of workflow: {workflow.id}"}
 
@@ -222,7 +222,7 @@ async def scan_data_collection(
                     run_id = inserted_run.inserted_id
 
                 # Add run_id to each file before inserting
-                for file in sorted(files, key=lambda x: x["file_location"])[:1]:
+                for file in sorted(files, key=lambda x: x["file_location"]):
                     file["permissions"] = {
                         "owners": [{"id": user_oid, "email": current_user.email, "groups": current_user.groups, "is_admin": current_user.is_admin}],
                         "viewers": [],

@@ -93,7 +93,7 @@ def register_callbacks_card_component(app):
         return None
     
     @app.callback(
-        Output({"type": "btn-done-edit", "index": MATCH}, "disabled"),
+        Output({"type": "btn-done-edit", "index": MATCH}, "disabled", allow_duplicate=True),
         [
             Input({"type": "card-input", "index": MATCH}, "value"),
             Input({"type": "card-dropdown-column", "index": MATCH}, "value"),

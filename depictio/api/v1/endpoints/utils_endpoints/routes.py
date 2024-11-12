@@ -80,4 +80,4 @@ async def status(current_user=Depends(get_current_user)):
     if not current_user:
         raise HTTPException(status_code=401, detail="Current user not found.")
 
-    return {"status": "online", "version": "v0.1.0"}
+    return {"status": "online", "version": "v0.1.1"}

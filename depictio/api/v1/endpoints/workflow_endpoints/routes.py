@@ -21,7 +21,7 @@ workflows_endpoint_router = APIRouter()
 
 @workflows_endpoint_router.get("/get_all_workflows")
 async def get_all_workflows(current_user: str = Depends(get_current_user)):
-    logger.info(f"current_user: {current_user}")
+    logger.debug(f"current_user: {current_user}")
 
     if not current_user:
         raise HTTPException(status_code=404, detail="User not found.")
@@ -31,7 +31,7 @@ async def get_all_workflows(current_user: str = Depends(get_current_user)):
 
     # DEBUG - Find all workflows regardless of permissions
     workflows_cursor = list(workflows_collection.find())
-    logger.info(f"workflows_cursor - ALL: {workflows_cursor}")
+    logger.debug(f"workflows_cursor - ALL: {workflows_cursor}")
 
     # Find workflows where current_user is either an owner or a viewer
     query = {
@@ -44,11 +44,11 @@ async def get_all_workflows(current_user: str = Depends(get_current_user)):
 
     # Retrieve the workflows & convert them to Workflow objects to validate the model
     workflows_cursor = list(workflows_collection.find(query))
-    logger.info(f"workflows_cursor: {workflows_cursor}")
+    logger.debug(f"workflows_cursor: {workflows_cursor}")
     if not workflows_cursor or len(workflows_cursor) == 0:
         return []
     workflows = [convert_objectid_to_str(w) for w in workflows_cursor]
-    logger.info(f"workflows: {workflows}")
+    logger.debug(f"workflows: {workflows}")
     # workflows = [Workflow(**convert_objectid_to_str(w)) for w in workflows_cursor]
     return workflows
 

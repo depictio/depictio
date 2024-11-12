@@ -15,24 +15,24 @@ def build_interactive_frame(index, children=None):
                     "type": "input-body",
                     "index": index,
                 },
-                style={
-                    "padding": "5px",  # Reduce padding inside the card body
-                    "display": "flex",
-                    "flexDirection": "column",
-                    "justifyContent": "center",
-                    "height": "100%",  # Make sure it fills the parent container
-                },
+                # style={
+                #     "padding": "5px",  # Reduce padding inside the card body
+                #     "display": "flex",
+                #     "flexDirection": "column",
+                #     "justifyContent": "center",
+                #     "height": "100%",  # Make sure it fills the parent container
+                # },
             ),
-            style={
-                "width": "100%",
-                "height": "100%",  # Ensure the card fills the container's height
-                "padding": "0",  # Remove default padding
-                "margin": "0",  # Remove default margin
-                "boxShadow": "none",  # Optional: Remove shadow for a cleaner look
-                # "border": "1px solid #ddd",  # Optional: Add a light border
-                # "borderRadius": "4px",  # Optional: Slightly round the corners
-                "border": "0px",  # Optional: Remove border
-            },
+            # style={
+            #     "width": "100%",
+            #     "height": "100%",  # Ensure the card fills the container's height
+            #     "padding": "0",  # Remove default padding
+            #     "margin": "0",  # Remove default margin
+            #     "boxShadow": "none",  # Optional: Remove shadow for a cleaner look
+            #     # "border": "1px solid #ddd",  # Optional: Add a light border
+            #     # "borderRadius": "4px",  # Optional: Slightly round the corners
+            #     "border": "0px",  # Optional: Remove border
+            # },
             id={
                 "type": "interactive-component",
                 "index": index,
@@ -47,22 +47,19 @@ def build_interactive_frame(index, children=None):
                     "index": index,
                 },
                 style={
-                    "padding": "5px",  # Reduce padding inside the card body
                     "display": "flex",
                     "flexDirection": "column",
-                    "justifyContent": "center",
-                    "height": "100%",  # Make sure it fills the parent container
+                    "overflow": "visible",  # Allow dropdown to overflow
+                    "height": "100%",
+                    "position": "relative",  # Ensure positioning context
                 },
             ),
             style={
                 "width": "100%",
                 "height": "100%",  # Ensure the card fills the container's height
-                "padding": "0",  # Remove default padding
-                "margin": "0",  # Remove default margin
-                "boxShadow": "none",  # Optional: Remove shadow for a cleaner look
-                # "border": "1px solid #ddd",  # Optional: Add a light border
-                # "borderRadius": "4px",  # Optional: Slightly round the corners
-                "border": "0px",  # Optional: Remove border
+                "padding": "0",
+                "overflow": "visible",  # Allow dropdown to overflow
+                "position": "relative",  # Ensure positioning context
             },
             id={
                 "type": "interactive-component",
@@ -89,9 +86,7 @@ def build_interactive(**kwargs):
     stepper = kwargs.get("stepper", False)
     parent_index = kwargs.get("parent_index", None)
 
-
     logger.info(f"Interactive - kwargs: {kwargs}")
-    
 
     if stepper:
         value_div_type = "interactive-component-value-tmp"
@@ -132,14 +127,22 @@ def build_interactive(**kwargs):
 
     # If the aggregation value is Select, MultiSelect or SegmentedControl
     if interactive_component_type in ["Select", "MultiSelect", "SegmentedControl"]:
-        data = sorted(df[column_name].drop_nans().unique())
+        data = sorted(df[column_name].drop_nulls().unique())
 
         # WARNING: This is a temporary solution to avoid modifying dashboard data - the -tmp suffix is added to the id and removed once clicked on the btn-done D
-        interactive_component = func_name(data=data, id={"type": value_div_type, "index": str(index), "persistence_type": "local"})
+        interactive_component = func_name(data=data, id={"type": value_div_type, "index": str(index)})
 
         # If the aggregation value is MultiSelect, make the component searchable and clearable
         if interactive_component_type == "MultiSelect":
-            kwargs = {"searchable": True, "clearable": True, "clearSearchOnChange": False, "persistence_type": "local"}
+            kwargs = {
+                "searchable": True,
+                "clearable": True,
+                "clearSearchOnChange": False,
+                "persistence_type": "local",
+                "dropdownPosition": "bottom",
+                "zIndex": 1000,
+                # "position": "relative",
+            }
             if not value:
                 value = []
             kwargs.update({"value": value})

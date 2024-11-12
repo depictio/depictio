@@ -40,7 +40,10 @@ def validate_workflow_and_collection(collection, user_id: str, workflow_id: str,
         **permissions,
     }
 
+
+    logger.info(f"Query: {query}")  
     workflow = collection.find_one(query)
+    logger.info(f"Workflow: {workflow}")
 
     # Check if the workflow exists
     if not workflow:
@@ -68,26 +71,26 @@ def validate_workflow_and_collection(collection, user_id: str, workflow_id: str,
         "data_collections._id": data_collection_oid,  # Directly match the _id inside data_collections
     }
 
-    logger.info(f"Data collection query: {dc_query}")
-    logger.info(f"Data collection id: {data_collection_id}")
-    logger.info(f"Workflow id: {workflow_id}")
-    logger.info(f"User id: {user_id}")
-    logger.info(f"Data collection oid: {data_collection_oid}")
-    logger.info(f"Workflow oid: {workflow_oid}")
+    logger.debug(f"Data collection query: {dc_query}")
+    logger.debug(f"Data collection id: {data_collection_id}")
+    logger.debug(f"Workflow id: {workflow_id}")
+    logger.debug(f"User id: {user_id}")
+    logger.debug(f"Data collection oid: {data_collection_oid}")
+    logger.debug(f"Workflow oid: {workflow_oid}")
 
     # Using positional operator to return only the matching data collection from the array
     workflow_dc = collection.find_one(dc_query, {"data_collections.$": 1})
 
     if workflow_dc:
-        logger.info(f"workflow_dc: {workflow_dc}")
+        logger.debug(f"workflow_dc: {workflow_dc}")
 
         data_collection = workflow_dc.get("data_collections", [])[0]  # The matched data collection
-        logger.info(f"Data collection: {data_collection}")
+        logger.debug(f"Data collection: {data_collection}")
 
         # data_collection = collection.find_one(dc_query)
-        logger.info(f"Data collection: {data_collection}")
+        logger.debug(f"Data collection: {data_collection}")
         # data_collection = data_collection.get("data_collections")[0]
-        logger.info(f"Data collection: {data_collection}")
+        logger.debug(f"Data collection: {data_collection}")
 
         data_collection = convert_objectid_to_str(data_collection)
         data_collection = DataCollection(**data_collection)

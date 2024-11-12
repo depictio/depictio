@@ -231,11 +231,11 @@ async def delete_token(request: dict, current_user=Depends(get_current_user)):
     if not current_user:
         raise HTTPException(status_code=401, detail="Current user not found.")
 
-    logger.info(f"Request: {request}")
+    logger.debug(f"Request: {request}")
 
     token_id = request["token_id"]
     user_id = current_user.id
-    logger.info(f"Token ID: {token_id}")
+    logger.debug(f"Token ID: {token_id}")
 
     if isinstance(user_id, str):
         user_id = ObjectId(user_id)
@@ -243,23 +243,23 @@ async def delete_token(request: dict, current_user=Depends(get_current_user)):
         user_id = ObjectId(user_id["$oid"])
 
     # Log the _id and the query structure
-    logger.info(f"User _id (ObjectId): {user_id}")
+    logger.debug(f"User _id (ObjectId): {user_id}")
     query = {"_id": user_id}
 
     # Get existing tokens from the user and remove the token to be deleted
     user_data = users_collection.find_one(query)
     tokens = user_data.get("tokens", [])
-    logger.info(f"Tokens: {tokens}")
+    logger.debug(f"Tokens: {tokens}")
     tokens = [e for e in tokens if str(e["_id"]) != str(token_id)]
-    logger.info(f"Tokens after deletion: {tokens}")
+    logger.debug(f"Tokens after deletion: {tokens}")
 
     # Update the user with the new tokens
     update = {"$set": {"tokens": tokens}}
-    logger.info(f"Query: {query}")
+    logger.debug(f"Query: {query}")
 
     # Insert in the user collection
     result = users_collection.update_one(query, update)
-    logger.info(f"Update result: {result.modified_count} document(s) updated")
+    logger.debug(f"Update result: {result.modified_count} document(s) updated")
 
     # Return success status
     return {"success": result.modified_count > 0}

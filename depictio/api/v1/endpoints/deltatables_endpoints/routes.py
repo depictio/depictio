@@ -105,6 +105,44 @@ async def specs(
     return column_specs
 
 
+def align_schemas(data_frames):
+    """
+    Align column types across all DataFrames for aggregation.
+
+    Parameters:
+    - data_frames: List[pl.DataFrame] - List of Polars DataFrames.
+
+    Returns:
+    - List[pl.DataFrame] - List of DataFrames with aligned schemas.
+    """
+    # Collect all unique column names and their most common types
+    column_types = {}
+    for df in data_frames:
+        for col, dtype in df.schema.items():
+            if col not in column_types:
+                column_types[col] = dtype
+            elif column_types[col] != dtype:
+                # Prefer Float64 over Int64, and String for mixed types
+                if {column_types[col], dtype} == {pl.Int64, pl.Float64}:
+                    column_types[col] = pl.Float64
+                elif pl.Utf8 in {column_types[col], dtype}:
+                    column_types[col] = pl.Utf8  # Default to String for mixed types
+
+    # Align all DataFrames to the detected column types
+    aligned_data_frames = []
+    for df in data_frames:
+        aligned_columns = []
+        for col, dtype in column_types.items():
+            if col in df.columns:
+                aligned_columns.append(df[col].cast(dtype))
+            else:
+                # Add missing columns with null values
+                aligned_columns.append(pl.Series(col, [None] * len(df), dtype=dtype))
+        aligned_data_frames.append(pl.DataFrame(aligned_columns))
+
+    return aligned_data_frames
+
+
 @deltatables_endpoint_router.post("/create/{workflow_id}/{data_collection_id}")
 async def aggregate_data(
     workflow_id: str,
@@ -233,10 +271,17 @@ async def aggregate_data(
             detail=f"No files found for data_collection: {data_collection_id} of workflow: {workflow_id}.",
         )
 
-    logger.debug(f"data_frames : {data_frames}")
+    for idx, df in enumerate(data_frames):
+        logger.warning(f"Schema of DataFrame {idx}: {df.schema}")
+
+    # Align the schemas of all DataFrames
+    aligned_data_frames = align_schemas(data_frames)
+
+    for idx, df in enumerate(aligned_data_frames):
+        logger.warning(f"Schema of aligned DataFrame {idx}: {df.schema}")
 
     # Aggregate the dataframes
-    aggregated_df = pl.concat(data_frames)
+    aggregated_df = pl.concat(aligned_data_frames)
 
     # TODO: remove - just for testing
     # Add timestamp column

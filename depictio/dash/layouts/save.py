@@ -5,6 +5,7 @@ from dash import html, dcc, Input, Output, State, ALL
 import dash
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_token
 
 
 def register_callbacks_save(app):
@@ -76,98 +77,115 @@ def register_callbacks_save(app):
         logger.debug(f"save_data_dashboard - TOKEN: {TOKEN}")
         # current_user = fetch_user_from_token(TOKEN)
 
-        from dash import ctx
 
-        triggered_id = ctx.triggered[0]["prop_id"].split(".")[0]
-        logger.info(f"save_data_dashboard - Triggered ID: {triggered_id}")
+        # Check user status
+        current_user = fetch_user_from_token(TOKEN)
+        if not current_user:
+            logger.warning("User not found.")
+            return dash.no_update
+        
+        dashboard_id = pathname.split("/")[-1]
 
-        # if n_clicks:
-        if (
-            (triggered_id == "save-button-dashboard")
-            or ("btn-done" in triggered_id)
-            or ("btn-done-edit" in triggered_id)
-            or ("remove-box-button" in triggered_id)
-            or ("remove-all-components-button" in triggered_id)
-            or (triggered_id == "edit-components-mode-button")
-            or (triggered_id == "draggable")
-        ) and edit_dashboard_mode_button_checked:
-            # if n_clicks or n_intervals:
-            dashboard_id = pathname.split("/")[-1]
+        # Get existing metadata for the dashboard
+        dashboard_data_response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/dashboards/get/{dashboard_id}", headers={"Authorization": f"Bearer {TOKEN}"})
+        if dashboard_data_response.status_code == 200:
+            dashboard_data = dashboard_data_response.json()
+            logger.debug(f"save_data_dashboard - Dashboard data: {dashboard_data}")
 
-            logger.debug(f"save_data_dashboard INSIDE")
-            logger.info(f"stored-metadata-component: {stored_metadata}")
 
-            # FIXME: check if some component are duplicated based on index value, if yes, remove them
-            stored_metadata_indexes = list()
-            for elem in stored_metadata:
-                if elem["index"] in stored_metadata_indexes:
-                    stored_metadata.remove(elem)
-                else:
-                    stored_metadata_indexes.append(elem["index"])
+            # Check user permissions
+            if str(current_user.id) not in [e["_id"] for e in dashboard_data["permissions"]["owners"]]:
+                logger.warning("User does not have permission to edit & save this dashboard.")
+                return dash.no_update
 
-            if "btn-done-edit" in triggered_id:
-                parent_indexes = [elem["parent_index"] for elem in stored_metadata if elem["parent_index"]]
-                stored_metadata = [elem for elem in stored_metadata if elem["index"] not in parent_indexes]
 
-            # Get existing metadata for the dashboard
-            dashboard_data_response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/dashboards/get/{dashboard_id}", headers={"Authorization": f"Bearer {TOKEN}"})
-            if dashboard_data_response.status_code == 200:
-                dashboard_data = dashboard_data_response.json()
-                logger.debug(f"save_data_dashboard - Dashboard data: {dashboard_data}")
-                # Replace the existing metadata with the new metadata
+            from dash import ctx
 
-                if "draggable" in triggered_id:
-                    stored_metadata = dashboard_data["stored_metadata"]
+            triggered_id = ctx.triggered[0]["prop_id"].split(".")[0]
+            logger.info(f"save_data_dashboard - Triggered ID: {triggered_id}")
 
-                dashboard_data["stored_metadata"] = stored_metadata
-                dashboard_data["stored_layout_data"] = stored_layout_data
-                dashboard_data["stored_edit_dashboard_mode_button"] = edit_dashboard_mode_button
-                dashboard_data["stored_add_button"] = add_button
-                dashboard_data["buttons_data"]["edit_components_button"] = edit_components_mode_button_checked
-                dashboard_data["buttons_data"]["add_components_button"] = add_button
-                dashboard_data["buttons_data"]["edit_dashboard_mode_button"] = edit_dashboard_mode_button_checked
+            # if n_clicks:
+            if (
+                (triggered_id == "save-button-dashboard")
+                or ("btn-done" in triggered_id)
+                or ("btn-done-edit" in triggered_id)
+                or ("remove-box-button" in triggered_id)
+                or ("remove-all-components-button" in triggered_id)
+                or (triggered_id == "edit-components-mode-button")
+                or (triggered_id == "draggable")
+            ) and edit_dashboard_mode_button_checked:
+                # if n_clicks or n_intervals:
 
-                current_time = datetime.now()
-                dashboard_data["last_saved_ts"] = str(current_time)
+                logger.debug(f"save_data_dashboard INSIDE")
+                logger.info(f"stored-metadata-component: {stored_metadata}")
 
-                logger.debug(f"save_data_dashboard - Dashboard data: {dashboard_data}")
+                # FIXME: check if some component are duplicated based on index value, if yes, remove them
+                stored_metadata_indexes = list()
+                for elem in stored_metadata:
+                    if elem["index"] in stored_metadata_indexes:
+                        stored_metadata.remove(elem)
+                    else:
+                        stored_metadata_indexes.append(elem["index"])
 
-                logger.debug(f"Dashboard data: {dashboard_data}")
+                    if "btn-done-edit" in triggered_id:
+                        parent_indexes = [elem["parent_index"] for elem in stored_metadata if elem["parent_index"]]
+                        stored_metadata = [elem for elem in stored_metadata if elem["index"] not in parent_indexes]
 
-                response = httpx.post(
-                    f"{API_BASE_URL}/depictio/api/v1/dashboards/save/{dashboard_id}",
-                    json=dashboard_data,
-                    headers={
-                        "Authorization": f"Bearer {TOKEN}",
-                    },
-                )
-                if response.status_code == 200:
-                    logger.info(f"Dashboard data saved successfully for dashboard {dashboard_id}.")
-                else:
-                    logger.warning(f"Failed to save dashboard data: {response.json()}")
 
-                if n_clicks:
-                    # Screenshot the dashboard
-                    screenshot_response = httpx.get(
-                        f"{API_BASE_URL}/depictio/api/v1/dashboards/screenshot/{dashboard_id}",
+                    # Replace the existing metadata with the new metadata
+
+                    if "draggable" in triggered_id:
+                        stored_metadata = dashboard_data["stored_metadata"]
+
+                    dashboard_data["stored_metadata"] = stored_metadata
+                    dashboard_data["stored_layout_data"] = stored_layout_data
+                    dashboard_data["stored_edit_dashboard_mode_button"] = edit_dashboard_mode_button
+                    dashboard_data["stored_add_button"] = add_button
+                    dashboard_data["buttons_data"]["edit_components_button"] = edit_components_mode_button_checked
+                    dashboard_data["buttons_data"]["add_components_button"] = add_button
+                    dashboard_data["buttons_data"]["edit_dashboard_mode_button"] = edit_dashboard_mode_button_checked
+
+                    current_time = datetime.now()
+                    dashboard_data["last_saved_ts"] = str(current_time)
+
+                    logger.debug(f"save_data_dashboard - Dashboard data: {dashboard_data}")
+
+                    logger.debug(f"Dashboard data: {dashboard_data}")
+
+                    response = httpx.post(
+                        f"{API_BASE_URL}/depictio/api/v1/dashboards/save/{dashboard_id}",
+                        json=dashboard_data,
                         headers={
                             "Authorization": f"Bearer {TOKEN}",
                         },
-                        timeout=60.0,  # Timeout set to 60 seconds
                     )
-                    if screenshot_response.status_code == 200:
-                        logger.info("Dashboard screenshot saved successfully.")
+                    if response.status_code == 200:
+                        logger.info(f"Dashboard data saved successfully for dashboard {dashboard_id}.")
                     else:
-                        logger.warning(f"Failed to save dashboard screenshot: {screenshot_response.json()}")
+                        logger.warning(f"Failed to save dashboard data: {response.json()}")
 
+                    if n_clicks:
+                        # Screenshot the dashboard
+                        screenshot_response = httpx.get(
+                            f"{API_BASE_URL}/depictio/api/v1/dashboards/screenshot/{dashboard_id}",
+                            headers={
+                                "Authorization": f"Bearer {TOKEN}",
+                            },
+                            timeout=60.0,  # Timeout set to 60 seconds
+                        )
+                        if screenshot_response.status_code == 200:
+                            logger.info("Dashboard screenshot saved successfully.")
+                        else:
+                            logger.warning(f"Failed to save dashboard screenshot: {screenshot_response.json()}")
+
+                        return dash.no_update
+
+                    # else:
                     return dash.no_update
 
-                # else:
-                return dash.no_update
-
-            else:
-                logger.warning(f"Failed to fetch dashboard data: {dashboard_data_response.json()}")
-                return dash.no_update
+                else:
+                    logger.warning(f"Failed to fetch dashboard data: {dashboard_data_response.json()}")
+                    return dash.no_update
 
         return dash.no_update
 
