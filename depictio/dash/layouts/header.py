@@ -17,25 +17,52 @@ def register_callbacks_header(app):
         Output("save-button-dashboard", "disabled"),
         Output("remove-all-components-button", "disabled"),
         Output("toggle-interactivity-button", "disabled"),
+        # Output("reset-all-filters-button", "disabled"),
         Output("dashboard-version", "disabled"),
         Output("share-button", "disabled"),
         Output("draggable", "isDraggable"),
         Output("draggable", "isResizable"),
         Input("edit-dashboard-mode-button", "checked"),
         State("local-store", "data"),
+        State("url", "pathname"),
         # prevent_initial_call=True,
     )
-    def toggle_buttons(switch_state, local_store):
+    def toggle_buttons(switch_state, local_store, pathname):
         logger.info("\n\n\n")
         logger.info("toggle_buttons")
         logger.info(switch_state)
         logger.info("API_BASE_URL: " + str(API_BASE_URL))
 
+        len_output = 8
+
+        current_user = fetch_user_from_token(local_store["access_token"])
+
         if not local_store["access_token"]:
             switch_state = False
-            return [True] * 8
+            return [True] * len_output
 
         TOKEN = local_store["access_token"]
+
+        dashboard_id = pathname.split("/")[-1]
+
+        dashboard_data_response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/dashboards/get/{dashboard_id}", headers={"Authorization": f"Bearer {TOKEN}"})
+        if dashboard_data_response.status_code != 200:
+            return [True] * len_output
+
+        data = dashboard_data_response.json()
+
+        # Check if data is available, if not set the buttons to disabled
+        owner = True if str(current_user.id) in [str(e["_id"]) for e in data["permissions"]["owners"]] else False
+
+        logger.info(f'{data["permissions"]["viewers"]}')
+
+        viewer_ids = [str(e["_id"]) for e in data["permissions"]["viewers"] if e != "*"]
+        is_viewer = str(current_user.id) in viewer_ids
+        has_wildcard = "*" in data["permissions"]["viewers"]
+        viewer = is_viewer or has_wildcard
+
+        if not owner and viewer:
+            return [dash.no_update] * (len_output - 2) + [False] * 2
 
         workflows = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/workflows/get_all_workflows",
@@ -43,9 +70,9 @@ def register_callbacks_header(app):
         ).json()
         if not workflows:
             switch_state = False
-            return [True] * 8
+            return [True] * len_output
 
-        return [not switch_state] * 6 + [switch_state] * 2
+        return [not switch_state] * (len_output - 2) + [switch_state] * 2
 
     @app.callback(
         Output("share-modal-dashboard", "is_open"),
@@ -123,11 +150,11 @@ def register_callbacks_header(app):
     #         return dash.no_update
 
 
-def design_header(data):
+def design_header(data, local_store):
     """
     Design the header of the dashboard
     """
-    # logger.info(f"depictio dashboard data: {data}")
+    logger.info(f"depictio dashboard data: {data}")
 
     if data:
         if "stored_add_button" not in data:
@@ -135,11 +162,36 @@ def design_header(data):
         if "stored_edit_dashboard_mode_button" not in data:
             data["stored_edit_dashboard_mode_button"] = [int(0)]
 
+    current_user = fetch_user_from_token(local_store["access_token"])
+    logger.info(f"current_user: {current_user}")
+
     init_nclicks_add_button = data["stored_add_button"] if data else {"count": 0, "initialized": False, "id": ""}
     init_nclicks_edit_dashboard_mode_button = data["stored_edit_dashboard_mode_button"] if data else [int(0)]
 
     # Check if data is available, if not set the buttons to disabled
-    disabled = False
+    owner = True if str(current_user.id) in [str(e["_id"]) for e in data["permissions"]["owners"]] else False
+
+    logger.info(f'{data["permissions"]["viewers"]}')
+
+    viewer_ids = [str(e["_id"]) for e in data["permissions"]["viewers"] if e != "*"]
+    is_viewer = str(current_user.id) in viewer_ids
+    has_wildcard = "*" in data["permissions"]["viewers"]
+    viewer = is_viewer or has_wildcard
+
+    if not owner and viewer:
+        disabled = True
+        edit_dashboard_mode_button_checked = False
+        edit_components_button_checked = False
+    else:
+        disabled = False
+        edit_dashboard_mode_button_checked = data["buttons_data"]["edit_dashboard_mode_button"]
+        edit_components_button_checked = data["buttons_data"]["edit_components_button"]
+
+    logger.info(f"owner: {owner}, viewer: {viewer}")
+    logger.info(f"edit_dashboard_mode_button_checked: {edit_dashboard_mode_button_checked}")
+    logger.info(f"edit_components_button_checked: {edit_components_button_checked}")
+    logger.info(f"disabled: {disabled}")
+
     # if not data:
     #     disabled = True
 
@@ -235,6 +287,14 @@ def design_header(data):
     title_style = {"fontWeight": "bold", "fontSize": "24px", "color": "#333"}
     button_style = {"margin": "0 0px", "fontFamily": "Virgil", "marginTop": "5px"}
 
+
+    sx={
+        ":hover": {
+            "backgroundColor": "#d0d0d0",  # Replace with your desired darker color
+            "cursor": "pointer",  # Ensures the cursor changes to pointer on hover
+        }
+    }
+
     # Right side of the header - Edit dashboard mode button
     # if data:
 
@@ -253,6 +313,7 @@ def design_header(data):
         style=button_style,
         disabled=disabled,
         # leftIcon=DashIconify(icon="mdi:plus", width=16, color="white"),
+        sx=sx
     )
 
     save_button = dmc.ActionIcon(
@@ -269,6 +330,7 @@ def design_header(data):
         n_clicks=0,
         disabled=disabled,
         style=button_style,
+        sx=sx
         # leftIcon=DashIconify(icon="mdi:content-save", width=16, color="white"),
         # width of the button
         # style={"width": "120px", "fontFamily": "Virgil"},
@@ -330,7 +392,8 @@ def design_header(data):
                 [
                     dmc.Switch(
                         id="edit-dashboard-mode-button",
-                        checked=data["buttons_data"]["edit_dashboard_mode_button"],
+                        checked=edit_dashboard_mode_button_checked,
+                        disabled=disabled,
                         color="gray",
                     ),
                     dmc.Text("Edit dashboard layout", style={"fontFamily": "default"}),
@@ -343,7 +406,8 @@ def design_header(data):
                 [
                     dmc.Switch(
                         id="edit-components-mode-button",
-                        checked=data["buttons_data"]["edit_components_button"],
+                        checked=edit_components_button_checked,
+                        disabled=disabled,
                         color="gray",
                     ),
                     dmc.Text("Display components options", style={"fontFamily": "default"}),
@@ -385,7 +449,7 @@ def design_header(data):
                         # style=button_style,
                         # Hide
                         # style={"display": "none"},
-                        disabled=disabled,
+                        disabled=False,
                         fullWidth=True,
                     )
                 ]
@@ -427,6 +491,7 @@ def design_header(data):
         # variant="filled",
         variant="subtle",
         style=button_style,
+        sx=sx
     )
 
     dummy_output = html.Div(id="dummy-output", style={"display": "none"})
