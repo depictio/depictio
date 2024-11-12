@@ -173,14 +173,14 @@ def register_callbacks_users_management(app):
     @app.callback([Output("login-button", "disabled"), Output("login-email", "error")], [Input("login-email", "value")])
     def update_submit_button(email):
         if email:
-            valid = re.match(r"^[a-zA-Z0-9_.+-]+@embl\.de$", email)
+            valid = re.match(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$", email)
             return not valid, not valid
         return True, False  # Initially disabled with no error
 
     @app.callback([Output("register-button", "disabled"), Output("register-email", "error")], [Input("register-email", "value")])
     def update_submit_button(email):
         if email:
-            valid = re.match(r"^[a-zA-Z0-9_.+-]+@embl\.de$", email)
+            valid = re.match(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$", email)
             return not valid, not valid
         return True, False  # Initially disabled with no error
 

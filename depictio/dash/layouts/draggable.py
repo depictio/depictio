@@ -25,8 +25,9 @@ from depictio.dash.utils import generate_unique_index, get_columns_from_data_col
 
 
 # Mapping of component types to their respective dimensions (width and height)
-component_dimensions = {"card": {"w": 2, "h": 5}, "interactive": {"w": 5, "h": 4}, "figure": {"w": 6, "h": 14}, "table": {"w": 6, "h": 14}}
-required_breakpoints = ["xl", "lg", "sm", "md", "xs", "xxs"]
+component_dimensions = {"card": {"w": 2, "h": 5}, "interactive": {"w": 5, "h": 5}, "figure": {"w": 6, "h": 14}, "table": {"w": 6, "h": 14}}
+required_breakpoints = ["lg"]
+# required_breakpoints = ["xl", "lg", "sm", "md", "xs", "xxs"]
 
 
 def calculate_new_layout_position(child_type, existing_layouts, child_id, n):
@@ -74,6 +75,15 @@ def remove_duplicates_by_index(components):
         if index not in unique_components:
             unique_components[index] = component
     return list(unique_components.values())
+
+
+def clean_stored_metadata(stored_metadata):
+    # Remove duplicates from stored_metadata by checking parent_index and index
+    stored_metadata = remove_duplicates_by_index(stored_metadata)
+    parent_indexes = set([e["parent_index"] for e in stored_metadata if "parent_index" in e and e["parent_index"] is not None])
+    # remove parent indexes that are also child indexes
+    stored_metadata = [e for e in stored_metadata if e["index"] not in parent_indexes]
+    return stored_metadata
 
 
 def register_callbacks_draggable(app):
@@ -557,7 +567,10 @@ def register_callbacks_draggable(app):
                 )
                 state_stored_draggable_children[dashboard_id] = new_children
 
-                return new_children, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+                if new_children:
+                    return new_children, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+                else:
+                    return draggable_children, dash.no_update, dash.no_update, dash.no_update, dash.no_update
                 # return new_children, dash.no_update, state_stored_draggable_children, dash.no_update
 
             elif "edit-components-mode-button" in triggered_input:
@@ -747,6 +760,23 @@ def register_callbacks_draggable(app):
                 # state_stored_draggable_children[dashboard_id] = new_children
 
                 return new_children, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+            elif triggered_input == "edit-dashboard-mode-button":
+                logger.info(f"Edit dashboard mode button clicked: {edit_dashboard_mode_button}")
+                # new_children = list()
+                # for child, child_metadata in zip(draggable_children, stored_metadata):
+                #     if type(child["props"]["children"]) is dict:
+                #         child = enable_box_edit_mode(child["props"]["children"]["props"]["children"][-1], edit_dashboard_mode_button, component_data=child_metadata)
+                #     elif type(child["props"]["children"]) is list:
+                #         child = enable_box_edit_mode(child["props"]["children"][-1], edit_dashboard_mode_button, component_data=child_metadata)
+                #     new_children.append(child)
+                #     state_stored_draggable_children[dashboard_id] = new_children
+
+                return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+                # return new_children, dash.no_update, state_stored_draggable_children, dash.no_update
+
+            else:
+                logger.warning(f"Unexpected triggered_input: {triggered_input}")
+                return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
         else:
             return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update

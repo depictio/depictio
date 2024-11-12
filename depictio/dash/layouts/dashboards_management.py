@@ -337,7 +337,18 @@ def register_callbacks_dashboards_management(app):
             )
             return modal
 
-        def create_buttons(dashboard):
+        def create_buttons(dashboard, user_id):
+            disabled = True if str(user_id) not in [str(owner["_id"]) for owner in dashboard["permissions"]["owners"]] else False
+
+            if str(user_id) in [str(owner["_id"]) for owner in dashboard["permissions"]["owners"]]:
+                color_badge_ownership = "blue"
+            else:
+                color_badge_ownership = "gray"
+
+            badge = dmc.Badge(
+                f"Owner: {dashboard['permissions']['owners'][0]['email']}", color=color_badge_ownership, leftSection=DashIconify(icon="mdi:account", width=16, color="grey")
+            )
+
             group = html.Div(
                 [
                     dmc.Group(
@@ -354,6 +365,8 @@ def register_callbacks_dashboards_management(app):
                         ]
                     ),
                     dmc.Space(h=10),
+                    dmc.Group([badge]),
+                    dmc.Space(h=10),
                     dmc.Group(
                         [
                             html.A(
@@ -362,6 +375,7 @@ def register_callbacks_dashboards_management(app):
                                     id={"type": "view-dashboard-button", "index": dashboard["dashboard_id"]},
                                     variant="outline",
                                     color="dark",
+                                    # size="xs",
                                     # style={"fontFamily": "Virgil"},
                                     # leftIcon=DashIconify(icon="mdi:eye", width=12, color="black"),
                                 ),
@@ -373,6 +387,8 @@ def register_callbacks_dashboards_management(app):
                                 variant="outline",
                                 color="blue",
                                 # style={"fontFamily": "Virgil"},
+                                disabled=disabled,
+                                # size="xs",
                             ),
                             dmc.Button(
                                 "Duplicate",
@@ -380,6 +396,7 @@ def register_callbacks_dashboards_management(app):
                                 variant="outline",
                                 color="gray",
                                 # style={"fontFamily": "Virgil"},
+                                # size="xs",
                             ),
                             dmc.Button(
                                 "Delete",
@@ -387,7 +404,18 @@ def register_callbacks_dashboards_management(app):
                                 variant="outline",
                                 color="red",
                                 # style={"fontFamily": "Virgil"},
+                                disabled=disabled,
+                                # size="xs",
                             ),
+                            # dmc.Button(
+                            #     "Make public",
+                            #     id={"type": "make-public-dashboard-button", "index": dashboard["dashboard_id"]},
+                            #     variant="outline",
+                            #     color="violet",
+                            #     # style={"fontFamily": "Virgil"},
+                            #     disabled=disabled,
+                            #     size="xs",
+                            # ),
                         ]
                         # align="center",
                         # position="apart",
@@ -415,7 +443,7 @@ def register_callbacks_dashboards_management(app):
             # output_folder = os.path.join(os.path.dirname(__file__), 'static', 'screenshots')
 
             # Define the filename and paths
-            filename = f"{user_id}_{dashboard['_id']}.png"
+            filename = f"{dashboard['_id']}.png"
             # Filesystem path to check existence
             thumbnail_fs_path = os.path.join(output_folder, filename)
             # URL path for the Image src
@@ -453,7 +481,7 @@ def register_callbacks_dashboards_management(app):
             for dashboard in dashboards:
                 delete_modal = modal_delete_dashboard(dashboard)
                 edit_name_modal = modal_edit_name_dashboard(dashboard)
-                buttons = create_buttons(dashboard)
+                buttons = create_buttons(dashboard, user_id)
 
                 thumbnail = return_thumbnail(user_id, dashboard)
                 view.append(
@@ -630,20 +658,23 @@ def register_callbacks_dashboards_management(app):
                 new_dashboard.id = ObjectId()
                 new_dashboard.title = f"{dashboard.title} (copy)"
                 new_dashboard.dashboard_id = str(new_dashboard.id)
+                new_dashboard.permissions.owners = [current_userbase]
+                new_dashboard.permissions.viewers = []
                 # new_dashboard.dashboard_id = generate_unique_index()
                 # new_dashboard.dashboard_id = str(len(dashboards) + 1)
                 updated_dashboards.append(new_dashboard)
                 insert_dashboard(new_dashboard.dashboard_id, new_dashboard.mongo(), user_data["access_token"])
 
                 # Copy thumbnail
-                thumbnail_filename = f"{str(current_userbase.id)}_{str(dashboard.id)}.png"
+                thumbnail_filename = f"{str(dashboard.id)}.png"
+                # thumbnail_filename = f"{str(current_userbase.id)}_{str(dashboard.id)}.png"
                 thumbnail_fs_path = f"/app/depictio/dash/static/screenshots/{thumbnail_filename}"
 
                 if not os.path.exists(thumbnail_fs_path):
                     logger.warning(f"Thumbnail not found at path: {thumbnail_fs_path}")
                 else:
                     # Copy the thumbnail to the new dashboard ID
-                    new_thumbnail_fs_path = f"/app/depictio/dash/static/screenshots/{str(current_userbase.id)}_{str(new_dashboard.id)}.png"
+                    new_thumbnail_fs_path = f"/app/depictio/dash/static/screenshots/{str(new_dashboard.id)}.png"
                     shutil.copy(thumbnail_fs_path, new_thumbnail_fs_path)
 
         return generate_dashboard_view_response(updated_dashboards, store_data_list, current_userbase)

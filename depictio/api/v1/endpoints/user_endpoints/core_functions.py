@@ -74,7 +74,7 @@ def add_token_to_user(user, token):
 def purge_expired_tokens_from_user(user_id):
     from depictio.api.v1.db import users_collection
 
-    logger.info(f"Current user ID: {user_id}")
+    logger.debug(f"Current user ID: {user_id}")
 
     if isinstance(user_id, str):
         user_id = ObjectId(user_id)
@@ -82,25 +82,25 @@ def purge_expired_tokens_from_user(user_id):
         user_id = ObjectId(user_id["$oid"])
 
     # Log the _id and the query structure
-    logger.info(f"User _id (ObjectId): {user_id}")
+    logger.debug(f"User _id (ObjectId): {user_id}")
     query = {"_id": user_id}
 
     # Get existing tokens from the user and remove the token to be deleted
     user_data = users_collection.find_one(query)
     tokens = user_data.get("tokens", [])
-    logger.info(f"Tokens: {tokens}")
+    logger.debug(f"Tokens: {tokens}")
 
     # Remove expired tokens, convert expire_datetime from that format (2024-08-21 02:26:39) to datetime object
     tokens = [e for e in tokens if datetime.strptime(e["expire_datetime"], "%Y-%m-%d %H:%M:%S") > datetime.now()]
-    logger.info(f"Tokens after deletion: {tokens}")
+    logger.debug(f"Tokens after deletion: {tokens}")
 
     # Update the user with the new tokens
     update = {"$set": {"tokens": tokens}}
-    logger.info(f"Query: {query}")
+    logger.debug(f"Query: {query}")
 
     # Insert in the user collection
     result = users_collection.update_one(query, update)
-    logger.info(f"Update result: {result.modified_count} document(s) updated")
+    logger.debug(f"Update result: {result.modified_count} document(s) updated")
 
     # Return success status
     return {"success": True, "message": f"{result.modified_count} document(s) updated"}
@@ -113,7 +113,7 @@ def check_if_token_is_valid(token: str) -> bool:
 
     # Query the database for the user with a non-expired token
     user = users_collection.find_one({"tokens": {"$elemMatch": {"access_token": token, "expire_datetime": {"$gt": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}}}})
-    logger.info(f"Checking token: {token} : {user}")
+    # logger.info(f"Checking token: {token} : {user}")
 
     if user:
         return True
