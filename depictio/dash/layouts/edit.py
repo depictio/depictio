@@ -134,8 +134,8 @@ def enable_box_edit_mode(
             # "overflowY": "auto",
             "overflowY": "hidden",  # Hide overflow to prevent scrollbar
             "width": "100%",  # Ensure it takes full width of the parent
-            "height": "auto",  # Ensure it takes full height of the parent
-            # "height": "100%",  # Ensure it takes full height of the parent
+            # "height": "auto",  # Ensure it takes full height of the parent
+            "height": "100%",  # Ensure it takes full height of the parent
             "display": "flex",  # Use flexbox for better layout control
             "flexDirection": "column",  # Arrange children vertically
             # "padding": "5px",  # Reduce padding to save space
