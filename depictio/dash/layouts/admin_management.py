@@ -10,18 +10,126 @@ from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_token
 from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.endpoints.user_endpoints.models import User
+from depictio.api.v1.endpoints.dashboards_endpoints.models import DashboardData
+from depictio.api.v1.endpoints.user_endpoints.models import UserBase
+
+# Define styles and colors
+card_styles = {
+    "boxShadow": "0 4px 6px rgba(0, 0, 0, 0.1)",
+    "borderRadius": "8px",
+    "padding": "20px",
+    "marginBottom": "20px",
+}
+
+
+def render_dashboardwise_layout(dashboard):
+    dashboard = DashboardData.from_mongo(dashboard)
+
+    logger.info(f"Dashboard: {dashboard}")
+    logger.info(f"Owner : {dashboard.permissions.owners[0]}")
+    logger.info(f"Owner : {dashboard.permissions.owners[0].mongo()}")
+
+    # Badge color based on admin status
+    import json
+    from depictio.api.v1.models.base import convert_objectid_to_str
+
+    dashboard_owner_raw = convert_objectid_to_str(dashboard.permissions.owners[0].mongo()) if dashboard.permissions.owners else "Unknown"
+    dashboard_owner = json.dumps(dashboard_owner_raw) if dashboard_owner_raw != "Unknown" else "Unknown"
+    dashboard_viewers = ["None"]
+    if dashboard.permissions.viewers:
+        dashboard_viewers = [json.dumps(convert_objectid_to_str(viewer.mongo())) if viewer != "*" else "*" for viewer in dashboard.permissions.viewers]
+
+    # dashboard_viewers = [u.mongo() for u in dashboard.permissions.viewers] if dashboard.permissions.viewers else ["None"]
+    last_saved = dashboard.last_saved_ts
+    dashboard_title = f"{dashboard.title} - {dashboard_owner_raw['email']}"
+    components_count = len(dashboard.stored_metadata)
+    dashboard_id = dashboard.dashboard_id
+    public_dashboard = True if "*" in dashboard.permissions.viewers else False
+
+    layout = dmc.Accordion(
+        children=[
+            dmc.AccordionItem(
+                [
+                    dmc.AccordionControl(
+                        [
+                            dmc.Group(
+                                [
+                                    dmc.Text(dashboard_title, weight=500, size="lg", style={"flex": 1}),
+                                    dmc.Badge(
+                                        "Public" if public_dashboard else "Private",
+                                        color="blue" if public_dashboard else "gray",
+                                        variant="light",
+                                        size="md",
+                                        radius="sm",
+                                    ),
+                                ],
+                                position="apart",
+                            ),
+                        ]
+                    ),
+                    dmc.AccordionPanel(
+                        [
+                            dmc.Group(
+                                spacing="xs",
+                                position="apart",
+                                children=[
+                                    dmc.Stack(
+                                        spacing="xs",
+                                        style={"marginBottom": "15px"},
+                                        children=[
+                                            dmc.Group(
+                                                [
+                                                    dmc.Text("Owner: ", weight=700, size="sm"),
+                                                    dmc.Text(dashboard_owner, size="sm"),
+                                                ]
+                                            ),
+                                            dmc.Group(
+                                                [
+                                                    dmc.Text("Viewers: ", weight=700, size="sm"),
+                                                    dmc.List([dmc.ListItem(viewer) for viewer in dashboard_viewers], size="sm"),
+                                                ]
+                                            ),
+                                            dmc.Group(
+                                                [
+                                                    dmc.Text("Components: ", weight=700, size="sm"),
+                                                    dmc.Text(str(components_count), size="sm"),
+                                                ]
+                                            ),
+                                            dmc.Group(
+                                                [
+                                                    dmc.Text("Last Saved: ", weight=700, size="sm"),
+                                                    dmc.Text(last_saved, size="sm"),
+                                                ]
+                                            ),
+                                        ],
+                                    ),
+                                    # dmc.Button(
+                                    #     [DashIconify(icon="mdi:delete", width=16, height=16), " Delete"],
+                                    #     color="red",
+                                    #     variant="filled",
+                                    #     size="sm",
+                                    #     id={"type": "delete-dashboard-button", "index": str(dashboard_id)},  # Replace dashboard_id with the appropriate identifier
+                                    #     styles={"root": {"marginLeft": "10px"}},
+                                    # ),
+                                ],
+                            ),
+                        ],
+                    ),
+                ],
+                value=str(dashboard_id),
+            ),
+        ],
+        # withBorder=True,
+        # shadow="sm",
+        radius="md",
+        # style=card_styles,
+    )
+
+    return layout
 
 
 def render_userwise_layout(user):
     user = User.from_mongo(user)
-
-    # Define styles and colors
-    card_styles = {
-        "boxShadow": "0 4px 6px rgba(0, 0, 0, 0.1)",
-        "borderRadius": "8px",
-        "padding": "20px",
-        "marginBottom": "20px",
-    }
 
     # Badge color based on admin status
     badge_color = "blue" if user.is_admin else "gray"
@@ -160,5 +268,18 @@ def register_admin_callbacks(app):
                 content = html.P("Error fetching users. Please try again later.")
 
             return content
+        elif active_tab == "dashboards":
+            response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/dashboards/list_all", headers={"Authorization": f"Bearer {local_data['access_token']}"})
+            logger.info(f"Response: {response}")
+            # content = html.P("DASHBOARDS - Under construction.")
+            if response.status_code == 200:
+                dashboards = response.json()
+                dashboards_layouts = [render_dashboardwise_layout(dashboard) for dashboard in dashboards]
+                content = html.Div(dashboards_layouts)
+            else:
+                logger.error(f"Error fetching dashboards: {response.json()}")
+                content = html.P("Error fetching dashboards. Please try again later.")
+            return content
+
         else:
             return html.P("Under construction.")
