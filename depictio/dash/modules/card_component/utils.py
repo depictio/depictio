@@ -18,6 +18,7 @@ AGGREGATION_MAPPING = {
     "skewness": "skew",
     "kurtosis": "kurt",
     "percentile": "quantile",
+    "nunique": "nunique",
     # Add more mappings if necessary
 }
 
@@ -58,6 +59,12 @@ def compute_value(data, column_name, aggregation):
             return None
         else:
             try:
+                logger.info(f"Applying aggregation function '{pandas_agg}'")
+                logger.info(f"Column name: {column_name}")
+                logger.info(f"Data: {data}")
+                logger.info(f"Data cols {data.columns}")
+                logger.info(f"Data type: {data[column_name].dtype}")
+                logger.info(f"Data: {data[column_name]}")
                 new_value = data[column_name].agg(pandas_agg)
                 logger.info(f"Computed {aggregation} ({pandas_agg}): {new_value} (Type: {type(new_value)})")
             except AttributeError as e:
@@ -155,12 +162,18 @@ def build_card(**kwargs):
     # else:
     index = index
 
+
+
     logger.info(f"Card kwargs: {kwargs}")
 
     if refresh or not v:
         import polars as pl
 
         data = kwargs.get("df", pl.DataFrame())
+
+        logger.info(f"Existing data: {data}")
+        logger.info(f"Existing data columns: {list(data.to_pandas().columns)}")
+
 
         if data.is_empty():
             from depictio.api.v1.deltatables_utils import load_deltatable_lite
