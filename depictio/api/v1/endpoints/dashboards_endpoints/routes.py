@@ -1,5 +1,6 @@
 import json
 import os, sys
+from typing import Dict
 from fastapi import Depends, HTTPException, APIRouter
 
 
@@ -31,7 +32,8 @@ async def get_dashboard(dashboard_id: str, current_user=Depends(get_current_user
         "dashboard_id": str(dashboard_id),
         "$or": [
             {"permissions.owners._id": user_id},
-            # {"permissions.viewers._id": user_id},
+            {"permissions.viewers._id": user_id},
+            {"permissions.viewers": {"$in": ["*"]}},
         ],
     }
 
@@ -60,7 +62,30 @@ async def list_dashboards(current_user=Depends(get_current_user)):
     user_id = current_user.id
     logger.debug(f"Current user ID: {user_id}")
 
-    result = load_dashboards_from_db(owner=user_id)
+    result = load_dashboards_from_db(owner=user_id, admin_mode=False)
+
+    if not result["success"]:
+        raise HTTPException(status_code=404, detail=result["message"])
+
+    return result["dashboards"]
+
+@dashboards_endpoint_router.get("/list_all")
+async def list_dashboards(current_user=Depends(get_current_user)):
+    """
+    Fetch a list of dashboards for the current user.
+    """
+
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Current user not found.")
+    
+    if not current_user.is_admin:
+        raise HTTPException(status_code=401, detail="Current user is not an admin.")
+
+    user_id = current_user.id
+    logger.debug(f"Current user ID: {user_id}")
+    logger.info(f"Current user: {current_user}")
+
+    result = load_dashboards_from_db(owner=user_id, admin_mode=True)
 
     if not result["success"]:
         raise HTTPException(status_code=404, detail=result["message"])
@@ -75,10 +100,6 @@ async def save_dashboard(dashboard_id: str, data: dict, current_user=Depends(get
     Check if an entry with the same dashboard_id exists, if not, insert, if yes, update.
     """
 
-    logger.debug(f"Dashboard ID: {dashboard_id}")
-    logger.debug(f"Data: {data}")
-    logger.debug(f"Current user: {current_user}")
-
     if not current_user:
         raise HTTPException(status_code=401, detail="Current user not found.")
 
@@ -87,12 +108,9 @@ async def save_dashboard(dashboard_id: str, data: dict, current_user=Depends(get
 
     user_id = current_user.id
 
-    logger.debug(f"Data to save: {data}")
-
     data = DashboardData.from_mongo(data)
 
     data_dict = data.mongo()
-    # logger.info(f"Data to save: {data_dict}")
 
     # Attempt to find and update the document, or insert if it doesn't exist
     result = dashboards_collection.find_one_and_update(
@@ -105,22 +123,11 @@ async def save_dashboard(dashboard_id: str, data: dict, current_user=Depends(get
     # MongoDB should always return a document after an upsert operation
     if result:
         message = "Dashboard data updated successfully." if result.get("dashboard_id", None) == dashboard_id else "Dashboard data inserted successfully."
-
-        # # Trigger screenshot capture
-        # url = f"{DASH_BASE_URL}/{dashboard_id}"
-        # from pyppeteer.errors import BrowserError
-
-        # try:
-        #     await asyncio.run(capture_screenshots(url, current_user))
-        #     logger.info(f"Screenshot captured for dashboard ID: {dashboard_id}")
-
-        # except (BrowserError, RuntimeError) as e:
-        #     logger.error(f"Failed to capture screenshot for dashboard ID: {dashboard_id} - {e}")
-
-        #     raise HTTPException(status_code=500, detail=str(e))
+        logger.info(message)
 
         return {"message": message, "dashboard_id": dashboard_id}
     else:
+        logger.error("Failed to insert or update dashboard data.")
         # It's unlikely to reach this point due to upsert=True, but included for completeness
         raise HTTPException(status_code=404, detail="Failed to insert or update dashboard data.")
 
@@ -133,12 +140,11 @@ async def screenshot_dashboard(dashboard_id: str, current_user=Depends(get_curre
     # output_folder = "/app/depictio/dash/assets/screenshots"
 
     # Define the shared static directory
-    output_folder = '/app/depictio/dash/static/screenshots'  # Directly set to the desired path
+    output_folder = "/app/depictio/dash/static/screenshots"  # Directly set to the desired path
     logger.info(f"Output folder: {output_folder}")
 
     # Ensure the directory exists
     os.makedirs(output_folder, exist_ok=True)
-
 
     # DASH_BASE_URL = "http://localhost:5080"
     url = f"{DASH_BASE_URL}"
@@ -222,13 +228,13 @@ async def screenshot_dashboard(dashboard_id: str, current_user=Depends(get_curre
 
                 # find corresponding mongoid for the dashboard
                 dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id, "permissions.owners._id": user_id})
-                logger.info(f"Dashboard data: {dashboard_data}")
-                dashboard_monogo_id = dashboard_data["_id"]
+                logger.debug(f"Dashboard data: {dashboard_data}")
+                dashboard_mongo_id = dashboard_data["_id"]
 
-                output_file = f"{output_folder}/{user_id}_{dashboard_monogo_id}.png"
-                logger.info(f"Output file: {output_file}")
+                output_file = f"{output_folder}/{dashboard_mongo_id}.png"
+                logger.debug(f"Output file: {output_file}")
                 await element.screenshot(path=output_file)
-                logger.info(f"Screenshot captured for dashboard ID: {dashboard_id}")
+                logger.debug(f"Screenshot captured for dashboard ID: {dashboard_id}")
             else:
                 logger.error("Could not find 'div#page-content' element")
 
@@ -269,23 +275,20 @@ async def get_component_data_endpoint(dashboard_id: str, component_id: str, curr
         raise HTTPException(status_code=401, detail="Current user not found.")
 
     user_id = current_user.id
-    logger.info(f"Current user ID: {user_id}")
+    logger.debug(f"Current user ID: {user_id}")
 
     # Find dashboards where current_user is either an owner or a viewer
     query = {
         "dashboard_id": str(dashboard_id),
-        "$or": [
-            {"permissions.owners._id": user_id},
-            # {"permissions.viewers._id": user_id},
-        ],
+        "$or": [{"permissions.owners._id": user_id}, {"permissions.viewers._id": user_id}, {"permissions.viewers": "*"}],
     }
 
     dashboard_data = dashboards_collection.find_one(query)
 
-    logger.info(f"Dashboard data: {dashboard_data}")
+    logger.debug(f"Dashboard data: {dashboard_data}")
 
     dashboard_data = DashboardData.from_mongo(dashboard_data)
-    logger.info(f"Dashboard data from mongo: {dashboard_data}")
+    logger.debug(f"Dashboard data from mongo: {dashboard_data}")
 
     if not dashboard_data:
         raise HTTPException(status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found.")
