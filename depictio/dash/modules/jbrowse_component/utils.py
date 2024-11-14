@@ -3,12 +3,12 @@ import json
 import os
 import httpx
 import polars as pl
-from depictio.api.v1.configs.config import API_BASE_URL, logger
 from dash import html, dcc
 import dash_bootstrap_components as dbc
 
 from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_token
-
+from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.config import API_BASE_URL
 
 def build_jbrowse_df_mapping_dict(stored_metadata, df_dict_processed, access_token):
     jbrowse_df_mapping_dict = collections.defaultdict(dict)

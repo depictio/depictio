@@ -3,8 +3,9 @@ from bson import ObjectId
 from fastapi import HTTPException, Depends, APIRouter
 
 
-from depictio.api.v1.configs.config import settings, logger
+from depictio.api.v1.configs.config import settings
 from depictio.api.v1.db import db
+from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.endpoints.files_endpoints.models import File
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.api.v1.endpoints.validators import validate_workflow_and_collection

@@ -4,7 +4,7 @@ from bson import ObjectId
 from fastapi import HTTPException, Depends, APIRouter
 from pymongo import ReturnDocument
 
-from depictio.api.v1.configs.config import logger
+from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.db import workflows_collection, users_collection
 from depictio.api.v1.endpoints.deltatables_endpoints.routes import delete_deltatable
 from depictio.api.v1.endpoints.files_endpoints.routes import delete_files

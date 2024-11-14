@@ -153,7 +153,7 @@ async def screenshot_dashboard(dashboard_id: str, current_user=Depends(get_curre
 
     try:
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
+            browser = await p.chromium.launch(headless=True, executable_path="/home/mambauser/.cache/ms-playwright/chromium-1140/chrome-linux/chrome")
 
             # Define the viewport size (browser window size)
             viewport_width = 1920
@@ -232,9 +232,9 @@ async def screenshot_dashboard(dashboard_id: str, current_user=Depends(get_curre
                 dashboard_mongo_id = dashboard_data["_id"]
 
                 output_file = f"{output_folder}/{dashboard_mongo_id}.png"
-                logger.debug(f"Output file: {output_file}")
+                logger.info(f"Output file: {output_file}")
                 await element.screenshot(path=output_file)
-                logger.debug(f"Screenshot captured for dashboard ID: {dashboard_id}")
+                logger.info(f"Screenshot captured for dashboard ID: {dashboard_id}")
             else:
                 logger.error("Could not find 'div#page-content' element")
 

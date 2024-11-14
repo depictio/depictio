@@ -2,7 +2,7 @@
 import collections
 from bson import ObjectId
 import numpy as np
-from depictio.api.v1.configs.config import logger
+from depictio.api.v1.configs.logging import logger
 import polars as pl
 import os
 from depictio.api.v1.db import files_collection

@@ -339,14 +339,19 @@ def register_callbacks_dashboards_management(app):
 
         def create_buttons(dashboard, user_id):
             disabled = True if str(user_id) not in [str(owner["_id"]) for owner in dashboard["permissions"]["owners"]] else False
+            public = True if "*" in [e for e in dashboard["permissions"]["viewers"]] else False
 
             if str(user_id) in [str(owner["_id"]) for owner in dashboard["permissions"]["owners"]]:
                 color_badge_ownership = "blue"
             else:
                 color_badge_ownership = "gray"
+            badge_icon = "material-symbols:public" if public else "material-symbols:lock"
 
-            badge = dmc.Badge(
+            badge_owner = dmc.Badge(
                 f"Owner: {dashboard['permissions']['owners'][0]['email']}", color=color_badge_ownership, leftSection=DashIconify(icon="mdi:account", width=16, color="grey")
+            )
+            badge_status = dmc.Badge(
+                "Public" if public else "Private", color="green" if public else "red", leftSection=DashIconify(icon=badge_icon, width=16, color="grey")
             )
 
             group = html.Div(
@@ -365,7 +370,7 @@ def register_callbacks_dashboards_management(app):
                         ]
                     ),
                     dmc.Space(h=10),
-                    dmc.Group([badge]),
+                    dmc.Group([badge_owner, badge_status], ),
                     dmc.Space(h=10),
                     dmc.Group(
                         [
