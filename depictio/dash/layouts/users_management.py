@@ -7,7 +7,8 @@ import httpx
 from dash_extensions import EventListener
 from dash.exceptions import PreventUpdate
 
-from depictio.api.v1.configs.config import API_BASE_URL, logger
+from depictio.api.v1.configs.config import API_BASE_URL
+from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.endpoints.user_endpoints.utils import verify_password, login_user, find_user, add_user
 
 

@@ -5,7 +5,7 @@ from bson import ObjectId
 from fastapi import HTTPException, Depends, APIRouter
 import polars as pl
 
-from depictio.api.v1.configs.config import settings, logger
+from depictio.api.v1.configs.config import settings
 from depictio.api.v1.db import workflows_collection, files_collection, users_collection, deltatables_collection
 from depictio.api.v1.endpoints.deltatables_endpoints.utils import get_s3_folder_size, precompute_columns_specs, read_table_for_DC_table
 from depictio.api.v1.s3 import minio_storage_options
@@ -15,7 +15,7 @@ from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.api.v1.endpoints.user_endpoints.models import UserBase
 from depictio.api.v1.endpoints.validators import validate_workflow_and_collection
 from depictio.api.v1.models.base import convert_objectid_to_str
-
+from depictio.api.v1.configs.logging import logger
 
 from depictio.api.v1.utils import (
     # decode_token,

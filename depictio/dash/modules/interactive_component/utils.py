@@ -4,7 +4,7 @@ import dash_mantine_components as dmc
 import dash_bootstrap_components as dbc
 
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
-from depictio.api.v1.configs.config import logger
+from depictio.api.v1.configs.logging import logger
 
 
 def build_interactive_frame(index, children=None):

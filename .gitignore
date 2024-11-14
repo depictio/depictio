@@ -212,3 +212,4 @@ jbrowse-watcher-plugin/
 !.env
 ldap_config/
 ldap_db/
+depictio/dash/static/
