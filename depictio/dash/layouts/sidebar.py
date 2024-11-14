@@ -197,7 +197,7 @@ def render_sidebar(email):
         # className="mt-auto",
         children=[
             dmc.Grid(
-                id="sidebar-footer-server-stastus",
+                id="sidebar-footer-server-status",
                 align="center",
                 justify="center",
             ),

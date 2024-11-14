@@ -19,8 +19,9 @@ from depictio.api.v1.endpoints.validators import validate_workflow_and_collectio
 from depictio.api.v1.endpoints.workflow_endpoints.models import Workflow
 from depictio.api.v1.models.base import convert_objectid_to_str
 from depictio.api.v1.utils import construct_full_regex, scan_runs
-from depictio.api.v1.configs.config import settings, logger
+from depictio.api.v1.configs.config import settings
 from depictio.api.v1.s3 import s3_client
+from depictio.api.v1.configs.logging import logger
 
 from depictio.api.v1.db import workflows_collection, files_collection, jbrowse_collection
 

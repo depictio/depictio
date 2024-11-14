@@ -11,11 +11,10 @@ from depictio.dash.layouts.draggable_scenarios.add_component import add_new_comp
 from depictio.dash.layouts.draggable_scenarios.graphs_interactivity import refresh_children_based_on_click_data, refresh_children_based_on_selected_data
 from depictio.dash.layouts.edit import edit_component
 
-from depictio.api.v1.configs.config import API_BASE_URL, logger
-
+from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.dash.layouts.draggable_scenarios.interactive_component_update import render_raw_children, update_interactive_component
 from depictio.dash.layouts.draggable_scenarios.restore_dashboard import render_dashboard
-
+from depictio.api.v1.configs.logging import logger
 
 # Depictio layout imports for stepper
 

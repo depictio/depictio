@@ -34,6 +34,7 @@ metadata:
   name: depictio-ing
   namespace: datasci-depictio-project
 spec:
+  # ingressClassName: external-users
   ingressClassName: internal-users
   rules:
     - host: demo.depictio.embl.org
@@ -110,7 +111,8 @@ metadata:
   name: mongo
   namespace: datasci-depictio-project
 spec:
-  type: LoadBalancer # Or use LoadBalancer if you're using Minikube with a cloud provider's driver
+  type: ClusterIP
+  # type: LoadBalancer # Or use LoadBalancer if you're using Minikube with a cloud provider's driver
   ports:
     - name: db
       port: 27018
@@ -125,6 +127,8 @@ metadata:
   name: minio
   namespace: datasci-depictio-project
 spec:
+  strategy:
+    type: Recreate
   replicas: 1
   selector:
     matchLabels:
@@ -162,9 +166,13 @@ spec:
           volumeMounts:
             - name: minio-storage
               mountPath: /data
+      # volumes:
+      #   - name: minio-storage
+      #     emptyDir: {}
       volumes:
         - name: minio-storage
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: minio-pvc
 ---
 apiVersion: v1
 kind: Service
@@ -172,7 +180,8 @@ metadata:
   name: minio
   namespace: datasci-depictio-project
 spec:
-  type: LoadBalancer
+  type: ClusterIP
+  # type: LoadBalancer
   ports:
     - port: 9000
       name: http
@@ -189,6 +198,8 @@ metadata:
   name: depictio-backend
   namespace: datasci-depictio-project
 spec:
+  strategy:
+    type: Recreate
   replicas: 1
   selector:
     matchLabels:
@@ -199,14 +210,11 @@ spec:
         app: depictio-backend
     spec:
       securityContext:
-      #   runAsNonRoot: true
-        # runAsUser: 1000
         fsGroup: 2000
-        # seccompProfile:
-        #   type: RuntimeDefault
+
       containers:
         - name: depictio-backend
-          image: registry.git.embl.de/tweber/depictio/depictio:v0.0.1
+          image: registry.git.embl.de/tweber/depictio/depictio:v0.0.3
           imagePullPolicy: Always
           # securityContext:
           #   allowPrivilegeEscalation: false
@@ -214,7 +222,9 @@ spec:
           #   #   drop:
           #   #     - ALL
           #   runAsNonRoot: true
-          #   # runAsUser: 1000
+            # runAsUser: 1000
+            # fsGroup: 2000
+
           #   # seccompProfile:
           #   #   type: RuntimeDefault
           env:
@@ -250,7 +260,7 @@ spec:
 
 
             - name: depictio-screenshots  # New Volume Mount
-              mountPath: /app/depictio/dash/assets/screenshots
+              mountPath: /app/depictio/dash/static/screenshots
 
             
           resources:
@@ -315,6 +325,8 @@ metadata:
   namespace: datasci-depictio-project
 spec:
   replicas: 1
+  strategy: 
+    type: Recreate
   selector:
     matchLabels:
       app: depictio-frontend
@@ -331,7 +343,7 @@ spec:
       #     type: RuntimeDefault
       containers:
         - name: depictio-frontend
-          image: registry.git.embl.de/tweber/depictio/depictio:v0.0.1
+          image: registry.git.embl.de/tweber/depictio/depictio:v0.0.3
           imagePullPolicy: Always
 
           # securityContext:
@@ -370,7 +382,7 @@ spec:
               mountPath: /app/depictio-example-data        
             
             - name: depictio-screenshots  # New Volume Mount
-              mountPath: /app/depictio/dash/assets/screenshots
+              mountPath: /app/depictio/dash/static/screenshots
           resources:
             requests:
               memory: "1Gi"
