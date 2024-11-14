@@ -1,0 +1,46 @@
+# -----------------------------
+# Exclude Legacy Directories
+# -----------------------------
+depictioDB_K8S/
+depictioDB_bak/
+depictio-example-data/
+jbrowse2_sessions/
+jbrowse-watcher-plugin/
+minio_data/
+
+# -----------------------------
+# Exclude Common Development Directories
+# -----------------------------
+dev/
+bak/
+data/
+assets/
+docs/
+keys/
+screenshots/
+venv/
+wf_data/
+
+# -----------------------------
+# Exclude Hidden Directories and Files
+# -----------------------------
+.depictio/
+
+# -----------------------------
+# Exclude Python Cache and Log Files
+# -----------------------------
+__pycache__/
+*.log
+
+# -----------------------------
+# Exclude Node.js Dependencies (if applicable)
+# -----------------------------
+node_modules/
+
+# -----------------------------
+# Exclude Temporary Files and OS Files
+# -----------------------------
+*.tmp
+*.swp
+.DS_Store
+Thumbs.db

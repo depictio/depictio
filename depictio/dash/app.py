@@ -232,6 +232,109 @@ def handle_authenticated_user(pathname, local_data):
         admin = html.Div(id="admin-management-content")
         return admin, header, pathname, local_data
 
+    elif pathname == "/about":
+        header = create_default_header("About")
+        # Enhanced About Page
+        about_page = dmc.SimpleGrid(
+            cols=2,  # Number of columns in the grid
+            spacing="xl",  # Space between the cards
+            breakpoints=[
+                {"maxWidth": 980, "cols": 1, "spacing": "md"},  # Responsive design: 1 column on smaller screens
+            ],
+            children=[
+                # Github Repository Card
+                dmc.Card(
+                    withBorder=True,  # Adds a border to the card
+                    shadow="md",  # Medium shadow for depth
+                    # padding="lg",  # Large padding inside the card
+                    
+                    radius="md",  # Medium border radius for rounded corners
+                    style={"textAlign": "center"},  # Center-align text and elements
+                    children=[
+                        # Icon and Title
+                        dmc.Group(
+                            position="center",
+                            spacing="sm",
+                            children=[
+                                DashIconify(icon="mdi:github", width=40, color="#333"),
+                                dmc.Text(
+                                    "GitHub Repository",
+                                    size="xl",
+                                    weight=700,  # Bold text
+                                ),
+                            ],
+                        ),
+                        # Description
+                        dmc.Text(
+                            "Explore the source code of Depictio on GitHub.",
+                            size="md",
+                            color="dimmed",
+                            mt="sm",  # Margin top for spacing
+                        ),
+                        # GitHub Button with Link
+                        dmc.Anchor(
+                            href="https://github.com/depictio/depictio",  # Replace with your GitHub repo URL
+                            target="_blank",  # Opens the link in a new tab
+                            children=dmc.Button(
+                                "GitHub",
+                                color="dark",
+                                variant="filled",
+                                size="md",
+                                radius="md",
+                                mt="md",  # Margin top for spacing
+                                leftIcon=DashIconify(icon="mdi:github-circle", width=20),
+                            ),
+                        ),
+                    ],
+                ),
+                # Documentation Card
+                dmc.Card(
+                    withBorder=True,
+                    shadow="md",
+                    # padding="lg",
+                    radius="md",
+                    style={"textAlign": "center"},
+                    children=[
+                        # Icon and Title
+                        dmc.Group(
+                            position="center",
+                            spacing="sm",
+                            children=[
+                                DashIconify(icon="mdi:file-document", width=40, color="#333"),
+                                dmc.Text(
+                                    "Documentation",
+                                    size="xl",
+                                    weight=700,
+                                ),
+                            ],
+                        ),
+                        # Description
+                        dmc.Text(
+                            "Learn how to use Depictio with our comprehensive documentation.",
+                            size="md",
+                            color="dimmed",
+                            mt="sm",
+                        ),
+                        # Documentation Button with Link
+                        dmc.Anchor(
+                            href="https://depictio.github.io/depictio-docs/",  # Replace with your documentation URL
+                            target="_blank",
+                            children=dmc.Button(
+                                "Documentation",
+                                color="dark",
+                                variant="filled",
+                                size="md",
+                                radius="md",
+                                mt="md",
+                                leftIcon=DashIconify(icon="mdi:file-document-box", width=20),
+                            ),
+                        ),
+                    ],
+                ),
+            ],
+        )
+        return about_page, header, pathname, local_data
+
     else:
         # Fallback to dashboards if path is unrecognized
         return dash.no_update, dash.no_update, "/dashboards", local_data

@@ -10,8 +10,8 @@ import dash_ag_grid as dag
 
 from depictio.dash.utils import list_workflows, get_columns_from_data_collection, return_mongoid
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
-from depictio.api.v1.configs.config import API_BASE_URL, logger
-
+from depictio.api.v1.configs.config import API_BASE_URL
+from depictio.api.v1.configs.logging import logger
 
 def register_callbacks_stepper_part_one(app):
     @app.callback(

@@ -17,8 +17,8 @@ from depictio.dash.utils import (
     UNSELECTED_STYLE,
     get_columns_from_data_collection,
 )
-from depictio.api.v1.configs.config import API_BASE_URL, logger
-
+from depictio.api.v1.configs.config import API_BASE_URL
+from depictio.api.v1.configs.logging import logger
 
 def register_callbacks_interactive_component(app):
     @app.callback(

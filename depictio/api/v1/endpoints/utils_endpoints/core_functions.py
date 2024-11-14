@@ -1,4 +1,5 @@
-from depictio.api.v1.configs.config import logger, settings
+from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.config import settings
 from depictio.api.v1.s3 import s3_client
 from fastapi import HTTPException
 from botocore.exceptions import ClientError

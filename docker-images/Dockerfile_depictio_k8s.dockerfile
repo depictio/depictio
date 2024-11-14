@@ -30,7 +30,10 @@ RUN micromamba create -n depictio -f depictio.yaml && \
 # -----------------------------
 ARG MAMBA_DOCKERFILE_ACTIVATE=1
 
-RUN micromamba shell init -s bash -p /opt/conda/envs/depictio && \
+# RUN micromamba shell init -s bash -p /opt/conda/envs/depictio && \
+#     echo "source activate depictio" >> ~/.bashrc && \
+#     echo "conda list" >> ~/.bashrc
+RUN micromamba shell init -s bash && \
     echo "source activate depictio" >> ~/.bashrc && \
     echo "conda list" >> ~/.bashrc
 
@@ -38,10 +41,12 @@ RUN micromamba shell init -s bash -p /opt/conda/envs/depictio && \
 # Install Playwright Dependencies
 # -----------------------------
 USER root
+RUN bash -c 'whoami'
+
 
 # Ensure /etc/apt/sources.list exists and configure it
 RUN if [ ! -f /etc/apt/sources.list ]; then \
-        echo "deb http://deb.debian.org/debian buster main" > /etc/apt/sources.list; \
+    echo "deb http://deb.debian.org/debian buster main" > /etc/apt/sources.list; \
     fi
 
 # Optionally switch to an alternative Debian mirror
@@ -53,9 +58,26 @@ RUN apt-get update && apt-get install --fix-missing -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-RUN /opt/conda/envs/depictio/bin/playwright install --with-deps
+
+RUN bash -c '/opt/conda/envs/depictio/bin/playwright install --with-deps'
+
+
+# -----------------------------
+# Copy Application Code
+# -----------------------------
+# Use --chown to set ownership to the non-root user during copy
+COPY --chown=1000:1000 . /app
+
+# -----------------------------
+# Ensure Static Directory Exists and Set Permissions
+# -----------------------------
+RUN mkdir -p /app/depictio/dash/static/screenshots && \
+    chmod -R 777 /app/depictio/dash/static/screenshots && \
+    chown -R $MAMBA_USER:$MAMBA_USER /app/depictio/dash/static/screenshots && \
+    rm -rf /app/depictioDB_bak /app/depictio_K8S
 
 USER $MAMBA_USER
+RUN bash -c 'whoami'
 
 # -----------------------------
 # Environment Variables
@@ -66,12 +88,9 @@ ENV PYTHONPATH="${PYTHONPATH}:/mnt"
 # -----------------------------
 # Install Playwright
 # -----------------------------
-RUN playwright install chromium
+RUN bash -c 'playwright install chromium'
 
-# -----------------------------
-# Copy Application Code
-# -----------------------------
-COPY . /app
+
 
 # -----------------------------
 # Expose Ports

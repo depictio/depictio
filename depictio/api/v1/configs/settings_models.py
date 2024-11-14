@@ -1,7 +1,6 @@
 import os
 from typing import Dict, Union
 from pydantic import BaseSettings, Field
-from depictio.api.v1.configs.logging import logger
 
 class Collections(BaseSettings):
     """Collections names in MongoDB."""
@@ -52,7 +51,7 @@ class FastAPIConfig(BaseSettings):
     host: str = "0.0.0.0"
     service_name: str = "depictio_backend"
     port: int = Field(default=8058, env='DEPICTIO_BACKEND_PORT')
-    logger.info(f"Port: {port}")
+    logging_level: str = "INFO"
     class Config:
         env_prefix = 'DEPICTIO_BACKEND_'
 

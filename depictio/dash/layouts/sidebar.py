@@ -61,13 +61,15 @@ def register_sidebar_callbacks(app):
     )
     def update_active_state(pathname):
         if pathname == "/dashboards":
-            return [True, False, False]
+            return [True, False, False, False]
         elif pathname == "/projects":
-            return [False, True, False]
+            return [False, True, False, False]
         elif pathname == "/admin":
-            return [False, False, True]
+            return [False, False, True, False]
+        elif pathname == "/about":
+            return [False, False, False, True]
         else:
-            return [False, False, False]
+            return [False, False, False, False]
 
     @app.callback(
         Output("avatar-container", "children"),
@@ -178,6 +180,13 @@ def render_sidebar(email):
                 icon=DashIconify(icon="material-symbols:settings", height=25),
                 href="/admin",
                 style={"padding": "20px", "display": "none"},
+            ),
+            dmc.NavLink(
+                id={"type": "sidebar-link", "index": "about"},
+                label=dmc.Text("About", size="lg", style={"fontSize": "16px"}),  # Using dmc.Text to set the font size
+                icon=DashIconify(icon="mingcute:question-line", height=25),
+                href="/about",
+                style={"padding": "20px"},
             ),
         ],
         style={"white-space": "nowrap", "margin-top": "20px", "flexGrow": "1", "overflowY": "auto"},
