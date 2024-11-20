@@ -34,8 +34,8 @@ metadata:
   name: depictio-ing
   namespace: datasci-depictio-project
 spec:
-  # ingressClassName: external-users
-  ingressClassName: internal-users
+  ingressClassName: external-users
+  # ingressClassName: internal-users
   rules:
     - host: demo.depictio.embl.org
       http:
