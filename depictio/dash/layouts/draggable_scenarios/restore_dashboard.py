@@ -1,6 +1,7 @@
 import collections
 import httpx
 from depictio.api.v1.configs.config import API_BASE_URL
+from depictio.api.v1.deltatables_utils import load_deltatable_lite
 from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_token
 from depictio.dash.layouts.draggable_scenarios.interactive_component_update import update_interactive_component
 from depictio.dash.modules.card_component.utils import build_card
@@ -55,9 +56,18 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, TOKE
 
     children = list()
 
+    # TODO: load df and pass it to the build functions to not have to load it multiple times
+
+    # Iterate over the stored metadata, get wf & dc_id, load only once dataframe and pass it to the build functions
+    dfs_dict = collections.defaultdict(dict)
+    for child_metadata in stored_metadata:
+        if child_metadata["dc_id"] not in dfs_dict:
+            dfs_dict[child_metadata["dc_id"]] = load_deltatable_lite(workflow_id=child_metadata["wf_id"], data_collection_id=child_metadata["dc_id"], TOKEN=TOKEN)
+
     for child_metadata in stored_metadata:
         child_metadata["build_frame"] = True
         child_metadata["access_token"] = TOKEN
+        child_metadata["df"] = dfs_dict[child_metadata["dc_id"]]
         # logger.info(child_metadata)
         # logger.info(f"type of child_metadata : {type(child_metadata)}")
 
