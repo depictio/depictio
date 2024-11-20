@@ -111,6 +111,9 @@ def build_table(**kwargs):
     # print(cols)
     columnDefs = [{"field": c, "headerTooltip": f"Column type: {e['type']}", "filter": e["filter"]} for c, e in cols.items()]
 
+
+    # TODO: fix with infinite scrolling - https://dash.plotly.com/dash-ag-grid/infinite-row-model
+
     # Prepare ag grid table
     table_aggrid = dag.AgGrid(
         id={"type": value_div_type, "index": str(index)},

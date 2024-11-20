@@ -25,6 +25,9 @@ from depictio.dash.utils import (
 
 
 def register_callbacks_table_component(app):
+
+    # TODO: fix with infinite scrolling - https://dash.plotly.com/dash-ag-grid/infinite-row-model
+
     # @app.callback(
     #     Output({"type": "table-aggrid", "index": MATCH}, "getRowsResponse"),
     #     Input("interactive-values-store", "data"),
