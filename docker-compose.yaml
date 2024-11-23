@@ -35,6 +35,9 @@ services:
       - ./data:/app/data
       - ./minio_data:/minio_data
       - ./.env:/app/.env
+    # command: >
+    # gunicorn -w 1 -b 0.0.0.0:5080 --reload depictio.dash.app:server
+    # gunicorn -w 4 -b 0.0.0.0:5080 depictio.dash.app:server
     command: ["python", "depictio/dash/app.py"]
     user: "${UID}:${GID}"
     depends_on:
