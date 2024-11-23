@@ -111,33 +111,110 @@ def build_table(**kwargs):
     # print(cols)
     columnDefs = [{"field": c, "headerTooltip": f"Column type: {e['type']}", "filter": e["filter"]} for c, e in cols.items()]
 
+    # row_id_def = [
+    #     {
+    #         "headerName": "ID",
+    #         "maxWidth": 100,
+    #         # it is important to have node.id here, so that when the id changes (which happens when the row is loaded)
+    #         # then the cell is refreshed.
+    #         "valueGetter": {"function": "params.node.id"},
+    #     }
+    # ]
+    # columnDefs = row_id_def + columnDefs
+
+    defaultColDef = {
+        "flex": 1,
+        "minWidth": 150,
+        "sortable": True,
+        "filter": True,
+        "floatingFilter": True,
+        "resizable": True,
+
+    }
+
+    logger.info(f"Index {index} - ColumnDefs: {columnDefs}")
+
+    # if index.endswith("-tmp"):
+
+    data = df.head(100).to_pandas().to_dict("records")
+
     # Prepare ag grid table
     table_aggrid = dag.AgGrid(
         id={"type": value_div_type, "index": str(index)},
-        rowData=df.to_pandas().to_dict("records"),
+        rowData=data,
         # rowModelType="infinite",
         columnDefs=columnDefs,
+        # defaultColDef=defaultColDef,
         dashGridOptions={
             "tooltipShowDelay": 500,
             "pagination": True,
             "paginationAutoPageSize": False,
             "animateRows": False,
-            # The number of rows rendered outside the viewable area the grid renders.
-            # "rowBuffer": 0,
-            # # How many blocks to keep in the store. Default is no limit, so every requested block is kept.
-            # "maxBlocksInCache": 2,
-            # "cacheBlockSize": 100,
-            # "cacheOverflowSize": 2,
-            # "maxConcurrentDatasourceRequests": 2,
-            # "infiniteInitialRowCount": 1,
             "rowSelection": "multiple",
             "enableCellTextSelection": True,
             "ensureDomOrder": True,
+            # "isRowSelectable": True,
         },
-        # columnSize="sizeToFit",
         defaultColDef={"resizable": True, "sortable": True, "filter": True},
-        # use the parameters above
     )
+
+    # else:
+    #     table_aggrid = dag.AgGrid(
+    #         id={"type": value_div_type, "index": str(index)},
+    #         rowModelType="infinite",
+    #         columnDefs=columnDefs,
+    #         defaultColDef=defaultColDef,
+    #         dashGridOptions={
+    #             # "tooltipShowDelay": 500,
+    #             # "pagination": True,
+    #             # "paginationAutoPageSize": False,
+    #             # "animateRows": False,
+    #             # The number of rows rendered outside the viewable area the grid renders.
+    #             "rowBuffer": 0,
+    #             # How many blocks to keep in the store. Default is no limit, so every requested block is kept.
+    #             "maxBlocksInCache": 2,
+    #             "cacheBlockSize": 100,
+    #             "cacheOverflowSize": 2,
+    #             "maxConcurrentDatasourceRequests": 2,
+    #             "infiniteInitialRowCount": 1,
+    #             # "infiniteInitialRowCount": 1000,
+    #             "rowSelection": "multiple",
+    #             "enableCellTextSelection": True,
+    #             "rowMultiSelectWithClick": True,
+    #             "suppressRowDeselection": True,
+    #             # "ensureDomOrder": True,
+    #             # "isRowSelectable": True,
+    #         },
+    #         getRowId="params.data.index"
+    #     )
+
+    # Prepare ag grid table
+    # table_aggrid = dag.AgGrid(
+    #     id={"type": value_div_type, "index": str(index)},
+    #     rowData=df.to_pandas().to_dict("records"),
+    #     # rowModelType="infinite",
+    #     columnDefs=columnDefs,
+    #     dashGridOptions={
+    #         "tooltipShowDelay": 500,
+    #         "pagination": True,
+    #         "paginationAutoPageSize": False,
+    #         "animateRows": False,
+    #         # The number of rows rendered outside the viewable area the grid renders.
+    #         # "rowBuffer": 0,
+    #         # # How many blocks to keep in the store. Default is no limit, so every requested block is kept.
+    #         # "maxBlocksInCache": 2,
+    #         # "cacheBlockSize": 100,
+    #         # "cacheOverflowSize": 2,
+    #         # "maxConcurrentDatasourceRequests": 2,
+    #         # "infiniteInitialRowCount": 1,
+    #         "rowSelection": "multiple",
+    #         "enableCellTextSelection": True,
+    #         "ensureDomOrder": True,
+    #     },
+    #     # columnSize="sizeToFit",
+    #     defaultColDef={"resizable": True, "sortable": True, "filter": True},
+    #     # use the parameters above
+    # )
 
     # Metadata management - Create a store component to store the metadata of the card
     store_index = index.replace("-tmp", "")

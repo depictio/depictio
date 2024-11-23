@@ -1,5 +1,5 @@
 # Import necessary libraries
-from dash import html, dcc, Input, Output, State, MATCH, ALL
+from dash import html, dcc, Input, Output, State, MATCH, ALL, ctx
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 from dash_iconify import DashIconify
@@ -24,94 +24,213 @@ from depictio.dash.utils import (
 # TODO: interactivity when selecting table rows
 
 
+operators = {
+    "greaterThanOrEqual": "ge",
+    "lessThanOrEqual": "le",
+    "lessThan": "lt",
+    "greaterThan": "gt",
+    "notEqual": "ne",
+    "equals": "eq",
+}
+
+
+def filter_df(dff, filter_model, col):
+    if "filter" in filter_model:
+        if filter_model["filterType"] == "date":
+            crit1 = filter_model["dateFrom"]
+            crit1 = pd.Series(crit1).astype(dff[col].dtype)[0]
+            if "dateTo" in filter_model:
+                crit2 = filter_model["dateTo"]
+                crit2 = pd.Series(crit2).astype(dff[col].dtype)[0]
+        else:
+            crit1 = filter_model["filter"]
+            crit1 = pd.Series(crit1).astype(dff[col].dtype)[0]
+            if "filterTo" in filter_model:
+                crit2 = filter_model["filterTo"]
+                crit2 = pd.Series(crit2).astype(dff[col].dtype)[0]
+    if "type" in filter_model:
+        if filter_model["type"] == "contains":
+            dff = dff.loc[dff[col].str.contains(crit1)]
+        elif filter_model["type"] == "notContains":
+            dff = dff.loc[~dff[col].str.contains(crit1)]
+        elif filter_model["type"] == "startsWith":
+            dff = dff.loc[dff[col].str.startswith(crit1)]
+        elif filter_model["type"] == "notStartsWith":
+            dff = dff.loc[~dff[col].str.startswith(crit1)]
+        elif filter_model["type"] == "endsWith":
+            dff = dff.loc[dff[col].str.endswith(crit1)]
+        elif filter_model["type"] == "notEndsWith":
+            dff = dff.loc[~dff[col].str.endswith(crit1)]
+        elif filter_model["type"] == "inRange":
+            if filter_model["filterType"] == "date":
+                dff = dff.loc[dff[col].astype("datetime64[ns]").between_time(crit1, crit2)]
+            else:
+                dff = dff.loc[dff[col].between(crit1, crit2)]
+        elif filter_model["type"] == "blank":
+            dff = dff.loc[dff[col].isnull()]
+        elif filter_model["type"] == "notBlank":
+            dff = dff.loc[~dff[col].isnull()]
+        else:
+            dff = dff.loc[getattr(dff[col], operators[filter_model["type"]])(crit1)]
+    elif filter_model["filterType"] == "set":
+        dff = dff.loc[dff[col].astype("string").isin(filter_model["values"])]
+    return dff
+
+
 def register_callbacks_table_component(app):
-    # @app.callback(
-    #     Output({"type": "table-aggrid", "index": MATCH}, "getRowsResponse"),
-    #     Input("interactive-values-store", "data"),
-    #     Input({"type": "table-aggrid", "index": MATCH}, "getRowsRequest"),
-    #     State({"type": "stored-metadata-component", "index": MATCH}, "data"),
-    #     State("local-store", "data"),
-    #     State("url", "pathname"),
-    #     prevent_initial_call=True,
-    # )
-    # def infinite_scroll_component(interactive_values, request, stored_metadata, local_store, pathname):
-    #     # simulate slow callback
-    #     # time.sleep(2)
+#     @app.callback(
+#         Output({"type": "table-aggrid", "index": MATCH}, "getRowsResponse"),
+#         Input("interactive-values-store", "data"),
+#         Input({"type": "table-aggrid", "index": MATCH}, "getRowsRequest"),
+#         Input({"type": "table-aggrid", "index": MATCH}, "selectedRows"),
+#         State({"type": "stored-metadata-component", "index": MATCH}, "data"),
+#         State("local-store", "data"),
+#         State("url", "pathname"),
+#         prevent_initial_call=True,
+#     )
+#     # def infinite_scroll_component(interactive_values, request, stored_metadata, local_store, pathname):
+#     def infinite_scroll_component(interactive_values, request, selected_rows, stored_metadata, local_store, pathname):
+#         # simulate slow callback
+#         # time.sleep(2)
 
-    #     dashboard_id = pathname.split("/")[-1]
+#         ctx_trigggered = ctx.triggered[0]["prop_id"].split(".")[1]
+#         logger.info(f"Context triggered: {ctx_trigggered}")
 
-    #     logger.info(f"Interactive values: {interactive_values}")
-    #     if dashboard_id not in interactive_values:
-    #         interactive_values_data = None
-    #     else:
-    #         if "interactive_components_values" not in interactive_values[dashboard_id]:
-    #             interactive_values_data = None
-    #         else:
-    #             interactive_values_data = interactive_values[dashboard_id]["interactive_components_values"]
 
-    #         # Make sure all the interactive values are in the correct format
-    #         interactive_values_data = [e for e in interactive_values_data if e["metadata"]["component_type"] == "interactive"]
-    #     logger.info(f"Interactive values data: {interactive_values_data}")
-    #     logger.info(f"Request: {request}")
-    #     logger.info(f"Stored metadata: {stored_metadata}")
-    #     logger.info(f"Local store: {local_store}")
+#         dashboard_id = pathname.split("/")[-1]
 
-    #     # if local_store is None:
-    #     #     raise dash.exceptions.PreventUpdate
+#         # logger.info(f"Interactive values: {interactive_values}")
+#         # if dashboard_id not in interactive_values:
+#         #     interactive_values_data = None
+#         # else:
+#         #     if "interactive_components_values" not in interactive_values[dashboard_id]:
+#         #         interactive_values_data = None
+#         #     else:
+#         #         interactive_values_data = interactive_values[dashboard_id]["interactive_components_values"]
 
-    #     TOKEN = local_store["access_token"]
+#         #     # Make sure all the interactive values are in the correct format
+#         #     interactive_values_data = [e for e in interactive_values_data if e["metadata"]["component_type"] == "interactive"]
+#         # logger.info(f"Interactive values data: {interactive_values_data}")
+#         logger.info(f"Request: {request}")
+#         logger.info(f"Selected rows: {selected_rows}")
+#         logger.info(f"Stored metadata: {stored_metadata}")
+#         logger.info(f"Local store: {local_store}")
 
-    #     # if request is None:
-    #     #     return dash.no_update
+#         workflow_id = stored_metadata["wf_id"]
+#         data_collection_id = stored_metadata["dc_id"]
+#         TOKEN = local_store["access_token"]
+#         df = load_deltatable_lite(workflow_id, data_collection_id, TOKEN=TOKEN).to_pandas()
 
-    #     # if stored_metadata_all is not None:
-    #     logger.info(f"Stored metadata: {stored_metadata}")
+#         dff = df.copy()
 
-    #     workflow_id = stored_metadata["wf_id"]
-    #     data_collection_id = stored_metadata["dc_id"]
 
-    #     dc_specs = httpx.get(
-    #         f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
-    #         headers={
-    #             "Authorization": f"Bearer {TOKEN}",
-    #         },
-    #     ).json()
+#         if "getRowsRequest" in ctx_trigggered:
 
-    #     # Initialize metadata list by converting filterModel
-    #     if request:
-    #         if "filterModel" in request:
-    #             # if request["filterModel"]:
-    #             metadata = convert_filter_model_to_metadata(request["filterModel"])
-    #     else:
-    #         metadata = list()
+#             if request:
+#                 if request["filterModel"]:
+#                     filters = request["filterModel"]
+#                     for f in filters:
+#                         try:
+#                             if "operator" in filters[f]:
+#                                 if filters[f]["operator"] == "AND":
+#                                     dff = filter_df(dff, filters[f]["condition1"], f)
+#                                     dff = filter_df(dff, filters[f]["condition2"], f)
+#                                 else:
+#                                     dff1 = filter_df(dff, filters[f]["condition1"], f)
+#                                     dff2 = filter_df(dff, filters[f]["condition2"], f)
+#                                     dff = pd.concat([dff1, dff2])
+#                             else:
+#                                 dff = filter_df(dff, filters[f], f)
+#                         except:
+#                             pass
 
-    #     logger.info(f"Metadata generated from filter model: {metadata}")
+#                 if request["sortModel"]:
+#                     sorting = []
+#                     asc = []
+#                     for sort in request["sortModel"]:
+#                         sorting.append(sort["colId"])
+#                         if sort["sort"] == "asc":
+#                             asc.append(True)
+#                         else:
+#                             asc.append(False)
+#                     dff = dff.sort_values(by=sorting, ascending=asc)
 
-    #     if interactive_values_data:
-    #         # Combine both metadata and stored metadata
-    #         metadata += interactive_values_data
+#                 lines = len(dff.index)
+#                 if lines == 0:
+#                     lines = 1
 
-    #     # logger.info(f"Metadata: {metadata}")
-    #     # logger.info(f"Stored metadata: {stored_metadata}")
+#                 partial = dff.iloc[request["startRow"] : request["endRow"]]
 
-    #     # if dc_specs["config"]["type"] == "Table":
-    #     df = load_deltatable_lite(workflow_id, data_collection_id, metadata=metadata, TOKEN=TOKEN)
+#                 return_dict = {
+#                     "rowData": partial.to_dict("records"),
+#                     "rowCount": lines,
+#                 }
+#                 # if "selectedRows" in ctx_trigggered:
+#                 #     return_dict["selectedRows"] = []
+#                 # logger.info(f"Return dict: {return_dict}")
 
-    #     from dash import ctx
-    #     import polars as pl
+#                 return {"rowData": partial.to_dict("records"), "rowCount": lines}
+#         else:
+#             return dash.no_update
 
-    #     triggered_id = ctx.triggered_id
-    #     logger.info(f"Triggered ID: {triggered_id}")
+        
 
-    #     if request is None:
-    #         partial = df[:100]
-    #     else:
-    #         partial = df[request["startRow"] : request["endRow"]]
-    #     return {"rowData": partial.to_dicts(), "rowCount": df.shape[0]}
-    #     # else:
-    #     #     return dash.no_update
-    #     # else:
-    #     #     return dash.no_update
+        # # if local_store is None:
+        # #     raise dash.exceptions.PreventUpdate
+
+        # TOKEN = local_store["access_token"]
+
+        # # if request is None:
+        # #     return dash.no_update
+
+        # # if stored_metadata_all is not None:
+        # logger.info(f"Stored metadata: {stored_metadata}")
+
+        # workflow_id = stored_metadata["wf_id"]
+        # data_collection_id = stored_metadata["dc_id"]
+
+        # dc_specs = httpx.get(
+        #     f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
+        #     headers={
+        #         "Authorization": f"Bearer {TOKEN}",
+        #     },
+        # ).json()
+
+        # # Initialize metadata list by converting filterModel
+        # if request:
+        #     if "filterModel" in request:
+        #         # if request["filterModel"]:
+        #         metadata = convert_filter_model_to_metadata(request["filterModel"])
+        # else:
+        #     metadata = list()
+
+        # logger.info(f"Metadata generated from filter model: {metadata}")
+
+        # if interactive_values_data:
+        #     # Combine both metadata and stored metadata
+        #     metadata += interactive_values_data
+
+        # # logger.info(f"Metadata: {metadata}")
+        # # logger.info(f"Stored metadata: {stored_metadata}")
+
+        # # if dc_specs["config"]["type"] == "Table":
+        # df = load_deltatable_lite(workflow_id, data_collection_id, metadata=metadata, TOKEN=TOKEN)
+
+        # from dash import ctx
+        # import polars as pl
+
+        # triggered_id = ctx.triggered_id
+        # logger.info(f"Triggered ID: {triggered_id}")
+
+        # if request is None:
+        #     partial = df[:100]
+        # else:
+        #     partial = df[request["startRow"] : request["endRow"]]
+        # return {"rowData": partial.to_dicts(), "rowCount": df.shape[0]}
+        # else:
+        #     return dash.no_update
+        # else:
+        # return dash.no_update
 
     # Callback to update card body based on the selected column and aggregation
     @app.callback(
@@ -170,10 +289,11 @@ def register_callbacks_table_component(app):
             "dc_config": dc_specs["config"],
             "cols_json": cols_json,
             "access_token": TOKEN,
-            "stepper": True
+            "stepper": True,
         }
         new_table = build_table(**table_kwargs)
         return new_table
+
 
 def design_table(id):
     row = [
