@@ -7,6 +7,7 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.db import db
 from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.endpoints.files_endpoints.models import File
+from depictio.api.v1.endpoints.jbrowse_endpoints.routes import handle_jbrowse_tracks
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.api.v1.endpoints.validators import validate_workflow_and_collection
 from depictio.api.v1.endpoints.workflow_endpoints.models import WorkflowRun
@@ -189,31 +190,34 @@ async def scan_data_collection(
     # Scan the runs and retrieve the files
 
     for location in locations:
-        logger.debug(f"Scanning location: {location}")
+        # logger.debug(f"Scanning location: {location}")
         runs_and_content = scan_runs(location, workflow.config, data_collection, workflow_oid)
         runs_and_content = serialize_for_mongo(runs_and_content)
-        logger.debug(f"Runs and content: {runs_and_content}")
+        # logger.debug(f"Runs and content: {runs_and_content}")
 
 
         # Check if the scan was successful and the result is a list of dictionaries
         if isinstance(runs_and_content, list) and all(isinstance(item, dict) for item in runs_and_content):
             return_dict = {workflow.id: collections.defaultdict(list)}
             # Sort the runs by location
-            runs_and_content = sorted(runs_and_content, key=lambda x: x["run_location"])
+            runs_and_content = sorted(runs_and_content, key=lambda x: x["run_tag"])
+            # logger.info(f"Runs and content: {runs_and_content}")
             for run in runs_and_content:
                 files = run.pop("files", [])
 
                 # Insert the run into runs_collection and retrieve its id
 
                 run = WorkflowRun(**run)
-                logger.info(f"Run: {run}")
-                logger.info(f"Run.mongo: {run.mongo()}")
-                logger.info(f"type(run.mongo()): {type(run.mongo())}")
-                logger.info(f"Run.mongo['workflow_id']: {run.mongo()['workflow_id']}")
+                # logger.info(f"Run tag: {run.run_tag}")
+                # logger.info(f"Files : {files}")
+                # logger.info(f"Run: {run}")
+                # logger.info(f"Run.mongo: {run.mongo()}")
+                # logger.info(f"type(run.mongo()): {type(run.mongo())}")
+                # logger.info(f"Run.mongo['workflow_id']: {run.mongo()['workflow_id']}")
 
                 existing_run = runs_collection.find_one({"run_tag": run.mongo()["run_tag"], "workflow_id": run.mongo()["workflow_id"]})
                 if existing_run:
-                    logger.info(f"Run already exists: {existing_run}")
+                    logger.debug(f"Run already exists: {existing_run}")
                     run_id = existing_run["_id"]
                     run = WorkflowRun.from_mongo(existing_run)
 
@@ -231,9 +235,9 @@ async def scan_data_collection(
 
                     # logger.info(data_collection.config.type)
 
-                    # if data_collection.config.type == "JBrowse2":
-                    #     # logger.info(data_collection.config)
-                    #     handle_jbrowse_tracks(file, user_id, workflow.id, data_collection)
+                    if data_collection.config.type == "JBrowse2":
+                        # logger.info(data_collection.config)
+                        handle_jbrowse_tracks(file, user_id, workflow.id, data_collection)
 
                     # Check if the file already exists in the database
 
@@ -249,10 +253,11 @@ async def scan_data_collection(
 
                     file = File(**file)
 
-                    logger.debug(f"Existing file query: {existing_file_query}")
-                    logger.debug(f"Existing file: {existing_file}")
+                    # logger.info(f"Existing file query: {existing_file_query}")
+                    # logger.info(f"Existing file: {existing_file}")
 
                     if not existing_file:
+                        logger.debug(f"File does not exist: {file.mongo()['file_location']} - Inserting...")
                         file.id = ObjectId()
                         # If the file does not exist, add it to the database
                         files_collection.insert_one(file.mongo())
