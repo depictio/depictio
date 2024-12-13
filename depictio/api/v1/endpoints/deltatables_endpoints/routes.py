@@ -1,5 +1,6 @@
 from datetime import datetime
 import hashlib
+import math
 import os
 from bson import ObjectId
 from fastapi import HTTPException, Depends, APIRouter
@@ -27,6 +28,18 @@ from depictio.api.v1.utils import (
 
 deltatables_endpoint_router = APIRouter()
 
+def sanitize_for_json(obj):
+    """
+    Recursively sanitizes data for JSON serialization by replacing NaN and Infinity with None.
+    """
+    if isinstance(obj, dict):
+        return {k: sanitize_for_json(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [sanitize_for_json(i) for i in obj]
+    elif isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+    return obj
 
 @deltatables_endpoint_router.get("/get/{workflow_id}/{data_collection_id}")
 async def list_registered_files(
@@ -51,20 +64,26 @@ async def list_registered_files(
         data_collection_id,
     )
 
-    logger.debug(f"Workflow: {workflow}")
-    logger.debug(f"Data Collection: {data_collection}")
-    logger.debug(f"User: {user_oid}")
-    logger.debug(f"Workflow ID: {workflow_oid}")
-    logger.debug(f"Data Collection ID: {data_collection_oid}")
-    logger.debug(f"Current User: {current_user}")
+    logger.info(f"Workflow: {workflow}")
+    logger.info(f"Data Collection: {data_collection}")
+    logger.info(f"User: {user_oid}")
+    logger.info(f"Workflow ID: {workflow_oid}")
+    logger.info(f"Data Collection ID: {data_collection_oid}")
+    logger.info(f"Current User: {current_user}")
 
     # Query to find deltatable associated with the data collection
     query = {"data_collection_id": data_collection_oid}
     deltatable_cursor = deltatables_collection.find(query)
+    logger.info(f"Deltatable Cursor: {deltatable_cursor}")
     deltatables = list(deltatable_cursor)[0]
-    # logger.info(deltatable)
+    logger.info(f"Deltatables: {deltatables}")
+
+    deltatables = sanitize_for_json(deltatables)
+    logger.info(f"Deltatables sanitized: {deltatables}")
+
 
     return convert_objectid_to_str(deltatables)
+    # return convert_objectid_to_str(deltatables)
 
 
 @deltatables_endpoint_router.get("/specs/{workflow_id}/{data_collection_id}")
@@ -95,6 +114,9 @@ async def specs(
     query = {"data_collection_id": data_collection_oid}
     deltatable_cursor = deltatables_collection.find(query)
     deltatables = list(deltatable_cursor)[0]
+
+    deltatables = sanitize_for_json(deltatables)
+    logger.info(f"Deltatables sanitized: {deltatables}")
 
     # TODO - fix with versioning
     column_specs = deltatables["aggregation"][-1]["aggregation_columns_specs"]
@@ -294,7 +316,7 @@ async def aggregate_data(
     logger.info(f"Write complete to MinIO at destination: {destination_file_name}")
 
     # Precompute columns specs
-    results = precompute_columns_specs(aggregated_df, agg_functions)
+    results = precompute_columns_specs(aggregated_df, agg_functions, dc_config)
 
     # Compute the hash of the aggregated data using the filename, time, and size
     # filesize = os.path.getsize(destination_file_name)
