@@ -121,7 +121,7 @@ def upload_dir_to_s3(bucket_name, s3_folder, local_dir, s3_client):
             s3_client.upload_file(local_path, bucket_name, s3_path)
 
 
-def precompute_columns_specs(aggregated_df: pl.DataFrame, agg_functions: dict):
+def precompute_columns_specs(aggregated_df: pl.DataFrame, agg_functions: dict, dc_config: dict):
     """
     Aggregate dataframes and return a list of dictionaries with column names, types and specs.
     """
@@ -130,9 +130,23 @@ def precompute_columns_specs(aggregated_df: pl.DataFrame, agg_functions: dict):
 
     results = list()
     # For each column in the DataFrame
+
+    logger.info(f"dc_config : {dc_config}")
+    logger.info(dc_config["dc_specific_properties"])
+    if "columns_description" in dc_config["dc_specific_properties"]:
+        logger.info(dc_config["dc_specific_properties"]["columns_description"])
+        logger.info(list(dc_config["dc_specific_properties"]["columns_description"].keys()))
     for column in aggregated_df.columns:
+        logger.info(f"Processing column: {column}")
         tmp_dict = collections.defaultdict(dict)
         tmp_dict["name"] = column
+        column_description = None
+
+        if "columns_description" in dc_config["dc_specific_properties"]:
+            if column in list(dc_config["dc_specific_properties"]["columns_description"].keys()):
+                column_description = dc_config["dc_specific_properties"]["columns_description"][column]
+
+        tmp_dict["description"] = column_description
         # Identify the column data type
         col_type = str(aggregated_df[column].dtype).lower()
         # logger.info(col_type)
@@ -165,5 +179,6 @@ def precompute_columns_specs(aggregated_df: pl.DataFrame, agg_functions: dict):
                     result = result[0]
                 tmp_dict["specs"][str(method_name)] = numpy_to_python(result)
         results.append(tmp_dict)
-    logger.info(results)
+        logger.info(f"Column specs: {tmp_dict}")
+    logger.info(f"Results: {results}")
     return results
