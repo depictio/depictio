@@ -197,7 +197,7 @@ def register_callbacks_stepper_part_one(app):
                 # if description in col sub dict, update headerTooltip
                 for col in columnDefs:
                     if "description" in cols[col["field"]] and cols[col["field"]]["description"] is not None:
-                        col["headerTooltip"] = f"{col['headerTooltip']}\nDescription: {cols[col['field']]['description']}"
+                        col["headerTooltip"] = f"{col['headerTooltip']} | Description: {cols[col['field']]['description']}"
 
                 if "depictio_run_id" in cols:
                     run_nb = cols["depictio_run_id"]["specs"]["nunique"]
