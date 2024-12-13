@@ -79,6 +79,18 @@ def render_dashboardwise_layout(dashboard):
                                         children=[
                                             dmc.Group(
                                                 [
+                                                    dmc.Text("Database entry ID: ", weight=700, size="sm"),
+                                                    dmc.Text(str(dashboard.id), size="sm"),
+                                                ]
+                                            ),
+                                            dmc.Group(
+                                                [
+                                                    dmc.Text("Dashboard ID: ", weight=700, size="sm"),
+                                                    dmc.Text(str(dashboard_id), size="sm"),
+                                                ]
+                                            ),
+                                            dmc.Group(
+                                                [
                                                     dmc.Text("Owner: ", weight=700, size="sm"),
                                                     dmc.Text(dashboard_owner, size="sm"),
                                                 ]
