@@ -184,13 +184,21 @@ def upload_file_to_s3(bucket_name, file_location, s3_key):
 
 
 def handle_jbrowse_tracks(file, user_id, workflow_id, data_collection):
+
+
+
+    if not isinstance(file, dict):
+        file = file.mongo()
+
+    logger.debug(f"Handling JBrowse tracks for file: {file}")
+
     # endpoint_url = "http://0.0.0.0"
     endpoint_url = settings.minio.external_endpoint
     port = settings.minio.port
     bucket_name = settings.minio.bucket
 
-    file_location = file.mongo()["file_location"]
-    run_id = file.mongo()["run_id"]
+    file_location = file["file_location"]
+    run_id = file["run_id"]
 
     # Extract the path suffix from the file location
     path_suffix = file_location.split(f"{run_id}/")[1]
@@ -214,7 +222,7 @@ def handle_jbrowse_tracks(file, user_id, workflow_id, data_collection):
     # Prepare the track details
     track_details = {
         "trackId": s3_key_hash,
-        "name": file.filename,
+        "name": file["filename"],
         "uri": f"{endpoint_url}:{port}/{bucket_name}/{s3_key}",
         "indexUri": f"{endpoint_url}:{port}/{bucket_name}/{s3_key}.tbi",
         "run_id": run_id,
@@ -239,15 +247,19 @@ def handle_jbrowse_tracks(file, user_id, workflow_id, data_collection):
     file_index = data_collection.config.dc_specific_properties.index_extension
 
     # Upload the file to S3
-    upload_file_to_s3(bucket_name, file_location, s3_key)
+    # upload_file_to_s3(bucket_name, file_location, s3_key)
 
     # Update the file mongo document with the S3 key
     # FIXME: find another way to access internally and externally (jbrowse) files registered
-    file.S3_location = trackid
-    file.trackId = s3_key_hash
+    file["S3_location"] = trackid
+    file["trackId"] = s3_key_hash
+
+    # check if file is dict or object
+    # if not isinstance(file, dict):
+    #     file = file.mongo()
 
     # Update into the database
-    files_collection.update_one({"_id": file.mongo()["_id"]}, {"$set": file.mongo()})
+    files_collection.update_one({"_id": file["_id"]}, {"$set": file})
 
     # Check if the file is an index and skip if it is
     if not file_location.endswith(file_index):
@@ -312,6 +324,7 @@ async def create_trackset(
         "data_collection._id": data_collection_oid,
     }
     files = list(files_collection.find(query_files))
+    logger.debug(f"Files: {files}")
 
     new_tracks = list()
 
@@ -468,11 +481,13 @@ async def filter_config(
     current_user: str = Depends(get_current_user),
 ):
     tracks = filter_params.get("tracks", [])
+    logger.debug(f"Filtering tracks: {tracks}")
     # Update the JBrowse configuration
     jbrowse_config_dir = settings.jbrowse.config_dir
     data_collection_oid = filter_params.get("data_collection_id")
 
     default_config_path = os.path.join(jbrowse_config_dir, f"{current_user.id}_{data_collection_oid}.json")
+    lite_config_path = default_config_path.replace(".json", "_lite.json")
     dashboard_id = filter_params.get("dashboard_id")
 
     logger.debug(f"Filtering tracks: {tracks}")
@@ -482,10 +497,11 @@ async def filter_config(
     logger.debug(f"Len tracks: {len(tracks)}")
 
     if not tracks:
-        return {"message": "No tracks provided."}
+
+        return {"message": "No tracks provided.", "session": None}
 
     if not default_config_path:
-        return {"message": "No default config provided."}
+        return {"message": "No default config provided.", "session": None}
 
     if not dashboard_id:
         return {"message": "No dashboard ID provided."}
@@ -500,6 +516,7 @@ async def filter_config(
             if track["trackId"] not in filtered_track_ids:
                 filtered_track_ids.append(track["trackId"])
                 filtered_tracks.append(track)
+                logger.debug(f"Track ID: {track['trackId']}")
 
 
     logger.debug(f"Filtered tracks: {filtered_tracks}")

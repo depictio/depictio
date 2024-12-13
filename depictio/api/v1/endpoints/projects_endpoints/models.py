@@ -1,16 +1,18 @@
 from datetime import datetime
 import re
-from typing import List
+from typing import List, Optional
 from bson import ObjectId
-from pydantic import (
-    BaseModel,
-    validator,
-)
+from pydantic import Field, validator
 from depictio.api.v1.endpoints.workflow_endpoints.models import Workflow
+from depictio.api.v1.models.base import MongoModel, PyObjectId
 
 
-class Project(BaseModel):
-    # depictio_version: str
+class Project(MongoModel):
+    id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
+    depictio_version: str
+    name: str
+    description: Optional[str]
+    data_management_platform_project_url: Optional[str]
     workflows: List[Workflow]
 
     @validator("depictio_version")

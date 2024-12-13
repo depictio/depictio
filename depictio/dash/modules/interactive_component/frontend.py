@@ -20,6 +20,7 @@ from depictio.dash.utils import (
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging import logger
 
+
 def register_callbacks_interactive_component(app):
     @app.callback(
         Output({"type": "input-dropdown-method", "index": MATCH}, "data"),
@@ -78,7 +79,6 @@ def register_callbacks_interactive_component(app):
     def reset_aggregation_value(column_value):
         return None
 
-
     @app.callback(
         Output({"type": "btn-done-edit", "index": MATCH}, "disabled", allow_duplicate=True),
         [
@@ -99,6 +99,7 @@ def register_callbacks_interactive_component(app):
     @app.callback(
         Output({"type": "input-body", "index": MATCH}, "children"),
         Output({"type": "interactive-description", "index": MATCH}, "children"),
+        Output({"type": "columns-description", "index": MATCH}, "children"),
         [
             Input({"type": "input-title", "index": MATCH}, "value"),
             Input({"type": "input-dropdown-column", "index": MATCH}, "value"),
@@ -139,10 +140,29 @@ def register_callbacks_interactive_component(app):
         cols_json = get_columns_from_data_collection(wf_tag, dc_tag, TOKEN)
         logger.info(f"cols_json: {cols_json}")
 
+        from dash import dash_table
+
+        data_columns_df = [{"column": c, "description": cols_json[c]["description"]} for c in cols_json if cols_json[c]["description"] is not None]
+
+        columns_description_df = dash_table.DataTable(
+            # id={
+            #     "type": "columns-description",
+            #     "index": input_id,
+            # },
+            columns=[
+                {"name": "Column", "id": "column"},
+                {"name": "Description", "id": "description"},
+            ],
+            data=data_columns_df,
+            # Small font size, helvetica, no border, center text
+            style_cell={"fontSize": 12, "fontFamily": "Helvetica", "border": "0px", "textAlign": "center"},
+            style_header={"fontWeight": "bold"},
+        )
+
         # If any of the input values are None, return an empty list
         if input_value is None or column_value is None or aggregation_value is None or wf_tag is None or dc_tag is None:
             if not component_data:
-                return ([], None)
+                return ([], None, columns_description_df)
             else:
                 input_value = component_data.get("title", "")
                 column_value = component_data["column_name"]
@@ -154,7 +174,6 @@ def register_callbacks_interactive_component(app):
                 logger.info(f"aggregation_value: {aggregation_value}")
                 logger.info(f"value: {value}")
 
-
         # Get the type of the selected column
         column_type = cols_json[column_value]["type"]
 
@@ -162,8 +181,12 @@ def register_callbacks_interactive_component(app):
             children=[
                 html.Hr(),
                 dmc.Tooltip(
-                    children=dmc.Badge(
-                        children="Interactive component description", leftSection=DashIconify(icon="mdi:information", color="grey", width=20), color="gray", radius="lg"
+                    children=dmc.Stack(
+                        [
+                            dmc.Badge(
+                                children="Interactive component description", leftSection=DashIconify(icon="mdi:information", color="grey", width=20), color="gray", radius="lg"
+                            ),
+                        ]
                     ),
                     label=agg_functions[str(column_type)]["input_methods"][aggregation_value]["description"],
                     multiline=True,
@@ -212,9 +235,10 @@ def register_callbacks_interactive_component(app):
         if value:
             interactive_kwargs["value"] = value
 
+
         new_interactive_component = build_interactive(**interactive_kwargs)
 
-        return new_interactive_component, interactive_description
+        return new_interactive_component, interactive_description, columns_description_df
 
 
 def design_interactive(id, df):
@@ -293,7 +317,16 @@ def design_interactive(id, df):
     )
 
     interactive_row = [
-        dmc.Center(dbc.Row([left_column, right_column])),
+        dmc.Center(
+            dmc.Stack(
+                [
+                    dbc.Row([left_column, right_column]),
+                    html.Hr(),
+                    # dmc.Space(h=5),
+                    dbc.Row(dmc.Stack([dmc.Title("Data Collection - Columns description", order=5), html.Div(id={"type": "columns-description", "index": id["index"]})])),
+                ]
+            ),
+        ),
     ]
     return interactive_row
 

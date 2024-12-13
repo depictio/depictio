@@ -116,7 +116,7 @@ def enable_box_edit_mode(
             if component_type == "figure" and component_data.get("visu_type", None).lower() == "scatter":
                 buttons = dmc.Group([remove_button, edit_button, duplicate_button, reset_selection_button], grow=False, spacing="xs", style={"margin-left": "12px"})
 
-            elif component_type == "table":
+            elif component_type in ["table", "jbrowse"]:
                 buttons = dmc.Group([remove_button, duplicate_button], grow=False, spacing="xs", style={"margin-left": "12px"})
         else:
             buttons = dmc.Group([remove_button, duplicate_button], grow=False, spacing="xs", style={"margin-left": "12px"})
