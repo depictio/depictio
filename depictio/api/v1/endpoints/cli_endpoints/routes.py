@@ -11,14 +11,14 @@ from depictio.api.v1.models_utils import validate_config
 cli_endpoint_router = APIRouter()
 
 
-@cli_endpoint_router.post("/validate_agent_config")
-async def validate_agent_config_endpoint(agent_config: dict):
-    # Validate that the agent config is correct using token and email
-    user = agent_config["user"]
+@cli_endpoint_router.post("/validate_cli_config")
+async def validate_cli_config_endpoint(cli_config: dict):
+    # Validate that the cli config is correct using token and email
+    user = cli_config["user"]
     token = user["token"]
     email = user["email"]
 
-    logger.info(f"Agent config: {agent_config}")
+    logger.info(f"cli config: {cli_config}")
     logger.info(f"User: {user}")
     logger.info(f"Token: {token}")
     logger.info(f"Email: {email}")
@@ -36,8 +36,12 @@ async def validate_agent_config_endpoint(agent_config: dict):
         return {"valid": False}
 
 
-@cli_endpoint_router.post("/validate_pipeline_config")
+@cli_endpoint_router.post("/validate_project_config")
 async def validate_pipeline_config_endpoint(pipeline_config: dict = dict(), current_user=Depends(get_current_user)):
+
+    logger.info(f"Pipeline config: {pipeline_config}")
+    logger.info(f"Current user: {current_user}")
+
     if not pipeline_config:
         return {"success": False, "error": "No pipeline config provided"}
 
@@ -52,9 +56,10 @@ async def validate_pipeline_config_endpoint(pipeline_config: dict = dict(), curr
     current_userbase = convert_objectid_to_str(current_userbase)
     logger.info(f"Current user base: {current_user}")
     if not current_user:
+        logger.error("Current user not found.")
         return {"success": False, "error": "Invalid token"}
 
-    # Validate that the pipeline config is correct using agent config and pipeline config
+    # Validate that the pipeline config is correct using cli config and pipeline config
 
     logger.info(f"Pipeline config: {pipeline_config}")
 
