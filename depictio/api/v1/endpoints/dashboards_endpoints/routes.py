@@ -11,6 +11,7 @@ from depictio.api.v1.endpoints.dashboards_endpoints.models import DashboardData
 from depictio.api.v1.configs.logging import logger
 
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
+from depictio.api.v1.models.base import convert_objectid_to_str
 
 dashboards_endpoint_router = APIRouter()
 
@@ -69,6 +70,7 @@ async def list_dashboards(current_user=Depends(get_current_user)):
 
     return result["dashboards"]
 
+
 @dashboards_endpoint_router.get("/list_all")
 async def list_dashboards(current_user=Depends(get_current_user)):
     """
@@ -77,7 +79,7 @@ async def list_dashboards(current_user=Depends(get_current_user)):
 
     if not current_user:
         raise HTTPException(status_code=401, detail="Current user not found.")
-    
+
     if not current_user.is_admin:
         raise HTTPException(status_code=401, detail="Current user is not an admin.")
 
@@ -91,6 +93,80 @@ async def list_dashboards(current_user=Depends(get_current_user)):
         raise HTTPException(status_code=404, detail=result["message"])
 
     return result["dashboards"]
+
+
+@dashboards_endpoint_router.post("/toggle_public_status/{dashboard_id}")
+async def make_dashboard_public(dashboard_id: str, params: dict, current_user=Depends(get_current_user)):
+    """
+    Make a dashboard with the given dashboard ID public or private.
+    """
+    logger.info(f"Params: {params}")
+    logger.info(f"Current user: {current_user}")
+    logger.info(f"Dashboard ID: {dashboard_id}")    
+
+
+    if not params:
+        raise HTTPException(status_code=400, detail="No parameters provided.")
+
+    status = bool(params.get("public", None))
+
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Current user not found.")
+
+    user_id = current_user.id
+
+    if status:
+        result = dashboards_collection.find_one_and_update(
+            {"dashboard_id": dashboard_id, "permissions.owners._id": user_id},
+            {"$set": {"permissions.viewers": ["*"]}},
+            return_document=True,  # Adjust based on your MongoDB driver version, some versions might use ReturnDocument.AFTER
+        )
+        logger.info(f"Dashboard with ID '{dashboard_id}' made public.")
+    else:
+        get_current_permissions = dashboards_collection.find_one({"dashboard_id": dashboard_id, "permissions.owners._id": user_id})
+        result = dashboards_collection.find_one_and_update(
+            {"dashboard_id": dashboard_id, "permissions.owners._id": user_id},
+            {"$set": {"permissions.viewers": [e for e in get_current_permissions["permissions"]["viewers"] if e != "*"]}},
+            return_document=True,  # Adjust based on your MongoDB driver version, some versions might use ReturnDocument.AFTER
+        )
+        logger.info(f"Dashboard with ID '{dashboard_id}' made private.")
+
+    if result:
+        logger.info(f"Dashboard with ID '{dashboard_id}' changed status to public: {status}")
+        logger.info(f"Result: {result}")
+        logger.info(f"Permissions: {result['permissions']}")
+
+        return {"message": f"Dashboard with ID '{dashboard_id}' changed status to public: {status}", "permissions": convert_objectid_to_str(result["permissions"])}
+    else:
+        raise HTTPException(status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found.")
+
+
+@dashboards_endpoint_router.post("/edit_name/{dashboard_id}")
+async def edit_dashboard_name(dashboard_id: str, data: Dict, current_user=Depends(get_current_user)):
+    """
+    Edit the name of a dashboard with the given dashboard ID.
+    """
+
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Current user not found.")
+
+    user_id = current_user.id
+
+    new_name = data.get("new_name", None)
+    if not new_name:
+        raise HTTPException(status_code=400, detail="No new name provided.")
+
+    result = dashboards_collection.find_one_and_update(
+        {"dashboard_id": dashboard_id, "permissions.owners._id": user_id},
+        {"$set": {"title": new_name}},
+        return_document=True,  # Adjust based on your MongoDB driver version, some versions might use ReturnDocument.AFTER
+    )
+
+    if result:
+        logger.info(f"Dashboard name updated successfully to '{new_name}'.")
+        return {"message": f"Dashboard name updated successfully to '{new_name}'."}
+    else:
+        raise HTTPException(status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found.")
 
 
 # /Users/tweber/Gits/depictio/dev/jup_nb/.jupyter/jupyter_notebook_config.py
@@ -153,7 +229,8 @@ async def screenshot_dashboard(dashboard_id: str, current_user=Depends(get_curre
 
     try:
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True, executable_path="/home/mambauser/.cache/ms-playwright/chromium-1140/chrome-linux/chrome")
+            browser = await p.chromium.launch(headless=True)
+            # browser = await p.chromium.launch(headless=True, executable_path="/home/mambauser/.cache/ms-playwright/chromium-1140/chrome-linux/chrome")
 
             # Define the viewport size (browser window size)
             viewport_width = 1920
