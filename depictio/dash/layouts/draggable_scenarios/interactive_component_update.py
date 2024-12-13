@@ -142,10 +142,12 @@ def render_raw_children(
     # )
 
     # Log the addition of 'jbrowse' children
-    logger.info(f"Added 'jbrowse' children. Total children so far: {len(children)}")
+    # logger.info(f"Added 'jbrowse' children. Total children so far: {len(children)}")
 
     # Process non-'jbrowse' components
     comp_type = component.get("component_type")
+
+    logger.info(f"Processing component type: {comp_type}")
 
     # Update interactive components
     if comp_type == "interactive":
@@ -159,6 +161,7 @@ def render_raw_children(
 
     # Set flags and tokens
     component.update({"build_frame": True, "refresh": True, "access_token": TOKEN, "no_store": True})
+    logger.info(f"Component: {component}")
 
     # Attach relevant metadata if available
     # if stored_metadata_complete:
@@ -190,7 +193,7 @@ def render_raw_children(
     # logger.info(f"Child added: {child}")
 
     logger.info(f"Total children rendered: {len(children)}")
-    logger.debug(f"Child indexes: {indexes}")
+    logger.info(f"Child indexes: {indexes}")
 
     return child, index
 
@@ -255,10 +258,42 @@ def update_interactive_component(stored_metadata_raw, interactive_components_dic
     # for child, component in zip(current_draggable_children, stored_metadata):
     #     if component["component_type"] in ["jbrowse"]:
     #         children.append(child)
-    # if component["component_type"] == "interactive":
-    #     logger.info(f"Interactive CHILD - {child}")
-    #     child["props"]["children"][1]["props"]["children"]["props"]["children"]["props"]["children"][2]["props"]["data"]["value"] = interactive_components_dict[component["index"]]["value"]
-    #     logger.info(f"Interactive CHILD - {child}")
+    #     elif component["component_type"] == "interactive":
+    #         logger.info(f"Interactive CHILD - {child}")
+    #         logger.info(f"Interactive CHILD keys - {child.keys()}")
+            
+    #         try:
+    #             level1 = child["props"]
+    #             logger.info(f"Level 1 props: {level1}")
+                
+    #             level2 = level1["children"][1]
+    #             logger.info(f"Level 2 children[1]: {level2}")
+                
+    #             level3 = level2["props"]
+    #             logger.info(f"Level 3 props: {level3}")
+                
+    #             level4 = level3["children"]["props"]
+    #             logger.info(f"Level 4 children.props: {level4}")
+                
+    #             level5 = level4["children"]["props"]
+    #             logger.info(f"Level 5 children.props: {level5}")
+                
+    #             level6 = level5["children"]["props"]
+    #             logger.info(f"Level 6 children.props: {level6}")
+                
+    #             level7 = level6["children"][2]["props"]["data"]["value"]
+    #             logger.info(f"Level 7 data.value: {level7}")
+                
+    #             # Now perform the assignment
+    #             child["props"]["children"][1]["props"]["children"]["props"]["children"]["props"]["children"][2]["props"]["data"]["value"] = interactive_components_dict[component["index"]]["value"]
+                
+    #         except KeyError as e:
+    #             logger.error(f"KeyError encountered: {e}")
+    #             # Handle the error or re-raise with more context
+    #             raise
+            
+    #         logger.info(f"Interactive CHILD after update - {child}")
+
 
     logger.info(f"df_dict_processed - {df_dict_processed}")
 

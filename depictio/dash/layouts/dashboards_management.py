@@ -132,18 +132,9 @@ def edit_dashboard_name(new_name, dashboard_id, dashboards, token):
         if dashboard.dashboard_id == dashboard_id:
             logger.info(f"Found dashboard to edit: {dashboard}")
             dashboard.title = new_name
-            dashboard_to_edit = dashboard
         updated_dashboards.append(dashboard)
 
-    logger.info(f"dashboard_to_edit: {dashboard_to_edit}")
-
-    logger.info(f"dashboard_to_edit.mongo(): {dashboard_to_edit.mongo()}")
-
-    logger.info(f"convert_objectid_to_str(dashboard_to_edit.mongo()) {convert_objectid_to_str(dashboard_to_edit.mongo())}")
-
-    response = httpx.post(
-        f"{API_BASE_URL}/depictio/api/v1/dashboards/save/{dashboard_id}", headers={"Authorization": f"Bearer {token}"}, json=convert_objectid_to_str(dashboard_to_edit.mongo())
-    )
+    response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/dashboards/edit_name/{dashboard_id}", headers={"Authorization": f"Bearer {token}"}, json={"new_name": new_name})
 
     if response.status_code == 200:
         logger.info(f"Successfully edited dashboard name: {dashboard}")
@@ -337,8 +328,7 @@ def register_callbacks_dashboards_management(app):
             )
             return modal
 
-        def create_buttons(dashboard, user_id):
-            disabled = True if str(user_id) not in [str(owner["_id"]) for owner in dashboard["permissions"]["owners"]] else False
+        def create_dashboad_view_header(dashboard, user_id):
             public = True if "*" in [e for e in dashboard["permissions"]["viewers"]] else False
 
             if str(user_id) in [str(owner["_id"]) for owner in dashboard["permissions"]["owners"]]:
@@ -350,9 +340,7 @@ def register_callbacks_dashboards_management(app):
             badge_owner = dmc.Badge(
                 f"Owner: {dashboard['permissions']['owners'][0]['email']}", color=color_badge_ownership, leftSection=DashIconify(icon="mdi:account", width=16, color="grey")
             )
-            badge_status = dmc.Badge(
-                "Public" if public else "Private", color="green" if public else "red", leftSection=DashIconify(icon=badge_icon, width=16, color="grey")
-            )
+            badge_status = dmc.Badge("Public" if public else "Private", color="green" if public else "violet", leftSection=DashIconify(icon=badge_icon, width=16, color="grey"))
 
             group = html.Div(
                 [
@@ -370,8 +358,22 @@ def register_callbacks_dashboards_management(app):
                         ]
                     ),
                     dmc.Space(h=10),
-                    dmc.Group([badge_owner, badge_status], ),
+                    dmc.Group(
+                        [badge_owner, badge_status],
+                    ),
                     dmc.Space(h=10),
+                ]
+            )
+            return group
+
+        def create_buttons(dashboard, user_id):
+            disabled = True if str(user_id) not in [str(owner["_id"]) for owner in dashboard["permissions"]["owners"]] else False
+            public = True if "*" in [e for e in dashboard["permissions"]["viewers"]] else False
+            privacy_button_title = "Make private" if public else "Make public"
+            color_privacy_button = "violet" if public else "green"
+
+            group = html.Div(
+                [
                     dmc.Group(
                         [
                             html.A(
@@ -380,9 +382,10 @@ def register_callbacks_dashboards_management(app):
                                     id={"type": "view-dashboard-button", "index": dashboard["dashboard_id"]},
                                     variant="outline",
                                     color="dark",
-                                    # size="xs",
+                                    size="xs",
                                     # style={"fontFamily": "Virgil"},
                                     # leftIcon=DashIconify(icon="mdi:eye", width=12, color="black"),
+                                    style={"padding": "2px 6px", "fontSize": "12px"},
                                 ),
                                 href=f"/dashboard/{dashboard['dashboard_id']}",
                             ),
@@ -393,7 +396,8 @@ def register_callbacks_dashboards_management(app):
                                 color="blue",
                                 # style={"fontFamily": "Virgil"},
                                 disabled=disabled,
-                                # size="xs",
+                                size="xs",
+                                style={"padding": "2px 6px", "fontSize": "12px"},
                             ),
                             dmc.Button(
                                 "Duplicate",
@@ -401,7 +405,8 @@ def register_callbacks_dashboards_management(app):
                                 variant="outline",
                                 color="gray",
                                 # style={"fontFamily": "Virgil"},
-                                # size="xs",
+                                size="xs",
+                                style={"padding": "2px 6px", "fontSize": "12px"},
                             ),
                             dmc.Button(
                                 "Delete",
@@ -410,17 +415,19 @@ def register_callbacks_dashboards_management(app):
                                 color="red",
                                 # style={"fontFamily": "Virgil"},
                                 disabled=disabled,
-                                # size="xs",
+                                size="xs",
+                                style={"padding": "2px 6px", "fontSize": "12px"},
                             ),
-                            # dmc.Button(
-                            #     "Make public",
-                            #     id={"type": "make-public-dashboard-button", "index": dashboard["dashboard_id"]},
-                            #     variant="outline",
-                            #     color="violet",
-                            #     # style={"fontFamily": "Virgil"},
-                            #     disabled=disabled,
-                            #     size="xs",
-                            # ),
+                            dmc.Button(
+                                privacy_button_title,
+                                id={"type": "make-public-dashboard-button", "index": dashboard["dashboard_id"]},
+                                variant="outline",
+                                color=color_privacy_button,
+                                # style={"fontFamily": "Virgil"},
+                                disabled=disabled,
+                                size="xs",
+                                style={"padding": "2px 6px", "fontSize": "12px"},
+                            ),
                         ]
                         # align="center",
                         # position="apart",
@@ -487,6 +494,53 @@ def register_callbacks_dashboards_management(app):
                 delete_modal = modal_delete_dashboard(dashboard)
                 edit_name_modal = modal_edit_name_dashboard(dashboard)
                 buttons = create_buttons(dashboard, user_id)
+                dashboard_header = create_dashboad_view_header(dashboard, user_id)
+
+                buttons = dmc.Accordion(
+                    [
+                        dmc.AccordionItem(
+                            value="actions",
+                            children=[
+                                dmc.AccordionControl(
+                                    dmc.Group(
+                                        [
+                                            # Reduce padding and margins for a smaller look
+                                            DashIconify(icon="mdi:interaction-double-tap", width=20, color="gray"),
+                                            dmc.Text(
+                                                "Dashboard Actions",
+                                                style={
+                                                    "fontSize": "12px",  # Smaller font size
+                                                    "padding": "2px 4px",  # Reduce padding
+                                                },
+                                            ),
+                                        ],
+                                        style={
+                                            "gap": "4px",  # Smaller gap between components
+                                        },
+                                    ),
+                                    style={
+                                        "padding": "4px",  # Smaller control padding
+                                        "fontSize": "12px",  # Smaller font for control
+                                    },
+                                ),
+                                dmc.AccordionPanel(
+                                    buttons,
+                                    style={
+                                        "padding": "4px",  # Smaller padding for the panel
+                                        "fontSize": "12px",  # Smaller font for the panel
+                                    },
+                                ),
+                            ],
+                        ),
+                    ],
+                    style={
+                        "width": "100%",  # Adjust width as needed
+                        "padding": "4px",  # Smaller padding for the accordion
+                        "fontSize": "12px",  # Reduce overall font size
+                    },
+                    # variant="separated",
+                    chevronPosition="left",
+                )
 
                 thumbnail = return_thumbnail(user_id, dashboard)
                 view.append(
@@ -502,13 +556,31 @@ def register_callbacks_dashboards_management(app):
                             "display": "flex",
                             "flexDirection": "column",
                         },
-                        children=[thumbnail, buttons, delete_modal, edit_name_modal],
+                        children=[thumbnail, dashboard_header, buttons, delete_modal, edit_name_modal],
                     )
                 )
             return view
 
-        dashboards_view = dmc.SimpleGrid(
-            loop_over_dashboards(user_id, dashboards),
+        private_dashboards_section_header = dmc.Title([DashIconify(icon="mdi:lock", width=18, color="#7d56f2"), " Private Dashboards"], order=3)
+        private_dashboards = [d for d in dashboards if "*" not in d["permissions"]["viewers"]]
+        private_dashboards_ids = [d["dashboard_id"] for d in private_dashboards]
+        private_dashboards_view = dmc.SimpleGrid(
+            loop_over_dashboards(user_id, private_dashboards),
+            cols=3,  # Default number of columns
+            spacing="xl",
+            verticalSpacing="xl",
+            breakpoints=[
+                {"maxWidth": 1600, "cols": 3},  # Large screens
+                {"maxWidth": 1200, "cols": 2},  # Medium screens
+                {"maxWidth": 768, "cols": 1},  # Small screens
+            ],
+            style={"width": "100%"},
+        )
+        public_dashboards_section_header = dmc.Title([DashIconify(icon="material-symbols:public", width=18, color="#54ca74"), " Public Dashboards"], order=3)
+
+        public_dashboards = [d for d in dashboards if "*" in d["permissions"]["viewers"] and d["dashboard_id"] not in private_dashboards_ids]
+        public_dashboards_view = dmc.SimpleGrid(
+            loop_over_dashboards(user_id, public_dashboards),
             cols=3,  # Default number of columns
             spacing="xl",
             verticalSpacing="xl",
@@ -524,7 +596,15 @@ def register_callbacks_dashboards_management(app):
         return html.Div(
             [
                 # dmc.Grid([title], justify="space-between", align="center", style={"width": "100%", "padding": "20px 0"}), html.Hr(),
-                dashboards_view
+                # private_dashboards_view
+                private_dashboards_section_header,
+                dmc.Space(h=10),
+                private_dashboards_view,
+                dmc.Space(h=20),
+                html.Hr(),
+                public_dashboards_section_header,
+                dmc.Space(h=10),
+                public_dashboards_view,
             ],
             style={"width": "100%", "padding": "0 20px"},
         )
@@ -536,6 +616,9 @@ def register_callbacks_dashboards_management(app):
             Input({"type": "confirm-delete", "index": ALL}, "n_clicks"),
             Input({"type": "save-edit-name-dashboard", "index": ALL}, "n_clicks"),
             Input({"type": "duplicate-dashboard-button", "index": ALL}, "n_clicks"),
+            Input({"type": "make-public-dashboard-button", "index": ALL}, "n_clicks"),
+            Input({"type": "make-public-dashboard-button", "index": ALL}, "children"),
+            Input({"type": "make-public-dashboard-button", "index": ALL}, "id"),
         ],
         [
             State({"type": "create-dashboard-button", "index": ALL}, "id"),
@@ -551,6 +634,9 @@ def register_callbacks_dashboards_management(app):
         delete_n_clicks_list,
         edit_n_clicks_list,
         duplicate_n_clicks_list,
+        make_public_n_clicks_list,
+        make_public_children_list,
+        make_public_id_list,
         # create_ids_list,
         store_data_list,
         delete_ids_list,
@@ -584,6 +670,18 @@ def register_callbacks_dashboards_management(app):
 
         if ctx.triggered_id.get("type") == "duplicate-dashboard-button":
             return handle_dashboard_duplication(dashboards, user_data, store_data_list, current_userbase)
+
+        if ctx.triggered_id.get("type") == "make-public-dashboard-button":
+            logger.info("Make public dashboard button clicked")
+            logger.info(f"make_public_children_list: {make_public_children_list}")
+            logger.info(f"make_public_n_clicks_list: {make_public_n_clicks_list}")
+            logger.info(f"make_public_id_list: {make_public_id_list}")
+            public_current_status = [child for child, id in zip(make_public_children_list, make_public_id_list) if id["index"] == ctx.triggered_id["index"]][0]
+            logger.info(f"public_current_status: {public_current_status}")
+            public_current_status = False if public_current_status == "Make public" else True
+            logger.info(f"public_current_status: {public_current_status}")
+
+            return handle_dashboard_make_public(dashboards, user_data, store_data_list, current_userbase, public_current_status)
 
         if ctx.triggered_id.get("type") == "save-edit-name-dashboard":
             logger.info("Edit dashboard button clicked")
@@ -638,6 +736,39 @@ def register_callbacks_dashboards_management(app):
         dashboards = [dashboard for dashboard in dashboards if dashboard.dashboard_id != index_confirm_delete]
         return generate_dashboard_view_response(dashboards, store_data_list, current_userbase)
         # return generate_dashboard_view_response(dashboards, len(dashboards) + 1, store_data_list, current_userbase)
+
+    def handle_dashboard_make_public(dashboards, user_data, store_data_list, current_userbase, public_current_status):
+        logger.info("Make public dashboard button clicked")
+        ctx_triggered_dict = ctx.triggered[0]
+        logger.info(f"ctx_triggered_dict: {ctx_triggered_dict}")
+        index_make_public = eval(ctx_triggered_dict["prop_id"].split(".")[0])["index"]
+        logger.info(f"index_make_public: {index_make_public}")
+        logger.info(f"User data: {user_data}")
+        logger.info(f"current_userbase: {current_userbase}")
+        logger.info(f"public_current_status: {public_current_status}")
+        logger.info(f"NOT public_current_status: {not public_current_status}")
+
+        updated_dashboards = list()
+        for dashboard in dashboards:
+            if dashboard.dashboard_id == index_make_public:
+                logger.info(f"Found dashboard to update status: {dashboard}")
+                response = httpx.post(
+                    f"{API_BASE_URL}/depictio/api/v1/dashboards/toggle_public_status/{index_make_public}",
+                    headers={"Authorization": f"Bearer {user_data['access_token']}"},
+                    json={"public": not public_current_status},
+                )
+                dashboard.permissions = response.json()["permissions"]
+                updated_dashboards.append(dashboard)
+
+                if response.status_code == 200:
+                    logger.info(f"Successfully made dashboard '{not public_current_status}': {dashboard}")
+
+                else:
+                    raise ValueError(f"Failed to make dashboard public. Error: {response.text}")
+            else:
+                updated_dashboards.append(dashboard)
+
+        return generate_dashboard_view_response(updated_dashboards, store_data_list, current_userbase)
 
     def handle_dashboard_duplication(dashboards, user_data, store_data_list, current_userbase):
         logger.info("Duplicate dashboard button clicked")

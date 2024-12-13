@@ -138,7 +138,7 @@ def convert_filter_model_to_metadata(filter_model):
     return metadata
 
 
-def load_deltatable_lite(workflow_id: ObjectId, data_collection_id: ObjectId, metadata: Optional[dict] = None, TOKEN: Optional[str] = None) -> pl.DataFrame:
+def load_deltatable_lite(workflow_id: ObjectId, data_collection_id: ObjectId, metadata: Optional[dict] = None, TOKEN: Optional[str] = None, limit_rows: Optional[int] = None) -> pl.DataFrame:
     """
     Load a Delta table with optional filtering based on metadata.
 
@@ -192,6 +192,10 @@ def load_deltatable_lite(workflow_id: ObjectId, data_collection_id: ObjectId, me
                 combined_filter &= filt
             delta_scan = delta_scan.filter(combined_filter)
             logger.info("Applied filters based on metadata.")
+
+    if limit_rows:
+        delta_scan = delta_scan.limit(limit_rows)
+        logger.info(f"Applied row limit: {limit_rows}")
 
     # Collect the DataFrame
     try:

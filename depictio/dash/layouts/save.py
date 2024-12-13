@@ -44,6 +44,13 @@ def register_callbacks_save(app):
             "n_clicks",
         ),
         Input(
+            {
+                "type": "duplicate-box-button",
+                "index": ALL,
+            },
+            "n_clicks",
+        ),
+        Input(
             {"type": "remove-box-button", "index": ALL},
             "n_clicks",
         ),
@@ -65,6 +72,7 @@ def register_callbacks_save(app):
         # n_intervals,
         n_clicks_done,
         n_clicks_done_edit,
+        n_clicks_duplicate,
         n_clicks_remove,
         n_clicks_remove_all,
     ):
@@ -77,13 +85,12 @@ def register_callbacks_save(app):
         logger.debug(f"save_data_dashboard - TOKEN: {TOKEN}")
         # current_user = fetch_user_from_token(TOKEN)
 
-
         # Check user status
         current_user = fetch_user_from_token(TOKEN)
         if not current_user:
             logger.warning("User not found.")
             return dash.no_update
-        
+
         dashboard_id = pathname.split("/")[-1]
 
         # Get existing metadata for the dashboard
@@ -92,12 +99,10 @@ def register_callbacks_save(app):
             dashboard_data = dashboard_data_response.json()
             logger.debug(f"save_data_dashboard - Dashboard data: {dashboard_data}")
 
-
             # Check user permissions
             if str(current_user.id) not in [e["_id"] for e in dashboard_data["permissions"]["owners"]]:
                 logger.warning("User does not have permission to edit & save this dashboard.")
                 return dash.no_update
-
 
             from dash import ctx
 
@@ -109,6 +114,7 @@ def register_callbacks_save(app):
                 (triggered_id == "save-button-dashboard")
                 or ("btn-done" in triggered_id)
                 or ("btn-done-edit" in triggered_id)
+                or ("duplicate-box-button" in triggered_id)
                 or ("remove-box-button" in triggered_id)
                 or ("remove-all-components-button" in triggered_id)
                 or (triggered_id == "edit-components-mode-button")
@@ -128,9 +134,8 @@ def register_callbacks_save(app):
                         stored_metadata_indexes.append(elem["index"])
 
                     if "btn-done-edit" in triggered_id:
-                        parent_indexes = [elem["parent_index"] for elem in stored_metadata if elem["parent_index"]]
+                        parent_indexes = [elem["parent_index"] for elem in stored_metadata if "parent_index" in elem]
                         stored_metadata = [elem for elem in stored_metadata if elem["index"] not in parent_indexes]
-
 
                     # Replace the existing metadata with the new metadata
 

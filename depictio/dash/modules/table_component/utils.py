@@ -111,6 +111,41 @@ def build_table(**kwargs):
     # print(cols)
     columnDefs = [{"field": c, "headerTooltip": f"Column type: {e['type']}", "filter": e["filter"]} for c, e in cols.items()]
 
+    # if description in col sub dict, update headerTooltip
+    for col in columnDefs:
+        if "description" in cols[col["field"]] and cols[col["field"]]["description"] is not None:
+            col["headerTooltip"] = f"{col['headerTooltip']} | Description: {cols[col['field']]['description']}"
+
+    style_partial_data_displayed = {"display": "none"}
+
+    from dash_iconify import DashIconify
+
+    cutoff = 1000
+
+    if df.to_pandas().shape[0] > cutoff:
+        df = df.head(cutoff)
+        if build_frame:
+            style_partial_data_displayed = {"display": "block", "paddingBottom": "5px"}
+
+    partial_data_badge = dmc.Tooltip(
+        children=dmc.Badge(
+            "Partial data displayed",
+            id={"type": "graph-partial-data-displayed", "index": index},
+            style=style_partial_data_displayed,
+            leftSection=DashIconify(
+                icon="mdi:alert-circle",
+                width=20,
+            ),
+            # sx={"paddingLeft": 0},
+            size="lg",
+            radius="xl",
+            color="red",
+            fullWidth=False,
+        ),
+        label=f"Tables are currently loaded with a maximum of {cutoff} rows.",
+        position="top",
+        openDelay=500,
+    )
     # Prepare ag grid table
     table_aggrid = dag.AgGrid(
         id={"type": value_div_type, "index": str(index)},
@@ -162,6 +197,7 @@ def build_table(**kwargs):
     # Create the card body
     new_card_body = html.Div(
         [
+            partial_data_badge,
             table_aggrid,
             store_component,
         ]

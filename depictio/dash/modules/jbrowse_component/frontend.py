@@ -109,7 +109,7 @@ def design_jbrowse(id):
 def create_stepper_jbrowse_button(n, disabled=False):
     button = dbc.Col(
         dmc.Button(
-            "JBrowse2",
+            "JBrowse (Beta)",
             id={
                 "type": "btn-option",
                 "index": n,
@@ -120,7 +120,7 @@ def create_stepper_jbrowse_button(n, disabled=False):
             size="xl",
             color="yellow",
             leftIcon=DashIconify(icon="material-symbols:table-rows-narrow-rounded", color="white"),
-            disabled=True,
+            # disabled=True,
         )
     )
     store = dcc.Store(

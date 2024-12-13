@@ -155,11 +155,7 @@ def build_figure(**kwargs):
     if df.is_empty():
         df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
 
-    style_partial_data_displayed = {"display": "none"}
-    cutoff = 100000
-    if build_frame:
-        if visu_type.lower() == "scatter" and df.shape[0] > cutoff:
-            style_partial_data_displayed = {"display": "block"}
+
 
     # figure = render_figure(dict_kwargs, visu_type, df)
 
@@ -169,6 +165,12 @@ def build_figure(**kwargs):
     # selected_point = {"x": selected_point[dict_kwargs["x"]], "y": selected_point[dict_kwargs["y"]]}
 
     figure = render_figure(dict_kwargs, visu_type, df)
+
+    style_partial_data_displayed = {"display": "none"}
+    cutoff = 100000
+    if build_frame:
+        if visu_type.lower() == "scatter" and df.shape[0] > cutoff:
+            style_partial_data_displayed = {"display": "block"}
 
     partial_data_badge = dmc.Tooltip(
         children=dmc.Badge(

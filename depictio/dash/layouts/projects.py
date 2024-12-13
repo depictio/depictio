@@ -42,7 +42,19 @@ def fetch_projects(token):
         {
             "_id": ObjectId(),
             "name": "Strand-Seq",
-            "description": "Strand-Seq project",
+            "description": "Korbel group Strand-Seq project",
+            "icon": "mdi:dna",
+            "created_at": "2021-10-01",
+            "permissions": {
+                "owners": [current_user],
+                "viewers": ["*"],
+            },
+        },
+        {
+            "_id": ObjectId(),
+            "name": "TREC Single-Cell Interactome",
+            "description": "Single-Cell Interactome project",
+            "icon": "mdi:sail-boat",
             "created_at": "2021-10-01",
             "permissions": {
                 "owners": [current_user],
@@ -128,9 +140,16 @@ def render_data_collection(dc, workflow_id, token):
 
     # Preview Section for Tables
     if dc["config"]["type"].lower() == "table":
-        df = load_deltatable_lite(workflow_id=workflow_id, data_collection_id=dc["_id"], TOKEN=token)
+        df = load_deltatable_lite(workflow_id=workflow_id, data_collection_id=dc["_id"], TOKEN=token, limit_rows=100)
         logger.info(f"df shape: {df.shape} for {workflow_id}/{dc['_id']} with name {dc['data_collection_tag']}")
         columnDefs = [{"field": c, "headerName": c} for c in df.columns]
+
+        # # if description in col sub dict, update headerTooltip
+        # for col in columnDefs:
+        #     if "description" in cols[col["field"]] and cols[col["field"]]["description"] is not None:
+        #         col["headerTooltip"] = f"{col['headerTooltip']} | Description: {cols[col['field']]['description']}"
+
+
         grid = dag.AgGrid(
             rowData=df.to_pandas().head(100).to_dict("records"),
             id={"type": "project-dc-table", "index": f"{workflow_id}/{dc['_id']}"},
@@ -210,7 +229,7 @@ def render_data_collection(dc, workflow_id, token):
                                             dmc.Accordion(
                                                 children=[
                                                     dmc.AccordionControl(
-                                                        dmc.Text("Configuration", weight=700, className="label-text"),
+                                                        dmc.Text("depictio-CLI configuration", weight=700, className="label-text"),
                                                         icon=DashIconify(icon="ic:baseline-settings-applications", width=20),
                                                     ),
                                                     dmc.AccordionPanel(
@@ -449,7 +468,7 @@ def render_project_item(project, token):
         children=[
             dmc.AccordionControl(
                 f"{project['name']} ({project['_id']})",
-                icon=DashIconify(icon="mdi:folder-open", width=20),
+                icon=DashIconify(icon=project['icon'], width=20),
             ),
             dmc.AccordionPanel(
                 children=[
@@ -507,7 +526,7 @@ def render_projects_list(projects, token):
 
     sections = []
     owned_section = create_project_section("Projects Owned:", owned_projects)
-    shared_section = create_project_section("Projects Shared/Accessible:", shared_projects)
+    shared_section = create_project_section("Projects Shared:", shared_projects)
 
     if owned_section:
         sections.extend(owned_section)
@@ -606,7 +625,7 @@ def register_workflows_callbacks(app):
 
         # Temporarily hardcode the current project to "Strand-Seq"
         # Remove or modify this filter when dynamic project selection is implemented
-        projects = [project for project in projects if project.get("name") == "Strand-Seq"]
+        # projects = [project for project in projects if project.get("name") == "Strand-Seq"]
 
         if not projects:
             logger.info("No projects matched the hardcoded filter.")

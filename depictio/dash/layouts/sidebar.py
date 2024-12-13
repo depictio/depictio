@@ -116,7 +116,7 @@ def register_sidebar_callbacks(app):
                 logger.info(f"Server status: {response.json()}")
                 server_status = response.json()["status"]
                 if server_status == "online":
-                    server_status_badge = dmc.Col(dmc.Badge(f"Server online : {response.json()['version']}", variant="dot", color="green", size=14), span="content")
+                    server_status_badge = dmc.Col(dmc.Badge(f"Server online - {response.json()['version']}", variant="dot", color="green", size=14), span="content")
 
                     return [dmc.Group([server_status_badge], position="apart")]
                 else:

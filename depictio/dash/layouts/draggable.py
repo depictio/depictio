@@ -880,6 +880,7 @@ def register_callbacks_draggable(app):
         # logger.info(f"Interactive ids: {ids}")
         # logger.info(f"Stored metadata: {stored_metadata}")
         stored_metadata_interactive = [e for e in stored_metadata if e["component_type"] == "interactive"]
+        stored_metadata_interactive = remove_duplicates_by_index(stored_metadata_interactive)
         # logger.info(f"Stored metadata interactive: {stored_metadata_interactive}")
 
         # Extract dashboard_id from the URL pathname
@@ -892,6 +893,10 @@ def register_callbacks_draggable(app):
 
         # Ensure that the lengths of interactive_values, ids, and stored_metadata match
         if not (len(interactive_values) == len(ids) == len(stored_metadata_interactive)):
+            logger.info(f"Interactive values: {interactive_values}")
+            logger.info(f"Interactive ids: {ids}")
+            logger.info(f"Stored metadata: {stored_metadata_interactive}")
+            logger.info(f"Lengths of interactive_values : {len(interactive_values)}, ids: {len(ids)}, stored_metadata: {len(stored_metadata_interactive)}")
             logger.error("Mismatch in lengths of interactive_values, ids, and stored_metadata.")
             raise dash.exceptions.PreventUpdate
 
