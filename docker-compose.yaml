@@ -22,7 +22,7 @@ services:
       - "9001:9001"
 
   depictio_frontend:
-    image: depictio:stable
+    image: depictio:dev
     # image: registry.git.embl.de/tweber/depictio/depictio:latest
     build:
       dockerfile: docker-images/Dockerfile_depictio.dockerfile
@@ -31,10 +31,12 @@ services:
       - 5080:5080
     volumes:
       - ./depictio:/app/depictio
-      - ./configs:/configs
+      # - /Users/tweber/Gits/depictio-cli/configs:/configs
       - ./data:/app/data
       - ./minio_data:/minio_data
       - ./.env:/app/.env
+      - ../depictio-cli:/app/depictio-cli
+      - ../depictio-models:/app/depictio-models
     command: ["python", "depictio/dash/app.py"]
     user: "${UID}:${GID}"
     depends_on:
@@ -44,7 +46,7 @@ services:
 
   depictio_backend:
     # image: registry.git.embl.de/tweber/depictio/depictio:latest
-    image: depictio:stable
+    image: depictio:dev
     build:
       dockerfile: docker-images/Dockerfile_depictio.dockerfile
       context: .
@@ -57,8 +59,11 @@ services:
       - ./data:/app/data
       - ./minio_data:/minio_data
       - ./jbrowse-watcher-plugin/sessions:/jbrowse-watcher-plugin/sessions
-      - ./configs:/configs
+      # - /Users/tweber/Gits/depictio-cli/configs:/configs
       - ./.env:/app/.env
+      - ../depictio-cli:/app/depictio-cli
+      - ../depictio-cli/configs:/configs
+      - ../depictio-models:/app/depictio-models
     command: ["python", "depictio/api/run.py"]
     user: "${UID}:${GID}"  # Run as the specified user (not root)
     depends_on:
