@@ -7,9 +7,10 @@ from pymongo.results import UpdateResult
 
 from depictio.api.v1.db import dashboards_collection
 from depictio.api.v1.configs.logging import logger
-from depictio.api.v1.endpoints.dashboards_endpoints.models import DashboardData
-from depictio.api.v1.models.base import convert_objectid_to_str
+# from depictio.api.v1.endpoints.dashboards_endpoints.models import DashboardData
 
+from depictio_models.models.base import convert_objectid_to_str
+from depictio_models.models.dashboards import DashboardData
 
 def load_dashboards_from_db(owner, admin_mode=False):
     logger.info("Loading dashboards from MongoDB")

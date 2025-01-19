@@ -6,13 +6,17 @@ from fastapi import HTTPException, Depends, APIRouter
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.db import db
 from depictio.api.v1.configs.logging import logger
-from depictio.api.v1.endpoints.files_endpoints.models import File
 from depictio.api.v1.endpoints.jbrowse_endpoints.routes import handle_jbrowse_tracks
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.api.v1.endpoints.validators import validate_workflow_and_collection
-from depictio.api.v1.endpoints.workflow_endpoints.models import WorkflowRun
-from depictio.api.v1.models.base import convert_objectid_to_str
 
+# from depictio_models.models.base import convert_objectid_to_str
+# from depictio.api.v1.endpoints.workflow_endpoints.models import WorkflowRun
+# from depictio.api.v1.endpoints.files_endpoints.models import File
+
+from depictio_models.models.base import convert_objectid_to_str
+from depictio_models.models.workflows import WorkflowRun
+from depictio_models.models.files import File
 
 from depictio.api.v1.utils import (
     scan_files,
