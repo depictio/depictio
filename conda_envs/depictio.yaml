@@ -22,7 +22,8 @@ dependencies:
   - pika # RabbitMQ
   - plotly_express=0.4.1
   - polars
-  - pydantic==1.10.10
+  - pydantic
+  - pydantic-settings
   - pymongo
   - python
   - python-jose
@@ -36,7 +37,6 @@ dependencies:
   - pytest-playwright
   - playwright
   - pip:  
-    - pydantic[email]==1.10.10
     - dash-mantine-components==0.12.1
     - dash-jbrowse==1.2.0
     - dash-iconify==0.1.2
@@ -46,4 +46,5 @@ dependencies:
     - dash-ag-grid==2.2.0
     - pyjwt
     - pytest-playwright
+    # - pydantic[email]==1.10.10
 

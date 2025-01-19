@@ -8,12 +8,15 @@ from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.db import workflows_collection, users_collection
 from depictio.api.v1.endpoints.deltatables_endpoints.routes import delete_deltatable
 from depictio.api.v1.endpoints.files_endpoints.routes import delete_files
-from depictio.api.v1.endpoints.user_endpoints.models import UserBase
+# from depictio.api.v1.endpoints.user_endpoints.models import UserBase
 from depictio.api.v1.endpoints.workflow_endpoints.utils import compare_models
-from depictio.api.v1.models.base import convert_objectid_to_str
-from depictio.api.v1.models.top_structure import Workflow
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 
+# from depictio_models.models.base import convert_objectid_to_str
+# from depictio.api.v1.models.top_structure import Workflow
+from depictio_models.models.base import convert_objectid_to_str
+from depictio_models.models.workflows import Workflow
+from depictio_models.models.users import UserBase
 
 # Define the router
 workflows_endpoint_router = APIRouter()

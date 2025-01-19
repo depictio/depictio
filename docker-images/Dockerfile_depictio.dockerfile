@@ -77,6 +77,16 @@ RUN bash -c 'playwright install chromium'
 # RUN /opt/conda/envs/depictio/bin/pip install .
 
 # -----------------------------
+# Install depictio-models
+# -----------------------------
+COPY ./depictio-models /app/depictio-models
+USER root
+RUN rm -rf /app/depictio-models/depictio_models.egg-info
+RUN pip install -e /app/depictio-models --config-settings "editable_mode=compat"
+USER appuser  # Switch back if needed
+# RUN pip install -e /app/depictio-models --config-settings "editable_mode=compat"
+
+# -----------------------------
 # Final Commands
 # -----------------------------
 CMD ["/bin/bash"]
