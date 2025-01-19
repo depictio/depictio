@@ -9,9 +9,13 @@ from dash_iconify import DashIconify
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_token
 from depictio.api.v1.configs.logging import logger
-from depictio.api.v1.endpoints.user_endpoints.models import User
-from depictio.api.v1.endpoints.dashboards_endpoints.models import DashboardData
-from depictio.api.v1.endpoints.user_endpoints.models import UserBase
+# from depictio.api.v1.endpoints.user_endpoints.models import User
+# from depictio.api.v1.endpoints.dashboards_endpoints.models import DashboardData
+# from depictio.api.v1.endpoints.user_endpoints.models import UserBase
+
+from depictio_models.models.users import User
+from depictio_models.models.dashboards import DashboardData
+from depictio_models.models.users import UserBase
 
 # Define styles and colors
 card_styles = {
@@ -31,7 +35,7 @@ def render_dashboardwise_layout(dashboard):
 
     # Badge color based on admin status
     import json
-    from depictio.api.v1.models.base import convert_objectid_to_str
+    from depictio_models.models.base import convert_objectid_to_str
 
     dashboard_owner_raw = convert_objectid_to_str(dashboard.permissions.owners[0].mongo()) if dashboard.permissions.owners else "Unknown"
     dashboard_owner = json.dumps(dashboard_owner_raw) if dashboard_owner_raw != "Unknown" else "Unknown"

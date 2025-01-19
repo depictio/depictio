@@ -7,9 +7,9 @@ import bcrypt
 from depictio.api.v1.configs.config import API_BASE_URL, PRIVATE_KEY, ALGORITHM
 from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.endpoints.user_endpoints.core_functions import add_token_to_user, fetch_user_from_email
-from depictio.api.v1.endpoints.user_endpoints.models import Token
-from depictio.api.v1.models.base import convert_objectid_to_str
-
+# from depictio.api.v1.endpoints.user_endpoints.models import Token
+from depictio_models.models.base import convert_objectid_to_str
+from depictio_models.models.users import Token
 
 def login_user(email):
     return {"logged_in": True, "email": email}
