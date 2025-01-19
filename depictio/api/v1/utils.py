@@ -10,12 +10,16 @@ import os
 import re
 from typing import List
 
-from depictio.api.v1.endpoints.datacollections_endpoints.models import DataCollection
-from depictio.api.v1.endpoints.files_endpoints.models import File
-from depictio.api.v1.endpoints.workflow_endpoints.models import WorkflowConfig, WorkflowRun
-from depictio.api.v1.models.top_structure import RootConfig
-from depictio.api.v1.models_utils import get_config, validate_all_workflows, validate_config
 from depictio.api.v1.configs.logging import logger
+# from depictio.api.v1.endpoints.datacollections_endpoints.models import DataCollection
+# from depictio.api.v1.endpoints.files_endpoints.models import File
+# from depictio.api.v1.endpoints.workflow_endpoints.models import WorkflowConfig, WorkflowRun
+# from depictio.api.v1.models_utils import get_config, validate_all_workflows, validate_config
+# from depictio.api.v1.models.top_structure import RootConfig
+
+from depictio_models.models.data_collections import DataCollection
+from depictio_models.models.files import File
+from depictio_models.models.workflows import WorkflowConfig, WorkflowRun
 
 # FIXME: update model & function using a list of dict instead of a dict
 def construct_full_regex(files_regex, regex_config):
@@ -40,11 +44,11 @@ def regex_match(root, file, full_regex, data_collection):
         if re.match(normalized_regex, file):
             logger.debug(f"Matched file - file-based: {file}")
             return True, re.match(normalized_regex, file)
-    elif data_collection.config.regex.type.lower() == "path-based":
-        # If regex pattern is path-based, match the full path
-        file_location = os.path.join(root, file)
-        if re.match(normalized_regex, file_location):
-            return True, re.match(normalized_regex, file)
+    # elif data_collection.config.regex.type.lower() == "path-based":
+    #     # If regex pattern is path-based, match the full path
+    #     file_location = os.path.join(root, file)
+    #     if re.match(normalized_regex, file_location):
+    #         return True, re.match(normalized_regex, file)
     return False, None
 
 
@@ -155,34 +159,34 @@ def scan_runs(
     return runs
 
 
-def populate_database(config_path: str, workflow_id: str, data_collection_id: str) -> List[WorkflowRun]:
-    """
-    Populate the database with files for a given workflow.
-    """
-    config_data = get_config(config_path)
-    config = validate_config(config_data, RootConfig)
-    validated_config = validate_all_workflows(config)
+# def populate_database(config_path: str, workflow_id: str, data_collection_id: str) -> List[WorkflowRun]:
+#     """
+#     Populate the database with files for a given workflow.
+#     """
+#     config_data = get_config(config_path)
+#     config = validate_config(config_data, RootConfig)
+#     validated_config = validate_all_workflows(config)
 
-    config_dict = {f"{e.workflow_id}": e for e in validated_config.workflows}
+#     config_dict = {f"{e.workflow_id}": e for e in validated_config.workflows}
 
-    if workflow_id not in config_dict:
-        raise ValueError(f"Workflow '{workflow_id}' not found in the config file.")
+#     if workflow_id not in config_dict:
+#         raise ValueError(f"Workflow '{workflow_id}' not found in the config file.")
 
-    if workflow_id is None:
-        raise ValueError("Please provide a workflow name.")
+#     if workflow_id is None:
+#         raise ValueError("Please provide a workflow name.")
 
-    workflow = config_dict[workflow_id]
-    workflow.runs = {}
-    data_collection = workflow.data_collections[data_collection_id]
+#     workflow = config_dict[workflow_id]
+#     workflow.runs = {}
+#     data_collection = workflow.data_collections[data_collection_id]
 
-    runs_and_content = scan_runs(
-        parent_runs_location=workflow.config.parent_runs_location,
-        workflow_config=workflow.config,
-        data_collection=data_collection,
-        workflow_id=workflow_id,
-    )
+#     runs_and_content = scan_runs(
+#         parent_runs_location=workflow.config.parent_runs_location,
+#         workflow_config=workflow.config,
+#         data_collection=data_collection,
+#         workflow_id=workflow_id,
+#     )
 
-    return runs_and_content
+#     return runs_and_content
 
 
 def serialize_for_mongo(data):
