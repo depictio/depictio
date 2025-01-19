@@ -7,10 +7,12 @@ import yaml
 from depictio.api.v1.endpoints.user_endpoints.core_functions import generate_agent_config
 from depictio.api.v1.endpoints.user_endpoints.utils import hash_password, list_existing_tokens
 from depictio.api.v1.configs.logging import logger
-from depictio.api.v1.endpoints.user_endpoints.models import User
+# from depictio.api.v1.endpoints.user_endpoints.models import User
 from depictio.api.v1.endpoints.user_endpoints.utils import add_token
 from depictio.api.v1.endpoints.utils_endpoints.core_functions import create_bucket
 
+# from depictio_models.models.base import User
+from depictio_models.models.users import User
 
 user_dict = {"username": "admin", "password": hash_password("changeme"), "is_admin": True, "email": "admin@embl.de"}
 

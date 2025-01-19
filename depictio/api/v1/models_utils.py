@@ -1,16 +1,12 @@
 
-import hashlib
 import os
-from typing import Dict, List, Type
+from typing import Dict, Type
 
 from pydantic import BaseModel, ValidationError
 import yaml
 
-from depictio.api.v1.endpoints.datacollections_endpoints.models import DataCollection
-from depictio.api.v1.endpoints.user_endpoints.models import Permission, User
-from depictio.api.v1.endpoints.workflow_endpoints.models import Workflow
-from depictio.api.v1.models.top_structure import RootConfig
 from depictio.api.v1.configs.logging import logger
+
 
 def get_config(filename: str):
     """
@@ -71,67 +67,67 @@ def validate_config(config: Dict, pydantic_model: Type[BaseModel]) -> BaseModel:
     return data
 
 
-def populate_file_models(workflow: Workflow) -> List[DataCollection]:
-    """
-    Returns a list of DataCollection models for a given workflow.
-    """
+# def populate_file_models(workflow: Workflow) -> List[DataCollection]:
+#     """
+#     Returns a list of DataCollection models for a given workflow.
+#     """
 
-    datacollections_models = []
-    for metadata in workflow.data_collections:
-        data_collection_tag = metadata.data_collection_tag
-        datacollection_instance = DataCollection(
-            data_collection_tag=data_collection_tag,
-            description=metadata.description,
-            config=metadata.config,
-            workflow_tag=workflow.workflow_tag,
-        )
-        # datacollection_instance.config.data_collection_id = datacollection_id
-        # datacollection_instance.config.workflow_id = workflow.workflow_id
-        datacollections_models.append(datacollection_instance)
+#     datacollections_models = []
+#     for metadata in workflow.data_collections:
+#         data_collection_tag = metadata.data_collection_tag
+#         datacollection_instance = DataCollection(
+#             data_collection_tag=data_collection_tag,
+#             description=metadata.description,
+#             config=metadata.config,
+#             workflow_tag=workflow.workflow_tag,
+#         )
+#         # datacollection_instance.config.data_collection_id = datacollection_id
+#         # datacollection_instance.config.workflow_id = workflow.workflow_id
+#         datacollections_models.append(datacollection_instance)
 
-    return datacollections_models
-
-
-def validate_worfklow(workflow: Workflow, config: RootConfig, user: User) -> dict:
-    """
-    Validate the workflow.
-    """
-    # workflow_config = config.workflows[workflow_name]
-    # print(workflow_config)
-
-    # datacollection_models = populate_file_models(workflow)
-
-    # Create a dictionary of validated datacollections with datacollection_id as the key
-    # validated_datacollections = {
-    #     datacollection.data_collection_tag: datacollection
-    #     for datacollection in datacollection_models
-    # }
-
-    # # print(validated_datacollections)
-    # # Update the workflow's files attribute in the main config
-    # workflow.data_collections = validated_datacollections
-    # workflow.runs = {}
-
-    # Create the permissions using the decoded user
-    permissions = Permission(owners=[user])
-    workflow.permissions = permissions
-
-    return workflow
+#     return datacollections_models
 
 
-def validate_all_workflows(config: RootConfig, user: User) -> RootConfig:
-    """
-    Validate all workflows in the config.
-    """
-    for workflow in config.workflows:
-        validate_worfklow(workflow, config, user)
+# def validate_worfklow(workflow: Workflow, config: RootConfig, user: User) -> dict:
+#     """
+#     Validate the workflow.
+#     """
+#     # workflow_config = config.workflows[workflow_name]
+#     # print(workflow_config)
 
-    return config
+#     # datacollection_models = populate_file_models(workflow)
+
+#     # Create a dictionary of validated datacollections with datacollection_id as the key
+#     # validated_datacollections = {
+#     #     datacollection.data_collection_tag: datacollection
+#     #     for datacollection in datacollection_models
+#     # }
+
+#     # # print(validated_datacollections)
+#     # # Update the workflow's files attribute in the main config
+#     # workflow.data_collections = validated_datacollections
+#     # workflow.runs = {}
+
+#     # Create the permissions using the decoded user
+#     permissions = Permission(owners=[user])
+#     workflow.permissions = permissions
+
+#     return workflow
 
 
-def calculate_file_hash(file_path: str) -> str:
-    """Calculate a unique hash for a file based on its content."""
-    # Implementation of hashing function
-    with open(file_path, "rb") as f:
-        return hashlib.md5(f.read()).hexdigest()
+# def validate_all_workflows(config: RootConfig, user: User) -> RootConfig:
+#     """
+#     Validate all workflows in the config.
+#     """
+#     for workflow in config.workflows:
+#         validate_worfklow(workflow, config, user)
+
+#     return config
+
+
+# def calculate_file_hash(file_path: str) -> str:
+#     """Calculate a unique hash for a file based on its content."""
+#     # Implementation of hashing function
+#     with open(file_path, "rb") as f:
+#         return hashlib.md5(f.read()).hexdigest()
 
