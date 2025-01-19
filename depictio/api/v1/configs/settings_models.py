@@ -1,7 +1,7 @@
 import os
 from typing import Dict, Union
-from pydantic import BaseSettings, Field
-
+from pydantic import Field
+from pydantic_settings import BaseSettings
 class Collections(BaseSettings):
     """Collections names in MongoDB."""
     projects_collection: str = "projects"
