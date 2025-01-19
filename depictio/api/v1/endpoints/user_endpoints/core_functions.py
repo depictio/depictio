@@ -1,8 +1,11 @@
 from datetime import datetime
 from bson import ObjectId
 from depictio.api.v1.configs.logging import logger
-from depictio.api.v1.endpoints.user_endpoints.models import User, UserBase
-from depictio.api.v1.models.base import convert_objectid_to_str
+
+# from depictio.api.v1.endpoints.user_endpoints.models import User, UserBase
+# from depictio_models.models.base import convert_objectid_to_str
+from depictio_models.models.users import User, UserBase
+from depictio_models.models.base import convert_objectid_to_str
 
 
 def generate_agent_config(current_user, request):
