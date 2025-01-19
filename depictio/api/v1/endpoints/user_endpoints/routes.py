@@ -13,12 +13,14 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     generate_agent_config,
     purge_expired_tokens_from_user,
 )
-from depictio.api.v1.endpoints.user_endpoints.models import User, UserBase
+# from depictio.api.v1.endpoints.user_endpoints.models import User, UserBase
 from depictio.api.v1.endpoints.user_endpoints.utils import add_token, check_password
 from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.db import users_collection
-from depictio.api.v1.models.base import convert_objectid_to_str
 
+# from depictio_models.models.base import convert_objectid_to_str
+from depictio_models.models.base import convert_objectid_to_str
+from depictio_models.models.users import User, UserBase
 
 auth_endpoint_router = APIRouter()
 

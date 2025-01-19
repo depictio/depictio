@@ -7,7 +7,7 @@ import httpx
 import sys
 
 from depictio.api.v1.configs.logging import logger
-from depictio.api.v1.models.base import convert_objectid_to_str
+from depictio_models.models.base import convert_objectid_to_str
 
 
 SELECTED_STYLE = {
