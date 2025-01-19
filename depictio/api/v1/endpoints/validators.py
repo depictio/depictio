@@ -1,10 +1,50 @@
 from bson import ObjectId
 from fastapi import HTTPException
-from depictio.api.v1.endpoints.datacollections_endpoints.models import DataCollection
 
-from depictio.api.v1.endpoints.workflow_endpoints.models import Workflow
-from depictio.api.v1.models.base import convert_objectid_to_str
+# from depictio_models.models.base import convert_objectid_to_str
+# from depictio.api.v1.endpoints.datacollections_endpoints.models import DataCollection
+# from depictio.api.v1.endpoints.workflow_endpoints.models import Workflow
+
+from depictio_models.models.base import convert_objectid_to_str
+from depictio_models.models.data_collections import DataCollection
+from depictio_models.models.workflows import Workflow
+
+
 from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.db import projects_collection
+
+# TODO: check if still compliant with the new structure
+def return_project_object(user_id: str, project_id: str, permissions: dict = None):
+    """
+    Validates the existence of a project.
+    Raises HTTPException if the validation fails.
+    """
+    try:
+        user_oid = ObjectId(user_id)
+        project_oid = ObjectId(project_id)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if not permissions:
+        permissions = {
+            "$or": [
+                {"permissions.owners._id": user_id},
+                {"permissions.viewers._id": user_id},
+                {"permissions.viewers": "*"},  # This makes projects with "*" publicly accessible
+            ],
+        }
+
+    project = projects_collection.find_one(
+        {"_id": project_oid, **permissions},
+    )
+
+    if not project:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No projects with id {project_id} found for the current user.",
+        )
+
+    return project_oid, project, user_oid
 
 
 def validate_workflow_and_collection(collection, user_id: str, workflow_id: str, data_collection_id: str = None, permissions: dict = None):
@@ -40,8 +80,7 @@ def validate_workflow_and_collection(collection, user_id: str, workflow_id: str,
         **permissions,
     }
 
-
-    logger.info(f"Query: {query}")  
+    logger.info(f"Query: {query}")
     workflow = collection.find_one(query)
     logger.info(f"Workflow: {workflow}")
 

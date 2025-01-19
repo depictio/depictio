@@ -21,6 +21,7 @@ deltatables_collection = db[settings.mongodb.collections.deltatables_collection]
 jbrowse_collection = db[settings.mongodb.collections.jbrowse_collection]
 dashboards_collection = db[settings.mongodb.collections.dashboards_collection]
 initialization_collection = db[settings.mongodb.collections.initialization_collection]
+projects_collection = db[settings.mongodb.collections.projects_collection]
 
 # Initialize admin user and token
 initialize_db()

@@ -13,9 +13,10 @@ from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
 from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_token
 from depictio.api.v1.configs.logging import logger
-from depictio.api.v1.endpoints.user_endpoints.models import UserBase
+# from depictio.api.v1.endpoints.user_endpoints.models import UserBase
 from depictio.dash.utils import return_mongoid
 
+from depictio_models.models.users import UserBase
 
 # =========================
 # Data Fetching Functions

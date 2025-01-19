@@ -1,6 +1,7 @@
 # in /app/api/v1/routers.py
 from fastapi import APIRouter
 from depictio.api.v1.configs.config import settings
+from depictio.api.v1.endpoints.projects_endpoints.routes import projects_endpoint_router
 from depictio.api.v1.endpoints.workflow_endpoints.routes import workflows_endpoint_router
 from depictio.api.v1.endpoints.datacollections_endpoints.routes import datacollections_endpoint_router
 from depictio.api.v1.endpoints.files_endpoints.routes import files_endpoint_router
@@ -15,6 +16,11 @@ router = APIRouter()
 
 
 # initialize_db(settings)
+router.include_router(
+    projects_endpoint_router,
+    prefix="/projects",
+    tags=["Projects"],
+)
 router.include_router(
     workflows_endpoint_router,
     prefix="/workflows",
