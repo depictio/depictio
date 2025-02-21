@@ -53,7 +53,7 @@ RUN apt-get update && apt-get install --fix-missing -y \
     && rm -rf /var/lib/apt/lists/*
 
 
-RUN bash -c '/opt/conda/envs/depictio/bin/playwright install --with-deps'
+RUN bash -c '/opt/conda/envs/depictio/bin/playwright install --with-deps chromium'
 
 
 USER $MAMBA_USER
@@ -68,7 +68,7 @@ ENV PYTHONPATH="${PYTHONPATH}:/mnt"
 # -----------------------------
 # Install Playwright
 # -----------------------------
-RUN bash -c 'playwright install chromium'
+# RUN bash -c 'playwright install --with-deps chromium'
 
 # -----------------------------
 # Install depictio-cli

@@ -12,15 +12,17 @@ dependencies:
   - bson
   - dash
   - dash-bootstrap-components
-  # - dash-mantine-components
+  - dash-mantine-components==0.12.1
+  - dash-extensions==1.0.1
+  - dash-iconify==0.1.2
+  - plotly_express=0.4.1
   - fastapi
   - fastexcel
   - fastparquet
   - httpx
   - numpy
   - pandas
-  - pika # RabbitMQ
-  - plotly_express=0.4.1
+  # - pika # RabbitMQ
   - polars
   - pydantic
   - pydantic-settings
@@ -30,21 +32,16 @@ dependencies:
   - python-multipart
   - python-dotenv
   - pyyaml
-  - redis-py
+  # - redis-py
   - typer
+  - typeguard
   - uvicorn
   - deltalake
   - pytest-playwright
   - playwright
+  - pyjwt
   - pip:  
-    - dash-mantine-components==0.12.1
-    - dash-jbrowse==1.2.0
-    - dash-iconify==0.1.2
-    - dash-extensions==1.0.1
     - dash-draggable==0.1.2
-    - dash-auth==2.0.0
     - dash-ag-grid==2.2.0
-    - pyjwt
-    - pytest-playwright
     # - pydantic[email]==1.10.10
 
