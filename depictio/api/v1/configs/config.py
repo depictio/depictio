@@ -1,16 +1,18 @@
 import os
 
 from depictio.api.v1.configs.settings_models import Settings
-from depictio.api.v1.utils import get_config, validate_config
 from depictio.api.v1.crypto import run_generate_keys
+# from depictio.api.v1.utils import get_config, validate_config
 # from depictio.api.v1.configs.logging import logger
 # from depictio.api.v1.configs.logging import setup_logging
+
+from depictio_models.utils import get_config, validate_model_config
 
 config_backend_location = os.getenv("DEPICTIO_CONFIG_BACKEND_LOCATION", "depictio/api/v1/configs/config_backend_dockercompose.yaml")
 
 # Settings
 # Overwrite priority: environment variables (.env) > config file (.yaml) > default values
-settings = validate_config(get_config(config_backend_location), Settings)
+settings = validate_model_config(get_config(config_backend_location), Settings)
 
 # logger = setup_logging(settings.fastapi.logging_level)
 

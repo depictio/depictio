@@ -40,10 +40,13 @@ async def validate_cli_config_endpoint(cli_config: dict):
         for t in tokens:
             t = t.dict()
             if t["name"] == token["name"] and t["access_token"] == token["access_token"]:
+                logger.info("Token is valid.")
                 return {"valid": True}
         return {"valid": False}
     else:
         return {"valid": False}
+
+
 
 
 # @cli_endpoint_router.post("/validate_project_config")
