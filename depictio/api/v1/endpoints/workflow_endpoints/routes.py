@@ -18,6 +18,8 @@ from depictio_models.models.users import UserBase
 workflows_endpoint_router = APIRouter()
 
 
+# FIXME: refactor that endpoint to be compliant with new architecture
+
 @workflows_endpoint_router.get("/get_all_workflows")
 async def get_all_workflows(current_user: str = Depends(get_current_user)):
     logger.debug(f"current_user: {current_user}")
