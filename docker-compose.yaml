@@ -2,7 +2,7 @@ services:
   mongo:
     image: mongo:latest
     command: --dbpath /data/depictioDB --port 27018
-    user: "${UID}:${GID}"  # Run as the specified user (not root)
+    user: "${UID:-1000}:${GID:-1000}"
     ports:
       - 27018:27018
     volumes:
@@ -10,7 +10,7 @@ services:
 
   minio:
     image: minio/minio:latest
-    user: "${UID}:${GID}"  # Run as the specified user (not root)
+    user: "${UID:-1000}:${GID:-1000}"
     volumes:
       - "./minio_data:/data"
     environment:
@@ -38,7 +38,7 @@ services:
       - ../depictio-cli:/app/depictio-cli
       - ../depictio-models:/app/depictio-models
     command: ["python", "depictio/dash/app.py"]
-    user: "${UID}:${GID}"
+    user: "${UID:-1000}:${GID:-1000}"
     depends_on:
       - mongo
       - minio
@@ -65,7 +65,7 @@ services:
       - ../depictio-cli/configs:/configs
       - ../depictio-models:/app/depictio-models
     command: ["python", "depictio/api/run.py"]
-    user: "${UID}:${GID}"  # Run as the specified user (not root)
+    user: "${UID:-1000}:${GID:-1000}"
     depends_on:
       - mongo
       - minio
