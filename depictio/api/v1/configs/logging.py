@@ -24,7 +24,7 @@ handler = logging.StreamHandler()
 handler.setFormatter(formatter)
 
 # Set the logging level
-logging.basicConfig(level=logging.WARNING, handlers=[handler])
+logging.basicConfig(level=logging.INFO, handlers=[handler])
 
 # Get the logger
 logger = logging.getLogger("depictio")
