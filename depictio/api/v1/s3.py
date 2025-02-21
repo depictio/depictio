@@ -20,4 +20,3 @@ s3_client = boto3.client(
     aws_secret_access_key=settings.minio.root_password,
     endpoint_url=f"{settings.minio.internal_endpoint}:{settings.minio.port}",
 )
-
