@@ -2,6 +2,7 @@ import os
 from typing import Dict, Union
 from pydantic import Field
 from pydantic_settings import BaseSettings
+
 class Collections(BaseSettings):
     """Collections names in MongoDB."""
     projects_collection: str = "projects"
@@ -10,6 +11,7 @@ class Collections(BaseSettings):
     runs_collection: str = "runs"
     files_collection: str = "files"
     users_collection: str = "users"
+    groups_collection: str = "groups"
     deltatables_collection: str = "deltatables"
     jbrowse_collection: str = "jbrowse_collection"
     dashboards_collection: str = "dashboards"
