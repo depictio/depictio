@@ -6,7 +6,7 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.db import db
 from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.endpoints.datacollections_endpoints.utils import generate_join_dict, normalize_join_details
-from depictio.api.v1.endpoints.files_endpoints.routes import delete_files
+# from depictio.api.v1.endpoints.files_endpoints.routes import delete_files
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.api.v1.endpoints.validators import validate_workflow_and_collection
 from depictio.api.v1.endpoints.workflow_endpoints.routes import get_all_workflows, get_workflow_from_id
@@ -79,8 +79,8 @@ async def delete_datacollection(
         {"_id": workflow_oid},
         {"$pull": {"data_collections": data_collection}},
     )
-    delete_files_message = await delete_files(workflow_id, data_collection_id, current_user)
-    return delete_files_message
+    # delete_files_message = await delete_files(workflow_id, data_collection_id, current_user)
+    return {"message": "Data collection deleted successfully."}
 
 
 @datacollections_endpoint_router.get("/get_join_tables/{workflow_id}/{data_collection_id}")

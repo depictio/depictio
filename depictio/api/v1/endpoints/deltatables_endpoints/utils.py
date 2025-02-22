@@ -121,7 +121,7 @@ def upload_dir_to_s3(bucket_name, s3_folder, local_dir, s3_client):
             s3_client.upload_file(local_path, bucket_name, s3_path)
 
 
-def precompute_columns_specs(aggregated_df: pl.DataFrame, agg_functions: dict, dc_config: dict):
+def precompute_columns_specs(aggregated_df: pl.DataFrame, agg_functions: dict, dc_data: dict):
     """
     Aggregate dataframes and return a list of dictionaries with column names, types and specs.
     """
@@ -130,7 +130,7 @@ def precompute_columns_specs(aggregated_df: pl.DataFrame, agg_functions: dict, d
 
     results = list()
     # For each column in the DataFrame
-
+    dc_config = dc_data["config"]
     logger.info(f"dc_config : {dc_config}")
     logger.info(dc_config["dc_specific_properties"])
     if "columns_description" in dc_config["dc_specific_properties"]:
