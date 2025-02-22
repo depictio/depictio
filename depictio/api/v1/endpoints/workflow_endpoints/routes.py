@@ -6,14 +6,10 @@ from pymongo import ReturnDocument
 
 from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.db import workflows_collection, users_collection
-from depictio.api.v1.endpoints.deltatables_endpoints.routes import delete_deltatable
-from depictio.api.v1.endpoints.files_endpoints.routes import delete_files
-# from depictio.api.v1.endpoints.user_endpoints.models import UserBase
+
 from depictio.api.v1.endpoints.workflow_endpoints.utils import compare_models
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 
-# from depictio_models.models.base import convert_objectid_to_str
-# from depictio.api.v1.models.top_structure import Workflow
 from depictio_models.models.base import convert_objectid_to_str
 from depictio_models.models.workflows import Workflow
 from depictio_models.models.users import UserBase
@@ -21,6 +17,8 @@ from depictio_models.models.users import UserBase
 # Define the router
 workflows_endpoint_router = APIRouter()
 
+
+# FIXME: refactor that endpoint to be compliant with new architecture
 
 @workflows_endpoint_router.get("/get_all_workflows")
 async def get_all_workflows(current_user: str = Depends(get_current_user)):
@@ -343,10 +341,10 @@ async def delete_workflow(workflow_id: str, current_user: str = Depends(get_curr
     workflows_collection.delete_one({"_id": workflow_oid})
     assert workflows_collection.find_one({"_id": workflow_oid}) is None
 
-    for data_collection in data_collections:
-        delete_files_message = await delete_files(workflow_id, data_collection["data_collection_id"], current_user)
+    # for data_collection in data_collections:
+    #     delete_files_message = await delete_files(workflow_id, data_collection["data_collection_id"], current_user)
 
-        delete_datatable_message = await delete_deltatable(workflow_id, data_collection["data_collection_id"], current_user)
+    #     delete_datatable_message = await delete_deltatable(workflow_id, data_collection["data_collection_id"], current_user)
 
     return {"message": f"Workflow {workflow_tag} with ID '{id}' deleted successfully, as well as all files"}
 
@@ -364,3 +362,4 @@ async def compare_models_endpoint(new_workflow: Workflow, existing_workflow: Wor
     result = compare_models(new_workflow, existing_workflow)
 
     return {"exists": True, "match": result, "message": f"Workflow with name '{new_workflow.workflow_tag}' exists."}
+

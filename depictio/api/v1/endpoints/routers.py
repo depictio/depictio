@@ -11,6 +11,7 @@ from depictio.api.v1.endpoints.jbrowse_endpoints.routes import jbrowse_endpoints
 from depictio.api.v1.endpoints.utils_endpoints.routes import utils_endpoint_router
 from depictio.api.v1.endpoints.dashboards_endpoints.routes import dashboards_endpoint_router
 from depictio.api.v1.endpoints.cli_endpoints.routes import cli_endpoint_router
+from depictio.api.v1.endpoints.runs_endpoints.routes import runs_endpoint_router
 
 router = APIRouter()
 
@@ -25,6 +26,11 @@ router.include_router(
     workflows_endpoint_router,
     prefix="/workflows",
     tags=["Workflows"],
+)
+router.include_router(
+    runs_endpoint_router,
+    prefix="/runs",
+    tags=["Workflows runs"],
 )
 router.include_router(
     datacollections_endpoint_router,
