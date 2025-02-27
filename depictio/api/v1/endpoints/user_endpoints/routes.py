@@ -46,6 +46,7 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
         raise HTTPException(status_code=401, detail="Invalid token")
 
     user = fetch_user_from_token(token)
+    logger.info(f"User: {user}")
 
     if user is None:
         raise HTTPException(status_code=401, detail="Invalid token")
