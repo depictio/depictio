@@ -40,6 +40,11 @@ from depictio.dash.layouts.draggable_scenarios.restore_dashboard import load_dep
 
 from depictio.api.v1.configs.logging import logger
 
+import os 
+os.environ["DEPICTIO_CONTEXT"] = "server"
+from depictio_models.utils import get_depictio_context
+DEPICTIO_CONTEXT = get_depictio_context()
+
 
 # Start the app
 app = dash.Dash(
