@@ -1,3 +1,4 @@
+from typing import List
 from bson import ObjectId
 import dash_mantine_components as dmc
 import dash
@@ -8,62 +9,68 @@ from dash_iconify import DashIconify
 import yaml
 import dash_ag_grid as dag
 import polars as pl
+from pydantic import validate_call
 
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
-from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_token
+from depictio.api.v1.endpoints.user_endpoints.core_functions import (
+    fetch_user_from_token,
+)
 from depictio.api.v1.configs.logging import logger
+
 # from depictio.api.v1.endpoints.user_endpoints.models import UserBase
 from depictio.dash.utils import return_mongoid
 
 from depictio_models.models.users import UserBase
+from depictio_models.models.projects import Project
+from depictio_models.models.workflows import Workflow
 
 # =========================
 # Data Fetching Functions
 # =========================
 
+@validate_call
+def fetch_projects(token: str) -> List[Project]:
+    """
+    Fetch all projects for the current user.
+    """
+    url = f"{API_BASE_URL}/depictio/api/v1/projects/get/all"
 
-def fetch_projects(token):
-    # """Fetch all projects for the current user."""
-    # url = f"{API_BASE_URL}/depictio/api/v1/projects/get_all_projects"
-    # headers = {"Authorization": f"Bearer {token}"}
-    # try:
-    #     response = httpx.get(url, headers=headers)
-    #     response.raise_for_status()
-    #     logger.info("Successfully fetched projects.")
-    #     return response.json()
-    # except httpx.HTTPError as e:
-    #     logger.error(f"Error fetching projects: {e}")
-    #     return []
+    headers = {"Authorization": f"Bearer {token}"}
+    projects = httpx.get(url, headers=headers)
+    logger.info("Successfully fetched projects.")
+    logger.info(f"Projects: {projects.json()}")
 
-    current_user = fetch_user_from_token(token)
-    current_user = UserBase(**current_user.dict()).mongo()
-
-    projects = [
-        {
-            "_id": ObjectId(),
-            "name": "Strand-Seq",
-            "description": "Korbel group Strand-Seq project",
-            "icon": "mdi:dna",
-            "created_at": "2021-10-01",
-            "permissions": {
-                "owners": [current_user],
-                "viewers": ["*"],
-            },
-        },
-        {
-            "_id": ObjectId(),
-            "name": "TREC Single-Cell Interactome",
-            "description": "Single-Cell Interactome project",
-            "icon": "mdi:sail-boat",
-            "created_at": "2021-10-01",
-            "permissions": {
-                "owners": [current_user],
-                "viewers": ["*"],
-            },
-        }
-    ]
+    projects = [Project.from_mongo(project) for project in projects.json()]
     return projects
+
+    # current_user = fetch_user_from_token(token)
+    # current_user = UserBase(**current_user.dict()).mongo()
+
+    # projects = [
+    #     {
+    #         "_id": ObjectId(),
+    #         "name": "Strand-Seq",
+    #         "description": "Korbel group Strand-Seq project",
+    #         "icon": "mdi:dna",
+    #         "created_at": "2021-10-01",
+    #         "permissions": {
+    #             "owners": [current_user],
+    #             "viewers": ["*"],
+    #         },
+    #     },
+    #     {
+    #         "_id": ObjectId(),
+    #         "name": "TREC Single-Cell Interactome",
+    #         "description": "Single-Cell Interactome project",
+    #         "icon": "mdi:sail-boat",
+    #         "created_at": "2021-10-01",
+    #         "permissions": {
+    #             "owners": [current_user],
+    #             "viewers": ["*"],
+    #         },
+    #     }
+    # ]
 
 
 # def fetch_workflows(token, project_id):
@@ -82,7 +89,10 @@ def fetch_projects(token):
 
 def fetch_workflows(token):
     # Fetch the workflows for the user
-    response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/workflows/get_all_workflows", headers={"Authorization": f"Bearer {token}"})
+    response = httpx.get(
+        f"{API_BASE_URL}/depictio/api/v1/workflows/get_all_workflows",
+        headers={"Authorization": f"Bearer {token}"},
+    )
     logger.info(f"Response status code: {response.status_code}")
     if response.status_code == 200:
         logger.info(f"Successfully fetched workflows for current user.")
@@ -98,16 +108,20 @@ def fetch_workflows(token):
 # =====================
 
 
-def categorize_projects(projects, current_user):
+def categorize_projects(projects: List[Project], current_user):
     """Categorize projects into owned and shared/accessed."""
     owned = []
     shared = []
 
     for project in projects:
-        owners_ids = [str(o["_id"]) for o in project["permissions"]["owners"]]
+        # Get owner IDs from the Project model
+        owners_ids = [str(o.id) for o in project.permissions.owners]
         if str(current_user.id) in owners_ids:
             owned.append(project)
-        elif str(current_user.id) in project["permissions"]["viewers"] or "*" in project["permissions"]["viewers"]:
+        elif (
+            str(current_user.id) in project.permissions.viewers
+            or "*" in project.permissions.viewers
+        ):
             shared.append(project)
 
     return owned, shared
@@ -122,7 +136,10 @@ def categorize_workflows(workflows, current_user):
         owners_ids = [str(o["_id"]) for o in wf["permissions"]["owners"]]
         if str(current_user.id) in owners_ids:
             owned.append(wf)
-        elif str(current_user.id) in wf["permissions"]["viewers"] or "*" in wf["permissions"]["viewers"]:
+        elif (
+            str(current_user.id) in wf["permissions"]["viewers"]
+            or "*" in wf["permissions"]["viewers"]
+        ):
             shared.append(wf)
 
     return owned, shared
@@ -135,21 +152,29 @@ def categorize_workflows(workflows, current_user):
 
 def render_data_collection(dc, workflow_id, token):
     """Render a single data collection item."""
-    icon = "mdi:table" if dc["config"]["type"].lower() == "table" else "mdi:file-document"
+    icon = (
+        "mdi:table" if dc["config"]["type"].lower() == "table" else "mdi:file-document"
+    )
     dc_config = yaml.dump(dc["config"], default_flow_style=False)
     dc_config_md = f"```yaml\n{dc_config}\n```"
 
     # Preview Section for Tables
     if dc["config"]["type"].lower() == "table":
-        df = load_deltatable_lite(workflow_id=workflow_id, data_collection_id=dc["_id"], TOKEN=token, limit_rows=100)
-        logger.info(f"df shape: {df.shape} for {workflow_id}/{dc['_id']} with name {dc['data_collection_tag']}")
+        df = load_deltatable_lite(
+            workflow_id=workflow_id,
+            data_collection_id=dc["_id"],
+            TOKEN=token,
+            limit_rows=100,
+        )
+        logger.info(
+            f"df shape: {df.shape} for {workflow_id}/{dc['_id']} with name {dc['data_collection_tag']}"
+        )
         columnDefs = [{"field": c, "headerName": c} for c in df.columns]
 
         # # if description in col sub dict, update headerTooltip
         # for col in columnDefs:
         #     if "description" in cols[col["field"]] and cols[col["field"]]["description"] is not None:
         #         col["headerTooltip"] = f"{col['headerTooltip']} | Description: {cols[col['field']]['description']}"
-
 
         grid = dag.AgGrid(
             rowData=df.to_pandas().head(100).to_dict("records"),
@@ -189,39 +214,77 @@ def render_data_collection(dc, workflow_id, token):
                 children=[
                     dmc.Accordion(
                         children=[
-                            dmc.AccordionControl(dc["data_collection_tag"], icon=DashIconify(icon=icon, width=20)),
+                            dmc.AccordionControl(
+                                dc["data_collection_tag"],
+                                icon=DashIconify(icon=icon, width=20),
+                            ),
                             dmc.AccordionPanel(
                                 children=[
                                     dmc.Accordion(
                                         children=[
-                                            dmc.AccordionControl("Details", icon=DashIconify(icon="mdi:information-outline", width=20)),
+                                            dmc.AccordionControl(
+                                                "Details",
+                                                icon=DashIconify(
+                                                    icon="mdi:information-outline",
+                                                    width=20,
+                                                ),
+                                            ),
                                             dmc.AccordionPanel(
                                                 children=[
                                                     dmc.Group(
                                                         children=[
-                                                            dmc.Text("Database ID:", weight=700, className="label-text"),
-                                                            dmc.Text(dc["_id"], weight=500),
+                                                            dmc.Text(
+                                                                "Database ID:",
+                                                                weight=700,
+                                                                className="label-text",
+                                                            ),
+                                                            dmc.Text(
+                                                                dc["_id"], weight=500
+                                                            ),
                                                         ],
                                                         spacing="xs",
                                                     ),
                                                     dmc.Group(
                                                         children=[
-                                                            dmc.Text("Tag:", weight=700, className="label-text"),
-                                                            dmc.Text(dc["data_collection_tag"], weight=500),
+                                                            dmc.Text(
+                                                                "Tag:",
+                                                                weight=700,
+                                                                className="label-text",
+                                                            ),
+                                                            dmc.Text(
+                                                                dc[
+                                                                    "data_collection_tag"
+                                                                ],
+                                                                weight=500,
+                                                            ),
                                                         ],
                                                         spacing="xs",
                                                     ),
                                                     dmc.Group(
                                                         children=[
-                                                            dmc.Text("Description:", weight=700, className="label-text"),
-                                                            dmc.Text(dc["description"], weight=500),
+                                                            dmc.Text(
+                                                                "Description:",
+                                                                weight=700,
+                                                                className="label-text",
+                                                            ),
+                                                            dmc.Text(
+                                                                dc["description"],
+                                                                weight=500,
+                                                            ),
                                                         ],
                                                         spacing="xs",
                                                     ),
                                                     dmc.Group(
                                                         children=[
-                                                            dmc.Text("Type:", weight=700, className="label-text"),
-                                                            dmc.Text(dc["config"]["type"], weight=500),
+                                                            dmc.Text(
+                                                                "Type:",
+                                                                weight=700,
+                                                                className="label-text",
+                                                            ),
+                                                            dmc.Text(
+                                                                dc["config"]["type"],
+                                                                weight=500,
+                                                            ),
                                                         ],
                                                         spacing="xs",
                                                     ),
@@ -230,13 +293,22 @@ def render_data_collection(dc, workflow_id, token):
                                             dmc.Accordion(
                                                 children=[
                                                     dmc.AccordionControl(
-                                                        dmc.Text("depictio-CLI configuration", weight=700, className="label-text"),
-                                                        icon=DashIconify(icon="ic:baseline-settings-applications", width=20),
+                                                        dmc.Text(
+                                                            "depictio-CLI configuration",
+                                                            weight=700,
+                                                            className="label-text",
+                                                        ),
+                                                        icon=DashIconify(
+                                                            icon="ic:baseline-settings-applications",
+                                                            width=20,
+                                                        ),
                                                     ),
                                                     dmc.AccordionPanel(
                                                         children=[
                                                             dmc.Paper(
-                                                                children=dcc.Markdown(children=dc_config_md),
+                                                                children=dcc.Markdown(
+                                                                    children=dc_config_md
+                                                                ),
                                                                 className="p-3",
                                                                 radius="sm",
                                                                 withBorder=True,
@@ -272,8 +344,7 @@ def render_data_collection(dc, workflow_id, token):
         style={"marginBottom": "10px"},
     )
 
-
-def render_workflow_item(wf, token):
+def render_workflow_item(wf: Workflow, token):
     """Render a single workflow item."""
     workflow_details = dmc.Paper(
         children=[
@@ -281,31 +352,38 @@ def render_workflow_item(wf, token):
                 children=[
                     dmc.Group(
                         children=[
-                            dmc.Text("Database ID:", weight=700, className="label-text"),
-                            dmc.Text(wf["_id"], weight=500),
+                            dmc.Text(
+                                "Database ID:", weight=700, className="label-text"
+                            ),
+                            dmc.Text(str(wf.id), weight=500),
                         ],
                         spacing="xs",
                     ),
                     dmc.Group(
                         children=[
                             dmc.Text("Name:", weight=700, className="label-text"),
-                            dmc.Text(wf["name"], weight=500),
+                            dmc.Text(wf.name, weight=500),
                         ],
                         spacing="xs",
                     ),
                     dmc.Group(
                         children=[
                             dmc.Text("Engine:", weight=700, className="label-text"),
-                            dmc.Text(wf["engine"], weight=500),
+                            dmc.Text(
+                                f"{wf.engine.name}" + (f" (version {wf.engine.version})" if wf.engine.version else ""),
+                                weight=500
+                            ),
                         ],
                         spacing="xs",
                     ),
                     dmc.Group(
                         children=[
-                            dmc.Text("Repository URL:", weight=700, className="label-text"),
+                            dmc.Text(
+                                "Repository URL:", weight=700, className="label-text"
+                            ),
                             dmc.Anchor(
-                                wf["repository_url"],
-                                href=wf["repository_url"],
+                                wf.repository_url,
+                                href=wf.repository_url,
                                 target="_blank",
                                 weight=500,
                             ),
@@ -314,32 +392,34 @@ def render_workflow_item(wf, token):
                     ),
                     dmc.Group(
                         children=[
-                            dmc.Text("Description:", weight=700, className="label-text"),
-                            dmc.Text(wf["description"], weight=500),
+                            dmc.Text(
+                                "Description:", weight=700, className="label-text"
+                            ),
+                            dmc.Text(wf.description, weight=500),
                         ],
                         spacing="xs",
                     ),
                     dmc.Group(
                         children=[
                             dmc.Text("Created at:", weight=700, className="label-text"),
-                            dmc.Text(wf["registration_time"], weight=500),
+                            dmc.Text(wf.registration_time, weight=500),
                         ],
                         spacing="xs",
                     ),
-                    dmc.Group(
-                        children=[
-                            dmc.Text("Owners:", weight=700, className="label-text"),
-                            dmc.Text(str(wf["permissions"]["owners"]), weight=500),
-                        ],
-                        spacing="xs",
-                    ),
-                    dmc.Group(
-                        children=[
-                            dmc.Text("Viewers:", weight=700, className="label-text"),
-                            dmc.Text(str(wf["permissions"]["viewers"]), weight=500),
-                        ],
-                        spacing="xs",
-                    ),
+                    # dmc.Group(
+                    #     children=[
+                    #         dmc.Text("Owners:", weight=700, className="label-text"),
+                    #         dmc.Text(str([o.id for o in wf.permissions.owners]), weight=500),
+                    #     ],
+                    #     spacing="xs",
+                    # ),
+                    # dmc.Group(
+                    #     children=[
+                    #         dmc.Text("Viewers:", weight=700, className="label-text"),
+                    #         dmc.Text(str(wf.permissions.viewers), weight=500),
+                    #     ],
+                    #     spacing="xs",
+                    # ),
                 ],
                 className="dataset-details p-3",
             ),
@@ -350,43 +430,52 @@ def render_workflow_item(wf, token):
         className="p-3",
     )
 
-    data_collections = [render_data_collection(dc, wf["_id"], token) for dc in wf["data_collections"]]
-    data_collections_section = dmc.Paper(
-        children=data_collections,
-        className="p-3",
-        radius="md",
-        withBorder=True,
-        shadow="sm",
-    )
+    # data_collections = [
+    #     render_data_collection(dc, wf["_id"], token) for dc in wf["data_collections"]
+    # ]
+    # data_collections_section = dmc.Paper(
+    #     children=data_collections,
+    #     className="p-3",
+    #     radius="md",
+    #     withBorder=True,
+    #     shadow="sm",
+    # )
 
     return dmc.AccordionItem(
         children=[
             dmc.AccordionControl(
-                f"{wf['engine']}/{wf['name']} ({wf['_id']})",
+                f"{wf.workflow_tag} ({str(wf.id)})",
                 icon=DashIconify(icon="vscode-icons:file-type-snakemake", width=20),
             ),
             dmc.AccordionPanel(
                 children=[
                     dmc.Accordion(
                         children=[
-                            dmc.AccordionControl("Details", icon=DashIconify(icon="mdi:information-outline", width=20)),
+                            dmc.AccordionControl(
+                                "Details",
+                                icon=DashIconify(
+                                    icon="mdi:information-outline", width=20
+                                ),
+                            ),
                             dmc.AccordionPanel(workflow_details),
                         ],
                     ),
-                    dmc.Accordion(
-                        children=[
-                            dmc.AccordionControl("Data Collections", icon=DashIconify(icon="mdi:database", width=20)),
-                            dmc.AccordionPanel(data_collections_section),
-                        ],
-                    ),
+                    # dmc.Accordion(
+                    #     children=[
+                    #         dmc.AccordionControl(
+                    #             "Data Collections",
+                    #             icon=DashIconify(icon="mdi:database", width=20),
+                    #         ),
+                    #         dmc.AccordionPanel(data_collections_section),
+                    #     ],
+                    # ),
                 ]
             ),
         ],
-        value=f"{wf['engine']}/{wf['name']}",
+        value=f"{wf.workflow_tag} ({str(wf.id)})",
     )
 
-
-def render_project_item(project, token):
+def render_project_item(project: Project, token):
     logger.info(f"Rendering project item: {project}")
     """Render a single project item containing multiple workflows."""
     project_details = dmc.Paper(
@@ -396,35 +485,39 @@ def render_project_item(project, token):
                     dmc.Group(
                         children=[
                             dmc.Text("Name:", weight=700, className="label-text"),
-                            dmc.Text(project["name"], weight=500),
+                            dmc.Text(project.name, weight=500),
                         ],
                         spacing="xs",
                     ),
                     dmc.Group(
                         children=[
-                            dmc.Text("Description:", weight=700, className="label-text"),
-                            dmc.Text(project["description"], weight=500),
+                            dmc.Text(
+                                "Description:", weight=700, className="label-text"
+                            ),
+                            dmc.Text(project.description, weight=500),
                         ],
                         spacing="xs",
                     ),
                     dmc.Group(
                         children=[
                             dmc.Text("Created at:", weight=700, className="label-text"),
-                            dmc.Text(project["created_at"], weight=500),
+                            dmc.Text(project.registration_time, weight=500),
                         ],
                         spacing="xs",
                     ),
                     dmc.Group(
                         children=[
                             dmc.Text("Owners:", weight=700, className="label-text"),
-                            dmc.Text(str(project["permissions"]["owners"]), weight=500),
+                            dmc.Text(str([o.id for o in project.permissions.owners]), weight=500),
                         ],
                         spacing="xs",
                     ),
                     dmc.Group(
                         children=[
                             dmc.Text("Viewers:", weight=700, className="label-text"),
-                            dmc.Text(str(project["permissions"]["viewers"]), weight=500),
+                            dmc.Text(
+                                str(project.permissions.viewers), weight=500
+                            ),
                         ],
                         spacing="xs",
                     ),
@@ -439,11 +532,11 @@ def render_project_item(project, token):
     )
 
     # Fetch workflows for this project
-    workflows = fetch_workflows(token)
-    current_user = fetch_user_from_token(token)
-    owned_workflows, shared_workflows = categorize_workflows(workflows, current_user)
+    # workflows = fetch_workflows(token)
+    # current_user = fetch_user_from_token(token)
+    # owned_workflows, shared_workflows = categorize_workflows(workflows, current_user)
 
-    def create_workflow_section(title, workflows):
+    def create_workflow_section(title, workflows: List[Workflow]):
         if not workflows:
             return None
         workflow_items = [render_workflow_item(wf, token) for wf in workflows]
@@ -456,37 +549,49 @@ def render_project_item(project, token):
             ),
         ]
 
-    sections = []
-    owned_section = create_workflow_section("Workflows Owned:", owned_workflows)
-    shared_section = create_workflow_section("Workflows Shared/Accessible:", shared_workflows)
+    sections = create_workflow_section("Workflows:", project.workflows)
+    # owned_section = create_workflow_section("Workflows Owned:", owned_workflows)
+    # shared_section = create_workflow_section(
+    #     "Workflows Shared/Accessible:", shared_workflows
+    # )
 
-    if owned_section:
-        sections.extend(owned_section)
-    if shared_section:
-        sections.extend(shared_section)
+    # if owned_section:
+    #     sections.extend(owned_section)
+    # if shared_section:
+    #     sections.extend(shared_section)
 
     return dmc.AccordionItem(
         children=[
             dmc.AccordionControl(
-                f"{project['name']} ({project['_id']})",
-                icon=DashIconify(icon=project['icon'], width=20),
+                f"{project.name} ({project.id})",
+                # icon=DashIconify(icon=project.icon, width=20),
             ),
             dmc.AccordionPanel(
                 children=[
                     dmc.Accordion(
                         children=[
-                            dmc.AccordionControl("Project Details", icon=DashIconify(icon="mdi:information-outline", width=20)),
+                            dmc.AccordionControl(
+                                "Project Details",
+                                icon=DashIconify(
+                                    icon="mdi:information-outline", width=20
+                                ),
+                            ),
                             dmc.AccordionPanel(project_details),
                         ],
                     ),
                     dmc.Accordion(
                         children=[
-                            dmc.AccordionControl("Workflows", icon=DashIconify(icon="mdi:workflow", width=20)),
+                            dmc.AccordionControl(
+                                "Workflows",
+                                icon=DashIconify(icon="mdi:workflow", width=20),
+                            ),
                             dmc.AccordionPanel(
                                 children=[
                                     dmc.AccordionMultiple(
                                         children=[
-                                            html.Div(sections) if sections else html.P("No workflows available."),
+                                            html.Div(sections)
+                                            if sections
+                                            else html.P("No workflows available."),
                                         ]
                                     )
                                 ]
@@ -496,11 +601,11 @@ def render_project_item(project, token):
                 ]
             ),
         ],
-        value=f"{project['name']}",
+        value=f"{project.name}",
     )
 
 
-def render_projects_list(projects, token):
+def render_projects_list(projects: List[Project], token: str):
     """Render the full projects list, categorized into owned and shared."""
     if not projects:
         return html.P("No projects available.")
@@ -564,7 +669,9 @@ def register_projects_callbacks(app):
             logger.error(f"Invalid ID format: {id['index']}")
             return dash.no_update
 
-        logger.info(f"Workflow ID: {workflow_id}, Data Collection ID: {data_collection_id}")
+        logger.info(
+            f"Workflow ID: {workflow_id}, Data Collection ID: {data_collection_id}"
+        )
 
         if request is None:
             return dash.no_update
