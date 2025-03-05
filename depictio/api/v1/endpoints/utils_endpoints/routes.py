@@ -77,7 +77,10 @@ async def drop_all_collections(current_user=Depends(get_current_user)):
 
 @utils_endpoint_router.get("/status")
 async def status(current_user=Depends(get_current_user)):
+    logger.info("Checking server status...")
     if not current_user:
         raise HTTPException(status_code=401, detail="Current user not found.")
+
+    logger.info("Server is online.")
 
     return {"status": "online", "version": "v0.0.4"}

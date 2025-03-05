@@ -100,7 +100,7 @@ def register_callbacks_save(app):
             logger.debug(f"save_data_dashboard - Dashboard data: {dashboard_data}")
 
             # Check user permissions
-            if str(current_user.id) not in [e["_id"] for e in dashboard_data["permissions"]["owners"]]:
+            if str(current_user.id) not in [e["id"] for e in dashboard_data["permissions"]["owners"]]:
                 logger.warning("User does not have permission to edit & save this dashboard.")
                 return dash.no_update
 
