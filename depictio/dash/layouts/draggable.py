@@ -919,17 +919,17 @@ def design_draggable(data, init_layout, init_children, local_data):
 
     TOKEN = local_data["access_token"]
 
-    workflows = httpx.get(
-        f"{API_BASE_URL}/depictio/api/v1/workflows/get_all_workflows",
+    projects = httpx.get(
+        f"{API_BASE_URL}/depictio/api/v1/projects/get/all",
         headers={"Authorization": f"Bearer {TOKEN}"},
     )
-    logger.info("Code: %s", workflows.status_code)
+    logger.info("Code: %s", projects.status_code)
 
-    workflows = workflows.json()
+    projects = projects.json()
 
-    logger.info(f"workflows {workflows}")
+    logger.info(f"projects {projects}")
 
-    if not workflows:
+    if not projects:
         # When there are no workflows, log information and prepare a message
         # logger.info(f"init_children {init_children}")
         logger.info(f"init_layout {init_layout}")
