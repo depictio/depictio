@@ -5,17 +5,18 @@ import dash_bootstrap_components as dbc
 from dash import html, dcc, Input, Output, State, ctx
 import httpx
 from dash_iconify import DashIconify
+from pydantic import validate_call
 
 from depictio.api.v1.configs.config import API_BASE_URL
-from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_token
+from depictio.api.v1.endpoints.user_endpoints.core_functions import (
+    fetch_user_from_token,
+)
 from depictio.api.v1.configs.logging import logger
-# from depictio.api.v1.endpoints.user_endpoints.models import User
-# from depictio.api.v1.endpoints.dashboards_endpoints.models import DashboardData
-# from depictio.api.v1.endpoints.user_endpoints.models import UserBase
 
 from depictio_models.models.users import User
 from depictio_models.models.dashboards import DashboardData
 from depictio_models.models.users import UserBase
+
 
 # Define styles and colors
 card_styles = {
@@ -37,11 +38,24 @@ def render_dashboardwise_layout(dashboard):
     import json
     from depictio_models.models.base import convert_objectid_to_str
 
-    dashboard_owner_raw = convert_objectid_to_str(dashboard.permissions.owners[0].mongo()) if dashboard.permissions.owners else "Unknown"
-    dashboard_owner = json.dumps(dashboard_owner_raw) if dashboard_owner_raw != "Unknown" else "Unknown"
+    dashboard_owner_raw = (
+        convert_objectid_to_str(dashboard.permissions.owners[0].mongo())
+        if dashboard.permissions.owners
+        else "Unknown"
+    )
+    dashboard_owner = (
+        json.dumps(dashboard_owner_raw)
+        if dashboard_owner_raw != "Unknown"
+        else "Unknown"
+    )
     dashboard_viewers = ["None"]
     if dashboard.permissions.viewers:
-        dashboard_viewers = [json.dumps(convert_objectid_to_str(viewer.mongo())) if viewer != "*" else "*" for viewer in dashboard.permissions.viewers]
+        dashboard_viewers = [
+            json.dumps(convert_objectid_to_str(viewer.mongo()))
+            if viewer != "*"
+            else "*"
+            for viewer in dashboard.permissions.viewers
+        ]
 
     # dashboard_viewers = [u.mongo() for u in dashboard.permissions.viewers] if dashboard.permissions.viewers else ["None"]
     last_saved = dashboard.last_saved_ts
@@ -58,7 +72,12 @@ def render_dashboardwise_layout(dashboard):
                         [
                             dmc.Group(
                                 [
-                                    dmc.Text(dashboard_title, weight=500, size="lg", style={"flex": 1}),
+                                    dmc.Text(
+                                        dashboard_title,
+                                        weight=500,
+                                        size="lg",
+                                        style={"flex": 1},
+                                    ),
                                     dmc.Badge(
                                         "Public" if public_dashboard else "Private",
                                         color="blue" if public_dashboard else "gray",
@@ -83,37 +102,73 @@ def render_dashboardwise_layout(dashboard):
                                         children=[
                                             dmc.Group(
                                                 [
-                                                    dmc.Text("Database entry ID: ", weight=700, size="sm"),
-                                                    dmc.Text(str(dashboard.id), size="sm"),
+                                                    dmc.Text(
+                                                        "Database entry ID: ",
+                                                        weight=700,
+                                                        size="sm",
+                                                    ),
+                                                    dmc.Text(
+                                                        str(dashboard.id), size="sm"
+                                                    ),
                                                 ]
                                             ),
                                             dmc.Group(
                                                 [
-                                                    dmc.Text("Dashboard ID: ", weight=700, size="sm"),
-                                                    dmc.Text(str(dashboard_id), size="sm"),
+                                                    dmc.Text(
+                                                        "Dashboard ID: ",
+                                                        weight=700,
+                                                        size="sm",
+                                                    ),
+                                                    dmc.Text(
+                                                        str(dashboard_id), size="sm"
+                                                    ),
                                                 ]
                                             ),
                                             dmc.Group(
                                                 [
-                                                    dmc.Text("Owner: ", weight=700, size="sm"),
-                                                    dmc.Text(dashboard_owner, size="sm"),
+                                                    dmc.Text(
+                                                        "Owner: ", weight=700, size="sm"
+                                                    ),
+                                                    dmc.Text(
+                                                        dashboard_owner, size="sm"
+                                                    ),
                                                 ]
                                             ),
                                             dmc.Group(
                                                 [
-                                                    dmc.Text("Viewers: ", weight=700, size="sm"),
-                                                    dmc.List([dmc.ListItem(viewer) for viewer in dashboard_viewers], size="sm"),
+                                                    dmc.Text(
+                                                        "Viewers: ",
+                                                        weight=700,
+                                                        size="sm",
+                                                    ),
+                                                    dmc.List(
+                                                        [
+                                                            dmc.ListItem(viewer)
+                                                            for viewer in dashboard_viewers
+                                                        ],
+                                                        size="sm",
+                                                    ),
                                                 ]
                                             ),
                                             dmc.Group(
                                                 [
-                                                    dmc.Text("Components: ", weight=700, size="sm"),
-                                                    dmc.Text(str(components_count), size="sm"),
+                                                    dmc.Text(
+                                                        "Components: ",
+                                                        weight=700,
+                                                        size="sm",
+                                                    ),
+                                                    dmc.Text(
+                                                        str(components_count), size="sm"
+                                                    ),
                                                 ]
                                             ),
                                             dmc.Group(
                                                 [
-                                                    dmc.Text("Last Saved: ", weight=700, size="sm"),
+                                                    dmc.Text(
+                                                        "Last Saved: ",
+                                                        weight=700,
+                                                        size="sm",
+                                                    ),
                                                     dmc.Text(last_saved, size="sm"),
                                                 ]
                                             ),
@@ -143,17 +198,27 @@ def render_dashboardwise_layout(dashboard):
 
     return layout
 
-
-def render_userwise_layout(user):
-    user = User.from_mongo(user)
+@validate_call
+def render_userwise_layout(user: User) -> dmc.Accordion:
+    """
+    Render the layout for a user.
+    """
 
     # Badge color based on admin status
     badge_color = "blue" if user.is_admin else "gray"
     badge_label = "System Admin" if user.is_admin else "User"
 
     # Format dates for better readability
-    registration_date = user.registration_date.strftime("%B %d, %Y %H:%M") if isinstance(user.registration_date, datetime.datetime) else user.registration_date
-    last_login = user.last_login.strftime("%B %d, %Y %H:%M") if isinstance(user.last_login, datetime.datetime) else user.last_login
+    registration_date = (
+        user.registration_date.strftime("%B %d, %Y %H:%M")
+        if isinstance(user.registration_date, datetime.datetime)
+        else user.registration_date
+    )
+    last_login = (
+        user.last_login.strftime("%B %d, %Y %H:%M")
+        if isinstance(user.last_login, datetime.datetime)
+        else user.last_login
+    )
 
     layout = dmc.Accordion(
         children=[
@@ -167,7 +232,12 @@ def render_userwise_layout(user):
                         [
                             dmc.Group(
                                 [
-                                    dmc.Text(user.email, weight=500, size="lg", style={"flex": 1}),
+                                    dmc.Text(
+                                        user.email,
+                                        weight=500,
+                                        size="lg",
+                                        style={"flex": 1},
+                                    ),
                                     dmc.Badge(
                                         badge_label,
                                         color=badge_color,
@@ -192,28 +262,85 @@ def render_userwise_layout(user):
                                         children=[
                                             dmc.Group(
                                                 [
-                                                    dmc.Text("Registration Date: ", weight=700, size="sm"),
-                                                    dmc.Text(registration_date, size="sm"),
+                                                    dmc.Text(
+                                                        "User ID: ",
+                                                        weight=700,
+                                                        size="sm",
+                                                    ),
+                                                    dmc.Text(str(user.id), size="sm"),
                                                 ]
                                             ),
                                             dmc.Group(
                                                 [
-                                                    dmc.Text("Last Login: ", weight=700, size="sm"),
+                                                    dmc.Text(
+                                                        "Registration Date: ",
+                                                        weight=700,
+                                                        size="sm",
+                                                    ),
+                                                    dmc.Text(
+                                                        registration_date, size="sm"
+                                                    ),
+                                                ]
+                                            ),
+                                            dmc.Group(
+                                                [
+                                                    dmc.Text(
+                                                        "Last Login: ",
+                                                        weight=700,
+                                                        size="sm",
+                                                    ),
                                                     dmc.Text(last_login, size="sm"),
                                                 ]
                                             ),
                                             dmc.Group(
                                                 [
-                                                    dmc.Text("Groups: ", weight=700, size="sm"),
-                                                    dmc.List([dmc.ListItem(group) for group in user.groups] if user.groups else [dmc.ListItem("None")], size="sm"),
+                                                    dmc.Text(
+                                                        "Groups: ",
+                                                        weight=700,
+                                                        size="sm",
+                                                    ),
+                                                    dmc.SimpleGrid(
+                                                        [
+                                                            dmc.Group(
+                                                                [
+                                                                    dmc.Text(
+                                                                        group.name,
+                                                                        size="sm",
+                                                                    ),
+                                                                    dmc.Text(
+                                                                        str(group.id),
+                                                                        size="sm",
+                                                                    ),
+                                                                ],
+                                                                style={
+                                                                    "flex": 1,
+                                                                    "border": "1px solid #e1e1e1",
+                                                                },
+                                                            )
+                                                            for group in user.groups
+                                                        ]
+                                                        if user.groups
+                                                        else [
+                                                            dmc.Text("None", size="sm")
+                                                        ],
+                                                    ),
+                                                    # dmc.List([dmc.ListItem(group) for group in user.groups] if user.groups else [dmc.ListItem("None")], size="sm"),
                                                 ]
                                             ),
                                             dmc.Group(
                                                 [
-                                                    dmc.Text("Account Status: ", weight=700, size="sm"),
+                                                    dmc.Text(
+                                                        "Account Status: ",
+                                                        weight=700,
+                                                        size="sm",
+                                                    ),
                                                     dmc.Badge(
-                                                        "Active" if user.is_active else "Inactive",
-                                                        color="green" if user.is_active else "red",
+                                                        "Active"
+                                                        if user.is_active
+                                                        else "Inactive",
+                                                        color="green"
+                                                        if user.is_active
+                                                        else "red",
                                                         variant="light",
                                                         size="sm",
                                                         radius="sm",
@@ -222,8 +349,17 @@ def render_userwise_layout(user):
                                             ),
                                             dmc.Group(
                                                 [
-                                                    dmc.Text("Verified: ", weight=700, size="sm"),
-                                                    dmc.Text("Yes" if user.is_verified else "No", size="sm"),
+                                                    dmc.Text(
+                                                        "Verified: ",
+                                                        weight=700,
+                                                        size="sm",
+                                                    ),
+                                                    dmc.Text(
+                                                        "Yes"
+                                                        if user.is_verified
+                                                        else "No",
+                                                        size="sm",
+                                                    ),
                                                 ]
                                             ),
                                         ],
@@ -273,11 +409,15 @@ def register_admin_callbacks(app):
         # )
 
         if active_tab == "users":
-            response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/auth/list", headers={"Authorization": f"Bearer {local_data['access_token']}"})
+            response = httpx.get(
+                f"{API_BASE_URL}/depictio/api/v1/auth/list",
+                headers={"Authorization": f"Bearer {local_data['access_token']}"},
+            )
             logger.info(f"Response: {response}")
             if response.status_code == 200:
                 users = response.json()
-                userwise_layouts = [render_userwise_layout(user) for user in users]
+                logger.info(f"Users: {users}")
+                userwise_layouts = [render_userwise_layout(User.from_mongo(user)) for user in users]
                 content = html.Div(userwise_layouts)
             else:
                 logger.error(f"Error fetching users: {response.json()}")
@@ -285,12 +425,17 @@ def register_admin_callbacks(app):
 
             return content
         elif active_tab == "dashboards":
-            response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/dashboards/list_all", headers={"Authorization": f"Bearer {local_data['access_token']}"})
+            response = httpx.get(
+                f"{API_BASE_URL}/depictio/api/v1/dashboards/list_all",
+                headers={"Authorization": f"Bearer {local_data['access_token']}"},
+            )
             logger.info(f"Response: {response}")
             # content = html.P("DASHBOARDS - Under construction.")
             if response.status_code == 200:
                 dashboards = response.json()
-                dashboards_layouts = [render_dashboardwise_layout(dashboard) for dashboard in dashboards]
+                dashboards_layouts = [
+                    render_dashboardwise_layout(dashboard) for dashboard in dashboards
+                ]
                 content = html.Div(dashboards_layouts)
             else:
                 logger.error(f"Error fetching dashboards: {response.json()}")

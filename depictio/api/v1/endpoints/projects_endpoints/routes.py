@@ -1,3 +1,4 @@
+from typing import List
 from bson import ObjectId
 from fastapi import HTTPException, Depends, APIRouter
 
@@ -13,6 +14,30 @@ from depictio_models.models.base import convert_objectid_to_str
 # Define the router
 projects_endpoint_router = APIRouter()
 
+@projects_endpoint_router.get("/get/all")
+async def get_all_projects(current_user: str = Depends(get_current_user)) -> List:
+    logger.info("Getting all projects")
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+
+    # Find projects where current_user is either an owner or a viewer
+    query = {
+        "$or": [
+            {"permissions.owners._id": current_user.id},
+            {"permissions.viewers._id": current_user.id},
+            {"permissions.viewers": "*"},  # This makes projects with "*" publicly accessible
+        ],
+    }
+
+    if current_user.is_admin:
+        query = {}
+
+    projects = projects_collection.find(query)
+    if projects:
+        projects = [convert_objectid_to_str(project) for project in projects]
+        return projects
+    else:
+        return []
 
 @projects_endpoint_router.get("/get/from_id")
 async def get_project_from_id(project_id: str, current_user: str = Depends(get_current_user)):
