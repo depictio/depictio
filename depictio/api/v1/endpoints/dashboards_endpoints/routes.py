@@ -14,7 +14,7 @@ from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 # from depictio_models.models.base import convert_objectid_to_str
 from depictio_models.models.base import convert_objectid_to_str
 from depictio_models.models.dashboards import DashboardData
-
+from depictio_models.utils import convert_model_to_dict
 dashboards_endpoint_router = APIRouter()
 
 
@@ -41,11 +41,9 @@ async def get_dashboard(dashboard_id: str, current_user=Depends(get_current_user
     }
 
     dashboard_data = dashboards_collection.find_one(query)
-
-    logger.debug(f"Dashboard data: {dashboard_data}")
-
     dashboard_data = DashboardData.from_mongo(dashboard_data)
-    logger.debug(f"Dashboard data from mongo: {dashboard_data}")
+    dashboard_data = convert_model_to_dict(dashboard_data)
+    logger.info(f"Dashboard data from mongo: {dashboard_data}")
 
     if not dashboard_data:
         raise HTTPException(status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found.")
