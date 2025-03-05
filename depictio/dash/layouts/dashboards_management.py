@@ -790,7 +790,11 @@ def register_callbacks_dashboards_management(app):
                 # Load full dashboard data from the database
                 dashboard_data_response = httpx.get(
                     f"{API_BASE_URL}/depictio/api/v1/dashboards/get/{index_duplicate}", headers={"Authorization": f"Bearer {user_data['access_token']}"}
-                ).json()
+                )
+                if dashboard_data_response.status_code != 200:
+                    raise ValueError(f"Failed to load dashboard data from the database. Error: {dashboard_data_response.text}")
+                else:
+                    dashboard_data_response = dashboard_data_response.json()
 
                 # deep copy the dashboard object
                 new_dashboard = DashboardData.from_mongo(dashboard_data_response)
