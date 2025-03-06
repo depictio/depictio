@@ -216,7 +216,6 @@ async def list_registered_files(
 
 @deltatables_endpoint_router.get("/specs/{data_collection_id}")
 async def specs(
-    workflow_id: str,
     data_collection_id: str,
     current_user: str = Depends(get_current_user),
 ):

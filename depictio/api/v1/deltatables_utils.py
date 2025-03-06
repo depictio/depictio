@@ -159,7 +159,7 @@ def load_deltatable_lite(workflow_id: ObjectId, data_collection_id: ObjectId, me
     data_collection_id_str = str(data_collection_id)
 
     # Prepare the request URL and headers
-    url = f"{API_BASE_URL}/depictio/api/v1/deltatables/get/{workflow_id_str}/{data_collection_id_str}"
+    url = f"{API_BASE_URL}/depictio/api/v1/deltatables/get/{data_collection_id_str}"
     headers = {"Authorization": f"Bearer {TOKEN}"} if TOKEN else {}
 
     # Make the HTTP GET request to fetch the Delta table location
