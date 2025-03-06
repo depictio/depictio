@@ -66,6 +66,9 @@ def register_callbacks_stepper_part_three(app):
         local_data,
     ):
         
+        wf_id = workflow_selection
+        dc_id = data_collection_selection
+
         if not local_data:
             raise dash.exceptions.PreventUpdate
         
@@ -94,7 +97,7 @@ def register_callbacks_stepper_part_three(app):
             raise dash.exceptions.PreventUpdate
 
         # Retrieve wf_id and dc_id
-        wf_id, dc_id = return_mongoid(workflow_tag=workflow_selection, data_collection_tag=data_collection_selection, TOKEN=TOKEN)
+        # wf_id, dc_id = return_mongoid(workflow_tag=workflow_selection, data_collection_tag=data_collection_selection, TOKEN=TOKEN)
 
         # Check if any button has been clicked more than stored
         button_clicked = False
