@@ -184,8 +184,8 @@ def return_mongoid(
 
 
 def get_columns_from_data_collection(
-    workflow_tag: str,
-    data_collection_tag: str,
+    workflow_id: str,
+    data_collection_id: str,
     TOKEN: str,
 ):
     logger.info(f"get_columns_from_data_collection - TOKEN: {TOKEN}")
@@ -195,11 +195,11 @@ def get_columns_from_data_collection(
     # workflows = list_workflows(TOKEN)
     # workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_id][0]["_id"]
     # data_collection_id = [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["data_collection_tag"] == data_collection_id][0]["_id"]
-    workflow_id, data_collection_id = return_mongoid(workflow_tag=workflow_tag, data_collection_tag=data_collection_tag, TOKEN=TOKEN)
+    # workflow_id, data_collection_id = return_mongoid(workflow_tag=workflow_tag, data_collection_tag=data_collection_tag, TOKEN=TOKEN)
 
     if workflow_id is not None and data_collection_id is not None:
         response = httpx.get(
-            f"{API_BASE_URL}/depictio/api/v1/deltatables/specs/{workflow_id}/{data_collection_id}",
+            f"{API_BASE_URL}/depictio/api/v1/deltatables/specs/{data_collection_id}",
             headers={
                 "Authorization": f"Bearer {TOKEN}",
             },
