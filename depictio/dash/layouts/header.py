@@ -395,12 +395,27 @@ def design_header(data, local_store):
             data["last_saved_ts"].split(".")[0], "%Y-%m-%d %H:%M:%S"
         )
 
+    response = httpx.get(
+        f"{API_BASE_URL}/depictio/api/v1/projects/get/from_id/{data['project_id']}",
+        headers={"Authorization": f"Bearer {local_store['access_token']}"},
+    )
+    if response.status_code != 200:
+        raise Exception("Failed to fetch project data.")
+    project_name = response.json()["name"]
+
     card_section = dbc.Row(
         [
             dmc.Stack(
                 [
                     # dmc.CardSection(
                     # [
+                    dmc.Badge(
+                        f"Project: {project_name}",
+                        color="green",
+                        leftSection=DashIconify(
+                            icon="mdi:jira", width=16, color="grey"
+                        ),
+                    ),
                     dmc.Badge(
                         f"Owner: {data['permissions']['owners'][0]['email']}",
                         color="blue",
@@ -410,7 +425,7 @@ def design_header(data, local_store):
                     ),
                     dmc.Badge(
                         f"Last saved: {formated_ts}",
-                        color="green",
+                        color="violet",
                         leftSection=DashIconify(
                             icon="mdi:clock-time-four-outline", width=16, color="grey"
                         ),
@@ -420,7 +435,7 @@ def design_header(data, local_store):
                 ],
                 justify="center",
                 align="flex-start",
-                spacing="xs",
+                spacing=5,
             ),
         ],
     )
