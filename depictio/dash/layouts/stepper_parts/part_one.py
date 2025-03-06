@@ -8,10 +8,15 @@ import httpx
 import yaml
 import dash_ag_grid as dag
 
-from depictio.dash.utils import list_workflows, get_columns_from_data_collection, return_mongoid
+from depictio.dash.utils import (
+    list_workflows,
+    get_columns_from_data_collection,
+    return_mongoid,
+)
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging import logger
+
 
 def register_callbacks_stepper_part_one(app):
     @app.callback(
@@ -26,13 +31,19 @@ def register_callbacks_stepper_part_one(app):
         State("local-store", "data"),
         prevent_initial_call=True,
     )
-    def update_step_1(workflow_selection, data_collection_selection, input_btn_values, component_selected, id, local_store):
+    def update_step_1(
+        workflow_id,
+        data_collection_id,
+        input_btn_values,
+        component_selected,
+        id,
+        local_store,
+    ):
         # Use dcc.Store in store-list to get the latest button clicked using timestamps
-
 
         if not local_store:
             raise dash.exceptions.PreventUpdate
-        
+
         TOKEN = local_store["access_token"]
 
         logger.info(f"CTX Triggered ID: {ctx.triggered_id}")
@@ -51,7 +62,10 @@ def register_callbacks_stepper_part_one(app):
             "Figure": {"color": "grape", "icon": "mdi:graph-box"},
             "Interactive": {"color": "indigo", "icon": "bx:slider-alt"},
             "Table": {"color": "green", "icon": "octicon:table-24"},
-            "JBrowse2": {"color": "yellow", "icon": "material-symbols:table-rows-narrow-rounded"},
+            "JBrowse2": {
+                "color": "yellow",
+                "icon": "material-symbols:table-rows-narrow-rounded",
+            },
             "None": {"color": "gray", "icon": "ph:circle"},
         }
 
@@ -61,7 +75,12 @@ def register_callbacks_stepper_part_one(app):
 
         # logger.info(f"component_selected: {component_selected}")
 
-        workflow_id, data_collection_id = return_mongoid(workflow_tag=workflow_selection, data_collection_tag=data_collection_selection, TOKEN=TOKEN)
+
+        # workflow_id, data_collection_id = return_mongoid(
+        #     workflow_tag=workflow_selection,
+        #     data_collection_tag=data_collection_selection,
+        #     TOKEN=TOKEN,
+        # )
         # workflows = list_workflows(TOKEN)
 
         # workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_selection][0]["_id"]
@@ -69,17 +88,27 @@ def register_callbacks_stepper_part_one(app):
 
         # print(data_collection_selection)
 
-        dc_specs = httpx.get(
-            f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
-            headers={
-                "Authorization": f"Bearer {TOKEN}",
+        # dc_specs = httpx.get(
+        #     f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
+        #     headers={
+        #         "Authorization": f"Bearer {TOKEN}",
+        #     },
+        # ).json()
+        dc_specs = {
+            "config": {
+                "type": "Table",
             },
-        ).json()
+            "data_collection_tag": "test",
+            "description": "test",
+            "_id": "test",
+        }
 
-        if workflow_selection is not None and data_collection_selection is not None:
+        if workflow_id is not None and data_collection_id is not None:
             # component_selected = html.Div(f"{component_selected}")
 
-            config_title = dmc.Title("Data collection config", order=3, align="left", weight=500)
+            config_title = dmc.Title(
+                "Data collection config", order=3, align="left", weight=500
+            )
             json_formatted = yaml.dump(dc_specs["config"], indent=2)
             prism = dbc.Col(
                 [
@@ -95,7 +124,9 @@ def register_callbacks_stepper_part_one(app):
                 width=6,
             )
 
-            dc_main_info = dmc.Title("Data collection info", order=3, align="left", weight=500)
+            dc_main_info = dmc.Title(
+                "Data collection info", order=3, align="left", weight=500
+            )
 
             main_info = html.Table(
                 [
@@ -122,7 +153,9 @@ def register_callbacks_stepper_part_one(app):
                                     "width": "20%",
                                 },
                             ),
-                            html.Td(dc_specs["config"]["type"], style={"text-align": "left"}),
+                            html.Td(
+                                dc_specs["config"]["type"], style={"text-align": "left"}
+                            ),
                         ]
                     ),
                     html.Tr(
@@ -151,7 +184,9 @@ def register_callbacks_stepper_part_one(app):
                                     "width": "20%",
                                 },
                             ),
-                            html.Td(dc_specs["description"], style={"text-align": "left"}),
+                            html.Td(
+                                dc_specs["description"], style={"text-align": "left"}
+                            ),
                         ]
                     ),
                     html.Tr(
@@ -187,113 +222,141 @@ def register_callbacks_stepper_part_one(app):
             # turn main_info into 4 rows with 2 columns
 
             layout = [dc_main_info, html.Hr(), main_info, html.Hr()]
-            if dc_specs["config"]["type"] == "Table":
-                logger.info(f"PART 1 - TOKEN: {TOKEN}")
-                df = load_deltatable_lite(workflow_id, data_collection_id, TOKEN=TOKEN)
-                cols = get_columns_from_data_collection(workflow_selection, data_collection_selection, TOKEN)
-                logger.info(f"Columns: {cols}")
-                columnDefs = [{"field": c, "headerTooltip": f"Type: {e['type']}"} for c, e in cols.items()]
+            # if dc_specs["config"]["type"] == "Table":
+            #     logger.info(f"PART 1 - TOKEN: {TOKEN}")
+            #     df = load_deltatable_lite(workflow_id, data_collection_id, TOKEN=TOKEN)
+            #     cols = get_columns_from_data_collection(
+            #         workflow_selection, data_collection_selection, TOKEN
+            #     )
+            #     logger.info(f"Columns: {cols}")
+            #     columnDefs = [
+            #         {"field": c, "headerTooltip": f"Type: {e['type']}"}
+            #         for c, e in cols.items()
+            #     ]
 
-                # if description in col sub dict, update headerTooltip
-                for col in columnDefs:
-                    if "description" in cols[col["field"]] and cols[col["field"]]["description"] is not None:
-                        col["headerTooltip"] = f"{col['headerTooltip']} | Description: {cols[col['field']]['description']}"
+            #     # if description in col sub dict, update headerTooltip
+            #     for col in columnDefs:
+            #         if (
+            #             "description" in cols[col["field"]]
+            #             and cols[col["field"]]["description"] is not None
+            #         ):
+            #             col["headerTooltip"] = (
+            #                 f"{col['headerTooltip']} | Description: {cols[col['field']]['description']}"
+            #             )
 
-                if "depictio_run_id" in cols:
-                    run_nb = cols["depictio_run_id"]["specs"]["nunique"]
-                    run_nb_title = dmc.Title(f"Run Nb : {run_nb}", order=3, align="left", weight=500)
-                else:
-                    run_nb_title = dmc.Title("Run Nb : 0", order=3, align="left", weight=500)
+            #     if "depictio_run_id" in cols:
+            #         run_nb = cols["depictio_run_id"]["specs"]["nunique"]
+            #         run_nb_title = dmc.Title(
+            #             f"Run Nb : {run_nb}", order=3, align="left", weight=500
+            #         )
+            #     else:
+            #         run_nb_title = dmc.Title(
+            #             "Run Nb : 0", order=3, align="left", weight=500
+            #         )
 
-                data_previz_title = dmc.Title("Data previsualization", order=3, align="left", weight=500)
-                config_title = dmc.Title("Data collection configuration", order=3, align="left", weight=500)
-                # print(df.head(20).to_dict("records"))
-                # cellClicked, cellDoubleClicked, cellRendererData, cellValueChanged, className, columnDefs, columnSize, columnSizeOptions, columnState, csvExportParams, dangerously_allow_code, dashGridOptions, defaultColDef, deleteSelectedRows, deselectAll, detailCellRendererParams, enableEnterpriseModules, exportDataAsCsv, filterModel, getDetailRequest, getDetailResponse, getRowId, getRowStyle, getRowsRequest, getRowsResponse, id, licenseKey, masterDetail, paginationGoTo, paginationInfo, persisted_props, persistence, persistence_type, resetColumnState, rowClass, rowClassRules, rowData, rowModelType, rowStyle, rowTransaction, scrollTo, selectAll, selectedRows, style, suppressDragLeaveHidesColumns, updateColumnState, virtualRowData
-                grid = dag.AgGrid(
-                    # id={"type": "get-started-example-basic", "index": id["index"]},
-                    # rowModelType="infinite",
-                    rowData=df.to_pandas().head(100).to_dict("records"),
-                    columnDefs=columnDefs,
-                    dashGridOptions={
-                        "tooltipShowDelay": 500,
-                        "pagination": True,
-                        "paginationAutoPageSize": False,
-                        "animateRows": False,
-                        # The number of rows rendered outside the viewable area the grid renders.
-                        # "rowBuffer": 0,
-                        # # How many blocks to keep in the store. Default is no limit, so every requested block is kept.
-                        # "maxBlocksInCache": 2,
-                        # "cacheBlockSize": 100,
-                        # "cacheOverflowSize": 2,
-                        # "maxConcurrentDatasourceRequests": 2,
-                        # "infiniteInitialRowCount": 1,
-                        # "rowSelection": "multiple",
-                    },
-                    # columnSize="sizeToFit",
-                    defaultColDef={"resizable": True, "sortable": True, "filter": True},
-                    # use the parameters above
-                )
-                # layout += [run_nb_title, html.Hr(), data_previz_title, html.Hr(), grid]
-                # print(layout)
+            #     data_previz_title = dmc.Title(
+            #         "Data previsualization", order=3, align="left", weight=500
+            #     )
+            #     config_title = dmc.Title(
+            #         "Data collection configuration", order=3, align="left", weight=500
+            #     )
+            #     # print(df.head(20).to_dict("records"))
+            #     # cellClicked, cellDoubleClicked, cellRendererData, cellValueChanged, className, columnDefs, columnSize, columnSizeOptions, columnState, csvExportParams, dangerously_allow_code, dashGridOptions, defaultColDef, deleteSelectedRows, deselectAll, detailCellRendererParams, enableEnterpriseModules, exportDataAsCsv, filterModel, getDetailRequest, getDetailResponse, getRowId, getRowStyle, getRowsRequest, getRowsResponse, id, licenseKey, masterDetail, paginationGoTo, paginationInfo, persisted_props, persistence, persistence_type, resetColumnState, rowClass, rowClassRules, rowData, rowModelType, rowStyle, rowTransaction, scrollTo, selectAll, selectedRows, style, suppressDragLeaveHidesColumns, updateColumnState, virtualRowData
+            #     grid = dag.AgGrid(
+            #         # id={"type": "get-started-example-basic", "index": id["index"]},
+            #         # rowModelType="infinite",
+            #         rowData=df.to_pandas().head(100).to_dict("records"),
+            #         columnDefs=columnDefs,
+            #         dashGridOptions={
+            #             "tooltipShowDelay": 500,
+            #             "pagination": True,
+            #             "paginationAutoPageSize": False,
+            #             "animateRows": False,
+            #             # The number of rows rendered outside the viewable area the grid renders.
+            #             # "rowBuffer": 0,
+            #             # # How many blocks to keep in the store. Default is no limit, so every requested block is kept.
+            #             # "maxBlocksInCache": 2,
+            #             # "cacheBlockSize": 100,
+            #             # "cacheOverflowSize": 2,
+            #             # "maxConcurrentDatasourceRequests": 2,
+            #             # "infiniteInitialRowCount": 1,
+            #             # "rowSelection": "multiple",
+            #         },
+            #         # columnSize="sizeToFit",
+            #         defaultColDef={"resizable": True, "sortable": True, "filter": True},
+            #         # use the parameters above
+            #     )
+            #     # layout += [run_nb_title, html.Hr(), data_previz_title, html.Hr(), grid]
+            #     # print(layout)
 
-                layout += [
-                    dmc.Accordion(
-                        children=[
-                            dmc.AccordionItem(
-                                [
-                                    dmc.AccordionControl(data_previz_title),
-                                    dmc.AccordionPanel(grid),
-                                ],
-                                value="data_collection_table_previz",
-                            ),
-                            dmc.AccordionItem(
-                                [
-                                    dmc.AccordionControl(config_title),
-                                    dmc.AccordionPanel(prism),
-                                ],
-                                value="data_collection_config",
-                            ),
-                        ],
-                    ),
-                    # buttons_list
-                ]
+            #     layout += [
+            #         dmc.Accordion(
+            #             children=[
+            #                 dmc.AccordionItem(
+            #                     [
+            #                         dmc.AccordionControl(data_previz_title),
+            #                         dmc.AccordionPanel(grid),
+            #                     ],
+            #                     value="data_collection_table_previz",
+            #                 ),
+            #                 dmc.AccordionItem(
+            #                     [
+            #                         dmc.AccordionControl(config_title),
+            #                         dmc.AccordionPanel(prism),
+            #                     ],
+            #                     value="data_collection_config",
+            #                 ),
+            #             ],
+            #         ),
+            #         # buttons_list
+            #     ]
 
-            elif dc_specs["config"]["type"] == "JBrowse2":
-                if dc_specs["config"]["dc_specific_properties"]["jbrowse_template_location"]:
-                    template_json = json.load(open(dc_specs["config"]["dc_specific_properties"]["jbrowse_template_location"]))
-                    template_title = dmc.Title("JBrowse template", order=3, align="left", weight=500)
-                    prism_template = dbc.Col(
-                        [
-                            dmc.Prism(
-                                f"""{json.dumps(template_json, indent=2)}""",
-                                language="json",
-                                colorScheme="light",
-                                noCopy=True,
-                            ),
-                        ],
-                        width=6,
-                    )
-                    layout += [
-                        dmc.Accordion(
-                            children=[
-                                dmc.AccordionItem(
-                                    [
-                                        dmc.AccordionControl(config_title),
-                                        dmc.AccordionPanel(prism),
-                                    ],
-                                    value="data_collection_config",
-                                ),
-                                dmc.AccordionItem(
-                                    [
-                                        dmc.AccordionControl(template_title),
-                                        dmc.AccordionPanel(prism_template),
-                                    ],
-                                    value="jbrowse_template",
-                                ),
-                            ],
-                        )
-                        # ,buttons_list
-                    ]
+            # elif dc_specs["config"]["type"] == "JBrowse2":
+            #     if dc_specs["config"]["dc_specific_properties"][
+            #         "jbrowse_template_location"
+            #     ]:
+            #         template_json = json.load(
+            #             open(
+            #                 dc_specs["config"]["dc_specific_properties"][
+            #                     "jbrowse_template_location"
+            #                 ]
+            #             )
+            #         )
+            #         template_title = dmc.Title(
+            #             "JBrowse template", order=3, align="left", weight=500
+            #         )
+            #         prism_template = dbc.Col(
+            #             [
+            #                 dmc.Prism(
+            #                     f"""{json.dumps(template_json, indent=2)}""",
+            #                     language="json",
+            #                     colorScheme="light",
+            #                     noCopy=True,
+            #                 ),
+            #             ],
+            #             width=6,
+            #         )
+            #         layout += [
+            #             dmc.Accordion(
+            #                 children=[
+            #                     dmc.AccordionItem(
+            #                         [
+            #                             dmc.AccordionControl(config_title),
+            #                             dmc.AccordionPanel(prism),
+            #                         ],
+            #                         value="data_collection_config",
+            #                     ),
+            #                     dmc.AccordionItem(
+            #                         [
+            #                             dmc.AccordionControl(template_title),
+            #                             dmc.AccordionPanel(prism_template),
+            #                         ],
+            #                         value="jbrowse_template",
+            #                     ),
+            #                 ],
+            #             )
+            #             # ,buttons_list
+            #         ]
 
         else:
             layout = html.Div("No data to display")
@@ -304,7 +367,11 @@ def register_callbacks_stepper_part_one(app):
             radius="xl",
             style={"fontFamily": "Virgil"},
             color=component_metadata_dict[component_selected]["color"],
-            leftSection=DashIconify(icon=component_metadata_dict[component_selected]["icon"], width=15, color=component_metadata_dict[component_selected]["color"]),
+            leftSection=DashIconify(
+                icon=component_metadata_dict[component_selected]["icon"],
+                width=15,
+                color=component_metadata_dict[component_selected]["color"],
+            ),
         )
 
     # @app.callback(
