@@ -10,13 +10,14 @@ from depictio.api.v1.configs.logging import logger
 # from depictio.api.v1.endpoints.dashboards_endpoints.models import DashboardData
 
 from depictio_models.models.base import convert_objectid_to_str
+from depictio_models.utils import convert_model_to_dict
 from depictio_models.models.dashboards import DashboardData
 
 def load_dashboards_from_db(owner, admin_mode=False):
     logger.info("Loading dashboards from MongoDB")
 
     logger.info(f"owner: {owner}")
-    projection = {"_id": 1, "dashboard_id": 1, "version": 1, "title": 1, "permissions": 1, "last_saved_ts": 1}
+    projection = {"_id": 1, "dashboard_id": 1, "version": 1, "title": 1, "permissions": 1, "last_saved_ts": 1, "project_id": 1}
     if admin_mode:
         projection["stored_metadata"] = 1
 
