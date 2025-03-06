@@ -39,7 +39,7 @@ async def get_all_projects(current_user: str = Depends(get_current_user)) -> Lis
     else:
         return []
 
-@projects_endpoint_router.get("/get/from_id")
+@projects_endpoint_router.get("/get/from_id/{project_id}")
 async def get_project_from_id(project_id: str, current_user: str = Depends(get_current_user)):
     logger.info(f"Getting project with ID: {project_id}")
     if not current_user:
@@ -67,7 +67,7 @@ async def get_project_from_id(project_id: str, current_user: str = Depends(get_c
     return project
 
 
-@projects_endpoint_router.get("/get/from_name")
+@projects_endpoint_router.get("/get/from_name/{project_name}")
 async def get_project_from_name(project_name: str, current_user: str = Depends(get_current_user)):
     logger.info(f"Getting project with ID: {project_name}")
     if not current_user:
