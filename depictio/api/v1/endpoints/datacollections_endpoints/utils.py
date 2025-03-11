@@ -25,8 +25,8 @@ def symmetrize_join_details(join_details_map: Dict[str, List[dict]]):
                     }
                     join_details_map[related_dc_id].append(symmetric_join)
 
-
-def generate_join_dict(workflow):
+from typing import Dict, List
+def generate_join_dict(workflow: Dict) -> Dict[str, Dict[str, dict]]:
     from depictio.api.v1.configs.logging import logger
 
     logger.info(f"Workflow: {workflow}")
