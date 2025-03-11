@@ -199,8 +199,10 @@ def handle_authenticated_user(pathname, local_data):
     if pathname.startswith("/dashboard/"):
         dashboard_id = pathname.split("/")[-1]
         depictio_dash_data = load_depictio_data(dashboard_id, local_data)
+        logger.info(f"Depictio dash data: {depictio_dash_data}")
         header = design_header(data=depictio_dash_data, local_store=local_data)
-        return create_dashboard_layout(depictio_dash_data=depictio_dash_data, local_data=local_data), header, pathname, local_data
+        dashboard_id = pathname.split("/")[-1]
+        return create_dashboard_layout(depictio_dash_data=depictio_dash_data, dashboard_id=dashboard_id, local_data=local_data), header, pathname, local_data
 
     elif pathname == "/dashboards":
         user = fetch_user_from_token(local_data["access_token"])
@@ -459,9 +461,10 @@ def create_tokens_management_layout():
     return tokens_management_layout
 
 
-def create_dashboard_layout(depictio_dash_data=None, local_data=None):
+def create_dashboard_layout(depictio_dash_data=dict, dashboard_id=str, local_data=dict):
     # Init layout and children if depictio_dash_data is available, else set to empty
     if depictio_dash_data:
+        logger.info(f"Depictio dash data: {depictio_dash_data}")
         if "stored_layout_data" in depictio_dash_data:
             init_layout = depictio_dash_data["stored_layout_data"]
         else:
@@ -475,7 +478,7 @@ def create_dashboard_layout(depictio_dash_data=None, local_data=None):
     # header, backend_components = design_header(depictio_dash_data)
 
     # Generate draggable layout
-    core = design_draggable(depictio_dash_data, init_layout, init_children, local_data)
+    core = design_draggable(init_layout, init_children, dashboard_id, local_data)
 
     return dmc.Container(
         [

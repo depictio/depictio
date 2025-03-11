@@ -89,7 +89,7 @@ def register_callbacks_stepper_part_one(app):
         # print(data_collection_selection)
 
         # dc_specs = httpx.get(
-        #     f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
+        #     f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{data_collection_id}",
         #     headers={
         #         "Authorization": f"Bearer {TOKEN}",
         #     },
@@ -409,7 +409,7 @@ def register_callbacks_stepper_part_one(app):
     #         logger.debug(f"Data collection ID: {data_collection_id}")
 
     #         dc_specs = httpx.get(
-    #             f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
+    #             f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{data_collection_id}",
     #             headers={
     #                 "Authorization": f"Bearer {TOKEN}",
     #             },

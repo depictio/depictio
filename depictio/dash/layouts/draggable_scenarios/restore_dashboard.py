@@ -62,6 +62,7 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, TOKE
     from depictio.dash.layouts.draggable import clean_stored_metadata
 
     stored_metadata = clean_stored_metadata(stored_metadata)
+    logger.info(f"Stored metadata: {stored_metadata}")
 
     children = list()
 
@@ -86,6 +87,7 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, TOKE
         child = build_function(**child_metadata)
         # logger.debug(f"child : ")
         children.append(child)
+    logger.info(f"Children: {children}")
 
     interactive_components_dict = return_interactive_components_dict(stored_metadata)
 
@@ -98,6 +100,7 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, TOKE
         )
         for child in children
     ]
+    logger.info(f"Children: {children}")
 
     children = update_interactive_component(
         stored_metadata,
@@ -107,6 +110,7 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, TOKE
         TOKEN=TOKEN,
         dashboard_id=dashboard_id,
     )
+    logger.info(f"Children: {children}")
     return children
 
 
@@ -132,7 +136,7 @@ def load_depictio_data(dashboard_id, local_data):
     logger.info(f"load_depictio_data : {dashboard_data}")
 
     if dashboard_data:
-        if "buttons_data" not in dashboard_data:
+        if not hasattr(dashboard_data, "buttons_data"):
             dashboard_data.buttons_data = {
                 "edit_components_button": True,
                 "edit_dashboard_mode_button": True,
@@ -147,7 +151,7 @@ def load_depictio_data(dashboard_id, local_data):
         #         else:
         #             dashboard_data["buttons_data"][button] = True
 
-        if "stored_metadata" in dashboard_data:
+        if hasattr(dashboard_data, "stored_metadata"):
             current_user = fetch_user_from_token(local_data["access_token"])
 
             # Check if data is available, if not set the buttons to disabled
@@ -188,10 +192,12 @@ def load_depictio_data(dashboard_id, local_data):
                 dashboard_id,
                 local_data["access_token"],
             )
+            logger.info(f"Render Children: {children}")
 
             dashboard_data.stored_children_data = children
         logger.info(f"Dashboard data RETURN: {dashboard_data}")
         dashboard_data = convert_model_to_dict(dashboard_data)
+        logger.info(f"Dashboard data RETURN to dict: {dashboard_data}")
         return dashboard_data
     else:
         return None

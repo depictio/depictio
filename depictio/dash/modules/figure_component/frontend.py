@@ -454,8 +454,8 @@ def register_callbacks_figure_component(app):
         dict_kwargs = args[0]
 
         visu_type = args[1]
-        workflow = args[2]
-        data_collection = args[3]
+        workflow_id = args[2]
+        data_collection_id = args[3]
         id = args[4]
         parent_index = args[5]
         local_data = args[6]
@@ -474,7 +474,7 @@ def register_callbacks_figure_component(app):
         component_data = get_component_data(input_id=parent_index, dashboard_id=dashboard_id, TOKEN=TOKEN)
         logger.info(f"component_data: {component_data}")
 
-        columns_json = get_columns_from_data_collection(workflow, data_collection, TOKEN)
+        columns_json = get_columns_from_data_collection(workflow_id, data_collection_id, TOKEN)
 
         columns_specs_reformatted = collections.defaultdict(list)
         {columns_specs_reformatted[v["type"]].append(k) for k, v in columns_json.items()}
@@ -506,13 +506,13 @@ def register_callbacks_figure_component(app):
         logger.info(f"visu_type: {visu_type}")
         logger.info(f"dict_kwargs: {dict_kwargs}")
 
-        workflows = list_workflows(TOKEN)
+        # workflows = list_workflows(TOKEN)
 
-        workflow_id = [e for e in workflows if e["workflow_tag"] == workflow][0]["_id"]
-        data_collection_id = [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["data_collection_tag"] == data_collection][0]["_id"]
+        # workflow_id = [e for e in workflows if e["workflow_tag"] == workflow][0]["_id"]
+        # data_collection_id = [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["data_collection_tag"] == data_collection][0]["_id"]
 
         dc_specs = httpx.get(
-            f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
+            f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{data_collection_id}",
             headers={
                 "Authorization": f"Bearer {TOKEN}",
             },

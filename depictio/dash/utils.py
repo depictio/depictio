@@ -69,7 +69,6 @@ def get_component_data(input_id, dashboard_id, TOKEN):
         return None
 
 
-
 def load_depictio_data_mongo(dashboard_id: str, TOKEN: str):
     url = f"{API_BASE_URL}/depictio/api/v1/dashboards/get/{dashboard_id}"
     try:
@@ -116,7 +115,9 @@ def list_workflows(token: str = None):
     headers = {"Authorization": f"Bearer {token}"}  # Token is now mandatory
 
     # print(token)
-    workflows = httpx.get(f"{API_BASE_URL}/depictio/api/v1/workflows/get_all_workflows", headers=headers)
+    workflows = httpx.get(
+        f"{API_BASE_URL}/depictio/api/v1/workflows/get_all_workflows", headers=headers
+    )
     workflows_json = workflows.json()
     # pretty_workflows = json.dumps(workflows_json, indent=4)
     # typer.echo(pretty_workflows)
@@ -140,26 +141,63 @@ def list_workflows(token: str = None):
 #         return data_collections_dict_for_dropdown
 
 
-def return_wf_tag_from_id(workflow_id: ObjectId, workflows: list = None, TOKEN: str = None):
-    if not workflows:
-        workflows = list_workflows(TOKEN)
-    else:
-        workflows = [convert_objectid_to_str(workflow.mongo()) for workflow in workflows]
-
-    return [e for e in workflows if e["_id"] == workflow_id][0]["workflow_tag"]
-
-
-def return_dc_tag_from_id(workflow_id: ObjectId, data_collection_id: ObjectId, workflows: list = None, TOKEN: str = None):
-    if not workflows:
-        workflows = list_workflows(TOKEN)
+def return_wf_tag_from_id(workflow_id: ObjectId, TOKEN: str = None):
+    # logger.info(f"return_wf_tag_from_id - TOKEN : {TOKEN}")
+    # logger.info(f"return_wf_tag_from_id - workflow_id : {workflow_id}")
+    # logger.info(f"return_wf_tag_from_id - workflows : {workflows}")
+    # if not workflows:
+    #     workflows = list_workflows(TOKEN)
     # else:
-    # workflows = [convert_objectid_to_str(workflow.mongo()) for workflow in workflows]
-    # print("data_collection_id", data_collection_id)
-    return [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["_id"] == data_collection_id][0]["data_collection_tag"]
+    #     workflows = [convert_objectid_to_str(workflow.mongo()) for workflow in workflows]
+
+    # return [e for e in workflows if e["_id"] == workflow_id][0]["workflow_tag"]
+    response = httpx.get(
+        f"{API_BASE_URL}/depictio/api/v1/workflows/get_tag_from_id/{workflow_id}",
+        headers={"Authorization": f"Bearer {TOKEN}"},
+    )
+    if response.status_code == 200:
+        return response.json()
+    else:
+        logger.error("No workflows found")
+        return None
+
+
+def return_dc_tag_from_id(
+    # workflow_id: ObjectId,
+    data_collection_id: ObjectId,
+    # workflows: list = None,
+    TOKEN: str = None,
+):
+    # if not workflows:
+    #     workflows = list_workflows(TOKEN)
+    # # else:
+    # # workflows = [convert_objectid_to_str(workflow.mongo()) for workflow in workflows]
+    # # print("data_collection_id", data_collection_id)
+    # return [
+    #     f
+    #     for e in workflows
+    #     if e["_id"] == workflow_id
+    #     for f in e["data_collections"]
+    #     if f["_id"] == data_collection_id
+    # ][0]["data_collection_tag"]
+    response = httpx.get(
+        f"{API_BASE_URL}/depictio/api/v1/datacollections/get_tag_from_id/{data_collection_id}",
+        headers={"Authorization": f"Bearer {TOKEN}"},
+    )
+    if response.status_code == 200:
+        return response.json()
+    else:
+        logger.error("No data collections found")
+        return None
 
 
 def return_mongoid(
-    workflow_tag: str = None, workflow_id: ObjectId = None, data_collection_tag: str = None, data_collection_id: ObjectId = None, workflows: list = None, TOKEN: str = None
+    workflow_tag: str = None,
+    workflow_id: ObjectId = None,
+    data_collection_tag: str = None,
+    data_collection_id: ObjectId = None,
+    workflows: list = None,
+    TOKEN: str = None,
 ):
     if not workflows:
         workflows = list_workflows(TOKEN)
@@ -168,14 +206,28 @@ def return_mongoid(
 
     if workflow_tag is not None and data_collection_tag is not None:
         # print("workflow_tag and data_collection_tag")
-        workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_tag][0]["_id"]
+        workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_tag][0][
+            "_id"
+        ]
         # print("workflow_id", workflow_id)
-        data_collection_id = [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["data_collection_tag"] == data_collection_tag][0]["_id"]
+        data_collection_id = [
+            f
+            for e in workflows
+            if e["_id"] == workflow_id
+            for f in e["data_collections"]
+            if f["data_collection_tag"] == data_collection_tag
+        ][0]["_id"]
         # print("data_collection_id", data_collection_id)
     elif workflow_id is not None and data_collection_tag is not None:
         # print("workflow_id and data_collection_tag")
         workflow_id = str(workflow_id)
-        data_collection_id = [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["data_collection_tag"] == data_collection_tag][0]["_id"]
+        data_collection_id = [
+            f
+            for e in workflows
+            if e["_id"] == workflow_id
+            for f in e["data_collections"]
+            if f["data_collection_tag"] == data_collection_tag
+        ][0]["_id"]
     else:
         # print("Invalid input")
         return None, None
@@ -251,9 +303,14 @@ def analyze_structure(struct, depth=0):
     """
 
     if isinstance(struct, list):
-        logger.info("  " * depth + f"Depth {depth} Type: List with {len(struct)} elements")
+        logger.info(
+            "  " * depth + f"Depth {depth} Type: List with {len(struct)} elements"
+        )
         for idx, child in enumerate(struct):
-            logger.info("  " * depth + f"Element {idx} ID: {child.get('props', {}).get('id', None)}")
+            logger.info(
+                "  " * depth
+                + f"Element {idx} ID: {child.get('props', {}).get('id', None)}"
+            )
             analyze_structure(child, depth=depth + 1)
         return
 
@@ -275,14 +332,21 @@ def analyze_structure(struct, depth=0):
         analyze_structure(children, depth=depth + 1)
 
     elif isinstance(children, list):
-        logger.info("  " * depth + f"Depth {depth} Type: List with {len(children)} elements")
+        logger.info(
+            "  " * depth + f"Depth {depth} Type: List with {len(children)} elements"
+        )
         for idx, child in enumerate(children):
-            logger.info("  " * depth + f"Element {idx} ID: {child.get('props', {}).get('id', None)}")
+            logger.info(
+                "  " * depth
+                + f"Element {idx} ID: {child.get('props', {}).get('id', None)}"
+            )
             # Recursive call
             analyze_structure(child, depth=depth + 1)
 
 
-def analyze_structure_and_get_deepest_type(struct, depth=0, max_depth=0, deepest_type=None, print=False):
+def analyze_structure_and_get_deepest_type(
+    struct, depth=0, max_depth=0, deepest_type=None, print=False
+):
     """
     Recursively analyze a nested plotly dash structure and return the type of the deepest element (excluding 'stored-metadata-component').
 
@@ -303,26 +367,37 @@ def analyze_structure_and_get_deepest_type(struct, depth=0, max_depth=0, deepest
     current_type = None
     if isinstance(struct, dict):
         id_value = struct.get("props", {}).get("id", None)
-        if isinstance(id_value, dict) and id_value.get("type") != "stored-metadata-component":
+        if (
+            isinstance(id_value, dict)
+            and id_value.get("type") != "stored-metadata-component"
+        ):
             current_type = id_value.get("type")
             if print:
-                logger.info(f"Found component of type: {current_type} at depth: {depth}")  # Debug print
+                logger.info(
+                    f"Found component of type: {current_type} at depth: {depth}"
+                )  # Debug print
 
     if depth > max_depth:
         max_depth = depth
         deepest_type = current_type
         if print:
-            logger.info(f"Updated max_depth to {max_depth} with deepest_type: {deepest_type}")  # Debug print
+            logger.info(
+                f"Updated max_depth to {max_depth} with deepest_type: {deepest_type}"
+            )  # Debug print
     elif depth == max_depth and current_type is not None:
         deepest_type = current_type
         if print:
-            logger.info(f"Updated deepest_type to {deepest_type} at same max_depth: {max_depth}")  # Debug print
+            logger.info(
+                f"Updated deepest_type to {deepest_type} at same max_depth: {max_depth}"
+            )  # Debug print
 
     if isinstance(struct, list):
         for child in struct:
             if print:
                 logger.info(f"Descending into list at depth: {depth}")  # Debug print
-            max_depth, deepest_type = analyze_structure_and_get_deepest_type(child, depth=depth + 1, max_depth=max_depth, deepest_type=deepest_type)
+            max_depth, deepest_type = analyze_structure_and_get_deepest_type(
+                child, depth=depth + 1, max_depth=max_depth, deepest_type=deepest_type
+            )
     elif isinstance(struct, dict):
         children = struct.get("props", {}).get("children", None)
         if isinstance(children, (list, dict)):

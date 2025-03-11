@@ -325,12 +325,12 @@ def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
     logger.info(f"Component data: {component_data}")
     id = {"type": f"{component_data['component_type']}-component", "index": n}
 
-    wf_tag = return_wf_tag_from_id(component_data["wf_id"], TOKEN=TOKEN)
-    dc_tag = return_dc_tag_from_id(
-        workflow_id=component_data["wf_id"],
-        data_collection_id=component_data["dc_id"],
-        TOKEN=TOKEN,
-    )
+    # wf_tag = return_wf_tag_from_id(component_data["wf_id"], TOKEN=TOKEN)
+    # dc_tag = return_dc_tag_from_id(
+    #     # workflow_id=component_data["wf_id"],
+    #     data_collection_id=component_data["dc_id"],
+    #     TOKEN=TOKEN,
+    # )
 
     select_row = dbc.Row(
         [
@@ -361,7 +361,7 @@ def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
                         "index": n,
                     },
                     # value=datacollection_selection,
-                    value=dc_tag,
+                    value=component_data["dc_id"],
                     label=html.H4(
                         [
                             DashIconify(icon="bxs:data"),

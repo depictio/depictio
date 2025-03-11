@@ -9,9 +9,6 @@ import httpx
 from depictio.dash.utils import (
     get_component_data,
     load_depictio_data_mongo,
-    return_dc_tag_from_id,
-    return_mongoid,
-    return_wf_tag_from_id,
 )
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging import logger
