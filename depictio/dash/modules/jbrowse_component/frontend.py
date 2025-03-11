@@ -46,7 +46,7 @@ def register_callbacks_jbrowse_component(app):
         data_collection_id = [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["data_collection_tag"] == dc_id][0]["_id"]
 
         dc_specs = httpx.get(
-            f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
+            f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{data_collection_id}",
             headers={
                 "Authorization": f"Bearer {TOKEN}",
             },
