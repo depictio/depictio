@@ -701,7 +701,7 @@ def register_projects_callbacks(app):
         # Fetch data collection specs and convert to DataCollection model
         try:
             response = httpx.get(
-                f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
+                f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{data_collection_id}",
                 headers={"Authorization": f"Bearer {TOKEN}"},
             )
             response.raise_for_status()
