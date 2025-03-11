@@ -146,8 +146,8 @@ def register_callbacks_draggable(app):
         Updates the store whenever any workflow or data collection dropdown changes.
 
         Args:
-            wf_values (list): List of selected workflow values from all dropdowns.
-            dc_values (list): List of selected data collection values from all dropdowns.
+            wf_values (list): List of selected workflow IDs from all dropdowns.
+            dc_values (list): List of selected data collection IDs from all dropdowns.
             pathname (str): Current URL pathname.
             local_store (dict): Data from 'local-store', expected to contain 'access_token'.
             components_store (dict): Existing components' wf/dc data.
@@ -158,11 +158,11 @@ def register_callbacks_draggable(app):
             dict: Updated components' wf/dc data.
         """
         logger.info("Entering store_wf_dc_selection callback")
-        logger.debug(f"Workflow values: {wf_values}")
-        logger.debug(f"Data collection values: {dc_values}")
-        logger.debug(f"URL pathname: {pathname}")
-        logger.debug(f"Local store data: {local_store}")
-        logger.debug(f"Components store data before update: {components_store}")
+        logger.info(f"Workflow values (IDs): {wf_values}")
+        logger.info(f"Data collection values (IDs): {dc_values}")
+        logger.info(f"URL pathname: {pathname}")
+        logger.info(f"Local store data: {local_store}")
+        logger.info(f"Components store data before update: {components_store}")
 
         # Validate access token
         if not local_store or "access_token" not in local_store:
@@ -175,83 +175,59 @@ def register_callbacks_draggable(app):
         if not components_store:
             components_store = {}
 
-        # Process workflow selections
-        for wf_val, wf_id in zip(wf_values, wf_ids):
+        # Process workflow selections (now using IDs directly)
+        for wf_id_value, wf_id_prop in zip(wf_values, wf_ids):
             # Parse the ID safely
             try:
-                trigger_id = wf_id
-            # except json.JSONDecodeError as e:
-            #     logger.error(f"Error parsing workflow ID '{wf_id}': {e}")
-            #     continue  # Skip this iteration
+                trigger_id = wf_id_prop
             except Exception as e:
-                logger.error(f"Error parsing workflow ID '{wf_id}': {e}")
+                logger.error(f"Error parsing workflow ID prop '{wf_id_prop}': {e}")
                 continue
 
             trigger_index = str(trigger_id.get("index"))
             if not trigger_index:
-                logger.error(f"Invalid workflow ID: {trigger_id}")
+                logger.error(f"Invalid workflow ID prop: {trigger_id}")
                 continue  # Skip this iteration
 
-            # Update workflow tag
+            # Update workflow ID directly
             components_store.setdefault(trigger_index, {})
-            components_store[trigger_index]["wf_tag"] = wf_val
-
-            # Fetch corresponding wf_id and dc_id
-            dc_tag = components_store[trigger_index].get("dc_tag", "")
+            components_store[trigger_index]["wf_id"] = wf_id_value
+            
+            # Get the workflow tag from the ID for reference/display purposes
             try:
-                wf_id_fetched, dc_id_fetched = return_mongoid(
-                    workflow_tag=wf_val, data_collection_tag=dc_tag, TOKEN=TOKEN
-                )
-                components_store[trigger_index]["wf_id"] = wf_id_fetched
-                components_store[trigger_index]["dc_id"] = dc_id_fetched
-                logger.debug(
-                    f"Updated component '{trigger_index}' with wf_id: {wf_id_fetched}, dc_id: {dc_id_fetched}"
-                )
+                wf_tag = return_wf_tag_from_id(workflow_id=wf_id_value, TOKEN=TOKEN)
+                components_store[trigger_index]["wf_tag"] = wf_tag
+                logger.debug(f"Updated component '{trigger_index}' with wf_tag: {wf_tag} from wf_id: {wf_id_value}")
             except Exception as e:
-                logger.error(
-                    f"Error retrieving IDs for component '{trigger_index}': {e}"
-                )
-                components_store[trigger_index]["wf_id"] = ""
-                components_store[trigger_index]["dc_id"] = ""
+                logger.error(f"Error retrieving workflow tag for component '{trigger_index}': {e}")
+                components_store[trigger_index]["wf_tag"] = ""
 
-        # Process datacollection selections
-        for dc_val, dc_id in zip(dc_values, dc_ids):
+        # Process datacollection selections (now using IDs directly)
+        for dc_id_value, dc_id_prop in zip(dc_values, dc_ids):
             # Parse the ID safely
             try:
-                trigger_id = dc_id
-            # except json.JSONDecodeError as e:
-            #     logger.error(f"Error parsing datacollection ID '{dc_id}': {e}")
-            #     continue  # Skip this iteration
+                trigger_id = dc_id_prop
             except Exception as e:
-                logger.error(f"Error parsing datacollection ID '{dc_id}': {e}")
+                logger.error(f"Error parsing datacollection ID prop '{dc_id_prop}': {e}")
                 continue  # Skip this iteration
 
             trigger_index = str(trigger_id.get("index"))
             if not trigger_index:
-                logger.error(f"Invalid datacollection ID: {trigger_id}")
+                logger.error(f"Invalid datacollection ID prop: {trigger_id}")
                 continue  # Skip this iteration
 
-            # Update datacollection tag
+            # Update datacollection ID directly
             components_store.setdefault(trigger_index, {})
-            components_store[trigger_index]["dc_tag"] = dc_val
-
-            # Fetch corresponding wf_id and dc_id
-            wf_tag = components_store[trigger_index].get("wf_tag", "")
+            components_store[trigger_index]["dc_id"] = dc_id_value
+            
+            # Get the datacollection tag from the ID for reference/display purposes
             try:
-                wf_id_fetched, dc_id_fetched = return_mongoid(
-                    workflow_tag=wf_tag, data_collection_tag=dc_val, TOKEN=TOKEN
-                )
-                components_store[trigger_index]["wf_id"] = wf_id_fetched
-                components_store[trigger_index]["dc_id"] = dc_id_fetched
-                logger.debug(
-                    f"Updated component '{trigger_index}' with wf_id: {wf_id_fetched}, dc_id: {dc_id_fetched}"
-                )
+                dc_tag = return_dc_tag_from_id(data_collection_id=dc_id_value, TOKEN=TOKEN)
+                components_store[trigger_index]["dc_tag"] = dc_tag
+                logger.debug(f"Updated component '{trigger_index}' with dc_tag: {dc_tag} from dc_id: {dc_id_value}")
             except Exception as e:
-                logger.error(
-                    f"Error retrieving IDs for component '{trigger_index}': {e}"
-                )
-                components_store[trigger_index]["wf_id"] = ""
-                components_store[trigger_index]["dc_id"] = ""
+                logger.error(f"Error retrieving datacollection tag for component '{trigger_index}': {e}")
+                components_store[trigger_index]["dc_tag"] = ""
 
         logger.debug(f"Components store data after update: {components_store}")
         return components_store
