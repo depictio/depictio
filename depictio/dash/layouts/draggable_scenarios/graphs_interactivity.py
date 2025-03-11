@@ -40,9 +40,7 @@ def process_click_data(dict_graph_data, interactive_components_dict, TOKEN):
     # Extract columns_description from metadata to determine column types
     columns_description = metadata.get("dc_config", {}).get("columns_description", {})
 
-    wf_tag = return_wf_tag_from_id(metadata.get("wf_id"), TOKEN=TOKEN)
-    dc_tag = return_dc_tag_from_id(metadata.get("wf_id"), metadata.get("dc_id"), TOKEN=TOKEN)
-    cols_json = get_columns_from_data_collection(wf_tag, dc_tag, TOKEN)
+    cols_json = get_columns_from_data_collection(metadata.get("wf_id"), metadata.get("dc_id"), TOKEN)
     logger.info(f"Columns JSON: {cols_json}")
 
     # Get column types; default to 'object' (categorical) if not specified
@@ -166,9 +164,7 @@ def process_selected_data(dict_graph_data, interactive_components_dict, TOKEN):
     columns_description = metadata.get("dc_config", {}).get("columns_description", {})
 
     # Fetch column types from data collection (assuming helper functions exist)
-    wf_tag = return_wf_tag_from_id(metadata.get("wf_id"), TOKEN=TOKEN)
-    dc_tag = return_dc_tag_from_id(metadata.get("wf_id"), metadata.get("dc_id"), TOKEN=TOKEN)
-    cols_json = get_columns_from_data_collection(wf_tag, dc_tag, TOKEN)
+    cols_json = get_columns_from_data_collection(metadata.get("wf_id"), metadata.get("dc_id"), TOKEN)
     logger.info(f"Columns JSON: {cols_json}")
 
     # Get column types; default to 'object' (categorical) if not specified
