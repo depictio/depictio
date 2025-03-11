@@ -114,7 +114,7 @@ def register_callbacks_interactive_component(app):
         ],
         # prevent_initial_call=True,
     )
-    def update_card_body(input_value, column_value, aggregation_value, wf_tag, dc_tag, id, parent_index, local_data, pathname):
+    def update_card_body(input_value, column_value, aggregation_value, workflow_id, data_collection_id, id, parent_index, local_data, pathname):
         """
         Callback to update card body based on the selected column and aggregation
         """
@@ -137,7 +137,7 @@ def register_callbacks_interactive_component(app):
         value = None
 
         # Get the columns from the selected data collection
-        cols_json = get_columns_from_data_collection(wf_tag, dc_tag, TOKEN)
+        cols_json = get_columns_from_data_collection(workflow_id, data_collection_id, TOKEN)
         logger.info(f"cols_json: {cols_json}")
 
         from dash import dash_table
@@ -160,7 +160,7 @@ def register_callbacks_interactive_component(app):
         )
 
         # If any of the input values are None, return an empty list
-        if input_value is None or column_value is None or aggregation_value is None or wf_tag is None or dc_tag is None:
+        if input_value is None or column_value is None or aggregation_value is None or workflow_id is None or data_collection_id is None:
             if not component_data:
                 return ([], None, columns_description_df)
             else:
@@ -203,19 +203,20 @@ def register_callbacks_interactive_component(app):
         )
 
         # Get the type of the selected column, the aggregation method and the function name
-        cols_json = get_columns_from_data_collection(wf_tag, dc_tag, TOKEN)
-        logger.info(f"Wf tag : {wf_tag}")
-        logger.info(f"Dc tag : {dc_tag}")
+        # cols_json = get_columns_from_data_collection(wf_tag, dc_tag, TOKEN)
+        # logger.info(f"Wf tag : {wf_tag}")
+        # logger.info(f"Dc tag : {dc_tag}")
         logger.info(f"Cols json : {cols_json}")
         column_type = cols_json[column_value]["type"]
 
         # Get the workflow and data collection IDs from the tags
-        workflow_id, data_collection_id = return_mongoid(workflow_tag=wf_tag, data_collection_tag=dc_tag, TOKEN=TOKEN)
+        # workflow_id, data_collection_id = return_mongoid(workflow_tag=wf_tag, data_collection_tag=dc_tag, TOKEN=TOKEN)
 
         dc_specs = httpx.get(
-            f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
+            f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{data_collection_id}",
             headers=headers,
         ).json()
+        logger.info(f"dc_specs : {dc_specs}")
 
         interactive_kwargs = {
             "index": id["index"],

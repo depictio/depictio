@@ -71,7 +71,7 @@ def register_callbacks_table_component(app):
     #     data_collection_id = stored_metadata["dc_id"]
 
     #     dc_specs = httpx.get(
-    #         f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
+    #         f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{data_collection_id}",
     #         headers={
     #             "Authorization": f"Bearer {TOKEN}",
     #         },
@@ -125,7 +125,7 @@ def register_callbacks_table_component(app):
         ],
         prevent_initial_call=True,
     )
-    def design_table_component(wf_tag, dc_tag, n_clicks, id, data):
+    def design_table_component(workflow_id, data_collection_id, n_clicks, id, data):
         """
         Callback to update card body based on the selected column and aggregation
         """
@@ -140,15 +140,15 @@ def register_callbacks_table_component(app):
         }
 
         # Get the workflow and data collection ids from the tags selected
-        workflow_id, data_collection_id = return_mongoid(workflow_tag=wf_tag, data_collection_tag=dc_tag, TOKEN=TOKEN)
+        # workflow_id, data_collection_id = return_mongoid(workflow_tag=wf_tag, data_collection_tag=dc_tag, TOKEN=TOKEN)
 
         # Get the data collection specs
         dc_specs = httpx.get(
-            f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
+            f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{data_collection_id}",
             headers=headers,
         ).json()
 
-        cols_json = get_columns_from_data_collection(wf_tag, dc_tag, TOKEN)
+        cols_json = get_columns_from_data_collection(workflow_id, data_collection_id, TOKEN)
 
         # Get the join tables for the selected workflow - used in store for metadata management
         # join_tables_for_wf = httpx.get(
