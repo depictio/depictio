@@ -49,14 +49,16 @@ async def specs(
     # Use MongoDB aggregation to directly retrieve the specific data collection
     pipeline = [
         # Match projects containing this collection and with appropriate permissions
-        {"$match": {
-            "workflows.data_collections._id": data_collection_oid,
-            "$or": [
-                {"permissions.owners._id": current_user.id},
-                {"permissions.viewers._id": current_user.id},
-                {"permissions.viewers": "*"},
-            ],
-        }},
+        {
+            "$match": {
+                "workflows.data_collections._id": data_collection_oid,
+                "$or": [
+                    {"permissions.owners._id": current_user.id},
+                    {"permissions.viewers._id": current_user.id},
+                    {"permissions.viewers": "*"},
+                ],
+            }
+        },
         # Unwind the workflows array
         {"$unwind": "$workflows"},
         # Unwind the data_collections array
@@ -64,16 +66,16 @@ async def specs(
         # Match the specific data collection ID
         {"$match": {"workflows.data_collections._id": data_collection_oid}},
         # Return only the data collection
-        {"$replaceRoot": {"newRoot": "$workflows.data_collections"}}
+        {"$replaceRoot": {"newRoot": "$workflows.data_collections"}},
     ]
-    
+
     result = list(projects_collection.aggregate(pipeline))
-    
+
     if not result:
         raise HTTPException(
             status_code=404, detail="Data collection not found or access denied."
         )
-    
+
     return convert_objectid_to_str(result[0])
 
 
@@ -152,7 +154,7 @@ async def get_join_tables(
     for dc_id in join_details_map:
         TOKEN = current_user["access_token"]
         join_details_map[dc_id]["with_dc"] = [
-            return_dc_tag_from_id(workflow_id, dc_id, workflows, TOKEN)
+            return_dc_tag_from_id(dc_id, workflows, TOKEN)
             for dc_id in join_details_map[dc_id]["with_dc_id"]
         ]
 
@@ -174,7 +176,6 @@ async def get_dc_joined(
 
     # Retrieve workflow
     workflow = await get_workflow_from_id(workflow_id, current_user=current_user)
-    workflow = workflow.mongo()
     logger.info(f"Workflow: {workflow}")
     logger.info(f"type(workflow): {type(workflow)}")
 
@@ -183,3 +184,53 @@ async def get_dc_joined(
     logger.info(f"Join details: {join_details_map}")
 
     return join_details_map
+
+
+@datacollections_endpoint_router.get("/get_tag_from_id/{data_collection_id}")
+async def get_tag_from_id(
+    data_collection_id: str,
+    current_user: str = Depends(get_current_user),
+):
+    try:
+        data_collection_oid = ObjectId(data_collection_id)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # Use MongoDB aggregation to directly retrieve the specific data collection
+    pipeline = [
+        # Match projects containing this collection and with appropriate permissions
+        {
+            "$match": {
+                "workflows.data_collections._id": data_collection_oid,
+                "$or": [
+                    {"permissions.owners._id": current_user.id},
+                    {"permissions.viewers._id": current_user.id},
+                    {"permissions.viewers": "*"},
+                ],
+            }
+        },
+        # Unwind the workflows array
+        {"$unwind": "$workflows"},
+        # Unwind the data_collections array
+        {"$unwind": "$workflows.data_collections"},
+        # Match the specific data collection ID
+        {"$match": {"workflows.data_collections._id": data_collection_oid}},
+        # Return only the data collection
+        {"$replaceRoot": {"newRoot": "$workflows.data_collections"}},
+    ]
+
+    result = list(projects_collection.aggregate(pipeline))
+
+    if not result:
+        raise HTTPException(
+            status_code=404, detail="Data collection not found or access denied."
+        )
+
+    if len(result) > 1:
+        raise HTTPException(
+            status_code=500, detail="Multiple data collections found for the same ID."
+        )
+
+    dc_tag = result[0]["data_collection_tag"]
+
+    return dc_tag
