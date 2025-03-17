@@ -496,7 +496,9 @@ def render_workflow_item(wf: Workflow, token: str):
     )
 
 
-def render_project_item(project: Project, current_user: UserBase, token: str):
+def render_project_item(
+    project: Project, current_user: UserBase, admin_UI: False, token: str
+):
     """
     Render a single project item containing multiple workflows.
 
@@ -600,11 +602,20 @@ def render_project_item(project: Project, current_user: UserBase, token: str):
         if str(current_user.id) in [str(o.id) for o in project.permissions.owners]
         else False
     )
-    badge_ownership = dmc.Badge(
-        children="Owned" if project_owned else "Shared",
-        color="teal" if project_owned else "gray",
-        className="ml-2",
-    )
+
+
+    if not admin_UI:
+        badge_ownership = dmc.Badge(
+            children="Owned" if project_owned else "Shared",
+            color="teal" if project_owned else "gray",
+            className="ml-2",
+        )
+    else:
+        badge_ownership = dmc.Badge(
+            children=project.permissions.owners[0].email,
+            color="blue",
+            className="ml-2",
+        )
 
     return dmc.AccordionItem(
         children=[
@@ -656,7 +667,9 @@ def render_project_item(project: Project, current_user: UserBase, token: str):
     )
 
 
-def render_projects_list(projects: List[Project], token: str):
+def render_projects_list(
+    projects: List[Project], admin_UI: bool = False, token: str = None
+):
     """Render the full projects list, categorized into owned and shared."""
     if not projects:
         return html.P("No projects available.")
@@ -668,7 +681,12 @@ def render_projects_list(projects: List[Project], token: str):
         if not projects:
             return None
         project_items = [
-            render_project_item(project=project, current_user=current_user, token=token)
+            render_project_item(
+                project=project,
+                current_user=current_user,
+                admin_UI=admin_UI,
+                token=token,
+            )
             for project in projects
         ]
         return [
@@ -803,6 +821,6 @@ def register_workflows_callbacks(app):
 
         return html.Div(
             children=[
-                render_projects_list(projects, token),
+                render_projects_list(projects=projects, admin_UI=False, token=token),
             ]
         )
