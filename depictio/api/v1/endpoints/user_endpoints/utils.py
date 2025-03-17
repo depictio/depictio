@@ -6,10 +6,15 @@ import bcrypt
 
 from depictio.api.v1.configs.config import API_BASE_URL, PRIVATE_KEY, ALGORITHM
 from depictio.api.v1.configs.logging import logger
-from depictio.api.v1.endpoints.user_endpoints.core_functions import add_token_to_user, fetch_user_from_email
+from depictio.api.v1.endpoints.user_endpoints.core_functions import (
+    add_token_to_user,
+    fetch_user_from_email,
+)
+
 # from depictio.api.v1.endpoints.user_endpoints.models import Token
 from depictio_models.models.base import convert_objectid_to_str
 from depictio_models.models.users import Token
+
 
 def login_user(email):
     return {"logged_in": True, "email": email}
@@ -50,17 +55,64 @@ def find_user(email, return_tokens=False):
     return None
 
 
+def get_groups(TOKEN):
+    response = httpx.get(
+        f"{API_BASE_URL}/depictio/api/v1/auth/get_all_groups",
+        headers={"Authorization ": f"Bearer {TOKEN}"},
+    )
+    if response.status_code == 200:
+        return response.json()
+    else:
+        return []
+
+
+from depictio_models.models.users import Group
+
+
+def get_users_group() -> Group:
+    response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/auth/get_users_group")
+    if response.status_code == 200:
+        group = response.json()
+        logger.info(f"Group: {group}")
+        group = Group.from_mongo(group)
+        logger.info(f"Group: {group}")
+        return group
+    else:
+        return []
+
+
 # Function to add a new user
-def add_user(email, password, is_admin=False):
+def add_user(email, password, group=None, is_admin=False):
     hashed_password = hash_password(password)
-    user_dict = {
-        "email": email,
-        "password": hashed_password,
-        "is_admin": is_admin,
-        "registration_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "last_login": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-    }
-    response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/auth/register", json=user_dict)
+    # user_dict = {
+    #     "email": email,
+    #     "password": hashed_password,
+    #     "is_admin": is_admin,
+    #     "registration_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    #     "last_login": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    # }
+    from depictio_models.models.users import User
+    logger.info(f"Groups: {group}")
+    if not group:
+        group = get_users_group()
+        logger.info(f"Users Group: {group}")
+    logger.info(f"Groups: {group}")
+
+    user = User(
+        email=email,
+        password=hashed_password,
+        is_admin=is_admin,
+        registration_date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        last_login=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        groups=[group],
+    )
+    from depictio_models.utils import convert_model_to_dict
+    logger.info(f"User: {user}")
+    user = convert_model_to_dict(user)
+    logger.info(f"User: {user}")
+    response = httpx.post(
+        f"{API_BASE_URL}/depictio/api/v1/auth/register", json=user
+    )
     if response.status_code == 200:
         logger.info(f"User {email} added successfully.")
     else:
@@ -78,12 +130,20 @@ def edit_password(email, old_password, new_password, headers):
         if verify_password(user["password"], old_password):
             hashed_password = hash_password(new_password)
             user_dict = {"new_password": hashed_password, "old_password": old_password}
-            logger.info(f"Updating password for user {email} with new password: {new_password}")
-            response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/auth/edit_password", json=user_dict, headers=headers)
+            logger.info(
+                f"Updating password for user {email} with new password: {new_password}"
+            )
+            response = httpx.post(
+                f"{API_BASE_URL}/depictio/api/v1/auth/edit_password",
+                json=user_dict,
+                headers=headers,
+            )
             if response.status_code == 200:
                 logger.info(f"Password for user {email} updated successfully.")
             else:
-                logger.error(f"Error updating password for user {email}: {response.text}")
+                logger.error(
+                    f"Error updating password for user {email}: {response.text}"
+                )
             return response
         else:
             logger.error(f"Old password for user {email} is incorrect.")
@@ -124,7 +184,12 @@ def add_token(token_data: dict) -> dict:
     logger.info(f"Adding token for user {email}.")
     logger.info(f"Token: {token_data}")
     token, expire = create_access_token(token_data)
-    token_data = {"access_token": token, "expire_datetime": expire.strftime("%Y-%m-%d %H:%M:%S"), "name": token_data["name"], "token_lifetime": token_data["token_lifetime"]}
+    token_data = {
+        "access_token": token,
+        "expire_datetime": expire.strftime("%Y-%m-%d %H:%M:%S"),
+        "name": token_data["name"],
+        "token_lifetime": token_data["token_lifetime"],
+    }
 
     # create hash from access token
     token_data["hash"] = hashlib.sha256(token.encode()).hexdigest()
@@ -138,7 +203,9 @@ def add_token(token_data: dict) -> dict:
         logger.info(f"Tokens: {tokens}")
         for t in tokens:
             if t["name"] == token_data["name"]:
-                logger.error(f"Token with name {token_data['name']} already exists for user {email}.")
+                logger.error(
+                    f"Token with name {token_data['name']} already exists for user {email}."
+                )
                 return None
 
         logger.info(f"Adding token for user {email}.")
@@ -164,7 +231,11 @@ def delete_token(email, token_id, current_token):
     if user:
         logger.info(f"Deleting token for user {email}.")
         request_body = {"user": user, "token_id": token_id}
-        response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/auth/delete_token", json=request_body, headers={"Authorization": f"Bearer {current_token}"})
+        response = httpx.post(
+            f"{API_BASE_URL}/depictio/api/v1/auth/delete_token",
+            json=request_body,
+            headers={"Authorization": f"Bearer {current_token}"},
+        )
         if response.status_code == 200:
             logger.info(f"Token deleted for user {email}.")
         else:
@@ -208,7 +279,10 @@ def check_token_validity(token):
 
 def fetch_user_from_token(token):
     logger.info(f"Fetching user from token.")
-    response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_token", params={"token": token})
+    response = httpx.get(
+        f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_token",
+        params={"token": token},
+    )
     if response.status_code == 200:
         user_data = response.json()
         logger.info(f"Raw user data from response: {user_data}")
@@ -232,10 +306,18 @@ def generate_agent_config(email, token, current_token):
     logger.info(f"User: {user}")
 
     token = convert_objectid_to_str(token)
-    token = {"access_token": token["access_token"], "expire_datetime": token["expire_datetime"], "name": token["name"]}
+    token = {
+        "access_token": token["access_token"],
+        "expire_datetime": token["expire_datetime"],
+        "name": token["name"],
+    }
 
     logger.info(f"Generating agent config for user {user}.")
-    result = httpx.post(f"{API_BASE_URL}/depictio/api/v1/auth/generate_agent_config", json={"user": user, "token": token}, headers={"Authorization": f"Bearer {current_token}"})
+    result = httpx.post(
+        f"{API_BASE_URL}/depictio/api/v1/auth/generate_agent_config",
+        json={"user": user, "token": token},
+        headers={"Authorization": f"Bearer {current_token}"},
+    )
     # logger.info(f"Result: {result.json()}")
     if result.status_code == 200:
         logger.info(f"Agent config generated for user {user}.")
