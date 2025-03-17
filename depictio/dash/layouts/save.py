@@ -145,31 +145,22 @@ def register_callbacks_save(app):
         # Deduplicate and clean metadata
         unique_metadata = []
         seen_indexes = set()
-        parent_indexes = set()
 
         logger.info(f"Stored metadata: {stored_metadata}")
-        
-        # First pass: collect all parent_indexes
         for elem in stored_metadata:
-            if "parent_index" in elem and elem["parent_index"] is not None:
-                parent_indexes.add(elem["parent_index"])
-        
-        logger.info(f"Parent indexes (components that have been edited): {parent_indexes}")
-        
-        # Second pass: add components to unique_metadata, skipping those that have been edited
-        for elem in stored_metadata:
-            # Skip components that have been edited (their index is in parent_indexes)
-            if elem["index"] in parent_indexes:
-                logger.info(f"Skipping original component that has been edited: {elem['index']}")
-                continue
-                
-            # Add unique components
             if elem["index"] not in seen_indexes:
                 unique_metadata.append(elem)
                 seen_indexes.add(elem["index"])
-                
         logger.info(f"Unique metadata: {unique_metadata}")
         logger.info(f"seen_indexes: {seen_indexes}")
+        # Remove child components for edit mode
+        if "btn-done-edit" in triggered_id:
+            unique_metadata = [
+                elem for elem in unique_metadata if "parent_index" not in elem
+            ]
+            logger.info(
+                f"Unique metadata after removing child components: {unique_metadata}"
+            )
 
         # Use draggable layout metadata if triggered by draggable
         if "draggable" in triggered_id:
