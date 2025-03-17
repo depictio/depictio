@@ -88,20 +88,20 @@ def register_callbacks_stepper_part_one(app):
 
         # print(data_collection_selection)
 
-        # dc_specs = httpx.get(
-        #     f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{data_collection_id}",
-        #     headers={
-        #         "Authorization": f"Bearer {TOKEN}",
-        #     },
-        # ).json()
-        dc_specs = {
-            "config": {
-                "type": "Table",
+        dc_specs = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{data_collection_id}",
+            headers={
+                "Authorization": f"Bearer {TOKEN}",
             },
-            "data_collection_tag": "test",
-            "description": "test",
-            "_id": "test",
-        }
+        ).json()
+        # dc_specs = {
+        #     "config": {
+        #         "type": "Table",
+        #     },
+        #     "data_collection_tag": "test",
+        #     "description": "test",
+        #     "_id": "test",
+        # }
 
         if workflow_id is not None and data_collection_id is not None:
             # component_selected = html.Div(f"{component_selected}")
@@ -154,7 +154,26 @@ def register_callbacks_stepper_part_one(app):
                                 },
                             ),
                             html.Td(
-                                dc_specs["config"]["type"], style={"text-align": "left"}
+                                # camelcase 
+                                dc_specs["config"]["type"].capitalize(),
+                                style={"text-align": "left"}
+                            ),
+                        ]
+                    ),
+                    html.Tr(
+                        [
+                            html.Td(
+                                "MetaType:",
+                                style={
+                                    "font-weight": "bold",
+                                    "text-align": "left",
+                                    "width": "20%",
+                                },
+                            ),
+                            html.Td(
+                                # camelcase 
+                                dc_specs["config"]["metatype"].capitalize(),
+                                style={"text-align": "left"}
                             ),
                         ]
                     ),
