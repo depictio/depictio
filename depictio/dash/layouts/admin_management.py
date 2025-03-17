@@ -1,4 +1,5 @@
 import datetime
+from typing import List
 import dash_mantine_components as dmc
 import dash
 import dash_bootstrap_components as dbc
@@ -12,10 +13,12 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     fetch_user_from_token,
 )
 from depictio.api.v1.configs.logging import logger
+from depictio.dash.layouts.projects import render_project_item
 
 from depictio_models.models.users import User
 from depictio_models.models.dashboards import DashboardData
 from depictio_models.models.users import UserBase
+from depictio_models.models.projects import Project
 
 
 # Define styles and colors
@@ -39,7 +42,9 @@ def render_dashboardwise_layout(dashboard):
     from depictio_models.models.base import convert_objectid_to_str
 
     dashboard_owner_raw = (
-        convert_objectid_to_str(dashboard.permissions.owners[0].mongo())
+        convert_objectid_to_str(
+            convert_objectid_to_str(dashboard.permissions.owners[0].model_dump(exclude_none=True))
+        )
         if dashboard.permissions.owners
         else "Unknown"
     )
@@ -197,6 +202,7 @@ def render_dashboardwise_layout(dashboard):
     )
 
     return layout
+
 
 @validate_call
 def render_userwise_layout(user: User) -> dmc.Accordion:
@@ -391,6 +397,37 @@ def render_userwise_layout(user: User) -> dmc.Accordion:
     return layout
 
 
+@validate_call
+def fetch_projects_for_admin(token: str) -> List[Project]:
+    """
+    Fetch all projects using the existing get_all_projects endpoint.
+    For admin users, this will return all projects in the system.
+    """
+    url = f"{API_BASE_URL}/depictio/api/v1/projects/get/all"
+
+    headers = {"Authorization": f"Bearer {token}"}
+    projects = httpx.get(url, headers=headers)
+    logger.info("Successfully fetched projects for admin view.")
+    logger.info(f"Projects: {projects.json()}")
+
+    projects = [Project.from_mongo(project) for project in projects.json()]
+    return projects
+
+
+# Override the render_project_item function to show owner email instead of "Owned"
+def admin_render_project_item(project: Project, current_user: UserBase, token: str):
+    """
+    Modified version of render_project_item that shows the owner's email instead of "Owned".
+    All badges are blue as requested.
+    """
+    # Get the original project item
+    project_item = render_project_item(
+        project, current_user, admin_UI=True, token=token
+    )
+
+    return project_item
+
+
 def register_admin_callbacks(app):
     @app.callback(
         Output("admin-management-content", "children"),
@@ -417,7 +454,9 @@ def register_admin_callbacks(app):
             if response.status_code == 200:
                 users = response.json()
                 logger.info(f"Users: {users}")
-                userwise_layouts = [render_userwise_layout(User.from_mongo(user)) for user in users]
+                userwise_layouts = [
+                    render_userwise_layout(User.from_mongo(user)) for user in users
+                ]
                 content = html.Div(userwise_layouts)
             else:
                 logger.error(f"Error fetching users: {response.json()}")
@@ -441,6 +480,39 @@ def register_admin_callbacks(app):
                 logger.error(f"Error fetching dashboards: {response.json()}")
                 content = html.P("Error fetching dashboards. Please try again later.")
             return content
+        elif active_tab == "projects":
+            # Fetch all projects for admin view using the existing endpoint
+            try:
+                projects = fetch_projects_for_admin(local_data["access_token"])
+                current_user = fetch_user_from_token(local_data["access_token"])
 
+                if projects:
+                    # Create project items with modified render function to show owner email
+                    project_items = [
+                        admin_render_project_item(
+                            project=project,
+                            current_user=current_user,
+                            token=local_data["access_token"],
+                        )
+                        for project in projects
+                    ]
+
+                    content = dmc.Container(
+                        children=[
+                            dmc.Accordion(
+                                children=project_items,
+                                chevronPosition="right",
+                                className="mb-4",
+                            ),
+                        ],
+                        fluid=True,
+                    )
+                else:
+                    content = html.P("No projects available.")
+
+                return content
+            except Exception as e:
+                logger.error(f"Error fetching projects: {e}")
+                return html.P(f"Error fetching projects: {str(e)}")
         else:
             return html.P("Under construction.")
