@@ -93,6 +93,7 @@ def fetch_projects(token: str) -> List[Project]:
 # Rendering Components
 # =====================
 
+
 def return_deltatable_for_view(workflow_id: str, dc: DataCollection, token: str):
     """
     Return a DeltaTable component for viewing data collections.
@@ -147,18 +148,16 @@ def return_deltatable_for_view(workflow_id: str, dc: DataCollection, token: str)
 def render_data_collection(dc: DataCollection, workflow_id: str, token: str):
     """
     Render a single data collection item.
-    
+
     Args:
         dc: DataCollection model
         workflow_id: ID of the workflow
         token: Authentication token for the API
-        
+
     Returns:
         Dash Mantine Paper component
     """
-    icon = (
-        "mdi:table" if dc.config.type.lower() == "table" else "mdi:file-document"
-    )
+    icon = "mdi:table" if dc.config.type.lower() == "table" else "mdi:file-document"
     dc_config = yaml.dump(dc.config.model_dump(), default_flow_style=False)
     dc_config_md = f"```yaml\n{dc_config}\n```"
 
@@ -172,6 +171,17 @@ def render_data_collection(dc: DataCollection, workflow_id: str, token: str):
     preview_panel = None
     preview_control = None
 
+    badge_type_metatype = dmc.Badge(
+        children="Metadata"
+        if dc.config.metatype.lower() == "metadata"
+        else "Aggregate",
+        color="blue" if dc.config.metatype.lower() == "metadata" else "black",
+        className="ml-2",
+        style={"display": "inline-block"}
+        if dc.config.metatype.lower() == "metadata"
+        else {"display": "none"},
+    )
+
     return dmc.Paper(
         children=[
             dmc.AccordionMultiple(
@@ -179,7 +189,12 @@ def render_data_collection(dc: DataCollection, workflow_id: str, token: str):
                     dmc.Accordion(
                         children=[
                             dmc.AccordionControl(
-                                dc.data_collection_tag,
+                                dmc.Group(
+                                    [
+                                        dmc.Text(dc.data_collection_tag),
+                                        badge_type_metatype,
+                                    ]
+                                ),
                                 icon=DashIconify(icon=icon, width=20),
                             ),
                             dmc.AccordionPanel(
@@ -230,7 +245,11 @@ def render_data_collection(dc: DataCollection, workflow_id: str, token: str):
                                                                 className="label-text",
                                                             ),
                                                             dmc.Text(
-                                                                dc.description if hasattr(dc, "description") else "",
+                                                                dc.description
+                                                                if hasattr(
+                                                                    dc, "description"
+                                                                )
+                                                                else "",
                                                                 weight=500,
                                                             ),
                                                         ],
@@ -245,6 +264,20 @@ def render_data_collection(dc: DataCollection, workflow_id: str, token: str):
                                                             ),
                                                             dmc.Text(
                                                                 dc.config.type,
+                                                                weight=500,
+                                                            ),
+                                                        ],
+                                                        spacing="xs",
+                                                    ),
+                                                    dmc.Group(
+                                                        children=[
+                                                            dmc.Text(
+                                                                "MetaType:",
+                                                                weight=700,
+                                                                className="label-text",
+                                                            ),
+                                                            dmc.Text(
+                                                                dc.config.metatype,
                                                                 weight=500,
                                                             ),
                                                         ],
@@ -310,11 +343,11 @@ def render_data_collection(dc: DataCollection, workflow_id: str, token: str):
 def render_workflow_item(wf: Workflow, token: str):
     """
     Render a single workflow item.
-    
+
     Args:
         wf: Workflow object
         token: Authentication token for the API
-        
+
     Returns:
         Dash Mantine AccordionItem component
     """
@@ -408,7 +441,7 @@ def render_workflow_item(wf: Workflow, token: str):
     )
 
     # Render data collections if they exist
-    if hasattr(wf, 'data_collections') and wf.data_collections:
+    if hasattr(wf, "data_collections") and wf.data_collections:
         data_collections = [
             render_data_collection(dc, str(wf.id), token) for dc in wf.data_collections
         ]
@@ -449,7 +482,9 @@ def render_workflow_item(wf: Workflow, token: str):
                             ),
                             dmc.AccordionPanel(
                                 children=[
-                                    data_collections_section if data_collections_section else html.P("No data collections available.")
+                                    data_collections_section
+                                    if data_collections_section
+                                    else html.P("No data collections available.")
                                 ]
                             ),
                         ],
@@ -461,15 +496,17 @@ def render_workflow_item(wf: Workflow, token: str):
     )
 
 
-def render_project_item(project: Project, current_user: UserBase, token: str):
+def render_project_item(
+    project: Project, current_user: UserBase, admin_UI: False, token: str
+):
     """
     Render a single project item containing multiple workflows.
-    
+
     Args:
         project: Project object
         current_user: Current user object
         token: Authentication token for the API
-        
+
     Returns:
         Dash Mantine AccordionItem component
     """
@@ -565,11 +602,20 @@ def render_project_item(project: Project, current_user: UserBase, token: str):
         if str(current_user.id) in [str(o.id) for o in project.permissions.owners]
         else False
     )
-    badge_ownership = dmc.Badge(
-        children="Owned" if project_owned else "Shared",
-        color="teal" if project_owned else "gray",
-        className="ml-2",
-    )
+
+
+    if not admin_UI:
+        badge_ownership = dmc.Badge(
+            children="Owned" if project_owned else "Shared",
+            color="teal" if project_owned else "gray",
+            className="ml-2",
+        )
+    else:
+        badge_ownership = dmc.Badge(
+            children=project.permissions.owners[0].email,
+            color="blue",
+            className="ml-2",
+        )
 
     return dmc.AccordionItem(
         children=[
@@ -621,7 +667,9 @@ def render_project_item(project: Project, current_user: UserBase, token: str):
     )
 
 
-def render_projects_list(projects: List[Project], token: str):
+def render_projects_list(
+    projects: List[Project], admin_UI: bool = False, token: str = None
+):
     """Render the full projects list, categorized into owned and shared."""
     if not projects:
         return html.P("No projects available.")
@@ -633,7 +681,12 @@ def render_projects_list(projects: List[Project], token: str):
         if not projects:
             return None
         project_items = [
-            render_project_item(project=project, current_user=current_user, token=token)
+            render_project_item(
+                project=project,
+                current_user=current_user,
+                admin_UI=admin_UI,
+                token=token,
+            )
             for project in projects
         ]
         return [
@@ -661,7 +714,7 @@ def render_projects_list(projects: List[Project], token: str):
 def register_projects_callbacks(app):
     """
     Register callbacks related to projects and data collections.
-    
+
     Args:
         app: Dash application instance
     """
@@ -706,11 +759,12 @@ def register_projects_callbacks(app):
             )
             response.raise_for_status()
             dc_specs_dict = response.json()
-            
+
             # Create DataCollection model from the response
             from depictio_models.models.data_collections import DataCollection
+
             dc_specs = DataCollection.from_mongo(dc_specs_dict)
-            
+
         except httpx.HTTPError as e:
             logger.error(f"Error fetching data collection specs: {e}")
             return dash.no_update
@@ -735,7 +789,7 @@ def register_projects_callbacks(app):
 def register_workflows_callbacks(app):
     """
     Register callbacks related to projects and workflows.
-    
+
     Args:
         app: Dash application instance
     """
@@ -767,6 +821,6 @@ def register_workflows_callbacks(app):
 
         return html.Div(
             children=[
-                render_projects_list(projects, token),
+                render_projects_list(projects=projects, admin_UI=False, token=token),
             ]
         )
