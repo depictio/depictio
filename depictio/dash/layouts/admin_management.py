@@ -3,7 +3,7 @@ from typing import List
 import dash_mantine_components as dmc
 import dash
 import dash_bootstrap_components as dbc
-from dash import html, dcc, Input, Output, State, ctx
+from dash import html, dcc, Input, Output, State, ctx, ALL
 import httpx
 from dash_iconify import DashIconify
 from pydantic import validate_call
@@ -43,7 +43,9 @@ def render_dashboardwise_layout(dashboard):
 
     dashboard_owner_raw = (
         convert_objectid_to_str(
-            convert_objectid_to_str(dashboard.permissions.owners[0].model_dump(exclude_none=True))
+            convert_objectid_to_str(
+                dashboard.permissions.owners[0].model_dump(exclude_none=True)
+            )
         )
         if dashboard.permissions.owners
         else "Unknown"
@@ -105,18 +107,6 @@ def render_dashboardwise_layout(dashboard):
                                         spacing="xs",
                                         style={"marginBottom": "15px"},
                                         children=[
-                                            dmc.Group(
-                                                [
-                                                    dmc.Text(
-                                                        "Database entry ID: ",
-                                                        weight=700,
-                                                        size="sm",
-                                                    ),
-                                                    dmc.Text(
-                                                        str(dashboard.id), size="sm"
-                                                    ),
-                                                ]
-                                            ),
                                             dmc.Group(
                                                 [
                                                     dmc.Text(
@@ -329,6 +319,7 @@ def render_userwise_layout(user: User) -> dmc.Accordion:
                                                         else [
                                                             dmc.Text("None", size="sm")
                                                         ],
+                                                        cols=5,
                                                     ),
                                                     # dmc.List([dmc.ListItem(group) for group in user.groups] if user.groups else [dmc.ListItem("None")], size="sm"),
                                                 ]
@@ -365,6 +356,40 @@ def render_userwise_layout(user: User) -> dmc.Accordion:
                                                         if user.is_verified
                                                         else "No",
                                                         size="sm",
+                                                    ),
+                                                ]
+                                            ),
+                                            dmc.Group(
+                                                [
+                                                    dmc.Button(
+                                                        "Delete",
+                                                        color="red",
+                                                        variant="filled",
+                                                        size="xs",
+                                                        id={
+                                                            "type": "delete-user-button",
+                                                            "index": str(user.id),
+                                                        },  # Replace user.id with the appropriate identifier
+                                                        # styles={
+                                                        #     "root": {
+                                                        #         "marginLeft": "10px"
+                                                        #     }
+                                                        # },
+                                                    ),
+                                                    dmc.Button(
+                                                        "Make System Admin",
+                                                        color="violet",
+                                                        variant="filled",
+                                                        size="xs",
+                                                        id={
+                                                            "type": "turn-sysadmin-user-button",
+                                                            "index": str(user.id),
+                                                        },  # Replace user.id with the appropriate identifier
+                                                        # styles={
+                                                        #     "root": {
+                                                        #         "marginLeft": "10px"
+                                                        #     }
+                                                        # },
                                                     ),
                                                 ]
                                             ),
@@ -433,10 +458,22 @@ def register_admin_callbacks(app):
         Output("admin-management-content", "children"),
         Input("url", "pathname"),
         Input("admin-tabs", "value"),
+        Input({"type": "delete-user-button", "index": ALL}, "n_clicks"),
+        State({"type": "delete-user-button", "index": ALL}, "id"),
+        Input({"type": "turn-sysadmin-user-button", "index": ALL}, "n_clicks"),
+        State({"type": "turn-sysadmin-user-button", "index": ALL}, "id"),
         State("local-store", "data"),
         prevent_initial_call=True,
     )
-    def create_admin_management_content(pathname, active_tab, local_data):
+    def create_admin_management_content(
+        pathname,
+        active_tab,
+        delete_user_clicks,
+        delete_user_ids,
+        turn_sysadmin_clicks,
+        turn_sysadmin_ids,
+        local_data,
+    ):
         if not local_data["access_token"]:
             return html.P("No access token found. Please log in.")
 
@@ -446,11 +483,67 @@ def register_admin_callbacks(app):
         # )
 
         if active_tab == "users":
+            # check if one of the delete user buttons was clicked
+            if delete_user_clicks:
+                logger.info(f"Delete user button clicked: {delete_user_ids}")
+                # retrieve user id by cross-referencing the button id
+
+                for button_id, n_click_index in zip(
+                    delete_user_ids, delete_user_clicks
+                ):
+                    if n_click_index:
+                        user_id = button_id["index"]
+                        logger.error(f"Deleting user: {user_id}")
+                        response = httpx.delete(
+                            f"{API_BASE_URL}/depictio/api/v1/auth/delete/{user_id}",
+                            headers={
+                                "Authorization": f"Bearer {local_data['access_token']}"
+                            },
+                        )
+                        logger.info(f"Response: {response}")
+                        if response.status_code == 200:
+                            logger.info(f"Successfully deleted user: {user_id}")
+                        else:
+                            logger.error(f"Error deleting user: {response.json()}")
+                            return html.P(
+                                "Error deleting user. Please try again later."
+                            )
+
+            if turn_sysadmin_clicks:
+                logger.info(f"Turn sysadmin button clicked: {turn_sysadmin_ids}")
+                # retrieve user id by cross-referencing the button id
+
+                for button_id, n_click_index in zip(
+                    turn_sysadmin_ids, turn_sysadmin_clicks
+                ):
+                    if n_click_index:
+                        user_id = button_id["index"]
+                        logger.error(f"Making user system admin: {user_id}")
+                        response = httpx.post(
+                            f"{API_BASE_URL}/depictio/api/v1/auth/turn_sysadmin/{user_id}",
+                            headers={
+                                "Authorization": f"Bearer {local_data['access_token']}"
+                            },
+                        )
+                        logger.info(f"Response: {response}")
+                        if response.status_code == 200:
+                            logger.info(
+                                f"Successfully made user system admin: {user_id}"
+                            )
+                        else:
+                            logger.error(
+                                f"Error making user system admin: {response.json()}"
+                            )
+                            return html.P(
+                                "Error making user system admin. Please try again later"
+                            )
+
             response = httpx.get(
                 f"{API_BASE_URL}/depictio/api/v1/auth/list",
                 headers={"Authorization": f"Bearer {local_data['access_token']}"},
             )
             logger.info(f"Response: {response}")
+
             if response.status_code == 200:
                 users = response.json()
                 logger.info(f"Users: {users}")
