@@ -603,7 +603,6 @@ def render_project_item(
         else False
     )
 
-
     if not admin_UI:
         badge_ownership = dmc.Badge(
             children="Owned" if project_owned else "Shared",
@@ -654,6 +653,51 @@ def render_project_item(
                                             html.Div(sections)
                                             if sections
                                             else html.P("No workflows available."),
+                                        ]
+                                    )
+                                ]
+                            ),
+                        ],
+                    ),
+                    dmc.Accordion(
+                        children=[
+                            dmc.AccordionControl(
+                                "Roles and permissions",
+                                icon=DashIconify(icon="mdi:shield-account", width=20),
+                            ),
+                            dmc.AccordionPanel(
+                                children=[
+                                    dmc.Accordion(
+                                        children=[
+                                            dag.AgGrid(
+                                                columnDefs=[
+                                                    # set types
+                                                    {"field": "id"},
+                                                    {"field": "email"},
+                                                    {
+                                                        "field": "Owner",
+                                                        "cellRenderer": "agCheckboxCellRenderer",
+                                                    },
+                                                    {"field": "Editor"},
+                                                    {"field": "Viewer"},
+                                                ],
+                                                rowData=[
+                                                    {
+                                                        "id": str(user.id),
+                                                        "email": user.email,
+                                                        "Owner": True,
+                                                        "Editor": False,
+                                                        "Viewer": False,
+                                                    }
+                                                    for user in project.permissions.viewers
+                                                    + project.permissions.owners
+                                                ],
+                                                defaultColDef={
+                                                    "resizable": True,
+                                                    "sortable": True,
+                                                    "filter": True,
+                                                },
+                                            )
                                         ]
                                     )
                                 ]
