@@ -9,6 +9,7 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     add_token_to_user,
     check_if_token_is_valid,
     fetch_user_from_email,
+    fetch_user_from_id,
     fetch_user_from_token,
     generate_agent_config,
     purge_expired_tokens_from_user,
@@ -135,13 +136,15 @@ async def create_user(user: User):
         user_db = User.from_mongo(user_dict).mongo()
         logger.info(f"User: {user_db}")
         result = users_collection.insert_one(user_db)
-        
+
         # Retrieve the user from the database and convert ObjectIds to strings
         created_user = users_collection.find_one({"_id": result.inserted_id})
         if created_user:
             return convert_objectid_to_str(created_user)
         else:
-            raise HTTPException(status_code=500, detail="Failed to retrieve created user")
+            raise HTTPException(
+                status_code=500, detail="Failed to retrieve created user"
+            )
 
 
 @auth_endpoint_router.get("/get_all_groups")
@@ -170,6 +173,26 @@ async def get_users_group():
             status_code=500, detail="Multiple groups with the same name"
         )
     return groups[0]
+
+
+@auth_endpoint_router.get("/fetch_user/from_id")
+async def api_fetch_user(user_id: str, current_user=Depends(get_current_user)):
+    if not user_id:
+        raise HTTPException(status_code=400, detail="No user_id provided")
+
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Current user not found.")
+
+    user = fetch_user_from_id(user_id)
+    if user:
+        # Ensure ObjectIds are converted to strings
+        if isinstance(user, dict):
+            return convert_objectid_to_str(user)
+        else:
+            # If it's already a model, convert to dict first
+            return convert_model_to_dict(user)
+    else:
+        raise HTTPException(status_code=404, detail="User not found")
 
 
 @auth_endpoint_router.get("/fetch_user/from_email")
@@ -260,7 +283,7 @@ async def edit_password(request: dict, current_user=Depends(get_current_user)):
             user_id = ObjectId(user_id)
         else:
             user_id = ObjectId(str(user_id))
-            
+
     # Update the user in the database by replacing ONLY the password field
     result = users_collection.update_one(
         {"_id": user_id}, {"$set": {"password": new_password}}
@@ -334,7 +357,7 @@ async def delete_token(request: dict, current_user=Depends(get_current_user)):
     user_data = users_collection.find_one(query)
     if not user_data:
         raise HTTPException(status_code=404, detail="User not found")
-        
+
     tokens = user_data.get("tokens", [])
     logger.debug(f"Tokens: {tokens}")
     tokens = [e for e in tokens if str(e["_id"]) != str(token_id)]
@@ -400,7 +423,7 @@ def generate_agent_config_endpoint(
 
     # Convert current_user to dict with ObjectIds as strings
     user_dict = convert_model_to_dict(current_user)
-    
+
     depictio_agent_config = generate_agent_config(
         current_user=user_dict, request=request
     )
@@ -419,3 +442,59 @@ def list_users(current_user=Depends(get_current_user)):
     users = users_collection.find()
     users = [convert_objectid_to_str(user) for user in users]
     return users
+
+@auth_endpoint_router.delete("/delete/{user_id}")
+def delete_user(user_id: str, current_user=Depends(get_current_user)):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Current user not found.")
+    # Check if the current user is an admin
+    if not current_user.is_admin:
+        raise HTTPException(status_code=401, detail="Current user is not an admin.")
+
+    # Ensure user_id is an ObjectId
+    if isinstance(user_id, str):
+        user_id = ObjectId(user_id)
+    elif isinstance(user_id, dict) and "$oid" in user_id:
+        user_id = ObjectId(user_id["$oid"])
+    elif isinstance(user_id, ObjectId):
+        # Already an ObjectId, no conversion needed
+        pass
+    else:
+        # Convert to string first, then to ObjectId
+        user_id = ObjectId(str(user_id))
+
+    # Delete the user from the database
+    result = users_collection.delete_one({"_id": user_id})
+    if result.deleted_count == 1:
+        return {"success": True}
+    else:
+        return {"success": False}
+    
+@auth_endpoint_router.post("/turn_sysadmin/{user_id}")
+def turn_sysadmin(user_id: str, current_user=Depends(get_current_user)):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Current user not found.")
+    # Check if the current user is an admin
+    if not current_user.is_admin:
+        raise HTTPException(status_code=401, detail="Current user is not an admin.")
+
+    # Ensure user_id is an ObjectId
+    if isinstance(user_id, str):
+        user_id = ObjectId(user_id)
+    elif isinstance(user_id, dict) and "$oid" in user_id:
+        user_id = ObjectId(user_id["$oid"])
+    elif isinstance(user_id, ObjectId):
+        # Already an ObjectId, no conversion needed
+        pass
+    else:
+        # Convert to string first, then to ObjectId
+        user_id = ObjectId(str(user_id))
+
+    # Update the user in the database
+    result = users_collection.update_one(
+        {"_id": user_id}, {"$set": {"is_admin": True}}
+    )
+    if result.modified_count == 1:
+        return {"success": True}
+    else:
+        return {"success": False}
