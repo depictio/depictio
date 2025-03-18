@@ -86,8 +86,6 @@ layout = html.Div(
             closeOnEscape=False,
             withCloseButton=True,
             zIndex=10000,
-            overlayOpacity=0.3,  # Set lower opacity for the overlay
-            overlayColor="black",  # Set overlay color (e.g., black)
         ),
         html.Div(id="landing-page"),  # Initially hidden
     ]
@@ -476,7 +474,9 @@ def register_callbacks_dashboards_management(app):
                 project = response.json()
                 project_name = project["name"]
             else:
-                logger.error(f"Failed to get project from ID: {dashboard['project_id']}")
+                logger.error(
+                    f"Failed to get project from ID: {dashboard['project_id']}"
+                )
                 project_name = "Unknown"
 
             badge_project = dmc.Badge(
@@ -507,7 +507,9 @@ def register_callbacks_dashboards_management(app):
                     ),
                     dmc.Space(h=10),
                     dmc.Stack(
-                        [badge_project, badge_owner, badge_status], justify="center", align="flex-start"
+                        [badge_project, badge_owner, badge_status],
+                        justify="center",
+                        align="flex-start",
                     ),
                     dmc.Space(h=10),
                 ]
@@ -929,7 +931,9 @@ def register_callbacks_dashboards_management(app):
         # next_index = index_data.get("next_index", 1)
 
         if not ctx.triggered_id:
-            return handle_no_trigger(dashboards, store_data_list, current_userbase, user_data)
+            return handle_no_trigger(
+                dashboards, store_data_list, current_userbase, user_data
+            )
             # return handle_no_trigger(dashboards, next_index, store_data_list, current_userbase)
 
         if "type" not in ctx.triggered_id:
