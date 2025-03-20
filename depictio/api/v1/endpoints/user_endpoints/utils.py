@@ -1,5 +1,7 @@
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 import hashlib
+from bson import ObjectId
+from fastapi import HTTPException
 import httpx
 import jwt
 import bcrypt
@@ -92,6 +94,7 @@ def add_user(email, password, group=None, is_admin=False):
     #     "last_login": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     # }
     from depictio_models.models.users import User
+
     logger.info(f"Groups: {group}")
     if not group:
         group = get_users_group()
@@ -107,12 +110,11 @@ def add_user(email, password, group=None, is_admin=False):
         groups=[group],
     )
     from depictio_models.utils import convert_model_to_dict
+
     logger.info(f"User: {user}")
     user = convert_model_to_dict(user)
     logger.info(f"User: {user}")
-    response = httpx.post(
-        f"{API_BASE_URL}/depictio/api/v1/auth/register", json=user
-    )
+    response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/auth/register", json=user)
     if response.status_code == 200:
         logger.info(f"User {email} added successfully.")
     else:
@@ -324,3 +326,73 @@ def generate_agent_config(email, token, current_token):
         return result.json()
     else:
         logger.error(f"Error generating agent config for user {user}: {result.text}")
+
+
+def create_group_helper(group_dict: dict):
+    from depictio.api.v1.db import client
+
+    # Ensure MongoDB is up and running
+    for _ in range(5):
+        try:
+            client.server_info()
+            logger.info("Connected to MongoDB")
+            break
+        except Exception as e:
+            logger.warning("Waiting for MongoDB to start...")
+            time.sleep(5)
+    else:
+        raise Exception("Could not connect to MongoDB")
+
+    from depictio.api.v1.db import groups_collection
+    from depictio_models.models.users import Group
+
+    # Check if the group already exists
+    existing_group = groups_collection.find_one({"name": group_dict["name"]})
+    if existing_group:
+        logger.info("Admin group already exists in the database")
+        return convert_objectid_to_str(existing_group)
+    # Insert the group into the database
+    else:
+        logger.info("Adding admin group to the database")
+        logger.info(f"Group: {group_dict}")
+        admin_group = Group(**group_dict)
+        logger.info(f"Group: {admin_group}")
+        admin_group = admin_group.mongo()
+        groups_collection.insert_one(admin_group)
+        logger.info("Admin group added to the database")
+        return convert_objectid_to_str(admin_group)
+
+
+def delete_group_helper(group_id: ObjectId) -> dict:
+    # check first if the group is not in the following groups (users, admin)
+    from depictio.api.v1.db import groups_collection
+
+    groups = groups_collection.find()
+    groups = [convert_objectid_to_str(group) for group in groups]
+    for group in groups:
+        if group["name"] in ["users", "admin"]:
+            if group_id == group["_id"]:
+                return {"success": False, "error": "Cannot delete this group."}
+
+    result = groups_collection.delete_one({"_id": group_id})
+    if result.deleted_count == 1:
+        return {"success": True}
+    else:
+        return {"success": False}
+
+
+def api_create_group(group_dict: dict, current_token: str):
+    logger.info(f"Creating group {group_dict}.")
+
+    response = httpx.post(
+        f"{API_BASE_URL}/depictio/api/v1/auth/create_group",
+        json=group_dict,
+        headers={"Authorization": f"Bearer {current_token}"},
+    )
+    if response.status_code == 200:
+        logger.info(f"Group {group_dict['name']} created successfully.")
+    else:
+        logger.error(f"Error creating group {group_dict['name']}: {response.text}")
+    return response
+
+
