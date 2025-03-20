@@ -384,7 +384,10 @@ def render_groupwise_layout(group: GroupUI, all_users: list) -> dmc.Accordion:
 def render_userwise_layout(user: User) -> dmc.Accordion:
     """
     Render the layout for a user.
+
     """
+
+    logger.info(f"User: {user}")
 
     # Badge color based on admin status
     badge_color = "blue" if user.is_admin else "gray"
@@ -571,20 +574,26 @@ def render_userwise_layout(user: User) -> dmc.Accordion:
                                                 [
                                                     delete_user_button,
                                                     modal_delete_user,
-                                                    dmc.Button(
-                                                        "Make System Admin",
+                                                    dmc.SegmentedControl(
+                                                        # "Make System Admin",
+                                                        value=str(user.is_admin),
+                                                        data=[
+                                                            {
+                                                                "label": "Standard",
+                                                                "value": str(False),
+                                                            },
+                                                            {
+                                                                "label": "System Admin",
+                                                                "value": str(True),
+                                                            },
+                                                        ],
                                                         color="violet",
-                                                        variant="filled",
+                                                        # variant="filled",
                                                         size="xs",
                                                         id={
                                                             "type": "turn-sysadmin-user-button",
                                                             "index": str(user.id),
-                                                        },  # Replace user.id with the appropriate identifier
-                                                        # styles={
-                                                        #     "root": {
-                                                        #         "marginLeft": "10px"
-                                                        #     }
-                                                        # },
+                                                        },
                                                     ),
                                                 ]
                                             ),
@@ -735,7 +744,7 @@ def register_admin_callbacks(app):
         Input("admin-tabs", "value"),
         Input({"type": "confirm-user-delete-button", "index": ALL}, "n_clicks"),
         State({"type": "confirm-user-delete-button", "index": ALL}, "id"),
-        Input({"type": "turn-sysadmin-user-button", "index": ALL}, "n_clicks"),
+        Input({"type": "turn-sysadmin-user-button", "index": ALL}, "value"),
         State({"type": "turn-sysadmin-user-button", "index": ALL}, "id"),
         State("local-store", "data"),
         prevent_initial_call=True,
@@ -751,10 +760,13 @@ def register_admin_callbacks(app):
         active_tab,
         delete_user_clicks,
         delete_user_ids,
-        turn_sysadmin_clicks,
+        turn_sysadmin_values,
         turn_sysadmin_ids,
         local_data,
     ):
+        trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
+        logger.info(f"Trigger ID: {trigger_id}")
+
         if not local_data["access_token"]:
             return html.P("No access token found. Please log in.")
 
@@ -790,18 +802,25 @@ def register_admin_callbacks(app):
                                 "Error deleting user. Please try again later."
                             ), {"display": "none"}
 
-            if turn_sysadmin_clicks:
+            if "turn-sysadmin-user-button" in trigger_id:
+                # turn into dict
+                trigger_id = eval(trigger_id)
+                logger.info(f"Trigger ID: {trigger_id}")
+                logger.info(f"type of trigger_id: {type(trigger_id)}")
+                trigger_id_index = trigger_id["index"]
+                logger.info(f"trigger_id_index: {trigger_id_index}")
                 logger.info(f"Turn sysadmin button clicked: {turn_sysadmin_ids}")
+                logger.info(f"Values: {turn_sysadmin_values}")
                 # retrieve user id by cross-referencing the button id
 
-                for button_id, n_click_index in zip(
-                    turn_sysadmin_ids, turn_sysadmin_clicks
-                ):
-                    if n_click_index:
+                for button_id, value in zip(turn_sysadmin_ids, turn_sysadmin_values):
+                    if trigger_id_index == button_id["index"]:
                         user_id = button_id["index"]
+                        is_admin = value
+                        logger.info(f"Value: {value}")
                         logger.error(f"Making user system admin: {user_id}")
                         response = httpx.post(
-                            f"{API_BASE_URL}/depictio/api/v1/auth/turn_sysadmin/{user_id}",
+                            f"{API_BASE_URL}/depictio/api/v1/auth/turn_sysadmin/{user_id}/{is_admin}",
                             headers={
                                 "Authorization": f"Bearer {local_data['access_token']}"
                             },
