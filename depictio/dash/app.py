@@ -10,22 +10,43 @@ import httpx
 from depictio.api.v1.configs.config import settings
 
 # Depictio components imports - design step
-from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_token
-from depictio.api.v1.endpoints.user_endpoints.utils import check_token_validity, purge_expired_tokens
-from depictio.dash.modules.card_component.frontend import register_callbacks_card_component
-from depictio.dash.modules.interactive_component.frontend import register_callbacks_interactive_component
-from depictio.dash.modules.figure_component.frontend import register_callbacks_figure_component
-from depictio.dash.modules.jbrowse_component.frontend import register_callbacks_jbrowse_component
-from depictio.dash.modules.table_component.frontend import register_callbacks_table_component
+from depictio.api.v1.endpoints.user_endpoints.core_functions import (
+    fetch_user_from_token,
+)
+from depictio.api.v1.endpoints.user_endpoints.utils import (
+    check_token_validity,
+    purge_expired_tokens,
+)
+from depictio.dash.modules.card_component.frontend import (
+    register_callbacks_card_component,
+)
+from depictio.dash.modules.interactive_component.frontend import (
+    register_callbacks_interactive_component,
+)
+from depictio.dash.modules.figure_component.frontend import (
+    register_callbacks_figure_component,
+)
+from depictio.dash.modules.jbrowse_component.frontend import (
+    register_callbacks_jbrowse_component,
+)
+from depictio.dash.modules.table_component.frontend import (
+    register_callbacks_table_component,
+)
 
 # TODO: markdown component
 
 
 # Depictio layout imports
 from depictio.dash.layouts.stepper import register_callbacks_stepper
-from depictio.dash.layouts.stepper_parts.part_one import register_callbacks_stepper_part_one
-from depictio.dash.layouts.stepper_parts.part_two import register_callbacks_stepper_part_two
-from depictio.dash.layouts.stepper_parts.part_three import register_callbacks_stepper_part_three
+from depictio.dash.layouts.stepper_parts.part_one import (
+    register_callbacks_stepper_part_one,
+)
+from depictio.dash.layouts.stepper_parts.part_two import (
+    register_callbacks_stepper_part_two,
+)
+from depictio.dash.layouts.stepper_parts.part_three import (
+    register_callbacks_stepper_part_three,
+)
 from depictio.dash.layouts.header import design_header, register_callbacks_header
 
 # from depictio.dash.layouts.draggable_scenarios.add_component import register_callbacks_add_component
@@ -36,13 +57,17 @@ from depictio.dash.layouts.draggable import (
 
 
 # Depictio utils imports
-from depictio.dash.layouts.draggable_scenarios.restore_dashboard import load_depictio_data
+from depictio.dash.layouts.draggable_scenarios.restore_dashboard import (
+    load_depictio_data,
+)
 
 from depictio.api.v1.configs.logging import logger
 
-import os 
+import os
+
 os.environ["DEPICTIO_CONTEXT"] = "server"
 from depictio_models.utils import get_depictio_context
+
 DEPICTIO_CONTEXT = get_depictio_context()
 
 
@@ -86,8 +111,12 @@ register_callbacks_table_component(app)
 # Register callbacks for draggable layout
 # register_callbacks_add_component(app)
 
-from depictio.dash.layouts.dashboards_management import register_callbacks_dashboards_management
-from depictio.dash.layouts.dashboards_management import layout as dashboards_management_layout
+from depictio.dash.layouts.dashboards_management import (
+    register_callbacks_dashboards_management,
+)
+from depictio.dash.layouts.dashboards_management import (
+    layout as dashboards_management_layout,
+)
 
 register_callbacks_dashboards_management(app)
 
@@ -159,7 +188,11 @@ def display_page(pathname, local_data):
     logger.debug(f"Local Data: {local_data}")
     logger.debug(f"URL Pathname: {pathname}")
 
-    if not local_data or not local_data.get("logged_in") or not check_token_validity(local_data["access_token"]):
+    if (
+        not local_data
+        or not local_data.get("logged_in")
+        or not check_token_validity(local_data["access_token"])
+    ):
         logger.debug("DISPLAY PAGE - User not logged in")
         logger.debug("DISPLAY PAGE - Redirect to /auth")
         return handle_unauthenticated_user(pathname)
@@ -174,7 +207,9 @@ def display_page(pathname, local_data):
     logger.debug(f"DISPLAY PAGE - Local Data: {local_data}")
     logger.debug(f"DISPLAY PAGE - Access Token: {local_data['access_token']}")
     logger.debug(f"DISPLAY PAGE - Logged In: {local_data['logged_in']}")
-    logger.debug(f"DISPLAY PAGE - Check Token Validity: {check_token_validity(local_data['access_token'])}")
+    logger.debug(
+        f"DISPLAY PAGE - Check Token Validity: {check_token_validity(local_data['access_token'])}"
+    )
     logger.debug(f"DISPLAY PAGE - HANDLE AUTHENTICATED USER")
 
     # Handle authenticated user logic
@@ -186,7 +221,12 @@ def handle_unauthenticated_user(pathname):
     logger.info("User not logged in")
 
     # Redirect any path to the login/auth page
-    return create_users_management_layout(), header, "/auth", {"logged_in": False, "access_token": None}
+    return (
+        create_users_management_layout(),
+        header,
+        "/auth",
+        {"logged_in": False, "access_token": None},
+    )
 
 
 def handle_authenticated_user(pathname, local_data):
@@ -202,7 +242,16 @@ def handle_authenticated_user(pathname, local_data):
         logger.info(f"Depictio dash data: {depictio_dash_data}")
         header = design_header(data=depictio_dash_data, local_store=local_data)
         dashboard_id = pathname.split("/")[-1]
-        return create_dashboard_layout(depictio_dash_data=depictio_dash_data, dashboard_id=dashboard_id, local_data=local_data), header, pathname, local_data
+        return (
+            create_dashboard_layout(
+                depictio_dash_data=depictio_dash_data,
+                dashboard_id=dashboard_id,
+                local_data=local_data,
+            ),
+            header,
+            pathname,
+            local_data,
+        )
 
     elif pathname == "/dashboards":
         user = fetch_user_from_token(local_data["access_token"])
@@ -246,7 +295,11 @@ def handle_authenticated_user(pathname, local_data):
             cols=2,  # Number of columns in the grid
             spacing="xl",  # Space between the cards
             breakpoints=[
-                {"maxWidth": 980, "cols": 1, "spacing": "md"},  # Responsive design: 1 column on smaller screens
+                {
+                    "maxWidth": 980,
+                    "cols": 1,
+                    "spacing": "md",
+                },  # Responsive design: 1 column on smaller screens
             ],
             children=[
                 # Github Repository Card
@@ -254,7 +307,6 @@ def handle_authenticated_user(pathname, local_data):
                     withBorder=True,  # Adds a border to the card
                     shadow="md",  # Medium shadow for depth
                     # padding="lg",  # Large padding inside the card
-                    
                     radius="md",  # Medium border radius for rounded corners
                     style={"textAlign": "center"},  # Center-align text and elements
                     children=[
@@ -289,7 +341,9 @@ def handle_authenticated_user(pathname, local_data):
                                 size="md",
                                 radius="md",
                                 mt="md",  # Margin top for spacing
-                                leftIcon=DashIconify(icon="mdi:github-circle", width=20),
+                                leftIcon=DashIconify(
+                                    icon="mdi:github-circle", width=20
+                                ),
                             ),
                         ),
                     ],
@@ -307,7 +361,9 @@ def handle_authenticated_user(pathname, local_data):
                             position="center",
                             spacing="sm",
                             children=[
-                                DashIconify(icon="mdi:file-document", width=40, color="#333"),
+                                DashIconify(
+                                    icon="mdi:file-document", width=40, color="#333"
+                                ),
                                 dmc.Text(
                                     "Documentation",
                                     size="xl",
@@ -333,7 +389,9 @@ def handle_authenticated_user(pathname, local_data):
                                 size="md",
                                 radius="md",
                                 mt="md",
-                                leftIcon=DashIconify(icon="mdi:file-document-box", width=20),
+                                leftIcon=DashIconify(
+                                    icon="mdi:file-document-box", width=20
+                                ),
                             ),
                         ),
                     ],
@@ -348,7 +406,12 @@ def handle_authenticated_user(pathname, local_data):
 
 
 def create_default_header(text):
-    return dmc.Text(text, weight=600, size="xl", style={"fontSize": "28px", "fontFamily": "Virgil", "padding": "20px 10px"})
+    return dmc.Text(
+        text,
+        weight=600,
+        size="xl",
+        style={"fontSize": "28px", "fontFamily": "Virgil", "padding": "20px 10px"},
+    )
 
 
 def create_admin_header(text):
@@ -361,6 +424,45 @@ def create_admin_header(text):
     Returns:
     - dmc.Header: A Dash Mantine Components Header containing the title and navigation tabs.
     """
+    add_group_button = dmc.Button(
+        "Add Group",
+        color="blue",
+        variant="filled",
+        size="sm",
+        id="add-group-button",
+        style={"display": "none"},
+    )
+    modal_group_button = dmc.Modal(
+        title="Add Group",
+        children=[
+            dmc.Group(
+                [
+                    dmc.Text("Group Name:"),
+                    dmc.TextInput(
+                        placeholder="Enter group name",
+                        size="sm",
+                        id="group-name-input",
+                    ),
+                ],
+                spacing="xs",
+            ),
+            dmc.Text(
+                id="add-group-modal-text",
+                size="sm",
+                color="red",
+                style={"display": "none"},
+            ),
+            dmc.Button(
+                "Add Group",
+                color="blue",
+                variant="filled",
+                size="sm",
+                id="add-group-submit-button",
+                style={"marginTop": "15px"},
+            ),
+        ],
+        id="add-group-modal",
+    )
     header = dmc.Header(
         height=60,  # Height of the header
         # padding="xs",  # Padding inside the header
@@ -390,28 +492,64 @@ def create_admin_header(text):
                                     [
                                         dmc.Tab(
                                             "Users",
-                                            icon=DashIconify(icon="mdi:account-group", width=20, height=20),
+                                            icon=DashIconify(
+                                                icon="mdi:account",
+                                                width=20,
+                                                height=20,
+                                            ),
                                             value="users",
                                             # value="users",
                                             # component=dcc.Link("Users", href="/admin/users", style={"textDecoration": "none", "color": "inherit"})
                                         ),
                                         dmc.Tab(
+                                            "Groups",
+                                            icon=DashIconify(
+                                                icon="mdi:account-group",
+                                                width=20,
+                                                height=20,
+                                            ),
+                                            value="groups",
+                                            # value="users",
+                                            # component=dcc.Link("Users", href="/admin/users", style={"textDecoration": "none", "color": "inherit"})
+                                        ),
+                                        dmc.Tab(
                                             "Projects",
-                                            icon=DashIconify(icon="mdi:jira", width=20, height=20),
+                                            icon=DashIconify(
+                                                icon="mdi:jira",
+                                                width=20,
+                                                height=20,
+                                            ),
                                             value="projects",
                                             # value="projects",
                                             # component=dcc.Link("Projects", href="/admin/projects", style={"textDecoration": "none", "color": "inherit"})
                                         ),
                                         dmc.Tab(
                                             "Dashboards",
-                                            icon=DashIconify(icon="mdi:view-dashboard", width=20, height=20),
+                                            icon=DashIconify(
+                                                icon="mdi:view-dashboard",
+                                                width=20,
+                                                height=20,
+                                            ),
                                             value="dashboards",
                                             # value="dashboards",
                                             # component=dcc.Link("Dashboards", href="/admin/dashboards", style={"textDecoration": "none", "color": "inherit"})
                                         ),
-                                        dmc.TabsPanel(value="users", id="admin-tabs-users"),
-                                        dmc.TabsPanel(value="projects", id="admin-tabs-projects"),
-                                        dmc.TabsPanel(value="dashboards", id="admin-tabs-dashboards"),
+                                        dmc.TabsPanel(
+                                            value="users",
+                                            id="admin-tabs-users",
+                                        ),
+                                        dmc.TabsPanel(
+                                            value="groups",
+                                            id="admin-tabs-groups",
+                                        ),
+                                        dmc.TabsPanel(
+                                            value="projects",
+                                            id="admin-tabs-projects",
+                                        ),
+                                        dmc.TabsPanel(
+                                            value="dashboards",
+                                            id="admin-tabs-dashboards",
+                                        ),
                                     ]
                                 ),
                                 # orientation="horizontal",
@@ -423,6 +561,8 @@ def create_admin_header(text):
                                 #     "tabActive": {"backgroundColor": "var(--mantine-color-blue-light)", "color": "var(--mantine-color-blue-dark)"},
                                 # }
                             ),
+                            add_group_button,
+                            modal_group_button,
                         ],
                     )
                 ],
@@ -496,7 +636,15 @@ def create_dashboard_layout(depictio_dash_data=dict, dashboard_id=str, local_dat
             html.Div(id="test-output-visible"),
         ],
         fluid=True,
-        style={"display": "flex", "maxWidth": "100%", "flexGrow": "1", "maxHeight": "100%", "flexDirection": "column", "width": "100%", "height": "100%"},
+        style={
+            "display": "flex",
+            "maxWidth": "100%",
+            "flexGrow": "1",
+            "maxHeight": "100%",
+            "flexDirection": "column",
+            "width": "100%",
+            "height": "100%",
+        },
     )
 
 
@@ -511,7 +659,12 @@ def design_header_ui(data):
         children=[
             dbc.Row(
                 [
-                    dbc.Col(dmc.Title("", order=2, color="black"), width=11, align="center", style={"textAlign": "left"}),
+                    dbc.Col(
+                        dmc.Title("", order=2, color="black"),
+                        width=11,
+                        align="center",
+                        style={"textAlign": "left"},
+                    ),
                 ],
                 style={"height": "100%"},
             ),
@@ -532,14 +685,20 @@ def create_app_layout():
     return dmc.Container(
         [
             dcc.Location(id="url", refresh=False),
-            dcc.Store(id="local-store", storage_type="local", data={"logged_in": False, "access_token": None}),
+            dcc.Store(
+                id="local-store",
+                storage_type="local",
+                data={"logged_in": False, "access_token": None},
+            ),
             dcc.Store(
                 id="local-store-components-metadata",
                 data={},
                 storage_type="local",
             ),
             dcc.Store(id="current-edit-parent-index", storage_type="memory"),
-            dcc.Interval(id="interval-component", interval=60 * 60 * 1000, n_intervals=0),
+            dcc.Interval(
+                id="interval-component", interval=60 * 60 * 1000, n_intervals=0
+            ),
             navbar,
             dmc.Drawer(
                 title="",
@@ -576,7 +735,14 @@ def create_app_layout():
                 size="100%",
                 p=0,
                 m=0,
-                style={"display": "flex", "maxWidth": "100%", "flexGrow": "1", "maxHeight": "100%", "flexDirection": "column", "overflow": "hidden"},
+                style={
+                    "display": "flex",
+                    "maxWidth": "100%",
+                    "flexGrow": "1",
+                    "maxHeight": "100%",
+                    "flexDirection": "column",
+                    "overflow": "hidden",
+                },
                 id="content-container",
             ),
         ],
