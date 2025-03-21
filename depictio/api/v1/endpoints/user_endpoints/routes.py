@@ -20,6 +20,7 @@ from depictio.api.v1.endpoints.user_endpoints.utils import (
     check_password,
     create_group_helper,
     delete_group_helper,
+    update_group_in_users_helper
 )
 from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.db import users_collection
@@ -52,7 +53,7 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
         raise HTTPException(status_code=401, detail="Invalid token")
 
     user = fetch_user_from_token(token)
-    logger.info(f"User: {user}")
+    logger.debug(f"User: {user}")
 
     if user is None:
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -176,12 +177,12 @@ async def get_all_groups_with_users(current_user=Depends(get_current_user)):
 
     for group in groups:
         group_id = ObjectId(group["_id"])
-        logger.info(f"Finding users for group: {group_id}")
+        logger.debug(f"Finding users for group: {group_id}")
 
         # Based on the actual user document structure where groups is an array of objects
         # with _id field that contains a $oid field
         users = list(users_collection.find({"groups._id": ObjectId(group_id)}))
-        logger.info(f"users found: {users}")
+        logger.debug(f"users found: {users}")
 
         if users:
             users = [
@@ -199,7 +200,7 @@ async def get_all_groups_with_users(current_user=Depends(get_current_user)):
             #     user.pop("groups", None)
             group["users"] = users
 
-    logger.info(f"Groups with users: {groups}")
+    logger.debug(f"Groups with users: {groups}")
     return groups
 
 
@@ -515,8 +516,8 @@ def delete_user(user_id: str, current_user=Depends(get_current_user)):
         return {"success": False}
 
 
-@auth_endpoint_router.post("/turn_sysadmin/{user_id}")
-def turn_sysadmin(user_id: str, current_user=Depends(get_current_user)):
+@auth_endpoint_router.post("/turn_sysadmin/{user_id}/{is_admin}")
+def turn_sysadmin(user_id: str, is_admin: bool, current_user=Depends(get_current_user)):
     if not current_user:
         raise HTTPException(status_code=401, detail="Current user not found.")
     # Check if the current user is an admin
@@ -536,7 +537,7 @@ def turn_sysadmin(user_id: str, current_user=Depends(get_current_user)):
         user_id = ObjectId(str(user_id))
 
     # Update the user in the database
-    result = users_collection.update_one({"_id": user_id}, {"$set": {"is_admin": True}})
+    result = users_collection.update_one({"_id": user_id}, {"$set": {"is_admin": is_admin}})
     if result.modified_count == 1:
         return {"success": True}
     else:
@@ -582,4 +583,40 @@ def delete_group(group_id: str, current_user=Depends(get_current_user)):
         group_id = ObjectId(str(group_id))
 
     response = delete_group_helper(group_id)
+    return response
+
+@auth_endpoint_router.post("/update_group_in_users/{group_id}")
+def update_group_in_users(group_id: str, request: dict, current_user=Depends(get_current_user)):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Current user not found.")
+    # Check if the current user is an admin
+    if not current_user.is_admin:
+        raise HTTPException(status_code=401, detail="Current user is not an admin.")
+
+    if not request:
+        raise HTTPException(status_code=400, detail="No request provided")
+
+    if not group_id:
+        raise HTTPException(status_code=400, detail="No group_id provided")
+
+    if "users" not in request:
+        raise HTTPException(status_code=400, detail="No users provided in request")
+
+    logger.info(f"Request: {request}")
+
+    # Convert user dicts to UserBaseGroupLess objects
+    users = [UserBaseGroupLess(**user) for user in request["users"]]
+
+    logger.info(f"Users: {users}")
+    
+    # Ensure group_id is an ObjectId
+    group_id_obj = (
+        ObjectId(group_id["$oid"]) if isinstance(group_id, dict) and "$oid" in group_id
+        else ObjectId(group_id) if isinstance(group_id, str)
+        else group_id if isinstance(group_id, ObjectId)
+        else ObjectId(str(group_id))
+    )
+    logger.info(f"Group ID: {group_id_obj}")
+
+    response = update_group_in_users_helper(group_id_obj, users)
     return response
