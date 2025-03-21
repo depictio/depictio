@@ -15,14 +15,18 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     purge_expired_tokens_from_user,
 )
 
-# from depictio.api.v1.endpoints.user_endpoints.models import User, UserBase
-from depictio.api.v1.endpoints.user_endpoints.utils import add_token, check_password
+from depictio.api.v1.endpoints.user_endpoints.utils import (
+    add_token,
+    check_password,
+    create_group_helper,
+    delete_group_helper,
+    update_group_in_users_helper
+)
 from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.db import users_collection
 
-# from depictio_models.models.base import convert_objectid_to_str
 from depictio_models.models.base import convert_objectid_to_str
-from depictio_models.models.users import User, UserBase
+from depictio_models.models.users import User, UserBase, UserBaseGroupLess
 from depictio_models.utils import convert_model_to_dict
 
 auth_endpoint_router = APIRouter()
@@ -49,7 +53,7 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
         raise HTTPException(status_code=401, detail="Invalid token")
 
     user = fetch_user_from_token(token)
-    logger.info(f"User: {user}")
+    logger.debug(f"User: {user}")
 
     if user is None:
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -157,6 +161,46 @@ async def get_all_groups(current_user=Depends(get_current_user)):
 
     groups = groups_collection.find()
     groups = [convert_objectid_to_str(group) for group in groups]
+    return groups
+
+
+@auth_endpoint_router.get("/get_all_groups_including_users")
+async def get_all_groups_with_users(current_user=Depends(get_current_user)):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Current user not found.")
+    if not current_user.is_admin:
+        raise HTTPException(status_code=401, detail="Current user is not an admin.")
+    from depictio.api.v1.db import groups_collection, users_collection
+
+    groups = groups_collection.find()
+    groups = [convert_objectid_to_str(group) for group in groups]
+
+    for group in groups:
+        group_id = ObjectId(group["_id"])
+        logger.debug(f"Finding users for group: {group_id}")
+
+        # Based on the actual user document structure where groups is an array of objects
+        # with _id field that contains a $oid field
+        users = list(users_collection.find({"groups._id": ObjectId(group_id)}))
+        logger.debug(f"users found: {users}")
+
+        if users:
+            users = [
+                convert_objectid_to_str(
+                    UserBaseGroupLess(
+                        id=user["_id"],
+                        email=user["email"],
+                        is_admin=user["is_admin"],
+                    ).model_dump(exclude_none=True)
+                )
+                for user in users
+            ]
+            # # drop groups field from users
+            # for user in users:
+            #     user.pop("groups", None)
+            group["users"] = users
+
+    logger.debug(f"Groups with users: {groups}")
     return groups
 
 
@@ -443,6 +487,7 @@ def list_users(current_user=Depends(get_current_user)):
     users = [convert_objectid_to_str(user) for user in users]
     return users
 
+
 @auth_endpoint_router.delete("/delete/{user_id}")
 def delete_user(user_id: str, current_user=Depends(get_current_user)):
     if not current_user:
@@ -469,9 +514,10 @@ def delete_user(user_id: str, current_user=Depends(get_current_user)):
         return {"success": True}
     else:
         return {"success": False}
-    
-@auth_endpoint_router.post("/turn_sysadmin/{user_id}")
-def turn_sysadmin(user_id: str, current_user=Depends(get_current_user)):
+
+
+@auth_endpoint_router.post("/turn_sysadmin/{user_id}/{is_admin}")
+def turn_sysadmin(user_id: str, is_admin: bool, current_user=Depends(get_current_user)):
     if not current_user:
         raise HTTPException(status_code=401, detail="Current user not found.")
     # Check if the current user is an admin
@@ -491,10 +537,86 @@ def turn_sysadmin(user_id: str, current_user=Depends(get_current_user)):
         user_id = ObjectId(str(user_id))
 
     # Update the user in the database
-    result = users_collection.update_one(
-        {"_id": user_id}, {"$set": {"is_admin": True}}
-    )
+    result = users_collection.update_one({"_id": user_id}, {"$set": {"is_admin": is_admin}})
     if result.modified_count == 1:
         return {"success": True}
     else:
         return {"success": False}
+
+
+@auth_endpoint_router.post("/create_group")
+def create_group(request: dict, current_user=Depends(get_current_user)):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Current user not found.")
+    # Check if the current user is an admin
+    if not current_user.is_admin:
+        raise HTTPException(status_code=401, detail="Current user is not an admin.")
+
+    if not request:
+        raise HTTPException(status_code=400, detail="No request provided")
+
+    if "name" not in request:
+        raise HTTPException(status_code=400, detail="No name provided")
+
+    response = create_group_helper(request)
+    return response
+
+
+@auth_endpoint_router.delete("/delete_group/{group_id}")
+def delete_group(group_id: str, current_user=Depends(get_current_user)):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Current user not found.")
+    # Check if the current user is an admin
+    if not current_user.is_admin:
+        raise HTTPException(status_code=401, detail="Current user is not an admin.")
+
+    # Ensure group_id is an ObjectId
+    if isinstance(group_id, str):
+        group_id = ObjectId(group_id)
+    elif isinstance(group_id, dict) and "$oid" in group_id:
+        group_id = ObjectId(group_id["$oid"])
+    elif isinstance(group_id, ObjectId):
+        # Already an ObjectId, no conversion needed
+        pass
+    else:
+        # Convert to string first, then to ObjectId
+        group_id = ObjectId(str(group_id))
+
+    response = delete_group_helper(group_id)
+    return response
+
+@auth_endpoint_router.post("/update_group_in_users/{group_id}")
+def update_group_in_users(group_id: str, request: dict, current_user=Depends(get_current_user)):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Current user not found.")
+    # Check if the current user is an admin
+    if not current_user.is_admin:
+        raise HTTPException(status_code=401, detail="Current user is not an admin.")
+
+    if not request:
+        raise HTTPException(status_code=400, detail="No request provided")
+
+    if not group_id:
+        raise HTTPException(status_code=400, detail="No group_id provided")
+
+    if "users" not in request:
+        raise HTTPException(status_code=400, detail="No users provided in request")
+
+    logger.info(f"Request: {request}")
+
+    # Convert user dicts to UserBaseGroupLess objects
+    users = [UserBaseGroupLess(**user) for user in request["users"]]
+
+    logger.info(f"Users: {users}")
+    
+    # Ensure group_id is an ObjectId
+    group_id_obj = (
+        ObjectId(group_id["$oid"]) if isinstance(group_id, dict) and "$oid" in group_id
+        else ObjectId(group_id) if isinstance(group_id, str)
+        else group_id if isinstance(group_id, ObjectId)
+        else ObjectId(str(group_id))
+    )
+    logger.info(f"Group ID: {group_id_obj}")
+
+    response = update_group_in_users_helper(group_id_obj, users)
+    return response

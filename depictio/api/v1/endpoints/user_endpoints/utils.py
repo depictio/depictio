@@ -1,5 +1,8 @@
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 import hashlib
+from typing import List
+from bson import ObjectId
+from fastapi import HTTPException
 import httpx
 import jwt
 import bcrypt
@@ -13,7 +16,7 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import (
 
 # from depictio.api.v1.endpoints.user_endpoints.models import Token
 from depictio_models.models.base import convert_objectid_to_str
-from depictio_models.models.users import Token
+from depictio_models.models.users import Token, UserBaseGroupLess
 
 
 def login_user(email):
@@ -92,6 +95,7 @@ def add_user(email, password, group=None, is_admin=False):
     #     "last_login": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     # }
     from depictio_models.models.users import User
+
     logger.info(f"Groups: {group}")
     if not group:
         group = get_users_group()
@@ -107,12 +111,11 @@ def add_user(email, password, group=None, is_admin=False):
         groups=[group],
     )
     from depictio_models.utils import convert_model_to_dict
+
     logger.info(f"User: {user}")
     user = convert_model_to_dict(user)
     logger.info(f"User: {user}")
-    response = httpx.post(
-        f"{API_BASE_URL}/depictio/api/v1/auth/register", json=user
-    )
+    response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/auth/register", json=user)
     if response.status_code == 200:
         logger.info(f"User {email} added successfully.")
     else:
@@ -324,3 +327,152 @@ def generate_agent_config(email, token, current_token):
         return result.json()
     else:
         logger.error(f"Error generating agent config for user {user}: {result.text}")
+
+
+def create_group_helper(group_dict: dict):
+    from depictio.api.v1.db import client
+
+    # Ensure MongoDB is up and running
+    for _ in range(5):
+        try:
+            client.server_info()
+            logger.info("Connected to MongoDB")
+            break
+        except Exception as e:
+            logger.warning("Waiting for MongoDB to start...")
+            time.sleep(5)
+    else:
+        raise Exception("Could not connect to MongoDB")
+
+    from depictio.api.v1.db import groups_collection
+    from depictio_models.models.users import Group
+
+    # Check if the group already exists
+    existing_group = groups_collection.find_one({"name": group_dict["name"]})
+    if existing_group:
+        logger.info("Admin group already exists in the database")
+        return convert_objectid_to_str(existing_group)
+    # Insert the group into the database
+    else:
+        logger.info("Adding admin group to the database")
+        logger.info(f"Group: {group_dict}")
+        admin_group = Group(**group_dict)
+        logger.info(f"Group: {admin_group}")
+        admin_group = admin_group.mongo()
+        groups_collection.insert_one(admin_group)
+        logger.info("Admin group added to the database")
+        return convert_objectid_to_str(admin_group)
+
+
+def delete_group_helper(group_id: ObjectId) -> dict:
+    # check first if the group is not in the following groups (users, admin)
+    from depictio.api.v1.db import groups_collection
+
+    groups = groups_collection.find()
+    groups = [convert_objectid_to_str(group) for group in groups]
+    for group in groups:
+        if group["name"] in ["users", "admin"]:
+            if group_id == group["_id"]:
+                return {"success": False, "error": "Cannot delete this group."}
+
+    result = groups_collection.delete_one({"_id": group_id})
+    if result.deleted_count == 1:
+        return {"success": True}
+    else:
+        return {"success": False}
+
+
+def update_group_in_users_helper(
+    group_id: ObjectId, group_users: List[UserBaseGroupLess]
+) -> dict:
+    # retrieve the group
+    from depictio.api.v1.db import groups_collection
+
+    group = groups_collection.find_one({"_id": group_id})
+    if not group:
+        return {"success": False, "error": "Group not found."}
+
+    # Convert group ObjectId to string for logging but keep original for queries
+    group_str = convert_objectid_to_str(group)
+    logger.debug(f"Updating group {group_str['_id']} in users")
+
+    from depictio.api.v1.db import users_collection
+
+    logger.debug(f"Group: {group_str}")
+    logger.debug(f"Group users: {group_users}")
+
+    # Get list of user IDs from the input users list
+    group_user_ids = [ObjectId(user.id) for user in group_users]
+
+    # Track users whose group memberships are updated
+    updated_users = []
+
+    # Create complete group info to add to users
+
+    group_info = Group(
+        id=ObjectId(group_id),
+        name=group_str["name"],
+    )
+    group_info = group_info.mongo()
+
+    # Find all users that have this group
+    current_users = list(users_collection.find({"groups._id": group_id}))
+    current_user_ids = [user["_id"] for user in current_users]
+    logger.debug(f"Current user ids: {current_user_ids}")
+
+    # SCENARIO 1 & 2: Add or update group for users in group_user_ids
+    for user_id in group_user_ids:
+
+        # Then add the updated group info
+        users_collection.update_one(
+            {"_id": user_id}, {"$addToSet": {"groups": group_info}}
+        )
+        updated_users.append(str(user_id))
+
+    # SCENARIO 3: Remove group from users no longer in the group
+    users_to_remove_from = [
+        uid for uid in current_user_ids if uid not in group_user_ids
+    ]
+    logger.debug(f"Users to remove from group: {users_to_remove_from}")
+
+    if users_to_remove_from:
+        users_collection.update_many(
+            {"_id": {"$in": users_to_remove_from}},
+            {"$pull": {"groups": {"_id": group_id}}},
+        )
+        updated_users.extend([str(uid) for uid in users_to_remove_from])
+
+    return {
+        "success": True,
+        "message": f"Updated group membership for users: {updated_users}",
+        "updated_users": updated_users,
+    }
+
+
+def api_create_group(group_dict: dict, current_token: str):
+    logger.info(f"Creating group {group_dict}.")
+
+    response = httpx.post(
+        f"{API_BASE_URL}/depictio/api/v1/auth/create_group",
+        json=group_dict,
+        headers={"Authorization": f"Bearer {current_token}"},
+    )
+    if response.status_code == 200:
+        logger.info(f"Group {group_dict['name']} created successfully.")
+    else:
+        logger.error(f"Error creating group {group_dict['name']}: {response.text}")
+    return response
+
+
+def api_update_group_in_users(group_id: str, payload: dict, current_token: str):
+    logger.info(f"Updating group {group_id}.")
+    response = httpx.post(
+        f"{API_BASE_URL}/depictio/api/v1/auth/update_group_in_users/{group_id}",
+        json=payload,
+        headers={"Authorization": f"Bearer {current_token}"},
+    )
+    if response.status_code == 200:
+        logger.info(f"Group {group_id} updated successfully.")
+    else:
+        logger.error(f"Error updating group {group_id}: {response.text}")
+    return response
