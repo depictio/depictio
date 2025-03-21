@@ -15,6 +15,7 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import (
 from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.endpoints.user_endpoints.utils import (
     api_create_group,
+    api_update_group_in_users,
     create_group_helper,
 )
 from depictio.dash.layouts.layouts_toolbox import (
@@ -211,6 +212,22 @@ def render_groupwise_layout(group: GroupUI, all_users: list) -> dmc.Accordion:
     logger.info(f"Group ID: {group.id}")
     logger.info(f"Group Name: {group.name}")
 
+    save_group_button = dmc.Button(
+        "Save",
+        color="blue",
+        variant="filled",
+        size="xs",
+        id={
+            "type": "save-group-users-button",
+            "index": str(group.id),
+        },
+    )
+    actions_text = dmc.Text(
+        "Actions: ",
+        weight=700,
+        size="sm",
+    )
+
     if group.name not in ["admin", "users"]:
         delete_group_button_id = {"type": "delete-group-button", "index": str(group.id)}
         delete_group_button = dmc.Button(
@@ -226,7 +243,13 @@ def render_groupwise_layout(group: GroupUI, all_users: list) -> dmc.Accordion:
             item_id=str(group.id),
             title=f"Delete group {group.name}?",
         )
-    else:
+    elif group.name == "admin":
+        save_group_button = None
+        delete_group_button = None
+        modal_delete_group = None
+        actions_text = None
+
+    elif group.name == "users":
         modal_delete_group = None
         delete_group_button = None
 
@@ -297,7 +320,9 @@ def render_groupwise_layout(group: GroupUI, all_users: list) -> dmc.Accordion:
                                                         value=[
                                                             [
                                                                 {
-                                                                    "value": user.email,
+                                                                    "value": str(
+                                                                        user.id
+                                                                    ),
                                                                     "label": user.email,
                                                                 }
                                                                 for user in all_users
@@ -309,7 +334,9 @@ def render_groupwise_layout(group: GroupUI, all_users: list) -> dmc.Accordion:
                                                             ],
                                                             [
                                                                 {
-                                                                    "value": user.email,
+                                                                    "value": str(
+                                                                        user.id
+                                                                    ),
                                                                     "label": user.email,
                                                                 }
                                                                 for user in group.users
@@ -329,16 +356,6 @@ def render_groupwise_layout(group: GroupUI, all_users: list) -> dmc.Accordion:
                                             ),
                                             dmc.Group(
                                                 [
-                                                    dmc.Button(
-                                                        "Save",
-                                                        color="blue",
-                                                        variant="filled",
-                                                        size="xs",
-                                                        id={
-                                                            "type": "save-group-users-button",
-                                                            "index": str(group.id),
-                                                        },
-                                                    ),
                                                     # dmc.Button(
                                                     #     "Delete",
                                                     #     color="red",
@@ -349,8 +366,10 @@ def render_groupwise_layout(group: GroupUI, all_users: list) -> dmc.Accordion:
                                                     #         "index": str(group.id),
                                                     #     },
                                                     # ),
+                                                    actions_text,
                                                     delete_group_button,
                                                     modal_delete_group,
+                                                    save_group_button,
                                                 ]
                                             ),
                                         ],
@@ -572,8 +591,11 @@ def render_userwise_layout(user: User) -> dmc.Accordion:
                                             ),
                                             dmc.Group(
                                                 [
-                                                    delete_user_button,
-                                                    modal_delete_user,
+                                                    dmc.Text(
+                                                        "User status:",
+                                                        weight=700,
+                                                        size="sm",
+                                                    ),
                                                     dmc.SegmentedControl(
                                                         # "Make System Admin",
                                                         value=str(user.is_admin),
@@ -587,7 +609,7 @@ def render_userwise_layout(user: User) -> dmc.Accordion:
                                                                 "value": str(True),
                                                             },
                                                         ],
-                                                        color="violet",
+                                                        color="blue",
                                                         # variant="filled",
                                                         size="xs",
                                                         id={
@@ -595,6 +617,15 @@ def render_userwise_layout(user: User) -> dmc.Accordion:
                                                             "index": str(user.id),
                                                         },
                                                     ),
+                                                ]
+                                            ),
+                                            dmc.Group(
+                                                [
+                                                    dmc.Text(
+                                                        "Actions", weight=700, size="sm"
+                                                    ),
+                                                    delete_user_button,
+                                                    modal_delete_user,
                                                 ]
                                             ),
                                         ],
@@ -699,22 +730,30 @@ def register_admin_callbacks(app):
         return False
 
     @app.callback(
-        Output("add-group-modal", "opened"),
-        Output("add-group-modal-text", "children"),
-        Output("add-group-modal-text", "style"),
-        State("add-group-modal", "opened"),
-        Input("add-group-submit-button", "n_clicks"),
-        Input("add-group-button", "n_clicks"),
-        State("group-name-input", "value"),
+        Output("group-add-confirmation-modal", "opened"),
+        Output("group-add-confirmation-modal-message", "children"),
+        Output("group-add-confirmation-modal-message", "style"),
+        State("group-add-confirmation-modal", "opened"),
+        Input("confirm-group-add-button", "n_clicks"),
+        Input("cancel-group-add-button", "n_clicks"),
+        Input("group-add-button", "n_clicks"),
+        State("group-add-modal-text-input", "value"),
         State("local-store", "data"),
         prevent_initial_call=True,
     )
-    def add_group(opened, n_clicks, n_clicks_modal, group_name, local_data):
+    def add_group(
+        opened,
+        confirm_clicks,
+        cancel_clicks,
+        add_clicks,
+        group_name,
+        local_data,
+    ):
         ctx = dash.callback_context
         trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
-        if trigger_id == "add-group-button":
+        if trigger_id == "group-add-button":
             return True, None, {"display": "none"}
-        elif trigger_id == "add-group-submit-button":
+        elif trigger_id == "confirm-group-add-button":
             if not local_data["access_token"]:
                 return False, html.P("No access token found. Please log in.")
             if not group_name:
@@ -733,8 +772,8 @@ def register_admin_callbacks(app):
 
     @app.callback(
         Output("admin-management-content", "children"),
-        Output("add-group-button", "style"),
-        Input("add-group-submit-button", "n_clicks"),
+        Output("group-add-button", "style"),
+        Input("confirm-group-add-button", "n_clicks"),
         Input({"type": "confirm-group-delete-button", "index": ALL}, "n_clicks"),
         State({"type": "confirm-group-delete-button", "index": ALL}, "id"),
         Input({"type": "save-group-users-button", "index": ALL}, "n_clicks"),
@@ -766,6 +805,7 @@ def register_admin_callbacks(app):
     ):
         trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
         logger.info(f"Trigger ID: {trigger_id}")
+        logger.info(f"Trigger ID type: {type(trigger_id)}")
 
         if not local_data["access_token"]:
             return html.P("No access token found. Please log in.")
@@ -883,6 +923,61 @@ def register_admin_callbacks(app):
                             return html.P(
                                 "Error deleting group. Please try again later."
                             ), {"display": "none"}
+
+            if "save-group-users-button" in trigger_id:
+                logger.info("SAVE GROUP USERS BUTTON CLICKED")
+                logger.info(
+                    f"Save group users button clicked clicks: {save_group_users_clicks}"
+                )
+                logger.info(f"Save group users button clicked: {save_group_users_ids}")
+                logger.info(f"Transferlist values: {transferlist_values}")
+                trigger_id_index = eval(trigger_id)["index"]
+                logger.info(f"Trigger ID: {trigger_id}")
+                logger.info(f"Trigger ID index: {trigger_id_index}")
+                # start at 1 to skip the first value which corresponds to admin group
+                for transfert_list_value, save_id in zip(
+                    transferlist_values[1:], save_group_users_ids
+                ):
+                    logger.info(f"save_id['index']: {save_id['index']}")
+                    logger.info(f"Trigger ID index: {trigger_id_index}")
+                    if str(save_id["index"]) == str(trigger_id_index):
+                        logger.info(f"Transferlist value: {transfert_list_value}")
+                        logger.info(f"Group ID: {trigger_id_index}")
+                        all_users = transfert_list_value[0]
+                        group_users = transfert_list_value[1]
+                        logger.info(f"Group users: {group_users}")
+
+                        group_id = trigger_id_index
+                        # group_users = transfert_list_value[1]
+                        # logger.info(f"Group users: {group_users}")
+                        from depictio_models.models.users import UserBaseGroupLess
+
+                        group_users = [
+                            {"email": user["label"], "id": str(user["value"])}
+                            for user in group_users
+                        ]
+                        logger.info(f"Group users: {group_users}")
+                        api_update_group_in_users(
+                            group_id,
+                            {"users": group_users},
+                            local_data["access_token"],
+                        )
+                        # logger.info(f"Group users: {group_users}")
+                        # response = httpx.post(
+                        #     f"{API_BASE_URL}/depictio/api/v1/auth/update_group_users/{group_id}",
+                        #     headers={
+                        #         "Authorization": f"Bearer {local_data['access_token']}"
+                        #     },
+                        #     json={"users": group_users},
+                        # )
+                        # logger.info(f"Response: {response}")
+                        # if response.status_code == 200:
+                        #     logger.info(f"Successfully updated group users: {group_id}")
+                        # else:
+                        #     logger.error(f"Error updating group users: {response.json()}")
+                        #     return html.P(
+                        #         "Error updating group users. Please try again later."
+                        #     ), {"display": "none"}
 
             reponse_all_users = httpx.get(
                 f"{API_BASE_URL}/depictio/api/v1/auth/list",
