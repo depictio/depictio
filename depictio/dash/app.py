@@ -17,6 +17,7 @@ from depictio.api.v1.endpoints.user_endpoints.utils import (
     check_token_validity,
     purge_expired_tokens,
 )
+from depictio.dash.layouts.layouts_toolbox import create_add_with_input_modal
 from depictio.dash.modules.card_component.frontend import (
     register_callbacks_card_component,
 )
@@ -429,40 +430,28 @@ def create_admin_header(text):
         color="blue",
         variant="filled",
         size="sm",
-        id="add-group-button",
+        id="group-add-button",
         style={"display": "none"},
+        leftIcon=DashIconify(icon="mdi:plus-circle", width=16, color="white"),
     )
-    modal_group_button = dmc.Modal(
+
+    text_group_input = dmc.TextInput(
+        placeholder="Enter group name",
+        size="sm",
+        id="group-add-modal-text-input",
+    )
+
+    add_group_modal, add_group_modal_id = create_add_with_input_modal(
+        id_prefix="group",
+        input_field=text_group_input,
         title="Add Group",
-        children=[
-            dmc.Group(
-                [
-                    dmc.Text("Group Name:"),
-                    dmc.TextInput(
-                        placeholder="Enter group name",
-                        size="sm",
-                        id="group-name-input",
-                    ),
-                ],
-                spacing="xs",
-            ),
-            dmc.Text(
-                id="add-group-modal-text",
-                size="sm",
-                color="red",
-                style={"display": "none"},
-            ),
-            dmc.Button(
-                "Add Group",
-                color="blue",
-                variant="filled",
-                size="sm",
-                id="add-group-submit-button",
-                style={"marginTop": "15px"},
-            ),
-        ],
-        id="add-group-modal",
+        message="Please complete the input field to add a new group.",
+        confirm_button_text="Add",
+        cancel_button_text="Cancel",
+        icon="mdi:plus-circle",
+        opened=False,
     )
+
     header = dmc.Header(
         height=60,  # Height of the header
         # padding="xs",  # Padding inside the header
@@ -562,7 +551,7 @@ def create_admin_header(text):
                                 # }
                             ),
                             add_group_button,
-                            modal_group_button,
+                            add_group_modal,
                         ],
                     )
                 ],
