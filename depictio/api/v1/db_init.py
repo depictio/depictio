@@ -3,9 +3,15 @@
 from datetime import time
 import os
 
+from bson import ObjectId
 import yaml
-from depictio.api.v1.endpoints.user_endpoints.core_functions import generate_agent_config
-from depictio.api.v1.endpoints.user_endpoints.utils import hash_password, list_existing_tokens
+from depictio.api.v1.endpoints.user_endpoints.core_functions import (
+    generate_agent_config,
+)
+from depictio.api.v1.endpoints.user_endpoints.utils import (
+    hash_password,
+    list_existing_tokens,
+)
 from depictio.api.v1.configs.logging import logger
 
 # from depictio.api.v1.endpoints.user_endpoints.models import User
@@ -14,43 +20,22 @@ from depictio.api.v1.endpoints.utils_endpoints.core_functions import create_buck
 
 # from depictio_models.models.base import User
 from depictio_models.models.users import User, Group
+from depictio.api.v1.endpoints.user_endpoints.utils import create_group_helper
 
-admin_user_dict = {"username": "admin", "password": hash_password("changeme"), "is_admin": True, "email": "admin@embl.de"}
+
+admin_user_dict = {
+    "_id": ObjectId("67658ba033c8b59ad489d7c7"),
+    "username": "admin",
+    "password": hash_password("changeme"),
+    "is_admin": True,
+    "email": "admin@embl.de",
+}
 admin_group_dict = {"name": "admin"}
+users_group_dict = {"name": "users"}
 
 
-def create_admin_group(admin_group_dict=admin_group_dict):
-    from depictio.api.v1.db import groups_collection, client
 
-    # Ensure MongoDB is up and running
-    for _ in range(5):
-        try:
-            client.server_info()
-            logger.info("Connected to MongoDB")
-            break
-        except Exception as e:
-            logger.warning("Waiting for MongoDB to start...")
-            time.sleep(5)
-    else:
-        raise Exception("Could not connect to MongoDB")
-
-    # Check if the group already exists
-    existing_group = groups_collection.find_one({"name": admin_group_dict["name"]})
-    if existing_group:
-        logger.info("Admin group already exists in the database")
-    # Insert the group into the database
-    else:
-        logger.info("Adding admin group to the database")
-        logger.info(f"Group: {admin_group_dict}")
-        admin_group = Group(**admin_group_dict)
-        logger.info(f"Group: {admin_group}")
-        admin_group = admin_group.mongo()
-        groups_collection.insert_one(admin_group)
-        logger.info("Admin group added to the database")
-        return admin_group
-
-
-def create_admin_user(admin_user_dict=admin_user_dict):
+def create_admin_user(admin_user_dict: dict):
     from depictio.api.v1.db import users_collection, client
 
     # Ensure MongoDB is up and running
@@ -82,14 +67,20 @@ def create_admin_user(admin_user_dict=admin_user_dict):
 
     # Check if default admin token exists
 
-    if not users_collection.find_one({"email": admin_user_dict["email"], "tokens.name": "default_admin_token"}):
+    if not users_collection.find_one(
+        {"email": admin_user_dict["email"], "tokens.name": "default_admin_token"}
+    ):
         user = users_collection.find_one({"email": admin_user_dict["email"]})
         logger.info(f"User: {user}")
         user = User.from_mongo(user)
         logger.info(f"User.from_mongo: {user}")
 
         logger.info("Creating default admin token")
-        token_data = {"sub": admin_user_dict["email"], "name": "default_admin_token", "token_lifetime": "long-lived"}
+        token_data = {
+            "sub": admin_user_dict["email"],
+            "name": "default_admin_token",
+            "token_lifetime": "long-lived",
+        }
         token = add_token(token_data)
         logger.info("Default admin token created")
         logger.info(f"Token: {token}")
@@ -106,7 +97,9 @@ def create_admin_user(admin_user_dict=admin_user_dict):
         os.makedirs("/app/depictio/.depictio", exist_ok=True)
         with open("/app/depictio/.depictio/default_admin_agent.yaml", "w") as f:
             f.write(agent_config)
-        logger.info("Agent config exported to /app/depictio/.depictio/default_admin_agent.yaml")
+        logger.info(
+            "Agent config exported to /app/depictio/.depictio/default_admin_agent.yaml"
+        )
         return user
 
     else:
@@ -123,8 +116,12 @@ def initialize_db():
         logger.info("Running initial setup...")
 
         # Create the admin group
-        admin_group = create_admin_group(admin_group_dict)
+        admin_group = create_group_helper(admin_group_dict)
+        users_group = create_group_helper(users_group_dict)
         admin_user_dict["groups"] = [admin_group]
+        logger.info(f"Admin group: {admin_group}")
+        logger.info(f"Users group: {users_group}")
+        logger.info(f"Admin user: {admin_user_dict}")
 
         # Create the admin user
         admin_user = create_admin_user(admin_user_dict)
