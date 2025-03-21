@@ -131,6 +131,8 @@ for item in sample_items:
 
 
 # Define the layout
+
+
 app.layout = dmc.Container(
     children=[
         dmc.Title("Delete Confirmation Modal Demo", order=1, mb="xl", mt="lg"),
