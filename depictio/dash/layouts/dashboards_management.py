@@ -21,12 +21,18 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import (
 )
 
 # from depictio.api.v1.endpoints.user_endpoints.models import UserBase
+from depictio.dash.layouts.layouts_toolbox import (
+    create_dashboard_modal,
+    create_delete_confirmation_modal,
+)
 from depictio_models.models.base import convert_objectid_to_str
 from depictio.dash.utils import generate_unique_index
 
 from depictio_models.models.dashboards import DashboardData
 from depictio_models.models.users import UserBase
 
+
+modal, modal_id = create_dashboard_modal()
 
 layout = html.Div(
     [
@@ -35,58 +41,7 @@ layout = html.Div(
             id="dashboard-modal-store", storage_type="session", data={"title": ""}
         ),  # Store for new dashboard data
         dcc.Store(id="init-create-dashboard-button", storage_type="memory", data=False),
-        dmc.Modal(
-            opened=False,
-            id="dashboard-modal",
-            centered=True,
-            children=[
-                dmc.Stack(
-                    [
-                        dmc.Center(dmc.Title("Create New Dashboard", order=2)),
-                        dmc.Center(dmc.Space(h=10)),
-                        dmc.Center(
-                            dmc.TextInput(
-                                label="Dashboard Title",
-                                style={"width": 300},
-                                placeholder="Enter dashboard title",
-                                id="dashboard-title-input",
-                            )
-                        ),
-                        # dmc.Center(dmc.Space(h=10)),
-                        dmc.Center(
-                            style={"display": "none"},
-                            id="unique-title-warning",
-                        ),
-                        dmc.Center(
-                            dmc.Select(
-                                label="Project selection",
-                                id="dashboard-projects",
-                                style={"width": 300},
-                                placeholder="Select project",
-                                searchable=True,
-                                clearable=True,
-                                allowDeselect=True,
-                            )
-                        ),
-                        # dmc.Center(dmc.Space(h=20)),
-                        dmc.Center(
-                            dmc.Button(
-                                "Create Dashboard",
-                                id="create-dashboard-submit",
-                                variant="filled",
-                                size="lg",
-                                color="black",
-                            )
-                        ),
-                    ],
-                    align="center",
-                ),
-            ],
-            closeOnClickOutside=False,
-            closeOnEscape=False,
-            withCloseButton=True,
-            zIndex=10000,
-        ),
+        modal,
         html.Div(id="landing-page"),  # Initially hidden
     ]
 )
@@ -305,39 +260,6 @@ def register_callbacks_dashboards_management(app):
                             variant="outline",
                             color="red",
                         ),
-                        dmc.Modal(
-                            opened=False,
-                            id={
-                                "type": "delete-confirmation-modal",
-                                "index": dashboard["dashboard_id"],
-                            },
-                            centered=True,
-                            children=[
-                                dmc.Title(
-                                    "Are you sure you want to delete this dashboard?",
-                                    order=3,
-                                    color="black",
-                                    style={"marginBottom": 20},
-                                ),
-                                dmc.Button(
-                                    "Delete",
-                                    id={
-                                        "type": "confirm-delete",
-                                        "index": dashboard["dashboard_id"],
-                                    },
-                                    color="red",
-                                    style={"marginRight": 10},
-                                ),
-                                dmc.Button(
-                                    "Cancel",
-                                    id={
-                                        "type": "cancel-delete",
-                                        "index": dashboard["dashboard_id"],
-                                    },
-                                    color="grey",
-                                ),
-                            ],
-                        ),
                     ],
                     align="center",
                     position="apart",
@@ -360,42 +282,6 @@ def register_callbacks_dashboards_management(app):
         # dashboards = [convert_objectid_to_str(dashboard.mongo()) for dashboard in dashboards]
 
         title = dmc.Title("Recently viewed:", order=3)
-
-        def modal_delete_dashboard(dashboard):
-            modal = dmc.Modal(
-                opened=False,
-                id={
-                    "type": "delete-confirmation-modal",
-                    "index": dashboard["dashboard_id"],
-                },
-                centered=True,
-                children=[
-                    dmc.Title(
-                        "Are you sure you want to delete this dashboard?",
-                        order=3,
-                        color="black",
-                        style={"marginBottom": 20},
-                    ),
-                    dmc.Button(
-                        "Delete",
-                        id={
-                            "type": "confirm-delete",
-                            "index": dashboard["dashboard_id"],
-                        },
-                        color="red",
-                        style={"marginRight": 10},
-                    ),
-                    dmc.Button(
-                        "Cancel",
-                        id={
-                            "type": "cancel-delete",
-                            "index": dashboard["dashboard_id"],
-                        },
-                        color="grey",
-                    ),
-                ],
-            )
-            return modal
 
         def modal_edit_name_dashboard(dashboard):
             modal = dmc.Modal(
@@ -689,7 +575,12 @@ def register_callbacks_dashboards_management(app):
         def loop_over_dashboards(user_id, dashboards, token):
             view = list()
             for dashboard in dashboards:
-                delete_modal = modal_delete_dashboard(dashboard)
+                # delete_modal = modal_delete_dashboard(dashboard)
+                delete_modal, delete_modal_id = create_delete_confirmation_modal(
+                    id_prefix="dashboard",
+                    item_id=dashboard["dashboard_id"],
+                    title=f"Delete dashboard : {dashboard['title']}",
+                )
                 edit_name_modal = modal_edit_name_dashboard(dashboard)
                 buttons = create_buttons(dashboard, user_id)
                 dashboard_header = create_dashboad_view_header(
@@ -872,7 +763,10 @@ def register_callbacks_dashboards_management(app):
         Output({"type": "dashboard-list", "index": ALL}, "children"),
         # [Output({"type": "dashboard-list", "index": ALL}, "children"), Output({"type": "dashboard-index-store", "index": ALL}, "data")],
         [
-            Input({"type": "confirm-delete", "index": ALL}, "n_clicks"),
+            # Input({"type": "cancel-dashboard-delete-button", "index": ALL}, "n_clicks"),
+            Input(
+                {"type": "confirm-dashboard-delete-button", "index": ALL}, "n_clicks"
+            ),
             Input({"type": "save-edit-name-dashboard", "index": ALL}, "n_clicks"),
             Input({"type": "duplicate-dashboard-button", "index": ALL}, "n_clicks"),
             Input({"type": "make-public-dashboard-button", "index": ALL}, "n_clicks"),
@@ -882,7 +776,7 @@ def register_callbacks_dashboards_management(app):
         [
             State({"type": "create-dashboard-button", "index": ALL}, "id"),
             # State({"type": "dashboard-index-store", "index": ALL}, "data"),
-            State({"type": "confirm-delete", "index": ALL}, "index"),
+            State({"type": "confirm-dashboard-delete-button", "index": ALL}, "index"),
             State({"type": "new-name-dashboard", "index": ALL}, "value"),
             State({"type": "new-name-dashboard", "index": ALL}, "id"),
             State("local-store", "data"),
@@ -890,6 +784,7 @@ def register_callbacks_dashboards_management(app):
         ],
     )
     def update_dashboards(
+        # cancel_n_clicks_list,
         delete_n_clicks_list,
         edit_n_clicks_list,
         duplicate_n_clicks_list,
@@ -943,7 +838,7 @@ def register_callbacks_dashboards_management(app):
                 )
                 # return handle_dashboard_creation(dashboards, next_index, modal_data, user_data, current_userbase, store_data_list)
 
-        if ctx.triggered_id.get("type") == "confirm-delete":
+        if ctx.triggered_id.get("type") == "confirm-dashboard-delete-button":
             return handle_dashboard_deletion(
                 dashboards,
                 delete_ids_list,
@@ -1219,6 +1114,7 @@ def register_callbacks_dashboards_management(app):
         [
             Input({"type": "create-dashboard-button", "index": ALL}, "n_clicks"),
             Input("create-dashboard-submit", "n_clicks"),
+            Input("cancel-dashboard-button", "n_clicks"),
         ],
         [
             State("dashboard-title-input", "value"),
@@ -1232,6 +1128,7 @@ def register_callbacks_dashboards_management(app):
     def handle_create_dashboard_and_toggle_modal(
         n_clicks_create,
         n_clicks_submit,
+        n_clicks_cancel,
         title,
         opened,
         user_data,
@@ -1264,6 +1161,11 @@ def register_callbacks_dashboards_management(app):
             logger.info("Create button clicked")
             # Toggle the modal when the create button is clicked
             return dash.no_update, True, dash.no_update, dash.no_update, dash.no_update
+
+        if triggered_id == "cancel-dashboard-button":
+            logger.info("Create button clicked")
+            # Toggle the modal when the create button is clicked
+            return dash.no_update, False, dash.no_update, dash.no_update, dash.no_update
 
         if triggered_id == "create-dashboard-submit":
             logger.info("Submit button clicked")
@@ -1361,13 +1263,24 @@ def register_callbacks_dashboards_management(app):
     #     return opened
 
     @app.callback(
-        Output({"type": "delete-confirmation-modal", "index": MATCH}, "opened"),
+        Output(
+            {"type": "dashboard-delete-confirmation-modal", "index": MATCH}, "opened"
+        ),
         [
             Input({"type": "delete-dashboard-button", "index": MATCH}, "n_clicks"),
-            Input({"type": "confirm-delete", "index": MATCH}, "n_clicks"),
-            Input({"type": "cancel-delete", "index": MATCH}, "n_clicks"),
+            Input(
+                {"type": "confirm-dashboard-delete-button", "index": MATCH}, "n_clicks"
+            ),
+            Input(
+                {"type": "cancel-dashboard-delete-button", "index": MATCH}, "n_clicks"
+            ),
         ],
-        [State({"type": "delete-confirmation-modal", "index": MATCH}, "opened")],
+        [
+            State(
+                {"type": "dashboard-delete-confirmation-modal", "index": MATCH},
+                "opened",
+            )
+        ],
         prevent_initial_call=True,
     )
     def open_delete_modal(n1, n2, n3, opened):
