@@ -197,7 +197,9 @@ make_project_public_modal, make_project_public_modal_id = create_add_with_input_
     opened=False,
 )
 
-store_make_project_public_modal = dcc.Store(id="store-make-project-public", data=None, storage_type="memory")
+store_make_project_public_modal = dcc.Store(
+    id="store-make-project-public", data=None, storage_type="memory"
+)
 
 layout = dmc.Container(
     [
@@ -421,10 +423,10 @@ def register_projectwise_user_management_callbacks(app):
             permissions = []
 
         # Add User button is enabled when email and permissions are selected
-        add_user_disabled = not (email and len(permissions) > 0 and group == "Public")
+        add_user_disabled = not (email and len(permissions) == 1)
 
         # Add Group button is enabled when group and permissions are selected
-        add_group_disabled = not (group and not email and len(permissions) > 0)
+        add_group_disabled = not (group and not email and len(permissions) == 1)
 
         return add_user_disabled, add_group_disabled
 
