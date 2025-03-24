@@ -7,7 +7,7 @@ from dash_iconify import DashIconify
 import httpx
 
 # Depictio imports
-from depictio.api.v1.configs.config import settings
+from depictio.api.v1.configs.config import API_BASE_URL, settings
 
 # Depictio components imports - design step
 from depictio.api.v1.endpoints.user_endpoints.core_functions import (
@@ -33,6 +33,7 @@ from depictio.dash.modules.jbrowse_component.frontend import (
 from depictio.dash.modules.table_component.frontend import (
     register_callbacks_table_component,
 )
+
 
 # TODO: markdown component
 
@@ -154,10 +155,19 @@ from depictio.dash.layouts.admin_management import register_admin_callbacks
 
 register_admin_callbacks(app)
 
-
 from depictio.dash.layouts.projects import register_projects_callbacks
 
 register_projects_callbacks(app)
+
+from depictio.dash.layouts.projectwise_user_management import (
+    register_projectwise_user_management_callbacks,
+)
+
+register_projectwise_user_management_callbacks(app)
+
+from depictio.dash.layouts.projectwise_user_management import (
+    layout as projectwise_user_management_layout,
+)
 
 
 def return_create_dashboard_button(email):
@@ -260,6 +270,23 @@ def handle_authenticated_user(pathname, local_data):
         header = create_header_with_button("Dashboards", create_button)
         content = create_dashboards_management_layout()
         return content, header, pathname, local_data
+
+    elif pathname.startswith("/project/"):
+        # project_id = pathname.split("/")[-1]
+        # # Retrieve project name from API
+        # response = httpx.get(
+        #     f"{API_BASE_URL}/depictio/api/v1/projects/get/from_id/{project_id}",
+        #     headers={"Authorization": f"Bearer {local_data['access_token']}"},
+        # )
+        # if response.status_code == 200:
+        #     project_name = response.json()["name"]
+        # else:
+        #     return dash.no_update, dash.no_update, "/projects", local_data
+        # # project_name = "Project Name"
+        header = create_default_header("Project Permissions Manager")
+        return projectwise_user_management_layout, header, pathname, local_data
+
+        # return projects, header, pathname, local_data
 
     elif pathname == "/projects":
         header = create_default_header("Projects registered")
