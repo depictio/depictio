@@ -20,7 +20,7 @@ from depictio.api.v1.endpoints.user_endpoints.utils import (
     check_password,
     create_group_helper,
     delete_group_helper,
-    update_group_in_users_helper
+    update_group_in_users_helper,
 )
 from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.db import users_collection
@@ -199,6 +199,10 @@ async def get_all_groups_with_users(current_user=Depends(get_current_user)):
             # for user in users:
             #     user.pop("groups", None)
             group["users"] = users
+    from depictio_models.models.users import GroupWithUsers
+
+    groups = [GroupWithUsers.from_mongo(group) for group in groups]
+    groups = [convert_model_to_dict(group, exclude_none=True) for group in groups]
 
     logger.debug(f"Groups with users: {groups}")
     return groups
@@ -219,8 +223,8 @@ async def get_users_group():
     return groups[0]
 
 
-@auth_endpoint_router.get("/fetch_user/from_id")
-async def api_fetch_user(user_id: str, current_user=Depends(get_current_user)):
+@auth_endpoint_router.get("/fetch_user/from_id/{user_id}")
+async def api_fetch_user_from_id(user_id: str, current_user=Depends(get_current_user)):
     if not user_id:
         raise HTTPException(status_code=400, detail="No user_id provided")
 
@@ -239,8 +243,8 @@ async def api_fetch_user(user_id: str, current_user=Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="User not found")
 
 
-@auth_endpoint_router.get("/fetch_user/from_email")
-async def api_fetch_user(email: str, current_user=Depends(get_current_user)):
+@auth_endpoint_router.get("/fetch_user/from_email/{email}")
+async def api_fetch_user_from_email(email: str, current_user=Depends(get_current_user)):
     if not email:
         raise HTTPException(status_code=400, detail="No email provided")
 
@@ -537,7 +541,9 @@ def turn_sysadmin(user_id: str, is_admin: bool, current_user=Depends(get_current
         user_id = ObjectId(str(user_id))
 
     # Update the user in the database
-    result = users_collection.update_one({"_id": user_id}, {"$set": {"is_admin": is_admin}})
+    result = users_collection.update_one(
+        {"_id": user_id}, {"$set": {"is_admin": is_admin}}
+    )
     if result.modified_count == 1:
         return {"success": True}
     else:
@@ -585,8 +591,11 @@ def delete_group(group_id: str, current_user=Depends(get_current_user)):
     response = delete_group_helper(group_id)
     return response
 
+
 @auth_endpoint_router.post("/update_group_in_users/{group_id}")
-def update_group_in_users(group_id: str, request: dict, current_user=Depends(get_current_user)):
+def update_group_in_users(
+    group_id: str, request: dict, current_user=Depends(get_current_user)
+):
     if not current_user:
         raise HTTPException(status_code=401, detail="Current user not found.")
     # Check if the current user is an admin
@@ -608,15 +617,97 @@ def update_group_in_users(group_id: str, request: dict, current_user=Depends(get
     users = [UserBaseGroupLess(**user) for user in request["users"]]
 
     logger.info(f"Users: {users}")
-    
+
     # Ensure group_id is an ObjectId
     group_id_obj = (
-        ObjectId(group_id["$oid"]) if isinstance(group_id, dict) and "$oid" in group_id
-        else ObjectId(group_id) if isinstance(group_id, str)
-        else group_id if isinstance(group_id, ObjectId)
+        ObjectId(group_id["$oid"])
+        if isinstance(group_id, dict) and "$oid" in group_id
+        else ObjectId(group_id)
+        if isinstance(group_id, str)
+        else group_id
+        if isinstance(group_id, ObjectId)
         else ObjectId(str(group_id))
     )
     logger.info(f"Group ID: {group_id_obj}")
 
     response = update_group_in_users_helper(group_id_obj, users)
     return response
+
+
+@auth_endpoint_router.get("/get_group_with_users/{group_id}")
+def get_group_with_users(group_id: str, current_user=Depends(get_current_user)):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Current user not found.")
+    # Check if the current user is an admin
+    if not current_user.is_admin:
+        raise HTTPException(status_code=401, detail="Current user is not an admin.")
+
+    # Ensure group_id is an ObjectId
+    if isinstance(group_id, str):
+        group_id = ObjectId(group_id)
+    elif isinstance(group_id, dict) and "$oid" in group_id:
+        group_id = ObjectId(group_id["$oid"])
+    elif isinstance(group_id, ObjectId):
+        # Already an ObjectId, no conversion needed
+        pass
+    else:
+        # Convert to string first, then to ObjectId
+        group_id = ObjectId(str(group_id))
+
+    from depictio.api.v1.db import groups_collection
+
+    group = groups_collection.find_one({"_id": group_id})
+
+    if group:
+        # find users in the group by querying the users collection
+        from depictio.api.v1.db import users_collection
+
+        users = list(users_collection.find({"groups._id": ObjectId(group_id)}))
+        logger.debug(f"users found: {users}")
+
+        if users:
+            users = [
+                convert_objectid_to_str(
+                    UserBaseGroupLess(
+                        id=user["_id"],
+                        email=user["email"],
+                        is_admin=user["is_admin"],
+                    ).model_dump(exclude_none=True)
+                )
+                for user in users
+            ]
+            group["users"] = users
+
+            # Check if group can be converted to GroupWithUsers
+            from depictio_models.models.users import GroupWithUsers
+
+            group_with_users = GroupWithUsers.from_mongo(group)
+            return convert_model_to_dict(group_with_users)
+        else:
+            return convert_model_to_dict(group)
+    else:
+        raise HTTPException(status_code=404, detail="Group not found")
+
+
+# @auth_endpoint_router.get("/get_all_groups_including_users")
+# async def get_all_groups_including_users(current_user=Depends(get_current_user)):
+#     if not current_user:
+#         raise HTTPException(status_code=401, detail="Current user not found.")
+#     if not current_user.is_admin:
+#         raise HTTPException(status_code=401, detail="Current user is not an admin.")
+#     from depictio.api.v1.db import groups_collection
+
+#     groups = groups_collection.find()
+
+#     # for group in groups leverage the existing function to get users
+#     new_groups = []
+#     for group in groups:
+#         group_id = ObjectId(group["_id"])
+#         logger.debug(f"Finding users for group: {group_id}")
+#         group_data = await get_group_with_users(group_id, current_user)
+#         logger.debug(f"Group data: {group_data}")
+#         new_groups.append(group_data)
+#     new_groups = [convert_model_to_dict(group) for group in new_groups]
+
+#     # groups = [convert_model_to_dict(group) for group in groups]
+#     return new_groups
