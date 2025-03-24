@@ -26,6 +26,7 @@ from depictio_models.models.projects import Project
 from depictio_models.models.workflows import Workflow
 from depictio_models.models.data_collections import DataCollection
 
+
 # =========================
 # Data Fetching Functions
 # =========================
@@ -661,47 +662,53 @@ def render_project_item(
                     ),
                     dmc.Accordion(
                         children=[
-                            dmc.AccordionControl(
-                                "Roles and permissions",
-                                icon=DashIconify(icon="mdi:shield-account", width=20),
+                            dmc.Anchor(
+                                dmc.AccordionControl(
+                                    "Roles and permissions",
+                                    icon=DashIconify(
+                                        icon="mdi:shield-account", width=20
+                                    ),
+                                ),
+                                href=f"/project/{str(project.id)}",
+                                style={"textDecoration": "none", "color": "inherit"},
                             ),
-                            dmc.AccordionPanel(
-                                children=[
-                                    dmc.Accordion(
-                                        children=[
-                                            dag.AgGrid(
-                                                columnDefs=[
-                                                    # set types
-                                                    {"field": "id"},
-                                                    {"field": "email"},
-                                                    {
-                                                        "field": "Owner",
-                                                        "cellRenderer": "agCheckboxCellRenderer",
-                                                    },
-                                                    {"field": "Editor"},
-                                                    {"field": "Viewer"},
-                                                ],
-                                                rowData=[
-                                                    {
-                                                        "id": str(user.id),
-                                                        "email": user.email,
-                                                        "Owner": True,
-                                                        "Editor": False,
-                                                        "Viewer": False,
-                                                    }
-                                                    for user in project.permissions.viewers
-                                                    + project.permissions.owners
-                                                ],
-                                                defaultColDef={
-                                                    "resizable": True,
-                                                    "sortable": True,
-                                                    "filter": True,
-                                                },
-                                            )
-                                        ]
-                                    )
-                                ]
-                            ),
+                            # dmc.AccordionPanel(
+                            #     children=[
+                            #         dmc.Accordion(
+                            #             children=[
+                            #                 dag.AgGrid(
+                            #                     columnDefs=[
+                            #                         # set types
+                            #                         {"field": "id"},
+                            #                         {"field": "email"},
+                            #                         {
+                            #                             "field": "Owner",
+                            #                             "cellRenderer": "agCheckboxCellRenderer",
+                            #                         },
+                            #                         {"field": "Editor"},
+                            #                         {"field": "Viewer"},
+                            #                     ],
+                            #                     rowData=[
+                            #                         {
+                            #                             "id": str(user.id),
+                            #                             "email": user.email,
+                            #                             "Owner": True,
+                            #                             "Editor": False,
+                            #                             "Viewer": False,
+                            #                         }
+                            #                         for user in project.permissions.viewers
+                            #                         + project.permissions.owners
+                            #                     ],
+                            #                     defaultColDef={
+                            #                         "resizable": True,
+                            #                         "sortable": True,
+                            #                         "filter": True,
+                            #                     },
+                            #                 )
+                            #             ]
+                            #         )
+                            #     ]
+                            # ),
                         ],
                     ),
                 ]
