@@ -118,7 +118,7 @@ def initialize_db():
         # Create the admin group
         admin_group = create_group_helper(admin_group_dict)
         users_group = create_group_helper(users_group_dict)
-        admin_user_dict["groups"] = [admin_group]
+        admin_user_dict["groups"] = [admin_group, users_group]
         logger.info(f"Admin group: {admin_group}")
         logger.info(f"Users group: {users_group}")
         logger.info(f"Admin user: {admin_user_dict}")
