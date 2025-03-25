@@ -71,7 +71,11 @@ def fetch_project_permissions(project_id, token):
                     continue
                 user_api = user_api.json()
                 group_name = ", ".join(
-                    [group["name"] for group in user_api.get("groups", [])]
+                    [
+                        group["name"]
+                        for group in user_api.get("groups", [])
+                        if group["name"] not in ["admin", "users"]
+                    ]
                 )
                 permissions_data.append(
                     {
@@ -87,7 +91,11 @@ def fetch_project_permissions(project_id, token):
             # Process editors
             for user in project_data["permissions"].get("editors", []):
                 group_name = ", ".join(
-                    [group["name"] for group in user_api.get("groups", [])]
+                    [
+                        group["name"]
+                        for group in user_api.get("groups", [])
+                        if group["name"] not in ["admin", "users"]
+                    ]
                 )
                 permissions_data.append(
                     {
@@ -103,7 +111,11 @@ def fetch_project_permissions(project_id, token):
             # Process viewers
             for user in project_data["permissions"].get("viewers", []):
                 group_name = ", ".join(
-                    [group["name"] for group in user_api.get("groups", [])]
+                    [
+                        group["name"]
+                        for group in user_api.get("groups", [])
+                        if group["name"] not in ["admin", "users"]
+                    ]
                 )
                 permissions_data.append(
                     {
@@ -187,7 +199,7 @@ cannot_delete_owner_modal, cannot_delete_owner_modal_id = create_add_with_input_
 make_project_public_modal, make_project_public_modal_id = create_add_with_input_modal(
     id_prefix="make-project-public",
     input_field=None,
-    title="Make Project Public",
+    title="Change Project Visibility",
     title_color="green",
     message="Are you sure you want to change visibility of the project?",
     confirm_button_text="Yes",
@@ -403,7 +415,7 @@ def register_projectwise_user_management_callbacks(app):
         if selected_group_id and selected_group_id in GROUPS_DATA:
             # Convert users to email options
             email_options = [
-                {"value": user["email"], "label": user["email"]}
+                {"value": user["id"], "label": user["email"]}
                 for user in GROUPS_DATA[selected_group_id]["users"]
             ]
             return email_options, False
@@ -439,22 +451,60 @@ def register_projectwise_user_management_callbacks(app):
         Input("permissions-manager-btn-add-user", "n_clicks"),
         Input("permissions-manager-btn-add-group", "n_clicks"),
         State("permissions-manager-input-email", "value"),
+        State("permissions-manager-input-email", "data"),
         State("permissions-managerinput-group", "value"),
         State("permissions-manager-checkboxes", "value"),
         State("permissions-manager-grid", "rowData"),
+        State("local-store", "data"),
         prevent_initial_call=True,
     )
     def add_user_or_group(
-        user_clicks, group_clicks, email, group_id, permissions, current_rows
+        user_clicks,
+        group_clicks,
+        user_id,
+        dropdown_data,
+        group_id,
+        permissions,
+        current_rows,
+        local_store_data,
     ):
         # Determine which button was clicked
         triggered_id = ctx.triggered_id
 
+        email = next(
+            (item["label"] for item in dropdown_data if item["value"] == user_id), None
+        )
+
+        logger.info(f"Triggered ID: {triggered_id}")
+        logger.info(f"user_id: {user_id}")
+        logger.info(f"Email: {email}")
+        logger.info(f"Group ID: {group_id}")
+        logger.info(f"Permissions: {permissions}")
+        logger.info(f"Current rows: {current_rows}")
+
+        logger.info(f"GROUPS_DATA: {GROUPS_DATA}")
+
         if not group_id or not permissions or group_id not in GROUPS_DATA:
             return current_rows, "", "", []
 
-        group_name = GROUPS_DATA[group_id]["name"]
         new_users = []
+
+        retrieve_user = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_id/{user_id}",
+            headers={"Authorization": f"Bearer {local_store_data['access_token']}"},
+        )
+
+        if retrieve_user.status_code != 200:
+            logger.error(f"Error fetching user data: {retrieve_user.text}")
+            return current_rows, "", "", []
+
+        groups = ", ".join(
+            [
+                group["name"]
+                for group in retrieve_user.json().get("groups", [])
+                if group["name"] not in ["admin", "users"]
+            ]
+        )
 
         # For individual user addition
         if triggered_id == "permissions-manager-btn-add-user" and email:
@@ -463,26 +513,20 @@ def register_projectwise_user_management_callbacks(app):
                 # Return current state without changes to trigger modal
                 return current_rows, email, group_id, permissions
 
-            # Find user in the group data to get their ID
-            user_data = next(
-                (
-                    user
-                    for user in GROUPS_DATA[group_id]["users"]
-                    if user["email"] == email
-                ),
-                None,
+            logger.info(
+                f"Adding user: {email} with group: {groups} and permissions: {permissions}"
             )
-            if user_data:
-                new_users.append(
-                    {
-                        "id": user_data["id"],  # Use existing user ID
-                        "email": email,
-                        "groups": group_name,
-                        "Owner": "Owner" in permissions,
-                        "Editor": "Editor" in permissions,
-                        "Viewer": "Viewer" in permissions,
-                    }
-                )
+
+            new_users.append(
+                {
+                    "id": user_id,
+                    "email": email,
+                    "groups": groups,
+                    "Owner": "Owner" in permissions,
+                    "Editor": "Editor" in permissions,
+                    "Viewer": "Viewer" in permissions,
+                }
+            )
 
         # For group addition
         elif triggered_id == "permissions-manager-btn-add-group":
@@ -493,7 +537,7 @@ def register_projectwise_user_management_callbacks(app):
                         {
                             "id": user["id"],  # Use existing user ID
                             "email": user["email"],
-                            "groups": group_name,
+                            "groups": groups,
                             "Owner": "Owner" in permissions,
                             "Editor": "Editor" in permissions,
                             "Viewer": "Viewer" in permissions,
@@ -502,6 +546,8 @@ def register_projectwise_user_management_callbacks(app):
 
         # Add to current rows
         updated_rows = current_rows + new_users
+
+        # TODO: Update the permissions in the API
 
         # Return updated rows and reset form
         return updated_rows, "", "", []
@@ -543,6 +589,9 @@ def register_projectwise_user_management_callbacks(app):
                 updated_rows = [
                     row for row in current_rows if str(row["id"]) != str(row_id)
                 ]
+
+                # TODO: Update the permissions in the API
+
                 return updated_rows
 
         # Handle checkbox changes
@@ -574,6 +623,9 @@ def register_projectwise_user_management_callbacks(app):
                         logger.info(f"Setting {column} to True")
                         row[column] = True
                         break
+
+                # TODO : Update the permissions in the API
+                logger.info(f"Updated rows: {updated_rows}")
 
                 return updated_rows
 
@@ -681,4 +733,6 @@ def register_projectwise_user_management_callbacks(app):
         elif triggered_id in [
             "confirm-make-project-public-add-button",
         ]:
+            # TODO: Update the project visibility in the API
+
             return False, value, value
