@@ -26,6 +26,7 @@ from depictio_models.models.projects import Project
 from depictio_models.models.workflows import Workflow
 from depictio_models.models.data_collections import DataCollection
 
+
 # =========================
 # Data Fetching Functions
 # =========================
@@ -597,24 +598,26 @@ def render_project_item(
 
     sections = create_workflow_section("Workflows:", project.workflows)
 
-    project_owned = (
-        True
-        if str(current_user.id) in [str(o.id) for o in project.permissions.owners]
-        else False
-    )
+    # Determine user's role in the project
+    role = "Viewer"  # Default role
+    color = "gray"   # Default color
+    
+    if str(current_user.id) in [str(o.id) for o in project.permissions.owners]:
+        role = "Owner"
+        color = "blue"
+    elif hasattr(project.permissions, "editors") and str(current_user.id) in [str(e.id) for e in project.permissions.editors]:
+        role = "Editor"
+        color = "teal"
+    elif str(current_user.id) in [str(v.id) for v in project.permissions.viewers]:
+        role = "Viewer"
+        color = "gray"
 
-    if not admin_UI:
-        badge_ownership = dmc.Badge(
-            children="Owned" if project_owned else "Shared",
-            color="teal" if project_owned else "gray",
-            className="ml-2",
-        )
-    else:
-        badge_ownership = dmc.Badge(
-            children=project.permissions.owners[0].email,
-            color="blue",
-            className="ml-2",
-        )
+    
+    badge_ownership = dmc.Badge(
+        children=role,
+        color=color,
+        className="ml-2",
+    )
 
     return dmc.AccordionItem(
         children=[
@@ -661,47 +664,53 @@ def render_project_item(
                     ),
                     dmc.Accordion(
                         children=[
-                            dmc.AccordionControl(
-                                "Roles and permissions",
-                                icon=DashIconify(icon="mdi:shield-account", width=20),
+                            dmc.Anchor(
+                                dmc.AccordionControl(
+                                    "Roles and permissions",
+                                    icon=DashIconify(
+                                        icon="mdi:shield-account", width=20
+                                    ),
+                                ),
+                                href=f"/project/{str(project.id)}",
+                                style={"textDecoration": "none", "color": "inherit"},
                             ),
-                            dmc.AccordionPanel(
-                                children=[
-                                    dmc.Accordion(
-                                        children=[
-                                            dag.AgGrid(
-                                                columnDefs=[
-                                                    # set types
-                                                    {"field": "id"},
-                                                    {"field": "email"},
-                                                    {
-                                                        "field": "Owner",
-                                                        "cellRenderer": "agCheckboxCellRenderer",
-                                                    },
-                                                    {"field": "Editor"},
-                                                    {"field": "Viewer"},
-                                                ],
-                                                rowData=[
-                                                    {
-                                                        "id": str(user.id),
-                                                        "email": user.email,
-                                                        "Owner": True,
-                                                        "Editor": False,
-                                                        "Viewer": False,
-                                                    }
-                                                    for user in project.permissions.viewers
-                                                    + project.permissions.owners
-                                                ],
-                                                defaultColDef={
-                                                    "resizable": True,
-                                                    "sortable": True,
-                                                    "filter": True,
-                                                },
-                                            )
-                                        ]
-                                    )
-                                ]
-                            ),
+                            # dmc.AccordionPanel(
+                            #     children=[
+                            #         dmc.Accordion(
+                            #             children=[
+                            #                 dag.AgGrid(
+                            #                     columnDefs=[
+                            #                         # set types
+                            #                         {"field": "id"},
+                            #                         {"field": "email"},
+                            #                         {
+                            #                             "field": "Owner",
+                            #                             "cellRenderer": "agCheckboxCellRenderer",
+                            #                         },
+                            #                         {"field": "Editor"},
+                            #                         {"field": "Viewer"},
+                            #                     ],
+                            #                     rowData=[
+                            #                         {
+                            #                             "id": str(user.id),
+                            #                             "email": user.email,
+                            #                             "Owner": True,
+                            #                             "Editor": False,
+                            #                             "Viewer": False,
+                            #                         }
+                            #                         for user in project.permissions.viewers
+                            #                         + project.permissions.owners
+                            #                     ],
+                            #                     defaultColDef={
+                            #                         "resizable": True,
+                            #                         "sortable": True,
+                            #                         "filter": True,
+                            #                     },
+                            #                 )
+                            #             ]
+                            #         )
+                            #     ]
+                            # ),
                         ],
                     ),
                 ]
@@ -716,7 +725,45 @@ def render_projects_list(
 ):
     """Render the full projects list, categorized into owned and shared."""
     if not projects:
-        return html.P("No projects available.")
+        content = dmc.Center(
+            dmc.Paper(
+                children=[
+                    dmc.Stack(
+                        children=[
+                            dmc.Center(
+                                DashIconify(
+                                    icon="material-symbols:folder-off-outline",
+                                    width=64,
+                                    height=64,
+                                    color="#6c757d",
+                                )
+                            ),
+                            dmc.Text(
+                                "No projects available",
+                                align="center",
+                                weight=700,
+                                size="xl",
+                            ),
+                            dmc.Text(
+                                "Projects created by users will appear here.",
+                                align="center",
+                                color="dimmed",
+                                size="sm",
+                            ),
+                        ],
+                        align="center",
+                        spacing="sm",
+                    )
+                ],
+                shadow="sm",
+                radius="md",
+                p="xl",
+                withBorder=True,
+                style={"width": "100%", "maxWidth": "500px"},
+            ),
+            style={"height": "300px"},
+        )
+        return content
 
     current_user = fetch_user_from_token(token)
     logger.info(f"Current user: {current_user}")
@@ -861,7 +908,45 @@ def register_workflows_callbacks(app):
 
         if not projects:
             logger.info("No projects matched the hardcoded filter.")
-            return html.P("No projects available.")
+            content = dmc.Center(
+                dmc.Paper(
+                    children=[
+                        dmc.Stack(
+                            children=[
+                                dmc.Center(
+                                    DashIconify(
+                                        icon="material-symbols:folder-off-outline",
+                                        width=64,
+                                        height=64,
+                                        color="#6c757d",
+                                    )
+                                ),
+                                dmc.Text(
+                                    "No projects available",
+                                    align="center",
+                                    weight=700,
+                                    size="xl",
+                                ),
+                                dmc.Text(
+                                    "Projects created by users will appear here.",
+                                    align="center",
+                                    color="dimmed",
+                                    size="sm",
+                                ),
+                            ],
+                            align="center",
+                            spacing="sm",
+                        )
+                    ],
+                    shadow="sm",
+                    radius="md",
+                    p="xl",
+                    withBorder=True,
+                    style={"width": "100%", "maxWidth": "500px"},
+                ),
+                style={"height": "300px"},
+            )
+            return content
 
         return html.Div(
             children=[

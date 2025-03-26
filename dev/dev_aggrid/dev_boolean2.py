@@ -60,7 +60,7 @@ columnDefs = [
         "headerName": "Actions",
         "cellRenderer": "Button",
         "cellRendererParams": {
-            "className": "btn btn-danger fw-bold",
+            "className": "btn",
             "style": {
                 "fontSize": "14px",
                 "padding": "6px 12px",
