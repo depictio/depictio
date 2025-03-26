@@ -10,6 +10,7 @@ import httpx
 import requests
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging import logger
+from depictio_models.models.base import convert_objectid_to_str
 
 
 def fetch_groups_data(token):
@@ -70,6 +71,7 @@ def fetch_project_permissions(project_id, token):
                     logger.error(f"Error fetching user data: {user_api.text}")
                     continue
                 user_api = user_api.json()
+                logger.info(f"User API: {user_api}")
                 group_name = ", ".join(
                     [
                         group["name"]
@@ -85,11 +87,25 @@ def fetch_project_permissions(project_id, token):
                         "Owner": True,
                         "Editor": False,
                         "Viewer": False,
+                        "is_admin": user_api.get("is_admin", False),
+                        "groups_with_metadata": convert_objectid_to_str(
+                            user_api.get("groups", [])
+                        ),
                     }
                 )
 
             # Process editors
             for user in project_data["permissions"].get("editors", []):
+                user_api = httpx.get(
+                    f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_id/{str(user['_id'])}",
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+                if user_api.status_code != 200:
+                    logger.error(f"Error fetching user data: {user_api.text}")
+                    continue
+                user_api = user_api.json()
+                logger.info(f"User API: {user_api}")
+
                 group_name = ", ".join(
                     [
                         group["name"]
@@ -105,11 +121,24 @@ def fetch_project_permissions(project_id, token):
                         "Owner": False,
                         "Editor": True,
                         "Viewer": False,
+                        "is_admin": user_api.get("is_admin", False),
+                        "groups_with_metadata": convert_objectid_to_str(
+                            user_api.get("groups", [])
+                        ),
                     }
                 )
 
             # Process viewers
             for user in project_data["permissions"].get("viewers", []):
+                user_api = httpx.get(
+                    f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_id/{str(user['_id'])}",
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+                if user_api.status_code != 200:
+                    logger.error(f"Error fetching user data: {user_api.text}")
+                    continue
+                user_api = user_api.json()
+                logger.info(f"User API: {user_api}")
                 group_name = ", ".join(
                     [
                         group["name"]
@@ -125,6 +154,10 @@ def fetch_project_permissions(project_id, token):
                         "Owner": False,
                         "Editor": False,
                         "Viewer": True,
+                        "is_admin": user_api.get("is_admin", False),
+                        "groups_with_metadata": convert_objectid_to_str(
+                            user_api.get("groups", [])
+                        ),
                     }
                 )
 
@@ -134,38 +167,56 @@ def fetch_project_permissions(project_id, token):
         return []
 
 
-columnDefs = [
-    {
-        "field": "id",
-        "hide": True,
-    },
-    {"field": "email", "headerName": "Email", "minWidth": 200},
-    {"field": "groups", "headerName": "Groups", "minWidth": 150},
-    {
-        "field": "Owner",
-        "cellRenderer": "agCheckboxCellRenderer",
-        "cellStyle": {"textAlign": "center"},
-    },
-    {
-        "field": "Editor",
-        "cellRenderer": "agCheckboxCellRenderer",
-        "cellStyle": {"textAlign": "center"},
-    },
-    {
-        "field": "Viewer",
-        "cellRenderer": "agCheckboxCellRenderer",
-        "cellStyle": {"textAlign": "center"},
-    },
-    {
-        "field": "actions",
-        "headerName": "Actions",
-        "cellRenderer": "Button",
-        "cellRendererParams": {
-            "className": "btn",
-            "value": "🗑️",
+# Define a custom cell renderer function for the actions column
+# This will be used to conditionally show/hide the delete button
+def create_column_defs(is_admin=False, is_owner=False):
+    """Create column definitions based on user permissions"""
+    return [
+        {
+            "field": "id",
+            "hide": True,
         },
-    },
-]
+        {"field": "email", "headerName": "Email", "minWidth": 200},
+        {"field": "groups", "headerName": "Groups", "minWidth": 150},
+        {
+            "field": "Owner",
+            "cellRenderer": "agCheckboxCellRenderer",
+            "cellStyle": {"textAlign": "center"},
+        },
+        {
+            "field": "Editor",
+            "cellRenderer": "agCheckboxCellRenderer",
+            "cellStyle": {"textAlign": "center"},
+        },
+        {
+            "field": "Viewer",
+            "cellRenderer": "agCheckboxCellRenderer",
+            "cellStyle": {"textAlign": "center"},
+        },
+        {
+            "field": "actions",
+            "headerName": "Actions",
+            "cellRenderer": "Button" if (is_admin or is_owner) else None,
+            "cellRendererParams": {
+                "className": "btn",
+                "value": "🗑️",
+            }
+            if (is_admin or is_owner)
+            else {},
+        },
+        {
+            "field": "is_admin",
+            "hide": True,
+        },
+        {
+            "field": "groups_with_metadata",
+            "hide": True,
+        },
+    ]
+
+
+# Initialize with default column definitions (no permissions)
+columnDefs = create_column_defs()
 
 # Layout with form to add new users
 # Create modal for user already exists warning
@@ -243,6 +294,7 @@ layout = dmc.Container(
             columnSize="sizeToFit",
         ),
         # Controls in a more compact layout below
+        html.Hr(),
         dmc.Card(
             [
                 dmc.Grid(
@@ -255,9 +307,21 @@ layout = dmc.Container(
                                     id="permissions-manager-checkboxes",
                                     orientation="horizontal",
                                     children=[
-                                        dmc.Checkbox(label="Owner", value="Owner"),
-                                        dmc.Checkbox(label="Editor", value="Editor"),
-                                        dmc.Checkbox(label="Viewer", value="Viewer"),
+                                        dmc.Checkbox(
+                                            id="permissions-manager-checkbox-owner",
+                                            label="Owner",
+                                            value="Owner",
+                                        ),
+                                        dmc.Checkbox(
+                                            id="permissions-manager-checkbox-editor",
+                                            label="Editor",
+                                            value="Editor",
+                                        ),
+                                        dmc.Checkbox(
+                                            id="permissions-manager-checkbox-viewer",
+                                            label="Viewer",
+                                            value="Viewer",
+                                        ),
                                     ],
                                     label="Permissions",
                                 ),
@@ -270,7 +334,7 @@ layout = dmc.Container(
                                 dmc.Group(
                                     [
                                         dmc.Select(
-                                            id="permissions-managerinput-group",
+                                            id="permissions-manager-input-group",
                                             label="Group",
                                             placeholder="Select group",
                                             data=GROUP_OPTIONS,
@@ -340,9 +404,10 @@ layout = dmc.Container(
 def register_projectwise_user_management_callbacks(app):
     # Callback to initialize data when page loads
     @app.callback(
-        Output("permissions-managerinput-group", "data"),
+        Output("permissions-manager-input-group", "data"),
         Output("permissions-manager-grid", "rowData"),
         Output("permissions-manager-project-header", "children"),
+        Output("permissions-manager-grid", "columnDefs"),
         Input("permissions-manager-project-header", "children"),
         State("local-store", "data"),
         State("url", "pathname"),
@@ -362,9 +427,37 @@ def register_projectwise_user_management_callbacks(app):
         )
         if response.status_code != 200:
             logger.error(f"Error fetching project data: {response.text}")
-            return [], []
+            return [], [], [], create_column_defs()
         project_data = response.json()
         project_name = project_data.get("name", "Project")
+
+        # Get current user info to determine permissions
+        response_current_user = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_token",
+            params={"token": local_store_data["access_token"]},
+            headers={"Authorization": f"Bearer {local_store_data['access_token']}"},
+        )
+
+        is_admin = False
+        is_owner = False
+
+        if response_current_user.status_code == 200:
+            current_user = response_current_user.json()
+            is_admin = current_user.get("is_admin", False)
+
+            # Check if user is an owner of this project
+            current_user_id = current_user.get("id")
+            if (
+                "permissions" in project_data
+                and "owners" in project_data["permissions"]
+            ):
+                is_owner = any(
+                    str(owner.get("_id")) == str(current_user_id)
+                    for owner in project_data["permissions"].get("owners", [])
+                )
+
+        # Create column definitions based on user permissions
+        column_defs = create_column_defs(is_admin=is_admin, is_owner=is_owner)
 
         title = dmc.Title(
             f"Project: {project_name}",
@@ -395,6 +488,26 @@ def register_projectwise_user_management_callbacks(app):
             id="permissions-manager-project-details",
         )
 
+        # public_private_text = dmc.Text(
+        #     "Sharing status: ",
+        #     size="sm",
+        #     color="gray",
+        # )
+
+        # public_private_badge = dmc.Badge(
+        #     "Public" if project_data.get("is_public") else "Private",
+        #     variant="filled",
+        #     color="green" if project_data.get("is_public") else "violet",
+        #     radius="xl",
+        #     size="sm",
+        # )
+        text_table_header = dmc.Text(
+            "Project Permissions",
+            size="xl",
+            weight="bold",
+            color="black",
+        )
+
         current_permissions = fetch_project_permissions(
             project_id=project_id, token=local_store_data["access_token"]
         )
@@ -402,16 +515,26 @@ def register_projectwise_user_management_callbacks(app):
         return (
             GROUP_OPTIONS,
             current_permissions,
-            [title_button, details],
+            [
+                title_button,
+                details,
+                # dmc.Group([public_private_text, public_private_badge]),
+                html.Hr(),
+                text_table_header,
+            ],
+            column_defs,
         )
 
     # Callback to dynamically populate email dropdown based on selected group
     @app.callback(
         Output("permissions-manager-input-email", "data"),
         Output("permissions-manager-input-email", "disabled"),
-        Input("permissions-managerinput-group", "value"),
+        Input("permissions-manager-input-group", "value"),
     )
     def update_email_options(selected_group_id):
+        logger.info(f"Selected group ID: {selected_group_id}")
+        logger.info(f"Groups data: {GROUPS_DATA}")
+
         if selected_group_id and selected_group_id in GROUPS_DATA:
             # Convert users to email options
             email_options = [
@@ -421,41 +544,96 @@ def register_projectwise_user_management_callbacks(app):
             return email_options, False
         return [], True
 
-    # Merged callback to enable/disable Add User and Add Group buttons
     @app.callback(
         Output("permissions-manager-btn-add-user", "disabled"),
         Output("permissions-manager-btn-add-group", "disabled"),
+        Output("permissions-manager-input-group", "disabled"),
+        Output("permissions-manager-checkbox-owner", "disabled"),
+        Output("permissions-manager-checkbox-editor", "disabled"),
+        Output("permissions-manager-checkbox-viewer", "disabled"),
+        Output("make-project-public-button", "disabled", allow_duplicate=True),
         Input("permissions-manager-input-email", "value"),
-        Input("permissions-managerinput-group", "value"),
+        Input("permissions-manager-input-group", "value"),
         Input("permissions-manager-checkboxes", "value"),
+        Input("local-store", "data"),
+        Input(
+            "permissions-manager-project-header", "children"
+        ),  # Add this to ensure the layout is loaded
         prevent_initial_call=True,
     )
-    def toggle_add_buttons(email, group, permissions):
+    def toggle_add_buttons(email, group, permissions, local_store_data, project_header):
+        # Check if the project header is loaded, which means the layout is ready
+        if not project_header:
+            return (
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+            )
+
         if not permissions:
             permissions = []
 
-        # Add User button is enabled when email and permissions are selected
+        if local_store_data is None:
+            # Disable checkboxes if local_store data is missing
+            return True, True, True, True, True, True, True
+
+        response_current_user = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_token",
+            params={"token": local_store_data["access_token"]},
+            headers={"Authorization": f"Bearer {local_store_data['access_token']}"},
+        )
+
+        if response_current_user.status_code != 200:
+            logger.error(
+                f"Error fetching current user data: {response_current_user.text}"
+            )
+            # It might be better to update checkboxes even in error case, or use no_update.
+            return (
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+            )
+
+        current_user = response_current_user.json()
+        logger.info(f"Current user : {current_user}")
+
+        if not current_user.get("is_admin", False):
+            # Disable checkboxes if the user is not admin
+            return True, True, True, True, True, True, True
+
+        # Enable Add User button when an email is provided and exactly one permission is selected.
         add_user_disabled = not (email and len(permissions) == 1)
 
-        # Add Group button is enabled when group and permissions are selected
+        # Enable Add Group button when a group is provided, email is empty, and exactly one permission is selected.
         add_group_disabled = not (group and not email and len(permissions) == 1)
 
-        return add_user_disabled, add_group_disabled
+        return add_user_disabled, add_group_disabled, False, False, False, False, False
 
     # Combined callback for adding users and groups
     @app.callback(
         Output("permissions-manager-grid", "rowData", allow_duplicate=True),
+        Output("permissions-manager-grid", "defaultColDef"),
         Output("permissions-manager-input-email", "value"),
-        Output("permissions-managerinput-group", "value"),
+        Output("permissions-manager-input-group", "value"),
         Output("permissions-manager-checkboxes", "value"),
         Input("permissions-manager-btn-add-user", "n_clicks"),
         Input("permissions-manager-btn-add-group", "n_clicks"),
         State("permissions-manager-input-email", "value"),
         State("permissions-manager-input-email", "data"),
-        State("permissions-managerinput-group", "value"),
+        State("permissions-manager-input-group", "value"),
         State("permissions-manager-checkboxes", "value"),
         State("permissions-manager-grid", "rowData"),
-        State("local-store", "data"),
+        State("permissions-manager-grid", "defaultColDef"),
+        Input("local-store", "data"),
+        State("url", "pathname"),
         prevent_initial_call=True,
     )
     def add_user_or_group(
@@ -466,7 +644,9 @@ def register_projectwise_user_management_callbacks(app):
         group_id,
         permissions,
         current_rows,
+        grid_options,
         local_store_data,
+        pathname,
     ):
         # Determine which button was clicked
         triggered_id = ctx.triggered_id
@@ -484,34 +664,60 @@ def register_projectwise_user_management_callbacks(app):
 
         logger.info(f"GROUPS_DATA: {GROUPS_DATA}")
 
-        if not group_id or not permissions or group_id not in GROUPS_DATA:
-            return current_rows, "", "", []
+        if local_store_data is None:
+            return current_rows, grid_options, "", "", []
 
-        new_users = []
-
-        retrieve_user = httpx.get(
-            f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_id/{user_id}",
+        response_current_user = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_token",
+            params={"token": local_store_data["access_token"]},
             headers={"Authorization": f"Bearer {local_store_data['access_token']}"},
         )
 
-        if retrieve_user.status_code != 200:
-            logger.error(f"Error fetching user data: {retrieve_user.text}")
-            return current_rows, "", "", []
+        if response_current_user.status_code != 200:
+            logger.error(
+                f"Error fetching current user data: {response_current_user.text}"
+            )
+            return current_rows, grid_options, "", "", []
+        current_user = response_current_user.json()
+        logger.info(f"Current user : {current_user}")
 
-        groups = ", ".join(
-            [
-                group["name"]
-                for group in retrieve_user.json().get("groups", [])
-                if group["name"] not in ["admin", "users"]
-            ]
-        )
+        if current_user["is_admin"] is False:
+            grid_options["editable"] = False
+            logger.info("User is not admin")
+            logger.info(f"Grid options: {grid_options}")
+            return current_rows, grid_options, "", "", []
+
+        if not group_id or not permissions or group_id not in GROUPS_DATA:
+            return current_rows, grid_options, "", "", []
+
+        new_users = []
 
         # For individual user addition
         if triggered_id == "permissions-manager-btn-add-user" and email:
+            retrieve_user = httpx.get(
+                f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_id/{user_id}",
+                headers={"Authorization": f"Bearer {local_store_data['access_token']}"},
+            )
+
+            if retrieve_user.status_code != 200:
+                logger.error(f"Error fetching user data: {retrieve_user.text}")
+                return current_rows, grid_options, "", "", []
+
+            retrieve_user = retrieve_user.json()
+            logger.info(f"Retrieved user: {retrieve_user}")
+
+            groups = ", ".join(
+                [
+                    group["name"]
+                    for group in retrieve_user.get("groups", [])
+                    if group["name"] not in ["admin", "users"]
+                ]
+            )
+
             # Check if user already exists in current rows
             if any(row["email"] == email for row in current_rows):
                 # Return current state without changes to trigger modal
-                return current_rows, email, group_id, permissions
+                return current_rows, grid_options, email, group_id, permissions
 
             logger.info(
                 f"Adding user: {email} with group: {groups} and permissions: {permissions}"
@@ -525,12 +731,37 @@ def register_projectwise_user_management_callbacks(app):
                     "Owner": "Owner" in permissions,
                     "Editor": "Editor" in permissions,
                     "Viewer": "Viewer" in permissions,
+                    "is_admin": retrieve_user.get("is_admin", False),
+                    "groups_with_metadata": convert_objectid_to_str(
+                        retrieve_user.get("groups", [])
+                    ),
                 }
             )
 
         # For group addition
         elif triggered_id == "permissions-manager-btn-add-group":
             for user in GROUPS_DATA[group_id]["users"]:
+                retrieve_user_response = httpx.get(
+                    f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_id/{str(user['id'])}",
+                    headers={
+                        "Authorization": f"Bearer {local_store_data['access_token']}"
+                    },
+                )
+
+                if retrieve_user_response.status_code != 200:
+                    logger.error(
+                        f"Error fetching user data: {retrieve_user_response.text}"
+                    )
+                    continue
+                retrieve_user = retrieve_user_response.json()
+
+                groups = ", ".join(
+                    [
+                        group["name"]
+                        for group in retrieve_user.get("groups", [])
+                        if group["name"] not in ["admin", "users"]
+                    ]
+                )
                 # Check if email already exists in current rows
                 if not any(row["email"] == user["email"] for row in current_rows):
                     new_users.append(
@@ -541,16 +772,81 @@ def register_projectwise_user_management_callbacks(app):
                             "Owner": "Owner" in permissions,
                             "Editor": "Editor" in permissions,
                             "Viewer": "Viewer" in permissions,
+                            "is_admin": user["is_admin"],
+                            "groups_with_metadata": convert_objectid_to_str(
+                                retrieve_user.get("groups", [])
+                            ),
                         }
                     )
 
         # Add to current rows
         updated_rows = current_rows + new_users
 
-        # TODO: Update the permissions in the API
+        logger.info(f"Updated rows: {updated_rows}")
+
+        permissions_payload = {
+            "owners": [
+                {
+                    "_id": user["id"],
+                    "email": user["email"],
+                    "is_admin": user["is_admin"],
+                    "groups": convert_objectid_to_str(user["groups_with_metadata"]),
+                }
+                for user in updated_rows
+                if user["Owner"]
+            ],
+            "editors": [
+                {
+                    "_id": user["id"],
+                    "email": user["email"],
+                    "is_admin": user["is_admin"],
+                    "groups": convert_objectid_to_str(user["groups_with_metadata"]),
+                }
+                for user in updated_rows
+                if user["Editor"]
+            ],
+            "viewers": [
+                {
+                    "_id": user["id"],
+                    "email": user["email"],
+                    "is_admin": user["is_admin"],
+                    "groups": convert_objectid_to_str(user["groups_with_metadata"]),
+                }
+                for user in updated_rows
+                if user["Viewer"]
+            ],
+        }
+        logger.info(f"Permissions payload: {permissions_payload}")
+        from depictio_models.models.users import Permission
+
+        permissions_payload_pydantic = Permission(**permissions_payload)
+        logger.info(f"Permissions payload pydantic: {permissions_payload_pydantic}")
+        # logger.info(f"Permissions payload: {permissions_payload}")
+
+        project_id = pathname.split("/")[-1]
+        response_project_permissions_update = httpx.post(
+            f"{API_BASE_URL}/depictio/api/v1/projects/update_project_permissions",
+            headers={
+                "Authorization": f"Bearer {local_store_data['access_token']}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "project_id": project_id,
+                "permissions": convert_objectid_to_str(permissions_payload),
+            },
+        )
+        if response_project_permissions_update.status_code != 200:
+            logger.error(
+                f"Error updating project permissions: {response_project_permissions_update.text}"
+            )
+            return current_rows, grid_options, "", "", []
+
+        logger.info(
+            f"Updated permissions in API: {response_project_permissions_update.json()}"
+        )
 
         # Return updated rows and reset form
-        return updated_rows, "", "", []
+        return updated_rows, grid_options, "", "", []
 
     # Callback to handle cell clicks and delete actions
     @app.callback(
@@ -558,14 +854,21 @@ def register_projectwise_user_management_callbacks(app):
         Input("permissions-manager-grid", "cellClicked"),
         Input("permissions-manager-grid", "cellValueChanged"),
         State("permissions-manager-grid", "rowData"),
+        State("local-store", "data"),
+        State("url", "pathname"),
         prevent_initial_call=True,
     )
-    def handle_cell_click_and_delete(clicked_data, value_changed_data, current_rows):
+    def handle_cell_click_and_delete(
+        clicked_data, value_changed_data, current_rows, local_store_data, pathname
+    ):
         triggered_id = ctx.triggered[0]["prop_id"]
         logger.info(f"Triggered ID: {triggered_id}")
         logger.info(f"Clicked data: {clicked_data}")
         logger.info(f"Value changed data: {value_changed_data}")
         logger.info(f"Current rows: {current_rows}")
+        current_owners_ids = set([row["id"] for row in current_rows if row["Owner"]])
+
+        updated_rows = list()
 
         # Handle button clicks (delete action)
         if "permissions-manager-grid.cellClicked" == triggered_id and clicked_data:
@@ -576,6 +879,28 @@ def register_projectwise_user_management_callbacks(app):
             logger.info(f"Row ID: {row_id}")
 
             if column == "actions":
+                response_current_user = httpx.get(
+                    f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_token",
+                    params={"token": local_store_data["access_token"]},
+                    headers={
+                        "Authorization": f"Bearer {local_store_data['access_token']}"
+                    },
+                )
+
+                if response_current_user.status_code != 200:
+                    logger.error(
+                        f"Error fetching current user data: {response_current_user.text}"
+                    )
+                    return current_rows
+
+                current_user = response_current_user.json()
+                logger.info(f"Current user: {current_user}")
+
+                if (current_user["is_admin"] is False) or (
+                    current_user["id"] not in current_owners_ids
+                ):
+                    return current_rows
+
                 logger.info(f"Delete button clicked for row ID: {row_id}")
                 # Check if trying to delete the last owner
                 target_row = next(
@@ -589,10 +914,6 @@ def register_projectwise_user_management_callbacks(app):
                 updated_rows = [
                     row for row in current_rows if str(row["id"]) != str(row_id)
                 ]
-
-                # TODO: Update the permissions in the API
-
-                return updated_rows
 
         # Handle checkbox changes
         if (
@@ -624,12 +945,75 @@ def register_projectwise_user_management_callbacks(app):
                         row[column] = True
                         break
 
-                # TODO : Update the permissions in the API
                 logger.info(f"Updated rows: {updated_rows}")
 
-                return updated_rows
+        if not updated_rows:
+            return current_rows
 
-        return current_rows
+        else:
+            permissions_payload = {
+                "owners": [
+                    {
+                        "_id": user["id"],
+                        "email": user["email"],
+                        "is_admin": user["is_admin"],
+                        "groups": convert_objectid_to_str(user["groups_with_metadata"]),
+                    }
+                    for user in updated_rows
+                    if user["Owner"]
+                ],
+                "editors": [
+                    {
+                        "_id": user["id"],
+                        "email": user["email"],
+                        "is_admin": user["is_admin"],
+                        "groups": convert_objectid_to_str(user["groups_with_metadata"]),
+                    }
+                    for user in updated_rows
+                    if user["Editor"]
+                ],
+                "viewers": [
+                    {
+                        "_id": user["id"],
+                        "email": user["email"],
+                        "is_admin": user["is_admin"],
+                        "groups": convert_objectid_to_str(user["groups_with_metadata"]),
+                    }
+                    for user in updated_rows
+                    if user["Viewer"]
+                ],
+            }
+        logger.info(f"Permissions payload: {permissions_payload}")
+        from depictio_models.models.users import Permission
+
+        permissions_payload_pydantic = Permission(**permissions_payload)
+        logger.info(f"Permissions payload pydantic: {permissions_payload_pydantic}")
+        # logger.info(f"Permissions payload: {permissions_payload}")
+
+        project_id = pathname.split("/")[-1]
+
+        response_project_permissions_update = httpx.post(
+            f"{API_BASE_URL}/depictio/api/v1/projects/update_project_permissions",
+            headers={
+                "Authorization": f"Bearer {local_store_data['access_token']}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "project_id": project_id,
+                "permissions": convert_objectid_to_str(permissions_payload),
+            },
+        )
+        if response_project_permissions_update.status_code != 200:
+            logger.error(
+                f"Error updating project permissions: {response_project_permissions_update.text}"
+            )
+            return current_rows
+
+        logger.info(
+            f"Updated permissions in API: {response_project_permissions_update.json()}"
+        )
+
+        return updated_rows
 
     # Callback to handle user exists modal
     @app.callback(
@@ -701,6 +1085,17 @@ def register_projectwise_user_management_callbacks(app):
 
         return False
 
+    def api_toggle_project_public_private(project_id, token, is_public):
+        response = httpx.post(
+            f"{API_BASE_URL}/depictio/api/v1/projects/toggle_public_private/{project_id}",
+            headers={"Authorization": f"Bearer {token}"},
+            params={"is_public": is_public},
+        )
+        if response.status_code != 200:
+            logger.error(f"Error toggling project public/private: {response.text}")
+            return {"message": response.text, "success": False}
+        return {"message": response.json(), "success": True}
+
     @app.callback(
         Output(make_project_public_modal_id, "opened"),
         Output("make-project-public-button", "value"),
@@ -709,10 +1104,12 @@ def register_projectwise_user_management_callbacks(app):
         Input("confirm-make-project-public-add-button", "n_clicks"),
         Input("cancel-make-project-public-add-button", "n_clicks"),
         State("store-make-project-public", "data"),
+        State("local-store", "data"),
+        State("url", "pathname"),
         prevent_initial_call=True,
     )
     def toggle_make_project_public_modal(
-        value, confirm_clicks, cancel_clicks, store_data
+        value, confirm_clicks, cancel_clicks, store_data, local_store, pathname
     ):
         triggered_id = ctx.triggered_id
         logger.info(f"Triggered ID: {triggered_id}")
@@ -733,6 +1130,16 @@ def register_projectwise_user_management_callbacks(app):
         elif triggered_id in [
             "confirm-make-project-public-add-button",
         ]:
-            # TODO: Update the project visibility in the API
+            project_id = pathname.split("/")[-1]
 
-            return False, value, value
+            logger.info(f"Value in modal: {value}")
+
+            response = api_toggle_project_public_private(
+                project_id=str(project_id),
+                token=local_store["access_token"],
+                is_public=value,
+            )
+            if response["success"]:
+                return False, value, value
+            else:
+                return False, dash.no_update, dash.no_update
