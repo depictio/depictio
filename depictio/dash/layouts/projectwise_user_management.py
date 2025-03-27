@@ -264,6 +264,13 @@ store_make_project_public_modal = dcc.Store(
     id="store-make-project-public", data=None, storage_type="memory"
 )
 
+text_table_header = dmc.Text(
+    "Project Permissions",
+    size="xl",
+    weight="bold",
+    color="black",
+)
+
 layout = dmc.Container(
     [
         user_exists_modal,
@@ -271,7 +278,9 @@ layout = dmc.Container(
         make_project_public_modal,
         store_make_project_public_modal,
         html.Div(id="permissions-manager-project-header"),
+        # html.Hr(style={"margin": "15px 0"}),
         # Grid first for better visibility
+        text_table_header,
         dag.AgGrid(
             id="permissions-manager-grid",
             columnDefs=columnDefs,
@@ -290,6 +299,8 @@ layout = dmc.Container(
                 "suppressClickEdit": True,
             },
             className="ag-theme-alpine",
+            # height to fit the content
+            # style={"height": "100%"},
             style={"height": "400px"},
             columnSize="sizeToFit",
         ),
@@ -402,6 +413,18 @@ layout = dmc.Container(
 
 
 def register_projectwise_user_management_callbacks(app):
+    @callback(
+        Output("make-project-public-button", "color"),
+        Input("make-project-public-button", "value"),
+        Input("url", "pathname"),
+    )
+    def update_status(value, pathname):
+        logger.info(f"value : {value}")
+        if value.lower() == "true":
+            return "green"
+        else:
+            return "violet"
+
     # Callback to initialize data when page loads
     @app.callback(
         Output("permissions-manager-input-group", "data"),
@@ -455,75 +478,65 @@ def register_projectwise_user_management_callbacks(app):
                     str(owner.get("_id")) == str(current_user_id)
                     for owner in project_data["permissions"].get("owners", [])
                 )
+                # Create column definitions based on user permissions
+                column_defs = create_column_defs(is_admin=is_admin, is_owner=is_owner)
 
-        # Create column definitions based on user permissions
-        column_defs = create_column_defs(is_admin=is_admin, is_owner=is_owner)
+                title = dmc.Title(
+                    f"Project: {project_name}",
+                    order=3,
+                    mb=20,
+                    id="permissions-manager-project-title",
+                )
+                make_public_button = dmc.SegmentedControl(
+                    id="make-project-public-button",
+                    color="green",
+                    size="sm",
+                    data=[
+                        {"value": "True", "label": "Public"},
+                        {"value": "False", "label": "Private"},
+                    ],
+                    value="True" if project_data.get("is_public") else "False",
+                    radius="xl",
+                )
 
-        title = dmc.Title(
-            f"Project: {project_name}",
-            order=3,
-            mb=20,
-            id="permissions-manager-project-title",
-        )
-        make_public_button = dmc.SegmentedControl(
-            id="make-project-public-button",
-            color="green",
-            size="sm",
-            data=[
-                {"value": "True", "label": "Public"},
-                {"value": "False", "label": "Private"},
-            ],
-            value="True" if project_data.get("is_public") else "False",
-            radius="xl",
-        )
+                title_button = dmc.Group(
+                    [title, make_public_button],
+                    position="apart",
+                )
+                details = dmc.Text(
+                    f"Project ID: {project_id}",
+                    size="sm",
+                    color="gray",
+                    id="permissions-manager-project-details",
+                )
 
-        title_button = dmc.Group(
-            [title, make_public_button],
-            position="apart",
-        )
-        details = dmc.Text(
-            f"Project ID: {project_id}",
-            size="sm",
-            color="gray",
-            id="permissions-manager-project-details",
-        )
+                # Wrap content in Paper to differentiate it from rest of UI
+                project_header_paper = dmc.Paper(
+                    [
+                        title_button,
+                        details,
+                    ],
+                    p="md",
+                    shadow="sm",
+                    radius="md",
+                    withBorder=True,
+                    style={
+                        "backgroundColor": "#f8f9fa",
+                        "marginBottom": "20px",
+                        "marginTop": "20px",
+                    },
+                )
 
-        # public_private_text = dmc.Text(
-        #     "Sharing status: ",
-        #     size="sm",
-        #     color="gray",
-        # )
-
-        # public_private_badge = dmc.Badge(
-        #     "Public" if project_data.get("is_public") else "Private",
-        #     variant="filled",
-        #     color="green" if project_data.get("is_public") else "violet",
-        #     radius="xl",
-        #     size="sm",
-        # )
-        text_table_header = dmc.Text(
-            "Project Permissions",
-            size="xl",
-            weight="bold",
-            color="black",
-        )
-
-        current_permissions = fetch_project_permissions(
-            project_id=project_id, token=local_store_data["access_token"]
-        )
-        logger.info(f"Current permissions: {current_permissions}")
-        return (
-            GROUP_OPTIONS,
-            current_permissions,
-            [
-                title_button,
-                details,
-                # dmc.Group([public_private_text, public_private_badge]),
-                html.Hr(),
-                text_table_header,
-            ],
-            column_defs,
-        )
+                current_permissions = fetch_project_permissions(
+                    project_id=project_id, token=local_store_data["access_token"]
+                )
+                logger.info(f"Current permissions: {current_permissions}")
+                return (
+                    GROUP_OPTIONS,
+                    current_permissions,
+                    [project_header_paper],
+                    column_defs,
+                )
 
     # Callback to dynamically populate email dropdown based on selected group
     @app.callback(
