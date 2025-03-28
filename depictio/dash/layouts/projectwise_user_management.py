@@ -1085,26 +1085,26 @@ def register_projectwise_user_management_callbacks(app):
 
         project_id = pathname.split("/")[-1]
 
-        # response_project_permissions_update = httpx.post(
-        #     f"{API_BASE_URL}/depictio/api/v1/projects/update_project_permissions",
-        #     headers={
-        #         "Authorization": f"Bearer {local_store_data['access_token']}",
-        #         "Content-Type": "application/json",
-        #     },
-        #     json={
-        #         "project_id": project_id,
-        #         "permissions": convert_objectid_to_str(permissions_payload),
-        #     },
-        # )
-        # if response_project_permissions_update.status_code != 200:
-        #     logger.error(
-        #         f"Error updating project permissions: {response_project_permissions_update.text}"
-        #     )
-        #     return current_rows
+        response_project_permissions_update = httpx.post(
+            f"{API_BASE_URL}/depictio/api/v1/projects/update_project_permissions",
+            headers={
+                "Authorization": f"Bearer {local_store_data['access_token']}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "project_id": project_id,
+                "permissions": convert_objectid_to_str(permissions_payload),
+            },
+        )
+        if response_project_permissions_update.status_code != 200:
+            logger.error(
+                f"Error updating project permissions: {response_project_permissions_update.text}"
+            )
+            return current_rows
 
-        # logger.info(
-        #     f"Updated permissions in API: {response_project_permissions_update.json()}"
-        # )
+        logger.info(
+            f"Updated permissions in API: {response_project_permissions_update.json()}"
+        )
 
         return updated_rows, updated_rows, False
 
