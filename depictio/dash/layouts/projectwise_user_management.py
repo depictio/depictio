@@ -46,8 +46,6 @@ GROUPS_DATA = {}
 GROUP_OPTIONS = []
 
 
-# Initial row data - will be populated from project permissions
-rowData = []
 
 
 def fetch_project_permissions(project_id, token):
@@ -246,6 +244,21 @@ cannot_delete_owner_modal, cannot_delete_owner_modal_id = create_add_with_input_
     opened=False,
 )
 
+cannot_change_last_owner_modal, cannot_change_last_owner_modal_id = (
+    create_add_with_input_modal(
+        id_prefix="cannot-change-last-owner",
+        input_field=None,
+        title="Cannot Change Last Owner Permissions",
+        title_color="red",
+        message="You cannot change your permissions from Owner to Editor or Viewer as you are the last owner of the project. Please assign ownership to another user first.",
+        confirm_button_text="OK",
+        confirm_button_color="red",
+        cancel_button_text="Cancel",
+        icon="mdi:alert-circle",
+        opened=False,
+    )
+)
+
 
 make_project_public_modal, make_project_public_modal_id = create_add_with_input_modal(
     id_prefix="make-project-public",
@@ -276,15 +289,22 @@ layout = dmc.Container(
         user_exists_modal,
         cannot_delete_owner_modal,
         make_project_public_modal,
+        cannot_change_last_owner_modal,
         store_make_project_public_modal,
         html.Div(id="permissions-manager-project-header"),
         # html.Hr(style={"margin": "15px 0"}),
         # Grid first for better visibility
         text_table_header,
+        dcc.Store(
+            id="permissions-manager-grid-store",
+            # data=rowData,
+            # data=
+            storage_type="memory",
+        ),
         dag.AgGrid(
             id="permissions-manager-grid",
             columnDefs=columnDefs,
-            rowData=rowData,
+            # rowData=rowData,
             defaultColDef={
                 "flex": 1,
                 "editable": True,
@@ -429,6 +449,7 @@ def register_projectwise_user_management_callbacks(app):
     @app.callback(
         Output("permissions-manager-input-group", "data"),
         Output("permissions-manager-grid", "rowData"),
+        Output("permissions-manager-grid-store", "data"),
         Output("permissions-manager-project-header", "children"),
         Output("permissions-manager-grid", "columnDefs"),
         Input("permissions-manager-project-header", "children"),
@@ -533,6 +554,7 @@ def register_projectwise_user_management_callbacks(app):
                 logger.info(f"Current permissions: {current_permissions}")
                 return (
                     GROUP_OPTIONS,
+                    current_permissions,
                     current_permissions,
                     [project_header_paper],
                     column_defs,
@@ -864,15 +886,27 @@ def register_projectwise_user_management_callbacks(app):
     # Callback to handle cell clicks and delete actions
     @app.callback(
         Output("permissions-manager-grid", "rowData", allow_duplicate=True),
+        Output("permissions-manager-grid-store", "data", allow_duplicate=True),
+        Output(cannot_change_last_owner_modal_id, "opened"),
         Input("permissions-manager-grid", "cellClicked"),
         Input("permissions-manager-grid", "cellValueChanged"),
+        Input("confirm-cannot-change-last-owner-add-button", "n_clicks"),
+        Input("cancel-cannot-change-last-owner-add-button", "n_clicks"),
         State("permissions-manager-grid", "rowData"),
         State("local-store", "data"),
+        State("permissions-manager-grid-store", "data"),
         State("url", "pathname"),
         prevent_initial_call=True,
     )
     def handle_cell_click_and_delete(
-        clicked_data, value_changed_data, current_rows, local_store_data, pathname
+        clicked_data,
+        value_changed_data,
+        confirm_clicks,
+        cancel_clicks,
+        current_rows,
+        local_store_data,
+        current_rows_store,
+        pathname,
     ):
         triggered_id = ctx.triggered[0]["prop_id"]
         logger.info(f"Triggered ID: {triggered_id}")
@@ -882,6 +916,14 @@ def register_projectwise_user_management_callbacks(app):
         current_owners_ids = set([row["id"] for row in current_rows if row["Owner"]])
 
         updated_rows = list()
+        show_cannot_change_last_owner_modal = False
+
+        # Close modal on confirm or cancel
+        if triggered_id in [
+            "confirm-cannot-change-last-owner-add-button.n_clicks",
+            "cancel-cannot-change-last-owner-add-button.n_clicks",
+        ]:
+            return current_rows_store, current_rows_store, False
 
         # Handle button clicks (delete action)
         if "permissions-manager-grid.cellClicked" == triggered_id and clicked_data:
@@ -904,7 +946,7 @@ def register_projectwise_user_management_callbacks(app):
                     logger.error(
                         f"Error fetching current user data: {response_current_user.text}"
                     )
-                    return current_rows
+                    return current_rows_store, current_rows_store, False
 
                 current_user = response_current_user.json()
                 logger.info(f"Current user: {current_user}")
@@ -912,7 +954,7 @@ def register_projectwise_user_management_callbacks(app):
                 if (current_user["is_admin"] is False) or (
                     current_user["id"] not in current_owners_ids
                 ):
-                    return current_rows
+                    return current_rows_store, current_rows_store, False
 
                 logger.info(f"Delete button clicked for row ID: {row_id}")
                 # Check if trying to delete the last owner
@@ -922,7 +964,7 @@ def register_projectwise_user_management_callbacks(app):
                 if target_row and target_row["Owner"]:
                     owner_count = sum(1 for row in current_rows if row["Owner"])
                     if owner_count <= 1:
-                        return current_rows
+                        return current_rows, current_rows, True
 
                 updated_rows = [
                     row for row in current_rows if str(row["id"]) != str(row_id)
@@ -941,6 +983,44 @@ def register_projectwise_user_management_callbacks(app):
             role_columns = ["Owner", "Editor", "Viewer"]
             if column in role_columns:
                 logger.info("Processing role selection")
+
+                # Get current user info
+                response_current_user = httpx.get(
+                    f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_token",
+                    params={"token": local_store_data["access_token"]},
+                    headers={
+                        "Authorization": f"Bearer {local_store_data['access_token']}"
+                    },
+                )
+
+                if response_current_user.status_code != 200:
+                    logger.error(
+                        f"Error fetching current user data: {response_current_user.text}"
+                    )
+                    return current_rows_store, current_rows_store, False
+
+                current_user = response_current_user.json()
+                current_user_id = current_user.get("id")
+
+                # Check if this is the last owner trying to change their own permissions
+                owner_count = sum(1 for row in current_rows if row["Owner"])
+                target_row = next(
+                    (row for row in current_rows if str(row["id"]) == str(row_id)), None
+                )
+
+                # If the user is the last owner and trying to change their own permissions from Owner to Editor/Viewer
+                if (
+                    owner_count <= 1
+                    and target_row
+                    and target_row["Owner"]
+                    and str(target_row["id"]) == str(current_user_id)
+                    and column != "Owner"
+                ):
+                    logger.info("Last owner trying to change their own permissions")
+                    show_cannot_change_last_owner_modal = True
+                    return current_rows_store, current_rows_store, True
+
+                # Otherwise, proceed with the change
                 updated_rows = current_rows.copy()
 
                 # Find the row that was clicked
@@ -961,7 +1041,7 @@ def register_projectwise_user_management_callbacks(app):
                 logger.info(f"Updated rows: {updated_rows}")
 
         if not updated_rows:
-            return current_rows
+            return current_rows_store, current_rows_store, False
 
         else:
             permissions_payload = {
@@ -1005,28 +1085,28 @@ def register_projectwise_user_management_callbacks(app):
 
         project_id = pathname.split("/")[-1]
 
-        response_project_permissions_update = httpx.post(
-            f"{API_BASE_URL}/depictio/api/v1/projects/update_project_permissions",
-            headers={
-                "Authorization": f"Bearer {local_store_data['access_token']}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "project_id": project_id,
-                "permissions": convert_objectid_to_str(permissions_payload),
-            },
-        )
-        if response_project_permissions_update.status_code != 200:
-            logger.error(
-                f"Error updating project permissions: {response_project_permissions_update.text}"
-            )
-            return current_rows
+        # response_project_permissions_update = httpx.post(
+        #     f"{API_BASE_URL}/depictio/api/v1/projects/update_project_permissions",
+        #     headers={
+        #         "Authorization": f"Bearer {local_store_data['access_token']}",
+        #         "Content-Type": "application/json",
+        #     },
+        #     json={
+        #         "project_id": project_id,
+        #         "permissions": convert_objectid_to_str(permissions_payload),
+        #     },
+        # )
+        # if response_project_permissions_update.status_code != 200:
+        #     logger.error(
+        #         f"Error updating project permissions: {response_project_permissions_update.text}"
+        #     )
+        #     return current_rows
 
-        logger.info(
-            f"Updated permissions in API: {response_project_permissions_update.json()}"
-        )
+        # logger.info(
+        #     f"Updated permissions in API: {response_project_permissions_update.json()}"
+        # )
 
-        return updated_rows
+        return updated_rows, updated_rows, False
 
     # Callback to handle user exists modal
     @app.callback(
