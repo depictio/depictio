@@ -10,7 +10,7 @@ def create_bucket(current_user):
     """
     # Check if the user is an admin
     if not current_user.is_admin:
-        logger.warning(f"Unauthorized bucket creation attempt by user: {current_user.username}")
+        logger.warning(f"Unauthorized bucket creation attempt by user: {current_user.email}")
         raise HTTPException(status_code=403, detail="User is not an admin.")
 
     bucket_name = settings.minio.bucket
