@@ -17,6 +17,7 @@ minio_storage_options = {
     "AWS_ALLOW_HTTP": "true",
     "AWS_S3_ALLOW_UNSAFE_RENAME": "true",
 }
+logger.info(f"minio_storage_options {minio_storage_options}")
 
 minios3_external_config = MinIOS3Config(
     provider="minio",

@@ -6,7 +6,7 @@ services:
       dockerfile: .devcontainer/Dockerfile
     init: true
     volumes:
-      - ..:/workspace:cached
+      - ./:/workspace:cached
     command: sleep infinity
     user: vscode
     depends_on:
