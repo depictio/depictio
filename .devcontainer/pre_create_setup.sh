@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/zsh
 
 # Create required directories with proper permissions
 rm -rdf minio_data/
