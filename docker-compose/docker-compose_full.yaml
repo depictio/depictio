@@ -57,6 +57,7 @@ services:
       - ./depictio:/app/depictio
       - ./data:/app/data
       - ./minio_data:/minio_data
+      # - ./jbrowse-watcher-plugin/sessions:/jbrowse-watcher-plugin/sessions
       - ./.env:/app/.env
       - ../depictio-cli:/app/depictio-cli
       - ../depictio-cli/configs:/configs
@@ -66,3 +67,14 @@ services:
     depends_on:
       - mongo
       - minio
+
+  # jbrowse2:
+  #   # image: registry.git.embl.de/tweber/depictio/jbrowse2:latest
+  #   build:
+  #     dockerfile: docker-images/Dockerfile_jbrowse.dev.240424.dockerfile
+  #   ports: 
+  #     - 3000:3000
+  #     - 9010:9010
+  #   volumes:
+  #     - "./jbrowse-watcher-plugin:/usr/src/plugin"
+  #     - "./jbrowse-watcher-plugin/sessions:/usr/src/jbrowse/plugin/sessions"
