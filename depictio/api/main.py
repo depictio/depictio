@@ -1,4 +1,3 @@
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from depictio.api.v1.endpoints.routers import router
@@ -8,9 +7,18 @@ os.environ["DEPICTIO_CONTEXT"] = "server"
 from depictio_models.utils import get_depictio_context
 DEPICTIO_CONTEXT = get_depictio_context()
 
-# from db import initialize_db
 from dotenv import load_dotenv
 load_dotenv(BASE_PATH.parent / ".env")
+
+# Import initialization module
+from depictio.api.v1.initialization import run_initialization
+
+# Initialize system before creating the app
+try:
+    run_initialization()
+except Exception as e:
+    print(f"Initialization failed: {e}")
+    raise
 
 app = FastAPI(title="Depictio API", version="0.1.0", debug=True)
 
