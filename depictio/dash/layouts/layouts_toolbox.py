@@ -13,20 +13,20 @@ def create_dashboard_modal(
 ):
     """
     Creates a stylish modal for dashboard creation with improved visual design.
-    
+
     Parameters:
     - dashboard_title: Pre-filled dashboard title (optional)
     - projects: List of project options for the dropdown
     - selected_project: Pre-selected project (optional)
     - opened: Whether the modal is initially open
     - id_prefix: Prefix for all IDs in the modal
-    
+
     Returns:
     - modal: The dashboard creation modal
     - modal_id: The ID of the modal for callbacks
     """
     modal_id = f"{id_prefix}-modal"
-    
+
     modal = dmc.Modal(
         opened=opened,
         id=modal_id,
@@ -38,7 +38,8 @@ def create_dashboard_modal(
         overlayBlur=3,
         shadow="xl",
         radius="md",
-        size="xl",
+        size=1000,
+        # size=2000,
         zIndex=10000,
         styles={
             "modal": {
@@ -46,6 +47,9 @@ def create_dashboard_modal(
             }
         },
         children=[
+            # dmc.Grid(
+            #     [
+            #         dmc.Col(
             dmc.Stack(
                 spacing="xl",
                 children=[
@@ -69,9 +73,7 @@ def create_dashboard_modal(
                         ],
                     ),
                     # Divider
-                    dmc.Divider(
-                        style={"marginTop": 5, "marginBottom": 5}
-                    ),
+                    dmc.Divider(style={"marginTop": 5, "marginBottom": 5}),
                     # Form elements
                     dmc.Stack(
                         spacing="md",
@@ -107,6 +109,31 @@ def create_dashboard_modal(
                                 icon=DashIconify(icon="mdi:jira"),
                                 style={"width": "100%"},
                             ),
+                            # Available templates dropdown
+                            # dmc.Select(
+                            #     label="Available templates",
+                            #     description="Select a template for your dashboard",
+                            #     data=[],  # This would be populated with actual templates
+                            #     id=f"{id_prefix}-templates",
+                            #     searchable=True,
+                            #     clearable=True,
+                            #     icon=DashIconify(icon="mdi:palette"),
+                            #     style={"width": "100%"},
+                            # ),
+                            # Template selection message
+                            # dmc.Center(
+                            #     dmc.Badge(
+                            #         "You picked a Depictio template for the workflow X",
+                            #         radius="xl",
+                            #         size="xl",
+                            #         # variant="gradient",
+                            #         # gradient={
+                            #         #     "from": "orange",
+                            #         #     "to": "red",
+                            #         # },
+                            #         className="animated-badge",
+                            #     )
+                            # ),
                         ],
                     ),
                     # Buttons
@@ -133,10 +160,26 @@ def create_dashboard_modal(
                     ),
                 ],
             ),
+            #     span=6,
+            # ),
+            # dmc.Col(
+            #     # Image
+            #     dmc.Image(
+            #         src="https://placehold.co/600x400",
+            #         alt="Placeholder image",
+            #         width="100%",
+            #         height="auto",
+            #         fit="cover",
+            #     ),
+            #     span=6,
+            # ),
+            # ]
+            # ),
         ],
     )
-    
+
     return modal, modal_id
+
 
 # Define the delete confirmation modal function
 def create_delete_confirmation_modal(
