@@ -1,3 +1,4 @@
+import dash_mantine_components as dmc
 import dash_ag_grid as dag
 from dash import Dash, html, Input, Output, State, callback
 import json
@@ -16,84 +17,108 @@ rowData = [
 ]
 
 columnDefs = [
-    # set types
     {"field": "id", "editable": False},
     {"field": "email", "editable": True},
     {
         "field": "Owner",
         "cellRenderer": "agCheckboxCellRenderer",
+        "headerName": '<span style="color: #228BE6; font-weight: bold;">Owner</span>',
+        "suppressHtmlEscaping": True,
     },
     {
         "field": "Editor",
         "cellRenderer": "agCheckboxCellRenderer",
+        "headerName": '<span style="color: #20c997; font-weight: bold;">Editor</span>',
+        "suppressHtmlEscaping": True,
     },
     {
         "field": "Viewer",
         "cellRenderer": "agCheckboxCellRenderer",
+        "headerName": '<span style="color: #868e96; font-weight: bold;">Viewer</span>',
+        "suppressHtmlEscaping": True,
     },
 ]
 
 app.layout = html.Div(
     [
-        dag.AgGrid(
-            id="grid-cell-data-types-editors",
-            columnDefs=columnDefs,
-            rowData=rowData,
-            defaultColDef={"flex": 1, "editable": True},
-            dashGridOptions={"animateRows": False},
+        # dmc.Badge(
+        #     "Orange red",
+        #     variant="gradient",
+        #     gradient={"from": "orange", "to": "red"},
+        # ),
+        # dag.AgGrid(
+        #     id="grid-cell-data-types-editors",
+        #     columnDefs=columnDefs,
+        #     rowData=rowData,
+        #     defaultColDef={"flex": 1, "editable": True},
+        #     dashGridOptions={"animateRows": False},
+        # ),
+        # html.Div(id="cell-update-output"),
+        # dmc.Group(
+        #     children=[
+        #         dmc.Badge(
+        #             "Indigo cyan",
+        #             variant="gradient",
+        #             gradient={"from": "indigo", "to": "cyan"},
+        #         ),
+        #         dmc.Badge(
+        #             "Lime green",
+        #             variant="gradient",
+        #             gradient={"from": "teal", "to": "lime", "deg": 105},
+        #         ),
+        #         dmc.Badge(
+        #             "Teal blue",
+        #             variant="gradient",
+        #             gradient={"from": "teal", "to": "blue", "deg": 60},
+        #         ),
+        #         dmc.Badge(
+        #             "Orange red",
+        #             variant="gradient",
+        #             gradient={"from": "orange", "to": "red"},
+        #         ),
+        #         dmc.Badge(
+        #             "Grape pink",
+        #             variant="gradient",
+        #             gradient={"from": "grape", "to": "pink", "deg": 35},
+        #         ),
+        #     ]
+        # ),
+        dmc.Badge(
+            "You picked a Depictio template for the workflow X",
+            radius="xl",
+            size="xl",
+            className="animated-badge"
         ),
-        html.Div(id="cell-update-output"),
-    ],
+    ]
 )
 
 
-@callback(
-    Output("grid-cell-data-types-editors", "rowData"),
-    Input("grid-cell-data-types-editors", "cellValueChanged"),
-    State("grid-cell-data-types-editors", "rowData"),
-)
-def update_role_selection(cell_changed, current_rows):
-    if not cell_changed:
-        return dash.no_update
+# @callback(
+#     Output("grid-cell-data-types-editors", "rowData"),
+#     Input("grid-cell-data-types-editors", "cellValueChanged"),
+#     State("grid-cell-data-types-editors", "rowData"),
+# )
+# def update_role_selection(cell_changed, current_rows):
+#     if not cell_changed:
+#         return dash.no_update
 
-    print(cell_changed)
-    print(current_rows)
+#     cell_changed = cell_changed[0]
+#     changed_field = cell_changed["colId"]
+#     row_index = cell_changed["rowIndex"]
+#     new_value = cell_changed["value"]
 
-    cell_changed = cell_changed[0]  # Assuming there's only one cell changed for now
+#     role_columns = ["Owner", "Editor", "Viewer"]
+#     if changed_field in role_columns and new_value is True:
+#         updated_data = [row.copy() for row in current_rows]
+#         changed_row = updated_data[row_index]
 
-    # Get the changed cell information
-    changed_field = cell_changed["colId"]
-    row_index = cell_changed["rowIndex"]
-    new_value = cell_changed["value"]
+#         for role in role_columns:
+#             changed_row[role] = False
+#         changed_row[changed_field] = True
 
-    # Only handle changes to the role columns
-    role_columns = ["Owner", "Editor", "Viewer"]
-    if changed_field in role_columns and new_value is True:
-        print("TOTO")
-        # Create a deep copy of the current row data
-        updated_data = []
-        for row in current_rows:
-            updated_data.append(row.copy())
+#         return updated_data
 
-        print(updated_data)
-
-        # Get the row that was changed
-        changed_row = updated_data[0]  # Assuming there's only one row for now
-        print(f"Changed row: {changed_row}")
-
-        # Set all role columns to False for the changed row
-        for role in role_columns:
-            print(f"Processing role: {role}")
-            changed_row[role] = False
-            print(f"After setting {role} to False: {changed_row}")
-
-        # Set the changed column to True
-        changed_row[changed_field] = True
-        print(f"After setting {changed_field} to True: {changed_row}")
-
-        return updated_data
-
-    return current_rows
+#     return current_rows
 
 
 if __name__ == "__main__":
