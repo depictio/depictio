@@ -37,9 +37,6 @@ minios3_internal_config = MinIOS3Config(
 )
 
 
-S3_storage_checks(minios3_internal_config)
-
-
 # Initialize your S3 client outside of your endpoint function
 s3_client = boto3.client(
     "s3",
