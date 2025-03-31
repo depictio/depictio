@@ -526,9 +526,42 @@ def render_project_item(
                     dmc.Group(
                         children=[
                             dmc.Text(
+                                "Database ID:", weight=700, className="label-text"
+                            ),
+                            dmc.Text(str(project.id), weight=500),
+                        ],
+                        spacing="xs",
+                    ),
+                    dmc.Group(
+                        children=[
+                            dmc.Text(
                                 "Description:", weight=700, className="label-text"
                             ),
-                            dmc.Text(project.description, weight=500),
+                            dmc.Text(
+                                project.description
+                                if project.description
+                                else "Not defined",
+                                weight=500,
+                            ),
+                        ],
+                        spacing="xs",
+                    ),
+                    dmc.Group(
+                        children=[
+                            dmc.Text(
+                                "Data Management Platform URL:",
+                                weight=700,
+                                className="label-text",
+                            ),
+                            dmc.Anchor(
+                                project.data_management_platform_project_url,
+                                href=project.data_management_platform_project_url,
+                                target="_blank",
+                                weight=500,
+                            ) if project.data_management_platform_project_url else dmc.Text(
+                                "Not defined",
+                                weight=500,
+                            ),
                         ],
                         spacing="xs",
                     ),
@@ -558,6 +591,25 @@ def render_project_item(
                     ),
                     dmc.Group(
                         children=[
+                            dmc.Text("Editors:", weight=700, className="label-text"),
+                            dmc.Text(
+                                str(
+                                    " ; ".join(
+                                        [
+                                            f"{o.email} - {o.id}"
+                                            for o in project.permissions.editors
+                                        ]
+                                    )
+                                )
+                                if project.permissions.editors
+                                else "None",
+                                weight=500,
+                            ),
+                        ],
+                        spacing="xs",
+                    ),
+                    dmc.Group(
+                        children=[
                             dmc.Text("Viewers:", weight=700, className="label-text"),
                             dmc.Text(
                                 str(
@@ -567,8 +619,23 @@ def render_project_item(
                                             for o in project.permissions.viewers
                                         ]
                                     )
-                                ),
+                                )
+                                if project.permissions.viewers
+                                else "None",
                                 weight=500,
+                            ),
+                        ],
+                        spacing="xs",
+                    ),
+                    dmc.Group(
+                        children=[
+                            dmc.Text("Is public:", weight=700, className="label-text"),
+                            dmc.Badge(
+                                "Public" if project.is_public else "Private",
+                                color="green" if project.is_public else "violet",
+                                variant="filled",
+                                radius="xl",
+                                size="xs",
                             ),
                         ],
                         spacing="xs",
@@ -600,19 +667,20 @@ def render_project_item(
 
     # Determine user's role in the project
     role = "Viewer"  # Default role
-    color = "gray"   # Default color
-    
+    color = "gray"  # Default color
+
     if str(current_user.id) in [str(o.id) for o in project.permissions.owners]:
         role = "Owner"
         color = "blue"
-    elif hasattr(project.permissions, "editors") and str(current_user.id) in [str(e.id) for e in project.permissions.editors]:
+    elif hasattr(project.permissions, "editors") and str(current_user.id) in [
+        str(e.id) for e in project.permissions.editors
+    ]:
         role = "Editor"
         color = "teal"
     elif str(current_user.id) in [str(v.id) for v in project.permissions.viewers]:
         role = "Viewer"
         color = "gray"
 
-    
     badge_ownership = dmc.Badge(
         children=role,
         color=color,
@@ -626,7 +694,7 @@ def render_project_item(
                     [
                         badge_ownership,
                         dmc.Text(f"{project.name}", weight=700),
-                        dmc.Text(f" ({str(project.id)})", weight=500),
+                        # dmc.Text(f" ({str(project.id)})", weight=500),
                     ],
                 ),
             ),
