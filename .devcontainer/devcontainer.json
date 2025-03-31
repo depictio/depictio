@@ -5,14 +5,16 @@
     "./docker-compose.devcontainer.yaml"
   ],
   "service": "app", // devcontainer (additional container in the docker compose)
-  "workspaceFolder": "/workspace",
+  // "workspaceFolder": "/app/depictio",
+  "workspaceFolder": "/workspace/",
   "customizations": {
     "vscode": {
       "extensions": [
         "ms-python.python",
         "ms-azuretools.vscode-docker",
-        "ms-python.anaconda-extension-pack",
-        "GitHub.copilot"
+        // "ms-python.anaconda-extension-pack",
+        "GitHub.copilot",
+        "saoudrizwan.claude-dev"
       ],
       "settings": {
         "terminal.integrated.shell.linux": "/bin/zsh"
@@ -21,7 +23,7 @@
   },
   // "initializeCommand": "init", // script to run before the containers are started
   "initializeCommand": ".devcontainer/pre_create_setup.sh",
-  "postCreateCommand": "post-create.sh", // script to run after the containers are started
+  "postCreateCommand": "post_create_setup.sh", // script to run after the containers are started
   "forwardPorts": [
     27018,
     3000,
