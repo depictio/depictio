@@ -133,7 +133,7 @@ def render_dashboardwise_layout(dashboard):
                                                         "Owner: ", weight=700, size="sm"
                                                     ),
                                                     dmc.Text(
-                                                        dashboard_owner, size="sm"
+                                                        dashboard_owner_raw['email'], size="sm"
                                                     ),
                                                 ]
                                             ),
@@ -1062,7 +1062,44 @@ def register_admin_callbacks(app):
                         fluid=True,
                     )
                 else:
-                    content = html.P("No projects available.")
+                    content = dmc.Center(
+                        dmc.Paper(
+                            children=[
+                                dmc.Stack(
+                                    children=[
+                                        dmc.Center(
+                                            DashIconify(
+                                                icon="material-symbols:folder-off-outline",
+                                                width=64,
+                                                height=64,
+                                                color="#6c757d"
+                                            )
+                                        ),
+                                        dmc.Text(
+                                            "No projects available",
+                                            align="center",
+                                            weight=700,
+                                            size="xl"
+                                        ),
+                                        dmc.Text(
+                                            "Projects created by users will appear here.",
+                                            align="center",
+                                            color="dimmed",
+                                            size="sm"
+                                        )
+                                    ],
+                                    align="center",
+                                    spacing="sm"
+                                )
+                            ],
+                            shadow="sm",
+                            radius="md",
+                            p="xl",
+                            withBorder=True,
+                            style={"width": "100%", "maxWidth": "500px"}
+                        ),
+                        style={"height": "300px"}
+                    )
 
                 return content, {"display": "none"}
             except Exception as e:
