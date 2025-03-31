@@ -6,7 +6,7 @@ from depictio.api.v1.configs.logging import logger
 # from depictio_models.models.base import convert_objectid_to_str
 from depictio_models.models.users import User, UserBase
 from depictio_models.models.base import convert_objectid_to_str
-
+from depictio_models.utils import convert_model_to_dict
 
 def generate_agent_config(current_user, request):
     logger.debug(f"Current user type: {type(current_user)}")
@@ -25,7 +25,7 @@ def generate_agent_config(current_user, request):
     )
 
     logger.debug(f"Current user base: {current_userbase}")
-    current_userbase = convert_objectid_to_str(current_userbase.dict())
+    current_userbase = convert_model_to_dict(current_userbase, exclude_none=True)
 
     # Keep only email and is_admin fields from user
     token = request["token"]
@@ -36,12 +36,16 @@ def generate_agent_config(current_user, request):
     # Depictio API config
     from depictio.api.v1.configs.config import API_BASE_URL
 
+    # S3 API config
+    from depictio.api.v1.s3 import minios3_external_config
+
     # FIXME: Temporary fix for local development - docker compose
     tmp_api_base_url = API_BASE_URL.replace("depictio_backend", "localhost")
 
     depictio_agent_config = {
         "api_base_url": tmp_api_base_url,
         "user": current_userbase,
+        "s3": minios3_external_config.model_dump(),
     }
 
     return depictio_agent_config
@@ -123,6 +127,33 @@ def check_if_token_is_valid(token: str) -> bool:
     else:
         return False
 
+
+def fetch_user_from_id(user_id: str, return_tokens: bool = False) -> User:
+    from depictio.api.v1.db import users_collection  # Move import inside the function
+
+    if return_tokens:
+        # Find the user in the database and only returns tokens with token_lifetime = "long-lived"
+        user = users_collection.find_one({"_id": ObjectId(user_id)})
+        # user = users_collection.find_one({"_id": ObjectId(user_id) }, {"tokens": {"$elemMatch": {"token_lifetime": "long-lived"}}})
+
+        # Filter the tokens to only return the long-lived tokens
+        user["tokens"] = [token for token in user["tokens"] if token["token_lifetime"] == "long-lived"]
+
+    else:
+        # Find the user in the database and exclude the tokens field
+        logger.info(f"Fetching user with ID: {user_id} of type {type(user_id)}")
+        user = users_collection.find_one({"_id": ObjectId(user_id)}, {"tokens": 0})
+        logger.info(f"User: {user}")
+    logger.debug(f"Fetching user with ID: {user_id} : {user}")
+    user = User.from_mongo(user)
+    logger.debug("After conversion to User model")
+    logger.debug(user)
+
+    if user:
+        # user = user.dict()
+        return user
+    else:
+        return None
 
 def fetch_user_from_email(email: str, return_tokens: bool = False) -> User:
     from depictio.api.v1.db import users_collection  # Move import inside the function
