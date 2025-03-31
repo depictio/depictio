@@ -1,0 +1,8 @@
+{
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true,
+    "python.envFile": "/Users/tweber/Gits/workspaces/depictio/.env",
+    "python.testing.pytestArgs": [
+        "depictio"
+    ]
+}
