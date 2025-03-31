@@ -1,5 +1,8 @@
 #!/bin/zsh
 
+# This script is run before the container is created.
+git submodule update --init --recursive
+
 # Create required directories with proper permissions
 rm -rdf minio_data/
 rm -rdf depictio-cli/
