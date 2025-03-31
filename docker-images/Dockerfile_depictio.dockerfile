@@ -47,7 +47,7 @@ RUN sed -i 's|http://deb.debian.org|http://ftp.us.debian.org|g' /etc/apt/sources
 
 # Install dependencies using apt
 RUN apt-get update && apt-get install --fix-missing -y \
-    xvfb xauth sudo \
+    xvfb xauth sudo git git-lfs curl \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
