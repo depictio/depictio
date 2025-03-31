@@ -1,7 +1,7 @@
 from datetime import datetime
 from pathlib import PosixPath
-import dash_mantine_components as dmc
-from dash import dcc
+# import dash_mantine_components as dmc
+# from dash import dcc
 
 # import jsonschema
 import numpy as np
@@ -220,11 +220,11 @@ agg_functions = {
         "title": "Integer",
         "input_methods": {
             "Slider": {
-                "component": dcc.Slider,
+                "component": "dcc.Slider",
                 "description": "Single value slider",
             },
             "RangeSlider": {
-                "component": dcc.RangeSlider,
+                "component": "dcc.RangeSlider",
                 "description": "Two values slider",
             },
         },
@@ -305,11 +305,11 @@ agg_functions = {
         "title": "Floating Point",
         "input_methods": {
             "Slider": {
-                "component": dcc.Slider,
+                "component": "dcc.Slider",
                 "description": "Single value slider",
             },
             "RangeSlider": {
-                "component": dcc.RangeSlider,
+                "component": "dcc.RangeSlider",
                 "description": "Two values slider",
             },
         },
@@ -391,11 +391,11 @@ agg_functions = {
         "description": "Boolean values",
         "input_methods": {
             "Checkbox": {
-                "component": dmc.Checkbox,
+                "component": "dmc.Checkbox",
                 "description": "Checkbox",
             },
             "Switch": {
-                "component": dmc.Switch,
+                "component": "dmc.Switch",
                 "description": "Switch",
             },
         },
@@ -489,19 +489,19 @@ agg_functions = {
         "title": "Object",
         "input_methods": {
             "TextInput": {
-                "component": dmc.TextInput,
+                "component": "dmc.TextInput",
                 "description": "Text input box",
             },
             "Select": {
-                "component": dmc.Select,
+                "component": "dmc.Select",
                 "description": "Select",
             },
             "MultiSelect": {
-                "component": dmc.MultiSelect,
+                "component": "dmc.MultiSelect",
                 "description": "MultiSelect",
             },
             "SegmentedControl": {
-                "component": dmc.SegmentedControl,
+                "component": "dmc.SegmentedControl",
                 "description": "SegmentedControl",
             },
         },
@@ -528,19 +528,19 @@ agg_functions = {
         "title": "Object",
         "input_methods": {
             "TextInput": {
-                "component": dmc.TextInput,
+                "component": "dmc.TextInput",
                 "description": "Text input box",
             },
             "Select": {
-                "component": dmc.Select,
+                "component": "dmc.Select",
                 "description": "Select",
             },
             "MultiSelect": {
-                "component": dmc.MultiSelect,
+                "component": "dmc.MultiSelect",
                 "description": "MultiSelect",
             },
             "SegmentedControl": {
-                "component": dmc.SegmentedControl,
+                "component": "dmc.SegmentedControl",
                 "description": "SegmentedControl",
             },
         },
