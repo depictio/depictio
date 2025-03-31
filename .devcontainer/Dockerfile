@@ -2,33 +2,29 @@ FROM mcr.microsoft.com/devcontainers/python:1-3.12-bookworm
 
 ENV PYTHONUNBUFFERED 1
 
-# Update args in docker-compose.yaml to set the UID/GID of the "vscode" user.
+# Update args in docker-compose.yaml to set the UID/GID of the "vscode" user
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
-RUN if [ "$USER_GID" != "1000" ] || [ "$USER_UID" != "1000" ]; then groupmod --gid $USER_GID vscode && usermod --uid $USER_UID --gid $USER_GID vscode; fi
+RUN if [ "$USER_GID" != "1000" ] || [ "$USER_UID" != "1000" ]; then \
+    groupmod --gid $USER_GID vscode && \
+    usermod --uid $USER_UID --gid $USER_GID vscode; \
+    fi
+
+# Install git, git-lfs, and curl
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends git git-lfs curl && \
+    rm -rf /var/lib/apt/lists/* && \
+    git lfs install
 
 # Copy install script
-COPY ./post-create.sh /bin
+COPY .devcontainer/post_create_setup.sh /bin
 
-# Install secondary Python version and uv package manager
+# Switch to vscode user and install pipenv package manager for creating venvs
 USER vscode
-RUN <<EOF
-curl -sS https://pyenv.run | /bin/sh
-INIT_PYENV='
-export PYENV_ROOT="$HOME/.pyenv"
-[ -d "$PYENV_ROOT/bin" ] && export PATH="$PYENV_ROOT/bin:$PATH"
-eval "$(pyenv init -)"
-'
-echo "$INIT_PYENV" >> ~/.profile
-echo "$INIT_PYENV" >> ~/.bashrc
-. ~/.profile
-pyenv install --skip-existing 3.9
-pyenv global system 3.9
 
-# Install uv package manager
-curl -LsSf https://astral.sh/uv/install.sh | sh
-echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.profile
-echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc
-EOF
+# Install uv 
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+RUN echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && \
+    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
 
 CMD ["sleep", "infinity"]
