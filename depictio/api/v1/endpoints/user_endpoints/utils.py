@@ -16,7 +16,7 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import (
 
 # from depictio.api.v1.endpoints.user_endpoints.models import Token
 from depictio_models.models.base import convert_objectid_to_str
-from depictio_models.models.users import Token, UserBaseGroupLess
+from depictio_models.models.users import Token, UserBaseGroupLess, Group
 
 
 def login_user(email):
@@ -69,7 +69,6 @@ def get_groups(TOKEN):
         return []
 
 
-from depictio_models.models.users import Group
 
 
 def get_users_group() -> Group:
