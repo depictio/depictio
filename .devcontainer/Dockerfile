@@ -10,7 +10,7 @@ RUN if [ "$USER_GID" != "1000" ] || [ "$USER_UID" != "1000" ]; then groupmod --g
 # Copy install script
 COPY ./post-create.sh /bin
 
-# Install secondary Python version
+# Install secondary Python version and uv package manager
 USER vscode
 RUN <<EOF
 curl -sS https://pyenv.run | /bin/sh
@@ -24,6 +24,11 @@ echo "$INIT_PYENV" >> ~/.bashrc
 . ~/.profile
 pyenv install --skip-existing 3.9
 pyenv global system 3.9
+
+# Install uv package manager
+curl -LsSf https://astral.sh/uv/install.sh | sh
+echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.profile
+echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc
 EOF
 
 CMD ["sleep", "infinity"]
