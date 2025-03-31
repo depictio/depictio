@@ -91,10 +91,9 @@ ENV PYTHONPATH="${PYTHONPATH}:/mnt"
 # -----------------------------
 # Install depictio-models
 # -----------------------------
-# COPY ./depictio-models /app/depictio-models
+COPY ./depictio-models /app/depictio-models
 USER root
-# RUN rm -rf /app/depictio-models/depictio_models.egg-info
-RUN git clone https://github.com/depictio/depictio-models.git /app/depictio-models
+RUN rm -rf /app/depictio-models/depictio_models.egg-info
 RUN pip install -e /app/depictio-models --config-settings "editable_mode=compat"
 USER appuser  # Switch back if needed
 # RUN pip install -e /app/depictio-models --config-settings "editable_mode=compat"
