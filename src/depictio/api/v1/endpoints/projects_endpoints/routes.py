@@ -319,16 +319,17 @@ async def delete_project(
 
 # endpoint and PermissionRequest to add or update permission of a user to a project
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 from depictio_models.models.users import Permission
 
 
 class ProjectPermissionRequest(BaseModel):
     project_id: str
     permissions: dict
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    class Config:
-        arbitrary_types_allowed = True
+    # class Config:
+    #     arbitrary_types_allowed = True
 
 
 @projects_endpoint_router.post("/update_project_permissions")
