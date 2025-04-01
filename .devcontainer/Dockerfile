@@ -12,9 +12,8 @@ RUN if [ "$USER_GID" != "1000" ] || [ "$USER_UID" != "1000" ]; then \
 
 # Install git, git-lfs, and curl
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends git git-lfs curl && \
-    rm -rf /var/lib/apt/lists/* && \
-    git lfs install
+    apt-get install -y --no-install-recommends&& \
+    rm -rf /var/lib/apt/lists/*
 
 # Copy install script
 COPY .devcontainer/post_create_setup.sh /bin
@@ -23,8 +22,8 @@ COPY .devcontainer/post_create_setup.sh /bin
 USER vscode
 
 # Install uv 
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
-RUN echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && \
-    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+# RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+# RUN echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && \
+#     echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
 
 CMD ["sleep", "infinity"]
