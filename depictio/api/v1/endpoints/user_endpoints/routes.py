@@ -11,8 +11,11 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     fetch_user_from_email,
     fetch_user_from_id,
     fetch_user_from_token,
-    generate_agent_config,
+    # generate_agent_config,
     purge_expired_tokens_from_user,
+)
+from depictio.api.v1.endpoints.user_endpoints.agent_config_utils import (
+    generate_agent_config,
 )
 
 from depictio.api.v1.endpoints.user_endpoints.utils import (

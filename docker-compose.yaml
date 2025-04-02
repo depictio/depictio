@@ -14,8 +14,8 @@ services:
     volumes:
       - "./minio_data:/data"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_ROOT_USER: ${DEPICTIO_MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${DEPICTIO_MINIO_ROOT_PASSWORD}
     command: server /data --console-address :9001
     ports:
       - "9000:9000"
@@ -61,6 +61,8 @@ services:
       - ../depictio-cli:/app/depictio-cli
       - ../depictio-cli/configs:/configs
       - ../depictio-models:/app/depictio-models
+    environment:
+        DEPICTIO_CONTAINER: "True"
     command: ["python", "depictio/api/run.py"]
     user: "${UID:-1000}:${GID:-1000}"
     depends_on:

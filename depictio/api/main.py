@@ -1,17 +1,21 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from depictio.api.v1.endpoints.routers import router
+from depictio.api.v1.initialization import run_initialization
 from depictio import BASE_PATH
-import os 
+import os
+from dotenv import load_dotenv
+import logging
+
 os.environ["DEPICTIO_CONTEXT"] = "server"
 from depictio_models.utils import get_depictio_context
+
 DEPICTIO_CONTEXT = get_depictio_context()
 
-from dotenv import load_dotenv
-load_dotenv(BASE_PATH.parent / ".env")
 
-# Import initialization module
-from depictio.api.v1.initialization import run_initialization
+load_dotenv(BASE_PATH.parent / ".env", override=False)
+logging.info(f"Current os env vars after loading .env: {os.environ}")
+
 
 # Initialize system before creating the app
 try:
