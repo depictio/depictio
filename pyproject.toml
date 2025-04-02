@@ -4,6 +4,7 @@ version = "0.0.3"
 description = "Depictio API & Frontend"
 readme = "README.md"
 requires-python = ">=3.8"
+license = {text = "MIT"}
 dependencies = [
   "bcrypt==4.2.1",
   "boto3==1.36.21",
@@ -47,7 +48,6 @@ authors = [
 urls = { Homepage = "http://github.com/depictio/depictio" }
 classifiers = [
   "Programming Language :: Python :: 3",
-  "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent"
 ]
 
@@ -59,6 +59,9 @@ depictio-dash = "depictio.dash.app:main"
 [build-system]
 requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["depictio"]
 
 [tool.mypy]
 exclude = "build/"
