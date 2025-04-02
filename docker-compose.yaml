@@ -30,7 +30,7 @@ services:
     ports:
       - 5080:5080
     volumes:
-      - ./src/depictio:/app/depictio
+      - ./depictio:/app/depictio
       # - /Users/tweber/Gits/depictio-cli/configs:/configs
       - ./data:/app/data
       - ./minio_data:/minio_data
@@ -54,7 +54,7 @@ services:
       - 8058:8058
     volumes:
       - $PWD/depictio-example-data:/app/depictio-example-data
-      - ./src/depictio:/app/depictio
+      - ./depictio:/app/depictio
       - ./data:/app/data
       - ./minio_data:/minio_data
       - ./.env:/app/.env
