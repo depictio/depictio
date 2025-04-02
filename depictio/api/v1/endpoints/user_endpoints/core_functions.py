@@ -2,53 +2,8 @@ from datetime import datetime
 from bson import ObjectId
 from depictio.api.v1.configs.logging import logger
 
-# from depictio.api.v1.endpoints.user_endpoints.models import User, UserBase
 # from depictio_models.models.base import convert_objectid_to_str
-from depictio_models.models.users import User, UserBase
-from depictio_models.models.base import convert_objectid_to_str
-from depictio_models.utils import convert_model_to_dict
-
-def generate_agent_config(current_user, request):
-    logger.debug(f"Current user type: {type(current_user)}")
-    logger.debug(f"Current user: {current_user}")
-    logger.debug(f"Request: {request}")
-
-
-    # convert to dict if it is a User object
-    if isinstance(current_user, User):
-        current_user = current_user.dict()
-    
-
-    current_userbase = UserBase(
-        **current_user
-        # **current_user.dict(exclude={"tokens", "is_active", "is_verified", "last_login", "registration_date", "password", "current_access_token"})
-    )
-
-    logger.debug(f"Current user base: {current_userbase}")
-    current_userbase = convert_model_to_dict(current_userbase, exclude_none=True)
-
-    # Keep only email and is_admin fields from user
-    token = request["token"]
-
-    # Add token to user
-    current_userbase["token"] = token
-
-    # Depictio API config
-    from depictio.api.v1.configs.config import API_BASE_URL
-
-    # S3 API config
-    from depictio.api.v1.s3 import minios3_external_config
-
-    # FIXME: Temporary fix for local development - docker compose
-    tmp_api_base_url = API_BASE_URL.replace("depictio_backend", "localhost")
-
-    depictio_agent_config = {
-        "api_base_url": tmp_api_base_url,
-        "user": current_userbase,
-        "s3": minios3_external_config.model_dump(),
-    }
-
-    return depictio_agent_config
+from depictio_models.models.users import User
 
 
 def add_token_to_user(user, token):
@@ -80,7 +35,6 @@ def add_token_to_user(user, token):
 
 def purge_expired_tokens_from_user(user_id):
     from depictio.api.v1.db import users_collection
-
     logger.debug(f"Current user ID: {user_id}")
 
     if isinstance(user_id, str):
@@ -98,7 +52,11 @@ def purge_expired_tokens_from_user(user_id):
     logger.debug(f"Tokens: {tokens}")
 
     # Remove expired tokens, convert expire_datetime from that format (2024-08-21 02:26:39) to datetime object
-    tokens = [e for e in tokens if datetime.strptime(e["expire_datetime"], "%Y-%m-%d %H:%M:%S") > datetime.now()]
+    tokens = [
+        e
+        for e in tokens
+        if datetime.strptime(e["expire_datetime"], "%Y-%m-%d %H:%M:%S") > datetime.now()
+    ]
     logger.debug(f"Tokens after deletion: {tokens}")
 
     # Update the user with the new tokens
@@ -115,11 +73,21 @@ def purge_expired_tokens_from_user(user_id):
 
 def check_if_token_is_valid(token: str) -> bool:
     from depictio.api.v1.db import users_collection
-
     # Check if the token exists in the database and has not expired
 
     # Query the database for the user with a non-expired token
-    user = users_collection.find_one({"tokens": {"$elemMatch": {"access_token": token, "expire_datetime": {"$gt": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}}}})
+    user = users_collection.find_one(
+        {
+            "tokens": {
+                "$elemMatch": {
+                    "access_token": token,
+                    "expire_datetime": {
+                        "$gt": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    },
+                }
+            }
+        }
+    )
     # logger.info(f"Checking token: {token} : {user}")
 
     if user:
@@ -129,15 +97,16 @@ def check_if_token_is_valid(token: str) -> bool:
 
 
 def fetch_user_from_id(user_id: str, return_tokens: bool = False) -> User:
-    from depictio.api.v1.db import users_collection  # Move import inside the function
-
+    from depictio.api.v1.db import users_collection
     if return_tokens:
         # Find the user in the database and only returns tokens with token_lifetime = "long-lived"
         user = users_collection.find_one({"_id": ObjectId(user_id)})
         # user = users_collection.find_one({"_id": ObjectId(user_id) }, {"tokens": {"$elemMatch": {"token_lifetime": "long-lived"}}})
 
         # Filter the tokens to only return the long-lived tokens
-        user["tokens"] = [token for token in user["tokens"] if token["token_lifetime"] == "long-lived"]
+        user["tokens"] = [
+            token for token in user["tokens"] if token["token_lifetime"] == "long-lived"
+        ]
 
     else:
         # Find the user in the database and exclude the tokens field
@@ -155,16 +124,19 @@ def fetch_user_from_id(user_id: str, return_tokens: bool = False) -> User:
     else:
         return None
 
-def fetch_user_from_email(email: str, return_tokens: bool = False) -> User:
-    from depictio.api.v1.db import users_collection  # Move import inside the function
 
+def fetch_user_from_email(email: str, return_tokens: bool = False) -> User:
+    from depictio.api.v1.db import users_collection
     if return_tokens:
         # Find the user in the database and only returns tokens with token_lifetime = "long-lived"
         user = users_collection.find_one({"email": email})
+        logger.info(f"Fetching user with email: {email} : {user}")
         # user = users_collection.find_one({"email": email }, {"tokens": {"$elemMatch": {"token_lifetime": "long-lived"}}})
 
         # Filter the tokens to only return the long-lived tokens
-        user["tokens"] = [token for token in user["tokens"] if token["token_lifetime"] == "long-lived"]
+        user["tokens"] = [
+            token for token in user["tokens"] if token["token_lifetime"] == "long-lived"
+        ]
 
     else:
         # Find the user in the database and exclude the tokens field
@@ -182,12 +154,12 @@ def fetch_user_from_email(email: str, return_tokens: bool = False) -> User:
 
 
 def fetch_user_from_token(token: str) -> User:
+    from depictio.api.v1.db import users_collection
     # check if token is a string
     if not isinstance(token, str):
         return None
 
     logger.debug(f"Fetching user from token {token}")
-    from depictio.api.v1.db import users_collection  # Move import inside the function
 
     if not token:
         return None

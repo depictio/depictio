@@ -89,6 +89,7 @@ def validate_login(login_email, login_password):
         logger.info("Password verification successful.")
         # from flask import make_response
         # resp = make_response("Login successful!")
+        logger.info(f"API_BASE_URL: {API_BASE_URL}")
 
         response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/auth/login", data={"username": user.email, "password": login_password})
         logger.info(f"Response: {response}")

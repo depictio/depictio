@@ -84,3 +84,25 @@ async def status(current_user=Depends(get_current_user)):
     logger.info("Server is online.")
 
     return {"status": "online", "version": "v0.0.4"}
+
+from depictio_models.models.users import User
+from depictio_models.models.base import PyObjectId
+from depictio.api.v1.db import users_collection
+
+
+@utils_endpoint_router.get("/test_objectid", response_model=User)
+async def test_objectid(id: PyObjectId):
+
+    logger.info(f"Received ObjectId: {id} of type {type(id)}")
+    # Perform any operations you need with the ObjectId
+    # For example, you can fetch a user from the database using this ObjectId
+    user = users_collection.find_one({"_id": id})
+    # drop email from the user object
+    # logger.info(f"User before dropping email: {user}")
+    # user.pop("email", None)
+    logger.info(f"User found: {user}")
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return user

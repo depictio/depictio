@@ -3,11 +3,12 @@ import os
 
 from bson import ObjectId
 import yaml
-from depictio.api.v1.endpoints.user_endpoints.core_functions import (
+from depictio.api.v1.endpoints.user_endpoints.agent_config_utils import (
     generate_agent_config,
 )
 from depictio.api.v1.endpoints.user_endpoints.utils import hash_password
 from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.config import settings
 
 from depictio.api.v1.endpoints.user_endpoints.utils import add_token
 # from depictio.api.v1.endpoints.utils_endpoints.core_functions import create_bucket
@@ -70,6 +71,7 @@ def create_user(user_dict: dict) -> dict:
     logger.info(f"Adding user {user_dict['email']} to the database")
     user = User(**user_dict)
     user_mongo = user.mongo()
+    logger.info(f"User MongoDB object: {user_mongo}")
     users_collection.insert_one(user_mongo)
     logger.info(f"User {user_dict['email']} added to the database")
 
@@ -96,7 +98,7 @@ def create_default_token(user):
 
     logger.info(f"Creating default token for {user.email}")
     token_data = {
-        "sub": user.email,
+        "sub": str(user.email),
         "name": "default_token",
         "token_lifetime": "long-lived",
     }
@@ -115,7 +117,7 @@ def create_default_token(user):
     config_filename = f"{username}_config.yaml"
 
     # Export the agent config to a file
-    config_dir = "/app/depictio/.depictio"
+    config_dir = settings.auth.cli_config_dir
     logger.info(f"Creating config directory: {config_dir}")
     os.makedirs(config_dir, exist_ok=True)
 
@@ -127,16 +129,25 @@ def create_default_token(user):
     return token_data
 
 
-def initialize_db():
+def initialize_db(wipe: bool = False) -> tuple:
     """
     Initialize the database with default users and groups.
     """
+    logger.info(f"Bootstrap: {wipe} and type: {type(wipe)}")
+
+    if wipe:
+        logger.info("Wipe is enabled. Deleting the database...")
+        from depictio.api.v1.db import client
+
+        client.drop_database(settings.mongodb.db_name)
+        logger.info("Database deleted successfully.")
+
     from depictio.api.v1.db import initialization_collection
 
     # Check if the initialization has already been done
-    initialization_status = initialization_collection.find_one({"initialized": True})
-    if initialization_status:
-        logger.info("Database already initialized. Skipping...")
+    # initialization_status = initialization_collection.find_one({"initialized": True})
+    # if initialization_status:
+    #     logger.info("Database already initialized. Skipping...")
 
     logger.info("Running initial database setup...")
 
@@ -146,7 +157,7 @@ def initialize_db():
     logger.info(f"Created admin group: {admin_group}")
     logger.info(f"Created users group: {users_group}")
 
-    # Assign groups to users
+    # # Assign groups to users
     admin_user_dict["groups"] = [admin_group, users_group]
     test_user_dict["groups"] = [users_group]
 
@@ -165,6 +176,6 @@ def initialize_db():
         test_token = create_default_token(test_user_payload["user"])
 
     # Mark initialization as complete
-    initialization_collection.insert_one({"initialized": True})
+    # initialization_collection.insert_one({"initialized": True})
     logger.info("Database initialization completed successfully.")
     return admin_user_payload["user"], test_user_payload["user"]

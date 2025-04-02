@@ -143,6 +143,7 @@ cython_debug/
 # Data and Logs
 depictioDB/
 depictioDB_bak/
+depictioDB_dev/
 depictioDB_K8S/
 diagnostic.data/
 journal/
@@ -213,9 +214,14 @@ jbrowse-watcher-plugin/
 ldap_config/
 ldap_db/
 depictio/dash/static/
+depictio/dash/assets/
 .aider*
 .env
 
 # Tokens
 *_token.yaml
 depictio/.depictio/
+depictio/keys/
+
+# Dependencies & Envs
+depictio-venv/

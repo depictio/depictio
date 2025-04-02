@@ -46,8 +46,26 @@
     "MINIO_ROOT_PASSWORD": "minio123",
     "DEPICTIO_BACKEND_DATA_VOLUME_HOST": "/workspace/depictio-data",
   },
-  "features": {
-    // details can be found here: https://github.com/devcontainers/features/tree/main/src/docker-outside-of-docker
-    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {} // docker outside of docker
-  }
+	"features": {
+		"ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+			"moby": true,
+			"installDockerBuildx": true,
+			"installDockerComposeSwitch": true,
+			"version": "latest",
+			"dockerDashComposeVersion": "none"
+		},
+		"ghcr.io/dhoeric/features/act:1": {},
+		"ghcr.io/hspaans/devcontainer-features/pytest:1": {
+			"version": "latest"
+			// "plugins": "pytest-testinfra"
+		},
+		"ghcr.io/va-h/devcontainers-features/uv:1": {
+			"shellautocompletion": true,
+			"version": "latest"
+		},
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/git-lfs:1": {}
+
+
+	}
 }

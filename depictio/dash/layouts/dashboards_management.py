@@ -26,6 +26,7 @@ from depictio.dash.layouts.layouts_toolbox import (
     create_delete_confirmation_modal,
 )
 from depictio_models.models.base import convert_objectid_to_str
+from depictio_models.utils import convert_model_to_dict
 from depictio.dash.utils import generate_unique_index
 
 from depictio_models.models.dashboards import DashboardData
@@ -803,18 +804,20 @@ def register_callbacks_dashboards_management(app):
         log_context_info()
 
         current_user = fetch_user_from_token(user_data["access_token"])
-        current_userbase = UserBase(
-            **current_user.dict(
-                exclude={
-                    "tokens",
-                    "is_active",
-                    "is_verified",
-                    "last_login",
-                    "registration_date",
-                    "password",
-                }
-            )
-        )
+        logger.info(f"current_user: {current_user}")
+        # current_userbase = UserBase(
+        #     convert_model_to_dict(current_user, exclude_none=True).dict(
+        #         exclude={
+        #             "tokens",
+        #             "is_active",
+        #             "is_verified",
+        #             "last_login",
+        #             "registration_date",
+        #             "password",
+        #         }
+        #     )
+        # )
+        current_userbase = current_user.turn_to_userbase()
 
         index_data = load_dashboards_from_db(user_data["access_token"])
         logger.info(f"index_data: {index_data}")
