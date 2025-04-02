@@ -12,6 +12,7 @@ from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     add_token_to_user,
     fetch_user_from_email,
+    fetch_user_from_id,
 )
 
 # from depictio.api.v1.endpoints.user_endpoints.models import Token
@@ -57,6 +58,13 @@ def find_user(email, return_tokens=False):
         return user_data
     return None
 
+def find_user_by_id(user_id):
+    # Call the core function directly
+    user_data = fetch_user_from_id(user_id)
+    if user_data:
+        logger.info(f"Found user data: {user_data}")
+        return user_data
+    return None
 
 def get_groups(TOKEN):
     response = httpx.get(
@@ -177,7 +185,12 @@ def create_access_token(token_data):
     to_encode = token_data.copy()
     expire = datetime.now() + expires_delta
     to_encode.update({"exp": expire})
+    logger.info(f"Token data: {to_encode}")
+    logger.info(f"Token expiration: {expire}")
+    logger.info(f"Token lifetime: {token_lifetime}")
+    logger.info(f"ALGORITHM: {ALGORITHM}")
     encoded_jwt = jwt.encode(to_encode, PRIVATE_KEY, algorithm=ALGORITHM)
+    logger.info(f"Encoded JWT: {encoded_jwt}")
     return encoded_jwt, expire
 
 
@@ -195,6 +208,7 @@ def add_token(token_data: dict) -> dict:
 
     # create hash from access token
     token_data["hash"] = hashlib.sha256(token.encode()).hexdigest()
+    logger.info(f"Token data: {token_data}")
 
     logger.info(f"Adding token for user {email}.")
     user = find_user(email)
@@ -353,14 +367,15 @@ def create_group_helper(group_dict: dict):
         return convert_objectid_to_str(existing_group)
     # Insert the group into the database
     else:
-        logger.info("Adding admin group to the database")
+        logger.info(f"Adding group {group_dict['name']} to the database")
         logger.info(f"Group: {group_dict}")
-        admin_group = Group(**group_dict)
-        logger.info(f"Group: {admin_group}")
-        admin_group = admin_group.mongo()
-        groups_collection.insert_one(admin_group)
+        group = Group(**group_dict)
+        logger.info(f"Group: {group}")
+        group = group.mongo()
+        logger.info(f"Group MongoDB object: {group}")
+        groups_collection.insert_one(group)
         logger.info("Admin group added to the database")
-        return convert_objectid_to_str(admin_group)
+        return convert_objectid_to_str(group)
 
 
 def delete_group_helper(group_id: ObjectId) -> dict:
