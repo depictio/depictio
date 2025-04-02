@@ -785,5 +785,13 @@ def create_app_layout():
 app.layout = create_app_layout
 
 
+def main():
+    app.run(
+        debug=settings.dash.debug,
+        host=settings.dash.host,
+        port=settings.dash.port,
+    )
+
+
 if __name__ == "__main__":
-    app.run_server(debug=True, host=settings.dash.host, port=settings.dash.port)
+    main()
