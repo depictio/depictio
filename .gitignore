@@ -213,12 +213,15 @@ jbrowse-watcher-plugin/
 !.env
 ldap_config/
 ldap_db/
-src/depictio/dash/static/
-src/depictio/dash/assets/
+depictio/dash/static/
+depictio/dash/assets/
 .aider*
 .env
 
 # Tokens
 *_token.yaml
-src/depictio/.depictio/
-src/depictio/keys/
+depictio/.depictio/
+depictio/keys/
+
+# Dependencies & Envs
+depictio-venv/
