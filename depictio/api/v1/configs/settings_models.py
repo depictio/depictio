@@ -1,7 +1,7 @@
 import os
 from typing import Dict, Union
 from pydantic import AliasChoices, ConfigDict, Field
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from depictio_models.models.s3 import MinioConfig
 
 
@@ -34,7 +34,7 @@ class MongoConfig(BaseSettings):
     wipe: bool = Field(
         default=False, json_schema_extra={"env": "DEPICTIO_MONGODB_WIPE"}
     )
-    model_config = ConfigDict(env_prefix="DEPICTIO_MONGODB_")
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_MONGODB_")
 
     # class Config:
     #     env_prefix = 'DEPICTIO_MONGO_'
@@ -47,7 +47,7 @@ class FastAPIConfig(BaseSettings):
     service_name: str = "depictio_backend"
     port: int = Field(default=8058, json_schema_extra={"env": "DEPICTIO_FASTAPI_PORT"})
     logging_level: str = "INFO"
-    model_config = ConfigDict(env_prefix="DEPICTIO_FASTAPI_")
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_FASTAPI_")
     workers: int = Field(
         default=1, json_schema_extra={"env": "DEPICTIO_FASTAPI_WORKERS"}
     )
@@ -63,7 +63,7 @@ class DashConfig(BaseSettings):
     service_name: str = "depictio_frontend"
     workers: int = Field(default=1, json_schema_extra={"env": "DEPICTIO_DASH_WORKERS"})
     port: int = Field(default=5080, json_schema_extra={"env": "DEPICTIO_DASH_PORT"})
-    model_config = ConfigDict(env_prefix="DEPICTIO_DASH_")
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_DASH_")
     # class Config:
     #     env_prefix = 'DEPICTIO_DASH_'
 
@@ -79,7 +79,7 @@ class JbrowseConfig(BaseSettings):
     }
     data_dir: str = "/data"
     config_dir: str = "/jbrowse-watcher-plugin/sessions"
-    model_config = ConfigDict(env_prefix="DEPICTIO_JBROWSE_")
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_JBROWSE_")
     # class Config:
     #     env_prefix = 'DEPICTIO_JBROWSE_'
 
@@ -96,7 +96,7 @@ class Auth(BaseSettings):
         default="depictio/.depictio",
         json_schema_extra={"env": "DEPICTIO_AUTH_CLI_CONFIG_DIR"},
     )
-    model_config = ConfigDict(arbitrary_types_allowed=True, env_prefix="DEPICTIO_AUTH_")
+    model_config = SettingsConfigDict(arbitrary_types_allowed=True, env_prefix="DEPICTIO_AUTH_")
 
     # class Config:
     #     env_prefix = 'DEPICTIO_AUTH_'
