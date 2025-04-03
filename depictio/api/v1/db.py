@@ -1,11 +1,8 @@
-# from gridfs import GridFS
 import pymongo
-# import redis
-
-# from depictio.api.v1.admin_creation_startup import create_admin_user
 from depictio.api.v1.configs.config import settings, MONGODB_URL
 from depictio.api.v1.db_init import initialize_db
 from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.endpoints.user_endpoints.utils import _ensure_mongodb_connection
 client = pymongo.MongoClient(MONGODB_URL)
 db = client[settings.mongodb.db_name]
 logger.info(f"MongoDB client created with URL: {MONGODB_URL}")
@@ -30,6 +27,9 @@ dashboards_collection = db[settings.mongodb.collections.dashboards_collection]
 initialization_collection = db[settings.mongodb.collections.initialization_collection]
 projects_collection = db[settings.mongodb.collections.projects_collection]
 test_collection = db[settings.mongodb.collections.test_collection]
+
+# Ensure MongoDB connection
+_ensure_mongodb_connection()
 
 # Initialize admin user and token
 initialize_db()
