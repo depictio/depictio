@@ -3,7 +3,7 @@ from typing import Optional
 
 from depictio.api.v1.configs.settings_models import Settings
 from depictio.api.v1.key_utils import (
-    run_generate_keys,
+    generate_keys,
     load_private_key,
     load_public_key,
     import_keys,
@@ -62,7 +62,7 @@ def setup_keys(
         )
     else:
         # Generate or use existing keys
-        run_generate_keys(private_key_path, public_key_path, keys_dir, algorithm)
+        generate_keys(private_key_path, public_key_path, keys_dir, algorithm)
 
     # Load and return keys
     private_key = load_private_key(private_key_path)
