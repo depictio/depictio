@@ -83,14 +83,3 @@ services:
       - ../depictio-models:/app/depictio-models
     command: ["pytest"]
     user: "${UID:-1000}:${GID:-1000}"
-
-  # jbrowse2:
-  #   # image: registry.git.embl.de/tweber/depictio/jbrowse2:latest
-  #   build:
-  #     dockerfile: docker-images/Dockerfile_jbrowse.dev.240424.dockerfile
-  #   ports: 
-  #     - 3000:3000
-  #     - 9010:9010
-  #   volumes:
-  #     - "./jbrowse-watcher-plugin:/usr/src/plugin"
-  #     - "./jbrowse-watcher-plugin/sessions:/usr/src/jbrowse/plugin/sessions"
