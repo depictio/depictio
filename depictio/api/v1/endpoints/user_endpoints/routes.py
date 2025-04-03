@@ -29,7 +29,7 @@ from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.db import users_collection
 
 from depictio_models.models.base import convert_objectid_to_str
-from depictio_models.models.users import User, UserBase, UserBaseGroupLess
+from depictio_models.models.users import User, UserBase, UserBaseGroupLess, Group
 from depictio_models.utils import convert_model_to_dict
 
 auth_endpoint_router = APIRouter()
@@ -554,20 +554,20 @@ def turn_sysadmin(user_id: str, is_admin: bool, current_user=Depends(get_current
 
 
 @auth_endpoint_router.post("/create_group")
-def create_group(request: dict, current_user=Depends(get_current_user)):
+def create_group(group: Group, current_user=Depends(get_current_user)):
     if not current_user:
         raise HTTPException(status_code=401, detail="Current user not found.")
     # Check if the current user is an admin
     if not current_user.is_admin:
         raise HTTPException(status_code=401, detail="Current user is not an admin.")
 
-    if not request:
-        raise HTTPException(status_code=400, detail="No request provided")
+    if not group:
+        raise HTTPException(status_code=400, detail="No group provided")
 
-    if "name" not in request:
-        raise HTTPException(status_code=400, detail="No name provided")
+    if not group.name:
+        raise HTTPException(status_code=400, detail="No group name provided")
 
-    response = create_group_helper(request)
+    response = create_group_helper(group)
     return response
 
 
