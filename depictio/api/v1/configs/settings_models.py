@@ -29,7 +29,7 @@ class MongoConfig(BaseSettings):
     service_name: str = "mongo"
     port: int = Field(default=27018, json_schema_extra={"env": "DEPICTIO_MONGODB_PORT"})
     db_name: str = Field(
-        default="depictioDB", json_schema_extra={"env": "DEPICTIO_MONGODB_NAME"}
+        default="depictioDB", json_schema_extra={"env": "DEPICTIO_MONGODB_DB_NAME"}
     )
     wipe: bool = Field(
         default=False, json_schema_extra={"env": "DEPICTIO_MONGODB_WIPE"}
