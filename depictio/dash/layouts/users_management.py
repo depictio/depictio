@@ -9,7 +9,7 @@ from dash.exceptions import PreventUpdate
 
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging import logger
-from depictio.api.v1.endpoints.user_endpoints.utils import verify_password, login_user, find_user, add_user
+from depictio.api.v1.endpoints.user_endpoints.utils import verify_password, login_user, find_user_by_email, add_user
 
 
 event = {"event": "keydown", "props": ["key"]}
@@ -79,7 +79,7 @@ def validate_login(login_email, login_password):
     if not login_email or not login_password:
         return "Please fill in all fields.", True, dash.no_update, dash.no_update
 
-    user = find_user(login_email)
+    user = find_user_by_email(login_email)
     if not user:
         return "User not found. Please register first.", True, dash.no_update, dash.no_update
 
@@ -119,7 +119,7 @@ def validate_login(login_email, login_password):
 def handle_registration(register_email, register_password, register_confirm_password):
     if not register_email or not register_password or not register_confirm_password:
         return "Please fill in all fields.", True
-    if find_user(register_email):
+    if find_user_by_email(register_email):
         return "Email already registered.", True
     if register_password != register_confirm_password:
         return "Passwords do not match.", True
