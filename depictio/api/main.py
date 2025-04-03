@@ -6,12 +6,9 @@ from depictio import BASE_PATH
 import os
 from dotenv import load_dotenv
 import logging
-
-os.environ["DEPICTIO_CONTEXT"] = "server"
 from depictio_models.utils import get_depictio_context
 
 DEPICTIO_CONTEXT = get_depictio_context()
-
 
 load_dotenv(BASE_PATH.parent / ".env", override=False)
 logging.info(f"Current os env vars after loading .env: {os.environ}")
