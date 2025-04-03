@@ -25,7 +25,7 @@ def generate_agent_config(current_user, request):
     token_subless = request["token"]
     token_subless.pop("sub", None)
     user = UserBaseCLIConfig(
-        **user.dict(),
+        **user.model_dump(),
         token=request["token"],
     )
 
