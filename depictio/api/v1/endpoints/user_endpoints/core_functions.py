@@ -4,7 +4,7 @@ from depictio.api.v1.configs.logging import logger
 
 # from depictio_models.models.base import convert_objectid_to_str
 from depictio_models.models.users import User
-
+from depictio_models.models.base import PyObjectId
 
 def add_token_to_user(user, token):
     from depictio.api.v1.db import users_collection
@@ -96,7 +96,7 @@ def check_if_token_is_valid(token: str) -> bool:
         return False
 
 
-def fetch_user_from_id(user_id: str, return_tokens: bool = False) -> User:
+def fetch_user_from_id(user_id: PyObjectId, return_tokens: bool = False) -> User:
     from depictio.api.v1.db import users_collection
     if return_tokens:
         # Find the user in the database and only returns tokens with token_lifetime = "long-lived"
