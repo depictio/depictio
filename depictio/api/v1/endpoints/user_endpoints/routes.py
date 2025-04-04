@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Dict
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -25,7 +25,7 @@ from depictio.api.v1.endpoints.user_endpoints.utils import (
     delete_group_helper,
     update_group_in_users_helper,
 )
-from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.custom_logging import logger
 from depictio.api.v1.db import users_collection
 
 from depictio_models.models.base import convert_objectid_to_str
@@ -553,8 +553,9 @@ def turn_sysadmin(user_id: str, is_admin: bool, current_user=Depends(get_current
         return {"success": False}
 
 
+from depictio_models.models.users import GroupBeanie
 @auth_endpoint_router.post("/create_group")
-def create_group(group: Group, current_user=Depends(get_current_user)):
+async def create_group(group: GroupBeanie, current_user=Depends(get_current_user)) -> Dict:
     if not current_user:
         raise HTTPException(status_code=401, detail="Current user not found.")
     # Check if the current user is an admin
@@ -567,8 +568,27 @@ def create_group(group: Group, current_user=Depends(get_current_user)):
     if not group.name:
         raise HTTPException(status_code=400, detail="No group name provided")
 
-    response = create_group_helper(group)
-    return response
+    response = await create_group_helper(group)
+    return response  # The CustomJSONResponse will handle serialization
+
+
+
+# @auth_endpoint_router.post("/create_group")
+# def create_group(group: Group, current_user=Depends(get_current_user)):
+#     if not current_user:
+#         raise HTTPException(status_code=401, detail="Current user not found.")
+#     # Check if the current user is an admin
+#     if not current_user.is_admin:
+#         raise HTTPException(status_code=401, detail="Current user is not an admin.")
+
+#     if not group:
+#         raise HTTPException(status_code=400, detail="No group provided")
+
+#     if not group.name:
+#         raise HTTPException(status_code=400, detail="No group name provided")
+
+#     response = create_group_helper(group)
+#     return response
 
 
 @auth_endpoint_router.delete("/delete_group/{group_id}")
