@@ -13,7 +13,7 @@ from depictio.api.v1.deltatables_utils import convert_filter_model_to_metadata, 
 from depictio.dash.layouts.draggable_scenarios.restore_dashboard import return_interactive_components_dict
 from depictio.dash.modules.table_component.utils import build_table, build_table_frame
 from depictio.dash.utils import return_mongoid
-from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.custom_logging import logger
 from depictio.api.v1.configs.config import API_BASE_URL
 
 from depictio.dash.utils import (

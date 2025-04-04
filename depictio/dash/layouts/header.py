@@ -9,7 +9,7 @@ from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     fetch_user_from_token,
 )
-from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.custom_logging import logger
 
 current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 

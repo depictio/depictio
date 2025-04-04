@@ -5,7 +5,7 @@ from dash_iconify import DashIconify
 
 from depictio.dash.modules.table_component.frontend import create_stepper_table_button
 from depictio.dash.utils import UNSELECTED_STYLE
-from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.custom_logging import logger
 
 # Depictio components imports - button step
 from depictio.dash.modules.figure_component.frontend import create_stepper_figure_button

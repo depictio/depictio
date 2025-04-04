@@ -21,7 +21,7 @@ from depictio.dash.layouts.draggable_scenarios.interactive_component_update impo
     update_interactive_component,
 )
 from depictio.dash.layouts.draggable_scenarios.restore_dashboard import render_dashboard
-from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.custom_logging import logger
 
 # Depictio layout imports for stepper
 

@@ -1,8 +1,7 @@
 from datetime import datetime
 from bson import ObjectId
-from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.custom_logging import logger
 
-# from depictio_models.models.base import convert_objectid_to_str
 from depictio_models.models.users import User
 from depictio_models.models.base import PyObjectId
 

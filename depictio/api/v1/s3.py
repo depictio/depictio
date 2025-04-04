@@ -1,6 +1,6 @@
 import boto3
 from depictio.api.v1.configs.config import settings
-from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.custom_logging import logger
 
 
 # from depictio_models.s3_utils import S3_storage_checks

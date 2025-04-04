@@ -8,7 +8,7 @@ from pymongo.errors import BulkWriteError
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.db import db
-from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.custom_logging import logger
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 
 
