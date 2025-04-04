@@ -10,7 +10,7 @@ from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
 from pydantic import validate_call
 
-from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.custom_logging import logger
 
 # Type definitions
 Algorithm = Literal["RS256", "RS512", "ES256", "SHA256"]
@@ -135,6 +135,7 @@ def generate_keys(
     public_key_path: Optional[str] = None,
     keys_dir: Optional[Path] = None,
     algorithm: Optional[Algorithm] = None,
+    wipe: bool = False,
 ) -> Tuple[str, str]:
     """Generate a new key pair with the specified algorithm.
 
@@ -143,6 +144,7 @@ def generate_keys(
         public_key_path: Optional custom path for public key
         keys_dir: Optional directory to store keys
         algorithm: Algorithm to use for key generation
+        wipe: Whether to wipe existing keys
 
     Returns:
         Tuple of (private_key_path, public_key_path)
@@ -154,6 +156,22 @@ def generate_keys(
     """
     if not algorithm:
         algorithm = "RS256"  # Default algorithm
+
+    logger.info(f"Generating keys with algorithm: {algorithm}")
+    logger.info(f"Keys directory: {keys_dir}")
+    logger.info(f"Private key path: {private_key_path}")
+    logger.info(f"Public key path: {public_key_path}")  
+    logger.info(f"Wipe existing keys: {wipe}")
+
+    if wipe:
+        logger.warning("Wiping existing keys as requested.")
+        # Remove existing keys if wipe is True
+        if private_key_path and os.path.exists(private_key_path):
+            os.remove(private_key_path)
+            logger.warning(f"Removed existing private key at {private_key_path}")
+        if public_key_path and os.path.exists(public_key_path):
+            os.remove(public_key_path)
+            logger.warning(f"Removed existing public key at {public_key_path}")
 
     try:
         private_key_path, public_key_path = _resolve_key_paths(
@@ -282,6 +300,7 @@ def load_public_key(public_key_path: str) -> RSAPublicKey:
     except Exception as e:
         logger.error(f"Error loading public key: {e}")
         raise
+
 
 @validate_call(validate_return=True)
 def import_keys(
