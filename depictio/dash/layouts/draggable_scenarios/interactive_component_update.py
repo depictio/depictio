@@ -1,7 +1,7 @@
 import collections
 from typing import Any, Dict, List, Tuple
 import pandas as pd
-from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.custom_logging import logger
 from depictio.api.v1.deltatables_utils import iterative_join, join_deltatables_dev, return_joins_dict
 from depictio.dash.layouts.edit import enable_box_edit_mode
 from depictio.dash.modules.card_component.utils import build_card

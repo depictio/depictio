@@ -12,7 +12,7 @@ from depictio.api.v1.deltatables_utils import load_deltatable_lite
 from depictio.dash.modules.card_component.frontend import design_card
 from depictio.dash.modules.figure_component.frontend import design_figure
 from depictio.dash.modules.interactive_component.frontend import design_interactive
-from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.custom_logging import logger
 
 # from depictio.dash.modules.table_component.frontend import design_table
 from depictio.dash.utils import (

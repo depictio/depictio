@@ -11,7 +11,7 @@ from depictio.dash.utils import (
     load_depictio_data_mongo,
 )
 from depictio.api.v1.configs.config import API_BASE_URL
-from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.custom_logging import logger
 from depictio.dash.modules.card_component.utils import (
     agg_functions,
     build_card,

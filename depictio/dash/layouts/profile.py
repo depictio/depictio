@@ -2,7 +2,7 @@ import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 from dash import html, Input, Output, State, dcc
 import dash
-from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.custom_logging import logger
 from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     fetch_user_from_token,
 )

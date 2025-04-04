@@ -3,7 +3,7 @@ import dash_mantine_components as dmc
 from dash import html, dcc, Input, Output, State, ctx
 import dash
 import yaml
-from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.custom_logging import logger
 from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_token
 from depictio.api.v1.endpoints.user_endpoints.utils import add_token, delete_token, generate_agent_config, list_existing_tokens
 from dash_extensions.enrich import html, Input, Output, State
