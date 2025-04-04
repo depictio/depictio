@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 import time
 import hashlib
 from typing import Dict, List, Optional, Union
+from beanie import PydanticObjectId
 from bson import ObjectId
 from fastapi import HTTPException
 import httpx
@@ -10,7 +11,7 @@ import bcrypt
 from pydantic import validate_call
 
 from depictio.api.v1.configs.config import API_BASE_URL, PRIVATE_KEY, ALGORITHM
-from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.custom_logging import logger
 from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     add_token_to_user,
     fetch_user_from_email,
@@ -20,14 +21,21 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import (
 
 # from depictio.api.v1.endpoints.user_endpoints.models import Token
 from depictio_models.models.base import convert_objectid_to_str, PyObjectId
-from depictio_models.models.users import Token, UserBaseGroupLess, Group
+from depictio_models.models.users import (
+    Token,
+    UserBaseGroupLess,
+    Group,
+    GroupBeanie,
+    UserBeanie,
+)
 
 
 def _dummy_mongodb_connection():
     """
-    Mock MongoDB connection for testing purposes.
+    Dummy function to simulate MongoDB connection.
+    This function is a placeholder and does not perform any actual connection.
     """
-    # Patch the client in the module where it's used
+    # This function is a placeholder and does not perform any actual connection.
     from depictio.api.v1.db import client
 
     return client.server_info()
@@ -96,6 +104,7 @@ def find_user_by_id(user_id: PyObjectId) -> Optional[Dict]:
         return user_data
     return None
 
+
 @validate_call(validate_return=True)
 def find_user_by_email(email: str, return_tokens: bool = False) -> Optional[Dict]:
     """
@@ -112,6 +121,7 @@ def find_user_by_email(email: str, return_tokens: bool = False) -> Optional[Dict
         logger.info(f"Found user data: {user_data}")
         return user_data
     return None
+
 
 @validate_call(validate_return=True)
 def hash_password(password: str) -> str:
@@ -148,6 +158,110 @@ def check_password(email: str, password: str) -> bool:
         if verify_password(user.password, password):
             return True
     return False
+
+
+async def get_users_by_group_id(group_id: PydanticObjectId) -> List[UserBeanie]:
+    """
+    Retrieve all users that belong to a specific group by group ID.
+    """
+    # Find users where the groups array contains a reference to this group ID
+    users = await UserBeanie.find(
+        {"groups": {"$elemMatch": {"$ref": "groups", "$id": group_id}}}
+    ).to_list()
+
+    return users
+
+
+@validate_call(validate_return=True)
+async def create_user_helper_beanie(
+    user: UserBeanie,
+) -> Dict[str, Union[bool, str, Optional[UserBeanie]]]:
+    """
+    Create a user in the database using Beanie ODM.
+
+    Args:
+        user (UserBeanie): The user to be created.
+
+    Returns:
+        dict: A dictionary containing the result of the user creation.
+    """
+    # Check if the user already exists
+    existing_user = await UserBeanie.find_one({"email": user.email})
+    if existing_user:
+        logger.info(f"User {user.email} already exists in the database")
+        return {
+            "success": False,
+            "message": "User already exists",
+            "user": existing_user,  # The CustomJSONResponse will handle serialization
+        }
+
+    # Insert the user into the database
+    try:
+        logger.debug(f"Preparing to add user {user.email} to the database")
+
+        # Insert the document
+        await user.insert()
+
+        logger.info(f"User {user.email} added to the database successfully")
+        return {
+            "success": True,
+            "message": "User created successfully",
+            "user": user,  # The CustomJSONResponse will handle serialization
+            "inserted_id": str(user.id),  # No need to manually convert to string
+        }
+    except Exception as e:
+        logger.error(f"Error creating user {user.email}: {e}")
+        return {
+            "success": False,
+            "message": f"Error creating user: {str(e)}",
+            "user": None,
+        }
+
+
+@validate_call()
+async def create_group_helper_beanie(
+    group: GroupBeanie,
+) -> Dict[str, Union[bool, str, Optional[GroupBeanie]]]:
+    """
+    Create a group in the database using Beanie ODM.
+
+    Args:
+        group (GroupBeanie): The group to be created.
+
+    Returns:
+        dict: A dictionary containing the result of the group creation.
+    """
+    # Check if the group already exists
+    existing_group = await GroupBeanie.find_one({"name": group.name})
+    if existing_group:
+        logger.info(f"Group {group.name} already exists in the database")
+        return {
+            "success": False,
+            "message": "Group already exists",
+            "group": existing_group,  # The CustomJSONResponse will handle serialization
+        }
+
+    # Insert the group into the database
+    try:
+        logger.debug(f"Preparing to add group {group.name} to the database")
+
+        # Insert the document
+        await group.insert()
+
+        logger.info(f"Group {group.name} added to the database successfully")
+        return {
+            "success": True,
+            "message": "Group created successfully",
+            "group": group,  # The CustomJSONResponse will handle serialization
+            "inserted_id": group.id,  # No need to manually convert to string
+        }
+    except Exception as e:
+        logger.error(f"Error creating group {group.name}: {e}")
+        return {
+            "success": False,
+            "message": f"Error creating group: {str(e)}",
+            "group": None,
+        }
 
 
 @validate_call(validate_return=True)
@@ -232,10 +346,6 @@ def logout_user():
 # Check if user is logged in
 def is_user_logged_in(session_data):
     return session_data.get("logged_in", False)
-
-
-
-
 
 
 def get_groups(TOKEN):
@@ -452,7 +562,6 @@ def check_token_validity(token):
         return True
     logger.error("Token is invalid.")
     return False
-
 
 
 def list_existing_tokens(email):
