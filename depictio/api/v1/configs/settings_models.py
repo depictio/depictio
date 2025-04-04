@@ -36,9 +36,6 @@ class MongoConfig(BaseSettings):
     )
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_MONGODB_")
 
-    # class Config:
-    #     env_prefix = 'DEPICTIO_MONGO_'
-
 
 class FastAPIConfig(BaseSettings):
     """Backend configuration."""
@@ -51,6 +48,7 @@ class FastAPIConfig(BaseSettings):
     workers: int = Field(
         default=1, json_schema_extra={"env": "DEPICTIO_FASTAPI_WORKERS"}
     )
+    ssl: bool = Field(default=False, json_schema_extra={"env": "DEPICTIO_FASTAPI_SSL"})
     # class Config:
     #     env_prefix = 'DEPICTIO_FASTAPI_'
 
@@ -64,8 +62,6 @@ class DashConfig(BaseSettings):
     workers: int = Field(default=1, json_schema_extra={"env": "DEPICTIO_DASH_WORKERS"})
     port: int = Field(default=5080, json_schema_extra={"env": "DEPICTIO_DASH_PORT"})
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_DASH_")
-    # class Config:
-    #     env_prefix = 'DEPICTIO_DASH_'
 
 
 class JbrowseConfig(BaseSettings):
@@ -80,8 +76,6 @@ class JbrowseConfig(BaseSettings):
     data_dir: str = "/data"
     config_dir: str = "/jbrowse-watcher-plugin/sessions"
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_JBROWSE_")
-    # class Config:
-    #     env_prefix = 'DEPICTIO_JBROWSE_'
 
 
 class Auth(BaseSettings):
@@ -96,19 +90,15 @@ class Auth(BaseSettings):
         default="depictio/.depictio",
         json_schema_extra={"env": "DEPICTIO_AUTH_CLI_CONFIG_DIR"},
     )
-    model_config = SettingsConfigDict(arbitrary_types_allowed=True, env_prefix="DEPICTIO_AUTH_")
-
-    # class Config:
-    #     env_prefix = 'DEPICTIO_AUTH_'
-    # arbitrary_types_allowed = True
+    model_config = SettingsConfigDict(
+        arbitrary_types_allowed=True, env_prefix="DEPICTIO_AUTH_"
+    )
 
 
 class Settings(BaseSettings):
     """Joint settings."""
 
     mongodb: MongoConfig = MongoConfig()
-    # redis: RedisConfig = RedisConfig()
-    # rabbitmq: RabbitMQConfig = RabbitMQConfig()
     fastapi: FastAPIConfig = FastAPIConfig()
     dash: DashConfig = DashConfig()
     minio: MinioConfig = MinioConfig()
