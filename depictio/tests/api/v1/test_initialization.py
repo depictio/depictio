@@ -163,10 +163,11 @@ def test_initialization_integration():
         "DEPICTIO_AUTH_KEYS_DIR": test_dir,
         "DEPICTIO_MONGODB_DB_NAME": "depictioDB-test",
         "DEPICTIO_MONGODB_URL": "mongodb://localhost:27018",
+        "DEPICTIO_MONGODB_SERVICE_NAME": "localhost",
         # Use the real S3 credentials
-        "DEPICTIO_MINIO_ROOT_USER": "7hNFStecOS9hhCvjaWxh",
-        "DEPICTIO_MINIO_ROOT_PASSWORD": "xwOhlZNd3DVv5V1srDxo0eHvcZqGru7grahb2MI7",
-        "DEPICTIO_MINIO_EXTERNAL_ENDPOINT": "https://s3.embl.de",
+        "DEPICTIO_MINIO_ROOT_USER": "Q3AM3UQ867SPQQA43P2F",
+        "DEPICTIO_MINIO_ROOT_PASSWORD": "zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG",
+        "DEPICTIO_MINIO_EXTERNAL_ENDPOINT": "https://play.min.io",
         "DEPICTIO_MINIO_BUCKET": "depictio-bucket-test",
     }
     
@@ -186,6 +187,9 @@ def test_initialization_integration():
         pytest.skip("MongoDB not available on port 27018, skipping integration test")
     
 
+    from depictio.api.v1.configs.config import settings
+    print(f"Settings: {settings}")
+
     try:
         # Import the function first to check if import works
         print("Step 3: Importing initialization module")
@@ -194,43 +198,43 @@ def test_initialization_integration():
         
         # Run with timeout to prevent hanging
         print("Step 5: About to run initialization")
-        admin_user, test_user = run_initialization()
+        test = run_initialization()
         print("Step 6: Initialization completed successfully")
         
         # Rest of the test...
-    except Exception as e:
-        print(f"Error during initialization: {e}")
-        import traceback
-        traceback.print_exc()
-        raise
-    finally:
-        # Cleanup code...
-        print("Cleanup: Restoring environment")
-        for var, value in original_env.items():
-            if value is None:
-                os.environ.pop(var, None)
-            else:
-                os.environ[var] = value
+    # except Exception as e:
+    #     print(f"Error during initialization: {e}")
+    #     import traceback
+    #     traceback.print_exc()
+    #     raise
+    # finally:
+    #     # Cleanup code...
+    #     print("Cleanup: Restoring environment")
+    #     for var, value in original_env.items():
+    #         if value is None:
+    #             os.environ.pop(var, None)
+    #         else:
+    #             os.environ[var] = value
 
-    #     # 2. Verify database was initialized with correct users
-    #     # Connect to the test database
-    #     client = pymongo.MongoClient(os.environ["DEPICTIO_MONGODB_URL"])
-    #     db = client[os.environ["DEPICTIO_MONGODB_DBTEST_NAME"]]
+        # 2. Verify database was initialized with correct users
+        # Connect to the test database
+        client = pymongo.MongoClient(os.environ["DEPICTIO_MONGODB_URL"])
+        db = client[os.environ["DEPICTIO_MONGODB_DBTEST_NAME"]]
         
-    #     # Check if admin user exists
-    #     admin = db.users.find_one({"email": "admin@depictio.com"})
-    #     assert admin is not None, "Admin user was not created"
-    #     assert admin["is_admin"] is True, "Admin user does not have admin privileges"
+        # Check if admin user exists
+        admin = db.users.find_one({"email": "admin@depictio.com"})
+        assert admin is not None, "Admin user was not created"
+        assert admin["is_admin"] is True, "Admin user does not have admin privileges"
         
-    #     # Check if test user exists
-    #     test = db.users.find_one({"email": "test@depictio.com"})
-    #     assert test is not None, "Test user was not created"
+        # Check if test user exists
+        test = db.users.find_one({"email": "test@depictio.com"})
+        assert test is not None, "Test user was not created"
         
-    #     # Check if required groups exist
-    #     admin_group = db.groups.find_one({"name": "admin"})
-    #     users_group = db.groups.find_one({"name": "users"})
-    #     assert admin_group is not None, "Admin group was not created"
-    #     assert users_group is not None, "Users group was not created"
+        # Check if required groups exist
+        admin_group = db.groups.find_one({"name": "admin"})
+        users_group = db.groups.find_one({"name": "users"})
+        assert admin_group is not None, "Admin group was not created"
+        assert users_group is not None, "Users group was not created"
         
     #     # 3. Verify S3 bucket was created and is accessible
     #     # Create an S3 client
@@ -284,10 +288,10 @@ def test_initialization_integration():
     #     assert admin_user is not None, "Admin user was not returned"
     #     assert test_user is not None, "Test user was not returned"
         
-    # finally:
-    #     # Clean up
-    #     # 1. Remove temporary directory
-    #     shutil.rmtree(test_dir)
+    finally:
+        # Clean up
+        # 1. Remove temporary directory
+        shutil.rmtree(test_dir)
         
     #     # 2. Clean up S3 bucket
     #     try:
@@ -317,12 +321,12 @@ def test_initialization_integration():
     #     except Exception as e:
     #         print(f"Warning: Could not clean up S3 bucket: {e}")
         
-    #     # 3. Clean up test database
-    #     try:
-    #         client = pymongo.MongoClient(os.environ.get("DEPICTIO_MONGODB_URI", "mongodb://localhost:27017"))
-    #         client.drop_database("test_db")
-    #     except Exception as e:
-    #         print(f"Warning: Could not clean up test database: {e}")
+        # 3. Clean up test database
+        try:
+            client = pymongo.MongoClient(os.environ.get("DEPICTIO_MONGODB_URI", "mongodb://localhost:27017"))
+            client.drop_database("test_db")
+        except Exception as e:
+            print(f"Warning: Could not clean up test database: {e}")
         
     #     # 4. Restore original environment variables
     #     for var, value in original_env.items():
