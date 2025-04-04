@@ -6,7 +6,7 @@ import polars as pl
 import pandas as pd
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.s3 import s3_client, minio_storage_options
-from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.custom_logging import logger
 
 
 import polars as pl

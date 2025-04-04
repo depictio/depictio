@@ -1,46 +1,189 @@
-import os
-from typing import Optional
-from pathlib import Path
-from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.backends import default_backend
+"""Cryptographic key management utilities for RSA and other algorithms."""
 
-from depictio.api.v1.configs.logging import logger
+import os
+from pathlib import Path
+from typing import Literal, Optional, Tuple, TypeVar, Union, cast
+
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
+from pydantic import validate_call
+
+from depictio.api.v1.configs.custom_logging import logger
+
+# Type definitions
+Algorithm = Literal["RS256", "RS512", "ES256", "SHA256"]
+KeyPathStr = str
+PrivateKeyT = TypeVar(
+    "PrivateKeyT", bound=Union[RSAPrivateKey, ec.EllipticCurvePrivateKey]
+)
+PublicKeyT = TypeVar("PublicKeyT", bound=Union[RSAPublicKey, ec.EllipticCurvePublicKey])
+
+
+class KeyGenerationError(Exception):
+    """Custom exception for key generation failures."""
+
+
+@validate_call()
+def _ensure_directory_exists(path: Union[str, Path]) -> None:
+    """Ensure the directory for a file exists.
+
+    Args:
+        path: File path whose directory should exist
+    """
+    if isinstance(path, str):
+        path = Path(path)
+
+    # Create parent directory if it doesn't exist
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+
+@validate_call(validate_return=True)
+def _resolve_key_paths(
+    private_key_path: Optional[str],
+    public_key_path: Optional[str],
+    keys_dir: Optional[Path],
+) -> Tuple[str, str]:
+    """Resolve key paths based on input parameters.
+
+    Args:
+        private_key_path: Optional custom path for private key
+        public_key_path: Optional custom path for public key
+        keys_dir: Optional directory to store keys
+
+    Returns:
+        Tuple of resolved private and public key paths
+    """
+    # Standardize keys_dir to Path if provided
+    if keys_dir:
+        keys_dir = Path(keys_dir) if isinstance(keys_dir, str) else keys_dir
+        keys_dir.mkdir(parents=True, exist_ok=True)
+
+        # Set default key paths if not provided
+        priv_path = private_key_path or str(keys_dir / "private_key.pem")
+        pub_path = public_key_path or str(keys_dir / "public_key.pem")
+    else:
+        if not private_key_path or not public_key_path:
+            raise ValueError(
+                "Both key paths must be specified if keys_dir is not provided"
+            )
+        priv_path = private_key_path
+        pub_path = public_key_path
+
+    # Ensure directories exist
+    _ensure_directory_exists(priv_path)
+    _ensure_directory_exists(pub_path)
+
+    return priv_path, pub_path
+
+
+@validate_call(config={"arbitrary_types_allowed": True})
+def _generate_rsa_private_key(key_size: int = 2048) -> RSAPrivateKey:
+    """Generate an RSA private key with the specified key size.
+
+    Args:
+        key_size: Size of the RSA key in bits (default: 2048)
+
+    Returns:
+        RSA private key object
+    """
+    return rsa.generate_private_key(
+        public_exponent=65537,
+        key_size=key_size,
+        backend=default_backend(),
+    )
+
+
+@validate_call(config={"arbitrary_types_allowed": True})
+def _save_private_key(private_key: PrivateKeyT, path: str) -> None:
+    """Save private key to file.
+
+    Args:
+        private_key: Private key object to save
+        path: Path where the key should be saved
+    """
+    with open(path, "wb") as f:
+        f.write(
+            private_key.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.PKCS8,
+                encryption_algorithm=serialization.NoEncryption(),
+            )
+        )
+
+
+@validate_call(config={"arbitrary_types_allowed": True})
+def _save_public_key(public_key: PublicKeyT, path: str) -> None:
+    """Save public key to file.
+
+    Args:
+        public_key: Public key object to save
+        path: Path where the key should be saved
+    """
+    with open(path, "wb") as f:
+        f.write(
+            public_key.public_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+        )
 
 
 def generate_keys(
     private_key_path: Optional[str] = None,
     public_key_path: Optional[str] = None,
     keys_dir: Optional[Path] = None,
-    algorithm: Optional[str] = None,
-):
-    """
-    Generate a new RSA private-public key pair.
+    algorithm: Optional[Algorithm] = None,
+    wipe: bool = False,
+) -> Tuple[str, str]:
+    """Generate a new key pair with the specified algorithm.
 
     Args:
         private_key_path: Optional custom path for private key
         public_key_path: Optional custom path for public key
         keys_dir: Optional directory to store keys
-    """
-    # Ensure keys directory exists
-    if keys_dir:
-        keys_dir.mkdir(parents=True, exist_ok=True)
-        private_key_path = private_key_path or str(keys_dir / "private_key.pem")
-        public_key_path = public_key_path or str(keys_dir / "public_key.pem")
+        algorithm: Algorithm to use for key generation
+        wipe: Whether to wipe existing keys
 
-    # Ensure the directory exists and has the correct permissions
-    os.makedirs(os.path.dirname(private_key_path), exist_ok=True)
+    Returns:
+        Tuple of (private_key_path, public_key_path)
+
+    Raises:
+        ValueError: If the algorithm is unsupported
+        NotImplementedError: If the algorithm is not yet implemented
+        KeyGenerationError: If key generation fails for any other reason
+    """
+    if not algorithm:
+        algorithm = "RS256"  # Default algorithm
+
+    logger.info(f"Generating keys with algorithm: {algorithm}")
+    logger.info(f"Keys directory: {keys_dir}")
+    logger.info(f"Private key path: {private_key_path}")
+    logger.info(f"Public key path: {public_key_path}")  
+    logger.info(f"Wipe existing keys: {wipe}")
+
+    if wipe:
+        logger.warning("Wiping existing keys as requested.")
+        # Remove existing keys if wipe is True
+        if private_key_path and os.path.exists(private_key_path):
+            os.remove(private_key_path)
+            logger.warning(f"Removed existing private key at {private_key_path}")
+        if public_key_path and os.path.exists(public_key_path):
+            os.remove(public_key_path)
+            logger.warning(f"Removed existing public key at {public_key_path}")
 
     try:
+        private_key_path, public_key_path = _resolve_key_paths(
+            private_key_path, public_key_path, keys_dir
+        )
+
         if algorithm == "RS256":
-            private_key = rsa.generate_private_key(
-                public_exponent=65537, key_size=2048, backend=default_backend()
-            )
+            private_key = _generate_rsa_private_key(key_size=2048)
             public_key = private_key.public_key()
         elif algorithm == "RS512":
-            private_key = rsa.generate_private_key(
-                public_exponent=65537, key_size=4096, backend=default_backend()
-            )
+            private_key = _generate_rsa_private_key(key_size=4096)
+            public_key = private_key.public_key()
         elif algorithm == "ES256":
             # Placeholder for ECDSA key generation
             raise NotImplementedError("ES256 algorithm is not implemented yet.")
@@ -50,95 +193,81 @@ def generate_keys(
         else:
             raise ValueError(f"Unsupported algorithm: {algorithm}")
 
-        # Save the private key
-        with open(private_key_path, "wb") as f:
-            f.write(
-                private_key.private_bytes(
-                    encoding=serialization.Encoding.PEM,
-                    format=serialization.PrivateFormat.TraditionalOpenSSL,
-                    encryption_algorithm=serialization.NoEncryption(),
-                )
-            )
-
-        # Save the public key
-        with open(public_key_path, "wb") as f:
-            f.write(
-                public_key.public_bytes(
-                    encoding=serialization.Encoding.PEM,
-                    format=serialization.PublicFormat.SubjectPublicKeyInfo,
-                )
-            )
+        # Save keys
+        _save_private_key(private_key, private_key_path)
+        _save_public_key(public_key, public_key_path)
 
         logger.info(
-            f"Generated new RSA key pair at {private_key_path} and {public_key_path}"
+            f"Generated new {algorithm} key pair at {private_key_path} and {public_key_path}"
         )
         return private_key_path, public_key_path
 
+    except (ValueError, NotImplementedError):
+        # Re-raise explicit errors
+        raise
     except Exception as e:
         logger.error(f"Failed to generate keys: {e}")
-        raise
+        raise KeyGenerationError(f"Failed to generate keys: {e}") from e
 
 
-def run_generate_keys(
+@validate_call(validate_return=True, config={"arbitrary_types_allowed": True})
+def check_and_generate_keys(
     private_key_path: Optional[str] = None,
     public_key_path: Optional[str] = None,
-    keys_dir: Optional[Path] = None,
-    algorithm: Optional[str] = None,
-):
-    """
-    Check if key files exist, generate if they don't.
+    keys_dir: Optional[Union[str, Path]] = None,
+    algorithm: Optional[Algorithm] = None,
+) -> Tuple[str, str]:
+    """Check if key files exist, generate if they don't.
 
     Args:
         private_key_path: Optional custom path for private key
         public_key_path: Optional custom path for public key
         keys_dir: Optional directory to store keys
-    """
-    # Ensure keys directory exists
-    logger.info(f"Setting up keys...")
-    logger.info(f"CWD: {os.getcwd()}")
-    logger.info(f"Keys dir: {keys_dir}")
-    logger.info(f"Private key path: {private_key_path}")
-    logger.info(f"Public key path: {public_key_path}")
+        algorithm: Algorithm to use for key generation if needed
 
+    Returns:
+        Tuple of (private_key_path, public_key_path)
+    """
     # Convert keys_dir to Path if it's a string
     if keys_dir and isinstance(keys_dir, str):
         keys_dir = Path(keys_dir)
 
-    if keys_dir:
-        logger.info(f"Creating keys directory: {keys_dir}")
-
-        os.makedirs(keys_dir, exist_ok=True)
-
-        private_key_path = private_key_path or str(keys_dir / "private_key.pem")
-        logger.info(f"Private key path set to: {private_key_path}")
-        public_key_path = public_key_path or str(keys_dir / "public_key.pem")
-        logger.info(f"Public key path set to: {public_key_path}")
+    # Resolve key paths
+    private_key_path, public_key_path = _resolve_key_paths(
+        private_key_path, public_key_path, keys_dir
+    )
 
     # Check if key files exist, generate if they don't
     if not os.path.exists(private_key_path) or not os.path.exists(public_key_path):
         logger.warning("Key files not found. Generating new keys.")
-        generate_keys(private_key_path, public_key_path, keys_dir, algorithm)
-    else:
-        logger.info("Key files already exist. No need to generate new keys.")
-        logger.info(f"Private key path: {private_key_path}")
-        logger.info(f"Public key path: {public_key_path}")
+        return generate_keys(private_key_path, public_key_path, keys_dir, algorithm)
+
+    logger.info("Key files already exist. No need to generate new keys.")
+    logger.info(f"Private key path: {private_key_path}")
+    logger.info(f"Public key path: {public_key_path}")
+    return private_key_path, public_key_path
 
 
-def load_private_key(private_key_path: Optional[str] = None):
-    """
-    Load the private key from the file.
+@validate_call(validate_return=True, config={"arbitrary_types_allowed": True})
+def load_private_key(private_key_path: str) -> RSAPrivateKey:
+    """Load a private key from a file.
 
     Args:
-        private_key_path: Optional custom path for private key
+        private_key_path: Path to the private key file
 
     Returns:
-        Loaded private key
+        Private key object
+
+    Raises:
+        FileNotFoundError: If the key file doesn't exist
+        Exception: If there's an error loading the key
     """
     try:
         with open(private_key_path, "rb") as f:
-            return serialization.load_pem_private_key(
+            key = serialization.load_pem_private_key(
                 f.read(), password=None, backend=default_backend()
             )
+            return cast(RSAPrivateKey, key)  # Type casting for mypy
     except FileNotFoundError:
         logger.error(f"Private key file not found at {private_key_path}")
         raise
@@ -147,21 +276,24 @@ def load_private_key(private_key_path: Optional[str] = None):
         raise
 
 
-def load_public_key(public_key_path: Optional[str] = None):
-    """
-    Load the public key from the file.
+@validate_call(validate_return=True, config={"arbitrary_types_allowed": True})
+def load_public_key(public_key_path: str) -> RSAPublicKey:
+    """Load a public key from a file.
 
     Args:
-        public_key_path: Optional custom path for public key
+        public_key_path: Path to the public key file
 
     Returns:
-        Loaded public key
+        Public key object
+
+    Raises:
+        FileNotFoundError: If the key file doesn't exist
+        Exception: If there's an error loading the key
     """
     try:
         with open(public_key_path, "rb") as f:
-            return serialization.load_pem_public_key(
-                f.read(), backend=default_backend()
-            )
+            key = serialization.load_pem_public_key(f.read(), backend=default_backend())
+            return cast(RSAPublicKey, key)  # Type casting for mypy
     except FileNotFoundError:
         logger.error(f"Public key file not found at {public_key_path}")
         raise
@@ -170,15 +302,15 @@ def load_public_key(public_key_path: Optional[str] = None):
         raise
 
 
+@validate_call(validate_return=True)
 def import_keys(
     private_key_content: str,
     public_key_content: str,
     private_key_path: Optional[str] = None,
     public_key_path: Optional[str] = None,
     keys_dir: Optional[Path] = None,
-):
-    """
-    Import keys from provided content.
+) -> Tuple[str, str]:
+    """Import keys from provided PEM content.
 
     Args:
         private_key_content: PEM-formatted private key content
@@ -188,16 +320,11 @@ def import_keys(
         keys_dir: Optional directory to store keys
 
     Returns:
-        Tuple of private and public key paths
+        Tuple of (private_key_path, public_key_path)
     """
-    # Ensure keys directory exists
-    if keys_dir:
-        keys_dir.mkdir(parents=True, exist_ok=True)
-        private_key_path = private_key_path or str(keys_dir / "private_key.pem")
-        public_key_path = public_key_path or str(keys_dir / "public_key.pem")
-
-    # Ensure the directory exists
-    os.makedirs(os.path.dirname(private_key_path), exist_ok=True)
+    private_key_path, public_key_path = _resolve_key_paths(
+        private_key_path, public_key_path, keys_dir
+    )
 
     # Write private key
     with open(private_key_path, "wb") as f:

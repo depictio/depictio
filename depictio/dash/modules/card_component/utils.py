@@ -2,7 +2,7 @@ from dash import html, dcc
 import dash_bootstrap_components as dbc
 import numpy as np
 import pandas as pd
-from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.custom_logging import logger
 
 # Mapping from custom aggregation names to pandas functions
 AGGREGATION_MAPPING = {

@@ -6,8 +6,7 @@ from pymongo.results import UpdateResult
 
 
 from depictio.api.v1.db import dashboards_collection
-from depictio.api.v1.configs.logging import logger
-# from depictio.api.v1.endpoints.dashboards_endpoints.models import DashboardData
+from depictio.api.v1.configs.custom_logging import logger
 
 from depictio_models.models.base import convert_objectid_to_str
 from depictio_models.utils import convert_model_to_dict

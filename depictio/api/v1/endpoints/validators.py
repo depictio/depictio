@@ -10,7 +10,7 @@ from depictio_models.models.data_collections import DataCollection
 from depictio_models.models.workflows import Workflow
 
 
-from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.custom_logging import logger
 from depictio.api.v1.db import projects_collection
 
 # TODO: check if still compliant with the new structure

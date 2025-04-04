@@ -1,5 +1,5 @@
 from dash import html
-from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.custom_logging import logger
 from depictio.dash.layouts.stepper import create_stepper_output, create_stepper_output_edit
 
 

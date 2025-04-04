@@ -1,12 +1,8 @@
-
-# from depictio.api.v1.endpoints.datacollections_endpoints.models import DataCollection
-# from depictio.api.v1.endpoints.workflow_endpoints.models import Workflow
-from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.custom_logging import logger
 
 from depictio_models.models.data_collections import DataCollection
 from depictio_models.models.workflows import Workflow
 
-logger.info("Imported utils.py")
 
 
 def compare_models(workflow_yaml: dict, workflow_db: dict) -> bool:

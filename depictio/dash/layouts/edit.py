@@ -2,7 +2,7 @@ import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 from dash import html
 
-from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.custom_logging import logger
 from depictio.dash.layouts.stepper import create_stepper_output_edit
 from depictio.dash.utils import get_component_data
 

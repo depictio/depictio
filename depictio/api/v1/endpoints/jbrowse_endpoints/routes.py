@@ -8,23 +8,18 @@ import subprocess
 from bson import ObjectId
 from fastapi import HTTPException, Depends, APIRouter
 import boto3
-# import pika
 
 from botocore.exceptions import NoCredentialsError
-# from depictio.api.v1.endpoints.files_endpoints.models import File
 
-# from depictio.api.v1.endpoints.jbrowse_endpoints.models import LogData
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.api.v1.endpoints.validators import validate_workflow_and_collection
-# from depictio.api.v1.endpoints.workflow_endpoints.models import Workflow
 from depictio.api.v1.utils import construct_full_regex, scan_runs
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.s3 import s3_client
-from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.custom_logging import logger
 
 from depictio.api.v1.db import workflows_collection, files_collection, jbrowse_collection
 
-# from depictio_models.models.base import convert_objectid_to_str
 from depictio_models.models.base import convert_objectid_to_str
 from depictio_models.models.data_collections_types.jbrowse import DCJBrowse2Config
 from depictio_models.models.files import File

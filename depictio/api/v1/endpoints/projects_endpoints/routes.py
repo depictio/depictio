@@ -3,7 +3,7 @@ from bson import ObjectId
 from fastapi import HTTPException, Depends, APIRouter
 
 # depictio imports
-from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.custom_logging import logger
 from depictio.api.v1.db import projects_collection, dashboards_collection
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 

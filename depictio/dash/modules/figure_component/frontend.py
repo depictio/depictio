@@ -13,7 +13,7 @@ from depictio.dash.utils import (
     get_columns_from_data_collection,
 )
 
-from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.custom_logging import logger
 
 # Depictio imports
 from depictio.dash.modules.figure_component.utils import (

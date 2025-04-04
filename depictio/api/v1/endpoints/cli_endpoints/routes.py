@@ -2,14 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 
 from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_email
-from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.custom_logging import logger
 
-# from depictio.api.v1.endpoints.user_endpoints.models import UserBase
-# from depictio_models.models.base import convert_objectid_to_str
-
-# FIXME: below should be replaced
-# from depictio.api.v1.models_utils import validate_config
-# from depictio.api.v1.models.top_structure import RootConfig
 
 from depictio_models.models.base import convert_objectid_to_str
 from depictio_models.models.projects import Project
