@@ -20,6 +20,7 @@ dependencies:
   - fastparquet
   - httpx==0.28.1
   - motor
+  - mypy-boto3-s3 
   - numpy==2.2.3
   - pandas==2.2.3
   - playwright==1.50.1
