@@ -1,21 +1,11 @@
 from datetime import datetime
 from pathlib import PosixPath
-# import dash_mantine_components as dmc
-# from dash import dcc
-
-# import jsonschema
+from typing import List
 import numpy as np
-
 import os
 import re
-from typing import List
 
-from depictio.api.v1.configs.logging import logger
-# from depictio.api.v1.endpoints.datacollections_endpoints.models import DataCollection
-# from depictio.api.v1.endpoints.files_endpoints.models import File
-# from depictio.api.v1.endpoints.workflow_endpoints.models import WorkflowConfig, WorkflowRun
-# from depictio.api.v1.models_utils import get_config, validate_all_workflows, validate_config
-# from depictio.api.v1.models.top_structure import RootConfig
+from depictio.api.v1.configs.custom_logging import logger
 
 from depictio_models.models.data_collections import DataCollection
 from depictio_models.models.files import File

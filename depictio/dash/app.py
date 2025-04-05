@@ -63,7 +63,7 @@ from depictio.dash.layouts.draggable_scenarios.restore_dashboard import (
     load_depictio_data,
 )
 
-from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.custom_logging import logger
 
 import os
 

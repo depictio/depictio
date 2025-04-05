@@ -15,7 +15,7 @@ from depictio.dash.utils import (
     UNSELECTED_STYLE,
 )
 from depictio.api.v1.configs.config import API_BASE_URL
-from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.custom_logging import logger
 
 def register_callbacks_jbrowse_component(app):
     @app.callback(

@@ -4,6 +4,9 @@ import math
 from bson import ObjectId
 from fastapi import HTTPException, Depends, APIRouter
 import polars as pl
+import boto3
+from botocore.exceptions import ClientError
+from fastapi import HTTPException
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.db import users_collection, deltatables_collection, projects_collection
@@ -11,10 +14,12 @@ from depictio.api.v1.endpoints.deltatables_endpoints.utils import precompute_col
 from depictio.api.v1.s3 import minio_storage_options
 from depictio.api.v1.utils import serialize_for_mongo, agg_functions
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
-from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.custom_logging import logger
 
 from depictio_models.models.deltatables import Aggregation, DeltaTableAggregated
 from depictio_models.models.base import convert_objectid_to_str
+from depictio_models.models.deltatables import UpsertDeltaTableAggregated
+from depictio_models.models.users import User
 
 deltatables_endpoint_router = APIRouter()
 
@@ -33,7 +38,6 @@ def sanitize_for_json(obj):
     return obj
 
 
-from depictio_models.models.deltatables import UpsertDeltaTableAggregated
 
 
 @deltatables_endpoint_router.post("/upsert")
@@ -127,7 +131,6 @@ async def upsert_deltatable(
         )
         version = 1
 
-    from depictio_models.models.users import User
 
     user = User.from_mongo(users_collection.find_one({"_id": ObjectId(current_user.id)}))
 
@@ -282,9 +285,7 @@ async def delete_deltatable(
         )
     data_collection_oid = ObjectId(deltatable["data_collection_id"])
 
-    import boto3
-    from botocore.exceptions import ClientError
-    from fastapi import HTTPException
+
 
     # Delete S3 DeltaTable
     deltatable_location = deltatable["delta_table_location"].lstrip("/")  # Ensure no leading "/"
