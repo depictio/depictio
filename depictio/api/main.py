@@ -21,6 +21,8 @@ from depictio_models.models.users import TokenBeanie, GroupBeanie, UserBeanie
 
 DEPICTIO_CONTEXT = get_depictio_context()
 
+load_dotenv(BASE_PATH.parent / ".env", override=False)
+print(f"Current os env vars after loading .env: {os.environ}")
 
 # Database initialization
 async def init_db():
