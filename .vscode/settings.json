@@ -2,7 +2,10 @@
     "python.testing.pytestEnabled": true,
     "python.testing.unittestEnabled": false,
     "python.testing.pytestArgs": [
-        "depictio/tests"
+        "depictio/tests",
+        "-xvs",
+        "-n",
+        "auto"
     ],
     // "python.testing.cwd": "${workspaceFolder:depictio}",
     "python.analysis.extraPaths": [
