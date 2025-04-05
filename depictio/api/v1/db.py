@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 import pymongo
 from depictio.api.v1.configs.config import settings, MONGODB_URL
-from depictio.api.v1.db_init import initialize_db
+# from depictio.api.v1.db_init import initialize_db
 from depictio.api.v1.configs.custom_logging import logger
 # from depictio.api.v1.endpoints.user_endpoints.utils import _ensure_mongodb_connection
 client = pymongo.MongoClient(MONGODB_URL)
