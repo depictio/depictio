@@ -15,6 +15,8 @@ from depictio.api.v1.endpoints.utils_endpoints.core_functions import create_buck
 
 from depictio_models.models.s3 import MinioConfig
 
+
+
 async def run_initialization(
     checks: Optional[List[str]] = None, s3_config: Optional[MinioConfig] = None
 ):
@@ -28,13 +30,6 @@ async def run_initialization(
     # Step 1: S3 Storage Accessibility Check (just storage, not bucket)
     logger.info("Starting system initialization...")
 
-    # user = await return_user_beanie(PydanticObjectId("67658ba033c8b59ad489d7c7"))
-    # await user.fetch_all_links()
-    # logger.info("Testing async beanie mongo fastapi")
-    # logger.error(user)
-    # logger.error(user.groups)
-    # logger.error(user.tokens)
-
 
     print(f"os.environ: {os.environ}")
     load_dotenv(BASE_PATH.parent / ".env", override=False)
@@ -43,13 +38,13 @@ async def run_initialization(
     # Use internal S3 config if not provided
     if s3_config is None:
         s3_config = minios3_external_config
-        logger.info(f"Using internal S3 config: {s3_config}")
+        logger.info(f"Using S3 config: {s3_config}")
 
     logger.info(f"OS Environment: {os.environ}")
 
     # Perform S3 storage accessibility check (without bucket check)
     logger.info("Checking S3 storage accessibility...")
-    # S3_storage_checks(s3_config, checks or ["s3"])
+    S3_storage_checks(s3_config, checks or ["s3"])
 
     # Step 2: Generate Keys (if not already generated)
     logger.info("Generating cryptographic keys...")
