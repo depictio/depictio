@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 import time
 import hashlib
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 from beanie import PydanticObjectId
 from bson import ObjectId
 from fastapi import HTTPException
@@ -11,7 +11,7 @@ import bcrypt
 from pydantic import validate_call
 
 from depictio.api.v1.configs.config import API_BASE_URL, PRIVATE_KEY, ALGORITHM
-from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.configs.custom_logging import format_pydantic, logger
 from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     add_token_to_user,
     fetch_user_from_email,
@@ -27,6 +27,8 @@ from depictio_models.models.users import (
     Group,
     GroupBeanie,
     UserBeanie,
+    TokenData,
+    TokenBeanie,
 )
 
 
@@ -142,7 +144,7 @@ def verify_password(stored_hash: str, password: str) -> bool:
 
 
 @validate_call(validate_return=True)
-def check_password(email: str, password: str) -> bool:
+async def check_password(email: str, password: str) -> bool:
     """
     Check if the provided password matches the stored password for the user.
     Args:
@@ -152,7 +154,7 @@ def check_password(email: str, password: str) -> bool:
         bool: True if the password matches, False otherwise.
     """
     logger.debug(f"Checking password for user {email}.")
-    user = find_user_by_email(email)
+    user = await fetch_user_from_email(email)
     logger.debug(f"User found: {user}")
     if user:
         if verify_password(user.password, password):
@@ -443,8 +445,9 @@ def edit_password(email, old_password, new_password, headers):
         return {"error": "User not found."}
 
 
-def create_access_token(token_data):
-    token_lifetime = token_data["token_lifetime"]
+@validate_call(validate_return=True)
+async def create_access_token(token_data: TokenData) -> Tuple[str, datetime]:
+    token_lifetime = token_data.token_lifetime
 
     if token_lifetime == "short-lived":
         expires_delta = timedelta(hours=12)
@@ -453,61 +456,40 @@ def create_access_token(token_data):
     else:
         raise ValueError("Invalid token type. Must be 'short-lived' or 'long-lived'.")
 
-    to_encode = token_data.copy()
+    to_encode = token_data.model_dump()
     expire = datetime.now() + expires_delta
     to_encode.update({"exp": expire})
-    logger.info(f"Token data: {to_encode}")
-    logger.info(f"Token expiration: {expire}")
-    logger.info(f"Token lifetime: {token_lifetime}")
-    logger.info(f"ALGORITHM: {ALGORITHM}")
+    logger.debug(f"Token data: {to_encode}")
+    logger.debug(f"Token expiration: {expire}")
+    logger.debug(f"Token lifetime: {token_lifetime}")
+    logger.debug(f"ALGORITHM: {ALGORITHM}")
     encoded_jwt = jwt.encode(to_encode, PRIVATE_KEY, algorithm=ALGORITHM)
-    logger.info(f"Encoded JWT: {encoded_jwt}")
+    logger.debug(f"Encoded JWT: {encoded_jwt}")
     return encoded_jwt, expire
 
 
-def add_token(token_data: dict) -> dict:
-    email = token_data["sub"]
+@validate_call(validate_return=True)
+async def add_token(token_data: TokenData) -> TokenBeanie:
+    email = token_data.sub
     logger.info(f"Adding token for user {email}.")
-    logger.info(f"Token: {token_data}")
-    token, expire = create_access_token(token_data)
-    token_data = {
-        "access_token": token,
-        "expire_datetime": expire.strftime("%Y-%m-%d %H:%M:%S"),
-        "name": token_data["name"],
-        "token_lifetime": token_data["token_lifetime"],
-    }
+    logger.info(f"Token: {format_pydantic(token_data)}")
+    token_value, expire = await create_access_token(token_data)
 
-    # create hash from access token
-    token_data["hash"] = hashlib.sha256(token.encode()).hexdigest()
-    logger.info(f"Token data: {token_data}")
+    token = TokenBeanie(
+        access_token=token_value,
+        expire_datetime=expire.strftime("%Y-%m-%d %H:%M:%S"),
+        name=token_data.name,
+        token_lifetime=token_data.token_lifetime,
+        user_id=token_data.sub,
+    )
+    logger.debug(f"Token: {format_pydantic(token)}")
 
-    logger.info(f"Adding token for user {email}.")
-    user = find_user_by_email(email)
-    logger.info(f"User: {user}")
-    if user:
-        # Check if the token already exists based on the name
-        tokens = list_existing_tokens(email)
-        logger.info(f"Tokens: {tokens}")
-        for t in tokens:
-            if t["name"] == token_data["name"]:
-                logger.error(
-                    f"Token with name {token_data['name']} already exists for user {email}."
-                )
-                return None
+    await TokenBeanie.save(token)
 
-        logger.info(f"Adding token for user {email}.")
-        token = Token(**token_data)
-        logger.info(f"Token: {token}")
-        logger.info(f"Token.mongo(): {token.mongo()}")
-
-        result = add_token_to_user(user, token.mongo())
-        logger.info(f"Result: {result}")
-        if result["success"]:
-            logger.info(f"Token added for user {email}.")
-        else:
-            logger.error(f"Error adding token for user {email}")
-        # return token
     return token
+
+
+from depictio_models.models.users import TokenBeanie
 
 
 def delete_token(email, token_id, current_token):
