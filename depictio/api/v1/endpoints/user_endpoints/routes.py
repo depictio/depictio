@@ -1,15 +1,22 @@
-from typing import Annotated, Dict
+from typing import Annotated, Dict, Optional, Any
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from beanie import PydanticObjectId
+from pydantic import EmailStr
+
+from depictio_models.models.users import UserBeanie, TokenBeanie
+
 
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from datetime import datetime
 
 from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     add_token_to_user,
+    async_fetch_user_from_token,
     check_if_token_is_valid,
     fetch_user_from_email,
-    fetch_user_from_id,
+    # fetch_user_from_email,
+    # fetch_user_from_id,
     fetch_user_from_token,
     # generate_agent_config,
     purge_expired_tokens_from_user,
@@ -25,18 +32,25 @@ from depictio.api.v1.endpoints.user_endpoints.utils import (
     delete_group_helper,
     update_group_in_users_helper,
 )
-from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.configs.custom_logging import format_pydantic, logger
 from depictio.api.v1.db import users_collection
 
 from depictio_models.models.base import convert_objectid_to_str
-from depictio_models.models.users import User, UserBase, UserBaseGroupLess, Group
+from depictio_models.models.users import (
+    User,
+    UserBase,
+    UserBaseGroupLess,
+    Group,
+    TokenBeanie,
+    TokenData,
+)
 from depictio_models.utils import convert_model_to_dict
 
 auth_endpoint_router = APIRouter()
 
 
 # OAuth2 scheme
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"/depictio/api/v1/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/depictio/api/v1/auth/login")
 
 
 async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
@@ -55,7 +69,7 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
     if token is None:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    user = fetch_user_from_token(token)
+    user = await async_fetch_user_from_token(token)
     logger.debug(f"User: {user}")
 
     if user is None:
@@ -65,7 +79,7 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
 
 
 # Login endpoint
-@auth_endpoint_router.post("/login")
+@auth_endpoint_router.post("/login", response_model=TokenBeanie)
 async def login(login_request: OAuth2PasswordRequestForm = Depends()):
     """Login endpoint
 
@@ -82,7 +96,7 @@ async def login(login_request: OAuth2PasswordRequestForm = Depends()):
     logger.info(f"Login attempt for user: {login_request.username}")
 
     # Verify credentials
-    _ = check_password(login_request.username, login_request.password)
+    _ = await check_password(login_request.username, login_request.password)
     if not _:
         logger.error("Invalid credentials")
         raise HTTPException(
@@ -92,16 +106,19 @@ async def login(login_request: OAuth2PasswordRequestForm = Depends()):
     # Generate random name for the token
     token_name = f"{login_request.username}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
 
-    # Add token details to user info
-    token_data = {
-        "sub": login_request.username,
-        "name": token_name,
-        "token_lifetime": "short-lived",
-    }
+    user = await fetch_user_from_email(login_request.username)
+    logger.debug(f"User: {user}")
+
+    token_data = TokenData(
+        name=token_name,
+        token_lifetime="short-lived",
+        sub=user.id,
+    )
+    logger.debug(f"Token data: {token_data}")
 
     # Generate and store token
-    token = add_token(token_data)
-    logger.info(f"Token : {token}")
+    token = await add_token(token_data)
+    logger.info(f"Token : {format_pydantic(token)}")
     if token is None:
         logger.error("Token with the same name already exists.")
         raise HTTPException(
@@ -109,22 +126,8 @@ async def login(login_request: OAuth2PasswordRequestForm = Depends()):
             detail="Token with the same name already exists",
         )
 
-    logger.info(f"Token generated for user: {login_request.username}")
 
-    # Update last-login field in the user document
-    result = users_collection.update_one(
-        {"email": login_request.username},
-        {"$set": {"last_login": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}},
-    )
-
-    return {
-        "access_token": token.access_token,
-        "token_type": "bearer",
-        "expire_datetime": token.expire_datetime,
-        "name": token.name,
-        "token_lifetime": token.token_lifetime,
-        "logged_in": True,
-    }
+    return token  # TokenBeanie
 
 
 @auth_endpoint_router.post("/register")
@@ -226,64 +229,64 @@ async def get_users_group():
     return groups[0]
 
 
-@auth_endpoint_router.get("/fetch_user/from_id/{user_id}")
-async def api_fetch_user_from_id(user_id: str, current_user=Depends(get_current_user)):
-    if not user_id:
-        raise HTTPException(status_code=400, detail="No user_id provided")
+# @auth_endpoint_router.get("/fetch_user/from_id/{user_id}")
+# async def api_fetch_user_from_id(user_id: str, current_user=Depends(get_current_user)):
+#     if not user_id:
+#         raise HTTPException(status_code=400, detail="No user_id provided")
 
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Current user not found.")
+#     if not current_user:
+#         raise HTTPException(status_code=401, detail="Current user not found.")
 
-    user = fetch_user_from_id(user_id)
-    if user:
-        # Ensure ObjectIds are converted to strings
-        if isinstance(user, dict):
-            return convert_objectid_to_str(user)
-        else:
-            # If it's already a model, convert to dict first
-            return convert_model_to_dict(user)
-    else:
-        raise HTTPException(status_code=404, detail="User not found")
-
-
-@auth_endpoint_router.get("/fetch_user/from_email/{email}")
-async def api_fetch_user_from_email(email: str, current_user=Depends(get_current_user)):
-    if not email:
-        raise HTTPException(status_code=400, detail="No email provided")
-
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Current user not found.")
-
-    user = fetch_user_from_email(email)
-    if user:
-        # Ensure ObjectIds are converted to strings
-        if isinstance(user, dict):
-            return convert_objectid_to_str(user)
-        else:
-            # If it's already a model, convert to dict first
-            return convert_model_to_dict(user)
-    else:
-        raise HTTPException(status_code=404, detail="User not found")
+#     user = fetch_user_from_id(user_id)
+#     if user:
+#         # Ensure ObjectIds are converted to strings
+#         if isinstance(user, dict):
+#             return convert_objectid_to_str(user)
+#         else:
+#             # If it's already a model, convert to dict first
+#             return convert_model_to_dict(user)
+#     else:
+#         raise HTTPException(status_code=404, detail="User not found")
 
 
-@auth_endpoint_router.get("/fetch_user/from_token")
-async def api_fetch_user_from_token(token: str, current_user=Depends(get_current_user)):
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Current user not found.")
+# @auth_endpoint_router.get("/fetch_user/from_email/{email}")
+# async def api_fetch_user_from_email(email: str, current_user=Depends(get_current_user)):
+#     if not email:
+#         raise HTTPException(status_code=400, detail="No email provided")
 
-    if not token:
-        raise HTTPException(status_code=400, detail="No token provided")
+#     if not current_user:
+#         raise HTTPException(status_code=401, detail="Current user not found.")
 
-    user = fetch_user_from_token(token)
-    if user:
-        # Ensure ObjectIds are converted to strings
-        if isinstance(user, dict):
-            return convert_objectid_to_str(user)
-        else:
-            # If it's already a model, convert to dict first
-            return convert_model_to_dict(user)
-    else:
-        raise HTTPException(status_code=404, detail="User not found")
+#     user = fetch_user_from_email(email)
+#     if user:
+#         # Ensure ObjectIds are converted to strings
+#         if isinstance(user, dict):
+#             return convert_objectid_to_str(user)
+#         else:
+#             # If it's already a model, convert to dict first
+#             return convert_model_to_dict(user)
+#     else:
+#         raise HTTPException(status_code=404, detail="User not found")
+
+
+# @auth_endpoint_router.get("/fetch_user/from_token")
+# async def api_fetch_user_from_token(token: str, current_user=Depends(get_current_user)):
+#     if not current_user:
+#         raise HTTPException(status_code=401, detail="Current user not found.")
+
+#     if not token:
+#         raise HTTPException(status_code=400, detail="No token provided")
+
+#     user = fetch_user_from_token(token)
+#     if user:
+#         # Ensure ObjectIds are converted to strings
+#         if isinstance(user, dict):
+#             return convert_objectid_to_str(user)
+#         else:
+#             # If it's already a model, convert to dict first
+#             return convert_model_to_dict(user)
+#     else:
+#         raise HTTPException(status_code=404, detail="User not found")
 
 
 @auth_endpoint_router.post("/edit_password")
@@ -554,8 +557,12 @@ def turn_sysadmin(user_id: str, is_admin: bool, current_user=Depends(get_current
 
 
 from depictio_models.models.users import GroupBeanie
+
+
 @auth_endpoint_router.post("/create_group")
-async def create_group(group: GroupBeanie, current_user=Depends(get_current_user)) -> Dict:
+async def create_group(
+    group: GroupBeanie, current_user=Depends(get_current_user)
+) -> Dict:
     if not current_user:
         raise HTTPException(status_code=401, detail="Current user not found.")
     # Check if the current user is an admin
@@ -570,7 +577,6 @@ async def create_group(group: GroupBeanie, current_user=Depends(get_current_user
 
     response = await create_group_helper(group)
     return response  # The CustomJSONResponse will handle serialization
-
 
 
 # @auth_endpoint_router.post("/create_group")
