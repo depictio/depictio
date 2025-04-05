@@ -14,74 +14,92 @@ import tempfile
 # Test Initialization
 # --------------------------------------------------------
 
+import pytest
+from unittest.mock import patch, MagicMock
+import pytest_asyncio
+
+@pytest.fixture
+async def initialization_test():
+    """Async fixture to replace setup/teardown methods"""
+    # Set up patches for all dependencies
+    s3_checks_patcher = patch("depictio.api.v1.initialization.S3_storage_checks")
+    mock_s3_checks = s3_checks_patcher.start()
+
+    generate_keys_patcher = patch("depictio.api.v1.initialization.generate_keys")
+    mock_generate_keys = generate_keys_patcher.start()
+
+    initialize_db_patcher = patch("depictio.api.v1.initialization.initialize_db")
+    mock_initialize_db = initialize_db_patcher.start()
+    
+    # Create a mock admin user
+    mock_admin_user = MagicMock()
+    mock_admin_user.email = "admin@example.com"
+    mock_initialize_db.return_value = mock_admin_user
+
+    create_bucket_patcher = patch("depictio.api.v1.initialization.create_bucket")
+    mock_create_bucket = create_bucket_patcher.start()
+
+    settings_patcher = patch("depictio.api.v1.initialization.settings")
+    mock_settings = settings_patcher.start()
+
+    # Configure mock settings
+    mock_settings.auth.keys_algorithm = "RS256"
+    mock_settings.auth.keys_dir = "/tmp/test_keys"
+    mock_settings.mongodb.wipe = False
+
+    # Patch BASE_PATH import 
+    base_path_patcher = patch("depictio.api.v1.initialization.BASE_PATH")
+    mock_base_path = base_path_patcher.start()
+
+    # Yield all mocks that tests will need
+    yield {
+        's3_checks': mock_s3_checks,
+        'generate_keys': mock_generate_keys,
+        'initialize_db': mock_initialize_db,
+        'create_bucket': mock_create_bucket,
+        'settings': mock_settings,
+        'base_path': mock_base_path
+    }
+
+    # Teardown - stop all patches
+    for patcher in [
+        s3_checks_patcher,
+        generate_keys_patcher,
+        initialize_db_patcher,
+        create_bucket_patcher,
+        settings_patcher,
+        base_path_patcher
+    ]:
+        patcher.stop()
 
 class TestInitialization:
-    def setup_method(self):
-        # Set up patches for all dependencies
-        self.s3_checks_patcher = patch(
-            "depictio.api.v1.initialization.S3_storage_checks"
-        )
-        self.mock_s3_checks = self.s3_checks_patcher.start()
-
-        self.generate_keys_patcher = patch(
-            "depictio.api.v1.initialization.generate_keys"
-        )
-        self.mock_generate_keys = self.generate_keys_patcher.start()
-
-        self.initialize_db_patcher = patch(
-            "depictio.api.v1.initialization.initialize_db"
-        )
-        self.mock_initialize_db = self.initialize_db_patcher.start()
-
-        self.create_bucket_patcher = patch(
-            "depictio.api.v1.initialization.create_bucket"
-        )
-        self.mock_create_bucket = self.create_bucket_patcher.start()
-
-        self.settings_patcher = patch("depictio.api.v1.initialization.settings")
-        self.mock_settings = self.settings_patcher.start()
-
-        # Configure mock settings
-        self.mock_settings.auth.keys_algorithm = "RS256"
-        self.mock_settings.auth.keys_dir = "/tmp/test_keys"
-        self.mock_settings.mongodb.wipe = False
-
-        # Mock return values
-        self.mock_initialize_db.return_value = ("admin_user", "test_user")
-
-    def teardown_method(self):
-        # Stop all patches
-        for patcher in [
-            self.s3_checks_patcher,
-            self.generate_keys_patcher,
-            self.initialize_db_patcher,
-            self.create_bucket_patcher,
-            self.settings_patcher,
-        ]:
-            patcher.stop()
-
-    def test_run_initialization_default_config(self):
+    @pytest.mark.asyncio
+    async def test_run_initialization_default_config(self, initialization_test):
         """Test initialization with default configuration."""
-        from depictio.api.v1.initialization import (
-            run_initialization,
-            minios3_external_config,
-        )
 
-        # Run the function
-        run_initialization()
-
+        print(f"Current location: {os.getcwd()}")
+        # Mock the minios3_external_config
+        with patch("depictio.api.v1.initialization.minios3_external_config") as mock_config:
+            # Import the function under test
+            from depictio.api.v1.initialization import run_initialization
+            
+            # Mock load_dotenv to prevent actual environment loading
+            with patch("depictio.api.v1.initialization.load_dotenv"):
+                # Run the function
+                await run_initialization()
+            
         # Verify all steps were called in the correct order
-        # self.mock_s3_checks.assert_called_once_with(minios3_external_config, ["s3"])
-        self.mock_generate_keys.assert_called_once()
-        self.mock_initialize_db.assert_called_once_with(wipe=False)
-        self.mock_create_bucket.assert_called_once_with("admin_user")
+        initialization_test['s3_checks'].assert_called_once()
+        initialization_test['generate_keys'].assert_called_once()
+        initialization_test['initialize_db'].assert_called_once_with(wipe=False)
+        initialization_test['create_bucket'].assert_called_once()
 
     def test_run_initialization_custom_config(self):
         """Test initialization with custom S3 configuration."""
         from depictio.api.v1.initialization import run_initialization
         from depictio_models.models.s3 import S3DepictioCLIConfig
 
-        s3_config = S3DepictioCLIConfig.parse_obj(
+        s3_config = S3DepictioCLIConfig.model_validate(
             {
                 "endpoint_url": "https://custom-endpoint",
                 "DEPICTIO_MINIO_ROOT_USER": "custom-key",
