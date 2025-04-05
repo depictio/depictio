@@ -1,6 +1,6 @@
 import uuid
 import dash
-from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.custom_logging import logger
 from depictio.dash.layouts.draggable_scenarios.interactive_component_update import update_interactive_component
 from depictio.dash.utils import get_columns_from_data_collection, return_dc_tag_from_id, return_wf_tag_from_id
 

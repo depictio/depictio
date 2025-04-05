@@ -64,4 +64,5 @@ build-backend = "setuptools.build_meta"
 packages = ["depictio"]
 
 [tool.mypy]
-exclude = "build/"
+exclude = ["build/", "depictio/"]
+files = ["tests/"]

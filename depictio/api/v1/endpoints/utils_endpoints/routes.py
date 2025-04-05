@@ -1,21 +1,29 @@
+from beanie import PydanticObjectId
 from fastapi import APIRouter, Depends, HTTPException
 
 from depictio.api.v1.configs.config import settings
-from depictio.api.v1.db import workflows_collection, data_collections_collection, runs_collection, files_collection, deltatables_collection, dashboards_collection
+from depictio.api.v1.db import (
+    workflows_collection,
+    data_collections_collection,
+    runs_collection,
+    files_collection,
+    deltatables_collection,
+    dashboards_collection,
+)
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.api.v1.endpoints.utils_endpoints.core_functions import create_bucket
 from depictio.api.v1.s3 import s3_client
-from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.custom_logging import logger
 
 # Define the router
 utils_endpoint_router = APIRouter()
+
 
 @utils_endpoint_router.get("/create_bucket")
 async def create_bucket_endpoint(current_user=Depends(get_current_user)):
     if not current_user:
         logger.error("Current user not found.")
         raise HTTPException(status_code=401, detail="Current user not found.")
-
 
     response = create_bucket(current_user)
 
@@ -25,7 +33,6 @@ async def create_bucket_endpoint(current_user=Depends(get_current_user)):
     else:
         logger.error(response.detail)
         raise HTTPException(status_code=response.status_code, detail=response.detail)
-
 
 
 # TODO - remove this endpoint - only for testing purposes in order to drop the S3 bucket content & the DB collections
@@ -84,25 +91,3 @@ async def status(current_user=Depends(get_current_user)):
     logger.info("Server is online.")
 
     return {"status": "online", "version": "v0.0.4"}
-
-from depictio_models.models.users import User
-from depictio_models.models.base import PyObjectId
-from depictio.api.v1.db import users_collection
-
-
-@utils_endpoint_router.get("/test_objectid", response_model=User)
-async def test_objectid(id: PyObjectId):
-
-    logger.info(f"Received ObjectId: {id} of type {type(id)}")
-    # Perform any operations you need with the ObjectId
-    # For example, you can fetch a user from the database using this ObjectId
-    user = users_collection.find_one({"_id": id})
-    # drop email from the user object
-    # logger.info(f"User before dropping email: {user}")
-    # user.pop("email", None)
-    logger.info(f"User found: {user}")
-
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    return user
