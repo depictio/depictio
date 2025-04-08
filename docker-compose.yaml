@@ -1,29 +1,15 @@
 services:
   mongo:
     image: mongo:latest
-    command: --dbpath /data/depictioDB --port 27018
+    command: mongod --quiet --dbpath /data/depictioDB --port 27018 --logpath /dev/null
     user: "${UID:-1000}:${GID:-1000}"
     ports:
       - 27018:27018
     volumes:
       - ./depictioDB:/data/depictioDB
 
-  minio:
-    image: minio/minio:latest
-    user: "${UID:-1000}:${GID:-1000}"
-    volumes:
-      - "./minio_data:/data"
-    environment:
-      MINIO_ROOT_USER: ${DEPICTIO_MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${DEPICTIO_MINIO_ROOT_PASSWORD}
-    command: server /data --console-address :9001
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-
   depictio_frontend:
     image: depictio:dev
-    # image: registry.git.embl.de/tweber/depictio/depictio:latest
     build:
       dockerfile: docker-images/Dockerfile_depictio.dockerfile
       context: .
@@ -31,21 +17,19 @@ services:
       - 5080:5080
     volumes:
       - ./depictio:/app/depictio
-      # - /Users/tweber/Gits/depictio-cli/configs:/configs
       - ./data:/app/data
-      - ./minio_data:/minio_data
       - ./.env:/app/.env
       - ../depictio-cli:/app/depictio-cli
       - ../depictio-models:/app/depictio-models
+    environment:
+        DEPICTIO_CONTAINER: "True"
     command: ["python", "depictio/dash/app.py"]
     user: "${UID:-1000}:${GID:-1000}"
     depends_on:
       - mongo
-      - minio
       - depictio_backend
 
   depictio_backend:
-    # image: registry.git.embl.de/tweber/depictio/depictio:latest
     image: depictio:dev
     build:
       dockerfile: docker-images/Dockerfile_depictio.dockerfile
@@ -56,15 +40,17 @@ services:
       - $PWD/depictio-example-data:/app/depictio-example-data
       - ./depictio:/app/depictio
       - ./data:/app/data
-      - ./minio_data:/minio_data
       - ./.env:/app/.env
       - ../depictio-cli:/app/depictio-cli
       - ../depictio-cli/configs:/configs
       - ../depictio-models:/app/depictio-models
     environment:
         DEPICTIO_CONTAINER: "True"
+        FORCE_COLOR: "1"
+        TERM: "xterm-256color"
+        PYTHONIOENCODING: "UTF-8"
     command: ["python", "depictio/api/run.py"]
     user: "${UID:-1000}:${GID:-1000}"
+    tty: true
     depends_on:
       - mongo
-      - minio
