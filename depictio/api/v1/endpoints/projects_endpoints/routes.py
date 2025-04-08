@@ -3,7 +3,7 @@ from bson import ObjectId
 from fastapi import HTTPException, Depends, APIRouter
 
 # depictio imports
-from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.configs.custom_logging import format_pydantic, logger
 from depictio.api.v1.db import projects_collection, dashboards_collection
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 
@@ -250,6 +250,8 @@ async def create_project(project: dict, current_user: str = Depends(get_current_
     }
 
 
+
+
 @projects_endpoint_router.put("/update")
 async def update_project(project: dict, current_user: str = Depends(get_current_user)):
     if not current_user:
@@ -409,7 +411,7 @@ async def toggle_public_private(
 
     # Convert string to proper boolean
     is_public_bool = True if is_public.lower() == "true" else False
-    
+
     # Toggle the project's is_public field
     project["is_public"] = is_public_bool
     logger.info(f"Project: {project}")
