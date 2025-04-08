@@ -60,8 +60,8 @@ async def add_token(token_data: Dict) -> TokenBeanie:
     await token.insert()
     
     # Add the token to the user's tokens list
-    user.tokens.append(token)
-    await user.save()
+    # user.tokens.append(token)
+    # await user.save()
     
     logger.info(f"Token created for user {user_id}.")
     return token
