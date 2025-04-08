@@ -227,7 +227,7 @@ async def async_fetch_user_from_id(
     return user
 
 
-async def fetch_user_from_email(email: str) -> Optional[UserBeanie]:
+async def fetch_user_from_email(email: str, return_tokens: bool = False) -> Optional[UserBeanie]:
     """
     Fetch a user based on their email address.
 
