@@ -1,7 +1,7 @@
 import boto3
 from botocore.exceptions import ClientError
 from bson import ObjectId
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import Mock, patch, MagicMock, call
 import bcrypt
 import mongomock
 import os
@@ -76,10 +76,17 @@ class TestInitialization:
     @pytest.mark.asyncio
     async def test_run_initialization_default_config(self, initialization_test):
         """Test initialization with default configuration."""
+        from depictio_models.models.s3 import S3DepictioCLIConfig
 
-        print(f"Current location: {os.getcwd()}")
-        # Mock the minios3_external_config
-        with patch("depictio.api.v1.initialization.minios3_external_config") as mock_config:
+        # Create a mock config that behaves like a real S3DepictioCLIConfig
+        mock_config = Mock(spec=S3DepictioCLIConfig)
+        mock_config.endpoint_url = "https://example.com"
+        mock_config.bucket = "test-bucket"
+        mock_config.root_user = "test-user"
+        mock_config.root_password = "test-password"
+
+        # Patch minios3_external_config to return this mock
+        with patch("depictio.api.v1.s3.minios3_external_config", mock_config):
             # Import the function under test
             from depictio.api.v1.initialization import run_initialization
             
