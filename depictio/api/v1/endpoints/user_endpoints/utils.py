@@ -107,7 +107,7 @@ def find_user_by_id(user_id: PyObjectId) -> Optional[Dict]:
     return None
 
 
-@validate_call(validate_return=True)
+@validate_call()
 def find_user_by_email(email: str, return_tokens: bool = False) -> Optional[Dict]:
     """
     Find a user by email.
@@ -117,12 +117,42 @@ def find_user_by_email(email: str, return_tokens: bool = False) -> Optional[Dict
     Returns:
         dict: The user data if found, None otherwise.
     """
+    import asyncio
+    
     logger.debug(f"Finding user with email: {email}")
-    user_data = fetch_user_from_email(email, return_tokens)
+    
+    # Create a new event loop if one doesn't exist in this thread
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    
+    # Run the async function in the event loop
+    user_data = loop.run_until_complete(fetch_user_from_email(email, return_tokens))
+    
     if user_data:
         logger.info(f"Found user data: {user_data}")
         return user_data
     return None
+
+
+# @validate_call()
+# def find_user_by_email(email: str, return_tokens: bool = False) -> Optional[Dict]:
+#     """
+#     Find a user by email.
+#     Args:
+#         email (str): The email of the user.
+#         return_tokens (bool): Whether to return tokens or not.
+#     Returns:
+#         dict: The user data if found, None otherwise.
+#     """
+#     logger.debug(f"Finding user with email: {email}")
+#     user_data = fetch_user_from_email(email, return_tokens)
+#     if user_data:
+#         logger.info(f"Found user data: {user_data}")
+#         return user_data
+#     return None
 
 
 @validate_call(validate_return=True)
