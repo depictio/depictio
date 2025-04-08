@@ -18,27 +18,45 @@ from depictio.api.v1.configs.config import settings, MONGODB_URL
 
 from depictio_models.utils import get_depictio_context
 from depictio_models.models.users import TokenBeanie, GroupBeanie, UserBeanie
+from depictio_models.models.projects import Project
 
 DEPICTIO_CONTEXT = get_depictio_context()
 
 load_dotenv(BASE_PATH.parent / ".env", override=False)
 print(f"Current os env vars after loading .env: {os.environ}")
 
+
 # Database initialization
-async def init_db():
+async def init_motor_beanie():
     client = AsyncIOMotorClient(MONGODB_URL)
     await init_beanie(
         database=client[settings.mongodb.db_name],
-        document_models=[TokenBeanie, GroupBeanie, UserBeanie],
+        document_models=[TokenBeanie, GroupBeanie, UserBeanie, Project],
     )
+
+
+async def check_initialization():
+    from depictio.api.v1.db import initialization_collection
+
+    result = initialization_collection.find_one({"initialization_complete": True})
+    if result:
+        return True
+    else:
+        return False
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: initialize database, etc.
-    await init_db()
-    # Initialize system before creating the app
-    await run_initialization()
+    await init_motor_beanie()
+
+    # Initialize system before creating the app if not already initialized
+    if not await check_initialization() or settings.mongodb.wipe:
+        print("Initialization not complete. Running initialization...")
+        await run_initialization()
+    else:
+        print("Initialization already complete. Skipping...")
+    # await run_initialization()
 
     yield
     # Shutdown: add cleanup tasks if needed
