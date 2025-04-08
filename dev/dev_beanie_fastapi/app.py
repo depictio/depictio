@@ -31,7 +31,7 @@ logger = logging.getLogger("rich")
 # Configuration
 JWT_SECRET = "your-secret-key-change-this-in-production"
 JWT_ALGORITHM = "HS256"
-MONGODB_URL = "mongodb://localhost:27018"
+MONGODB_URL = "mongodb://localhost:27017"
 DB_NAME = "beanie_test_db"
 
 
@@ -59,13 +59,14 @@ class CustomJSONResponse(JSONResponse):
         )
 
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: initialize database, etc.
     await init_db()
     yield
     # Shutdown: add cleanup tasks if needed
-    # await shutdown_db()
+    # await shutdown_db(wipe=True)
 
 
 # Initialize FastAPI
@@ -77,6 +78,14 @@ app = FastAPI(
 
 # OAuth2 scheme
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+
+class Test(Document):
+    name: str
+    test_field: Optional[str] = None
+
+    class Settings:
+        name = "test"
+        use_revision = True  # Track document revisions
 
 
 # Document models
@@ -120,7 +129,6 @@ class Token(Document):
         name = "tokens"  # Collection name
         use_revision = True  # Track document revisions
 
-
     # Field serializers for Pydantic v2
     @field_serializer("id")
     def serialize_id(self, id: PydanticObjectId) -> str:
@@ -160,7 +168,21 @@ class LoginForm(BaseModel):
 # Database initialization
 async def init_db():
     client = AsyncIOMotorClient(MONGODB_URL)
-    await init_beanie(database=client[DB_NAME], document_models=[User, Token])
+    # drop existing database for testing
+    # client.drop_database(DB_NAME)
+    await init_beanie(database=client[DB_NAME], document_models=[User, Token, Test])
+
+async def shutdown_db(wipe: bool = False):
+    # Close the database connection
+    client = AsyncIOMotorClient(MONGODB_URL)
+    
+    # Only wipe the database if explicitly requested
+    if wipe:
+        client.drop_database(DB_NAME)
+        logger.info(f"Database {DB_NAME} dropped.")
+    
+    client.close()
+    logger.info("Database connection closed.")
 
 
 # User authentication utilities
@@ -238,6 +260,13 @@ async def create_user(user_data: UserCreate):
     logger.info(f"Creating new user: {new_user}")
     await new_user.insert()
 
+    test = Test(name="test")
+    await test.insert()
+    logger.info(f"Test document created: {test}")
+
+
+
+
     # Return the user directly (hashed_password will be excluded via Config)
     return new_user
 
@@ -277,6 +306,11 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
 async def read_users_me(current_user: User = Depends(get_current_user)):
     # Return the user object directly
     logger.info(f"Current user: {current_user}")
+
+    test = await Test.find_one()
+    if test:
+        logger.info(f"Test document found: {test}")
+
     return current_user
 
 
