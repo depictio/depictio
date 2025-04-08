@@ -13,7 +13,7 @@ from depictio.api.v1.db import (
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.api.v1.endpoints.utils_endpoints.core_functions import create_bucket
 from depictio.api.v1.s3 import s3_client
-from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.configs.custom_logging import format_pydantic, logger
 
 # Define the router
 utils_endpoint_router = APIRouter()
@@ -89,5 +89,9 @@ async def status(current_user=Depends(get_current_user)):
         raise HTTPException(status_code=401, detail="Current user not found.")
 
     logger.info("Server is online.")
+    from depictio_models.models.projects import Project
+    test = await Project.find_one()
+    logger.debug(f"Test project: {format_pydantic(test)}")
+
 
     return {"status": "online", "version": "v0.0.4"}
