@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 
-from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_email
+from depictio.api.v1.endpoints.user_endpoints.core_functions import async_fetch_user_from_email
 from depictio.api.v1.configs.custom_logging import logger
 
 
@@ -27,7 +27,7 @@ async def validate_cli_config_endpoint(cli_config: dict):
     logger.info(f"Token: {token}")
     logger.info(f"Email: {email}")
 
-    db_user = fetch_user_from_email(email, return_tokens=True)
+    db_user = async_fetch_user_from_email(email, return_tokens=True)
 
     if db_user:
         tokens = db_user.tokens

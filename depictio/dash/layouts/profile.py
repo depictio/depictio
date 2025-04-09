@@ -3,9 +3,6 @@ import dash_mantine_components as dmc
 from dash import html, Input, Output, State, dcc
 import dash
 from depictio.api.v1.configs.custom_logging import logger
-from depictio.api.v1.endpoints.user_endpoints.core_functions import (
-    fetch_user_from_token,
-)
 from depictio.api.v1.endpoints.user_endpoints.utils import (
     edit_password,
     check_password,
@@ -18,6 +15,8 @@ from dash_extensions.enrich import (
 )
 from dash_extensions import EventListener
 from dash.exceptions import PreventUpdate
+
+from depictio.dash.api_calls import api_call_fetch_user_from_token
 
 # Layout placeholders
 avatar = html.Div(id="avatar-placeholder")
@@ -197,7 +196,7 @@ def register_profile_callbacks(app):
                 dash.no_update,
             )
 
-        current_user = fetch_user_from_token(local_data["access_token"])
+        current_user = api_call_fetch_user_from_token(local_data["access_token"])
 
         if triggered_id == "old-password":
             if check_password(current_user.email, old_password):
@@ -369,7 +368,7 @@ def register_profile_callbacks(app):
         if local_data is None or "access_token" not in local_data:
             return html.Div(), html.Div()
 
-        user = fetch_user_from_token(local_data["access_token"])
+        user = api_call_fetch_user_from_token(local_data["access_token"])
         logger.info(f"PROFILE user: {user}")
         user = user.dict()
 
@@ -413,6 +412,7 @@ def register_profile_callbacks(app):
         prevent_initial_call=True,
     )
     def logout_user_callback(n_clicks):
+        logger.info(f"Logout button clicked: {n_clicks}")
         if n_clicks is None:
             return dash.no_update, dash.no_update
 

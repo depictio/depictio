@@ -5,9 +5,7 @@ from dash import html, dcc, Input, Output, State, ALL
 import dash
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.custom_logging import logger
-from depictio.api.v1.endpoints.user_endpoints.core_functions import (
-    fetch_user_from_token,
-)
+from depictio.dash.api_calls import api_call_fetch_user_from_token
 
 
 def register_callbacks_save(app):
@@ -81,7 +79,7 @@ def register_callbacks_save(app):
 
         # Validate user authentication
         TOKEN = local_store["access_token"]
-        current_user = fetch_user_from_token(TOKEN)
+        current_user = api_call_fetch_user_from_token(TOKEN)
         if not current_user:
             logger.warning("User not found.")
             return dash.no_update

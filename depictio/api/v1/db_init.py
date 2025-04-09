@@ -1,8 +1,12 @@
 import os
 from typing import Optional
 from beanie import PydanticObjectId
+from fastapi import HTTPException
 import yaml
 
+from depictio.api.v1.endpoints.projects_endpoints.utils import (
+    helper_create_project_beanie,
+)
 from depictio.api.v1.endpoints.user_endpoints.agent_config_utils import (
     generate_agent_config,
 )
@@ -111,6 +115,48 @@ def create_user(user: User) -> dict:
 #     return token_data
 
 
+async def create_initial_project(admin_user: UserBeanie) -> None:
+    from depictio_models.models.projects import ProjectBeanie
+    # from depictio_models.models.projects import Project,
+    from depictio_models.models.users import UserBase, TokenBeanie
+
+    project_yaml_path = os.path.join(
+        os.path.dirname(__file__), "configs", "initial_project.yaml"
+    )
+    project_config = get_config(project_yaml_path)
+    project_config["yaml_config_path"] = project_yaml_path
+
+    admin_user_copy = admin_user.model_copy()
+    await admin_user_copy.fetch_all_links()
+
+    project_config["permissions"] = {
+        "owners": [
+            UserBase(
+                id=admin_user.id,
+                email=admin_user.email,
+                is_admin=True,
+                groups=[Group(id=g.id, name=g.name) for g in admin_user_copy.groups],
+            )
+        ],
+        "editors": [],
+        "viewers": [],
+    }
+
+    logger.debug(f"Project config: {project_config}")
+    project = ProjectBeanie(**project_config)
+    logger.debug(f"Project object: {format_pydantic(project)}")
+
+    try:
+        payload = await helper_create_project_beanie(project)
+        logger.debug(f"Project creation payload: {payload}")
+        if payload["success"]:
+            logger.info(
+                f"Project created successfully: {format_pydantic(payload['project'])}"
+            )
+    except HTTPException as e:
+        logger.error(f"Error creating project: {e}")
+
+
 async def initialize_db(wipe: bool = False) -> Optional[UserBeanie]:
     """
     Initialize the database with default users and groups.
@@ -118,7 +164,6 @@ async def initialize_db(wipe: bool = False) -> Optional[UserBeanie]:
     logger.info(f"Bootstrap: {wipe} and type: {type(wipe)}")
 
     _ensure_mongodb_connection()
-
 
     if wipe:
         logger.info("Wipe is enabled. Deleting the database...")
@@ -134,7 +179,6 @@ async def initialize_db(wipe: bool = False) -> Optional[UserBeanie]:
     initial_config = get_config(config_path)
 
     logger.info("Running initial database setup...")
-
 
     # Validate and create groups
     groups = {}
@@ -166,10 +210,10 @@ async def initialize_db(wipe: bool = False) -> Optional[UserBeanie]:
         # Create user
         user_payload = await create_user_helper_beanie(user)
         logger.debug(f"Created user: {format_pydantic(user_payload['user'])}")
-        
+
         created_user = user_payload["user"]
         created_users.append(created_user)
-        
+
         # If this is an admin user, save it for return
         if created_user.is_admin:
             admin_user = created_user
@@ -183,12 +227,17 @@ async def initialize_db(wipe: bool = False) -> Optional[UserBeanie]:
 
     # If no admin user was created through the loop, try to find one
     if admin_user is None:
-        logger.debug("No admin user created during initialization, checking if one exists...")
+        logger.debug(
+            "No admin user created during initialization, checking if one exists..."
+        )
         admin_user = await UserBeanie.find_one({"is_admin": True})
         if admin_user:
             logger.info(f"Found existing admin user: {admin_user.email}")
         else:
             logger.warning("No admin user found in the database")
 
+    await create_initial_project(admin_user=admin_user)
+
     logger.info("Database initialization completed successfully.")
+
     return admin_user

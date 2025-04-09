@@ -9,7 +9,7 @@ from depictio.api.v1.s3 import minios3_external_config
 from depictio_models.models.users import (
     UserBeanie,
     TokenBeanie,
-    UserBaseCLIConfigBeanie,
+    UserBaseCLIConfig,
     CLIConfig,
 )
 from depictio_models.utils import make_json_serializable
@@ -30,7 +30,7 @@ async def generate_agent_config(user: UserBeanie, token: TokenBeanie) -> CLIConf
     logger.info(f"Generating agent config for user: {user.email}")
 
     # Create the user CLI config
-    user_cli_config = UserBaseCLIConfigBeanie(
+    user_cli_config = UserBaseCLIConfig(
         id=user.id, email=user.email, is_admin=user.is_admin, token=token
     )
 

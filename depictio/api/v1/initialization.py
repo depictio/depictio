@@ -16,7 +16,6 @@ from depictio.api.v1.endpoints.utils_endpoints.core_functions import create_buck
 from depictio_models.models.s3 import MinioConfig
 
 
-
 async def run_initialization(
     checks: Optional[List[str]] = None, s3_config: Optional[MinioConfig] = None
 ):
@@ -29,7 +28,6 @@ async def run_initialization(
     """
     # Step 1: S3 Storage Accessibility Check (just storage, not bucket)
     logger.info("Starting system initialization...")
-
 
     print(f"os.environ: {os.environ}")
     load_dotenv(BASE_PATH.parent / ".env", override=False)
@@ -70,10 +68,10 @@ async def run_initialization(
 
     # Get the admin user from the initialization process
     admin_user = await initialize_db(wipe=bool(settings.mongodb.wipe))
-    
+
     if admin_user:
         logger.info(f"Admin user retrieved: {admin_user.email}")
-        
+
         # Step 4: S3 Bucket Creation
         try:
             logger.info("Creating S3 bucket...")
@@ -85,5 +83,21 @@ async def run_initialization(
     else:
         logger.warning("No admin user available, skipping bucket creation")
 
+
+    # Register initialization complete in the database
+    from depictio.api.v1.db import initialization_collection
+
+    init_data = {
+        "initialization_complete": True,
+        "admin_user_id": admin_user.id if admin_user else None,
+        "s3_checks": checks,
+        "s3_config": s3_config.model_dump_json(),
+    }
+
+    # Save initialization data to the database
+    initialization_collection.insert_one(init_data)
+    logger.info("Initialization data saved to the database.")
+    logger.debug(f"Initialization data: {init_data}")
     logger.info("System initialization complete.")
-    return True
+
+    return init_data

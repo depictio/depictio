@@ -5,8 +5,6 @@ from unittest.mock import patch, MagicMock, call
 import mongomock
 
 from depictio.api.v1.endpoints.user_endpoints.utils import (
-    # create_group_helper,
-    # delete_group_helper,
     hash_password,
     verify_password,
 )
@@ -191,7 +189,7 @@ class TestCheckPassword:
     def setup_method(self, method):
         # Set up patches
         self.fetch_user_patcher = patch(
-            "depictio.api.v1.endpoints.user_endpoints.utils.fetch_user_from_email"
+            "depictio.api.v1.endpoints.user_endpoints.utils.async_fetch_user_from_email"
         )
         self.mock_fetch_user = self.fetch_user_patcher.start()
 
@@ -597,28 +595,21 @@ from datetime import datetime
 from depictio.api.v1.endpoints.user_endpoints.utils import add_token
 from depictio_models.models.users import TokenBeanie, TokenData
 
-
 class TestAddToken:
     def setup_method(self):
         # Set up patches
         self.create_access_token_patcher = patch('depictio.api.v1.endpoints.user_endpoints.utils.create_access_token', new_callable=AsyncMock)
         self.mock_create_access_token = self.create_access_token_patcher.start()
         
-        # Mock the entire TokenBeanie class to avoid initialization errors
+        # Mock the TokenBeanie class
         self.token_beanie_patcher = patch('depictio.api.v1.endpoints.user_endpoints.utils.TokenBeanie')
         self.mock_token_beanie_class = self.token_beanie_patcher.start()
         
-        # Create a mock instance that will be returned by the constructor
-        self.mock_token_instance = MagicMock(spec=TokenBeanie)
-        # Add necessary attributes to prevent AttributeError
-        self.mock_token_instance.access_token = None
-        self.mock_token_instance.expire_datetime = None
-        self.mock_token_instance.name = None
-        self.mock_token_instance.token_lifetime = None
-        self.mock_token_instance.user_id = None
-        
-        self.mock_token_beanie_class.return_value = self.mock_token_instance
+        # Important: Add a class method 'save' to the TokenBeanie class mock
         self.mock_token_beanie_class.save = AsyncMock()
+        
+        # This will capture the argument passed to TokenBeanie constructor
+        self.mock_token_beanie_class.side_effect = lambda **kwargs: MagicMock(spec=TokenBeanie, **kwargs)
         
         self.logger_patcher = patch('depictio.api.v1.endpoints.user_endpoints.utils.logger')
         self.mock_logger = self.logger_patcher.start()
@@ -644,6 +635,8 @@ class TestAddToken:
         # Configure mock return values
         self.mock_create_access_token.return_value = (self.test_token_value, self.test_expire_datetime)
         
+        self.mock_token_instance = self.mock_token_beanie_class.return_value
+
     def teardown_method(self):
         # Stop all patches
         for patcher_attr in ['create_access_token_patcher', 'token_beanie_patcher', 
@@ -656,28 +649,29 @@ class TestAddToken:
         """Test successful token creation and storage."""
         # Act
         result = await add_token(self.token_data)
-
-        print(result)
         
         # Assert
         # Verify create_access_token was called with the right parameters
         self.mock_create_access_token.assert_called_once_with(self.token_data)
         
-        # # Verify TokenBeanie.save was called
+        # Capture the TokenBeanie instance that was created and saved
+        # The constructor is called with the token data we expect
+        self.mock_token_beanie_class.assert_called_once()
+        created_token = self.mock_token_beanie_class.call_args[1]
+        
+        # Verify TokenBeanie.save was called with the new instance
         self.mock_token_beanie_class.save.assert_called_once()
         
-        # # Check the token was created with expected values
-        saved_token = self.mock_token_beanie_class.save.call_args[0][0]
+        # Check that the token was created with the right parameters
+        assert created_token['access_token'] == self.test_token_value
+        assert created_token['expire_datetime'] == self.test_expire_datetime.strftime("%Y-%m-%d %H:%M:%S")
+        assert created_token['name'] == self.test_token_name
+        assert created_token['token_lifetime'] == "short-lived"
+        assert created_token['user_id'] == self.test_user_id
+        
+        # Check that the function returned the token instance
+        assert result is self.mock_token_beanie_class.save.call_args[0][0]        
 
-        assert saved_token.access_token == self.test_token_value
-        assert saved_token.expire_datetime == self.test_expire_datetime.strftime("%Y-%m-%d %H:%M:%S")
-        assert saved_token.name == self.test_token_name
-        assert saved_token.token_lifetime == "short-lived"
-        assert saved_token.user_id == self.test_user_id
-        
-        # Check that the function returned the token
-        assert result == self.mock_token_instance
-        
     @pytest.mark.asyncio
     async def test_add_token_database_error(self):
         """Test handling of database errors during token saving."""
@@ -708,4 +702,4 @@ class TestAddToken:
         assert "Token generation error" in str(exc_info.value)
         
         # Verify save was not called
-        self.mock_token_beanie_class.save.assert_not_called()
+        self.mock_token_instance.save.assert_not_called()
