@@ -9,15 +9,13 @@ from dash_iconify import DashIconify
 from pydantic import validate_call
 
 from depictio.api.v1.configs.config import API_BASE_URL
-from depictio.api.v1.endpoints.user_endpoints.core_functions import (
-    fetch_user_from_token,
-)
 from depictio.api.v1.configs.custom_logging import logger
 from depictio.api.v1.endpoints.user_endpoints.utils import (
     api_create_group,
     api_update_group_in_users,
     create_group_helper,
 )
+from depictio.dash.api_calls import api_call_fetch_user_from_token
 from depictio.dash.layouts.layouts_toolbox import (
     create_delete_confirmation_modal,
     # register_delete_confirmation_modal_callbacks,
@@ -1038,7 +1036,7 @@ def register_admin_callbacks(app):
             # Fetch all projects for admin view using the existing endpoint
             try:
                 projects = fetch_projects_for_admin(local_data["access_token"])
-                current_user = fetch_user_from_token(local_data["access_token"])
+                current_user = api_call_fetch_user_from_token(local_data["access_token"])
 
                 if projects:
                     # Create project items with modified render function to show owner email
