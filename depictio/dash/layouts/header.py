@@ -6,10 +6,8 @@ import dash
 import httpx
 
 from depictio.api.v1.configs.config import API_BASE_URL
-from depictio.api.v1.endpoints.user_endpoints.core_functions import (
-    fetch_user_from_token,
-)
 from depictio.api.v1.configs.custom_logging import logger
+from depictio.dash.api_calls import api_call_fetch_user_from_token
 
 current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -38,7 +36,7 @@ def register_callbacks_header(app):
 
         len_output = 8
 
-        current_user = fetch_user_from_token(local_store["access_token"])
+        current_user = api_call_fetch_user_from_token(local_store["access_token"])
 
         if not local_store["access_token"]:
             switch_state = False
@@ -181,7 +179,7 @@ def design_header(data, local_store):
         if "stored_edit_dashboard_mode_button" not in data:
             data["stored_edit_dashboard_mode_button"] = [int(0)]
 
-    current_user = fetch_user_from_token(local_store["access_token"])
+    current_user = api_call_fetch_user_from_token(local_store["access_token"])
     logger.info(f"current_user: {current_user}")
 
     init_nclicks_add_button = (
