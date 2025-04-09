@@ -1,8 +1,8 @@
 from fastapi import HTTPException
-from depictio_models.models.projects import Project
+from depictio_models.models.projects import ProjectBeanie
 
 
-async def helper_create_project_beanie(project: Project) -> Project:
+async def helper_create_project_beanie(project: ProjectBeanie) -> ProjectBeanie:
     """Helper function to create a project in the database.
 
     Args:
@@ -16,7 +16,7 @@ async def helper_create_project_beanie(project: Project) -> Project:
     """
 
     # Check if the project already exists
-    existing_project = await Project.find_one({"name": project.name})
+    existing_project = await ProjectBeanie.find_one({"name": project.name})
     if existing_project:
         raise HTTPException(
             status_code=400,
