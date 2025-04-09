@@ -116,8 +116,8 @@ def create_user(user: User) -> dict:
 
 
 async def create_initial_project(admin_user: UserBeanie) -> None:
-    # from depictio_models.models.projects import ProjectBeanie
-    from depictio_models.models.projects import Project
+    from depictio_models.models.projects import ProjectBeanie
+    # from depictio_models.models.projects import Project,
     from depictio_models.models.users import UserBase, TokenBeanie
 
     project_yaml_path = os.path.join(
@@ -143,7 +143,7 @@ async def create_initial_project(admin_user: UserBeanie) -> None:
     }
 
     logger.debug(f"Project config: {project_config}")
-    project = Project(**project_config)
+    project = ProjectBeanie(**project_config)
     logger.debug(f"Project object: {format_pydantic(project)}")
 
     try:
