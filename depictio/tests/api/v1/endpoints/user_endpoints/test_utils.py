@@ -189,7 +189,7 @@ class TestCheckPassword:
     def setup_method(self, method):
         # Set up patches
         self.fetch_user_patcher = patch(
-            "depictio.api.v1.endpoints.user_endpoints.utils.fetch_user_from_email"
+            "depictio.api.v1.endpoints.user_endpoints.utils.async_fetch_user_from_email"
         )
         self.mock_fetch_user = self.fetch_user_patcher.start()
 
