@@ -6,9 +6,9 @@ import polars as pl
 from dash import html, dcc
 import dash_bootstrap_components as dbc
 
-from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_token
 from depictio.api.v1.configs.custom_logging import logger
 from depictio.api.v1.configs.config import API_BASE_URL
+from depictio.dash.api_calls import api_call_fetch_user_from_token
 
 def build_jbrowse_df_mapping_dict(stored_metadata, df_dict_processed, access_token):
     jbrowse_df_mapping_dict = collections.defaultdict(dict)
@@ -88,7 +88,7 @@ def build_jbrowse(**kwargs):
     logger.info(f"build_jbrowse dashboard_id {dashboard_id}")
     logger.info(f"build_jbrowse build_frame {build_frame}")
 
-    user = fetch_user_from_token(access_token)
+    user = api_call_fetch_user_from_token(access_token)
     logger.info(f"user {user}")
 
     # response = httpx.get(
