@@ -103,15 +103,18 @@ def validate_login(login_email, login_password):
         token_lifetime = token_data.get("token_lifetime")
 
         if not access_token or not token_lifetime:
+            logger.error("Access token or token lifetime not found in response.")
             return "Failed to retrieve access token.", True, dash.no_update, dash.no_update
 
         if response.status_code != 200:
+            logger.error(f"Error logging in: {response.text}")
             return f"Error logging in: {response.text}", True, dash.no_update, dash.no_update
 
         # return "Login successful!", False,
+        logger.info(f"Login successful for user: {user.email}")
         return "Login successful!", False, login_user(user.email), token_data
 
-    logger.info("Password verification failed.")
+    logger.error("Password verification failed.")
     return "Invalid email or password.", True, dash.no_update, dash.no_update
 
 
@@ -264,10 +267,15 @@ def register_callbacks_users_management(app):
 
         elif button_id == "login-button":
             feedback_message, modal_open_new, session_data, local_data_new = validate_login(login_email, login_password)
+            logger.debug(f"Feedback message: {feedback_message}")
+            logger.debug(f"Modal open new: {modal_open_new}")
+            logger.debug(f"Session data: {session_data}")
+            logger.debug(f"Local data new: {local_data_new}")
             if not modal_open_new:
                 content = render_login_form()
             else:
                 content = render_login_form()
+                
             return modal_open_new, content, dmc.Text(feedback_message, color="red" if modal_open_new else "green"), current_state, modal_open_new, local_data_new
 
         elif button_id == "register-button":

@@ -1,9 +1,7 @@
 import collections
 import httpx
 from depictio.api.v1.configs.config import API_BASE_URL
-from depictio.api.v1.endpoints.user_endpoints.core_functions import (
-    fetch_user_from_token,
-)
+from depictio.dash.api_calls import api_call_fetch_user_from_token
 from depictio.dash.layouts.draggable_scenarios.interactive_component_update import (
     update_interactive_component,
 )
@@ -152,7 +150,7 @@ def load_depictio_data(dashboard_id, local_data):
         #             dashboard_data["buttons_data"][button] = True
 
         if hasattr(dashboard_data, "stored_metadata"):
-            current_user = fetch_user_from_token(local_data["access_token"])
+            current_user = api_call_fetch_user_from_token(local_data["access_token"])
 
             # Check if data is available, if not set the buttons to disabled
             owner = (
