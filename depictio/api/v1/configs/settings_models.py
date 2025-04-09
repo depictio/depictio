@@ -14,6 +14,7 @@ class Collections(BaseSettings):
     runs_collection: str = "runs"
     files_collection: str = "files"
     users_collection: str = "users"
+    tokens_collection: str = "tokens"
     groups_collection: str = "groups"
     deltatables_collection: str = "deltatables"
     jbrowse_collection: str = "jbrowse_collection"
