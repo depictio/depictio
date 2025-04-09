@@ -11,14 +11,10 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from datetime import datetime
 
 from depictio.api.v1.endpoints.user_endpoints.core_functions import (
-    add_token_to_user,
     async_fetch_user_from_token,
+    async_fetch_user_from_email,
+    async_fetch_user_from_id,
     check_if_token_is_valid,
-    fetch_user_from_email,
-    # fetch_user_from_email,
-    # fetch_user_from_id,
-    fetch_user_from_token,
-    # generate_agent_config,
     purge_expired_tokens_from_user,
 )
 from depictio.api.v1.endpoints.user_endpoints.agent_config_utils import (
@@ -53,7 +49,7 @@ auth_endpoint_router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/depictio/api/v1/auth/login")
 
 
-async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
+async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> User:
     """Returns the current user from the token.
 
     Args:
@@ -106,7 +102,7 @@ async def login(login_request: OAuth2PasswordRequestForm = Depends()):
     # Generate random name for the token
     token_name = f"{login_request.username}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
 
-    user = await fetch_user_from_email(login_request.username)
+    user = await async_fetch_user_from_email(login_request.username)
     logger.debug(f"User: {user}")
 
     token_data = TokenData(
@@ -126,8 +122,70 @@ async def login(login_request: OAuth2PasswordRequestForm = Depends()):
             detail="Token with the same name already exists",
         )
 
+    # Set logged_in to True
+    token.logged_in = True
 
     return token  # TokenBeanie
+
+
+@auth_endpoint_router.get("/fetch_user/from_token")
+async def api_fetch_user_from_token(
+    token: str, current_user=Depends(get_current_user)
+) -> User:
+    user = await async_fetch_user_from_token(token)
+
+    if not user:
+        raise HTTPException(
+            status_code=404, detail="User not found for the provided token"
+        )
+
+    # if user id differs from current user id
+    if user.id != current_user.id:
+        raise HTTPException(
+            status_code=403, detail="Token does not belong to the current user"
+        )
+
+    return user
+
+
+@auth_endpoint_router.get("/fetch_user/from_email")
+async def api_fetch_user_from_email(
+    email: EmailStr, current_user=Depends(get_current_user)
+) -> User:
+    user = await async_fetch_user_from_email(email)
+
+    if not user:
+        raise HTTPException(
+            status_code=404, detail="User not found for the provided email"
+        )
+
+    # if user id differs from current user id
+    if user.id != current_user.id:
+        raise HTTPException(
+            status_code=403, detail="Email does not belong to the current user"
+        )
+
+    return user
+
+
+@auth_endpoint_router.get("/fetch_user/from_id")
+async def api_fetch_user_from_id(
+    user_id: PydanticObjectId, current_user=Depends(get_current_user)
+) -> User:
+    user = await async_fetch_user_from_id(user_id)
+
+    if not user:
+        raise HTTPException(
+            status_code=404, detail="User not found for the provided ID"
+        )
+
+    # if user id differs from current user id
+    if user.id != current_user.id:
+        raise HTTPException(
+            status_code=403, detail="ID does not belong to the current user"
+        )
+
+    return user
 
 
 @auth_endpoint_router.post("/register")
@@ -229,65 +287,6 @@ async def get_users_group():
     return groups[0]
 
 
-# @auth_endpoint_router.get("/fetch_user/from_id/{user_id}")
-# async def api_fetch_user_from_id(user_id: str, current_user=Depends(get_current_user)):
-#     if not user_id:
-#         raise HTTPException(status_code=400, detail="No user_id provided")
-
-#     if not current_user:
-#         raise HTTPException(status_code=401, detail="Current user not found.")
-
-#     user = fetch_user_from_id(user_id)
-#     if user:
-#         # Ensure ObjectIds are converted to strings
-#         if isinstance(user, dict):
-#             return convert_objectid_to_str(user)
-#         else:
-#             # If it's already a model, convert to dict first
-#             return convert_model_to_dict(user)
-#     else:
-#         raise HTTPException(status_code=404, detail="User not found")
-
-
-# @auth_endpoint_router.get("/fetch_user/from_email/{email}")
-# async def api_fetch_user_from_email(email: str, current_user=Depends(get_current_user)):
-#     if not email:
-#         raise HTTPException(status_code=400, detail="No email provided")
-
-#     if not current_user:
-#         raise HTTPException(status_code=401, detail="Current user not found.")
-
-#     user = fetch_user_from_email(email)
-#     if user:
-#         # Ensure ObjectIds are converted to strings
-#         if isinstance(user, dict):
-#             return convert_objectid_to_str(user)
-#         else:
-#             # If it's already a model, convert to dict first
-#             return convert_model_to_dict(user)
-#     else:
-#         raise HTTPException(status_code=404, detail="User not found")
-
-
-# @auth_endpoint_router.get("/fetch_user/from_token")
-# async def api_fetch_user_from_token(token: str, current_user=Depends(get_current_user)):
-#     if not current_user:
-#         raise HTTPException(status_code=401, detail="Current user not found.")
-
-#     if not token:
-#         raise HTTPException(status_code=400, detail="No token provided")
-
-#     user = fetch_user_from_token(token)
-#     if user:
-#         # Ensure ObjectIds are converted to strings
-#         if isinstance(user, dict):
-#             return convert_objectid_to_str(user)
-#         else:
-#             # If it's already a model, convert to dict first
-#             return convert_model_to_dict(user)
-#     else:
-#         raise HTTPException(status_code=404, detail="User not found")
-
 
 @auth_endpoint_router.post("/edit_password")
 async def edit_password(request: dict, current_user=Depends(get_current_user)):
@@ -355,28 +354,6 @@ async def edit_password(request: dict, current_user=Depends(get_current_user)):
         raise HTTPException(status_code=500, detail="Failed to update password")
 
 
-@auth_endpoint_router.post("/add_token")
-async def add_token_endpoint(request: dict, current_user=Depends(get_current_user)):
-    if not request:
-        raise HTTPException(status_code=400, detail="No request provided")
-
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Current user not found.")
-
-    logger.info(f"Request: {request}")
-    user = convert_model_to_dict(current_user)
-    token = request["token"]
-    logger.info(f"Request: {request}")
-    logger.info(f"User: {user}")
-    logger.info(f"Token: {token}")
-
-    result = add_token_to_user(user, token)
-    if not result["success"]:
-        raise HTTPException(status_code=500, detail="Failed to add token")
-
-    return result
-
-
 @auth_endpoint_router.post("/delete_token")
 async def delete_token(request: dict, current_user=Depends(get_current_user)):
     if not request:
@@ -430,14 +407,8 @@ async def delete_token(request: dict, current_user=Depends(get_current_user)):
 
 
 @auth_endpoint_router.post("/purge_expired_tokens")
-async def purge_expired_tokens_endpoint(current_user=Depends(get_current_user)):
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Current user not found.")
-
-    # Convert user_id to string to ensure compatibility
-    user_id = str(current_user.id)
-
-    result = purge_expired_tokens_from_user(user_id)
+async def purge_expired_tokens_endpoint(current_user=Depends(get_current_user)) -> Dict:
+    result = await purge_expired_tokens_from_user(current_user.id)
 
     if result["success"]:
         return {"success": True}
@@ -445,12 +416,21 @@ async def purge_expired_tokens_endpoint(current_user=Depends(get_current_user)):
         raise HTTPException(status_code=500, detail="Failed to purge expired tokens")
 
 
-@auth_endpoint_router.post("/check_token_validity")
-async def check_token_validity_endpoint(request: dict):
-    token = request.get("token")
+from depictio_models.models.users import TokenBase
 
+
+@auth_endpoint_router.post("/check_token_validity")
+async def check_token_validity_endpoint(token: TokenBeanie):
     logger.info(f"Checking token validity.")
     logger.info(f"Token: {token}")
+
+    # token = TokenBase(**token)
+    # logger.info(f"Token: {format_pydantic(token)}")
+
+    # token = TokenBeanie(token)
+
+    logger.info(f"Token: {format_pydantic(token)}")
+
     if not token:
         raise HTTPException(status_code=400, detail="No token provided")
 
