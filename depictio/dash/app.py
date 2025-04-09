@@ -10,13 +10,11 @@ import httpx
 from depictio.api.v1.configs.config import API_BASE_URL, settings
 
 # Depictio components imports - design step
-from depictio.api.v1.endpoints.user_endpoints.core_functions import (
-    fetch_user_from_token,
-)
 from depictio.api.v1.endpoints.user_endpoints.utils import (
     check_token_validity,
     purge_expired_tokens,
 )
+from depictio.dash.api_calls import api_call_fetch_user_from_token
 from depictio.dash.layouts.layouts_toolbox import create_add_with_input_modal
 from depictio.dash.modules.card_component.frontend import (
     register_callbacks_card_component,
@@ -198,11 +196,12 @@ def display_page(pathname, local_data):
     logger.debug(f"Trigger: {trigger}")
     logger.debug(f"Local Data: {local_data}")
     logger.debug(f"URL Pathname: {pathname}")
+    from depictio_models.models.users import TokenBase
 
     if (
         not local_data
         or not local_data.get("logged_in")
-        or not check_token_validity(local_data["access_token"])
+        or not check_token_validity(TokenBase(**local_data))
     ):
         logger.debug("DISPLAY PAGE - User not logged in")
         logger.debug("DISPLAY PAGE - Redirect to /auth")
@@ -218,9 +217,9 @@ def display_page(pathname, local_data):
     logger.debug(f"DISPLAY PAGE - Local Data: {local_data}")
     logger.debug(f"DISPLAY PAGE - Access Token: {local_data['access_token']}")
     logger.debug(f"DISPLAY PAGE - Logged In: {local_data['logged_in']}")
-    logger.debug(
-        f"DISPLAY PAGE - Check Token Validity: {check_token_validity(local_data['access_token'])}"
-    )
+    # logger.debug(
+    #     f"DISPLAY PAGE - Check Token Validity: {check_token_validity(local_data['access_token'])}"
+    # )
     logger.debug(f"DISPLAY PAGE - HANDLE AUTHENTICATED USER")
 
     # Handle authenticated user logic
@@ -265,7 +264,9 @@ def handle_authenticated_user(pathname, local_data):
         )
 
     elif pathname == "/dashboards":
-        user = fetch_user_from_token(local_data["access_token"])
+        user = api_call_fetch_user_from_token(local_data["access_token"])
+        # user = fetch_user_from_token(local_data["access_token"])
+        logger.info(f"User: {user}")
         create_button = return_create_dashboard_button(user.email)
         header = create_header_with_button("Dashboards", create_button)
         content = create_dashboards_management_layout()
@@ -303,7 +304,7 @@ def handle_authenticated_user(pathname, local_data):
 
     elif pathname == "/admin":
         # Check if user is admin
-        user = fetch_user_from_token(local_data["access_token"])
+        user = api_call_fetch_user_from_token(local_data["access_token"])
         if not user.is_admin:
             # Fallback to dashboards if user is not admin
             content = create_dashboards_management_layout()
