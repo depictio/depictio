@@ -95,7 +95,7 @@ async def run_initialization(
     }
 
     # Save initialization data to the database
-    # initialization_collection.insert_one(init_data)
+    initialization_collection.insert_one(init_data)
     logger.info("Initialization data saved to the database.")
     logger.debug(f"Initialization data: {init_data}")
     logger.info("System initialization complete.")
