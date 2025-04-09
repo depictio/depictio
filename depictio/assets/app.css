@@ -1,0 +1,13 @@
+/* In assets/app.css */
+@font-face {
+    font-family: 'Virgil';
+    src: url('./Virgil.ttf') format('truetype'); /* Ensure the path is correct */
+}
+
+
+
+.mantine-Switch-label {
+    font-family: 'Virgil' !important; /* Override any existing font styles */
+    font-size: '20px' !important; /* Add font size */
+}
+
