@@ -18,7 +18,7 @@ from depictio.api.v1.configs.config import settings, MONGODB_URL
 
 from depictio_models.utils import get_depictio_context
 from depictio_models.models.users import TokenBeanie, GroupBeanie, UserBeanie
-from depictio_models.models.projects import Project
+from depictio_models.models.projects import ProjectBeanie
 
 DEPICTIO_CONTEXT = get_depictio_context()
 
@@ -31,7 +31,7 @@ async def init_motor_beanie():
     client = AsyncIOMotorClient(MONGODB_URL)
     await init_beanie(
         database=client[settings.mongodb.db_name],
-        document_models=[TokenBeanie, GroupBeanie, UserBeanie, Project],
+        document_models=[TokenBeanie, GroupBeanie, UserBeanie, ProjectBeanie],
     )
 
 
