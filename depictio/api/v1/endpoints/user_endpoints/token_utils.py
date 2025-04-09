@@ -55,6 +55,8 @@ async def add_token(token_data: Dict) -> TokenBeanie:
         name=token_data.get("name"),
         token_lifetime=token_data.get("token_lifetime", "short-lived")
     )
+
+    logger.debug(token)
     
     # Save the token to the database
     await token.insert()

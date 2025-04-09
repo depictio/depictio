@@ -89,9 +89,5 @@ async def status(current_user=Depends(get_current_user)):
         raise HTTPException(status_code=401, detail="Current user not found.")
 
     logger.info("Server is online.")
-    from depictio_models.models.projects import Project
-    test = await Project.find_one()
-    logger.debug(f"Test project: {format_pydantic(test)}")
-
 
     return {"status": "online", "version": "v0.0.4"}
