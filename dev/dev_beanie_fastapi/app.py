@@ -85,8 +85,13 @@ class Test(Document):
 
     class Settings:
         name = "test"
-        use_revision = True  # Track document revisions
 
+
+class Group(Document):
+    name: str
+ 
+    class Settings:
+        name = "groups"
 
 # Document models
 class User(Document):
@@ -94,10 +99,10 @@ class User(Document):
     hashed_password: str
     full_name: Optional[str] = None
     disabled: bool = False
+    groups: List[Group] = Field(default_factory=list)
 
     class Settings:
         name = "users"  # Collection name
-        use_revision = True  # Track document revisions
 
     # Define which fields to exclude when returning the model
     model_config = {"exclude": {"hashed_password"}, "arbitrary_types_allowed": True}
@@ -127,7 +132,6 @@ class Token(Document):
 
     class Settings:
         name = "tokens"  # Collection name
-        use_revision = True  # Track document revisions
 
     # Field serializers for Pydantic v2
     @field_serializer("id")
@@ -170,7 +174,7 @@ async def init_db():
     client = AsyncIOMotorClient(MONGODB_URL)
     # drop existing database for testing
     # client.drop_database(DB_NAME)
-    await init_beanie(database=client[DB_NAME], document_models=[User, Token, Test])
+    await init_beanie(database=client[DB_NAME], document_models=[User, Token, Test, Group])
 
 async def shutdown_db(wipe: bool = False):
     # Close the database connection
@@ -256,6 +260,7 @@ async def create_user(user_data: UserCreate):
         email=user_data.email,
         hashed_password=User.get_hashed_password(user_data.password),
         full_name=user_data.full_name,
+        groups=[Group(name="default")],
     )
     logger.info(f"Creating new user: {new_user}")
     await new_user.insert()
