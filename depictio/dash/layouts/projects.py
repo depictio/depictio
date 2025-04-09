@@ -13,12 +13,10 @@ from pydantic import validate_call
 
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
-from depictio.api.v1.endpoints.user_endpoints.core_functions import (
-    fetch_user_from_token,
-)
 from depictio.api.v1.configs.custom_logging import logger
 
 # from depictio.api.v1.endpoints.user_endpoints.models import UserBase
+from depictio.dash.api_calls import api_call_fetch_user_from_token
 from depictio.dash.utils import return_mongoid
 
 from depictio_models.models.users import UserBase
@@ -456,11 +454,27 @@ def render_workflow_item(wf: Workflow, token: str):
     else:
         data_collections_section = None
 
+    wf_icon_map = {
+        "snakemake": "vscode-icons:file-type-snakemake",
+        "nextflow": "vscode-icons:file-type-nextflow",
+        "python": "vscode-icons:file-type-python",
+        "r": "vscode-icons:file-type-r",
+        "bash": "vscode-icons:file-type-bash",
+        "galaxy": "vscode-icons:file-type-galaxy",
+        "cwl": "vscode-icons:file-type-cwl",
+        "rust": "vscode-icons:file-type-rust",
+        # default icon for unknown or unsupported engines -
+        "none": "hugeicons:workflow-square-01",
+    }
+    wf_icon = wf_icon_map.get(
+        wf.engine.name.lower(), "hugeicons:workflow-square-01"
+    )
+
     return dmc.AccordionItem(
         children=[
             dmc.AccordionControl(
-                f"{wf.workflow_tag} ({str(wf.id)})",
-                icon=DashIconify(icon="vscode-icons:file-type-snakemake", width=20),
+                f"{wf.engine.name} / {wf.name} ({str(wf.id)})",
+                icon=DashIconify(icon=wf_icon, width=20),
             ),
             dmc.AccordionPanel(
                 children=[
@@ -558,7 +572,9 @@ def render_project_item(
                                 href=project.data_management_platform_project_url,
                                 target="_blank",
                                 weight=500,
-                            ) if project.data_management_platform_project_url else dmc.Text(
+                            )
+                            if project.data_management_platform_project_url
+                            else dmc.Text(
                                 "Not defined",
                                 weight=500,
                             ),
@@ -833,7 +849,7 @@ def render_projects_list(
         )
         return content
 
-    current_user = fetch_user_from_token(token)
+    current_user = api_call_fetch_user_from_token(token)
     logger.info(f"Current user: {current_user}")
 
     def create_project_section(title, projects, current_user):
