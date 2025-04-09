@@ -97,7 +97,7 @@ async def get_workflow_from_args(
             detail="Workflow name and engine are required to get a workflow.",
         )
 
-    # current_user = fetch_user_from_token(token)
+    # current_user = api_call_fetch_user_from_token(token)
 
     logger.info(f"current_user: {current_user}")
 

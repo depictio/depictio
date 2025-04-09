@@ -6,7 +6,7 @@ from bson import ObjectId
 
 # Import the function to test
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
-from depictio_models.models.users import TokenBeanie
+from depictio_models.models.users import TokenBeanie, UserBeanie
 from depictio.api.main import app
 
 # ------------------------------------------------------
@@ -32,8 +32,7 @@ class TestGetCurrentUser:
         mock_token.user_id = "test_user_id"
         self.mock_token_find_one.return_value = mock_token
 
-        self.mock_user = MagicMock()
-        self.mock_user.fetch_all_links = AsyncMock()
+        self.mock_user = MagicMock(spec=UserBeanie)
         self.mock_user_get.return_value = self.mock_user
 
         # Test data
@@ -56,7 +55,6 @@ class TestGetCurrentUser:
             {"access_token": self.test_token}
         )
         self.mock_user_get.assert_called_once()
-        self.mock_user.fetch_all_links.assert_called_once()
         assert result == self.mock_user
 
     @pytest.mark.asyncio
@@ -135,7 +133,7 @@ class TestLoginEndpoint:
         new_callable=AsyncMock,
     )
     @patch(
-        "depictio.api.v1.endpoints.user_endpoints.routes.fetch_user_from_email",
+        "depictio.api.v1.endpoints.user_endpoints.routes.async_fetch_user_from_email",
         new_callable=AsyncMock,
     )
     @patch(
@@ -215,7 +213,7 @@ class TestLoginEndpoint:
         new_callable=AsyncMock,
     )
     @patch(
-        "depictio.api.v1.endpoints.user_endpoints.routes.fetch_user_from_email",
+        "depictio.api.v1.endpoints.user_endpoints.routes.async_fetch_user_from_email",
         new_callable=AsyncMock,
     )
     @patch(

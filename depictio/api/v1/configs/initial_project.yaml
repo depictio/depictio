@@ -1,0 +1,25 @@
+id: "646b0f3c1e4a2d7f8e5b8c9a"
+name: "Iris Dataset Project Data Analysis"
+workflows:
+  - name: "iris_workflow"
+    engine:
+      name: "python"
+    data_location:
+      structure: "flat"
+      locations:
+        # - "{DEPICTIO_DEMO_DATA_LOCATION}/iris_dataset"
+        - /app/depictio/depictio/api/v1/configs/iris_dataset
+    data_collections:
+      - data_collection_tag: "iris_table"
+        description: "Iris dataset in CSV format"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: single
+            scan_parameters:
+              filename: "https://gist.githubusercontent.com/netj/8836201/raw/6f9306ad21398ea43cba4f7d537619d0e07d5ae3/iris.csv"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","

@@ -7,8 +7,8 @@ import dash.dependencies as dd
 import httpx
 
 from depictio.api.v1.configs.config import API_BASE_URL
-from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_token
 from depictio.api.v1.configs.custom_logging import logger
+from depictio.dash.api_calls import api_call_fetch_user_from_token
 
 
 def register_sidebar_callbacks(app):
@@ -81,7 +81,7 @@ def register_sidebar_callbacks(app):
         if pathname == "/auth":
             return []
 
-        current_user = fetch_user_from_token(local_store["access_token"])
+        current_user = api_call_fetch_user_from_token(local_store["access_token"])
 
         email = current_user.email
         name = email.split("@")[0]
@@ -138,7 +138,7 @@ def register_sidebar_callbacks(app):
         if pathname == "/auth":
             return dash.no_update
 
-        current_user = fetch_user_from_token(local_store["access_token"])
+        current_user = api_call_fetch_user_from_token(local_store["access_token"])
         if current_user.is_admin:
             return {"padding": "20px"}
         else:

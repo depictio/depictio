@@ -4,10 +4,11 @@ from dash import html, dcc, Input, Output, State, ctx
 import dash
 import yaml
 from depictio.api.v1.configs.custom_logging import logger
-from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_token
 from depictio.api.v1.endpoints.user_endpoints.utils import add_token, delete_token, generate_agent_config, list_existing_tokens
 from dash_extensions.enrich import html, Input, Output, State
 from dash.exceptions import PreventUpdate
+
+from depictio.dash.api_calls import api_call_fetch_user_from_token
 
 # Layout placeholders
 event = {"event": "keydown", "props": ["key"]}
@@ -105,7 +106,7 @@ def register_tokens_management_callbacks(app):
         if not local_store:
             raise PreventUpdate
 
-        user = fetch_user_from_token(local_store["access_token"])
+        user = api_call_fetch_user_from_token(local_store["access_token"])
 
         tokens = list_existing_tokens(user.email)
         logger.info(f"tokens: {tokens}")

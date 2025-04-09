@@ -16,11 +16,9 @@ from depictio.api.v1.db import dashboards_collection
 from depictio.api.v1.configs.custom_logging import logger
 
 # from depictio.api.v1.endpoints.dashboards_endpoints.models import DashboardData
-from depictio.api.v1.endpoints.user_endpoints.core_functions import (
-    fetch_user_from_token,
-)
 
 # from depictio.api.v1.endpoints.user_endpoints.models import UserBase
+from depictio.dash.api_calls import api_call_fetch_user_from_token
 from depictio.dash.layouts.layouts_toolbox import (
     create_dashboard_modal,
     create_delete_confirmation_modal,
@@ -803,7 +801,7 @@ def register_callbacks_dashboards_management(app):
         logger.info("\nupdate_dashboards triggered")
         log_context_info()
 
-        current_user = fetch_user_from_token(user_data["access_token"])
+        current_user = api_call_fetch_user_from_token(user_data["access_token"])
         logger.info(f"current_user: {current_user}")
         # current_userbase = UserBase(
         #     convert_model_to_dict(current_user, exclude_none=True).dict(
@@ -1310,7 +1308,7 @@ def register_callbacks_dashboards_management(app):
         logger.info(f"data: {data}")
         logger.info("\n")
 
-        user = fetch_user_from_token(data["access_token"])
+        user = api_call_fetch_user_from_token(data["access_token"])
 
         def render_landing_page(data):
             return html.Div(
