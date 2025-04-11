@@ -365,10 +365,10 @@ def add_user(email, password, group=None, is_admin=False):
     from depictio_models.models.users import User
 
     logger.info(f"Groups: {group}")
-    if not group:
-        group = get_users_group()
-        logger.info(f"Users Group: {group}")
-    logger.info(f"Groups: {group}")
+    # if not group:
+    #     group = get_users_group()
+    #     logger.info(f"Users Group: {group}")
+    # logger.info(f"Groups: {group}")
 
     user = User(
         email=email,
