@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from beanie import PydanticObjectId
 from pydantic import EmailStr
 
+from depictio.dash.users_management_utils import create_user_in_db
 from depictio_models.models.users import UserBeanie, TokenBeanie
 
 
@@ -15,6 +16,7 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     async_fetch_user_from_email,
     async_fetch_user_from_id,
     check_if_token_is_valid,
+    # create_user_in_db,
     purge_expired_tokens_from_user,
 )
 from depictio.api.v1.endpoints.user_endpoints.agent_config_utils import (
@@ -188,31 +190,73 @@ async def api_fetch_user_from_id(
     return user
 
 
-@auth_endpoint_router.post("/register")
-async def create_user(user: User):
-    # Add user to the database
-    logger.info(f"Creating user: {user}")
-    user_dict = convert_model_to_dict(user)
-    logger.info(f"User dict: {user_dict}")
-    # Check if the user already exists
-    existing_user = users_collection.find_one({"email": user.email})
-    logger.info(f"Existing user: {existing_user}")
-    if existing_user:
-        raise HTTPException(status_code=400, detail="User already exists")
-    # Insert the user into the database
-    else:
-        user_db = User.from_mongo(user_dict).mongo()
-        logger.info(f"User: {user_db}")
-        result = users_collection.insert_one(user_db)
 
-        # Retrieve the user from the database and convert ObjectIds to strings
-        created_user = users_collection.find_one({"_id": result.inserted_id})
-        if created_user:
-            return convert_objectid_to_str(created_user)
-        else:
-            raise HTTPException(
-                status_code=500, detail="Failed to retrieve created user"
-            )
+@auth_endpoint_router.post("/register")
+async def create_user(
+    email: EmailStr, 
+    password: str, 
+    group: Optional[str] = None, 
+    is_admin: bool = False
+) -> Dict[str, Any]:
+    """
+    Endpoint to register a new user.
+    
+    Args:
+        email: User's email address
+        password: User's password
+        group: User's group (optional)
+        is_admin: Whether user is admin
+    
+    Returns:
+        Dictionary with user data, success status and message
+    """
+    logger.info(f"Registering user with email: {email}")    
+    logger.debug(f"Password: {password}")
+    logger.debug(f"Group: {group}")
+    logger.debug(f"Is Admin: {is_admin}")
+    try:
+        created_user = await create_user_in_db(email, password, group, is_admin)
+        
+        return {
+            "user": created_user.model_dump(),
+            "message": "User created successfully",
+            "success": True
+        }
+    except HTTPException as e:
+        # Re-raise HTTP exceptions
+        raise e
+    except Exception as e:
+        logger.error(f"Error creating user: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to create user: {str(e)}"
+        )
+
+# @auth_endpoint_router.post("/register")
+# async def create_user(user: User):
+#     # Add user to the database
+#     logger.info(f"Creating user: {user}")
+#     user_dict = convert_model_to_dict(user)
+#     logger.info(f"User dict: {user_dict}")
+#     # Check if the user already exists
+#     existing_user = users_collection.find_one({"email": user.email})
+#     logger.info(f"Existing user: {existing_user}")
+#     if existing_user:
+#         raise HTTPException(status_code=400, detail="User already exists")
+#     # Insert the user into the database
+#     else:
+#         user_db = User.from_mongo(user_dict).mongo()
+#         logger.info(f"User: {user_db}")
+#         result = users_collection.insert_one(user_db)
+
+#         # Retrieve the user from the database and convert ObjectIds to strings
+#         created_user = users_collection.find_one({"_id": result.inserted_id})
+#         if created_user:
+#             return convert_objectid_to_str(created_user)
+#         else:
+#             raise HTTPException(
+#                 status_code=500, detail="Failed to retrieve created user"
+#             )
 
 
 @auth_endpoint_router.get("/get_all_groups")
