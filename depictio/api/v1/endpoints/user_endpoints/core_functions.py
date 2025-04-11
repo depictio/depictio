@@ -184,3 +184,38 @@ async def purge_expired_tokens_from_user(user_id: PyObjectId) -> Dict[str, bool 
         "success": True,
         "deleted_count": len(outdated_tokens),
     }
+
+
+@validate_call(validate_return=True)
+async def create_user_in_db(user: User) -> Optional[UserBeanie]:
+    """
+    Helper function to create a user in the database using Beanie.
+    
+    Args:
+        user: The User model containing user data
+        
+    Returns:
+        The created UserBeanie object if successful, None otherwise
+        
+    Raises:
+        HTTPException: If user already exists
+    """
+    logger.info(f"Creating user: {user}")
+    
+    # Check if the user already exists
+    existing_user = await UserBeanie.find_one({"email": user.email})
+    logger.info(f"Existing user: {existing_user}")
+    
+    if existing_user:
+        raise HTTPException(status_code=400, detail="User already exists")
+    
+    # Create new UserBeanie from User model and insert into database
+    user_beanie = UserBeanie(**user.model_dump())
+    logger.info(f"User beanie: {user_beanie}")
+    
+    # Save the user to the database
+    await user_beanie.create()
+    logger.info(f"User created with id: {user_beanie.id}")
+    
+    # Return the created user
+    return user_beanie
