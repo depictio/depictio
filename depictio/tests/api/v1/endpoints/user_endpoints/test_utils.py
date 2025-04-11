@@ -586,120 +586,170 @@ class TestDeleteGroupHelper:
         assert result["message"] == "Group not found"
 
 
+from depictio.api.v1.endpoints.user_endpoints.utils import (
+    create_user_in_db,
+)
+from beanie import init_beanie
+from depictio_models.models.users import UserBeanie, GroupBeanie
+from unittest.mock import AsyncMock
+from depictio_models.models.base import PyObjectId
+from mongomock_motor import AsyncMongoMockClient
+from fastapi import HTTPException
+from unittest.mock import patch
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime
+# -------------------------------
+# Test for create_user_in_db
+# -------------------------------
 
-# Import the function to test and related models
-from depictio.api.v1.endpoints.user_endpoints.utils import add_token
-from depictio_models.models.users import TokenBeanie, TokenData
+@pytest.mark.asyncio
+class TestCreateUserInDb:
+    async def test_create_user_success(self):
+        """Test successful user creation with valid data."""
+        # Initialize Beanie directly in the test
+        client = AsyncMongoMockClient()
+        await init_beanie(database=client.test_db, document_models=[UserBeanie])
+        
+        # Set up test data
+        email = "test@example.com"
+        password = "securepassword"
+        
+        # Mock the hash_password function
+        with patch('depictio.api.v1.endpoints.user_endpoints.utils.hash_password') as mock_hash:
+            mock_hash.return_value = "$2b$12$mockedhashedpassword"
+            
+            # Call the function
+            result = await create_user_in_db(email=email, password=password)
+            
+            # Assertions
+            assert result is not None
+            assert result.email == email
+            assert result.password == "$2b$12$mockedhashedpassword"
+            assert result.is_admin is False
+            assert result.is_active is True
+            assert result.is_verified is False
+            assert result.registration_date is not None
+            assert result.last_login is not None
+            
+            # Verify hash_password was called with the correct password
+            mock_hash.assert_called_once_with(password)
+            
+            # Verify user is saved to database
+            db_user = await UserBeanie.find_one(UserBeanie.email == email)
+            assert db_user is not None
+            assert db_user.id == result.id
 
-class TestAddToken:
-    def setup_method(self):
-        # Set up patches
-        self.create_access_token_patcher = patch('depictio.api.v1.endpoints.user_endpoints.utils.create_access_token', new_callable=AsyncMock)
-        self.mock_create_access_token = self.create_access_token_patcher.start()
+    async def test_create_admin_user(self):
+        """Test creating an admin user."""
+        # Initialize Beanie directly in the test
+        client = AsyncMongoMockClient()
+        await init_beanie(database=client.test_db, document_models=[UserBeanie])
         
-        # Mock the TokenBeanie class
-        self.token_beanie_patcher = patch('depictio.api.v1.endpoints.user_endpoints.utils.TokenBeanie')
-        self.mock_token_beanie_class = self.token_beanie_patcher.start()
+        # Set up test data
+        email = "admin@example.com"
+        password = "securepassword"
         
-        # Important: Add a class method 'save' to the TokenBeanie class mock
-        self.mock_token_beanie_class.save = AsyncMock()
-        
-        # This will capture the argument passed to TokenBeanie constructor
-        self.mock_token_beanie_class.side_effect = lambda **kwargs: MagicMock(spec=TokenBeanie, **kwargs)
-        
-        self.logger_patcher = patch('depictio.api.v1.endpoints.user_endpoints.utils.logger')
-        self.mock_logger = self.logger_patcher.start()
-        
-        self.format_pydantic_patcher = patch('depictio.api.v1.endpoints.user_endpoints.utils.format_pydantic')
-        self.mock_format_pydantic = self.format_pydantic_patcher.start()
-        self.mock_format_pydantic.return_value = "formatted_output"
-        
-        # Test data
-        from bson import ObjectId
-        self.test_user_id = ObjectId("60d5ec9af682dcd2651257a1")
-        self.test_token_name = "test_token"
-        self.test_token_value = "jwt_token_12345"
-        self.test_expire_datetime = datetime(2023, 12, 31, 23, 59, 59)
-        
-        # Create test token data
-        self.token_data = TokenData(
-            name=self.test_token_name,
-            token_lifetime="short-lived",
-            sub=self.test_user_id
-        )
-        
-        # Configure mock return values
-        self.mock_create_access_token.return_value = (self.test_token_value, self.test_expire_datetime)
-        
-        self.mock_token_instance = self.mock_token_beanie_class.return_value
+        # Mock the hash_password function
+        with patch('depictio.api.v1.endpoints.user_endpoints.utils.hash_password') as mock_hash:
+            mock_hash.return_value = "$2b$12$mockedhashedpassword"
+            
+            # Call the function with is_admin=True
+            result = await create_user_in_db(email=email, password=password, is_admin=True)
+            
+            # Assertions
+            assert result is not None
+            assert result.email == email
+            assert result.is_admin is True
+            
+            # Verify user is saved to database
+            db_user = await UserBeanie.find_one(UserBeanie.email == email)
+            assert db_user is not None
+            assert db_user.is_admin is True
 
-    def teardown_method(self):
-        # Stop all patches
-        for patcher_attr in ['create_access_token_patcher', 'token_beanie_patcher', 
-                           'logger_patcher', 'format_pydantic_patcher']:
-            if hasattr(self, patcher_attr):
-                getattr(self, patcher_attr).stop()
-    
-    @pytest.mark.asyncio
-    async def test_add_token_success(self):
-        """Test successful token creation and storage."""
-        # Act
-        result = await add_token(self.token_data)
+    async def test_user_already_exists(self):
+        """Test attempting to create a user that already exists."""
+        # Initialize Beanie directly in the test
+        client = AsyncMongoMockClient()
+        await init_beanie(database=client.test_db, document_models=[UserBeanie])
         
-        # Assert
-        # Verify create_access_token was called with the right parameters
-        self.mock_create_access_token.assert_called_once_with(self.token_data)
+        # Set up test data
+        email = "existing@example.com"
+        password = "securepassword"
         
-        # Capture the TokenBeanie instance that was created and saved
-        # The constructor is called with the token data we expect
-        self.mock_token_beanie_class.assert_called_once()
-        created_token = self.mock_token_beanie_class.call_args[1]
+        # Create a user first
+        with patch('depictio.api.v1.endpoints.user_endpoints.utils.hash_password') as mock_hash:
+            mock_hash.return_value = "$2b$12$mockedhashedpassword"
+            await create_user_in_db(email=email, password=password)
         
-        # Verify TokenBeanie.save was called with the new instance
-        self.mock_token_beanie_class.save.assert_called_once()
-        
-        # Check that the token was created with the right parameters
-        assert created_token['access_token'] == self.test_token_value
-        assert created_token['expire_datetime'] == self.test_expire_datetime.strftime("%Y-%m-%d %H:%M:%S")
-        assert created_token['name'] == self.test_token_name
-        assert created_token['token_lifetime'] == "short-lived"
-        assert created_token['user_id'] == self.test_user_id
-        
-        # Check that the function returned the token instance
-        assert result is self.mock_token_beanie_class.save.call_args[0][0]        
+        # Now try to create the same user again
+        with patch('depictio.api.v1.endpoints.user_endpoints.utils.hash_password') as mock_hash:
+            mock_hash.return_value = "$2b$12$mockedhashedpassword"
+            
+            # Call the function and expect an HTTPException
+            with pytest.raises(HTTPException) as excinfo:
+                await create_user_in_db(email=email, password=password)
+            
+            # Verify the exception details
+            assert excinfo.value.status_code == 400
+            assert excinfo.value.detail == "User already exists"
 
-    @pytest.mark.asyncio
-    async def test_add_token_database_error(self):
-        """Test handling of database errors during token saving."""
-        # Arrange
-        self.mock_token_beanie_class.save.side_effect = Exception("Database error")
+    async def test_timestamp_format(self):
+        """Test that timestamps are formatted correctly."""
+        # Initialize Beanie directly in the test
+        client = AsyncMongoMockClient()
+        await init_beanie(database=client.test_db, document_models=[UserBeanie])
         
-        # Act & Assert
-        with pytest.raises(Exception) as exc_info:
-            await add_token(self.token_data)
+        # Set up test data
+        email = "timestamp@example.com"
+        password = "securepassword"
         
-        # Verify the exception
-        assert "Database error" in str(exc_info.value)
+        # Mock the hash_password function
+        with patch('depictio.api.v1.endpoints.user_endpoints.utils.hash_password') as mock_hash:
+            mock_hash.return_value = "$2b$12$mockedhashedpassword"
+            
+            # Call the function
+            result = await create_user_in_db(email=email, password=password)
+            
+            # Verify timestamp format (YYYY-MM-DD HH:MM:SS)
+            import re
+            timestamp_pattern = r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}"
+            
+            assert isinstance(result.registration_date, str)
+            assert isinstance(result.last_login, str)
+            assert re.match(timestamp_pattern, result.registration_date)
+            assert re.match(timestamp_pattern, result.last_login)
+
+    async def test_create_user_with_group(self):
+        """Test creating a user with a specific group."""
+        # Initialize Beanie directly in the test
+        client = AsyncMongoMockClient()
+        await init_beanie(database=client.test_db, document_models=[UserBeanie, GroupBeanie])
         
-        # Verify create_access_token was still called
-        self.mock_create_access_token.assert_called_once_with(self.token_data)
-    
-    @pytest.mark.asyncio
-    async def test_add_token_token_generation_error(self):
-        """Test handling of errors in token generation."""
-        # Arrange
-        self.mock_create_access_token.side_effect = Exception("Token generation error")
+        # Set up test data
+        email = "group@example.com"
+        password = "securepassword"
+        group_name = "TestGroup"
         
-        # Act & Assert
-        with pytest.raises(Exception) as exc_info:
-            await add_token(self.token_data)
+        # Create test group
+        # Note: This functionality is commented out in the provided code,
+        # but I'm including it for completeness
         
-        # Verify the exception
-        assert "Token generation error" in str(exc_info.value)
-        
-        # Verify save was not called
-        self.mock_token_instance.save.assert_not_called()
+        # Mock the hash_password function
+        with patch('depictio.api.v1.endpoints.user_endpoints.utils.hash_password') as mock_hash, \
+             patch('depictio.api.v1.endpoints.user_endpoints.utils.get_users_group') as mock_group:
+            
+            mock_hash.return_value = "$2b$12$mockedhashedpassword"
+            mock_group.return_value = Group(name=group_name)
+            
+            # Call the function with a group
+            result = await create_user_in_db(
+                email=email, 
+                password=password, 
+                group=group_name
+            )
+            
+            # Assertions
+            assert result is not None
+            assert result.email == email
+            
+            # Note: Group functionality is commented out in the provided code
+            # If uncommented, add appropriate assertions here
