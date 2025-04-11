@@ -10,6 +10,7 @@ from dash.exceptions import PreventUpdate
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.custom_logging import logger
 from depictio.api.v1.endpoints.user_endpoints.utils import verify_password, login_user, find_user_by_email, add_user
+from depictio.dash.api_calls import api_call_register_user
 
 
 event = {"event": "keydown", "props": ["key"]}
@@ -126,8 +127,10 @@ def handle_registration(register_email, register_password, register_confirm_pass
         return "Email already registered.", True
     if register_password != register_confirm_password:
         return "Passwords do not match.", True
-    response = add_user(register_email, register_password)
-    if response.status_code != 200:
+    # response = add_user(register_email, register_password)
+    logger.info(f"Registering user with email: {register_email}")
+    response = api_call_register_user(register_email, register_password)
+    if not response:
         return f"Error registering user: {response.text}", True
     return "Registration successful! Please login.", False
 
