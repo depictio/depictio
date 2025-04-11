@@ -12,9 +12,8 @@ from depictio.api.v1.configs.config import API_BASE_URL, settings
 # Depictio components imports - design step
 from depictio.api.v1.endpoints.user_endpoints.utils import (
     check_token_validity,
-    purge_expired_tokens,
 )
-from depictio.dash.api_calls import api_call_fetch_user_from_token
+from depictio.dash.api_calls import api_call_fetch_user_from_token, purge_expired_tokens
 from depictio.dash.layouts.layouts_toolbox import create_add_with_input_modal
 from depictio.dash.modules.card_component.frontend import (
     register_callbacks_card_component,
