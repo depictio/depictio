@@ -4,7 +4,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from beanie import PydanticObjectId
 from pydantic import EmailStr
 
-from depictio.dash.users_management_utils import create_user_in_db
 from depictio_models.models.users import UserBeanie, TokenBeanie
 
 
@@ -27,6 +26,7 @@ from depictio.api.v1.endpoints.user_endpoints.utils import (
     add_token,
     check_password,
     create_group_helper,
+    create_user_in_db,
     delete_group_helper,
     update_group_in_users_helper,
 )
