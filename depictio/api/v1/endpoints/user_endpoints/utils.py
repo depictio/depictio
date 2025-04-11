@@ -8,7 +8,7 @@ from fastapi import HTTPException
 import httpx
 import jwt
 import bcrypt
-from pydantic import validate_call
+from pydantic import EmailStr, validate_call
 
 from depictio.api.v1.configs.config import API_BASE_URL, PRIVATE_KEY, ALGORITHM
 from depictio.api.v1.configs.custom_logging import format_pydantic, logger
@@ -390,6 +390,58 @@ def add_user(email, password, group=None, is_admin=False):
         logger.error(f"Error adding user {email}: {response.text}")
     return response
 
+
+
+@validate_call(validate_return=True)
+async def create_user_in_db(
+    email: EmailStr, password: str, group: Optional[str] = None, is_admin: bool = False
+) -> Optional[UserBeanie]:
+    """
+    Helper function to create a user in the database using Beanie.
+
+    Args:
+        email: User's email address
+        password: Raw password (will be hashed)
+        group: User's group (optional)
+        is_admin: Whether user is admin
+
+    Returns:
+        The created UserBeanie object if successful
+    """
+    logger.info(f"Creating user with email: {email}")
+
+    # Check if the user already exists
+    existing_user = await UserBeanie.find_one({"email": email})
+
+    if existing_user:
+        raise HTTPException(status_code=400, detail="User already exists")
+
+    # Hash the password
+    hashed_password = hash_password(password)
+
+    # Get default group if not provided
+    # if not group:
+    #     group = get_users_group()
+    #     logger.info(f"Using default users group: {group}")
+
+    # Create current timestamp
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # Create new UserBeanie
+    user_beanie = UserBeanie(
+        email=email,
+        password=hashed_password,
+        is_admin=is_admin,
+        registration_date=current_time,
+        last_login=current_time,
+        # groups=[group],
+    )
+
+    # Save to database
+    await user_beanie.create()
+    logger.info(f"User created with id: {user_beanie.id}")
+
+    return user_beanie
 
 def login_user(email: str):
     return {"logged_in": True, "email": email}
