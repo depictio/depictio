@@ -1,7 +1,3 @@
-groups:
-  - name: admin
-  - name: users
-
 users:
   - id: "67658ba033c8b59ad489d7c7"
     email: admin@embl.de
@@ -17,3 +13,16 @@ users:
     is_admin: false
     groups:
       - users
+
+groups:
+  - name: admin
+    id: "67658ba033c8b59ad489d7c9"
+    description: Admin group
+    users_ids:
+      - "67658ba033c8b59ad489d7c7"
+  - name: users
+    id: "67658ba033c8b59ad489d7d0"
+    description: Users group
+    users_ids:
+      - "67658ba033c8b59ad489d7c8"
+      - "67658ba033c8b59ad489d7c7"
