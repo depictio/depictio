@@ -10,10 +10,7 @@ import httpx
 from depictio.api.v1.configs.config import API_BASE_URL, settings
 
 # Depictio components imports - design step
-from depictio.api.v1.endpoints.user_endpoints.utils import (
-    check_token_validity,
-)
-from depictio.dash.api_calls import api_call_fetch_user_from_token, purge_expired_tokens
+from depictio.dash.api_calls import api_call_fetch_user_from_token, purge_expired_tokens, check_token_validity
 from depictio.dash.layouts.layouts_toolbox import create_add_with_input_modal
 from depictio.dash.modules.card_component.frontend import (
     register_callbacks_card_component,
@@ -703,7 +700,7 @@ def create_app_layout():
             dcc.Location(id="url", refresh=False),
             dcc.Store(
                 id="local-store",
-                storage_type="local",
+                storage_type="memory",
                 data={"logged_in": False, "access_token": None},
             ),
             dcc.Store(
