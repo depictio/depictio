@@ -191,6 +191,7 @@ def render_register_form():
                     html.A(
                         dmc.Button(
                             "Back to Login",
+                            id="back-to-login-button",
                             radius="md",
                             variant="outline",
                             color="gray",
@@ -313,47 +314,36 @@ layout = html.Div(
         html.Div(
             [
                 dmc.Button(
-                    "hidden-login-button",
                     id="open-login-form",
                     style={"display": "none"},
                 ),
                 dmc.Button(
-                    "hidden-register-button",
                     id="open-register-form",
                     style={"display": "none"},
                 ),
-                dmc.Button(
-                    "hidden-login-button", id="login-button", style={"display": "none"}
-                ),
+                dmc.Button(id="login-button", style={"display": "none"}),
                 # dmc.Button("hidden-logout-button", id="logout-button", style={"display": "none"}),
                 dmc.Button(
-                    "hidden-register-button",
                     id="register-button",
                     style={"display": "none"},
                 ),
                 dmc.PasswordInput(
-                    "hidden-register-password",
                     id="register-password",
                     style={"display": "none"},
                 ),
                 dmc.PasswordInput(
-                    "hidden-register-confirm-password",
                     id="register-confirm-password",
                     style={"display": "none"},
                 ),
                 dmc.TextInput(
-                    "hidden-register-email",
                     id="register-email",
                     style={"display": "none"},
                 ),
                 dmc.PasswordInput(
-                    "hidden-login-password",
                     id="login-password",
                     style={"display": "none"},
                 ),
-                dmc.TextInput(
-                    "hidden-login-email", id="login-email", style={"display": "none"}
-                ),
+                dmc.TextInput(id="login-email", style={"display": "none"}),
                 html.Div(id="user-feedback"),
             ]
         ),
@@ -500,7 +490,11 @@ def register_callbacks_users_management(app):
             return (
                 modal_open_new,
                 content,
-                dmc.Text(feedback_message, color="red" if modal_open_new else "green"),
+                dmc.Text(
+                    feedback_message,
+                    id="user-feedback-message-login",
+                    color="red" if modal_open_new else "green",
+                ),
                 current_state,
                 modal_open_new,
                 local_data_new,
@@ -526,7 +520,11 @@ def register_callbacks_users_management(app):
             return (
                 True,
                 content,
-                dmc.Text(feedback_message, color="red" if modal_open_new else "green"),
+                dmc.Text(
+                    feedback_message,
+                    color="red" if modal_open_new else "green",
+                    id="user-feedback-message-register",
+                ),
                 dash.no_update,
                 dash.no_update,
                 dash.no_update,
