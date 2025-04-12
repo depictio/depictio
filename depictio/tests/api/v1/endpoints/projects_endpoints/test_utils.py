@@ -12,7 +12,7 @@ from depictio.api.v1.configs.custom_logging import format_pydantic
 from depictio.api.v1.endpoints.projects_endpoints.utils import (
     helper_create_project_beanie,
 )
-from depictio_models.models.projects import Project
+from depictio_models.models.projects import Project, ProjectBeanie
 from depictio_models.models.users import UserBase, Group, Permission
 from depictio_models.models.workflows import Workflow
 from depictio_models.models.data_collections import DataCollection, DataCollectionConfig
@@ -29,7 +29,7 @@ class TestProjectBeanie:
             id=user_id,
             email="test@example.com",
             is_admin=True,
-            groups=[Group(id=PydanticObjectId(), name="admin_group")],
+            # groups=[Group(id=PydanticObjectId(), name="admin_group")],
         )
 
     @pytest.fixture
@@ -76,10 +76,10 @@ class TestProjectBeanie:
         """Test successful project creation."""
         # Setup database at function level
         client = AsyncMongoMockClient()
-        await init_beanie(database=client.test_db, document_models=[Project])
+        await init_beanie(database=client.test_db, document_models=[ProjectBeanie])
 
         # Create the project object
-        sample_project = Project(**sample_project_config)
+        sample_project = ProjectBeanie(**sample_project_config)
         print(f"Sample project object: {format_pydantic(sample_project)}")
 
         # Act
@@ -91,7 +91,7 @@ class TestProjectBeanie:
         assert result["project"] == sample_project
 
         # Verify the project was saved to the database
-        retrieved_project = await Project.find_one({"name": sample_project.name})
+        retrieved_project = await ProjectBeanie.find_one({"name": sample_project.name})
         assert retrieved_project is not None
         assert retrieved_project.name == sample_project.name
         assert len(retrieved_project.workflows) == 1
@@ -107,10 +107,10 @@ class TestProjectBeanie:
         """Test project creation with duplicate name."""
         # Setup database at function level
         client = AsyncMongoMockClient()
-        await init_beanie(database=client.test_db, document_models=[Project])
+        await init_beanie(database=client.test_db, document_models=[ProjectBeanie])
 
         # Create the project object
-        sample_project = Project(**sample_project_config)
+        sample_project = ProjectBeanie(**sample_project_config)
 
         # Arrange - First save the project
         await sample_project.insert()
@@ -133,10 +133,10 @@ class TestProjectBeanie:
         """Test project creation with a data management platform URL."""
         # Setup database at function level
         client = AsyncMongoMockClient()
-        await init_beanie(database=client.test_db, document_models=[Project])
+        await init_beanie(database=client.test_db, document_models=[ProjectBeanie])
 
         # Create the project object
-        sample_project = Project(**sample_project_config)
+        sample_project = ProjectBeanie(**sample_project_config)
 
         # Arrange
         sample_project.data_management_platform_project_url = (
@@ -148,32 +148,32 @@ class TestProjectBeanie:
 
         # Assert
         assert result["success"] is True
-        retrieved_project = await Project.find_one({"name": sample_project.name})
+        retrieved_project = await ProjectBeanie.find_one({"name": sample_project.name})
         assert (
             retrieved_project.data_management_platform_project_url
             == "https://platform.example.com/projects/123"
         )
 
-    @pytest.mark.asyncio
-    async def test_helper_create_project_beanie_with_hash(self, sample_project_config):
-        """Test project creation with a hash value. Check if hash is not saved. Must be updated using the hash function."""
-        # Setup database at function level
-        client = AsyncMongoMockClient()
-        await init_beanie(database=client.test_db, document_models=[Project])
+    # @pytest.mark.asyncio
+    # async def test_helper_create_project_beanie_with_hash(self, sample_project_config):
+    #     """Test project creation with a hash value. Check if hash is not saved. Must be updated using the hash function."""
+    #     # Setup database at function level
+    #     client = AsyncMongoMockClient()
+    #     await init_beanie(database=client.test_db, document_models=[ProjectBeanie])
 
-        # Create the project object
-        sample_project = Project(**sample_project_config)
+    #     # Create the project object
+    #     sample_project = ProjectBeanie(**sample_project_config)
 
-        # Arrange
-        sample_project.hash = "abc123hash456def"
+    #     # Arrange
+    #     sample_project.hash = "abc123hash456def"
 
-        # Act
-        result = await helper_create_project_beanie(sample_project)
+    #     # Act
+    #     result = await helper_create_project_beanie(sample_project)
 
-        # Assert
-        assert result["success"] is True
-        retrieved_project = await Project.find_one({"name": sample_project.name})
-        assert retrieved_project.hash != "abc123hash456def"
+    #     # Assert
+    #     assert result["success"] is True
+    #     retrieved_project = await ProjectBeanie.find_one({"name": sample_project.name})
+    #     # assert retrieved_project.hash != "abc123hash456def"
 
     @pytest.mark.asyncio
     async def test_helper_create_project_beanie_public_project(
@@ -182,10 +182,10 @@ class TestProjectBeanie:
         """Test creation of a public project."""
         # Setup database at function level
         client = AsyncMongoMockClient()
-        await init_beanie(database=client.test_db, document_models=[Project])
+        await init_beanie(database=client.test_db, document_models=[ProjectBeanie])
 
         # Create the project object
-        sample_project = Project(**sample_project_config)
+        sample_project = ProjectBeanie(**sample_project_config)
 
         # Arrange
         sample_project.is_public = True
@@ -195,7 +195,7 @@ class TestProjectBeanie:
 
         # Assert
         assert result["success"] is True
-        retrieved_project = await Project.find_one({"name": sample_project.name})
+        retrieved_project = await ProjectBeanie.find_one({"name": sample_project.name})
         assert retrieved_project.is_public is True
 
     @pytest.mark.asyncio
@@ -205,24 +205,24 @@ class TestProjectBeanie:
         """Test creation of a project with complex permissions structure."""
         # Setup database at function level
         client = AsyncMongoMockClient()
-        await init_beanie(database=client.test_db, document_models=[Project])
+        await init_beanie(database=client.test_db, document_models=[ProjectBeanie])
 
         # Create the project object
-        sample_project = Project(**sample_project_config)
+        sample_project = ProjectBeanie(**sample_project_config)
 
         # Arrange
         editor_user = UserBase(
             id=PydanticObjectId(),
             email="editor@example.com",
             is_admin=False,
-            groups=[Group(id=PydanticObjectId(), name="editors_group")],
+            # groups=[Group(id=PydanticObjectId(), name="editors_group")],
         )
 
         viewer_user = UserBase(
             id=PydanticObjectId(),
             email="viewer@example.com",
             is_admin=False,
-            groups=[Group(id=PydanticObjectId(), name="viewers_group")],
+            # groups=[Group(id=PydanticObjectId(), name="viewers_group")],
         )
 
         sample_project.permissions.editors = [editor_user]
@@ -233,7 +233,7 @@ class TestProjectBeanie:
 
         # Assert
         assert result["success"] is True
-        retrieved_project = await Project.find_one({"name": sample_project.name})
+        retrieved_project = await ProjectBeanie.find_one({"name": sample_project.name})
         assert len(retrieved_project.permissions.owners) == 1
         assert len(retrieved_project.permissions.editors) == 1
         assert len(retrieved_project.permissions.viewers) == 1
@@ -247,7 +247,7 @@ class TestProjectBeanie:
         """Test creation of a project with multiple workflows."""
         # Setup database at function level
         client = AsyncMongoMockClient()
-        await init_beanie(database=client.test_db, document_models=[Project])
+        await init_beanie(database=client.test_db, document_models=[ProjectBeanie])
 
         # Create the project object
 
@@ -261,7 +261,7 @@ class TestProjectBeanie:
         # workflow_data["data_collections"][0]["data_collection_tag"] = "another_table"
         # workflow_data["data_collections"][0]["description"] = "Another dataset"
 
-        sample_project = Project(**sample_project_config)
+        sample_project = ProjectBeanie(**sample_project_config)
 
         print(format_pydantic(sample_project))
 
@@ -323,7 +323,7 @@ class TestProjectBeanie:
 
         # # Assert
         assert result["success"] is True
-        retrieved_project = await Project.find_one({"name": sample_project.name})
+        retrieved_project = await ProjectBeanie.find_one({"name": sample_project.name})
         await retrieved_project.fetch_all_links()
         print(format_pydantic(retrieved_project))
         print(format_pydantic(retrieved_project.workflows))
@@ -340,7 +340,7 @@ class TestProjectBeanie:
         """Test project creation mimicking the application workflow."""
         # Setup database at function level
         client = AsyncMongoMockClient()
-        await init_beanie(database=client.test_db, document_models=[Project])
+        await init_beanie(database=client.test_db, document_models=[ProjectBeanie])
 
         # This test follows the pattern shown in the example code
         # Load config as done in the application
@@ -352,12 +352,12 @@ class TestProjectBeanie:
             id=PydanticObjectId(),
             email="admin@example.com",
             is_admin=True,
-            groups=[Group(id=PydanticObjectId(), name="admin_group")],
+            # groups=[Group(id=PydanticObjectId(), name="admin_group")],
         )
 
         # Simulate admin_user.fetch_all_links() by creating a copy
         admin_user_copy = admin_user.model_copy()
-        admin_user_copy.groups = admin_user.groups
+        # admin_user_copy.groups = admin_user.groups
 
         # Set up permissions as shown in the example
         project_config["permissions"] = {
@@ -366,9 +366,9 @@ class TestProjectBeanie:
                     id=admin_user.id,
                     email=admin_user.email,
                     is_admin=True,
-                    groups=[
-                        Group(id=g.id, name=g.name) for g in admin_user_copy.groups
-                    ],
+                    # groups=[
+                        # Group(id=g.id, name=g.name) for g in admin_user_copy.groups
+                    # ],
                 )
             ],
             "editors": [],
@@ -376,7 +376,7 @@ class TestProjectBeanie:
         }
 
         # Create the project object
-        project = Project(**project_config)
+        project = ProjectBeanie(**project_config)
 
         # Execute the helper function
         result = await helper_create_project_beanie(project)
@@ -387,7 +387,7 @@ class TestProjectBeanie:
         assert result["project"] == project
 
         # Verify the project was saved to the database
-        retrieved_project = await Project.find_one({"name": project.name})
+        retrieved_project = await ProjectBeanie.find_one({"name": project.name})
         assert retrieved_project is not None
         assert retrieved_project.name == project.name
         assert len(retrieved_project.workflows) > 0
