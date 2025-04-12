@@ -23,13 +23,13 @@ from depictio_models.models.base import convert_objectid_to_str, PyObjectId
 from depictio_models.utils import convert_model_to_dict
 from depictio_models.models.users import (
     Token,
-    UserBaseGroupLess,
     Group,
     GroupBeanie,
     UserBeanie,
     TokenData,
     TokenBeanie,
     TokenBase,
+    UserBase,
 )
 
 
@@ -123,50 +123,6 @@ async def get_users_by_group_id(group_id: PydanticObjectId) -> List[UserBeanie]:
     return users
 
 
-@validate_call(validate_return=True)
-async def create_user_helper_beanie(
-    user: UserBeanie,
-) -> Dict[str, Union[bool, str, Optional[UserBeanie]]]:
-    """
-    Create a user in the database using Beanie ODM.
-
-    Args:
-        user (UserBeanie): The user to be created.
-
-    Returns:
-        dict: A dictionary containing the result of the user creation.
-    """
-    # Check if the user already exists
-    existing_user = await UserBeanie.find_one({"email": user.email})
-    if existing_user:
-        logger.info(f"User {user.email} already exists in the database")
-        return {
-            "success": False,
-            "message": "User already exists",
-            "user": existing_user,  # The CustomJSONResponse will handle serialization
-        }
-
-    # Insert the user into the database
-    try:
-        logger.debug(f"Preparing to add user {user.email} to the database")
-
-        # Insert the document
-        await user.insert()
-
-        logger.info(f"User {user.email} added to the database successfully")
-        return {
-            "success": True,
-            "message": "User created successfully",
-            "user": user,  # The CustomJSONResponse will handle serialization
-            "inserted_id": str(user.id),  # No need to manually convert to string
-        }
-    except Exception as e:
-        logger.error(f"Error creating user {user.email}: {e}")
-        return {
-            "success": False,
-            "message": f"Error creating user: {str(e)}",
-            "user": None,
-        }
 
 
 @validate_call()
@@ -331,71 +287,51 @@ async def add_token(token_data: TokenData) -> TokenBeanie:
     return token
 
 
-@validate_call(validate_return=True)
-def check_token_validity(token: TokenBase):
-    logger.info("Checking token validity.")
-    logger.info(f"Token: {token}")
-    # logger.info(f"Token : {format_pydantic(TokenBase(**token))}")
 
-    logger.info(f"Token: {format_pydantic(token)}")
-    # logger.info(f"Token model dump: {token.mongo()}")
-    logger.info(f"Token model dump: {convert_model_to_dict(token)}")
+# # Function to add a new user
+# def add_user(email, password, group=None, is_admin=False):
+#     hashed_password = hash_password(password)
+#     # user_dict = {
+#     #     "email": email,
+#     #     "password": hashed_password,
+#     #     "is_admin": is_admin,
+#     #     "registration_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+#     #     "last_login": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+#     # }
+#     from depictio_models.models.users import User
 
-    response = httpx.post(
-        f"{API_BASE_URL}/depictio/api/v1/auth/check_token_validity",
-        json=convert_model_to_dict(token),  # Sending the token in the body
-    )
-    if response.status_code == 200:
-        logger.info("Token is valid.")
-        return True
-    logger.error("Token is invalid.")
-    return False
+#     logger.info(f"Groups: {group}")
+#     # if not group:
+#     #     group = get_users_group()
+#     #     logger.info(f"Users Group: {group}")
+#     # logger.info(f"Groups: {group}")
 
+#     user = User(
+#         email=email,
+#         password=hashed_password,
+#         is_admin=is_admin,
+#         registration_date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+#         last_login=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+#         groups=[group],
+#     )
+#     from depictio_models.utils import convert_model_to_dict
 
-# Function to add a new user
-def add_user(email, password, group=None, is_admin=False):
-    hashed_password = hash_password(password)
-    # user_dict = {
-    #     "email": email,
-    #     "password": hashed_password,
-    #     "is_admin": is_admin,
-    #     "registration_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-    #     "last_login": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-    # }
-    from depictio_models.models.users import User
-
-    logger.info(f"Groups: {group}")
-    # if not group:
-    #     group = get_users_group()
-    #     logger.info(f"Users Group: {group}")
-    # logger.info(f"Groups: {group}")
-
-    user = User(
-        email=email,
-        password=hashed_password,
-        is_admin=is_admin,
-        registration_date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        last_login=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        groups=[group],
-    )
-    from depictio_models.utils import convert_model_to_dict
-
-    logger.info(f"User: {user}")
-    user = convert_model_to_dict(user)
-    logger.info(f"User: {user}")
-    response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/auth/register", json=user)
-    if response.status_code == 200:
-        logger.info(f"User {email} added successfully.")
-    else:
-        logger.error(f"Error adding user {email}: {response.text}")
-    return response
+#     logger.info(f"User: {user}")
+#     user = convert_model_to_dict(user)
+#     logger.info(f"User: {user}")
+#     response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/auth/register", json=user)
+#     if response.status_code == 200:
+#         logger.info(f"User {email} added successfully.")
+#     else:
+#         logger.error(f"Error adding user {email}: {response.text}")
+#     return response
 
 
 
 @validate_call(validate_return=True)
 async def create_user_in_db(
-    email: EmailStr, password: str, group: Optional[str] = None, is_admin: bool = False
-) -> Optional[UserBeanie]:
+    email: EmailStr, password: str, is_admin: bool = False
+) -> Optional[Dict[str, Union[bool, str, Optional[UserBeanie]]]]:
     """
     Helper function to create a user in the database using Beanie.
 
@@ -414,15 +350,15 @@ async def create_user_in_db(
     existing_user = await UserBeanie.find_one({"email": email})
 
     if existing_user:
-        raise HTTPException(status_code=400, detail="User already exists")
+        logger.warning(f"User {email} already exists in the database")
+        return {
+            "success": False,
+            "message": "User already exists",
+            "user": existing_user,  # The CustomJSONResponse will handle serialization
+        }
 
     # Hash the password
     hashed_password = hash_password(password)
-
-    # Get default group if not provided
-    # if not group:
-    #     group = get_users_group()
-    #     logger.info(f"Using default users group: {group}")
 
     # Create current timestamp
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -441,7 +377,11 @@ async def create_user_in_db(
     await user_beanie.create()
     logger.info(f"User created with id: {user_beanie.id}")
 
-    return user_beanie
+    return {
+        "success": True,
+        "message": "User created successfully",
+        "user": user_beanie,
+    }
 
 def login_user(email: str):
     return {"logged_in": True, "email": email}
@@ -452,16 +392,16 @@ def logout_user():
     return {"logged_in": False, "access_token": None}
 
 
-def get_users_group() -> Group:
-    response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/auth/get_users_group")
-    if response.status_code == 200:
-        group = response.json()
-        logger.info(f"Group: {group}")
-        group = Group.from_mongo(group)
-        logger.info(f"Group: {group}")
-        return group
-    else:
-        return []
+# def get_users_group() -> Group:
+#     response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/auth/get_users_group")
+#     if response.status_code == 200:
+#         group = response.json()
+#         logger.info(f"Group: {group}")
+#         group = Group.from_mongo(group)
+#         logger.info(f"Group: {group}")
+#         return group
+#     else:
+#         return []
 
 
 def edit_password(email, old_password, new_password, headers):
@@ -497,25 +437,6 @@ def edit_password(email, old_password, new_password, headers):
         return {"error": "User not found."}
 
 
-def delete_token(email, token_id, current_token):
-    logger.info(f"Deleting token for user {email}.")
-    user = find_user_by_email(email)
-    user = convert_objectid_to_str(user.dict())
-    logger.info(f"User: {user}")
-    if user:
-        logger.info(f"Deleting token for user {email}.")
-        request_body = {"user": user, "token_id": token_id}
-        response = httpx.post(
-            f"{API_BASE_URL}/depictio/api/v1/auth/delete_token",
-            json=request_body,
-            headers={"Authorization": f"Bearer {current_token}"},
-        )
-        if response.status_code == 200:
-            logger.info(f"Token deleted for user {email}.")
-        else:
-            logger.error(f"Error deleting token for user {email}: {response.text}")
-        return response
-    return None
 
 
 def list_existing_tokens(email):
@@ -528,34 +449,9 @@ def list_existing_tokens(email):
     return None
 
 
-def generate_agent_config(email, token, current_token):
-    user = find_user_by_email(email)
-    user = convert_objectid_to_str(user.dict())
-    logger.info(f"User: {user}")
-
-    token = convert_objectid_to_str(token)
-    token = {
-        "access_token": token["access_token"],
-        "expire_datetime": token["expire_datetime"],
-        "name": token["name"],
-    }
-
-    logger.info(f"Generating agent config for user {user}.")
-    result = httpx.post(
-        f"{API_BASE_URL}/depictio/api/v1/auth/generate_agent_config",
-        json={"user": user, "token": token},
-        headers={"Authorization": f"Bearer {current_token}"},
-    )
-    # logger.info(f"Result: {result.json()}")
-    if result.status_code == 200:
-        logger.info(f"Agent config generated for user {user}.")
-        return result.json()
-    else:
-        logger.error(f"Error generating agent config for user {user}: {result.text}")
-
 
 def update_group_in_users_helper(
-    group_id: ObjectId, group_users: List[UserBaseGroupLess]
+    group_id: ObjectId, group_users: List[UserBase]
 ) -> dict:
     # retrieve the group
     from depictio.api.v1.db import groups_collection
@@ -619,34 +515,6 @@ def update_group_in_users_helper(
         "updated_users": updated_users,
     }
 
-
-def api_create_group(group_dict: dict, current_token: str):
-    logger.info(f"Creating group {group_dict}.")
-
-    response = httpx.post(
-        f"{API_BASE_URL}/depictio/api/v1/auth/create_group",
-        json=group_dict,
-        headers={"Authorization": f"Bearer {current_token}"},
-    )
-    if response.status_code == 200:
-        logger.info(f"Group {group_dict['name']} created successfully.")
-    else:
-        logger.error(f"Error creating group {group_dict['name']}: {response.text}")
-    return response
-
-
-def api_update_group_in_users(group_id: str, payload: dict, current_token: str):
-    logger.info(f"Updating group {group_id}.")
-    response = httpx.post(
-        f"{API_BASE_URL}/depictio/api/v1/auth/update_group_in_users/{group_id}",
-        json=payload,
-        headers={"Authorization": f"Bearer {current_token}"},
-    )
-    if response.status_code == 200:
-        logger.info(f"Group {group_id} updated successfully.")
-    else:
-        logger.error(f"Error updating group {group_id}: {response.text}")
-    return response
 
 
 @validate_call()
