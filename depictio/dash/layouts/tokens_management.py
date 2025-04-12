@@ -4,7 +4,8 @@ from dash import html, dcc, Input, Output, State, ctx
 import dash
 import yaml
 from depictio.api.v1.configs.custom_logging import logger
-from depictio.api.v1.endpoints.user_endpoints.utils import add_token, delete_token, generate_agent_config, list_existing_tokens
+from depictio.api.v1.endpoints.user_endpoints.utils import add_token, list_existing_tokens
+from depictio.dash.api_calls import delete_token, generate_agent_config
 from dash_extensions.enrich import html, Input, Output, State
 from dash.exceptions import PreventUpdate
 
