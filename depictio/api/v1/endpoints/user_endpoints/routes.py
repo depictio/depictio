@@ -1,12 +1,8 @@
 from typing import Annotated, Dict, Optional, Any
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from beanie import PydanticObjectId
 from pydantic import EmailStr
-
-from depictio_models.models.users import UserBeanie, TokenBeanie
-
-
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from datetime import datetime
 
@@ -25,7 +21,6 @@ from depictio.api.v1.endpoints.user_endpoints.agent_config_utils import (
 from depictio.api.v1.endpoints.user_endpoints.utils import (
     add_token,
     check_password,
-    create_group_helper,
     create_user_in_db,
     delete_group_helper,
     update_group_in_users_helper,
@@ -37,8 +32,7 @@ from depictio_models.models.base import convert_objectid_to_str
 from depictio_models.models.users import (
     User,
     UserBase,
-    UserBaseGroupLess,
-    Group,
+    GroupBeanie,
     TokenBeanie,
     TokenData,
 )
@@ -190,47 +184,35 @@ async def api_fetch_user_from_id(
     return user
 
 
-
 @auth_endpoint_router.post("/register")
 async def create_user(
-    email: EmailStr, 
-    password: str, 
-    group: Optional[str] = None, 
-    is_admin: bool = False
+    email: EmailStr, password: str, is_admin: bool = False
 ) -> Dict[str, Any]:
     """
     Endpoint to register a new user.
-    
+
     Args:
         email: User's email address
         password: User's password
         group: User's group (optional)
         is_admin: Whether user is admin
-    
+
     Returns:
         Dictionary with user data, success status and message
     """
-    logger.info(f"Registering user with email: {email}")    
+    logger.info(f"Registering user with email: {email}")
     logger.debug(f"Password: {password}")
-    logger.debug(f"Group: {group}")
     logger.debug(f"Is Admin: {is_admin}")
     try:
-        created_user = await create_user_in_db(email, password, group, is_admin)
-        
-        return {
-            "user": created_user.model_dump(),
-            "message": "User created successfully",
-            "success": True
-        }
+        return await create_user_in_db(email, password, is_admin)
+
     except HTTPException as e:
         # Re-raise HTTP exceptions
         raise e
     except Exception as e:
         logger.error(f"Error creating user: {e}")
-        raise HTTPException(
-            status_code=500, 
-            detail=f"Failed to create user: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to create user: {str(e)}")
+
 
 # @auth_endpoint_router.post("/register")
 # async def create_user(user: User):
@@ -295,7 +277,7 @@ async def get_all_groups_with_users(current_user=Depends(get_current_user)):
         if users:
             users = [
                 convert_objectid_to_str(
-                    UserBaseGroupLess(
+                    UserBase(
                         id=user["_id"],
                         email=user["email"],
                         is_admin=user["is_admin"],
@@ -329,7 +311,6 @@ async def get_users_group():
             status_code=500, detail="Multiple groups with the same name"
         )
     return groups[0]
-
 
 
 @auth_endpoint_router.post("/edit_password")
@@ -460,9 +441,6 @@ async def purge_expired_tokens_endpoint(current_user=Depends(get_current_user)) 
         raise HTTPException(status_code=500, detail="Failed to purge expired tokens")
 
 
-from depictio_models.models.users import TokenBase
-
-
 @auth_endpoint_router.post("/check_token_validity")
 async def check_token_validity_endpoint(token: TokenBeanie):
     logger.info(f"Checking token validity.")
@@ -580,47 +558,6 @@ def turn_sysadmin(user_id: str, is_admin: bool, current_user=Depends(get_current
         return {"success": False}
 
 
-from depictio_models.models.users import GroupBeanie
-
-
-@auth_endpoint_router.post("/create_group")
-async def create_group(
-    group: GroupBeanie, current_user=Depends(get_current_user)
-) -> Dict:
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Current user not found.")
-    # Check if the current user is an admin
-    if not current_user.is_admin:
-        raise HTTPException(status_code=401, detail="Current user is not an admin.")
-
-    if not group:
-        raise HTTPException(status_code=400, detail="No group provided")
-
-    if not group.name:
-        raise HTTPException(status_code=400, detail="No group name provided")
-
-    response = await create_group_helper(group)
-    return response  # The CustomJSONResponse will handle serialization
-
-
-# @auth_endpoint_router.post("/create_group")
-# def create_group(group: Group, current_user=Depends(get_current_user)):
-#     if not current_user:
-#         raise HTTPException(status_code=401, detail="Current user not found.")
-#     # Check if the current user is an admin
-#     if not current_user.is_admin:
-#         raise HTTPException(status_code=401, detail="Current user is not an admin.")
-
-#     if not group:
-#         raise HTTPException(status_code=400, detail="No group provided")
-
-#     if not group.name:
-#         raise HTTPException(status_code=400, detail="No group name provided")
-
-#     response = create_group_helper(group)
-#     return response
-
-
 @auth_endpoint_router.delete("/delete_group/{group_id}")
 def delete_group(group_id: str, current_user=Depends(get_current_user)):
     if not current_user:
@@ -666,8 +603,8 @@ def update_group_in_users(
 
     logger.info(f"Request: {request}")
 
-    # Convert user dicts to UserBaseGroupLess objects
-    users = [UserBaseGroupLess(**user) for user in request["users"]]
+    # Convert user dicts to UserBase objects
+    users = [UserBase(**user) for user in request["users"]]
 
     logger.info(f"Users: {users}")
 
@@ -721,7 +658,7 @@ def get_group_with_users(group_id: str, current_user=Depends(get_current_user)):
         if users:
             users = [
                 convert_objectid_to_str(
-                    UserBaseGroupLess(
+                    UserBase(
                         id=user["_id"],
                         email=user["email"],
                         is_admin=user["is_admin"],
@@ -740,6 +677,26 @@ def get_group_with_users(group_id: str, current_user=Depends(get_current_user)):
             return convert_model_to_dict(group)
     else:
         raise HTTPException(status_code=404, detail="Group not found")
+
+
+@auth_endpoint_router.get("/get_group/{group_id}")
+async def get_group(group_id: str):
+    group = await GroupBeanie.get(group_id)
+    if not group:
+        return {
+            "message": "Group not found",
+            "success": False,
+        }
+
+    logger.debug(group)
+    await group.fetch_all_links()
+    logger.debug(group)
+
+    return {
+        "message": "Group found",
+        "success": True,
+        "group": group,
+    }
 
 
 # @auth_endpoint_router.get("/get_all_groups_including_users")
@@ -764,3 +721,41 @@ def get_group_with_users(group_id: str, current_user=Depends(get_current_user)):
 
 #     # groups = [convert_model_to_dict(group) for group in groups]
 #     return new_groups
+
+
+# @auth_endpoint_router.post("/create_group")
+# async def create_group(
+#     group: GroupBeanie, current_user=Depends(get_current_user)
+# ) -> Dict:
+#     if not current_user:
+#         raise HTTPException(status_code=401, detail="Current user not found.")
+#     # Check if the current user is an admin
+#     if not current_user.is_admin:
+#         raise HTTPException(status_code=401, detail="Current user is not an admin.")
+
+#     if not group:
+#         raise HTTPException(status_code=400, detail="No group provided")
+
+#     if not group.name:
+#         raise HTTPException(status_code=400, detail="No group name provided")
+
+#     response = await create_group_helper(group)
+#     return response  # The CustomJSONResponse will handle serialization
+
+
+# # @auth_endpoint_router.post("/create_group")
+# # def create_group(group: Group, current_user=Depends(get_current_user)):
+# #     if not current_user:
+# #         raise HTTPException(status_code=401, detail="Current user not found.")
+# #     # Check if the current user is an admin
+# #     if not current_user.is_admin:
+# #         raise HTTPException(status_code=401, detail="Current user is not an admin.")
+
+# #     if not group:
+# #         raise HTTPException(status_code=400, detail="No group provided")
+
+# #     if not group.name:
+# #         raise HTTPException(status_code=400, detail="No group name provided")
+
+# #     response = create_group_helper(group)
+# #     return response
