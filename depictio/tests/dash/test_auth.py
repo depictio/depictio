@@ -21,7 +21,7 @@ TEST_USER = initial_config["users"][
 TEST_USER_EMAIL = TEST_USER["email"]
 TEST_USER_PASSWORD = TEST_USER["password"]
 
-
+@pytest.mark.playwright
 def test_login_auth_page(page: Page):
     """Test logging in to the application via the auth page."""
 
@@ -43,7 +43,7 @@ def test_login_auth_page(page: Page):
     # Check if the login was successful
     page.wait_for_url(f"{DASH_URL}/dashboards")
 
-
+@pytest.mark.playwright
 def test_unsuccessful_login_auth_page(page: Page):
     """Test unsuccessful login attempt with invalid credentials."""
     
@@ -82,7 +82,7 @@ def test_unsuccessful_login_auth_page(page: Page):
     
     print("Successfully verified unsuccessful login scenario")
 
-
+@pytest.mark.playwright
 def test_user_registration(page: Page):
     """Test user registration functionality."""
     
@@ -147,7 +147,7 @@ def test_user_registration(page: Page):
     
     print(f"Successfully registered and logged in with user: {test_email}")
 
-
+@pytest.mark.playwright
 def test_unsuccessful_registration_already_registered(page: Page):
     """Test unsuccessful registration with various error scenarios."""
     
@@ -190,7 +190,7 @@ def test_unsuccessful_registration_already_registered(page: Page):
     
     print("Successfully tested all unsuccessful registration scenarios")
 
-
+@pytest.mark.playwright
 def test_unsuccessful_registration_password_mismatch(page: Page):
     """Test unsuccessful registration with various error scenarios."""
     
