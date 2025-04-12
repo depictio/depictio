@@ -555,3 +555,4 @@ class TestCheckIfTokenIsValid:
             
             # Verify logging
             mock_logger.debug.assert_called_once()
+

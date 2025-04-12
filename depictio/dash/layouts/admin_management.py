@@ -11,9 +11,12 @@ from pydantic import validate_call
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.custom_logging import logger
 from depictio.api.v1.endpoints.user_endpoints.utils import (
-    api_create_group,
-    api_update_group_in_users,
     create_group_helper,
+)
+from depictio.dash.api_calls import (
+    api_call_fetch_user_from_token,
+    api_create_group,
+    api_update_group_in_users
 )
 from depictio.dash.api_calls import api_call_fetch_user_from_token
 from depictio.dash.layouts.layouts_toolbox import (
@@ -948,7 +951,7 @@ def register_admin_callbacks(app):
                         group_id = trigger_id_index
                         # group_users = transfert_list_value[1]
                         # logger.info(f"Group users: {group_users}")
-                        from depictio_models.models.users import UserBaseGroupLess
+                        from depictio_models.models.users import UserBase
 
                         group_users = [
                             {"email": user["label"], "id": str(user["value"])}
@@ -982,10 +985,10 @@ def register_admin_callbacks(app):
                 headers={"Authorization": f"Bearer {local_data['access_token']}"},
             )
             if reponse_all_users.status_code == 200:
-                from depictio_models.models.users import UserBaseGroupLess
+                from depictio_models.models.users import UserBase
 
                 all_users = reponse_all_users.json()
-                all_users = [UserBaseGroupLess.from_mongo(user) for user in all_users]
+                all_users = [UserBase.from_mongo(user) for user in all_users]
                 logger.info(f"Users: {all_users}")
             else:
                 logger.error(f"Error fetching users: {reponse_all_users.json()}")

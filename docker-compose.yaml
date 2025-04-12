@@ -1,7 +1,7 @@
 services:
   mongo:
-    image: mongo:latest
-    command: mongod --quiet --dbpath /data/depictioDB --port 27018 --logpath /dev/null
+    image: mongo:8.0
+    command: mongod --dbpath /data/depictioDB --port 27018
     user: "${UID:-1000}:${GID:-1000}"
     ports:
       - 27018:27018
