@@ -1,7 +1,4 @@
-import asyncio
 from datetime import datetime
-from beanie import PydanticObjectId
-from bson import ObjectId
 from fastapi import HTTPException
 from typing import Dict, Optional
 
@@ -84,7 +81,6 @@ async def async_fetch_user_from_email(
         return None
 
     # Fetch linked documents
-    await user.fetch_all_links()
     logger.debug(f"User fetched from email: {format_pydantic(user)}")
     return user
 
