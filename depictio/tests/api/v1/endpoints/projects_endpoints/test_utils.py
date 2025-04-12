@@ -29,7 +29,7 @@ class TestProjectBeanie:
             id=user_id,
             email="test@example.com",
             is_admin=True,
-            groups=[Group(id=PydanticObjectId(), name="admin_group")],
+            # groups=[Group(id=PydanticObjectId(), name="admin_group")],
         )
 
     @pytest.fixture
@@ -215,14 +215,14 @@ class TestProjectBeanie:
             id=PydanticObjectId(),
             email="editor@example.com",
             is_admin=False,
-            groups=[Group(id=PydanticObjectId(), name="editors_group")],
+            # groups=[Group(id=PydanticObjectId(), name="editors_group")],
         )
 
         viewer_user = UserBase(
             id=PydanticObjectId(),
             email="viewer@example.com",
             is_admin=False,
-            groups=[Group(id=PydanticObjectId(), name="viewers_group")],
+            # groups=[Group(id=PydanticObjectId(), name="viewers_group")],
         )
 
         sample_project.permissions.editors = [editor_user]
@@ -352,12 +352,12 @@ class TestProjectBeanie:
             id=PydanticObjectId(),
             email="admin@example.com",
             is_admin=True,
-            groups=[Group(id=PydanticObjectId(), name="admin_group")],
+            # groups=[Group(id=PydanticObjectId(), name="admin_group")],
         )
 
         # Simulate admin_user.fetch_all_links() by creating a copy
         admin_user_copy = admin_user.model_copy()
-        admin_user_copy.groups = admin_user.groups
+        # admin_user_copy.groups = admin_user.groups
 
         # Set up permissions as shown in the example
         project_config["permissions"] = {
@@ -366,9 +366,9 @@ class TestProjectBeanie:
                     id=admin_user.id,
                     email=admin_user.email,
                     is_admin=True,
-                    groups=[
-                        Group(id=g.id, name=g.name) for g in admin_user_copy.groups
-                    ],
+                    # groups=[
+                        # Group(id=g.id, name=g.name) for g in admin_user_copy.groups
+                    # ],
                 )
             ],
             "editors": [],
