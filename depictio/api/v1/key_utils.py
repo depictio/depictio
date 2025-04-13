@@ -25,6 +25,16 @@ class KeyGenerationError(Exception):
     """Custom exception for key generation failures."""
 
 
+@validate_call(validate_return=True)
+def _generate_api_internal_key() -> str:
+    """Generate a random API internal key.
+
+    Returns:
+        Randomly generated API internal key
+    """
+    # Generate a random 32-byte key
+    return os.urandom(32).hex()
+
 @validate_call()
 def _ensure_directory_exists(path: Union[str, Path]) -> None:
     """Ensure the directory for a file exists.
