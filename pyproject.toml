@@ -70,3 +70,21 @@ packages = ["depictio"]
 [tool.mypy]
 exclude = ["build/", "depictio/"]
 files = ["depictio/tests/"]
+
+[tool.pytest.ini_options]
+pythonpath = "."
+python_files = "test_*.py"
+addopts = "-s"
+markers = [
+    "integration: mark test as an integration test.",
+    "playwright: mark test as a playwright test."
+]
+filterwarnings = [
+    "ignore::pydantic.warnings.PydanticDeprecatedSince20",
+    "ignore::DeprecationWarning:pydantic.*"
+]
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.pytest-playwright]
+headed = true
