@@ -14,7 +14,7 @@ from depictio.api.v1.endpoints.user_endpoints.utils import (
     login_user,
     find_user_by_email,
 )
-from depictio.dash.api_calls import api_call_register_user
+from depictio.dash.api_calls import api_call_fetch_user_from_email, api_call_register_user
 
 
 event = {"event": "keydown", "props": ["key"]}
@@ -213,7 +213,7 @@ def validate_login(login_email, login_password):
     if not login_email or not login_password:
         return "Please fill in all fields.", True, dash.no_update, dash.no_update
 
-    user = find_user_by_email(login_email)
+    user = api_call_fetch_user_from_email(login_email)
     if not user:
         return (
             "User not found. Please register first.",
@@ -274,7 +274,7 @@ def validate_login(login_email, login_password):
 def handle_registration(register_email, register_password, register_confirm_password):
     if not register_email or not register_password or not register_confirm_password:
         return "Please fill in all fields.", True
-    if find_user_by_email(register_email):
+    if api_call_fetch_user_from_email(register_email):
         return "Email already registered.", True
     if register_password != register_confirm_password:
         return "Passwords do not match.", True
