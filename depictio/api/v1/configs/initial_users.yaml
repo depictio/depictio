@@ -3,16 +3,11 @@ users:
     email: admin@embl.de
     password: "changeme"
     is_admin: true
-    groups:
-      - admin
-      - users
 
   - id: "67658ba033c8b59ad489d7c8"
     email: test_user@embl.de
     password: "test_pwd"
     is_admin: false
-    groups:
-      - users
 
 groups:
   - name: admin
