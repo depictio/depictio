@@ -1,5 +1,7 @@
 from typing import Dict, Any, Optional
 import httpx
+import sys
+import os
 from pydantic import EmailStr, validate_call
 
 from depictio.api.v1.configs.config import settings, API_BASE_URL
@@ -9,6 +11,13 @@ from depictio.api.v1.endpoints.user_endpoints.utils import find_user_by_email
 from depictio_models.models.users import User, UserBeanie, TokenBase
 from depictio_models.utils import convert_model_to_dict
 from depictio_models.models.base import PyObjectId, convert_objectid_to_str
+
+# Check if running in a test environment
+# First check environment variable, then check for pytest in sys.argv
+is_testing = os.environ.get('DEPICTIO_TEST_MODE', 'false').lower() == 'true' or any('pytest' in arg for arg in sys.argv)
+
+# Add a query parameter to API calls when in test mode to indicate test database should be used
+API_QUERY_PARAMS = {"test_mode": "true"} if is_testing else {}
 
 
 @validate_call(validate_return=True)
@@ -36,9 +45,12 @@ def api_call_register_user(
         # Create payload with parameters
         params = {"email": email, "password": password, "is_admin": is_admin}
 
-        # Add group if provided
-        if group:
-            params["group"] = group
+        # # Add group if provided
+        # if group:
+        #     params["group"] = group
+            
+        # Add test mode parameter if in test environment
+        # params.update(API_QUERY_PARAMS)
 
         response = httpx.post(
             f"{API_BASE_URL}/depictio/api/v1/auth/register",
@@ -73,6 +85,43 @@ def api_call_fetch_user_from_token(token: str) -> Optional[User]:
         f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_token",
         params={"token": token},
         headers={"Authorization": f"Bearer {token}"},
+    )
+
+    if response.status_code == 404:
+        return None
+
+    user_data = response.json()
+    logger.debug(f"User data fetched: {user_data}")
+
+    if not user_data:
+        return None
+
+    user = User(**user_data)
+
+    logger.debug(f"User object created: {format_pydantic(user)}")
+
+    return user
+
+@validate_call(validate_return=True)
+def api_call_fetch_user_from_email(email: EmailStr) -> Optional[User]:
+    """
+    Fetch a user from the authentication service using an email.
+    Synchronous version for Dash compatibility.
+
+    Args:
+        email: The user's email address
+
+    Returns:
+        Optional[User]: The user if found, None otherwise
+    """
+    logger.debug(f"Fetching user with email: {email}")
+    logger.debug(f"API Base URL: {API_BASE_URL}")
+    logger.debug(f"Internal API Key: {settings.fastapi.internal_api_key}")
+
+    response = httpx.get(
+        f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_email",
+        params={"email": email},
+        headers={"api-key": settings.fastapi.internal_api_key},
     )
 
     if response.status_code == 404:

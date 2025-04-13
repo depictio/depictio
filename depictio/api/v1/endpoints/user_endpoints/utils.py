@@ -123,8 +123,6 @@ async def get_users_by_group_id(group_id: PydanticObjectId) -> List[UserBeanie]:
     return users
 
 
-
-
 @validate_call()
 async def create_group_helper_beanie(
     group: GroupBeanie,
@@ -287,7 +285,6 @@ async def add_token(token_data: TokenData) -> TokenBeanie:
     return token
 
 
-
 # # Function to add a new user
 # def add_user(email, password, group=None, is_admin=False):
 #     hashed_password = hash_password(password)
@@ -325,7 +322,6 @@ async def add_token(token_data: TokenData) -> TokenBeanie:
 #     else:
 #         logger.error(f"Error adding user {email}: {response.text}")
 #     return response
-
 
 
 @validate_call(validate_return=True)
@@ -383,6 +379,56 @@ async def create_user_in_db(
         "user": user_beanie,
     }
 
+
+@validate_call(validate_return=True)
+def delete_user_from_db(
+    user_id: PyObjectId = None, email: str = None
+) -> Dict[str, Union[bool, str]]:
+    """
+    Helper function to delete a user from the database using Beanie.
+
+    Args:
+        user_id: User's ID
+
+    Returns:
+        A dictionary indicating success or failure
+    """
+    logger.info(f"Deleting user with id: {user_id} or email: {email}")
+    from depictio.api.v1.db import users_collection
+
+    # Cannot use both user_id and email
+    if not user_id and not email:
+        logger.error("Either user_id or email must be provided")
+        return {"success": False, "message": "Either user_id or email must be provided"}
+    if user_id and email:
+        logger.error("Cannot use both user_id and email")
+        return {"success": False, "message": "Cannot use both user_id and email"}
+    # If email is provided, find the user by email
+    if email:
+        user = users_collection.find_one({"email": email})
+        if not user:
+            logger.warning(f"User with email {email} not found")
+            return {"success": False, "message": "User not found"}
+        user_id = user["_id"]
+        logger.info(f"User ID resolved from email: {user_id}")
+    # If user_id is provided, find the user by user_id
+    else:
+        user_id = ObjectId(user_id)
+        logger.info(f"User ID provided: {user_id}")
+
+    if not user:
+        logger.warning(f"User with id {user_id} not found")
+        return {"success": False, "message": "User not found"}
+    # Delete the user
+    result = users_collection.delete_one({"_id": user_id})
+    if result.deleted_count == 1:
+        logger.info(f"User with id {user_id} deleted successfully")
+        return {"success": True, "message": "User deleted successfully"}
+    else:
+        logger.error(f"Error deleting user with id {user_id}")
+        return {"success": False, "message": "Error deleting user"}
+
+
 def login_user(email: str):
     return {"logged_in": True, "email": email}
 
@@ -437,8 +483,6 @@ def edit_password(email, old_password, new_password, headers):
         return {"error": "User not found."}
 
 
-
-
 def list_existing_tokens(email):
     logger.info(f"Listing tokens for user {email}.")
     user = find_user_by_email(email, return_tokens=True)
@@ -447,7 +491,6 @@ def list_existing_tokens(email):
         user = user.model_dump()
         return user.get("tokens", [])
     return None
-
 
 
 def update_group_in_users_helper(
@@ -514,7 +557,6 @@ def update_group_in_users_helper(
         "message": f"Updated group membership for users: {updated_users}",
         "updated_users": updated_users,
     }
-
 
 
 @validate_call()

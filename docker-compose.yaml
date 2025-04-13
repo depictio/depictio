@@ -23,6 +23,8 @@ services:
       - ../depictio-models:/app/depictio-models
     environment:
         DEPICTIO_CONTAINER: "True"
+        DEPICTIO_TEST_MODE: "${DEPICTIO_TEST_MODE:-false}"
+        DEPICTIO_MONGODB_DB_NAME: "${DEPICTIO_MONGODB_DB_NAME:-depictioDB}"
     command: ["python", "depictio/dash/app.py"]
     user: "${UID:-1000}:${GID:-1000}"
     depends_on:
@@ -46,6 +48,8 @@ services:
       - ../depictio-models:/app/depictio-models
     environment:
         DEPICTIO_CONTAINER: "True"
+        DEPICTIO_TEST_MODE: "${DEPICTIO_TEST_MODE:-false}"
+        DEPICTIO_MONGODB_DB_NAME: "${DEPICTIO_MONGODB_DB_NAME:-depictioDB}"
         FORCE_COLOR: "1"
         TERM: "xterm-256color"
         PYTHONIOENCODING: "UTF-8"
