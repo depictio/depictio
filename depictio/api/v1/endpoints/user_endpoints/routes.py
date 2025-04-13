@@ -1,6 +1,6 @@
 from typing import Annotated, Dict, Optional, Any
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Header, status
 from beanie import PydanticObjectId
 from pydantic import EmailStr
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -144,10 +144,19 @@ async def api_fetch_user_from_token(
     return user
 
 
-@auth_endpoint_router.get("/fetch_user/from_email")
+@auth_endpoint_router.get("/fetch_user/from_email", include_in_schema=False)
 async def api_fetch_user_from_email(
-    email: EmailStr, current_user=Depends(get_current_user)
+    email: EmailStr,
+    api_key: str = Header(..., description="Internal API key for authentication"),
 ) -> User:
+    from depictio.api.v1.configs.config import settings
+
+    if api_key != settings.fastapi.internal_api_key:
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid API key",
+        )
+
     user = await async_fetch_user_from_email(email)
 
     if not user:
@@ -156,10 +165,10 @@ async def api_fetch_user_from_email(
         )
 
     # if user id differs from current user id
-    if user.id != current_user.id:
-        raise HTTPException(
-            status_code=403, detail="Email does not belong to the current user"
-        )
+    # if user.id != current_user.id:
+    #     raise HTTPException(
+    #         status_code=403, detail="Email does not belong to the current user"
+    #     )
 
     return user
 
