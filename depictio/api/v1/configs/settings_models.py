@@ -2,6 +2,7 @@ import os
 from typing import Dict, Union
 from pydantic import AliasChoices, ConfigDict, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from depictio.api.v1.key_utils import _generate_api_internal_key
 from depictio_models.models.s3 import MinioConfig
 
 
@@ -50,6 +51,11 @@ class FastAPIConfig(BaseSettings):
         default=1, json_schema_extra={"env": "DEPICTIO_FASTAPI_WORKERS"}
     )
     ssl: bool = Field(default=False, json_schema_extra={"env": "DEPICTIO_FASTAPI_SSL"})
+    internal_api_key: str = Field(
+        default_factory=lambda: os.getenv("DEPICTIO_FASTAPI_INTERNAL_API_KEY", _generate_api_internal_key()),
+        # default="depictio_internal_api_key",
+        json_schema_extra={"env": "DEPICTIO_FASTAPI_INTERNAL_API_KEY"},
+    )
     # class Config:
     #     env_prefix = 'DEPICTIO_FASTAPI_'
 
