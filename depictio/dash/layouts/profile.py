@@ -68,7 +68,7 @@ layout = dbc.Container(
                                             color="green",
                                             style={"marginTop": "20px"},
                                         ),
-                                        href="/tokens",
+                                        href="/cli_configs",
                                     ),
                                     align="left",
                                     width="auto",
@@ -384,15 +384,15 @@ def register_profile_callbacks(app):
             )
         )
 
-        user_groups = user.get("groups", "N/A")
-        user_groups = [group.get("name", "N/A") for group in user_groups if group["name"] not in ["admin", "users"]]
+        # user_groups = user.get("groups", "N/A")
+        # user_groups = [group.get("name", "N/A") for group in user_groups if group["name"] not in ["admin", "users"]]
         user_metadata = {
             "Email": user.get("email", "N/A"),
             "Database ID": user.get("id", "N/A"),
             "Registration Date": user.get("registration_date", "N/A"),
             "Last login": user.get("last_login", "N/A"),
             "Admin": user.get("is_admin", "N/A"),
-            "Groups": f"[{', '.join(user_groups)}]"
+            # "Groups": f"[{', '.join(user_groups)}]"
         }
 
         metadata_items = [
