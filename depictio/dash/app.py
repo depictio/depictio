@@ -298,8 +298,8 @@ def handle_authenticated_user(pathname, local_data):
         header = create_default_header("Profile")
         return create_profile_layout(), header, pathname, local_data
 
-    elif pathname == "/tokens":
-        header = create_default_header("Tokens Management")
+    elif pathname == "/cli_configs":
+        header = create_default_header("Depictio-CLI configs Management")
         return create_tokens_management_layout(), header, pathname, local_data
 
     elif pathname == "/admin":
