@@ -7,13 +7,13 @@ from dotenv import load_dotenv
 from depictio import BASE_PATH
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.custom_logging import logger
-from depictio_models.s3_utils import S3_storage_checks
+from depictio.models.s3_utils import S3_storage_checks
 from depictio.api.v1.key_utils import generate_keys
 from depictio.api.v1.db_init import initialize_db
 from depictio.api.v1.s3 import minios3_external_config
 from depictio.api.v1.endpoints.utils_endpoints.core_functions import create_bucket
 
-from depictio_models.models.s3 import MinioConfig
+from depictio.models.models.s3 import MinioConfig
 
 
 async def run_initialization(

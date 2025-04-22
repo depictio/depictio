@@ -1,0 +1,80 @@
+from datetime import datetime
+import os
+import re
+from typing import List, Optional
+from beanie import Document
+from pydantic import field_validator
+
+from depictio.models.models.users import Permission
+from depictio.models.models.workflows import Workflow
+from depictio.models.models.base import MongoModel
+from depictio.models.config import DEPICTIO_CONTEXT
+
+
+class Project(MongoModel):
+    name: str
+    data_management_platform_project_url: Optional[str] = None
+    workflows: List[Workflow]
+    yaml_config_path: str
+    permissions: Permission
+    is_public: bool = False
+    hash: Optional[str] = None
+    registration_time: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v):
+        if not v:
+            raise ValueError("Project name cannot be empty")
+        return v
+
+    # @model_validator(mode="before")
+    # def compute_hash(cls, values: dict) -> dict:
+    #     """
+    #     Compute the hash of the project configuration.
+    #     """
+    #     # Compute the hash of the project configuration after removing all the "registration_time" fields in project and nested objects
+    #     values.pop("registration_time", None)
+    #     for workflow in values["workflows"]:
+    #         if workflow.get("registration_time"):
+    #             # Remove registration_time from workflow and its data_collections
+    #             workflow.pop("registration_time", None)
+    #         for data_collection in workflow["data_collections"]:
+    #             if data_collection.get("registration_time"):
+    #                 # Remove registration_time from data_collection
+    #                 data_collection.pop("registration_time", None)
+    #             # data_collection.pop("registration_time", None)
+
+    #     hash_str = hashlib.md5(
+    #         json.dumps(convert_objectid_to_str(values), sort_keys=True).encode()
+    #     ).hexdigest()
+    #     values["hash"] = hash_str
+    #     return values
+
+    @field_validator("yaml_config_path")
+    @classmethod
+    def validate_yaml_config_path(cls, v):
+        if DEPICTIO_CONTEXT.lower() == "cli":
+            # Check if looks like a valid path but do not check if it exists
+            if not os.path.isabs(v):
+                raise ValueError("Path must be absolute")
+            return v
+        else:
+            if not v:
+                raise ValueError("Path cannot be empty")
+            return v
+
+    @field_validator("data_management_platform_project_url")
+    @classmethod
+    def validate_data_management_platform_project_url(cls, v):
+        # Check if looks like a valid URL
+        if not v:
+            return v
+        if not re.match(r"https?://", v):
+            raise ValueError("Invalid URL")
+        return v
+
+
+class ProjectBeanie(Project, Document):
+    class Settings:
+        name = "projects"

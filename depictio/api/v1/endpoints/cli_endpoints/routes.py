@@ -5,9 +5,9 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import async_fetch_
 from depictio.api.v1.configs.custom_logging import logger
 
 
-from depictio_models.models.base import convert_objectid_to_str
-from depictio_models.models.projects import Project
-from depictio_models.models.users import UserBase
+from depictio.models.models.base import convert_objectid_to_str
+from depictio.models.models.projects import Project
+from depictio.models.models.users import UserBase
 
 
 cli_endpoint_router = APIRouter()

@@ -19,7 +19,7 @@ from depictio.api.v1.endpoints.workflow_endpoints.routes import (
     get_workflow_from_id,
 )
 
-from depictio_models.models.base import convert_objectid_to_str
+from depictio.models.models.base import convert_objectid_to_str
 
 from depictio.dash.utils import return_dc_tag_from_id, return_mongoid
 

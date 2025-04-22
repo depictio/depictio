@@ -5,10 +5,10 @@ from pymongo.errors import BulkWriteError
 from pydantic import BaseModel
 from pymongo import UpdateOne
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
-from depictio_models.models.workflows import WorkflowRun
+from depictio.models.models.workflows import WorkflowRun
 from depictio.api.v1.db import runs_collection, projects_collection
 from depictio.api.v1.configs.custom_logging import logger
-from depictio_models.models.base import convert_objectid_to_str
+from depictio.models.models.base import convert_objectid_to_str
 
 # Define the router
 runs_endpoint_router = APIRouter()

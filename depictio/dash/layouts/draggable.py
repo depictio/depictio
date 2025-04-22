@@ -1309,7 +1309,7 @@ def design_draggable(
         f"{API_BASE_URL}/depictio/api/v1/projects/get/from_dashboard_id/{dashboard_id}",
         headers={"Authorization": f"Bearer {TOKEN}"},
     ).json()
-    from depictio_models.models.projects import Project
+    from depictio.models.models.projects import Project
 
     project = Project.from_mongo(project)
     logger.info(f"design_draggable - Project: {project}")
