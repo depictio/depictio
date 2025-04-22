@@ -6,7 +6,7 @@ from bson import ObjectId
 
 # Import the function to test
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
-from depictio_models.models.users import TokenBeanie, UserBeanie
+from depictio.models.models.users import TokenBeanie, UserBeanie
 from depictio.api.main import app
 
 # ------------------------------------------------------

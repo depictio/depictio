@@ -15,7 +15,7 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     purge_expired_tokens_from_user,
 )
 
-from depictio_models.models.users import UserBeanie, TokenBeanie
+from depictio.models.models.users import UserBeanie, TokenBeanie
 
 # ------------------------------------------------------
 # Test async_fetch_user_from_token function
@@ -320,8 +320,8 @@ from mongomock_motor import AsyncMongoMockClient
 
 # Import the functions and models (these would be your actual imports)
 # from depictio.api.v1.endpoints.user_endpoints.core_functions import purge_expired_tokens_from_user, check_if_token_is_valid
-# from depictio_models.models.tokens import TokenBeanie
-# from depictio_models.models.users import UserBeanie
+# from depictio.models.models.tokens import TokenBeanie
+# from depictio.models.models.users import UserBeanie
 
 @pytest.mark.asyncio
 class TestPurgeExpiredTokensFromUser:
