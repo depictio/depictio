@@ -8,7 +8,7 @@ from depictio.api.v1.configs.custom_logging import logger
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.endpoints.user_endpoints.agent_config_utils import export_agent_config, generate_agent_config
 
-from depictio_models.models.users import UserBeanie, TokenBeanie
+from depictio.models.models.users import UserBeanie, TokenBeanie
 
 
 # Assuming you have this function somewhere in your codebase
@@ -102,11 +102,12 @@ async def create_default_token(user: UserBeanie) -> Optional[Dict[str, Any]]:
     # Generate and export agent config
     cli_config = await generate_agent_config(user, token)
     config_path = await export_agent_config(cli_config=cli_config, email=user.email, wipe=bool(settings.mongodb.wipe))
+    config_path = None
 
     
     logger.debug(f"Default token created for {user.email}")
     return {
-        "token": token.to_response_dict(),
+        "token": token.model_dump(),
         "config_path": config_path,
         "new_token_created": True
     }
