@@ -8,9 +8,9 @@ from pymongo.results import UpdateResult
 from depictio.api.v1.db import dashboards_collection
 from depictio.api.v1.configs.custom_logging import logger
 
-from depictio_models.models.base import convert_objectid_to_str
-from depictio_models.utils import convert_model_to_dict
-from depictio_models.models.dashboards import DashboardData
+from depictio.models.models.base import convert_objectid_to_str
+from depictio.models.utils import convert_model_to_dict
+from depictio.models.models.dashboards import DashboardData
 
 def load_dashboards_from_db(owner, admin_mode=False):
     logger.info("Loading dashboards from MongoDB")
@@ -30,9 +30,10 @@ def load_dashboards_from_db(owner, admin_mode=False):
         # Sort dashboards by title
         dashboards = sorted(dashboards, key=lambda x: x["title"])
     else:
+        logger.info("Admin mode not enabled.")
         dashboards = list(
             dashboards_collection.find(
-                {"$or": [{"permissions.owners._id": ObjectId(owner)}, {"permissions.viewers._id": ObjectId(owner)}, {"permissions.viewers": "*"}]}, projection
+                {"$or": [{"permissions.owners._id": ObjectId(owner)}, {"permissions.viewers._id": ObjectId(owner)}]}, projection
             )
         )
 
