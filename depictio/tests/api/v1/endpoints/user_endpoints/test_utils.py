@@ -8,7 +8,7 @@ from depictio.api.v1.endpoints.user_endpoints.utils import (
     hash_password,
     verify_password,
 )
-from depictio_models.models.users import Group
+from depictio.models.models.users import Group
 
 
 # Patch pymongo.MongoClient before any module using it is imported.
@@ -449,7 +449,7 @@ class TestCreateGroupHelper:
     def test_create_new_group_success(self):
         """Test creating a new group successfully."""
         # Create a test group
-        # from depictio_models.models.users import Group
+        # from depictio.models.models.users import Group
         test_group = Group(name="test_group")
 
         # Call the function
@@ -471,7 +471,7 @@ class TestCreateGroupHelper:
         self.groups_collection.insert_one({"name": "existing_group"})
 
         # Create a test group with the same name
-        # from depictio_models.models.users import Group
+        # from depictio.models.models.users import Group
         test_group = Group(name="existing_group")
 
         # Call the function
@@ -590,9 +590,9 @@ from depictio.api.v1.endpoints.user_endpoints.utils import (
     create_user_in_db,
 )
 from beanie import init_beanie
-from depictio_models.models.users import UserBeanie, GroupBeanie
+from depictio.models.models.users import UserBeanie, GroupBeanie
 from unittest.mock import AsyncMock
-from depictio_models.models.base import PyObjectId
+from depictio.models.models.base import PyObjectId
 from mongomock_motor import AsyncMongoMockClient
 from fastapi import HTTPException
 from unittest.mock import patch

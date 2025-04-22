@@ -76,7 +76,7 @@ class TestInitialization:
     @pytest.mark.asyncio
     async def test_run_initialization_default_config(self, initialization_test):
         """Test initialization with default configuration."""
-        from depictio_models.models.s3 import S3DepictioCLIConfig
+        from depictio.models.models.s3 import S3DepictioCLIConfig
 
         # Create a mock config that behaves like a real S3DepictioCLIConfig
         mock_config = Mock(spec=S3DepictioCLIConfig)
@@ -104,7 +104,7 @@ class TestInitialization:
     def test_run_initialization_custom_config(self):
         """Test initialization with custom S3 configuration."""
         from depictio.api.v1.initialization import run_initialization
-        from depictio_models.models.s3 import S3DepictioCLIConfig
+        from depictio.models.models.s3 import S3DepictioCLIConfig
 
         s3_config = S3DepictioCLIConfig.model_validate(
             {

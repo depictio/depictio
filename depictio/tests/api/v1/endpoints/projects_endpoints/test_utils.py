@@ -12,11 +12,11 @@ from depictio.api.v1.configs.custom_logging import format_pydantic
 from depictio.api.v1.endpoints.projects_endpoints.utils import (
     helper_create_project_beanie,
 )
-from depictio_models.models.projects import Project, ProjectBeanie
-from depictio_models.models.users import UserBase, Group, Permission
-from depictio_models.models.workflows import Workflow
-from depictio_models.models.data_collections import DataCollection, DataCollectionConfig
-from depictio_models.models.data_collections_types.table import DCTableConfig
+from depictio.models.models.projects import Project, ProjectBeanie
+from depictio.models.models.users import UserBase, Group, Permission
+from depictio.models.models.workflows import Workflow
+from depictio.models.models.data_collections import DataCollection, DataCollectionConfig
+from depictio.models.models.data_collections_types.table import DCTableConfig
 
 
 @pytest.mark.asyncio
@@ -268,8 +268,8 @@ class TestProjectBeanie:
         # sample_project_config["workflows"].append(workflow_data)
         print(f"Sample project config with multiple workflows: {sample_project_config}")
         # add a second workflow to the sample project config
-        from depictio_models.models.data_collections import Scan, ScanSingle
-        from depictio_models.models.workflows import (
+        from depictio.models.models.data_collections import Scan, ScanSingle
+        from depictio.models.models.workflows import (
             WorkflowEngine,
             WorkflowDataLocation,
         )

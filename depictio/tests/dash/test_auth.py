@@ -5,7 +5,7 @@ import yaml
 from playwright.sync_api import Page, expect
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.endpoints.user_endpoints.utils import delete_user_from_db
-from depictio_models.utils import get_config
+from depictio.models.utils import get_config
 from depictio import BASE_PATH
 
 # Load initial users configuration
