@@ -20,11 +20,11 @@ from depictio.api.v1.configs.custom_logging import logger
 
 from depictio.api.v1.db import workflows_collection, files_collection, jbrowse_collection
 
-from depictio_models.models.base import convert_objectid_to_str
-from depictio_models.models.data_collections_types.jbrowse import DCJBrowse2Config
-from depictio_models.models.files import File
-from depictio_models.models.jbrowse import LogData
-from depictio_models.models.workflows import Workflow
+from depictio.models.models.base import convert_objectid_to_str
+from depictio.models.models.data_collections_types.jbrowse import DCJBrowse2Config
+from depictio.models.models.files import File
+from depictio.models.models.jbrowse import LogData
+from depictio.models.models.workflows import Workflow
 
 jbrowse_endpoints_router = APIRouter()
 

@@ -16,10 +16,10 @@ from depictio.api.v1.utils import serialize_for_mongo, agg_functions
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.api.v1.configs.custom_logging import logger
 
-from depictio_models.models.deltatables import Aggregation, DeltaTableAggregated
-from depictio_models.models.base import convert_objectid_to_str
-from depictio_models.models.deltatables import UpsertDeltaTableAggregated
-from depictio_models.models.users import User
+from depictio.models.models.deltatables import Aggregation, DeltaTableAggregated
+from depictio.models.models.base import convert_objectid_to_str
+from depictio.models.models.deltatables import UpsertDeltaTableAggregated
+from depictio.models.models.users import User
 
 deltatables_endpoint_router = APIRouter()
 

@@ -1,13 +1,13 @@
 from bson import ObjectId
 from fastapi import HTTPException
 
-# from depictio_models.models.base import convert_objectid_to_str
+# from depictio.models.models.base import convert_objectid_to_str
 # from depictio.api.v1.endpoints.datacollections_endpoints.models import DataCollection
 # from depictio.api.v1.endpoints.workflow_endpoints.models import Workflow
 
-from depictio_models.models.base import convert_objectid_to_str
-from depictio_models.models.data_collections import DataCollection
-from depictio_models.models.workflows import Workflow
+from depictio.models.models.base import convert_objectid_to_str
+from depictio.models.models.data_collections import DataCollection
+from depictio.models.models.workflows import Workflow
 
 
 from depictio.api.v1.configs.custom_logging import logger
