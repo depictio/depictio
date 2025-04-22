@@ -5,8 +5,8 @@ from beanie import init_beanie
 from mongomock_motor import AsyncMongoMockClient
 
 from depictio.api.v1.endpoints.user_endpoints.utils import hash_password
-from depictio_models.models.users import UserBeanie, GroupBeanie, TokenBeanie
-from depictio_models.utils import get_config
+from depictio.models.models.users import UserBeanie, GroupBeanie, TokenBeanie
+from depictio.models.utils import get_config
 from depictio import BASE_PATH
 
 # Set environment variables for test mode
@@ -41,7 +41,6 @@ def setup_test_database():
             "last_login": "2023-01-01 00:00:00",
             "is_active": True,
             "is_verified": False,
-            "groups": []
         })
     
     # Initialize groups
