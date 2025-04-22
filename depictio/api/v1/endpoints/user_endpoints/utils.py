@@ -19,9 +19,9 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import (
 )
 
 # from depictio.api.v1.endpoints.user_endpoints.models import Token
-from depictio_models.models.base import convert_objectid_to_str, PyObjectId
-from depictio_models.utils import convert_model_to_dict
-from depictio_models.models.users import (
+from depictio.models.models.base import convert_objectid_to_str, PyObjectId
+from depictio.models.utils import convert_model_to_dict
+from depictio.models.models.users import (
     Token,
     Group,
     GroupBeanie,
@@ -295,7 +295,7 @@ async def add_token(token_data: TokenData) -> TokenBeanie:
 #     #     "registration_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
 #     #     "last_login": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
 #     # }
-#     from depictio_models.models.users import User
+#     from depictio.models.models.users import User
 
 #     logger.info(f"Groups: {group}")
 #     # if not group:
@@ -311,7 +311,7 @@ async def add_token(token_data: TokenData) -> TokenBeanie:
 #         last_login=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
 #         groups=[group],
 #     )
-#     from depictio_models.utils import convert_model_to_dict
+#     from depictio.models.utils import convert_model_to_dict
 
 #     logger.info(f"User: {user}")
 #     user = convert_model_to_dict(user)
@@ -368,6 +368,10 @@ async def create_user_in_db(
         last_login=current_time,
         # groups=[group],
     )
+
+    logger.debug(user_beanie)
+    logger.debug(user_beanie.model_dump())
+
 
     # Save to database
     await user_beanie.create()

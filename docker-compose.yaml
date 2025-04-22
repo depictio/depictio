@@ -1,7 +1,7 @@
 services:
   mongo:
     image: mongo:8.0
-    command: mongod --dbpath /data/depictioDB --port 27018
+    command: mongod --dbpath /data/depictioDB --port 27018 --logpath /dev/null 
     user: "${UID:-1000}:${GID:-1000}"
     ports:
       - 27018:27018
@@ -19,8 +19,8 @@ services:
       - ./depictio:/app/depictio
       - ./data:/app/data
       - ./.env:/app/.env
-      - ../depictio-cli:/app/depictio-cli
-      - ../depictio-models:/app/depictio-models
+      # - ../depictio-cli:/app/depictio-cli
+      # - ../depictio-models:/app/depictio-models
     environment:
         DEPICTIO_CONTAINER: "True"
         DEPICTIO_TEST_MODE: "${DEPICTIO_TEST_MODE:-false}"
@@ -43,9 +43,9 @@ services:
       - ./depictio:/app/depictio
       - ./data:/app/data
       - ./.env:/app/.env
-      - ../depictio-cli:/app/depictio-cli
-      - ../depictio-cli/configs:/configs
-      - ../depictio-models:/app/depictio-models
+      # - ../depictio-cli:/app/depictio-cli
+      # - ../depictio-cli/configs:/configs
+      # - ../depictio-models:/app/depictio-models
     environment:
         DEPICTIO_CONTAINER: "True"
         DEPICTIO_TEST_MODE: "${DEPICTIO_TEST_MODE:-false}"

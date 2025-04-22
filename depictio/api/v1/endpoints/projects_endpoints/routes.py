@@ -8,9 +8,9 @@ from depictio.api.v1.db import projects_collection, dashboards_collection
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 
 ## depictio-models imports
-from depictio_models.models.projects import Project
-from depictio_models.models.base import convert_objectid_to_str
-from depictio_models.utils import convert_model_to_dict
+from depictio.models.models.projects import Project
+from depictio.models.models.base import convert_objectid_to_str
+from depictio.models.utils import convert_model_to_dict
 
 # Define the router
 projects_endpoint_router = APIRouter()
@@ -322,7 +322,7 @@ async def delete_project(
 # endpoint and PermissionRequest to add or update permission of a user to a project
 
 from pydantic import BaseModel, ConfigDict, field_validator
-from depictio_models.models.users import Permission
+from depictio.models.models.users import Permission
 
 
 class ProjectPermissionRequest(BaseModel):

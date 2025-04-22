@@ -22,8 +22,8 @@ import requests
 from depictio.dash.layouts.layouts_toolbox import create_add_with_input_modal
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.custom_logging import logger
-from depictio_models.models.base import convert_objectid_to_str
-from depictio_models.models.users import Permission
+from depictio.models.models.base import convert_objectid_to_str
+from depictio.models.models.users import Permission
 
 
 # Initialize empty structures - will be populated by callback

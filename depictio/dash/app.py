@@ -66,7 +66,7 @@ from depictio.api.v1.configs.custom_logging import logger
 import os
 
 os.environ["DEPICTIO_CONTEXT"] = "server"
-from depictio_models.utils import get_depictio_context
+from depictio.models.utils import get_depictio_context
 
 DEPICTIO_CONTEXT = get_depictio_context()
 
@@ -196,7 +196,7 @@ def display_page(pathname, local_data):
     logger.debug(f"Trigger: {trigger}")
     logger.debug(f"Local Data: {local_data}")
     logger.debug(f"URL Pathname: {pathname}")
-    from depictio_models.models.users import TokenBase
+    from depictio.models.models.users import TokenBase
 
     if (
         not local_data
@@ -779,10 +779,10 @@ def create_admin_header(text):
                                             value="users",
                                             id="admin-tabs-users",
                                         ),
-                                        dmc.TabsPanel(
-                                            value="groups",
-                                            id="admin-tabs-groups",
-                                        ),
+                                        # dmc.TabsPanel(
+                                        #     value="groups",
+                                        #     id="admin-tabs-groups",
+                                        # ),
                                         dmc.TabsPanel(
                                             value="projects",
                                             id="admin-tabs-projects",

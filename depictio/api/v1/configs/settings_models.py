@@ -3,7 +3,7 @@ from typing import Dict, Union
 from pydantic import AliasChoices, ConfigDict, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from depictio.api.v1.key_utils import _generate_api_internal_key
-from depictio_models.models.s3 import MinioConfig
+from depictio.models.models.s3 import MinioConfig
 
 
 class Collections(BaseSettings):

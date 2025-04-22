@@ -39,7 +39,7 @@ RUN bash -c 'whoami'
 
 # Ensure /etc/apt/sources.list exists and configure it
 RUN if [ ! -f /etc/apt/sources.list ]; then \
-      echo "deb http://deb.debian.org/debian buster main" > /etc/apt/sources.list; \
+    echo "deb http://deb.debian.org/debian buster main" > /etc/apt/sources.list; \
     fi
 
 # Optionally switch to an alternative Debian mirror
@@ -86,16 +86,24 @@ ENV PYTHONPATH="${PYTHONPATH}:/mnt"
 # Install depictio-cli
 # -----------------------------
 # WORKDIR /app/depictio-cli
-# RUN /opt/conda/envs/depictio/bin/pip install .
+# RUN /opt/conda/envs/depictio/bin/pip install .  
 
 # -----------------------------
 # Install depictio-models
 # -----------------------------
 # COPY ./depictio-models /app/depictio-models
-USER root
-# RUN rm -rf /app/depictio-models/depictio_models.egg-info
-RUN git clone https://github.com/depictio/depictio-models.git /app/depictio-models
-RUN pip install -e /app/depictio-models --config-settings "editable_mode=compat"
+# USER root
+# # RUN rm -rf /app/depictio-models/depictio_models.egg-info
+# RUN pwd
+# RUN ls
+# COPY ./depictio-models /app/depictio-models
+# RUN pip install -e /app/depictio-models --config-settings "editable_mode=compat"
+
+# COPY ./depictio-cli /app/depictio-cli
+# RUN pip install -e /app/depictio-cli --config-settings "editable_mode=compat"
+
+
+
 USER appuser  # Switch back if needed
 # RUN pip install -e /app/depictio-models --config-settings "editable_mode=compat"
 

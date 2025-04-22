@@ -23,12 +23,12 @@ from depictio.dash.layouts.layouts_toolbox import (
     create_dashboard_modal,
     create_delete_confirmation_modal,
 )
-from depictio_models.models.base import convert_objectid_to_str
-from depictio_models.utils import convert_model_to_dict
+from depictio.models.models.base import convert_objectid_to_str
+from depictio.models.utils import convert_model_to_dict
 from depictio.dash.utils import generate_unique_index
 
-from depictio_models.models.dashboards import DashboardData
-from depictio_models.models.users import UserBase
+from depictio.models.models.dashboards import DashboardData
+from depictio.models.models.users import UserBase
 
 
 modal, modal_id = create_dashboard_modal()
@@ -52,6 +52,7 @@ def load_dashboards_from_db(token):
         raise ValueError("Token is required to load dashboards from the database.")
 
     try:
+
         response = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/dashboards/list",
             headers={"Authorization": f"Bearer {token}"},
@@ -97,7 +98,8 @@ def insert_dashboard(dashboard_id, dashboard_data, token):
         raise ValueError(
             "Dashboard ID is required to insert a dashboard into the database."
         )
-
+    logger.info(f"dashboard_id: {dashboard_id}")
+    logger.info(f"dashboard_data: {dashboard_data}")
     dashboard_data = convert_objectid_to_str(dashboard_data)
 
     response = httpx.post(
@@ -671,6 +673,7 @@ def register_callbacks_dashboards_management(app):
         private_dashboards = [
             d for d in dashboards if "*" not in d["permissions"]["viewers"]
         ]
+        logger.info(f"private_dashboards: {private_dashboards}")
         private_dashboards_ids = [d["dashboard_id"] for d in private_dashboards]
         private_dashboards_view = dmc.SimpleGrid(
             loop_over_dashboards(user_id, private_dashboards, token),

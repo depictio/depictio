@@ -1,7 +1,7 @@
 from depictio.api.v1.configs.custom_logging import logger
 
-from depictio_models.models.data_collections import DataCollection
-from depictio_models.models.workflows import Workflow
+from depictio.models.models.data_collections import DataCollection
+from depictio.models.models.workflows import Workflow
 
 
 

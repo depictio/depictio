@@ -28,15 +28,15 @@ from depictio.api.v1.endpoints.user_endpoints.utils import (
 from depictio.api.v1.configs.custom_logging import format_pydantic, logger
 from depictio.api.v1.db import users_collection
 
-from depictio_models.models.base import convert_objectid_to_str
-from depictio_models.models.users import (
+from depictio.models.models.base import convert_objectid_to_str
+from depictio.models.models.users import (
     User,
     UserBase,
     GroupBeanie,
     TokenBeanie,
     TokenData,
 )
-from depictio_models.utils import convert_model_to_dict
+from depictio.models.utils import convert_model_to_dict
 
 auth_endpoint_router = APIRouter()
 
@@ -298,7 +298,7 @@ async def get_all_groups_with_users(current_user=Depends(get_current_user)):
             # for user in users:
             #     user.pop("groups", None)
             group["users"] = users
-    from depictio_models.models.users import GroupWithUsers
+    from depictio.models.models.users import GroupWithUsers
 
     groups = [GroupWithUsers.from_mongo(group) for group in groups]
     groups = [convert_model_to_dict(group, exclude_none=True) for group in groups]
@@ -678,7 +678,7 @@ def get_group_with_users(group_id: str, current_user=Depends(get_current_user)):
             group["users"] = users
 
             # Check if group can be converted to GroupWithUsers
-            from depictio_models.models.users import GroupWithUsers
+            from depictio.models.models.users import GroupWithUsers
 
             group_with_users = GroupWithUsers.from_mongo(group)
             return convert_model_to_dict(group_with_users)
