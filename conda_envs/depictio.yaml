@@ -6,6 +6,7 @@ channels:
 dependencies:
   - bcrypt==4.2.1
   - beanie
+  - bleach
   - boto3==1.36.21
   - bson==0.5.10
   - colorlog
@@ -16,7 +17,9 @@ dependencies:
   - dash-mantine-components==0.12.1
   - dash==2.14.2
   - deltalake==0.24.0
+  - devtools
   - fastapi==0.115.8
+  - fastexcel
   - fastparquet
   - httpx==0.28.1
   - motor
@@ -37,6 +40,8 @@ dependencies:
   - python-multipart
   - pyyaml
   - rich
+  - typer
+  - typeguard
   - uvicorn==0.34.0
   - pip:  
     - dash-draggable==0.1.2
