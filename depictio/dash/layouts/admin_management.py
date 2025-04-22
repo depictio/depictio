@@ -16,7 +16,7 @@ from depictio.api.v1.endpoints.user_endpoints.utils import (
 from depictio.dash.api_calls import (
     api_call_fetch_user_from_token,
     api_create_group,
-    api_update_group_in_users
+    api_update_group_in_users,
 )
 from depictio.dash.api_calls import api_call_fetch_user_from_token
 from depictio.dash.layouts.layouts_toolbox import (
@@ -25,9 +25,9 @@ from depictio.dash.layouts.layouts_toolbox import (
 )
 from depictio.dash.layouts.projects import render_project_item
 
-from depictio_models.models.dashboards import DashboardData
-from depictio_models.models.users import UserBase, Group, User, GroupUI
-from depictio_models.models.projects import Project
+from depictio.models.models.dashboards import DashboardData
+from depictio.models.models.users import UserBase, Group, User, GroupUI
+from depictio.models.models.projects import Project
 
 
 # Define styles and colors
@@ -48,7 +48,7 @@ def render_dashboardwise_layout(dashboard):
 
     # Badge color based on admin status
     import json
-    from depictio_models.models.base import convert_objectid_to_str
+    from depictio.models.models.base import convert_objectid_to_str
 
     dashboard_owner_raw = (
         convert_objectid_to_str(
@@ -134,7 +134,8 @@ def render_dashboardwise_layout(dashboard):
                                                         "Owner: ", weight=700, size="sm"
                                                     ),
                                                     dmc.Text(
-                                                        dashboard_owner_raw['email'], size="sm"
+                                                        dashboard_owner_raw["email"],
+                                                        size="sm",
                                                     ),
                                                 ]
                                             ),
@@ -519,42 +520,42 @@ def render_userwise_layout(user: User) -> dmc.Accordion:
                                                     dmc.Text(last_login, size="sm"),
                                                 ]
                                             ),
-                                            dmc.Group(
-                                                [
-                                                    dmc.Text(
-                                                        "Groups: ",
-                                                        weight=700,
-                                                        size="sm",
-                                                    ),
-                                                    dmc.SimpleGrid(
-                                                        [
-                                                            dmc.Group(
-                                                                [
-                                                                    dmc.Text(
-                                                                        group.name,
-                                                                        size="sm",
-                                                                    ),
-                                                                    dmc.Text(
-                                                                        str(group.id),
-                                                                        size="sm",
-                                                                    ),
-                                                                ],
-                                                                style={
-                                                                    "flex": 1,
-                                                                    "border": "1px solid #e1e1e1",
-                                                                },
-                                                            )
-                                                            for group in user.groups
-                                                        ]
-                                                        if user.groups
-                                                        else [
-                                                            dmc.Text("None", size="sm")
-                                                        ],
-                                                        cols=5,
-                                                    ),
-                                                    # dmc.List([dmc.ListItem(group) for group in user.groups] if user.groups else [dmc.ListItem("None")], size="sm"),
-                                                ]
-                                            ),
+                                            # dmc.Group(
+                                            #     [
+                                            #         dmc.Text(
+                                            #             "Groups: ",
+                                            #             weight=700,
+                                            #             size="sm",
+                                            #         ),
+                                            #         dmc.SimpleGrid(
+                                            #             [
+                                            #                 dmc.Group(
+                                            #                     [
+                                            #                         dmc.Text(
+                                            #                             group.name,
+                                            #                             size="sm",
+                                            #                         ),
+                                            #                         dmc.Text(
+                                            #                             str(group.id),
+                                            #                             size="sm",
+                                            #                         ),
+                                            #                     ],
+                                            #                     style={
+                                            #                         "flex": 1,
+                                            #                         "border": "1px solid #e1e1e1",
+                                            #                     },
+                                            #                 )
+                                            #                 for group in user.groups
+                                            #             ]
+                                            #             if user.groups
+                                            #             else [
+                                            #                 dmc.Text("None", size="sm")
+                                            #             ],
+                                            #             cols=5,
+                                            #         ),
+                                            #         # dmc.List([dmc.ListItem(group) for group in user.groups] if user.groups else [dmc.ListItem("None")], size="sm"),
+                                            #     ]
+                                            # ),
                                             dmc.Group(
                                                 [
                                                     dmc.Text(
@@ -900,123 +901,164 @@ def register_admin_callbacks(app):
         elif active_tab == "groups":
             logger.info("\n GROUPS \n")
 
-            if delete_group_clicks:
-                logger.info(f"Delete group button clicked: {delete_group_ids}")
-                # retrieve group id by cross-referencing the button id
+            # if delete_group_clicks:
+            #     logger.info(f"Delete group button clicked: {delete_group_ids}")
+            #     # retrieve group id by cross-referencing the button id
 
-                for button_id, n_click_index in zip(
-                    delete_group_ids, delete_group_clicks
-                ):
-                    if n_click_index:
-                        group_id = button_id["index"]
-                        logger.info(f"Deleting group: {group_id}")
-                        response = httpx.delete(
-                            f"{API_BASE_URL}/depictio/api/v1/auth/delete_group/{group_id}",
-                            headers={
-                                "Authorization": f"Bearer {local_data['access_token']}"
-                            },
+            #     for button_id, n_click_index in zip(
+            #         delete_group_ids, delete_group_clicks
+            #     ):
+            #         if n_click_index:
+            #             group_id = button_id["index"]
+            #             logger.info(f"Deleting group: {group_id}")
+            #             response = httpx.delete(
+            #                 f"{API_BASE_URL}/depictio/api/v1/auth/delete_group/{group_id}",
+            #                 headers={
+            #                     "Authorization": f"Bearer {local_data['access_token']}"
+            #                 },
+            #             )
+            #             logger.info(f"Response: {response}")
+            #             if response.status_code == 200:
+            #                 logger.info(f"Successfully deleted group: {group_id}")
+            #             else:
+            #                 logger.error(f"Error deleting group: {response.json()}")
+            #                 return html.P(
+            #                     "Error deleting group. Please try again later."
+            #                 ), {"display": "none"}
+
+            # if "save-group-users-button" in trigger_id:
+            #     logger.info("SAVE GROUP USERS BUTTON CLICKED")
+            #     logger.info(
+            #         f"Save group users button clicked clicks: {save_group_users_clicks}"
+            #     )
+            #     logger.info(f"Save group users button clicked: {save_group_users_ids}")
+            #     logger.info(f"Transferlist values: {transferlist_values}")
+            #     trigger_id_index = eval(trigger_id)["index"]
+            #     logger.info(f"Trigger ID: {trigger_id}")
+            #     logger.info(f"Trigger ID index: {trigger_id_index}")
+            #     # start at 1 to skip the first value which corresponds to admin group
+            #     for transfert_list_value, save_id in zip(
+            #         transferlist_values[1:], save_group_users_ids
+            #     ):
+            #         logger.info(f"save_id['index']: {save_id['index']}")
+            #         logger.info(f"Trigger ID index: {trigger_id_index}")
+            #         if str(save_id["index"]) == str(trigger_id_index):
+            #             logger.info(f"Transferlist value: {transfert_list_value}")
+            #             logger.info(f"Group ID: {trigger_id_index}")
+            #             all_users = transfert_list_value[0]
+            #             group_users = transfert_list_value[1]
+            #             logger.info(f"Group users: {group_users}")
+
+            #             group_id = trigger_id_index
+            #             # group_users = transfert_list_value[1]
+            #             # logger.info(f"Group users: {group_users}")
+            #             from depictio.models.models.users import UserBase
+
+            #             group_users = [
+            #                 {"email": user["label"], "id": str(user["value"])}
+            #                 for user in group_users
+            #             ]
+            #             logger.info(f"Group users: {group_users}")
+            #             api_update_group_in_users(
+            #                 group_id,
+            #                 {"users": group_users},
+            #                 local_data["access_token"],
+            #             )
+            #             # logger.info(f"Group users: {group_users}")
+            #             # response = httpx.post(
+            #             #     f"{API_BASE_URL}/depictio/api/v1/auth/update_group_users/{group_id}",
+            #             #     headers={
+            #             #         "Authorization": f"Bearer {local_data['access_token']}"
+            #             #     },
+            #             #     json={"users": group_users},
+            #             # )
+            #             # logger.info(f"Response: {response}")
+            #             # if response.status_code == 200:
+            #             #     logger.info(f"Successfully updated group users: {group_id}")
+            #             # else:
+            #             #     logger.error(f"Error updating group users: {response.json()}")
+            #             #     return html.P(
+            #             #         "Error updating group users. Please try again later."
+            #             #     ), {"display": "none"}
+
+            # reponse_all_users = httpx.get(
+            #     f"{API_BASE_URL}/depictio/api/v1/auth/list",
+            #     headers={"Authorization": f"Bearer {local_data['access_token']}"},
+            # )
+            # if reponse_all_users.status_code == 200:
+            #     from depictio.models.models.users import UserBase
+
+            #     all_users = reponse_all_users.json()
+            #     all_users = [UserBase.from_mongo(user) for user in all_users]
+            #     logger.info(f"Users: {all_users}")
+            # else:
+            #     logger.error(f"Error fetching users: {reponse_all_users.json()}")
+            #     all_users = []
+
+            # response = httpx.get(
+            #     f"{API_BASE_URL}/depictio/api/v1/auth/get_all_groups_including_users",
+            #     headers={"Authorization": f"Bearer {local_data['access_token']}"},
+            # )
+            # logger.info(f"Response: {response}")
+
+            # if response.status_code == 200:
+            #     groups = response.json()
+            #     logger.info(f"Groups: {groups}")
+            #     groupwise_layouts = [
+            #         render_groupwise_layout(GroupUI.from_mongo(group), all_users)
+            #         for group in groups
+            #     ]
+
+            #     content = html.Div(
+            #         groupwise_layouts
+            #         # [add_group_button, modal, html.Div(groupwise_layouts)]
+            #     )
+            # else:
+            #     logger.error(f"Error fetching groups: {response.json()}")
+            #     content = html.P("Error fetching groups. Please try again later.")
+
+            # return content, {"display": "block"}
+
+            content = dmc.Center(
+                dmc.Paper(
+                    children=[
+                        dmc.Stack(
+                            children=[
+                                dmc.Center(
+                                    DashIconify(
+                                        icon="material-symbols:group-off",
+                                        width=64,
+                                        height=64,
+                                        color="#6c757d",
+                                    )
+                                ),
+                                dmc.Text(
+                                    "No groups available - Ongoing feature",
+                                    align="center",
+                                    weight=700,
+                                    size="xl",
+                                ),
+                                dmc.Text(
+                                    "Groups created by users will appear here.",
+                                    align="center",
+                                    color="dimmed",
+                                    size="sm",
+                                ),
+                            ],
+                            align="center",
+                            spacing="sm",
                         )
-                        logger.info(f"Response: {response}")
-                        if response.status_code == 200:
-                            logger.info(f"Successfully deleted group: {group_id}")
-                        else:
-                            logger.error(f"Error deleting group: {response.json()}")
-                            return html.P(
-                                "Error deleting group. Please try again later."
-                            ), {"display": "none"}
-
-            if "save-group-users-button" in trigger_id:
-                logger.info("SAVE GROUP USERS BUTTON CLICKED")
-                logger.info(
-                    f"Save group users button clicked clicks: {save_group_users_clicks}"
-                )
-                logger.info(f"Save group users button clicked: {save_group_users_ids}")
-                logger.info(f"Transferlist values: {transferlist_values}")
-                trigger_id_index = eval(trigger_id)["index"]
-                logger.info(f"Trigger ID: {trigger_id}")
-                logger.info(f"Trigger ID index: {trigger_id_index}")
-                # start at 1 to skip the first value which corresponds to admin group
-                for transfert_list_value, save_id in zip(
-                    transferlist_values[1:], save_group_users_ids
-                ):
-                    logger.info(f"save_id['index']: {save_id['index']}")
-                    logger.info(f"Trigger ID index: {trigger_id_index}")
-                    if str(save_id["index"]) == str(trigger_id_index):
-                        logger.info(f"Transferlist value: {transfert_list_value}")
-                        logger.info(f"Group ID: {trigger_id_index}")
-                        all_users = transfert_list_value[0]
-                        group_users = transfert_list_value[1]
-                        logger.info(f"Group users: {group_users}")
-
-                        group_id = trigger_id_index
-                        # group_users = transfert_list_value[1]
-                        # logger.info(f"Group users: {group_users}")
-                        from depictio_models.models.users import UserBase
-
-                        group_users = [
-                            {"email": user["label"], "id": str(user["value"])}
-                            for user in group_users
-                        ]
-                        logger.info(f"Group users: {group_users}")
-                        api_update_group_in_users(
-                            group_id,
-                            {"users": group_users},
-                            local_data["access_token"],
-                        )
-                        # logger.info(f"Group users: {group_users}")
-                        # response = httpx.post(
-                        #     f"{API_BASE_URL}/depictio/api/v1/auth/update_group_users/{group_id}",
-                        #     headers={
-                        #         "Authorization": f"Bearer {local_data['access_token']}"
-                        #     },
-                        #     json={"users": group_users},
-                        # )
-                        # logger.info(f"Response: {response}")
-                        # if response.status_code == 200:
-                        #     logger.info(f"Successfully updated group users: {group_id}")
-                        # else:
-                        #     logger.error(f"Error updating group users: {response.json()}")
-                        #     return html.P(
-                        #         "Error updating group users. Please try again later."
-                        #     ), {"display": "none"}
-
-            reponse_all_users = httpx.get(
-                f"{API_BASE_URL}/depictio/api/v1/auth/list",
-                headers={"Authorization": f"Bearer {local_data['access_token']}"},
+                    ],
+                    shadow="sm",
+                    radius="md",
+                    p="xl",
+                    withBorder=True,
+                    style={"width": "100%", "maxWidth": "500px"},
+                ),
+                style={"height": "300px"},
             )
-            if reponse_all_users.status_code == 200:
-                from depictio_models.models.users import UserBase
 
-                all_users = reponse_all_users.json()
-                all_users = [UserBase.from_mongo(user) for user in all_users]
-                logger.info(f"Users: {all_users}")
-            else:
-                logger.error(f"Error fetching users: {reponse_all_users.json()}")
-                all_users = []
-
-            response = httpx.get(
-                f"{API_BASE_URL}/depictio/api/v1/auth/get_all_groups_including_users",
-                headers={"Authorization": f"Bearer {local_data['access_token']}"},
-            )
-            logger.info(f"Response: {response}")
-
-            if response.status_code == 200:
-                groups = response.json()
-                logger.info(f"Groups: {groups}")
-                groupwise_layouts = [
-                    render_groupwise_layout(GroupUI.from_mongo(group), all_users)
-                    for group in groups
-                ]
-
-                content = html.Div(
-                    groupwise_layouts
-                    # [add_group_button, modal, html.Div(groupwise_layouts)]
-                )
-            else:
-                logger.error(f"Error fetching groups: {response.json()}")
-                content = html.P("Error fetching groups. Please try again later.")
-
-            return content, {"display": "block"}
+            return content, {"display": "none"}
 
         elif active_tab == "dashboards":
             response = httpx.get(
@@ -1030,6 +1072,48 @@ def register_admin_callbacks(app):
                 dashboards_layouts = [
                     render_dashboardwise_layout(dashboard) for dashboard in dashboards
                 ]
+                if len(dashboards_layouts) == 0:
+                    dashboards_layouts = [
+                        dmc.Center(
+                            dmc.Paper(
+                                children=[
+                                    dmc.Stack(
+                                        children=[
+                                            dmc.Center(
+                                                DashIconify(
+                                                    icon="ph:empty-bold",
+                                                    width=64,
+                                                    height=64,
+                                                    color="#6c757d",
+                                                )
+                                            ),
+                                            dmc.Text(
+                                                "No dashboards available",
+                                                align="center",
+                                                weight=700,
+                                                size="xl",
+                                            ),
+                                            dmc.Text(
+                                                "Dashboards created by users will appear here.",
+                                                align="center",
+                                                color="dimmed",
+                                                size="sm",
+                                            ),
+                                        ],
+                                        align="center",
+                                        spacing="sm",
+                                    )
+                                ],
+                                shadow="sm",
+                                radius="md",
+                                p="xl",
+                                withBorder=True,
+                                style={"width": "100%", "maxWidth": "500px"},
+                            ),
+                            style={"height": "300px"},
+                        )
+                    ]
+
                 content = html.Div(dashboards_layouts)
             else:
                 logger.error(f"Error fetching dashboards: {response.json()}")
@@ -1039,7 +1123,9 @@ def register_admin_callbacks(app):
             # Fetch all projects for admin view using the existing endpoint
             try:
                 projects = fetch_projects_for_admin(local_data["access_token"])
-                current_user = api_call_fetch_user_from_token(local_data["access_token"])
+                current_user = api_call_fetch_user_from_token(
+                    local_data["access_token"]
+                )
 
                 if projects:
                     # Create project items with modified render function to show owner email
@@ -1073,33 +1159,33 @@ def register_admin_callbacks(app):
                                                 icon="material-symbols:folder-off-outline",
                                                 width=64,
                                                 height=64,
-                                                color="#6c757d"
+                                                color="#6c757d",
                                             )
                                         ),
                                         dmc.Text(
                                             "No projects available",
                                             align="center",
                                             weight=700,
-                                            size="xl"
+                                            size="xl",
                                         ),
                                         dmc.Text(
                                             "Projects created by users will appear here.",
                                             align="center",
                                             color="dimmed",
-                                            size="sm"
-                                        )
+                                            size="sm",
+                                        ),
                                     ],
                                     align="center",
-                                    spacing="sm"
+                                    spacing="sm",
                                 )
                             ],
                             shadow="sm",
                             radius="md",
                             p="xl",
                             withBorder=True,
-                            style={"width": "100%", "maxWidth": "500px"}
+                            style={"width": "100%", "maxWidth": "500px"},
                         ),
-                        style={"height": "300px"}
+                        style={"height": "300px"},
                     )
 
                 return content, {"display": "none"}
