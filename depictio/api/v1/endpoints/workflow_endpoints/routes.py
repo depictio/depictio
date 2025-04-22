@@ -14,10 +14,10 @@ from depictio.api.v1.db import (
 from depictio.api.v1.endpoints.workflow_endpoints.utils import compare_models
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 
-from depictio_models.models.base import convert_objectid_to_str
-from depictio_models.utils import convert_model_to_dict
-from depictio_models.models.workflows import Workflow
-from depictio_models.models.users import UserBase
+from depictio.models.models.base import convert_objectid_to_str
+from depictio.models.utils import convert_model_to_dict
+from depictio.models.models.workflows import Workflow
+from depictio.models.models.users import UserBase
 
 # Define the router
 workflows_endpoint_router = APIRouter()

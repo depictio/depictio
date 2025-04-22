@@ -6,13 +6,13 @@ from depictio.api.v1.configs.custom_logging import logger
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.s3 import minios3_external_config
 
-from depictio_models.models.users import (
+from depictio.models.models.users import (
     UserBeanie,
     TokenBeanie,
     UserBaseCLIConfig,
     CLIConfig,
 )
-from depictio_models.utils import make_json_serializable
+from depictio.models.utils import make_json_serializable
 
 
 # Helper function to generate agent config
@@ -37,7 +37,7 @@ async def generate_agent_config(user: UserBeanie, token: TokenBeanie) -> CLIConf
     # Create the complete CLI config
     cli_config = CLIConfig(
         user=user_cli_config,
-        base_url=HttpUrl(f"http://{settings.fastapi.host}:{settings.fastapi.port}"),
+        base_url=f"http://{settings.fastapi.host}:{settings.fastapi.port}",
         s3=minios3_external_config,
     )
 

@@ -13,9 +13,9 @@ from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
 from depictio.api.v1.configs.custom_logging import logger
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 
-from depictio_models.models.base import convert_objectid_to_str, PyObjectId
-from depictio_models.models.dashboards import DashboardData
-from depictio_models.utils import convert_model_to_dict
+from depictio.models.models.base import convert_objectid_to_str, PyObjectId
+from depictio.models.models.dashboards import DashboardData
+from depictio.models.utils import convert_model_to_dict
 
 dashboards_endpoint_router = APIRouter()
 

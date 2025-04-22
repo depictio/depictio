@@ -6,7 +6,7 @@ from mypy_boto3_s3.client import S3Client
 from depictio.api.v1.configs.custom_logging import logger
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.s3 import s3_client
-from depictio_models.models.users import UserBeanie
+from depictio.models.models.users import UserBeanie
 
 class BucketResponse(BaseModel):
     """Response model for bucket operations"""

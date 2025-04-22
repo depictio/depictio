@@ -6,9 +6,9 @@ from pydantic import EmailStr, validate_call
 
 from depictio.api.v1.configs.custom_logging import format_pydantic, logger
 
-from depictio_models.models.users import User
-from depictio_models.models.base import PyObjectId
-from depictio_models.models.users import UserBeanie, TokenBeanie
+from depictio.models.models.users import User
+from depictio.models.models.base import PyObjectId
+from depictio.models.models.users import UserBeanie, TokenBeanie
 
 
 @validate_call(validate_return=True)
