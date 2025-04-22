@@ -8,10 +8,12 @@
         "auto"
     ],
     // "python.testing.cwd": "${workspaceFolder:depictio}",
-    "python.analysis.extraPaths": [
-        "../depictio-models"
-    ],
-    "python.autoComplete.extraPaths": [
-        "../depictio-models"
-    ]
+    // "python.analysis.extraPaths": [
+    //     "../depictio-models",
+    //     "../depictio-cli"
+    // ],
+    // "python.autoComplete.extraPaths": [
+    //     "../depictio-models",
+    //     "../depictio-cli"
+    // ]
 }
