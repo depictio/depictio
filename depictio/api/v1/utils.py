@@ -7,9 +7,9 @@ import re
 
 from depictio.api.v1.configs.custom_logging import logger
 
-from depictio_models.models.data_collections import DataCollection
-from depictio_models.models.files import File
-from depictio_models.models.workflows import WorkflowConfig, WorkflowRun
+from depictio.models.models.data_collections import DataCollection
+from depictio.models.models.files import File
+from depictio.models.models.workflows import WorkflowConfig, WorkflowRun
 
 # FIXME: update model & function using a list of dict instead of a dict
 def construct_full_regex(files_regex, regex_config):
