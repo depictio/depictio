@@ -8,9 +8,9 @@ from depictio.api.v1.configs.config import settings, API_BASE_URL
 from depictio.api.v1.configs.custom_logging import format_pydantic, logger
 
 from depictio.api.v1.endpoints.user_endpoints.utils import find_user_by_email
-from depictio_models.models.users import User, UserBeanie, TokenBase
-from depictio_models.utils import convert_model_to_dict
-from depictio_models.models.base import PyObjectId, convert_objectid_to_str
+from depictio.models.models.users import User, UserBeanie, TokenBase
+from depictio.models.utils import convert_model_to_dict
+from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 
 # Check if running in a test environment
 # First check environment variable, then check for pytest in sys.argv
@@ -239,8 +239,8 @@ def delete_token(email, token_id, current_token):
 
 
 def generate_agent_config(email, token, current_token):
-    user = find_user_by_email(email)
-    user = convert_objectid_to_str(user.dict())
+    user = api_call_fetch_user_from_email(email)
+    user = convert_objectid_to_str(user.model_dump())
     logger.info(f"User: {user}")
 
     token = convert_objectid_to_str(token)

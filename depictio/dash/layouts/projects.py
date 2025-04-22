@@ -19,10 +19,10 @@ from depictio.api.v1.configs.custom_logging import logger
 from depictio.dash.api_calls import api_call_fetch_user_from_token
 from depictio.dash.utils import return_mongoid
 
-from depictio_models.models.users import UserBase
-from depictio_models.models.projects import Project
-from depictio_models.models.workflows import Workflow
-from depictio_models.models.data_collections import DataCollection
+from depictio.models.models.users import UserBase
+from depictio.models.models.projects import Project
+from depictio.models.models.workflows import Workflow
+from depictio.models.models.data_collections import DataCollection
 
 
 # =========================
@@ -936,7 +936,7 @@ def register_projects_callbacks(app):
             dc_specs_dict = response.json()
 
             # Create DataCollection model from the response
-            from depictio_models.models.data_collections import DataCollection
+            from depictio.models.models.data_collections import DataCollection
 
             dc_specs = DataCollection.from_mongo(dc_specs_dict)
 

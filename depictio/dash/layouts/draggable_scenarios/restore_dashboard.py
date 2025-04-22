@@ -15,8 +15,8 @@ from depictio.dash.modules.interactive_component.utils import build_interactive
 from depictio.dash.modules.jbrowse_component.utils import build_jbrowse
 from depictio.dash.modules.table_component.utils import build_table
 
-from depictio_models.models.dashboards import DashboardData
-from depictio_models.utils import convert_model_to_dict
+from depictio.models.models.dashboards import DashboardData
+from depictio.models.utils import convert_model_to_dict
 
 build_functions = {
     "card": build_card,

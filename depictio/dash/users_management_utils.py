@@ -10,8 +10,8 @@
 #     get_users_group,
 # )
 
-# from depictio_models.models.users import User, UserBeanie
-# from depictio_models.utils import convert_model_to_dict
-# from depictio_models.models.base import PyObjectId
+# from depictio.models.models.users import User, UserBeanie
+# from depictio.models.utils import convert_model_to_dict
+# from depictio.models.models.base import PyObjectId
 
 
