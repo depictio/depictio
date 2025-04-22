@@ -3,8 +3,8 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.custom_logging import logger
 
 
-# from depictio_models.s3_utils import S3_storage_checks
-from depictio_models.models.s3 import S3DepictioCLIConfig
+# from depictio.models.s3_utils import S3_storage_checks
+from depictio.models.models.s3 import S3DepictioCLIConfig
 
 
 minio_storage_options = {
