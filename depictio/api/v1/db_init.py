@@ -12,18 +12,32 @@ from depictio.api.v1.endpoints.user_endpoints.utils import (
     create_user_in_db,
 )
 from depictio.api.v1.configs.custom_logging import format_pydantic, logger
-from depictio.api.v1.configs.config import settings
-from depictio_models.utils import get_config
+from depictio.api.v1.configs.config import settings, API_BASE_URL
+from depictio.api.v1.s3 import minios3_external_config
+from depictio.models.utils import get_config
 
-from depictio_models.models.users import GroupBeanie, UserBeanie, UserBase
-from depictio_models.models.projects import ProjectBeanie
+from depictio.models.models.users import (
+    GroupBeanie,
+    UserBeanie,
+    UserBase,
+    CLIConfig,
+    UserBaseCLIConfig,
+    TokenBeanie,
+)
+from depictio.models.models.s3 import S3DepictioCLIConfig
+from depictio.models.models.projects import ProjectBeanie
 
 
-async def create_initial_project(admin_user: UserBeanie) -> None:
-    # from depictio_models.models.projects import Project,
+from depictio.cli.cli.utils.helpers import process_data_collection_helper
+
+
+async def create_initial_project(
+    admin_user: UserBeanie, token_payload: TokenBeanie
+) -> None:
+    # from depictio.models.models.projects import Project,
 
     project_yaml_path = os.path.join(
-        os.path.dirname(__file__), "configs", "initial_project.yaml"
+        os.path.dirname(__file__), "configs", "iris_dataset", "initial_project.yaml"
     )
     project_config = get_config(project_yaml_path)
     project_config["yaml_config_path"] = project_yaml_path
@@ -43,9 +57,12 @@ async def create_initial_project(admin_user: UserBeanie) -> None:
     logger.debug(f"Project config: {project_config}")
     project = ProjectBeanie(**project_config)
     logger.debug(f"Project object: {format_pydantic(project)}")
+    token = TokenBeanie(**token_payload["token"])
+    logger.debug(f"Token: {format_pydantic(token)}")
 
     try:
         payload = await helper_create_project_beanie(project)
+
         logger.debug(f"Project creation payload: {payload}")
         if payload["success"]:
             logger.info(
@@ -109,13 +126,14 @@ async def initialize_db(wipe: bool = False) -> Optional[UserBeanie]:
 
         # # Create default token if user was just created
         if user_payload["success"]:
-            token = await create_default_token(user_payload["user"])
-            if token:
-                logger.info(f"Created token: {format_pydantic(token)}")
+            token_payload = await create_default_token(user_payload["user"])
+            if token_payload:
+                logger.info(f"Created token: {format_pydantic(token_payload['token'])}")
 
         if user_payload["user"].is_admin:
             admin_user = user_payload["user"]
             logger.info(f"Admin user created: {admin_user.email}")
+            admin_token = token_payload
 
     # If no admin user was created through the loop, try to find one
     if admin_user is None:
@@ -128,7 +146,9 @@ async def initialize_db(wipe: bool = False) -> Optional[UserBeanie]:
         else:
             logger.warning("No admin user found in the database")
 
-    project_payload = await create_initial_project(admin_user=admin_user)
+    project_payload = await create_initial_project(
+        admin_user=admin_user, token_payload=admin_token
+    )
     logger.debug(f"Project payload: {project_payload}")
 
     logger.info("Database initialization completed successfully.")
