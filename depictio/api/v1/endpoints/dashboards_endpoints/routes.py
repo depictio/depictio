@@ -1,3 +1,5 @@
+import asyncio
+from datetime import datetime
 import json
 import os, sys
 from typing import Dict
@@ -15,15 +17,16 @@ from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 
 from depictio.models.models.base import convert_objectid_to_str, PyObjectId
 from depictio.models.models.dashboards import DashboardData
+from depictio.models.models.users import Permission, TokenBeanie
 from depictio.models.utils import convert_model_to_dict
 
 dashboards_endpoint_router = APIRouter()
 
 
-@dashboards_endpoint_router.get("/get/{dashboard_id}")
+@dashboards_endpoint_router.get("/get/{dashboard_id}", response_model=DashboardData)
 async def get_dashboard(
     dashboard_id: PyObjectId, current_user=Depends(get_current_user)
-) -> DashboardData:
+):
     """
     Fetch dashboard data related to a dashboard ID.
     """
@@ -53,6 +56,8 @@ async def get_dashboard(
 
     logger.info(f"Dashboard data: {dashboard_data}")
     dashboard_data = DashboardData.from_mongo(dashboard_data)
+    logger.info(f"Dashboard data: {dashboard_data}")
+
     # logger.info(f"Dashboard data from mongo: {dashboard_data}")
     # dashboard_data = convert_model_to_dict(dashboard_data)
     # logger.info(f"Dashboard data from mongo: {dashboard_data}")
@@ -276,7 +281,7 @@ async def screenshot_dashboard(
 
     try:
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
+            browser = await p.chromium.launch(headless=False)
             # browser = await p.chromium.launch(headless=True, executable_path="/home/mambauser/.cache/ms-playwright/chromium-1140/chrome-linux/chrome")
 
             # Define the viewport size (browser window size)
@@ -295,18 +300,30 @@ async def screenshot_dashboard(
             await page.goto(f"{url}/auth", wait_until="networkidle")
             logger.info(f"Page URL: {url}/auth")
 
-            token_data = {
-                "access_token": current_user.current_access_token,
-                "logged_in": True,
-            }
+            # get the current user a functional token
+            token = await TokenBeanie.find_one(
+                {
+                    "user_id": current_user.id,
+                    "token_lifetime": "short-lived",
+                    "expire_datetime": {"$gt": datetime.now()},
+                }
+            )
+            logger.info(f"Token: {token}")
+
+            token_data = token.model_dump(exclude_none=True)
+            token_data["_id"] = token_data.pop("id", None)
+            token_data["logged_in"] = True
+            logger.info(f"Token: {token}")
 
             token_data_json = json.dumps(token_data)
             logger.info(f"Token data: {token_data_json}")
+
 
             # Set data in the local storage
             await page.evaluate(f"""() => {{
                 localStorage.setItem('local-store', '{token_data_json}');
             }}""")
+            # await asyncio.sleep(3600)  # Keeps the browser open for 1 hour
 
             await page.reload()
 
@@ -317,6 +334,7 @@ async def screenshot_dashboard(
             # Wait for the page content to load
             await page.wait_for_selector("div#page-content")
             logger.info(f"Wait for selector: div#page-content")
+
 
             # # Check if the iframe is present
             # iframe_element = await page.query_selector('iframe[src*="jbrowse"]')  # Adjust the selector to match the iframe's source or other attributes
@@ -448,5 +466,7 @@ async def get_component_data_endpoint(
         return None
 
     logger.info(f"Component metadata found: {component_metadata}")
+
+    component_metadata = convert_objectid_to_str(component_metadata)
 
     return component_metadata
