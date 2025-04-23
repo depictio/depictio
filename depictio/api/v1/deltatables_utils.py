@@ -178,6 +178,9 @@ def load_deltatable_lite(workflow_id: ObjectId, data_collection_id: ObjectId, me
 
     logger.info(f"Loading deltatable for workflow {workflow_id_str}, data collection " f"{data_collection_id_str}, metadata: {metadata}, from file_id: {file_id}")
 
+    logger.debug(f"minio_storage_options: {minio_storage_options}")
+    logger.debug(f"file_id: {file_id}")
+
     # Initialize the Delta table scan
     delta_scan = pl.scan_delta(file_id, storage_options=minio_storage_options)
 
