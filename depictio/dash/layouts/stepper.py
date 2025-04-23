@@ -107,7 +107,7 @@ def register_callbacks_stepper(app):
                 seen_workflow_ids.add(wf["_id"])
                 valid_wfs.append(
                     {
-                        "label": wf["workflow_tag"],
+                        "label": f"{wf["engine"]["name"]}/{wf["name"]}",
                         "value": wf["_id"],
                     }
                 )

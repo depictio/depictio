@@ -92,7 +92,7 @@ def create_dashboard_modal(
                             # Warning message (hidden by default)
                             dmc.Alert(
                                 "Dashboard title must be unique",
-                                color="yellow",
+                                color="red",
                                 id="unique-title-warning",
                                 icon=DashIconify(icon="mdi:alert"),
                                 style={"display": "none"},
