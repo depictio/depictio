@@ -4,17 +4,22 @@ import sys
 import os
 from pydantic import EmailStr, validate_call
 
-from depictio.api.v1.configs.config import settings, API_BASE_URL
+from depictio.api.v1.configs.config import (
+    FASTAPI_INTERNAL_API_KEY,
+    API_BASE_URL,
+)
 from depictio.api.v1.configs.custom_logging import format_pydantic, logger
 
 from depictio.api.v1.endpoints.user_endpoints.utils import find_user_by_email
-from depictio.models.models.users import User, UserBeanie, TokenBase
+from depictio.models.models.users import User, TokenBase
 from depictio.models.utils import convert_model_to_dict
-from depictio.models.models.base import PyObjectId, convert_objectid_to_str
+from depictio.models.models.base import convert_objectid_to_str
 
 # Check if running in a test environment
 # First check environment variable, then check for pytest in sys.argv
-is_testing = os.environ.get('DEPICTIO_TEST_MODE', 'false').lower() == 'true' or any('pytest' in arg for arg in sys.argv)
+is_testing = os.environ.get("DEPICTIO_TEST_MODE", "false").lower() == "true" or any(
+    "pytest" in arg for arg in sys.argv
+)
 
 # Add a query parameter to API calls when in test mode to indicate test database should be used
 API_QUERY_PARAMS = {"test_mode": "true"} if is_testing else {}
@@ -48,7 +53,7 @@ def api_call_register_user(
         # # Add group if provided
         # if group:
         #     params["group"] = group
-            
+
         # Add test mode parameter if in test environment
         # params.update(API_QUERY_PARAMS)
 
@@ -102,6 +107,7 @@ def api_call_fetch_user_from_token(token: str) -> Optional[User]:
 
     return user
 
+
 @validate_call(validate_return=True)
 def api_call_fetch_user_from_email(email: EmailStr) -> Optional[User]:
     """
@@ -116,12 +122,12 @@ def api_call_fetch_user_from_email(email: EmailStr) -> Optional[User]:
     """
     logger.debug(f"Fetching user with email: {email}")
     logger.debug(f"API Base URL: {API_BASE_URL}")
-    logger.debug(f"Internal API Key: {settings.fastapi.internal_api_key}")
+    logger.debug(f"Internal API Key: {FASTAPI_INTERNAL_API_KEY}")
 
     response = httpx.get(
         f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_email",
         params={"email": email},
-        headers={"api-key": settings.fastapi.internal_api_key},
+        headers={"api-key": FASTAPI_INTERNAL_API_KEY},
     )
 
     if response.status_code == 404:
