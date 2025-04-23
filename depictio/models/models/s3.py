@@ -4,6 +4,8 @@ from typing import Optional
 from pydantic import AliasChoices, BaseModel, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from depictio.api.v1.configs.custom_logging import logger
+
 
 class PolarsStorageOptions(BaseModel):
     endpoint_url: str
@@ -19,8 +21,10 @@ class PolarsStorageOptions(BaseModel):
     def validate_endpoint_url(cls, v):
         if not v:
             raise ValueError("Endpoint URL cannot be empty")
-        if not re.match(r"^https?://[^/]+:\d+", v):
-            raise ValueError("Invalid URL format : http://localhost:9000")
+        if not re.match(
+            r"^https?://[^/]+(:\d+)?$", v
+        ):
+            raise ValueError("Invalid URL format. Expected format: http://localhost:9000 or https://s3.embl.de")
         return v
 
     @field_validator("aws_access_key_id")
@@ -74,7 +78,7 @@ class PolarsStorageOptions(BaseModel):
 
 class S3DepictioCLIConfig(BaseSettings):
     model_config = SettingsConfigDict(extra="allow")
-    
+
     endpoint_url: str = Field(
         default="http://localhost:9000",
         json_schema_extra={"env": "DEPICTIO_MINIO_ENDPOINT_URL"},
@@ -111,13 +115,27 @@ class MinioConfig(S3DepictioCLIConfig):
         default="http://localhost",
         json_schema_extra={"env": "DEPICTIO_MINIO_EXTERNAL_ENDPOINT"},
     )
-    port: Optional[int] = Field(default=9000, json_schema_extra={"env": "DEPICTIO_MINIO_PORT"})
-    secure: bool = Field(default=False, json_schema_extra={"env": "DEPICTIO_MINIO_SECURE"})
+    port: Optional[int] = Field(
+        default=0, json_schema_extra={"env": "DEPICTIO_MINIO_PORT"}
+    )
+    secure: bool = Field(
+        default=False, json_schema_extra={"env": "DEPICTIO_MINIO_SECURE"}
+    )
     data_dir: str = Field(
         default="/depictio/minio_data",
         json_schema_extra={"env": "DEPICTIO_MINIO_DATA_DIR"},
     )
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_MINIO_", extra="allow")
+
+    @field_validator("port", mode="before")
+    def validate_port(cls, v):
+        if v == 0:
+            return v
+        if not isinstance(v, int):
+            raise ValueError("Port must be an integer")
+        if v < 1 or v > 65535:
+            raise ValueError("Port must be between 1 and 65535")
+        return v
 
     @model_validator(mode="before")
     def configure_endpoint_url(cls, values):
@@ -127,22 +145,26 @@ class MinioConfig(S3DepictioCLIConfig):
         # Get internal and external endpoints
         internal_endpoint = values.get("internal_endpoint", "http://minio")
         external_endpoint = values.get("external_endpoint", "http://localhost")
-        port = values.get("port", 9000)
+        port = values.get("port", 0)
 
         if is_container:
             if external_endpoint == "http://localhost":
                 # If running in a container and external endpoint is localhost, use internal endpoint
                 endpoint_url = f"{internal_endpoint}:{port}"
             else:
-                if port:
+                if port > 0:
                     endpoint_url = f"{external_endpoint}:{port}"
                 else:
                     endpoint_url = external_endpoint
         else:
-            if port:
+            if port > 0:
                 endpoint_url = f"{external_endpoint}:{port}"
             else:
                 endpoint_url = external_endpoint
+
+        logger.debug(f"Endpoint URL: {endpoint_url}")
+        logger.debug(f"Internal Endpoint: {internal_endpoint}")
+        logger.debug(f"Is container: {is_container}")
         values["endpoint_url"] = endpoint_url
 
         return values
