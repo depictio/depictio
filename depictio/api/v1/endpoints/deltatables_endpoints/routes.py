@@ -14,7 +14,7 @@ from depictio.api.v1.endpoints.deltatables_endpoints.utils import precompute_col
 from depictio.api.v1.s3 import minio_storage_options
 from depictio.api.v1.utils import serialize_for_mongo, agg_functions
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
-from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.configs.custom_logging import format_pydantic, logger
 
 from depictio.models.models.deltatables import Aggregation, DeltaTableAggregated
 from depictio.models.models.base import convert_objectid_to_str
@@ -131,6 +131,7 @@ async def upsert_deltatable(
         )
         version = 1
 
+    logger.info(f"DeltaTableAggregated: {format_pydantic(deltatable)}")
 
     user = User.from_mongo(users_collection.find_one({"_id": ObjectId(current_user.id)}))
 
@@ -148,8 +149,8 @@ async def upsert_deltatable(
     )
     logger.info(f"DeltaTableAggregated: {deltatable}")
 
-    deltatable = convert_objectid_to_str(deltatable.model_dump())
-    logger.info(f"DeltaTableAggregated Mongo: {deltatable}")
+    # deltatable = convert_objectid_to_str(deltatable.model_dump())
+    # logger.info(f"DeltaTableAggregated Mongo: {deltatable}")
 
     # Query to find files associated with the data collection
     # Check if the DeltaTableAggregated exists, if not create a new one, else update the existing one
@@ -161,7 +162,7 @@ async def upsert_deltatable(
             {
                 "$set": {
                     "delta_table_location": payload.delta_table_location,
-                    "aggregation": deltatable["aggregation"],
+                    "aggregation": [a.mongo() for a in deltatable.aggregation],
                 }
             },
             upsert=True,
@@ -177,8 +178,8 @@ async def upsert_deltatable(
             )
 
         logger.info("Inserting new DeltaTableAggregated")
-        logger.debug(serialize_for_mongo(deltatable))
-        deltatables_collection.insert_one(serialize_for_mongo(deltatable))
+        # logger.debug(serialize_for_mongo(deltatable))
+        deltatables_collection.insert_one(deltatable.model_dump())
     return {"message": "DeltaTableAggregated upserted successfully", "result": "success"}
 
 
@@ -201,12 +202,20 @@ async def list_registered_files(
             status_code=400,
             detail="Data Collection ID is required",
         )
+    logger.info(f"Data Collection ID: {data_collection_id}")
     data_collection_oid = ObjectId(data_collection_id)
+    logger.info(f"Data Collection OID: {data_collection_oid}")
 
     # Query to find deltatable associated with the data collection
     query = {"data_collection_id": data_collection_oid}
-    deltatable_cursor = deltatables_collection.find(query)
+    logger.info(f"Query: {query}")
+    deltatable_cursor = list(deltatables_collection.find(query))
     logger.info(f"Deltatable Cursor: {deltatable_cursor}")
+    if len(list(deltatable_cursor)) == 0:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No DeltaTableAggregated found for Data Collection ID {data_collection_oid}.",
+        )
     deltatables = list(deltatable_cursor)[0]
     logger.info(f"Deltatables: {deltatables}")
 
