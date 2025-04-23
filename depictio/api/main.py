@@ -78,8 +78,9 @@ async def lifespan(app: FastAPI):
     # await shutdown_db()
 
     # Cancel the background task if it's still running
-    if not background_task.done():
-        background_task.cancel()
+    if background_task:
+        if not background_task.done():
+            background_task.cancel()
 
 
 def delayed_process_data_collections():

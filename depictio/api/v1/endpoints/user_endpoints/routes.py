@@ -6,6 +6,7 @@ from pydantic import EmailStr
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from datetime import datetime
 
+from depictio.api.v1.configs.config import FASTAPI_INTERNAL_API_KEY
 from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     async_fetch_user_from_token,
     async_fetch_user_from_email,
@@ -149,9 +150,12 @@ async def api_fetch_user_from_email(
     email: EmailStr,
     api_key: str = Header(..., description="Internal API key for authentication"),
 ) -> User:
-    from depictio.api.v1.configs.config import settings
 
-    if api_key != settings.fastapi.internal_api_key:
+    logger.info(f"API key: {api_key}")
+    logger.info(f"Email: {email}")
+    logger.info(f"Internal API key: {FASTAPI_INTERNAL_API_KEY}")
+
+    if api_key != FASTAPI_INTERNAL_API_KEY:
         raise HTTPException(
             status_code=403,
             detail="Invalid API key",

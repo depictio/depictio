@@ -10,6 +10,7 @@ from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
 from pydantic import validate_call
 
+from depictio import BASE_PATH
 from depictio.api.v1.configs.custom_logging import logger
 
 # Type definitions
@@ -26,14 +27,55 @@ class KeyGenerationError(Exception):
 
 
 @validate_call(validate_return=True)
-def _generate_api_internal_key() -> str:
-    """Generate a random API internal key.
+def _load_or_generate_api_internal_key() -> str:
+    """Check if the API internal key is set in the environment.
 
     Returns:
-        Randomly generated API internal key
+        API internal key if set, otherwise generates a new one
     """
-    # Generate a random 32-byte key
-    return os.urandom(32).hex()
+    key_path = os.path.join(
+        BASE_PATH,
+        "keys",
+        "internal_api_key.pem",
+    )
+    logger.debug(f"Key path: {key_path}")
+    if os.path.exists(key_path):
+        with open(key_path, "r") as f:
+            key = f.read().strip()
+            logger.debug(f"Loaded API internal key: {key}")
+            return key
+    else:
+        key = _generate_api_internal_key()
+        logger.debug(f"Generated API internal key: {key}")
+        with open(key_path, "w") as f:
+            f.write(key)
+        return key
+
+
+@validate_call(validate_return=True)
+def _generate_api_internal_key() -> str:
+    """Generate a consistent API internal key.
+
+    Returns:
+        Consistently generated API internal key
+    """
+    # Use a combination of environment variables and a salt to generate a consistent key
+    salt = "DEPICTIO_INTERNAL_KEY_SALT"
+    base_key = os.getenv("DEPICTIO_INTERNAL_API_KEY", "")
+
+    # If no base key exists, generate a persistent key
+    if not base_key:
+        import hashlib
+
+        # Generate a hash based on a combination of system information
+        system_info = f"{os.getpid()}:{os.getuid()}:{salt}"
+        base_key = hashlib.sha256(system_info.encode()).hexdigest()
+
+        # Set the environment variable to persist the key
+        os.environ["DEPICTIO_INTERNAL_API_KEY"] = base_key
+
+    return base_key
+
 
 @validate_call()
 def _ensure_directory_exists(path: Union[str, Path]) -> None:
@@ -170,7 +212,7 @@ def generate_keys(
     logger.info(f"Generating keys with algorithm: {algorithm}")
     logger.info(f"Keys directory: {keys_dir}")
     logger.info(f"Private key path: {private_key_path}")
-    logger.info(f"Public key path: {public_key_path}")  
+    logger.info(f"Public key path: {public_key_path}")
     logger.info(f"Wipe existing keys: {wipe}")
 
     if wipe:
