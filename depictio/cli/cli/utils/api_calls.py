@@ -5,10 +5,7 @@ import typer
 
 # depictio-cli imports
 from depictio.cli.cli.utils.common import generate_api_headers, load_depictio_config
-from depictio.cli.logging import logger, setup_logging
-
-# Ensure the logger is properly configured
-logger = setup_logging(verbose=True, verbose_level="DEBUG")
+from depictio.cli.logging import logger
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
 from depictio.models.models.base import BaseModel, convert_objectid_to_str
 from depictio.models.models.users import CLIConfig
