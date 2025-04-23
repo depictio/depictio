@@ -15,10 +15,15 @@ import asyncio
 
 from depictio.api.v1.endpoints.routers import router
 from depictio.api.v1.initialization import run_initialization
-from depictio.api.v1.endpoints.utils_endpoints.process_data_collections import process_initial_data_collections
+from depictio.api.v1.endpoints.utils_endpoints.process_data_collections import (
+    process_collections,
+    process_initial_data_collections,
+)
 from depictio import BASE_PATH
 from depictio.api.v1.configs.config import settings, MONGODB_URL
 
+from depictio.api.v1.utils import clean_screenshots
+from depictio.models.models.base import PyObjectId
 from depictio.models.utils import get_depictio_context
 from depictio.models.models.users import TokenBeanie, GroupBeanie, UserBeanie
 from depictio.models.models.projects import ProjectBeanie
@@ -59,17 +64,19 @@ async def lifespan(app: FastAPI):
         await run_initialization()
     else:
         print("Initialization already complete. Skipping...")
-    # await run_initialization()
+
+    # Clean up screenshots directory
+    await clean_screenshots()
 
     # Create a background task to process data collections after the API is fully started
     background_task = delayed_process_data_collections()
-    
+
     # Start the app
     yield
-    
+
     # Shutdown: add cleanup tasks if needed
     # await shutdown_db()
-    
+
     # Cancel the background task if it's still running
     if not background_task.done():
         background_task.cancel()
@@ -81,43 +88,40 @@ def delayed_process_data_collections():
     """
     import time
     import threading
-    
+
+    # Check first if files exist
+    from depictio.api.v1.db import deltatables_collection, projects_collection
+
+    # Retrieve only DC id for the iris_table by using projection
+    dc_id = projects_collection.find_one(
+        {"workflows.data_collections.data_collection_tag": "iris_table"}
+    )
+    dc_id = dc_id.get("workflows", [{}])[0].get("data_collections", [{}])[0].get("_id")
+    print(f"DC id: {dc_id}")
+    print(f"DC id type: {type(dc_id)}")
+
+    if dc_id:
+        _check_deltatables = deltatables_collection.find_one(
+            {"data_collection_id": dc_id}, {"_id": 1}
+        )
+        print(f"Check deltatables: {_check_deltatables}")
+        if _check_deltatables:
+            print(
+                f"Data collection with ID {dc_id} already exists in deltatables_collection."
+            )
+            return
+
     # Wait longer to ensure the API has fully started
     time.sleep(5)
-    
-    def process_collections():
-        try:
-            print(f"Checking if API is ready at http://127.0.0.1:{settings.fastapi.port}/depictio/api/v1/utils/status...")
-            
-            # Use 127.0.0.1 instead of localhost to avoid potential DNS issues
-            response = httpx.get(
-                f"http://127.0.0.1:{settings.fastapi.port}/depictio/api/v1/utils/status",
-                timeout=10.0
-            )
-                        
-            if response.status_code == 200:
-                print("API is ready. Processing initial data collections...")
-                
-                # Call the synchronous version of process_initial_data_collections
-                from depictio.api.v1.endpoints.utils_endpoints.process_data_collections import sync_process_initial_data_collections
-                
-                result = sync_process_initial_data_collections()
-                
-                if result["success"]:
-                    print("Initial data collections processed successfully")
-                else:
-                    print(f"Failed to process initial data collections: {result['message']}")
-            else:
-                print(f"API returned status code {response.status_code}. Skipping data collection processing.")
-        except Exception as e:
-            print(f"Error checking API status or processing data collections: {str(e)}")
-    
+
     # Run the processing in a separate thread to avoid blocking
     thread = threading.Thread(target=process_collections)
     thread.daemon = True
     thread.start()
-    
-    return asyncio.Future()  # Return a future to make the function compatible with the cancel() call
+
+    return (
+        asyncio.Future()
+    )  # Return a future to make the function compatible with the cancel() call
 
 
 # Define a custom type adapter for PydanticObjectId
@@ -135,6 +139,7 @@ class CustomJSONResponse(JSONResponse):
                 custom_encoder={
                     PydanticObjectId: objectid_serializer,
                     ObjectId: objectid_serializer,
+                    PyObjectId: objectid_serializer,
                 },
             )
         )

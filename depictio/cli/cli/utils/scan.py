@@ -817,10 +817,15 @@ def scan_files_for_data_collection(
     response = api_get_files_by_dc_id(
         dc_id=str(data_collection.id), CLI_config=CLI_config
     )
+    print(f"Response: {response}")
+    print(f"Response Status Code: {response.status_code}")
+    print(f"Response Content: {response.content}")
+    print(f"Response json: {response.json()}")
     if response.status_code == 200:
         existing_files = response.json()
         existing_files = [File.from_mongo(f) for f in existing_files]
         logger.debug(f"Existing Files: {existing_files}")
+        print(f"Existing Files: {existing_files}")
     else:
         existing_files = None
         logger.warning(
@@ -835,7 +840,7 @@ def scan_files_for_data_collection(
     # Convert existing_files from a dict to a list of file dictionaries if needed.
     existing_files_reformated = (
         {
-            existing_file["file_location"]: existing_file
+            existing_file.file_location: existing_file
             for existing_file in existing_files
         }
         if existing_files

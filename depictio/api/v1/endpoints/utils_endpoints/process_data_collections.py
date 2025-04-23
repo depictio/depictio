@@ -1,5 +1,6 @@
 import os
 from typing import Dict, Any
+import httpx
 import pymongo
 from bson import ObjectId
 from fastapi import HTTPException
@@ -11,6 +12,44 @@ from depictio.models.models.users import CLIConfig, UserBaseCLIConfig
 from depictio.models.models.s3 import S3DepictioCLIConfig
 from depictio.cli.cli.utils.helpers import process_data_collection_helper
 from depictio.models.utils import get_config
+
+
+def process_collections():
+    try:
+        logger.info(
+            f"Checking if API is ready at http://127.0.0.1:{settings.fastapi.port}/depictio/api/v1/utils/status..."
+        )
+
+        # Use 127.0.0.1 instead of localhost to avoid potential DNS issues
+        response = httpx.get(
+            f"http://127.0.0.1:{settings.fastapi.port}/depictio/api/v1/utils/status",
+            timeout=10.0,
+        )
+
+        if response.status_code == 200:
+            logger.info("API is ready. Processing initial data collections...")
+
+            # Call the synchronous version of process_initial_data_collections
+            from depictio.api.v1.endpoints.utils_endpoints.process_data_collections import (
+                sync_process_initial_data_collections,
+            )
+
+            result = sync_process_initial_data_collections()
+
+            if result["success"]:
+                logger.info("Initial data collections processed successfully")
+            else:
+                logger.error(
+                    f"Failed to process initial data collections: {result['message']}"
+                )
+        else:
+            logger.error(
+                f"API returned status code {response.status_code}. Skipping data collection processing."
+            )
+    except Exception as e:
+        logger.error(
+            f"Error checking API status or processing data collections: {str(e)}"
+        )
 
 
 async def process_initial_data_collections() -> Dict[str, Any]:
@@ -65,8 +104,9 @@ def sync_process_initial_data_collections() -> Dict[str, Any]:
 
     # Get the initial project
     from depictio import BASE_PATH
+
     project_yaml_path = os.path.join(
-        BASE_PATH, "api/v1/configs", "initial_project.yaml"
+        BASE_PATH, "api/v1/configs/iris_dataset", "initial_project.yaml"
     )
     project_config = get_config(project_yaml_path)
     project_config_id = project_config["id"]
@@ -129,7 +169,7 @@ def sync_process_initial_data_collections() -> Dict[str, Any]:
 
     logger.info("Project: %s", format_pydantic(project))
     logger.info("Worlfow: %s", format_pydantic(project.workflows[0]))
-    logger.info("DC id : %s", str(project.workflows[0].data_collections[0]))    
+    logger.info("DC id : %s", str(project.workflows[0].data_collections[0]))
     logger.info("DC id : %s", str(project.workflows[0].data_collections[0].id))
     # logger.info("DC id : %s", str(project["workflows"][0]["data_collections"][0]))
     # # logger.info("DC id : %s", str(project["workflows"][0]["data_collections"][0]["_id"]))
@@ -140,13 +180,16 @@ def sync_process_initial_data_collections() -> Dict[str, Any]:
         wf=wf,
         dc_id=dc_id,
         mode="process",
+        command_parameters={
+            "overwrite": True,
+        },
     )
     logger.debug(f"Result: {result}")
     if result["result"] != "success":
         logger.error(f"Error processing data collection: {result['message']}")
         return {
             "success": False,
-            "message": f"Error processing data collection: {result['message']}"
+            "message": f"Error processing data collection: {result['message']}",
         }
 
     return {"success": True, "message": "Data collections processed successfully"}
