@@ -140,6 +140,9 @@ def sync_process_initial_data_collections() -> Dict[str, Any]:
         wf=wf,
         dc_id=dc_id,
         mode="process",
+        command_parameters={
+            "overwrite": True,
+        },
     )
     logger.debug(f"Result: {result}")
     if result["result"] != "success":
