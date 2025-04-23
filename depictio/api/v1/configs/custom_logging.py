@@ -1,11 +1,8 @@
 import logging
-import os
 import sys
 import re
-import json
-from types import NoneType
 from colorlog import ColoredFormatter
-from typing import Any, Dict
+from typing import Any
 
 # Import Rich components
 from rich.console import Console
@@ -425,33 +422,3 @@ def setup_logging(name=None, level="INFO"):
     return logger
 
 logger = setup_logging(__name__, level="DEBUG")
-
-
-# # Test function to demonstrate the logger in action
-# def test_function():
-#     from pydantic import BaseModel
-
-#     logger.info("Test function executed successfully.")
-
-#     class TestClass(BaseModel):
-#         name: str
-#         age: int
-
-#     # This should display on a single line
-#     test = TestClass(name="John Doe", age=30)
-#     logger.warning(test)
-
-#     # This should display on multiple lines
-#     test2 = TestClass(
-#         name="Jane Smith with a very long name that will not fit on a single line",
-#         age=42,
-#     )
-#     logger.error(test2)
-
-
-# # Uncomment to run the test
-# # test_function()
-
-# logger = setup_logging(__name__, level="DEBUG")
-# # Test function to demonstrate the logger in action
-# # test_function()
