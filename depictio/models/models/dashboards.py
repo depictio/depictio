@@ -1,9 +1,9 @@
 from typing import Dict, List, Optional
 from bson import ObjectId
-from pydantic import ConfigDict
+from pydantic import ConfigDict, field_serializer
 
 from depictio.models.models.users import Permission
-from depictio.models.models.base import MongoModel, PyObjectId
+from depictio.models.models.base import MongoModel, PyObjectId, convert_objectid_to_str
 
 
 class DashboardData(MongoModel):
@@ -26,5 +26,20 @@ class DashboardData(MongoModel):
     project_id: PyObjectId
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
-        json_encoders={ObjectId: lambda oid: str(oid)},
+        # json_encoders={ObjectId: lambda oid: str(oid)},
     )
+
+    @field_serializer("permissions")
+    def serialize_permissions(self, permissions: Permission):
+        # Convert any ObjectIds in the permissions object to strings
+        # The exact implementation depends on what's in your Permission class
+        return permissions.model_dump()
+    
+    @field_serializer("project_id")
+    def serialize_project_id(self, project_id: PyObjectId) -> str:
+        return str(project_id)
+    
+    @field_serializer("stored_metadata")
+    def serialize_stored_metadata(self, stored_metadata: List) -> List:
+        # Convert any ObjectIds in the stored_metadata list to strings
+        return convert_objectid_to_str(stored_metadata)
