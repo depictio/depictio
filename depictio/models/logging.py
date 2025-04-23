@@ -1,10 +1,9 @@
-# depictio_cli/logging.py
 import logging
 from colorlog import ColoredFormatter
 
 # Initialize logger without handlers
 logger = logging.getLogger("depictio-models")
-# logger.propagate = False  # Prevent propagation to root logger
+logger.propagate = True  # Prevent propagation to root logger
 
 
 def setup_logging(verbose: bool = False, verbose_level: str = "INFO") -> logging.Logger:
@@ -32,6 +31,9 @@ def setup_logging(verbose: bool = False, verbose_level: str = "INFO") -> logging
         level_name = logging.getLevelNamesMapping().get(verbose_level, verbose_level)  # type: ignore[attr-defined]
         logger.setLevel(level_name)
     else:
-        logger.setLevel(logging.WARNING)
+        logger.setLevel(logging.DEBUG)
 
     return logger
+
+# Automatically set up logging when the module is imported
+logger = setup_logging()
