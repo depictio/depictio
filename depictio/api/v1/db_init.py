@@ -130,10 +130,28 @@ async def initialize_db(wipe: bool = False) -> Optional[UserBeanie]:
             if token_payload:
                 logger.info(f"Created token: {format_pydantic(token_payload['token'])}")
 
-        if user_payload["user"].is_admin:
-            admin_user = user_payload["user"]
-            logger.info(f"Admin user created: {admin_user.email}")
-            admin_token = token_payload
+            if user_payload["user"].is_admin:
+                admin_user = user_payload["user"]
+                logger.info(f"Admin user created: {admin_user.email}")
+                logger.info(f"Admin token created: {format_pydantic(token_payload)}")
+        else:
+            token_beanie = await TokenBeanie.find_one(
+                {"user_id": user_payload["user"].id, "name": "default_token"}
+            )
+            if token_beanie:
+                token_payload = {
+                    "token": token_beanie.model_dump(),
+                    "config_path": None,
+                    "new_token_created": False,
+                }
+                logger.info(f"Token payload: {format_pydantic(token_payload)}")
+                logger.info(
+                    f"Default token already exists for {user_payload['user'].email}"
+                )
+            else:
+                logger.warning(
+                    f"Failed to create default token for {user_payload['user'].email}"
+                )
 
     # If no admin user was created through the loop, try to find one
     if admin_user is None:
@@ -147,7 +165,7 @@ async def initialize_db(wipe: bool = False) -> Optional[UserBeanie]:
             logger.warning("No admin user found in the database")
 
     project_payload = await create_initial_project(
-        admin_user=admin_user, token_payload=admin_token
+        admin_user=admin_user, token_payload=token_payload
     )
     logger.debug(f"Project payload: {project_payload}")
 
