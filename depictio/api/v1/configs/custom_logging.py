@@ -381,8 +381,11 @@ def setup_logging(name=None, level="INFO"):
     numeric_level = getattr(logging, level.upper(), logging.INFO)
 
     # Create logger
-    logger = logging.getLogger(name)
+    logger = logging.getLogger("depictio")
     logger.setLevel(numeric_level)
+    
+    # Ensure propagation to root logger
+    logger.propagate = True
 
     # Remove any existing handlers to avoid duplicates
     if logger.handlers:
@@ -421,35 +424,34 @@ def setup_logging(name=None, level="INFO"):
 
     return logger
 
-
 logger = setup_logging(__name__, level="DEBUG")
 
 
-# Test function to demonstrate the logger in action
-def test_function():
-    from pydantic import BaseModel
+# # Test function to demonstrate the logger in action
+# def test_function():
+#     from pydantic import BaseModel
 
-    logger.info("Test function executed successfully.")
+#     logger.info("Test function executed successfully.")
 
-    class TestClass(BaseModel):
-        name: str
-        age: int
+#     class TestClass(BaseModel):
+#         name: str
+#         age: int
 
-    # This should display on a single line
-    test = TestClass(name="John Doe", age=30)
-    logger.warning(test)
+#     # This should display on a single line
+#     test = TestClass(name="John Doe", age=30)
+#     logger.warning(test)
 
-    # This should display on multiple lines
-    test2 = TestClass(
-        name="Jane Smith with a very long name that will not fit on a single line",
-        age=42,
-    )
-    logger.error(test2)
+#     # This should display on multiple lines
+#     test2 = TestClass(
+#         name="Jane Smith with a very long name that will not fit on a single line",
+#         age=42,
+#     )
+#     logger.error(test2)
 
 
-# Uncomment to run the test
-# test_function()
+# # Uncomment to run the test
+# # test_function()
 
-logger = setup_logging(__name__, level="DEBUG")
-# Test function to demonstrate the logger in action
-# test_function()
+# logger = setup_logging(__name__, level="DEBUG")
+# # Test function to demonstrate the logger in action
+# # test_function()
