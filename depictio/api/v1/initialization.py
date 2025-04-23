@@ -1,7 +1,6 @@
 import os
 from typing import Optional, List
 
-from beanie import PydanticObjectId
 from dotenv import load_dotenv
 
 from depictio import BASE_PATH
@@ -82,7 +81,6 @@ async def run_initialization(
             # Continue initialization even if bucket creation fails
     else:
         logger.warning("No admin user available, skipping bucket creation")
-
 
     # Register initialization complete in the database
     from depictio.api.v1.db import initialization_collection
