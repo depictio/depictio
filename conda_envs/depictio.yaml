@@ -21,6 +21,7 @@ dependencies:
   - fastapi==0.115.8
   - fastexcel
   - fastparquet
+  - gunicorn
   - httpx==0.28.1
   - motor
   - mypy-boto3-s3 
@@ -40,6 +41,7 @@ dependencies:
   - python-multipart
   - pyyaml
   - rich
+  - tomli
   - typer
   - typeguard
   - uvicorn==0.34.0
