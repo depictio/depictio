@@ -5,7 +5,7 @@ import boto3
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ClientError
 
 from depictio.models.models.users import CLIConfig
-from depictio.models.models.s3 import MinioConfig, PolarsStorageOptions
+from depictio.models.models.s3 import MinioConfig, PolarsStorageOptions, S3DepictioCLIConfig
 from depictio.models.logging import logger
 
 
@@ -133,13 +133,12 @@ def S3_storage_checks(s3_config: MinioConfig, checks: Optional[List[str]] = None
 
 
 @validate_call
-def turn_S3_config_into_polars_storage_options(cli_config: CLIConfig):
+def turn_S3_config_into_polars_storage_options(s3_config: S3DepictioCLIConfig) -> PolarsStorageOptions:
     """
     Convert S3 configuration into storage options for the client.
     """
-    s3_config = cli_config.s3
     return PolarsStorageOptions(
-        endpoint_url=f"{s3_config.endpoint_url}:{s3_config.port}",
+        endpoint_url=f"{s3_config.endpoint_url}",
         aws_access_key_id=s3_config.root_user,
         aws_secret_access_key=s3_config.root_password,
     )

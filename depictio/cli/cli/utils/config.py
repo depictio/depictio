@@ -7,7 +7,6 @@ import typer
 
 # depictio-cli imports
 from depictio.cli.cli.utils.api_calls import api_get_project_from_name, api_login
-from depictio.cli.cli.utils.s3 import S3_storage_checks
 from depictio.cli.logging import logger
 
 # depictio-models imports
