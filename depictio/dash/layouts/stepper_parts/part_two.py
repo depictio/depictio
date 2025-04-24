@@ -25,7 +25,7 @@ def register_callbacks_stepper_part_two(app):
         prevent_initial_call=True,
     )
     def update_button_list(stored_add_button):
-        n = stored_add_button["id"]
+        n = stored_add_button["_id"]
 
         graph_stepper_button = dbc.Col(
             dmc.Button(
