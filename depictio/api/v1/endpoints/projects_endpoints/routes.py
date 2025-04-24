@@ -1,96 +1,23 @@
 from typing import List
 from bson import ObjectId
-from fastapi import HTTPException, Depends, APIRouter
+from fastapi import HTTPException, Depends, APIRouter, Query
 
 # depictio imports
-from depictio.api.v1.configs.custom_logging import format_pydantic, logger
+from depictio.api.v1.configs.custom_logging import logger
 from depictio.api.v1.db import projects_collection, dashboards_collection
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 
 ## depictio-models imports
 from depictio.models.models.projects import Project
-from depictio.models.models.base import convert_objectid_to_str
-from depictio.models.utils import convert_model_to_dict
+from depictio.models.models.users import User
+from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 
 # Define the router
 projects_endpoint_router = APIRouter()
 
 
-# {
-#   "_id": {
-#     "$oid": "67a25c82fea6466823de362b"
-#   },
-#   "description": null,
-#   "flexible_metadata": null,
-#   "name": "Strand-Seq data analysis",
-#     "permissions": {
-#     "owners": [
-#       {
-#         "_id": "67658ba033c8b59ad489d7c7",
-#         "email": "admin@embl.de",
-#         "is_admin": true,
-#         "groups": [
-#           {
-#             "id": "678e275019fcb5bbbf26a0d2",
-#             "description": null,
-#             "flexible_metadata": null,
-#             "hash": null,
-#             "name": "admin"
-#           },
-#           {
-#             "id": "67dc70fe7cb9e9eb04955423",
-#             "description": null,
-#             "flexible_metadata": null,
-#             "hash": null,
-#             "name": "TEST"
-#           },
-#           {
-#             "id": "67e18bd14fa5941c4ded00a8",
-#             "description": null,
-#             "flexible_metadata": null,
-#             "hash": null,
-#             "name": "TOTO"
-#           }
-#         ]
-#       }
-#     ],
-#     "editors": [
-#       {
-#         "_id": "67d9ae8ae77e0f469332abbf",
-#         "email": "t@t.com",
-#         "is_admin": false,
-#         "groups": [
-#           {
-#             "id": "67d155ae9870d172f406087a",
-#             "description": null,
-#             "flexible_metadata": null,
-#             "hash": null,
-#             "name": "users"
-#           },
-#           {
-#             "id": "67dc70fe7cb9e9eb04955423",
-#             "description": null,
-#             "flexible_metadata": null,
-#             "hash": null,
-#             "name": "TEST"
-#           }
-#         ]
-#       }
-#     ],
-#     "viewers": []
-#   },
-#   "is_public": false,
-#   "hash": "36011a3f7ff5eeba9044f9506bdf7037",
-#   "registration_time": "2025-02-25 10:22:05"
-# }
-
-
-@projects_endpoint_router.get("/get/all")
-async def get_all_projects(current_user: str = Depends(get_current_user)) -> List:
-    logger.info("Getting all projects")
-    if not current_user:
-        raise HTTPException(status_code=401, detail="User not found.")
-
+@projects_endpoint_router.get("/get/all", response_model=List[Project])
+async def get_all_projects(current_user: User = Depends(get_current_user)) -> List:
     # Find projects where current_user is either an owner or a viewer
     current_user_id = ObjectId(current_user.id)
     logger.info(f"Current user ID: {current_user_id}")
@@ -111,20 +38,18 @@ async def get_all_projects(current_user: str = Depends(get_current_user)) -> Lis
     projects = list(projects_collection.find(query))
     logger.info(f"Projects: {projects}")
     if projects:
-        projects = [convert_objectid_to_str(project) for project in projects]
+        projects = [Project.from_mongo(project) for project in projects]
         return projects
     else:
         return []
 
 
-@projects_endpoint_router.get("/get/from_id/{project_id}")
+@projects_endpoint_router.get("/get/from_id", response_model=Project)
 async def get_project_from_id(
-    project_id: str, current_user: str = Depends(get_current_user)
+    project_id: PyObjectId = Query(default="646b0f3c1e4a2d7f8e5b8c9a"),
+    current_user: User = Depends(get_current_user),
 ):
     logger.info(f"Getting project with ID: {project_id}")
-    if not current_user:
-        raise HTTPException(status_code=401, detail="User not found.")
-
     current_user_id = ObjectId(current_user.id)
     query = {
         "$or": [
@@ -150,9 +75,11 @@ async def get_project_from_id(
     return project
 
 
-@projects_endpoint_router.get("/get/from_dashboard_id/{dashboard_id}")
+@projects_endpoint_router.get(
+    "/get/from_dashboard_id/{dashboard_id}", response_model=Project
+)
 async def get_project_from_dashboard_id(
-    dashboard_id: str, current_user: str = Depends(get_current_user)
+    dashboard_id: PyObjectId, current_user: User = Depends(get_current_user)
 ):
     logger.info(f"Getting project with dashboard ID: {dashboard_id}")
     if not current_user:
@@ -180,13 +107,11 @@ async def get_project_from_dashboard_id(
     return project
 
 
-@projects_endpoint_router.get("/get/from_name/{project_name}")
+@projects_endpoint_router.get("/get/from_name/{project_name}", response_model=Project)
 async def get_project_from_name(
-    project_name: str, current_user: str = Depends(get_current_user)
+    project_name: str, current_user: User = Depends(get_current_user)
 ):
     logger.info(f"Getting project with ID: {project_name}")
-    if not current_user:
-        raise HTTPException(status_code=401, detail="User not found.")
 
     # Find projects where current_user is either an owner or a viewer
     query = {
@@ -213,12 +138,11 @@ async def get_project_from_name(
 
 
 @projects_endpoint_router.post("/create")
-async def create_project(project: dict, current_user: str = Depends(get_current_user)):
-    if not current_user:
-        raise HTTPException(status_code=401, detail="User not found.")
-
-    # Convert project to Project object
-    project = Project.from_mongo(project)
+async def create_project(
+    project: Project, current_user: User = Depends(get_current_user)
+):
+    # # Convert project to Project object
+    # project = Project.from_mongo(project)
 
     # Ensure the current_user is an owner
     if (
@@ -250,15 +174,12 @@ async def create_project(project: dict, current_user: str = Depends(get_current_
     }
 
 
-
-
 @projects_endpoint_router.put("/update")
-async def update_project(project: dict, current_user: str = Depends(get_current_user)):
-    if not current_user:
-        raise HTTPException(status_code=401, detail="User not found.")
-
+async def update_project(
+    project: Project, current_user: User = Depends(get_current_user)
+):
     # Convert project to Project object
-    project = Project.from_mongo(project)
+    # project = Project.from_mongo(project)
     logger.info(f"Updating project: {project}")
 
     # Ensure the current_user is an owner
@@ -292,11 +213,8 @@ async def update_project(project: dict, current_user: str = Depends(get_current_
 
 @projects_endpoint_router.delete("/delete")
 async def delete_project(
-    project_id: str, current_user: str = Depends(get_current_user)
+    project_id: PyObjectId, current_user: User = Depends(get_current_user)
 ):
-    if not current_user:
-        raise HTTPException(status_code=401, detail="User not found.")
-
     # Find the project
     project = await get_project_from_id(project_id, current_user)
 
@@ -319,10 +237,7 @@ async def delete_project(
     }
 
 
-# endpoint and PermissionRequest to add or update permission of a user to a project
-
-from pydantic import BaseModel, ConfigDict, field_validator
-from depictio.models.models.users import Permission
+from pydantic import BaseModel, ConfigDict
 
 
 class ProjectPermissionRequest(BaseModel):

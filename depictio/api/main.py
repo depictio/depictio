@@ -29,11 +29,27 @@ from depictio.models.utils import get_depictio_context
 from depictio.models.models.users import TokenBeanie, GroupBeanie, UserBeanie
 from depictio.models.models.projects import ProjectBeanie
 
-DEPICTIO_CONTEXT = get_depictio_context()
-
+# Explicitly load environment variables
 load_dotenv(BASE_PATH.parent / ".env", override=False)
-print(f"Current os env vars after loading .env: {os.environ}")
 
+# Detailed .env file debugging
+print(f"BASE_PATH: {BASE_PATH}")
+print(f"BASE_PATH.parent: {BASE_PATH.parent}")
+print(f"Attempting to load .env from: {BASE_PATH.parent / '.env'}")
+print(f"Does .env file exist? {os.path.exists(BASE_PATH.parent / '.env')}")
+print(f"Full .env file path: {os.path.abspath(BASE_PATH.parent / '.env')}")
+
+# Try alternative loading methods
+try:
+    from dotenv import dotenv_values
+    env_values = dotenv_values(BASE_PATH.parent / ".env")
+    print(f"Dotenv values: {env_values}")
+except Exception as e:
+    print(f"Error loading .env with dotenv_values: {e}")
+
+# Ensure context is loaded before first use
+DEPICTIO_CONTEXT = get_depictio_context()
+print(f"DEPICTIO_CONTEXT set to: {DEPICTIO_CONTEXT}")
 
 # Database initialization
 async def init_motor_beanie():
@@ -127,24 +143,47 @@ def delayed_process_data_collections():
 
 
 # Define a custom type adapter for PydanticObjectId
-def objectid_serializer(oid: PydanticObjectId | ObjectId) -> str:
+def objectid_serializer(oid: PydanticObjectId | ObjectId | PyObjectId) -> str:
     return str(oid)
+
+
+# Custom JSON encoder function to handle ObjectId serialization
+def custom_jsonable_encoder(obj, **kwargs):
+    if isinstance(obj, (ObjectId, PydanticObjectId, PyObjectId)):
+        return str(obj)
+    
+    # Handle dictionaries
+    if isinstance(obj, dict):
+        return {k: custom_jsonable_encoder(v, **kwargs) for k, v in obj.items()}
+    
+    # Handle lists or other iterables
+    if isinstance(obj, (list, tuple, set)):
+        return [custom_jsonable_encoder(i, **kwargs) for i in obj]
+    
+    # Use the default jsonable_encoder for other types
+    try:
+        return jsonable_encoder(obj, **kwargs)
+    except Exception as e:
+        # If jsonable_encoder fails, try to convert to string
+        try:
+            return str(obj)
+        except:
+            return f"<Unserializable object: {type(obj).__name__}>"
 
 
 # Updated JSON Response class that utilizes the serializer
 class CustomJSONResponse(JSONResponse):
     def render(self, content: Any) -> bytes:
-        # Convert PydanticObjectId and ObjectId to str when serializing
-        return super().render(
-            jsonable_encoder(
-                content,
-                custom_encoder={
-                    PydanticObjectId: objectid_serializer,
-                    ObjectId: objectid_serializer,
-                    PyObjectId: objectid_serializer,
-                },
-            )
+        # Use our custom encoder that recursively handles ObjectId instances
+        serialized_content = custom_jsonable_encoder(
+            content,
+            custom_encoder={
+                PydanticObjectId: objectid_serializer,
+                ObjectId: objectid_serializer,
+                PyObjectId: objectid_serializer,
+            },
         )
+        return super().render(serialized_content)
 
 
 # Check if in development mode

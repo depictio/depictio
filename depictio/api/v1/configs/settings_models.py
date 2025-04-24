@@ -57,6 +57,9 @@ class FastAPIConfig(BaseSettings):
             "env": "DEPICTIO_INTERNAL_API_KEY"
         },  # Shared across components
     )
+    playwright_dev_mode: bool = Field(
+        default=False, json_schema_extra={"env": "DEPICTIO_PLAYWRIGHT_DEV_MODE"}
+    )
 
 
 class DashConfig(BaseSettings):
