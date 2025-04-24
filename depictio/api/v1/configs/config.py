@@ -18,6 +18,8 @@ _KEYS_DIR = settings.auth.keys_dir
 # Use the shared internal API key from settings
 FASTAPI_INTERNAL_API_KEY = os.getenv("DEPICTIO_INTERNAL_API_KEY", settings.fastapi.internal_api_key)
 ALGORITHM = settings.auth.keys_algorithm
+DEPICTIO_CONTEXT = os.getenv("DEPICTIO_CONTEXT", None)
+logger.info(f"DEPICTIO_CONTEXT: {DEPICTIO_CONTEXT}")
 
 
 PRIVATE_KEY = load_private_key(
