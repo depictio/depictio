@@ -220,11 +220,16 @@ class MongoModel(BaseModel):
                         # Ensure value is converted to ObjectId
                         if isinstance(value, str) and ObjectId.is_valid(value):
                             new_dict[new_key] = ObjectId(value)
-                        elif isinstance(value, PyObjectId) or isinstance(value, ObjectId):
+                        elif isinstance(value, PyObjectId) or isinstance(
+                            value, ObjectId
+                        ):
                             new_dict[new_key] = ObjectId(str(value))
                         else:
                             # If it's not a valid ObjectId, keep it as is
                             new_dict[new_key] = value
+                    elif isinstance(value, str) and ObjectId.is_valid(value):
+                        # If the value is a valid ObjectId string, convert it
+                        new_dict[key] = ObjectId(value)
                     else:
                         new_key = key
                         # Recursively convert nested structures
@@ -237,9 +242,13 @@ class MongoModel(BaseModel):
                 return obj
 
         parsed = convert_ids(parsed)
-        
+
         # Double-check the top-level _id to ensure it's an ObjectId
-        if "_id" in parsed and isinstance(parsed["_id"], str) and ObjectId.is_valid(parsed["_id"]):
+        if (
+            "_id" in parsed
+            and isinstance(parsed["_id"], str)
+            and ObjectId.is_valid(parsed["_id"])
+        ):
             parsed["_id"] = ObjectId(parsed["_id"])
 
         # Convert PosixPath to str
@@ -282,7 +291,9 @@ class DirectoryPath(BaseModel):
     def validate_path(cls, v):
         # Ensure the path is valid
         if not isinstance(v, (str, Path)):
-            raise ValueError(f"Invalid type for path: {type(v)}. Must be a string or Path.")
+            raise ValueError(
+                f"Invalid type for path: {type(v)}. Must be a string or Path."
+            )
         v = Path(v)  # Ensure it's a Path object
         if not v.exists():
             raise ValueError(f"The directory '{v}' does not exist.")
