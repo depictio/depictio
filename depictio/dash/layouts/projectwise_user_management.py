@@ -78,7 +78,8 @@ def fetch_project_permissions(project_id, token):
     """
     try:
         response = requests.get(
-            f"{API_BASE_URL}/depictio/api/v1/projects/get/from_id/{project_id}",
+            f"{API_BASE_URL}/depictio/api/v1/projects/get/from_id",
+            params={"project_id": project_id},
             headers={"Authorization": f"Bearer {token}"},
         )
         project_data = response.json()
@@ -718,7 +719,8 @@ def register_projectwise_user_management_callbacks(app):
 
         # Fetch project data.
         response = httpx.get(
-            f"{API_BASE_URL}/depictio/api/v1/projects/get/from_id/{project_id}",
+            f"{API_BASE_URL}/depictio/api/v1/projects/get/from_id",
+            params={"project_id": project_id},
             headers={"Authorization": f"Bearer {local_store_data['access_token']}"},
         )
         if response.status_code != 200:

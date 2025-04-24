@@ -13,7 +13,7 @@ from depictio.api.v1.configs.custom_logging import format_pydantic, logger
 from depictio.api.v1.endpoints.user_endpoints.utils import find_user_by_email
 from depictio.models.models.users import User, TokenBase
 from depictio.models.utils import convert_model_to_dict
-from depictio.models.models.base import convert_objectid_to_str
+from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 
 # Check if running in a test environment
 # First check environment variable, then check for pytest in sys.argv
@@ -268,3 +268,18 @@ def generate_agent_config(email, token, current_token):
         return result.json()
     else:
         logger.error(f"Error generating agent config for user {user}: {result.text}")
+
+
+@validate_call(config=dict(arbitrary_types_allowed=True), validate_return=True)
+def api_get_project_from_id(project_id: PyObjectId, token: str) -> httpx.Response:
+    """
+    Get a project from the server using the project ID.
+    """
+    # First check if the project exists on the server DB for existing IDs and if the same metadata hash is used
+    logger.info(f"Getting project with ID: {project_id}")
+    response = httpx.get(
+        f"{API_BASE_URL}/depictio/api/v1/projects/get/from_id",
+        params={"project_id": project_id},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    return response
