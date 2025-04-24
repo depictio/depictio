@@ -5,28 +5,32 @@ from depictio.api.v1.configs.custom_logging import logger
 
 # from depictio.models.s3_utils import S3_storage_checks
 from depictio.models.models.s3 import S3DepictioCLIConfig
+from depictio.models.s3_utils import turn_S3_config_into_polars_storage_options
 
 
-minio_storage_options = {
-    "endpoint_url": f"{settings.minio.endpoint_url}",
-    "aws_access_key_id": settings.minio.root_user,
-    "aws_secret_access_key": settings.minio.root_password,
-    "use_ssl": "false",
-    "AWS_REGION": "us-east-1",
-    "signature_version": "s3v4",
-    "AWS_ALLOW_HTTP": "true",
-    "AWS_S3_ALLOW_UNSAFE_RENAME": "true",
-}
-logger.info(f"minio_storage_options {minio_storage_options}")
+# minio_storage_options = {
+#     "endpoint_url": f"{settings.minio.endpoint_url}",
+#     "aws_access_key_id": settings.minio.root_user,
+#     "aws_secret_access_key": settings.minio.root_password,
+#     "use_ssl": "false",
+#     "AWS_REGION": "us-east-1",
+#     "signature_version": "s3v4",
+#     "AWS_ALLOW_HTTP": "true",
+#     "AWS_S3_ALLOW_UNSAFE_RENAME": "true",
+# }
+# logger.info(f"minio_storage_options {minio_storage_options}")
 
 minios3_external_config = S3DepictioCLIConfig(
     # provider="minio",
     bucket=settings.minio.bucket,
     endpoint_url=f"{settings.minio.endpoint_url}",
     # port=settings.minio.port,
-    # root_user=settings.minio.root_user,
-    # root_password=settings.minio.root_password,
+    root_user=settings.minio.root_user,
+    root_password=settings.minio.root_password,
 )
+
+polars_s3_config = turn_S3_config_into_polars_storage_options(minios3_external_config).model_dump(exclude_none=True)
+logger.info(f"polars_s3_config: {polars_s3_config}")
 
 
 # Initialize your S3 client outside of your endpoint function
@@ -39,4 +43,6 @@ s3_client = boto3.client(
     # verify=False,
 )
 logger.info(f"minio s3 client {s3_client}")
-logger.info(f"Successfully created S3 client with endpoint: {settings.minio.endpoint_url}")
+logger.info(
+    f"Successfully created S3 client with endpoint: {settings.minio.endpoint_url}"
+)
