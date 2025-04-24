@@ -47,10 +47,9 @@ def api_get_project_from_id(project_id: str, CLI_config: CLIConfig):
     """
     # First check if the project exists on the server DB for existing IDs and if the same metadata hash is used
     logger.info(f"Getting project with ID: {project_id}")
-    logger.debug(f"{CLI_config.base_url}/depictio/api/v1/projects/get/from_id/{project_id}")
     response = httpx.get(
-        f"{CLI_config.base_url}/depictio/api/v1/projects/get/from_id/{project_id}",
-        # params={"project_id": project_id},
+        f"{CLI_config.base_url}/depictio/api/v1/projects/get/from_id",
+        params={"project_id": project_id},
         headers=generate_api_headers(CLI_config),
     )
     return response
