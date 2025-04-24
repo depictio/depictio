@@ -103,17 +103,6 @@ def handle_authenticated_user(pathname, local_data):
         return content, header, pathname, local_data
 
     elif pathname.startswith("/project/"):
-        # project_id = pathname.split("/")[-1]
-        # # Retrieve project name from API
-        # response = httpx.get(
-        #     f"{API_BASE_URL}/depictio/api/v1/projects/get/from_id/{project_id}",
-        #     headers={"Authorization": f"Bearer {local_data['access_token']}"},
-        # )
-        # if response.status_code == 200:
-        #     project_name = response.json()["name"]
-        # else:
-        #     return dash.no_update, dash.no_update, "/projects", local_data
-        # # project_name = "Project Name"
         header = create_default_header("Project Permissions Manager")
         return projectwise_user_management_layout, header, pathname, local_data
 

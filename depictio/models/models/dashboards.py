@@ -7,7 +7,7 @@ from depictio.models.models.base import MongoModel, PyObjectId, convert_objectid
 
 
 class DashboardData(MongoModel):
-    dashboard_id: str
+    dashboard_id: PyObjectId
     version: int = 1
     tmp_children_data: Optional[List] = []
     stored_layout_data: Dict = {}
@@ -38,6 +38,10 @@ class DashboardData(MongoModel):
     @field_serializer("project_id")
     def serialize_project_id(self, project_id: PyObjectId) -> str:
         return str(project_id)
+    
+    @field_serializer("dashboard_id")
+    def serialize_dashboard_id(self, dashboard_id: PyObjectId) -> str:
+        return str(dashboard_id)
     
     @field_serializer("stored_metadata")
     def serialize_stored_metadata(self, stored_metadata: List) -> List:

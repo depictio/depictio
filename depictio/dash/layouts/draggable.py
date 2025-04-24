@@ -1210,7 +1210,7 @@ def register_callbacks_draggable(app):
             # index = stored_add_button["count"]
             index = generate_unique_index()
             index = f"{index}-tmp"
-            stored_add_button["id"] = index
+            stored_add_button["_id"] = index
             # stored_add_button["count"] += 1
 
             current_draggable_children = add_new_component(str(index))
@@ -1309,6 +1309,7 @@ def design_draggable(
         f"{API_BASE_URL}/depictio/api/v1/projects/get/from_dashboard_id/{dashboard_id}",
         headers={"Authorization": f"Bearer {TOKEN}"},
     ).json()
+    logger.info(f"design_draggable - Project: {project}")
     from depictio.models.models.projects import Project
 
     project = Project.from_mongo(project)

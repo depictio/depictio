@@ -18,12 +18,15 @@ from depictio.api.v1.configs.custom_logging import logger
 # from depictio.api.v1.endpoints.dashboards_endpoints.models import DashboardData
 
 # from depictio.api.v1.endpoints.user_endpoints.models import UserBase
-from depictio.dash.api_calls import api_call_fetch_user_from_token
+from depictio.dash.api_calls import (
+    api_call_fetch_user_from_token,
+    api_get_project_from_id,
+)
 from depictio.dash.layouts.layouts_toolbox import (
     create_dashboard_modal,
     create_delete_confirmation_modal,
 )
-from depictio.models.models.base import convert_objectid_to_str
+from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.utils import convert_model_to_dict
 from depictio.dash.utils import generate_unique_index
 
@@ -52,7 +55,6 @@ def load_dashboards_from_db(token):
         raise ValueError("Token is required to load dashboards from the database.")
 
     try:
-
         response = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/dashboards/list",
             headers={"Authorization": f"Bearer {token}"},
@@ -352,9 +354,14 @@ def register_callbacks_dashboards_management(app):
 
             # get project from id
             logger.info(f"Project ID: {dashboard['project_id']}")
-            response = httpx.get(
-                f"{API_BASE_URL}/depictio/api/v1/projects/get/from_id/{str(dashboard['project_id'])}",
-                headers={"Authorization": f"Bearer {token}"},
+            # response = httpx.get(
+            #     f"{API_BASE_URL}/depictio/api/v1/projects/get/from_id",
+            #     params={"project_id": dashboard["project_id"]},
+            #     headers={"Authorization": f"Bearer {token}"},
+            # )
+
+            response = api_get_project_from_id(
+                project_id=dashboard["project_id"], token=token
             )
             if response.status_code == 200:
                 logger.info(f"Project response: {response.json()}")
@@ -377,6 +384,30 @@ def register_callbacks_dashboards_management(app):
                 leftSection=DashIconify(icon=badge_icon, width=16, color="grey"),
             )
 
+            # badge_tooltip_additional_info = dmc.HoverCard(
+            #     [
+            #         dmc.HoverCardTarget(
+            #             dmc.Badge(
+            #                 "Additional Info",
+            #                 color="gray",
+            #                 leftSection=DashIconify(
+            #                     icon="material-symbols:info-outline",
+            #                     width=16,
+            #                     color="grey",
+            #                 ),
+            #             )
+            #         ),
+            #         dmc.HoverCardDropdown(
+            #             [
+            #                 dmc.Text(f"Dashboard ID: {dashboard['dashboard_id']}"),
+            #                 dmc.Text(f"Last Modified: {dashboard['last_saved_ts']}"),
+            #                 # dmc.Text(f"Version: {str(dashboard['version'])}"),
+            #             ],
+            #             style={"padding": "10px"},
+            #         ),
+            #     ]
+            # )
+
             group = html.Div(
                 [
                     dmc.Group(
@@ -394,7 +425,12 @@ def register_callbacks_dashboards_management(app):
                     ),
                     dmc.Space(h=10),
                     dmc.Stack(
-                        [badge_project, badge_owner, badge_status],
+                        [
+                            badge_project,
+                            badge_owner,
+                            badge_status,
+                            # badge_tooltip_additional_info,
+                        ],
                         justify="center",
                         align="flex-start",
                     ),
@@ -566,7 +602,9 @@ def register_callbacks_dashboards_management(app):
             else:
                 thumbnail = html.A(
                     dmc.CardSection(
-                        dmc.Image(src=thumbnail_url, height=250, width=400)
+                        dmc.Image(
+                            src=thumbnail_url, height=225, width=400, fit="contain"
+                        )
                     ),
                     href=f"/dashboard/{dashboard['dashboard_id']}",
                 )
@@ -749,8 +787,8 @@ def register_callbacks_dashboards_management(app):
             logger.info(f"Projects: {projects}")
             projects_multiselect_options = [
                 {
-                    "label": f"{project['name']} ({str(project['_id'])})",
-                    "value": project["_id"],
+                    "label": f"{project['name']} ({str(project['id'])})",
+                    "value": project["id"],
                 }
                 for project in projects
             ]
@@ -929,7 +967,7 @@ def register_callbacks_dashboards_management(app):
                 last_saved_ts=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 permissions={"owners": [current_userbase], "viewers": []},
                 dashboard_id=str(dashboard_id),
-                project_id=modal_data["project_id"],
+                project_id=PyObjectId(modal_data["project_id"]),
             )
             dashboards.append(new_dashboard)
             insert_dashboard(
@@ -954,7 +992,7 @@ def register_callbacks_dashboards_management(app):
         dashboards = [
             dashboard
             for dashboard in dashboards
-            if dashboard.dashboard_id != index_confirm_delete
+            if str(dashboard.dashboard_id) != str(index_confirm_delete)
         ]
         return generate_dashboard_view_response(
             dashboards, store_data_list, current_userbase, user_data
