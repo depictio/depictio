@@ -8,7 +8,7 @@ from depictio.cli.cli.utils.api_calls import (
 )
 from depictio.cli.cli.utils.common import load_depictio_config
 from depictio.cli.cli.utils.config import validate_project_config_and_check_S3_storage
-from depictio.cli.cli.utils.s3 import S3_storage_checks
+from depictio.models.s3_utils import S3_storage_checks
 from depictio.cli.cli.utils.rich_utils import (
     rich_print_checked_statement,
     rich_print_json,
