@@ -1,10 +1,12 @@
 """
 Factory module for creating and configuring the Dash application.
 """
+
 import os
 import sys
 import dash
 import dash_bootstrap_components as dbc
+from flask import send_from_directory
 from depictio.api.v1.configs.config import settings
 from depictio.version import get_version
 from depictio.api.v1.configs.custom_logging import logger
@@ -19,19 +21,19 @@ DEPICTIO_CONTEXT = get_depictio_context()
 def create_dash_app():
     """
     Create and configure a new Dash application instance.
-    
+
     Returns:
         dash.Dash: Configured Dash application instance
     """
     # Check if in development mode
     dev_mode = os.environ.get("DEV_MODE", "false").lower() == "true"
-    
+
     # Get the root path of the depictio.dash package
     dash_root_path = os.path.dirname(os.path.dirname(__file__))
-    
+
     # Get the assets folder path
     assets_folder = os.path.join(dash_root_path, "assets")
-    
+
     # Start the app
     app = dash.Dash(
         __name__,  # Use the current module name
@@ -46,13 +48,19 @@ def create_dash_app():
         suppress_callback_exceptions=True,
         title="Depictio",
         assets_folder=assets_folder,
-        assets_url_path='/assets',  # Explicitly set the assets URL path
+        assets_url_path="/assets",  # Explicitly set the assets URL path
         # favicon="/assets/logo_icon.png",  # Use logo_icon.png as favicon
     )
-    
+
     # Configure Flask's logger to use custom logging settings
     server = app.server
     server.logger.handlers = logger.handlers
     server.logger.setLevel(logger.level)
     
+    # Configure static folder for Flask server
+    # This is separate from Dash's assets folder
+    static_folder = os.path.join(dash_root_path, "static")
+    server.static_folder = static_folder
+    server.static_url_path = "/static"
+
     return app, dev_mode
