@@ -15,6 +15,7 @@ from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.api.v1.endpoints.utils_endpoints.core_functions import create_bucket
 from depictio.api.v1.s3 import s3_client
 from depictio.api.v1.configs.custom_logging import format_pydantic, logger
+from depictio.version import get_version
 
 # Define the router
 utils_endpoint_router = APIRouter()
@@ -92,7 +93,7 @@ async def status():
     logger.info("Checking server status...")
     logger.info("Server is online.")
 
-    return {"status": "online", "version": "v0.0.4"}
+    return {"status": "online", "version": get_version()}
 
 
 @utils_endpoint_router.post("/process_initial_data_collections")
