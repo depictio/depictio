@@ -176,7 +176,7 @@ def process(
 
         # Get remote project configuration
         remote_project_config = api_get_project_from_id(
-            str(project_config.id), CLI_config
+            project_config.id, CLI_config
         )
 
         if remote_project_config.status_code == 200:
