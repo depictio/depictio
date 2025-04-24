@@ -3,6 +3,7 @@ from datetime import datetime
 import json
 import os, sys
 from typing import Dict
+from uuid import UUID
 from fastapi import Depends, HTTPException, APIRouter
 
 
@@ -17,7 +18,7 @@ from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 
 from depictio.models.models.base import convert_objectid_to_str, PyObjectId
 from depictio.models.models.dashboards import DashboardData
-from depictio.models.models.users import Permission, TokenBeanie
+from depictio.models.models.users import Permission, TokenBeanie, User
 from depictio.models.utils import convert_model_to_dict
 
 dashboards_endpoint_router = APIRouter()
@@ -25,21 +26,19 @@ dashboards_endpoint_router = APIRouter()
 
 @dashboards_endpoint_router.get("/get/{dashboard_id}", response_model=DashboardData)
 async def get_dashboard(
-    dashboard_id: PyObjectId, current_user=Depends(get_current_user)
+    dashboard_id: PyObjectId,
+    current_user: User = Depends(get_current_user),
 ):
     """
     Fetch dashboard data related to a dashboard ID.
     """
-
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Current user not found.")
 
     user_id = current_user.id
     logger.debug(f"Current user ID: {user_id}")
 
     # Find dashboards where current_user is either an owner or a viewer
     query = {
-        "dashboard_id": str(dashboard_id),
+        "dashboard_id": dashboard_id,
         "$or": [
             {"permissions.owners._id": user_id},
             {"permissions.viewers._id": user_id},
@@ -66,13 +65,12 @@ async def get_dashboard(
 
 
 @dashboards_endpoint_router.get("/list")
-async def list_dashboards(current_user=Depends(get_current_user)):
+async def list_dashboards(
+    current_user: User = Depends(get_current_user),
+):
     """
     Fetch a list of dashboards for the current user.
     """
-
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Current user not found.")
 
     user_id = current_user.id
     logger.debug(f"Current user ID: {user_id}")
@@ -86,13 +84,12 @@ async def list_dashboards(current_user=Depends(get_current_user)):
 
 
 @dashboards_endpoint_router.get("/list_all")
-async def list_dashboards(current_user=Depends(get_current_user)):
+async def list_all_dashboards(
+    current_user: User = Depends(get_current_user),
+):
     """
     Fetch a list of dashboards for the current user.
     """
-
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Current user not found.")
 
     if not current_user.is_admin:
         raise HTTPException(status_code=401, detail="Current user is not an admin.")
@@ -111,7 +108,9 @@ async def list_dashboards(current_user=Depends(get_current_user)):
 
 @dashboards_endpoint_router.post("/toggle_public_status/{dashboard_id}")
 async def make_dashboard_public(
-    dashboard_id: str, params: dict, current_user=Depends(get_current_user)
+    dashboard_id: str,
+    params: dict,
+    current_user: User = Depends(get_current_user),
 ):
     """
     Make a dashboard with the given dashboard ID public or private.
@@ -120,13 +119,7 @@ async def make_dashboard_public(
     logger.info(f"Current user: {current_user}")
     logger.info(f"Dashboard ID: {dashboard_id}")
 
-    if not params:
-        raise HTTPException(status_code=400, detail="No parameters provided.")
-
     status = bool(params.get("public", None))
-
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Current user not found.")
 
     user_id = current_user.id
 
@@ -175,14 +168,13 @@ async def make_dashboard_public(
 
 @dashboards_endpoint_router.post("/edit_name/{dashboard_id}")
 async def edit_dashboard_name(
-    dashboard_id: str, data: Dict, current_user=Depends(get_current_user)
+    dashboard_id: str,
+    data: Dict,
+    current_user: User = Depends(get_current_user),
 ):
     """
     Edit the name of a dashboard with the given dashboard ID.
     """
-
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Current user not found.")
 
     user_id = current_user.id
 
@@ -208,32 +200,22 @@ async def edit_dashboard_name(
 # /Users/tweber/Gits/depictio/dev/jup_nb/.jupyter/jupyter_notebook_config.py
 @dashboards_endpoint_router.post("/save/{dashboard_id}")
 async def save_dashboard(
-    dashboard_id: str, data: dict, current_user=Depends(get_current_user)
+    dashboard_id: PyObjectId,
+    data: DashboardData,
+    current_user: User = Depends(get_current_user),
 ):
     """
     Check if an entry with the same dashboard_id exists, if not, insert, if yes, update.
     """
 
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Current user not found.")
-
-    if not data:
-        raise HTTPException(status_code=400, detail="No data provided to save.")
-
     user_id = current_user.id
 
     logger.info(f"Dashboard data: {data}")
 
-    data = DashboardData.from_mongo(data)
-    logger.info(f"Dashboard data from mongo: {data}")
-
-    data_dict = data.mongo()
-    logger.info(f"Dashboard data dict: {data_dict}")
-
     # Attempt to find and update the document, or insert if it doesn't exist
     result = dashboards_collection.find_one_and_update(
         {"dashboard_id": dashboard_id, "permissions.owners._id": user_id},
-        {"$set": data_dict},
+        {"$set": data.mongo()},
         upsert=True,
         return_document=True,  # Adjust based on your MongoDB driver version, some versions might use ReturnDocument.AFTER
     )
@@ -247,7 +229,10 @@ async def save_dashboard(
         )
         logger.info(message)
 
-        return {"message": message, "dashboard_id": dashboard_id}
+        # Convert dashboard_id to string to ensure proper JSON serialization
+        dashboard_id_str = str(dashboard_id)
+
+        return {"message": message, "dashboard_id": dashboard_id_str}
     else:
         logger.error("Failed to insert or update dashboard data.")
         # It's unlikely to reach this point due to upsert=True, but included for completeness
@@ -258,7 +243,8 @@ async def save_dashboard(
 
 @dashboards_endpoint_router.get("/screenshot/{dashboard_id}")
 async def screenshot_dashboard(
-    dashboard_id: str, current_user=Depends(get_current_user)
+    dashboard_id: PyObjectId,
+    current_user: User = Depends(get_current_user),
 ):
     from playwright.async_api import async_playwright
 
@@ -279,9 +265,13 @@ async def screenshot_dashboard(
     # url = f"{DASH_BASE_URL}/{dashboard_id}"
     logger.info(f"Dashboard URL: {url}")
 
+    playwright_dev_mode = (
+        not os.getenv("DEPICTIO_PLAYWRIGHT_DEV_MODE", "False").lower() == "true"
+    )
+
     try:
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=False)
+            browser = await p.chromium.launch(headless=playwright_dev_mode)
             # browser = await p.chromium.launch(headless=True, executable_path="/home/mambauser/.cache/ms-playwright/chromium-1140/chrome-linux/chrome")
 
             # Define the viewport size (browser window size)
@@ -318,7 +308,6 @@ async def screenshot_dashboard(
             token_data_json = json.dumps(token_data)
             logger.info(f"Token data: {token_data_json}")
 
-
             # Set data in the local storage
             await page.evaluate(f"""() => {{
                 localStorage.setItem('local-store', '{token_data_json}');
@@ -328,13 +317,14 @@ async def screenshot_dashboard(
             await page.reload()
 
             # Navigate to the target dashboard page
-            await page.goto(f"{url}/dashboard/{dashboard_id}", wait_until="networkidle")
-            logger.info(f"Page URL: {url}/dashboard/{dashboard_id}")
+            await page.goto(
+                f"{url}/dashboard/{str(dashboard_id)}", wait_until="networkidle"
+            )
+            logger.info(f"Page URL: {url}/dashboard/{str(dashboard_id)}")
 
             # Wait for the page content to load
             await page.wait_for_selector("div#page-content")
             logger.info(f"Wait for selector: div#page-content")
-
 
             # # Check if the iframe is present
             # iframe_element = await page.query_selector('iframe[src*="jbrowse"]')  # Adjust the selector to match the iframe's source or other attributes
@@ -371,16 +361,13 @@ async def screenshot_dashboard(
                 user_id = current_user.id
 
                 # find corresponding mongoid for the dashboard
-                dashboard_data = dashboards_collection.find_one(
-                    {"dashboard_id": dashboard_id, "permissions.owners._id": user_id}
-                )
-                logger.debug(f"Dashboard data: {dashboard_data}")
-                dashboard_mongo_id = dashboard_data["_id"]
 
-                output_file = f"{output_folder}/{dashboard_mongo_id}.png"
+                output_file = f"{output_folder}/{str(dashboard_id)}.png"
                 logger.info(f"Output file: {output_file}")
                 await element.screenshot(path=output_file)
-                logger.info(f"Screenshot captured for dashboard ID: {dashboard_id}")
+                logger.info(
+                    f"Screenshot captured for dashboard ID: {str(dashboard_id)}"
+                )
             else:
                 logger.error("Could not find 'div#page-content' element")
 
@@ -393,13 +380,13 @@ async def screenshot_dashboard(
 
 
 @dashboards_endpoint_router.delete("/delete/{dashboard_id}")
-async def delete_dashboard(dashboard_id: str, current_user=Depends(get_current_user)):
+async def delete_dashboard(
+    dashboard_id: PyObjectId,
+    current_user: User = Depends(get_current_user),
+):
     """
     Delete a dashboard with the given dashboard ID.
     """
-
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Current user not found.")
 
     user_id = current_user.id
 
@@ -408,7 +395,9 @@ async def delete_dashboard(dashboard_id: str, current_user=Depends(get_current_u
     )
 
     if result.deleted_count > 0:
-        return {"message": f"Dashboard with ID '{dashboard_id}' deleted successfully."}
+        return {
+            "message": f"Dashboard with ID '{str(dashboard_id)}' deleted successfully."
+        }
     else:
         raise HTTPException(
             status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found."
@@ -417,21 +406,20 @@ async def delete_dashboard(dashboard_id: str, current_user=Depends(get_current_u
 
 @dashboards_endpoint_router.get("/get_component_data/{dashboard_id}/{component_id}")
 async def get_component_data_endpoint(
-    dashboard_id: str, component_id: str, current_user=Depends(get_current_user)
+    dashboard_id: PyObjectId,
+    component_id: UUID,
+    current_user: User = Depends(get_current_user),
 ):
     """
     Fetch component data related to a component ID.
     """
-
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Current user not found.")
 
     user_id = current_user.id
     logger.debug(f"Current user ID: {user_id}")
 
     # Find dashboards where current_user is either an owner or a viewer
     query = {
-        "dashboard_id": str(dashboard_id),
+        "dashboard_id": dashboard_id,
         "$or": [
             {"permissions.owners._id": user_id},
             {"permissions.viewers._id": user_id},
@@ -459,10 +447,13 @@ async def get_component_data_endpoint(
 
     # Find the component metadata by component_id
     component_metadata = next(
-        (item for item in stored_metadata if item.get("index") == component_id), None
+        (item for item in stored_metadata if item.get("index") == str(component_id)),
+        None,
     )
     if not component_metadata:
-        logger.error(f"Component with ID {component_id} not found in stored_metadata.")
+        logger.error(
+            f"Component with ID {str(component_id)} not found in stored_metadata."
+        )
         return None
 
     logger.info(f"Component metadata found: {component_metadata}")
