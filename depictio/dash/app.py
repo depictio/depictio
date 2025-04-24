@@ -15,6 +15,7 @@ from depictio.api.v1.configs.custom_logging import logger
 from depictio.dash.core.app_factory import create_dash_app
 from depictio.dash.core.callbacks import register_all_callbacks
 from depictio.dash.layouts.app_layout import create_app_layout
+from depictio.dash.flask_custom import register_static_routes
 
 # Create and configure the Dash application
 app, dev_mode = create_dash_app()
@@ -27,6 +28,9 @@ register_all_callbacks(app)
 
 # Get the Flask server instance for WSGI
 server = app.server
+
+# Register custom static file routes
+register_static_routes(server)
 
 # Run the server if executed directly (not through WSGI)
 if __name__ == "__main__":
