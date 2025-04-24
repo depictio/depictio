@@ -185,7 +185,7 @@ def design_header(data, local_store):
     init_nclicks_add_button = (
         data["stored_add_button"]
         if data
-        else {"count": 0, "initialized": False, "id": ""}
+        else {"count": 0, "initialized": False, "_id": ""}
     )
     init_nclicks_edit_dashboard_mode_button = (
         data["stored_edit_dashboard_mode_button"] if data else [int(0)]
@@ -394,7 +394,8 @@ def design_header(data, local_store):
         )
 
     response = httpx.get(
-        f"{API_BASE_URL}/depictio/api/v1/projects/get/from_id/{data['project_id']}",
+        f"{API_BASE_URL}/depictio/api/v1/projects/get/from_id",
+        params={"project_id": data["project_id"]},
         headers={"Authorization": f"Bearer {local_store['access_token']}"},
     )
     if response.status_code != 200:
