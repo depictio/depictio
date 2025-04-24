@@ -5,13 +5,19 @@ import yaml
 from typing import Any, Dict, Type
 from pydantic import BaseModel, ValidationError, validate_call
 from bson import ObjectId
+from dotenv import load_dotenv
 
 from depictio.models.logging import logger
 from depictio.models.models.base import convert_objectid_to_str
 
+# Explicitly load environment variables
+load_dotenv()
 
 def get_depictio_context():
-    return os.getenv("DEPICTIO_CONTEXT")
+    # Ensure environment variables are loaded before accessing
+    context = os.getenv("DEPICTIO_CONTEXT")
+    print(f"get_depictio_context() - DEPICTIO_CONTEXT: {context}")
+    return context
 
 
 @validate_call
