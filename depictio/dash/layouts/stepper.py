@@ -102,13 +102,13 @@ def register_callbacks_stepper(app):
                     in mapping_component_data_collection[dc["config"]["type"]]
                     for dc in wf["data_collections"]
                 )
-                and wf["_id"] not in seen_workflow_ids
+                and wf["id"] not in seen_workflow_ids
             ):
-                seen_workflow_ids.add(wf["_id"])
+                seen_workflow_ids.add(wf["id"])
                 valid_wfs.append(
                     {
                         "label": f"{wf["engine"]["name"]}/{wf["name"]}",
-                        "value": wf["_id"],
+                        "value": wf["id"],
                     }
                 )
 
@@ -210,7 +210,7 @@ def register_callbacks_stepper(app):
         #         "Authorization": f"Bearer {TOKEN}",
         #     },
         # ).json()
-        selected_wf_data = [wf for wf in all_wf_dc if wf["_id"] == selected_workflow][0]
+        selected_wf_data = [wf for wf in all_wf_dc if wf["id"] == selected_workflow][0]
 
         mapping_component_data_collection = {
             "table": ["Figure", "Card", "Interactive", "Table"],
@@ -230,7 +230,7 @@ def register_callbacks_stepper(app):
         valid_dcs = [
             {
                 "label": dc["data_collection_tag"],
-                "value": dc["_id"],
+                "value": dc["id"],
             }
             for dc in selected_wf_data["data_collections"]
             if component_selected
