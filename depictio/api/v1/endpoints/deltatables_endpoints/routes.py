@@ -11,7 +11,7 @@ from fastapi import HTTPException
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.db import users_collection, deltatables_collection, projects_collection
 from depictio.api.v1.endpoints.deltatables_endpoints.utils import precompute_columns_specs
-from depictio.api.v1.s3 import minio_storage_options
+from depictio.api.v1.s3 import polars_s3_config
 from depictio.api.v1.utils import serialize_for_mongo, agg_functions
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.api.v1.configs.custom_logging import format_pydantic, logger
@@ -96,7 +96,7 @@ async def upsert_deltatable(
                 dc_config = dc_config.get("config", None)
 
     # read deltatable using polars
-    df = pl.read_delta(payload.delta_table_location, storage_options=minio_storage_options)
+    df = pl.read_delta(payload.delta_table_location, storage_options=polars_s3_config)
     logger.info(f"DeltaTableAggregated read from MinIO at location: {payload.delta_table_location}")
 
     # Precompute columns specs
