@@ -21,6 +21,7 @@ from depictio.api.v1.endpoints.utils_endpoints.process_data_collections import (
 )
 from depictio import BASE_PATH
 from depictio.api.v1.configs.config import settings, MONGODB_URL
+from depictio.version import get_version, get_api_version
 
 from depictio.api.v1.utils import clean_screenshots
 from depictio.models.models.base import PyObjectId
@@ -146,10 +147,14 @@ class CustomJSONResponse(JSONResponse):
         )
 
 
+# Check if in development mode
+dev_mode = os.environ.get("DEV_MODE", "false").lower() == "true"
+    
+
 app = FastAPI(
     title="Depictio API",
-    version="0.1.0",
-    debug=True,
+    version=get_version(),
+    debug=dev_mode,
     lifespan=lifespan,
     default_response_class=CustomJSONResponse,
 )
@@ -162,6 +167,6 @@ app.add_middleware(
     allow_headers=["*"],  # Allow all headers
 )
 
-api_version = "v1"
+api_version = get_api_version()
 api_prefix = f"/depictio/api/{api_version}"
 app.include_router(router, prefix=api_prefix)

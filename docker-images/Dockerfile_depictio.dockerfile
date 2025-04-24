@@ -71,6 +71,11 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/usr/local/share/playwright-browsers
 
 RUN bash -c 'whoami'
 
+
+COPY ./docker-images/run_dash.sh /app/run_dash.sh
+COPY ./docker-images/run_fastapi.sh /app/run_fastapi.sh
+COPY ./pyproject.toml /app/pyproject.toml
+
 # -----------------------------
 # Environment Variables
 # -----------------------------

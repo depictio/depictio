@@ -16,11 +16,8 @@ from depictio.cli.cli.utils.api_calls import (
     api_get_files_by_dc_id,
     api_upsert_deltatable,
 )
-from depictio.cli.cli.utils.s3 import turn_S3_config_into_polars_storage_options
-from depictio.cli.logging import logger, setup_logging
-
-# Ensure the logger is properly configured
-logger = setup_logging(verbose=True, verbose_level="DEBUG")
+from depictio.models.s3_utils import turn_S3_config_into_polars_storage_options
+from depictio.cli.logging import logger
 
 
 @validate_call
@@ -331,14 +328,12 @@ def client_aggregate_data(
     else:
         overwrite = False
     # Generate destination prefix using the data collection id - should be a S3 path
-    destination_prefix = (
-        f"s3://{CLI_config.s3.bucket}/{str(data_collection.id)}"
-    )
+    destination_prefix = f"s3://{CLI_config.s3.bucket}/{str(data_collection.id)}"
     logger.debug(f"Destination prefix: {destination_prefix}")
     print(f"Destination prefix: {destination_prefix}")
 
     # Check if existing Delta table exists and is accessible
-    storage_options = turn_S3_config_into_polars_storage_options(CLI_config)
+    storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3)
     logger.debug(f"Storage options: {storage_options}")
     print(f"Storage options: {storage_options}")
 
@@ -355,7 +350,7 @@ def client_aggregate_data(
             destination_prefix, storage_options=storage_options
         )
         print(f"Response read table: {response_read_table}")
-        
+
         if response_read_table["result"] == "success" and "data" in response_read_table:
             existing_df = response_read_table["data"]
             destination_exists = True
@@ -363,11 +358,11 @@ def client_aggregate_data(
             assert type(existing_df) is pl.DataFrame
             logger.debug(f"Existing Delta table head: {existing_df.head(5)}")
         else:
-            logger.debug(
-                "Error reading Delta table or no data returned"
-            )
+            logger.debug("Error reading Delta table or no data returned")
             destination_exists = False
-            print("Error reading Delta table or no data returned, will create it during processing")
+            print(
+                "Error reading Delta table or no data returned, will create it during processing"
+            )
     except deltalake.exceptions.TableNotFoundError:
         logger.debug(
             "Destination prefix does not exist yet, will create it during processing"
