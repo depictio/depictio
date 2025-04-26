@@ -7,10 +7,13 @@ from flask_cors import CORS
 from header import create_header
 from auth_modals import auth_modals
 
-# Initialize the Dash app with Bootstrap theme
+# Initialize the Dash app with Bootstrap theme and Font Awesome
 app = dash.Dash(
     __name__,
-    external_stylesheets=[dbc.themes.BOOTSTRAP],
+    external_stylesheets=[
+        dbc.themes.BOOTSTRAP,
+        "https://use.fontawesome.com/releases/v5.15.4/css/all.css"  # Font Awesome for icons
+    ],
     suppress_callback_exceptions=True
 )
 

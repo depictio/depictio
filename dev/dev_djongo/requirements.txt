@@ -14,6 +14,8 @@ flask-cors>=4.0.0
 
 # Authentication
 djangorestframework-simplejwt>=5.2.2
+django-allauth>=0.54.0
+requests-oauthlib>=1.3.1
 
 # API Documentation
 drf-yasg>=1.21.0
