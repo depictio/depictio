@@ -31,6 +31,7 @@ from depictio.api.v1.db import users_collection
 
 from depictio.models.models.base import convert_objectid_to_str
 from depictio.models.models.users import (
+    TokenBase,
     User,
     UserBase,
     GroupBeanie,
@@ -455,26 +456,10 @@ async def purge_expired_tokens_endpoint(current_user=Depends(get_current_user)) 
 
 
 @auth_endpoint_router.post("/check_token_validity")
-async def check_token_validity_endpoint(token: TokenBeanie):
-    logger.info(f"Checking token validity.")
-    logger.info(f"Token: {token}")
+async def check_token_validity_endpoint(token: TokenBase):
+    is_valid = await check_if_token_is_valid(token)
 
-    # token = TokenBase(**token)
-    # logger.info(f"Token: {format_pydantic(token)}")
-
-    # token = TokenBeanie(token)
-
-    logger.info(f"Token: {format_pydantic(token)}")
-
-    if not token:
-        raise HTTPException(status_code=400, detail="No token provided")
-
-    is_valid = check_if_token_is_valid(token)
-
-    if not is_valid:
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-    return {"detail": "Token is valid"}
+    return {"success": is_valid}
 
 
 @auth_endpoint_router.post("/generate_agent_config")
