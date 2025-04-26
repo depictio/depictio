@@ -51,6 +51,18 @@ def create_login_modal():
                     color="secondary"
                 ),
                 dbc.Button("Login", id="login-button", color="primary"),
+                html.Hr(),
+                html.Div([
+                    html.P("Or login with:", className="text-center mt-3"),
+                    dbc.Button(
+                        [html.I(className="fab fa-google me-2"), "Login with Google"],
+                        id="google-login-button",
+                        color="danger",
+                        className="w-100 mt-2",
+                        href="http://localhost:8000/accounts/google/login/",
+                        external_link=True
+                    ),
+                ], className="w-100"),
             ]),
         ],
         id="login-modal",

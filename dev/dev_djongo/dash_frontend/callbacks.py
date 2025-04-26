@@ -31,24 +31,46 @@ def register_callbacks(app):
             return create_header(is_authenticated=True, username=auth_data['username'])
         return create_header(is_authenticated=False)
     
-    # Callback to handle page routing
+    # Callback to handle page routing and OAuth callback
     @app.callback(
         Output("page-content", "children"),
+        Output("auth-store", "data", allow_duplicate=True),
         Input("url", "pathname"),
-        Input("auth-store", "data")
+        Input("url", "search"),
+        Input("auth-store", "data"),
+        prevent_initial_call=True
     )
-    def render_page_content(pathname, auth_data):
+    def render_page_content(pathname, search, auth_data):
+        ctx = callback_context
+        triggered_id = ctx.triggered[0]["prop_id"].split(".")[0] if ctx.triggered else None
+        
+        # Check if we're receiving tokens from Google OAuth callback
+        if triggered_id == "url" and search:
+            import urllib.parse
+            params = urllib.parse.parse_qs(search.lstrip('?'))
+            
+            if 'access_token' in params and 'refresh_token' in params and 'username' in params:
+                # Store the tokens in auth-store
+                auth_data = {
+                    'username': params['username'][0],
+                    'access_token': params['access_token'][0],
+                    'refresh_token': params['refresh_token'][0]
+                }
+                # Return home page with updated auth data
+                return home_layout(), auth_data
+        
+        # Normal page routing
         is_authenticated = auth_data and 'access_token' in auth_data
         
         if pathname == "/":
-            return home_layout()
+            return home_layout(), dash.no_update
         elif pathname == "/dashboard":
             if is_authenticated:
-                return dashboard_layout()
+                return dashboard_layout(), dash.no_update
             else:
-                return unauthorized_layout()
+                return unauthorized_layout(), dash.no_update
         else:
-            return error_layout(f"404 - Page {pathname} not found")
+            return error_layout(f"404 - Page {pathname} not found"), dash.no_update
     
     # Callback to open login modal
     @app.callback(

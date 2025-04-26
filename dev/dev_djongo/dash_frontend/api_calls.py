@@ -123,3 +123,11 @@ def refresh_token(refresh_token):
         return response.status_code, response.json() if response.status_code == 200 else response.text
     except Exception as e:
         return 500, str(e)
+
+def google_login():
+    """
+    Initiate Google OAuth login by redirecting to the Django auth service
+    """
+    # Use the django-allauth URL directly
+    url = "http://localhost:8000/accounts/google/login/"
+    return url
