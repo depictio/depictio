@@ -6,7 +6,7 @@ from pydantic import EmailStr, validate_call
 
 from depictio.api.v1.configs.custom_logging import format_pydantic, logger
 
-from depictio.models.models.users import User
+from depictio.models.models.users import TokenBase, User
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.users import UserBeanie, TokenBeanie
 
@@ -121,7 +121,7 @@ async def async_fetch_user_from_id(
 
 
 @validate_call(validate_return=True)
-async def check_if_token_is_valid(token: TokenBeanie) -> bool:
+async def check_if_token_is_valid(token: TokenBase) -> bool:
     """
     Check if the provided token is valid and not expired.
 
@@ -170,10 +170,6 @@ async def purge_expired_tokens_from_user(user_id: PyObjectId) -> Dict[str, bool 
         await token.delete()
 
     logger.debug(f"Deleted {len(outdated_tokens)} expired tokens for user {user_id}")
-
-    if not outdated_tokens:
-        logger.debug(f"No expired tokens found for user {user_id}")
-        return {"success": False, "deleted_count": 0}
 
     # Return success status
     return {
