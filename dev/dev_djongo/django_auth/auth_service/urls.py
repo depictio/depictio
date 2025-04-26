@@ -39,7 +39,20 @@ urlpatterns = [
     # Authentication API endpoints
     path('api/auth/', include('authentication.urls')),
     
+    # django-allauth URLs - make sure these come after our custom URLs
+    path('accounts/', include('allauth.urls')),
+    
     # API documentation
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
+]
+
+# Add a handler for the Google OAuth callback
+from authentication.views import SocialLoginSuccessView
+
+urlpatterns += [
+    # Add a success URL that will redirect to the frontend with tokens
+    path('social-login-success/', 
+         SocialLoginSuccessView.as_view(), 
+         name='social_login_success'),
 ]
