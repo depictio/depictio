@@ -6,11 +6,13 @@ import traceback
 import xml.etree.ElementTree as ET
 import html
 from datetime import datetime, timedelta
+from typing import Optional
 
 import jwt
 import uvicorn
-from fastapi import FastAPI, Request, Response, Depends
+from fastapi import FastAPI, Request, Response, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse
+from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 from onelogin.saml2.auth import OneLogin_Saml2_Auth
@@ -25,9 +27,35 @@ load_dotenv()
 
 app = FastAPI(title="SAML Authentication Service")
 
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # ===============================================================
 # Configuration and Helpers
 # ===============================================================
+
+async def get_current_user(request: Request):
+    """Validate JWT token and return user data"""
+    # Get token from cookie
+    auth_token = request.cookies.get("auth_token")
+    
+    if not auth_token:
+        return None
+    
+    try:
+        # Decode and validate token
+        payload = jwt.decode(auth_token, os.getenv("JWT_SECRET"), algorithms=["HS256"])
+        return payload
+    except jwt.ExpiredSignatureError:
+        return None
+    except jwt.InvalidTokenError:
+        return None
 
 def get_saml_settings(custom_acs_url=None):
     """Create SAML settings from environment variables"""
@@ -149,14 +177,22 @@ def extract_saml_data(saml_xml):
     # Get attributes
     for attr in root.findall('.//saml:Attribute', namespaces):
         name = attr.get('Name')
+        friendly_name = attr.get('FriendlyName')  # Also check for FriendlyName
+        
         if name:
             values = []
             for value_elem in attr.findall('.//saml:AttributeValue', namespaces):
                 if value_elem.text:
                     values.append(value_elem.text)
             
+            # Use both the original name and friendly name if available
+            attr_key = friendly_name if friendly_name else name
+            
             if values:
-                result["user"]["attributes"][name] = values[0] if len(values) == 1 else values
+                result["user"]["attributes"][attr_key] = values[0] if len(values) == 1 else values
+
+    # Log the extracted attributes for debugging
+    logger.debug(f"Extracted SAML attributes: {json.dumps(result['user']['attributes'], default=str)}")
     
     return result
 
@@ -165,25 +201,90 @@ def extract_saml_data(saml_xml):
 # ===============================================================
 
 @app.get("/")
-async def home():
-    """Simple home page with login links"""
-    html_content = """
-    <h1>SAML Authentication Service</h1>
+async def home(request: Request):
+    """Home page with login links or user status"""
+    user = await get_current_user(request)
     
-    <h2>Authentication</h2>
-    <ul>
-        <li><a href='/login'>Standard Login with SAML</a></li>
-        <li><a href='/debug-login'>Debug Login (with detailed SAML analysis)</a></li>
-    </ul>
-    
-    <h2>Utilities</h2>
-    <ul>
-        <li><a href='/debug/'>View SAML Configuration</a></li>
-        <li><a href='/metadata/'>View SP Metadata</a></li>
-        <li><a href='/debug-form'>Manual SAML Response Analysis Form</a></li>
-    </ul>
+    # User status section if logged in
+    user_section = """
+    <div style="background-color: #e8f4f8; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+        <h3>Welcome!</h3>
+        <p>You are currently not logged in.</p>
+        <a href="/login" style="display: inline-block; background-color: #3498db; color: white; 
+                              padding: 10px 15px; text-decoration: none; border-radius: 4px;">
+            Login with SAML
+        </a>
+    </div>
     """
-    return HTMLResponse(html_content)
+    
+    if user:
+        user_section = f"""
+        <div style="background-color: #e8f4f8; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+            <h3>Welcome, {html.escape(user.get('username', 'User'))}!</h3>
+            <p>You are logged in as: {html.escape(user.get('email', 'Unknown'))}</p>
+            <a href="/profile" style="display: inline-block; background-color: #2ecc71; color: white; 
+                                  padding: 10px 15px; text-decoration: none; border-radius: 4px; margin-right: 10px;">
+                View Profile
+            </a>
+            <form action="/logout" method="post" style="display: inline-block;">
+                <button type="submit" style="background-color: #e74c3c; color: white; padding: 10px 15px; 
+                                          border-radius: 4px; border: none; cursor: pointer;">
+                    Logout
+                </button>
+            </form>
+        </div>
+        """
+    
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>SAML Authentication Service</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 0; padding: 0; }}
+            .container {{ max-width: 800px; margin: 0 auto; padding: 20px; }}
+            h1, h2 {{ color: #2c3e50; }}
+            .nav {{ margin-bottom: 20px; }}
+            .nav a {{ margin-right: 10px; }}
+            .card {{ background-color: #f9f9f9; border-radius: 8px; padding: 20px; 
+                   margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); }}
+            ul {{ padding-left: 20px; }}
+            li {{ margin-bottom: 10px; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="nav">
+                <a href="/">Home</a>
+                <a href="/profile">Profile</a>
+                <a href="/debug/">Debug Info</a>
+            </div>
+            
+            <h1>SAML Authentication Service</h1>
+            
+            {user_section}
+            
+            <div class="card">
+                <h2>Authentication Options</h2>
+                <ul>
+                    <li><a href='/login'>Standard Login with SAML</a></li>
+                    <li><a href='/debug-login'>Debug Login (with detailed SAML analysis)</a></li>
+                </ul>
+            </div>
+            
+            <div class="card">
+                <h2>Utilities</h2>
+                <ul>
+                    <li><a href='/debug/'>View SAML Configuration</a></li>
+                    <li><a href='/metadata/'>View SP Metadata</a></li>
+                    <li><a href='/debug-form'>Manual SAML Response Analysis Form</a></li>
+                </ul>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
 
 # ===============================================================
 # Authentication Routes
@@ -235,20 +336,54 @@ async def saml_callback(request: Request):
                     if not nameid:
                         return PlainTextResponse("No user identifier found in SAML response")
                     
+                    # Get email from attributes with fallback to nameid
+                    attributes = saml_data["user"]["attributes"]
+                    email = None
+                    
+                    # Check for email in various possible attribute names
+                    email_attribute_names = ["email", "Email", "mail", "Mail", "emailAddress", "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"]
+                    
+                    for attr_name in email_attribute_names:
+                        if attr_name in attributes:
+                            email = attributes[attr_name]
+                            if isinstance(email, list):
+                                email = email[0]
+                            break
+                    
+                    # Fallback to nameid if no email found
+                    if not email:
+                        email = nameid
+                    
+                    # Get username from attributes or default
+                    username = None
+                    username_attribute_names = ["username", "Username", "preferred_username", "login", "uid", "userId"]
+                    
+                    for attr_name in username_attribute_names:
+                        if attr_name in attributes:
+                            username = attributes[attr_name]
+                            if isinstance(username, list):
+                                username = username[0]
+                            break
+                    
+                    # Fallback username
+                    if not username:
+                        # Extract username from email or use default
+                        username = email.split('@')[0] if '@' in email else "user"
+                    
                     # Build user data
                     user_data = {
                         "id": nameid,
-                        "email": nameid,
-                        "username": saml_data["user"]["attributes"].get("username", "user"),
-                        "attributes": saml_data["user"]["attributes"],
+                        "email": email,
+                        "username": username,
+                        "attributes": attributes,
                         "authenticated_at": datetime.utcnow().isoformat()
                     }
                     
                     # Create JWT token
                     token = create_jwt_token(user_data)
                     
-                    # Set the JWT cookie and redirect
-                    response = RedirectResponse(url="/", status_code=303)
+                    # Set the JWT cookie and redirect to profile page
+                    response = RedirectResponse(url="/profile", status_code=303)
                     response.set_cookie(
                         key="auth_token", 
                         value=token, 
@@ -496,6 +631,141 @@ async def debug_form():
     </html>
     """
     return HTMLResponse(content=html_content)
+
+# ===============================================================
+# User Profile & Logout Routes
+# ===============================================================
+
+@app.get("/profile")
+async def profile_page(request: Request):
+    """Display user profile with SAML attributes"""
+    user = await get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+    
+    # Prepare user info for display
+    authenticated_at = user.get("authenticated_at", "Unknown")
+    try:
+        # Try to format the timestamp in a more readable way
+        auth_datetime = datetime.fromisoformat(authenticated_at)
+        authenticated_at = auth_datetime.strftime("%Y-%m-%d %H:%M:%S UTC")
+    except:
+        pass
+    
+    # Prepare attributes for display
+    attributes = user.get("attributes", {})
+    attribute_rows = ""
+    # Sort attributes alphabetically for better display
+    for key in sorted(attributes.keys()):
+        value = attributes[key]
+        # Format multi-value attributes as lists
+        if isinstance(value, list):
+            formatted_value = "<ul>"
+            for item in value:
+                formatted_value += f"<li>{html.escape(str(item))}</li>"
+            formatted_value += "</ul>"
+        else:
+            formatted_value = html.escape(str(value))
+            
+        attribute_rows += f"""
+        <tr>
+            <td>{html.escape(key)}</td>
+            <td>{formatted_value}</td>
+        </tr>
+        """
+    
+    if not attribute_rows:
+        attribute_rows = "<tr><td colspan='2'>No additional attributes found</td></tr>"
+    
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>User Profile</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 20px; max-width: 800px; margin: 0 auto; padding: 20px; }}
+            h1, h2 {{ color: #2c3e50; }}
+            .profile-card {{ background-color: #f9f9f9; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); }}
+            .button {{ display: inline-block; background-color: #3498db; color: white; padding: 10px 15px; 
+                      text-decoration: none; border-radius: 4px; margin-top: 10px; border: none; cursor: pointer; }}
+            .button.danger {{ background-color: #e74c3c; }}
+            table {{ width: 100%; border-collapse: collapse; margin-top: 15px; }}
+            th, td {{ text-align: left; padding: 12px; border-bottom: 1px solid #ddd; vertical-align: top; }}
+            th {{ background-color: #f2f2f2; }}
+            .nav {{ margin-bottom: 20px; }}
+            .nav a {{ margin-right: 10px; }}
+            ul {{ margin: 0; padding-left: 20px; }}
+        </style>
+    </head>
+    <body>
+        <div class="nav">
+            <a href="/">Home</a>
+            <a href="/profile">Profile</a>
+            <a href="/debug/">Debug Info</a>
+        </div>
+        
+        <h1>User Profile</h1>
+        
+        <div class="profile-card">
+            <h2>Basic Information</h2>
+            <table>
+                <tr>
+                    <th>ID</th>
+                    <td>{html.escape(user.get("id", "Unknown"))}</td>
+                </tr>
+                <tr>
+                    <th>Email</th>
+                    <td>{html.escape(user.get("email", "Unknown"))}</td>
+                </tr>
+                <tr>
+                    <th>Username</th>
+                    <td>{html.escape(user.get("username", "Unknown"))}</td>
+                </tr>
+                <tr>
+                    <th>Authenticated At</th>
+                    <td>{html.escape(authenticated_at)}</td>
+                </tr>
+            </table>
+        </div>
+        
+        <div class="profile-card">
+            <h2>SAML Attributes</h2>
+            <table>
+                <tr>
+                    <th>Attribute</th>
+                    <th>Value</th>
+                </tr>
+                {attribute_rows}
+            </table>
+        </div>
+        
+        <form action="/logout" method="post">
+            <button type="submit" class="button danger">Logout</button>
+        </form>
+    </body>
+    </html>
+    """
+    
+    return HTMLResponse(content=html_content)
+
+@app.post("/logout")
+async def logout():
+    """Handle user logout by clearing the auth cookie"""
+    response = RedirectResponse(url="/", status_code=303)
+    response.delete_cookie(key="auth_token")
+    return response
+
+# ===============================================================
+# Protected API Route Example
+# ===============================================================
+
+@app.get("/api/user")
+async def user_info(request: Request):
+    """Example API endpoint that returns the authenticated user's data"""
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return user
 
 # ===============================================================
 # Main Entry Point
