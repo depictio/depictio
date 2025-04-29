@@ -2,16 +2,14 @@ import os
 import base64
 import json
 import logging
-from datetime import datetime, timedelta
-
-import base64
+import traceback
 import xml.etree.ElementTree as ET
 import html
-import traceback
-from urllib.parse import parse_qs
+from datetime import datetime, timedelta
+
 import jwt
 import uvicorn
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request, Response, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse
 from dotenv import load_dotenv
 
@@ -22,22 +20,17 @@ from onelogin.saml2.settings import OneLogin_Saml2_Settings
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger("saml_debug")
 
-
-## .env
-# CMD_SAML_IDPSSOURL=http://localhost:8080/realms/master/protocol/saml
-# CMD_SAML_IDPCERT=keycloak_local.pem
-# CMD_REDIRECT_URL=http://localhost:8000/auth/saml/callback
-# CMD_SAML_IDENTIFIERFORMAT=urn:oasis:names:tc:SAML:2.0:nameid-format:persistent
-# BASE_URL=http://localhost:8000
-# CMD_SAML_SP_ENTITY_ID=depictio-dev-datasci
-
 # Load environment variables
 load_dotenv()
 
-app = FastAPI(title="Minimal SAML Debug")
+app = FastAPI(title="SAML Authentication Service")
 
-def get_saml_settings():
-    """Create minimal SAML settings"""
+# ===============================================================
+# Configuration and Helpers
+# ===============================================================
+
+def get_saml_settings(custom_acs_url=None):
+    """Create SAML settings from environment variables"""
     try:
         with open(os.getenv("CMD_SAML_IDPCERT"), "r") as cert_file:
             cert_content = cert_file.read()
@@ -46,20 +39,21 @@ def get_saml_settings():
         cert_content = ""
     
     base_url = os.getenv("BASE_URL", "http://localhost:8000")
+    entity_id = os.getenv("CMD_SAML_SP_ENTITY_ID", "depictio-dev-datasci")
     
-    return {
+    settings = {
         "strict": False,
         "debug": True,
         "sp": {
-            "entityId": "depictio-dev-datasci",  # CHANGED: Match client ID in Keycloak
+            "entityId": entity_id,
             "assertionConsumerService": {
-                "url": os.getenv("CMD_REDIRECT_URL"),
+                "url": custom_acs_url or os.getenv("CMD_REDIRECT_URL"),
                 "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST",
             },
             "NameIDFormat": os.getenv("CMD_SAML_IDENTIFIERFORMAT"),
         },
         "idp": {
-            "entityId": "depictio-dev-datasci",
+            "entityId": entity_id,
             "singleSignOnService": {
                 "url": os.getenv("CMD_SAML_IDPSSOURL"),
                 "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect",
@@ -73,6 +67,8 @@ def get_saml_settings():
             "requestedAuthnContext": False,
         }
     }
+    
+    return settings
 
 async def prepare_request(request: Request):
     """Prepare request for python-saml"""
@@ -94,40 +90,9 @@ async def prepare_request(request: Request):
         "headers": dict(request.headers),
     }
 
-@app.get("/")
-async def home():
-    """Simple home page with login link"""
-    html_content = """
-    SAML Debug App
-    
-    <a href='/login'>Login with SAML</a>
-    <br><br>
-    <a href='/debug/'>View Debug Info</a>
-    <br><br>
-    <a href='/metadata/'>View SP Metadata</a>
-    """
-    return PlainTextResponse(html_content)
-
-
-# Add this function to your application to test different NameID formats
-
-@app.get("/login")
-async def login(request: Request):
-    """Initiate SAML login"""
-    req = await prepare_request(request)
-    
-    try:
-        auth = OneLogin_Saml2_Auth(req, get_saml_settings())
-        login_url = auth.login()
-        logger.info(f"Login URL: {login_url}")
-        return RedirectResponse(login_url)
-    except Exception as e:
-        logger.error(f"Login error: {e}")
-        return PlainTextResponse(f"Error initiating login: {str(e)}")
-
-def init_saml_auth(req):
+def init_saml_auth(req, custom_acs_url=None):
     """Initialize SAML authentication"""
-    settings = get_saml_settings()
+    settings = get_saml_settings(custom_acs_url)
     logger.debug(f"SAML Settings: {json.dumps(settings, default=str, indent=2)}")
     
     try:
@@ -136,11 +101,113 @@ def init_saml_auth(req):
     except Exception as e:
         logger.error(f"Error initializing SAML auth: {e}")
         raise
+
+def create_jwt_token(user_data):
+    """Create a JWT token from user data"""
+    token_data = {
+        **user_data,
+        "exp": datetime.utcnow() + timedelta(hours=1)
+    }
+    return jwt.encode(token_data, os.getenv("JWT_SECRET"), algorithm="HS256")
+
+def extract_saml_data(saml_xml):
+    """Extract important data from SAML response XML"""
+    root = ET.fromstring(saml_xml)
+    
+    namespaces = {
+        'samlp': 'urn:oasis:names:tc:SAML:2.0:protocol',
+        'saml': 'urn:oasis:names:tc:SAML:2.0:assertion',
+        'ds': 'http://www.w3.org/2000/09/xmldsig#'
+    }
+    
+    # Extract data
+    result = {
+        "status": {
+            "code": None,
+            "message": None
+        },
+        "user": {
+            "nameid": None,
+            "attributes": {}
+        }
+    }
+    
+    # Get status
+    status_code_elem = root.find('.//samlp:StatusCode', namespaces)
+    if status_code_elem is not None:
+        result["status"]["code"] = status_code_elem.get('Value')
+    
+    status_message_elem = root.find('.//samlp:StatusMessage', namespaces)
+    if status_message_elem is not None and status_message_elem.text:
+        result["status"]["message"] = status_message_elem.text
+    
+    # Get NameID
+    nameid_elem = root.find('.//saml:NameID', namespaces)
+    if nameid_elem is not None and nameid_elem.text:
+        result["user"]["nameid"] = nameid_elem.text
+    
+    # Get attributes
+    for attr in root.findall('.//saml:Attribute', namespaces):
+        name = attr.get('Name')
+        if name:
+            values = []
+            for value_elem in attr.findall('.//saml:AttributeValue', namespaces):
+                if value_elem.text:
+                    values.append(value_elem.text)
+            
+            if values:
+                result["user"]["attributes"][name] = values[0] if len(values) == 1 else values
+    
+    return result
+
+# ===============================================================
+# Main Routes
+# ===============================================================
+
+@app.get("/")
+async def home():
+    """Simple home page with login links"""
+    html_content = """
+    <h1>SAML Authentication Service</h1>
+    
+    <h2>Authentication</h2>
+    <ul>
+        <li><a href='/login'>Standard Login with SAML</a></li>
+        <li><a href='/debug-login'>Debug Login (with detailed SAML analysis)</a></li>
+    </ul>
+    
+    <h2>Utilities</h2>
+    <ul>
+        <li><a href='/debug/'>View SAML Configuration</a></li>
+        <li><a href='/metadata/'>View SP Metadata</a></li>
+        <li><a href='/debug-form'>Manual SAML Response Analysis Form</a></li>
+    </ul>
+    """
+    return HTMLResponse(html_content)
+
+# ===============================================================
+# Authentication Routes
+# ===============================================================
+
+@app.get("/login")
+async def login(request: Request):
+    """Initiate standard SAML login"""
+    req = await prepare_request(request)
+    
+    try:
+        auth = init_saml_auth(req)
+        login_url = auth.login()
+        logger.info(f"Login URL: {login_url}")
+        return RedirectResponse(login_url)
+    except Exception as e:
+        logger.error(f"Login error: {e}")
+        return PlainTextResponse(f"Error initiating login: {str(e)}")
+
 @app.post("/auth/saml/callback")
 @app.get("/auth/saml/callback")
 async def saml_callback(request: Request):
-    """Handle SAML response with minimal attribute requirements"""
-    logger.info(f"Callback received: {request.method}")
+    """Handle SAML response and process authentication"""
+    logger.info(f"SAML callback received: {request.method}")
     
     if request.method == "POST":
         try:
@@ -154,44 +221,39 @@ async def saml_callback(request: Request):
                     # Decode SAML response
                     saml_xml = base64.b64decode(saml_response_b64).decode('utf-8')
                     
-                    # Parse XML to extract NameID
-                    root = ET.fromstring(saml_xml)
+                    # Extract user data
+                    saml_data = extract_saml_data(saml_xml)
                     
-                    namespaces = {
-                        'samlp': 'urn:oasis:names:tc:SAML:2.0:protocol',
-                        'saml': 'urn:oasis:names:tc:SAML:2.0:assertion'
-                    }
+                    # Check authentication status
+                    if saml_data["status"]["code"] != 'urn:oasis:names:tc:SAML:2.0:status:Success':
+                        return PlainTextResponse(
+                            f"Authentication failed: {saml_data['status']['message'] or 'Unknown error'}"
+                        )
                     
-                    # Check status
-                    status_code = root.find('.//samlp:StatusCode', namespaces)
-                    if status_code is not None and status_code.get('Value') != 'urn:oasis:names:tc:SAML:2.0:status:Success':
-                        return PlainTextResponse("Authentication failed")
-                    
-                    # Extract NameID - this is all we really need
-                    nameid_elem = root.find('.//saml:NameID', namespaces)
-                    nameid = nameid_elem.text if nameid_elem is not None else None
-                    
+                    # Get user identifier
+                    nameid = saml_data["user"]["nameid"]
                     if not nameid:
                         return PlainTextResponse("No user identifier found in SAML response")
                     
-                    # Build user data with just the NameID
+                    # Build user data
                     user_data = {
                         "id": nameid,
-                        "username": "user",  # Default username
-                        "email": nameid,     # Use NameID as email
+                        "email": nameid,
+                        "username": saml_data["user"]["attributes"].get("username", "user"),
+                        "attributes": saml_data["user"]["attributes"],
                         "authenticated_at": datetime.utcnow().isoformat()
                     }
                     
                     # Create JWT token
-                    token_data = {
-                        **user_data,
-                        "exp": datetime.utcnow() + timedelta(hours=1)
-                    }
-                    token = jwt.encode(token_data, os.getenv("JWT_SECRET"), algorithm="HS256")
+                    token = create_jwt_token(user_data)
                     
                     # Set the JWT cookie and redirect
                     response = RedirectResponse(url="/", status_code=303)
-                    response.set_cookie(key="auth_token", value=token, httponly=True)
+                    response.set_cookie(
+                        key="auth_token", 
+                        value=token, 
+                        httponly=True
+                    )
                     
                     return response
                     
@@ -206,6 +268,30 @@ async def saml_callback(request: Request):
     
     # For GET or errors
     return RedirectResponse(url="/")
+
+# ===============================================================
+# Debug Routes
+# ===============================================================
+
+@app.get("/debug/")
+async def debug_info():
+    """Show configuration and debug information"""
+    env_vars = {k: v for k, v in os.environ.items() if k.startswith("CMD_") or k in ["BASE_URL", "JWT_SECRET"]}
+    
+    try:
+        with open(os.getenv("CMD_SAML_IDPCERT"), "r") as f:
+            cert_content = f.read()
+            cert_excerpt = cert_content[:100] + "..." if len(cert_content) > 100 else cert_content
+    except Exception as e:
+        cert_excerpt = f"Error reading cert: {e}"
+    
+    debug_data = {
+        "environment": env_vars,
+        "certificate_excerpt": cert_excerpt,
+        "saml_settings": get_saml_settings()
+    }
+    
+    return debug_data
 
 @app.get("/metadata/")
 async def metadata():
@@ -224,28 +310,20 @@ async def metadata():
         logger.error(f"Error generating metadata: {e}")
         return PlainTextResponse(f"Error generating metadata: {str(e)}")
 
-@app.get("/debug/")
-async def debug_info():
-    """Show debug information"""
-    env_vars = {k: v for k, v in os.environ.items() if k.startswith("CMD_") or k in ["BASE_URL", "JWT_SECRET"]}
+@app.get("/debug-login")
+async def debug_login(request: Request):
+    """Login with SAML that redirects to the debug endpoint"""
+    req = await prepare_request(request)
+    debug_callback_url = f"{request.base_url}debug-saml"
     
     try:
-        with open(os.getenv("CMD_SAML_IDPCERT"), "r") as f:
-            cert_content = f.read()
-            cert_excerpt = cert_content[:100] + "..." if len(cert_content) > 100 else cert_content
+        auth = init_saml_auth(req, debug_callback_url)
+        login_url = auth.login()
+        logger.info(f"Debug Login URL: {login_url}")
+        return RedirectResponse(login_url)
     except Exception as e:
-        cert_excerpt = f"Error reading cert: {e}"
-    
-    debug_data = {
-        "environment": env_vars,
-        "certificate_excerpt": cert_excerpt,
-        "saml_settings": get_saml_settings()
-    }
-    
-    return debug_data
-
-
-
+        logger.error(f"Debug login error: {e}")
+        return PlainTextResponse(f"Error initiating debug login: {str(e)}")
 
 @app.post("/debug-saml")
 @app.get("/debug-saml")
@@ -278,57 +356,35 @@ async def debug_saml(request: Request):
                         xml_content = saml_xml
                         raw_debug_info["saml_xml_excerpt"] = saml_xml[:500] + "..." if len(saml_xml) > 500 else saml_xml
                         
-                        # Parse XML for more detailed analysis
+                        # Parse XML for detailed analysis
                         try:
-                            root = ET.fromstring(saml_xml)
+                            saml_data = extract_saml_data(saml_xml)
+                            raw_debug_info.update({
+                                "status_code": saml_data["status"]["code"],
+                                "status_message": saml_data["status"]["message"],
+                                "nameid": saml_data["user"]["nameid"],
+                                "attributes": saml_data["user"]["attributes"]
+                            })
                             
-                            # Register namespaces for better xpath queries
+                            # Additional analysis for debugging purposes
+                            root = ET.fromstring(saml_xml)
                             namespaces = {
                                 'samlp': 'urn:oasis:names:tc:SAML:2.0:protocol',
                                 'saml': 'urn:oasis:names:tc:SAML:2.0:assertion',
                                 'ds': 'http://www.w3.org/2000/09/xmldsig#'
                             }
                             
-                            # Extract status
-                            status_code_elem = root.find('.//samlp:StatusCode', namespaces)
-                            if status_code_elem is not None:
-                                raw_debug_info["status_code"] = status_code_elem.get('Value')
-                            
-                            status_message_elem = root.find('.//samlp:StatusMessage', namespaces)
-                            if status_message_elem is not None and status_message_elem.text:
-                                raw_debug_info["status_message"] = status_message_elem.text
-                            
-                            # Extract NameID
-                            nameid_elem = root.find('.//saml:NameID', namespaces)
-                            if nameid_elem is not None and nameid_elem.text:
-                                raw_debug_info["nameid"] = nameid_elem.text
-                            
-                            # Extract attributes and count duplicates
-                            attributes = {}
+                            # Count duplicates
                             attribute_counts = {}
-                            
                             for attr in root.findall('.//saml:Attribute', namespaces):
                                 name = attr.get('Name')
                                 if name:
-                                    if name not in attribute_counts:
-                                        attribute_counts[name] = 1
-                                    else:
-                                        attribute_counts[name] += 1
-                                        
-                                    values = []
-                                    for value_elem in attr.findall('.//saml:AttributeValue', namespaces):
-                                        if value_elem.text:
-                                            values.append(value_elem.text)
-                                    
-                                    if name in attributes:
-                                        # Append to existing attribute values
-                                        attributes[name].extend(values)
-                                    else:
-                                        attributes[name] = values
+                                    attribute_counts[name] = attribute_counts.get(name, 0) + 1
                             
-                            raw_debug_info["attributes"] = attributes
                             raw_debug_info["attribute_counts"] = attribute_counts
-                            raw_debug_info["duplicate_attributes"] = [name for name, count in attribute_counts.items() if count > 1]
+                            raw_debug_info["duplicate_attributes"] = [
+                                name for name, count in attribute_counts.items() if count > 1
+                            ]
                             
                         except Exception as xml_parse_error:
                             raw_debug_info["xml_parse_error"] = str(xml_parse_error)
@@ -370,12 +426,6 @@ async def debug_saml(request: Request):
             
             <h2>Headers</h2>
             <pre>{html.escape(json.dumps(raw_debug_info.get("headers", {}), indent=2))}</pre>
-            
-            <h2>Query Parameters</h2>
-            <pre>{html.escape(json.dumps(raw_debug_info.get("query_params", {}), indent=2))}</pre>
-            
-            <h2>Form Data</h2>
-            <pre>{html.escape(json.dumps(raw_debug_info.get("form_data_keys", []), indent=2))}</pre>
             
             <h2>SAML Response Status</h2>
             <table>
@@ -419,7 +469,6 @@ async def debug_saml(request: Request):
         </html>
         """)
 
-# Add a form to manually submit SAML responses for debugging
 @app.get("/debug-form")
 async def debug_form():
     """Form for manually submitting a SAML response for debugging"""
@@ -448,25 +497,10 @@ async def debug_form():
     """
     return HTMLResponse(content=html_content)
 
-# Modify your login route to use the debug endpoint for testing
-@app.get("/debug-login")
-async def debug_login(request: Request):
-    """Login with SAML that redirects to the debug endpoint"""
-    req = await prepare_request(request)
-    
-    # Create a modified settings dictionary that uses the debug endpoint
-    settings = get_saml_settings()
-    settings["sp"]["assertionConsumerService"]["url"] = str(request.base_url) + "debug-saml"
-    
-    try:
-        auth = OneLogin_Saml2_Auth(req, settings)
-        login_url = auth.login()
-        logger.info(f"Debug Login URL: {login_url}")
-        return RedirectResponse(login_url)
-    except Exception as e:
-        logger.error(f"Login error: {e}")
-        return PlainTextResponse(f"Error initiating login: {str(e)}")
+# ===============================================================
+# Main Entry Point
+# ===============================================================
 
 if __name__ == "__main__":
-    logger.info("Starting minimal SAML debug application")
-    uvicorn.run("minimal_saml:app", host="0.0.0.0", port=8000, reload=True)
+    logger.info("Starting SAML authentication service")
+    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
