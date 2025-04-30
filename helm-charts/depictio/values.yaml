@@ -181,3 +181,18 @@ configMaps:
       jbrowse:
         data_dir: "/data"
         config_dir: "/jbrowse-watcher-plugin/sessions"
+
+global:
+  protocol: TCP
+  domain: studio.127.0.0.1.nip.io
+  auth_domain: studio.127.0.0.1.nip.io
+
+service:
+  name: depictio-frontend
+  port: 5080
+
+ingress:
+  secretName: prod-ingress
+  clientMaxBodySize: 100M
+
+permission: public
