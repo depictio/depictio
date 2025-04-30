@@ -3,7 +3,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: mongo
-  namespace: {{ .Values.namespace.name }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "depictio.labels" . | nindent 4 }}
 spec:
@@ -40,7 +40,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: minio
-  namespace: {{ .Values.namespace.name }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "depictio.labels" . | nindent 4 }}
 spec:
@@ -89,7 +89,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: depictio-backend
-  namespace: {{ .Values.namespace.name }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "depictio.labels" . | nindent 4 }}
 spec:
@@ -164,7 +164,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: depictio-frontend
-  namespace: {{ .Values.namespace.name }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "depictio.labels" . | nindent 4 }}
 spec:
@@ -178,6 +178,11 @@ spec:
     metadata:
       labels:
         {{- include "depictio.frontend.selectorLabels" . | nindent 8 }}
+        release: {{ $.Release.Name }}
+        access: {{ .Values.permission }}
+        networking/allow-internet-egress: "true"
+        networking/allow-egress-to-studio-web: "true"
+        type: app
     spec:
       containers:
         - name: depictio-frontend

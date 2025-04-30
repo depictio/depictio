@@ -3,7 +3,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: depictio-frontend-config
-  namespace: {{ .Values.namespace.name }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "depictio.labels" . | nindent 4 }}
 data:
@@ -23,7 +23,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: depictio-backend-config
-  namespace: {{ .Values.namespace.name }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "depictio.labels" . | nindent 4 }}
 data:

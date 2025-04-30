@@ -1,0 +1,29 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}-ingress
+  namespace: {{ .Release.Namespace }}
+  labels:
+    io.kompose.service: {{ .Release.Name }}-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/auth-url: "{{ .Values.global.protocol }}://{{ .Values.global.auth_domain }}:8080/auth/?release={{ .Values.release }}"
+    nginx.ingress.kubernetes.io/auth-signin: "https://{{ .Values.global.domain }}/accounts/login/?next=$scheme%3A%2F%2F$host"
+    nginx.ingress.kubernetes.io/custom-http-errors: "503"
+    nginx.ingress.kubernetes.io/default-backend: nginx-errors
+    nginx.ingress.kubernetes.io/proxy-body-size: "{{ .Values.ingress.clientMaxBodySize }}"
+spec:
+  rules:
+    - host: {{ .Release.Name }}.{{ .Values.global.domain }}
+      http:
+        paths:
+        - path: /
+          backend:
+            service:
+              name: {{ .Values.service.name }}
+              port:
+                number: {{ .Values.service.port }}
+          pathType: ImplementationSpecific
+  tls:
+    - secretName: {{ .Values.ingress.secretName }}
+      hosts:
+        - {{ .Values.global.domain }}

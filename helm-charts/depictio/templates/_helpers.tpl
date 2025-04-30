@@ -51,13 +51,6 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
-Create the name of the namespace to use
-*/}}
-{{- define "depictio.namespaceName" -}}
-{{- default .Values.namespace.name }}
-{{- end }}
-
-{{/*
 Create mongo selector labels
 */}}
 {{- define "depictio.mongo.selectorLabels" -}}
