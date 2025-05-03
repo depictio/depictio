@@ -1,15 +1,15 @@
-from typing import List
-from pydantic import validate_call
+from typing import Dict, List
+
 import httpx
 import typer
+from pydantic import validate_call
 
-# depictio-cli imports
 from depictio.cli.cli.utils.common import generate_api_headers, load_depictio_config
-from depictio.cli.logging import logger
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
+from depictio.cli.logging import logger
 from depictio.models.models.base import BaseModel, convert_objectid_to_str
-from depictio.models.models.users import CLIConfig
 from depictio.models.models.files import File
+from depictio.models.models.users import CLIConfig
 from depictio.models.models.workflows import WorkflowRun
 from depictio.models.utils import convert_model_to_dict
 
