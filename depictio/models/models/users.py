@@ -1,5 +1,8 @@
 from datetime import datetime
 from typing import List, Optional, Union
+
+from beanie import Document, Link, PydanticObjectId
+from bson import ObjectId
 from pydantic import (
     BaseModel,
     EmailStr,
@@ -9,10 +12,9 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from beanie import Document, Link, PydanticObjectId
 
-from depictio.models.models.base import MongoModel, PyObjectId
 from depictio.models.logging import logger
+from depictio.models.models.base import MongoModel, PyObjectId
 from depictio.models.models.s3 import S3DepictioCLIConfig
 
 
@@ -24,12 +26,17 @@ class TokenData(BaseModel):
         pattern="^(short-lived|long-lived)$",
     )
     token_type: str = Field(
-        default="bearer", description="Type of authentication token", pattern="^(bearer|custom)$"
+        default="bearer",
+        description="Type of authentication token",
+        pattern="^(bearer|custom)$",
     )
-    sub: PydanticObjectId
+    sub: PyObjectId = Field(
+        default=PyObjectId(),
+        description="Subject of the token, typically the user ID",
+    )
 
     @field_serializer("sub")
-    def serialize_sub(self, sub: PydanticObjectId) -> str:
+    def serialize_sub(sub: PydanticObjectId) -> str:
         return str(sub)
 
     @field_validator("token_lifetime")
@@ -130,15 +137,15 @@ class TokenBase(MongoModel):
     # For consistent responses in the API
     # def to_response_dict(self):
 
-        # return {
-        #     "id": self.id,
-        #     "user_id": self.user_id,
-        #     "access_token": self.access_token,
-        #     "token_type": self.token_type,
-        #     # "expires_in": int((self.expire_datetime - datetime.now()).total_seconds()),
-        #     # "expires_at": self.expire_datetime,
-        #     "created_at": self.created_at,
-        # }
+    # return {
+    #     "id": self.id,
+    #     "user_id": self.user_id,
+    #     "access_token": self.access_token,
+    #     "token_type": self.token_type,
+    #     # "expires_in": int((self.expire_datetime - datetime.now()).total_seconds()),
+    #     # "expires_at": self.expire_datetime,
+    #     "created_at": self.created_at,
+    # }
 
 
 class TokenBeanie(TokenBase, Document):
@@ -157,7 +164,7 @@ class UserBase(MongoModel):
 
 
 class UserBaseCLIConfig(UserBase):
-    token: TokenBeanie
+    token: TokenBase
 
 
 class GroupUI(Group):
@@ -170,13 +177,16 @@ class CLIConfig(BaseModel):
     s3: S3DepictioCLIConfig
 
 
-class User(UserBase):
+class UserBaseUI(UserBase):
     # tokens: List[Token] = Field(default_factory=list)
     # current_access_token: Optional[str] = None
     is_active: bool = True
     is_verified: bool = False
     last_login: Optional[str] = None
     registration_date: Optional[str] = None
+
+
+class User(UserBaseUI):
     password: str
 
     @field_validator("password", mode="before")
@@ -184,6 +194,21 @@ class User(UserBase):
         # check that the password is hashed
         if v.startswith("$2b$"):
             return v
+        else:
+            # Raise an error if the password is not hashed
+            raise ValueError("Password must be hashed")
+
+    def turn_to_userbaseui(self):
+        userbaseui = UserBaseUI(
+            id=self.id,
+            email=self.email,
+            is_admin=self.is_admin,
+            is_active=self.is_active,
+            is_verified=self.is_verified,
+            last_login=self.last_login,
+            registration_date=self.registration_date,
+        )
+        return userbaseui
 
     def turn_to_userbase(self):
         userbase = UserBase(
@@ -276,3 +301,22 @@ class Permission(BaseModel):
             raise ValueError("A User cannot be both an editor and a viewer.")
 
         return values
+
+
+class RequestEditPassword(BaseModel):
+    old_password: str
+    new_password: str
+
+    @field_validator("old_password")
+    def hash_old_password(cls, v):
+        if v.startswith("$2b$"):
+            return v
+        else:
+            # Raise an error if the password is not hashed
+            raise ValueError("Password must be hashed")
+
+    @field_validator("new_password")
+    def hash_new_password(cls, v):
+        if v.startswith("$2b$"):
+            raise ValueError("Password is already hashed")
+        return v
