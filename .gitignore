@@ -165,6 +165,8 @@ keys/internal_api_key.pem
 
 ## Sensitive data
 .env
+.env.*
+!.env.example
 *_token.yaml
 depictio/.depictio/
 depictio/.depictio/default_admin_agent.yaml
