@@ -1,6 +1,7 @@
 import os
 import re
 from typing import Optional
+
 from pydantic import AliasChoices, BaseModel, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -21,10 +22,10 @@ class PolarsStorageOptions(BaseModel):
     def validate_endpoint_url(cls, v):
         if not v:
             raise ValueError("Endpoint URL cannot be empty")
-        if not re.match(
-            r"^https?://[^/]+(:\d+)?$", v
-        ):
-            raise ValueError("Invalid URL format. Expected format: http://localhost:9000 or https://s3.embl.de")
+        if not re.match(r"^https?://[^/]+(:\d+)?$", v):
+            raise ValueError(
+                "Invalid URL format. Expected format: http://localhost:9000 or https://s3.embl.de"
+            )
         return v
 
     @field_validator("aws_access_key_id")
@@ -77,94 +78,62 @@ class PolarsStorageOptions(BaseModel):
 
 
 class S3DepictioCLIConfig(BaseSettings):
-    model_config = SettingsConfigDict(extra="allow")
-
-    endpoint_url: str = Field(
-        default="http://localhost:9000",
-        json_schema_extra={"env": "DEPICTIO_MINIO_ENDPOINT_URL"},
-    )
-    root_user: str = Field(
-        default="minio",
-        validation_alias=AliasChoices(
-            "DEPICTIO_MINIO_ROOT_USER",
-            "DEPICTIO_MINIO_ACCESS_KEY",
-            "MINIO_ACCESS_KEY",
-        ),
-    )
-    root_password: str = Field(
-        default="minio123",
-        validation_alias=AliasChoices(
-            "DEPICTIO_MINIO_ROOT_PASSWORD",
-            "DEPICTIO_MINIO_SECRET_KEY",
-            "MINIO_SECRET_KEY",
-        ),
-    )
-    bucket: str = Field(
-        default="depictio-bucket", json_schema_extra={"env": "DEPICTIO_MINIO_BUCKET"}
-    )
+    """Test-specific version of S3DepictioCLIConfig for isolated testing."""
+    service_name: str = Field(default="http://minio")
+    endpoint_url: str = Field(default="http://localhost:9000")
+    root_user: str = Field(default="minio")
+    root_password: str = Field(default="minio123")
+    bucket: str = Field(default="depictio-bucket")
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_MINIO_")
 
 
-class MinioConfig(S3DepictioCLIConfig):
-    """Minio configuration."""
+# class S3DepictioCLIConfig(S3DepictioCLIConfig):
+#     """Minio configuration."""
 
-    internal_endpoint: str = Field(
-        default="http://minio",
-        json_schema_extra={"env": "DEPICTIO_MINIO_INTERNAL_ENDPOINT"},
-    )
-    external_endpoint: str = Field(
-        default="http://localhost",
-        json_schema_extra={"env": "DEPICTIO_MINIO_EXTERNAL_ENDPOINT"},
-    )
-    port: Optional[int] = Field(
-        default=0, json_schema_extra={"env": "DEPICTIO_MINIO_PORT"}
-    )
-    secure: bool = Field(
-        default=False, json_schema_extra={"env": "DEPICTIO_MINIO_SECURE"}
-    )
-    data_dir: str = Field(
-        default="/depictio/minio_data",
-        json_schema_extra={"env": "DEPICTIO_MINIO_DATA_DIR"},
-    )
-    model_config = SettingsConfigDict(env_prefix="DEPICTIO_MINIO_", extra="allow")
+#     external_endpoint: str = Field(default="http://localhost")
+#     port: Optional[int] = Field(default=0)
+#     secure: bool = Field(default=False)
+#     data_dir: str = Field(default="/depictio/minio_data")
+#     model_config = SettingsConfigDict(env_prefix="DEPICTIO_MINIO_")
 
-    @field_validator("port", mode="before")
-    def validate_port(cls, v):
-        if v == 0:
-            return v
-        if not isinstance(v, int):
-            raise ValueError("Port must be an integer")
-        if v < 1 or v > 65535:
-            raise ValueError("Port must be between 1 and 65535")
-        return v
+#     @field_validator("port", mode="before")
+#     def validate_port(cls, v):
+#         if v == 0:
+#             return v
+#         if not isinstance(v, int):
+#             raise ValueError("Port must be an integer")
+#         if v < 1 or v > 65535:
+#             raise ValueError("Port must be between 1 and 65535")
+#         return v
 
-    @model_validator(mode="before")
-    def configure_endpoint_url(cls, values):
-        # Check if running in a container
-        is_container = os.getenv("DEPICTIO_CONTAINER", "false").lower() == "true"
+#     @model_validator(mode="before")
+#     def configure_endpoint_url(cls, values):
+#         # Check if running in a container
+#         is_container = os.getenv("DEPICTIO_CONTAINER", "false").lower() == "true"
 
-        # Get internal and external endpoints
-        internal_endpoint = values.get("internal_endpoint", "http://minio")
-        external_endpoint = values.get("external_endpoint", "http://localhost")
-        port = values.get("port", 0)
+#         # Get internal and external endpoints
+#         internal_endpoint = values.get("internal_endpoint", "http://minio")
+#         external_endpoint = values.get("external_endpoint", "http://localhost")
+#         port = values.get("port", 0)
 
-        if is_container:
-            if external_endpoint == "http://localhost":
-                # If running in a container and external endpoint is localhost, use internal endpoint
-                endpoint_url = f"{internal_endpoint}:{port}"
-            else:
-                if port > 0:
-                    endpoint_url = f"{external_endpoint}:{port}"
-                else:
-                    endpoint_url = external_endpoint
-        else:
-            if port > 0:
-                endpoint_url = f"{external_endpoint}:{port}"
-            else:
-                endpoint_url = external_endpoint
+#         if is_container:
+#             if external_endpoint == "http://localhost":
+#                 # If running in a container and external endpoint is localhost, use internal endpoint
+#                 endpoint_url = f"{internal_endpoint}:{port}"
+#             else:
+#                 if port > 0:
+#                     endpoint_url = f"{external_endpoint}:{port}"
+#                 else:
+#                     endpoint_url = external_endpoint
+#         else:
+#             if port > 0:
+#                 endpoint_url = f"{external_endpoint}:{port}"
+#             else:
+#                 endpoint_url = external_endpoint
 
-        logger.debug(f"Endpoint URL: {endpoint_url}")
-        logger.debug(f"Internal Endpoint: {internal_endpoint}")
-        logger.debug(f"Is container: {is_container}")
-        values["endpoint_url"] = endpoint_url
+#         logger.debug(f"Endpoint URL: {endpoint_url}")
+#         logger.debug(f"Internal Endpoint: {internal_endpoint}")
+#         logger.debug(f"Is container: {is_container}")
+#         values["endpoint_url"] = endpoint_url
 
-        return values
+#         return values

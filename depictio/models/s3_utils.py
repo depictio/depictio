@@ -1,16 +1,17 @@
 from abc import ABC
-from typing import Optional, List
-from pydantic import validate_call
-import boto3
-from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ClientError
+from typing import List, Optional
 
-from depictio.models.models.users import CLIConfig
-from depictio.models.models.s3 import MinioConfig, PolarsStorageOptions, S3DepictioCLIConfig
+import boto3
+from botocore.exceptions import ClientError, NoCredentialsError, PartialCredentialsError
+from pydantic import validate_call
+
 from depictio.models.logging import logger
+from depictio.models.models.s3 import PolarsStorageOptions, S3DepictioCLIConfig
+from depictio.models.models.users import CLIConfig
 
 
 class S3ProviderBase(ABC):
-    def __init__(self, config: MinioConfig):
+    def __init__(self, config: S3DepictioCLIConfig):
         self.config = config
         self.bucket_name = config.bucket
         self.endpoint_url = config.endpoint_url
@@ -111,12 +112,13 @@ class S3ProviderBase(ABC):
 
 
 class MinIOManager(S3ProviderBase):
-    def __init__(self, config: MinioConfig):
+    def __init__(self, config: S3DepictioCLIConfig):
         logger.info(f"Initializing MinIOManager with bucket '{config.bucket}'")
         super().__init__(config)
 
 
-def S3_storage_checks(s3_config: MinioConfig, checks: Optional[List[str]] = None):
+@validate_call
+def S3_storage_checks(s3_config: S3DepictioCLIConfig, checks: Optional[List[str]] = None):
     """
     Flexible S3 storage checks.
 
