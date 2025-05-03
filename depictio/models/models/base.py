@@ -17,9 +17,7 @@ from pydantic import (
     field_validator,
 )
 import re
-
 import json
-
 from pydantic_core import CoreSchema, core_schema
 
 from depictio.models.logging import logger
@@ -40,14 +38,6 @@ def convert_objectid_to_str(item):
         return item
 
 
-# Custom JSON encoder
-class CustomJSONEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, PyObjectId):
-            return str(obj)
-        return super().default(obj)
-
-
 class PyObjectId(ObjectId):
     @classmethod
     def __get_pydantic_core_schema__(
@@ -59,9 +49,6 @@ class PyObjectId(ObjectId):
         return core_schema.no_info_plain_validator_function(
             cls.validate,
             serialization=core_schema.plain_serializer_function_ser_schema(str),
-            # core_schema.union_schema(
-            #     [core_schema.str_schema(), core_schema.is_instance_schema(ObjectId)]
-            # ),
         )
 
     @classmethod
@@ -130,6 +117,7 @@ class MongoModel(BaseModel):
         # If value is a Description instance, extract the string
         # if isinstance(value, Description):
         #     value = value.description
+        logger.debug(f"Sanitizing description: {value}")
 
         if not value:
             logger.debug("No description provided.")
@@ -137,9 +125,11 @@ class MongoModel(BaseModel):
 
         # Step 1: Convert special characters to their HTML-safe equivalents
         neutralized = html.escape(value)
+        logger.debug(f"Neutralized description: {neutralized}")
 
         # Step 2: Use bleach to remove all HTML tags and attributes
         sanitized = bleach.clean(neutralized, tags=[], attributes={}, strip=True)
+        logger.debug(f"Sanitized description: {sanitized}")
 
         # Step 3: Check if HTML tags were successfully removed
         if any(char in sanitized for char in ("<", ">", "&lt;", "&gt;")):
@@ -155,7 +145,7 @@ class MongoModel(BaseModel):
     def from_mongo(cls, data: dict):
         """We must convert _id into "id"."""
         if not data:
-            return data
+            return cls(**data)
 
         # Helper function to convert nested documents
         def convert_ids(document):
@@ -181,22 +171,6 @@ class MongoModel(BaseModel):
         # Compute hash if not present
         # setattr(instance, "hash", HashModel.compute_hash(data))
         return instance
-
-    def to_json(self, **kwargs):
-        parsed = self.model_dump(
-            exclude_unset=True,
-            by_alias=True,
-            **kwargs,
-        )
-
-        parsed = convert_objectid_to_str(parsed)
-
-        # Convert PosixPath to str
-        for key, value in parsed.items():
-            if isinstance(value, Path):
-                parsed[key] = str(value)
-
-        return parsed
 
     def mongo(self, **kwargs):
         exclude_unset = kwargs.pop("exclude_unset", False)
@@ -258,31 +232,7 @@ class MongoModel(BaseModel):
 
         return parsed
 
-    def tinydb(self, **kwargs):
-        exclude_unset = kwargs.pop("exclude_unset", False)
-        by_alias = kwargs.pop("by_alias", True)
-
-        parsed = self.model_dump(
-            exclude_unset=exclude_unset,
-            by_alias=by_alias,
-            **kwargs,
-        )
-
-        converted = {}
-        # Convert Path and datetime objects to serializable types
-        for key, value in parsed.items():
-            if isinstance(value, Path):
-                converted[key] = str(value)  # Convert Path to string
-            elif isinstance(value, datetime):
-                converted[key] = value.isoformat()  # Convert datetime to ISO string
-            else:
-                converted[key] = value
-
-        # Second pass: remove None values safely
-        cleaned = {k: v for k, v in converted.items() if v is not None}
-
-        return convert_objectid_to_str(cleaned)
-
+# TODO: move to pydantic DirectoryPath (https://docs.pydantic.dev/latest/api/types/#pydantic.types.DirectoryPath)
 
 class DirectoryPath(BaseModel):
     path: str
