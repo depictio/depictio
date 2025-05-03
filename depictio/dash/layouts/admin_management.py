@@ -26,7 +26,7 @@ from depictio.dash.layouts.layouts_toolbox import (
 from depictio.dash.layouts.projects import render_project_item
 
 from depictio.models.models.dashboards import DashboardData
-from depictio.models.models.users import UserBase, Group, User, GroupUI
+from depictio.models.models.users import UserBase, Group, User, GroupUI, UserBaseUI
 from depictio.models.models.projects import Project
 
 
@@ -402,7 +402,7 @@ def render_groupwise_layout(group: GroupUI, all_users: list) -> dmc.Accordion:
 
 
 @validate_call
-def render_userwise_layout(user: User) -> dmc.Accordion:
+def render_userwise_layout(user: UserBaseUI) -> dmc.Accordion:
     """
     Render the layout for a user.
 
@@ -890,7 +890,7 @@ def register_admin_callbacks(app):
                 users = response.json()
                 logger.info(f"Users: {users}")
                 userwise_layouts = [
-                    render_userwise_layout(User.from_mongo(user)) for user in users
+                    render_userwise_layout(UserBaseUI.from_mongo(user)) for user in users
                 ]
                 content = html.Div(userwise_layouts)
             else:
