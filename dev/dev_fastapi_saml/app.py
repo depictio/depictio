@@ -63,10 +63,12 @@ SP_ENTITY_ID      = os.getenv("CMD_SAML_ISSUER")
 ATTR_ID           = os.getenv("CMD_SAML_ATTRIBUTE_ID")
 ATTR_USERNAME     = os.getenv("CMD_SAML_ATTRIBUTE_USERNAME")
 ATTR_EMAIL        = os.getenv("CMD_SAML_ATTRIBUTE_EMAIL")
+NAMEID_FORMAT     = os.getenv("CMD_SAML_IDENTIFIERFORMAT")
 
 # Read the IdP certificate
 with open(IDP_CERT_PATH, "r") as cert_file:
     IDP_CERT = cert_file.read()
+    logger.info(f"IDP CERT loaded from {IDP_CERT_PATH}")
 
 # Get the callback URL (with base URL detection)
 BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
@@ -78,39 +80,60 @@ logger.info(f"SP_ENTITY_ID: {SP_ENTITY_ID}")
 logger.info(f"IDP_SSO_URL: {IDP_SSO_URL}")
 logger.info(f"BASE_URL: {BASE_URL}")
 logger.info(f"ACS_URL: {ACS_URL}")
+logger.info(f"NAMEID_FORMAT: {NAMEID_FORMAT}")
 
 # --- Build python3-saml settings ---
 saml_settings = {
     "strict": True,
     "debug": True,
     "sp": {
-        "entityId": SP_ENTITY_ID,  # This key is correct
+        "entityId": SP_ENTITY_ID,
         "assertionConsumerService": {
             "url": ACS_URL,
             "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST",
         },
-        "NameIDFormat": "urn:oasis:names:tc:SAML:2.0:nameid-format:emailAddress",
+        "NameIDFormat": NAMEID_FORMAT,
+        "x509cert": "",
+        "privateKey": ""
     },
     "idp": {
-        "entityId": "https://auth.embl.org/realms/EMBL-HD",  # Updated entity ID
+        "entityId": "https://auth.ktest.embl.de/realms/EMBL-HD",
         "singleSignOnService": {
+            "url": IDP_SSO_URL, 
+            "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect"
+        },
+        "singleLogoutService": {
             "url": IDP_SSO_URL,
-            "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect",
+            "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect"
         },
         "x509cert": IDP_CERT,
     },
     "security": {
+        "authnRequestsSigned": False,  # Changed to match IdP metadata requirement
+        "wantAssertionsSigned": True,
+        "wantMessagesSigned": False,   # Changed to match IdP metadata
+        "wantAttributeStatement": True,
+        "allowSingleLabelDomains": True,
         "nameIdEncrypted": False,
-        "authnRequestsSigned": False,
-        "logoutRequestSigned": False,
-        "logoutResponseSigned": False,
-        "signMetadata": False,
-        "wantMessagesSigned": False,
-        "wantAssertionsSigned": False,
-        "wantAssertionsEncrypted": False,
-        "wantNameIdEncrypted": False,
         "requestedAuthnContext": False,
     },
+    "contactPerson": {
+        "technical": {
+            "givenName": "Technical Contact",
+            "emailAddress": "technical@example.com"
+        },
+        "support": {
+            "givenName": "Support Contact",
+            "emailAddress": "support@example.com"
+        }
+    },
+    "organization": {
+        "en-US": {
+            "name": "Depictio SAML Test",
+            "displayname": "Depictio SAML Test",
+            "url": BASE_URL
+        }
+    }
 }
 
 # --- JWT Authentication setup ---
@@ -253,13 +276,27 @@ async def saml_metadata():
         entity_id = saml_settings["sp"]["entityId"]
         acs_url = saml_settings["sp"]["assertionConsumerService"]["url"]
         binding = saml_settings["sp"]["assertionConsumerService"]["binding"]
+        nameid_format = saml_settings["sp"]["NameIDFormat"]
         
         metadata_xml = f"""<?xml version="1.0"?>
 <md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" entityID="{entity_id}">
-  <md:SPSSODescriptor AuthnRequestsSigned="false" WantAssertionsSigned="false" protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">
-    <md:NameIDFormat>urn:oasis:names:tc:SAML:2.0:nameid-format:emailAddress</md:NameIDFormat>
+  <md:SPSSODescriptor AuthnRequestsSigned="false" WantAssertionsSigned="true" protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">
+    <md:NameIDFormat>{nameid_format}</md:NameIDFormat>
     <md:AssertionConsumerService Binding="{binding}" Location="{acs_url}" index="1"/>
   </md:SPSSODescriptor>
+  <md:Organization>
+    <md:OrganizationName xml:lang="en-US">Depictio SAML Test</md:OrganizationName>
+    <md:OrganizationDisplayName xml:lang="en-US">Depictio SAML Test</md:OrganizationDisplayName>
+    <md:OrganizationURL xml:lang="en-US">{BASE_URL}</md:OrganizationURL>
+  </md:Organization>
+  <md:ContactPerson contactType="technical">
+    <md:GivenName>Technical Contact</md:GivenName>
+    <md:EmailAddress>technical@example.com</md:EmailAddress>
+  </md:ContactPerson>
+  <md:ContactPerson contactType="support">
+    <md:GivenName>Support Contact</md:GivenName>
+    <md:EmailAddress>support@example.com</md:EmailAddress>
+  </md:ContactPerson>
 </md:EntityDescriptor>
 """
         logger.info(f"Generated SAML metadata for SP: {entity_id}")
@@ -273,9 +310,9 @@ async def saml_metadata():
 async def saml_login(request: Request, RelayState: Optional[str] = None):
     logger.info(f"SAML login initiated from: {request.client.host if request.client else 'unknown'}")
     
-    # Use a specific RelayState if not provided
+    # Use frontend URL as RelayState instead of callback URL
     if not RelayState:
-        RelayState = f"{BASE_URL}/auth/saml/callback"
+        RelayState = f"{BASE_URL}/auth-success"
     
     logger.info(f"Using RelayState: {RelayState}")
     
@@ -290,25 +327,29 @@ async def saml_login(request: Request, RelayState: Optional[str] = None):
         logger.warning(f"Could not get SAML request XML: {e}")
     
     # Pass explicit parameters to control the SAML request
-    login_url = auth.login(return_to=RelayState)
-    logger.info(f"Redirecting to IdP: {login_url}")
-    
-    # For debugging, you can directly print the URL in browser:
-    html_content = f"""
-    <!DOCTYPE html>
-    <html>
-        <head>
-            <title>Redirecting to EMBL Login</title>
-            <meta http-equiv="refresh" content="0;url={login_url}">
-        </head>
-        <body>
-            <h1>Redirecting to EMBL Login</h1>
-            <p>If you are not redirected automatically, click <a href="{login_url}">here</a>.</p>
-            <p>Debug info: <pre>{login_url}</pre></p>
-        </body>
-    </html>
-    """
-    return HTMLResponse(content=html_content)
+    try:
+        login_url = auth.login(return_to=RelayState)
+        logger.info(f"Redirecting to IdP: {login_url}")
+        
+        # For debugging, you can directly print the URL in browser:
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+            <head>
+                <title>Redirecting to EMBL Login</title>
+                <meta http-equiv="refresh" content="0;url={login_url}">
+            </head>
+            <body>
+                <h1>Redirecting to EMBL Login</h1>
+                <p>If you are not redirected automatically, click <a href="{login_url}">here</a>.</p>
+                <p>Debug info: <pre>{login_url}</pre></p>
+            </body>
+        </html>
+        """
+        return HTMLResponse(content=html_content)
+    except Exception as e:
+        logger.error(f"Error during SAML login: {e}")
+        return {"error": str(e)}
 
 # 2) ACS endpoint - Process SAML Response
 @app.post("/auth/saml/callback")
@@ -317,93 +358,115 @@ async def saml_callback(
     user_manager: UserManager = Depends(get_user_manager),
 ):
     logger.info("Received SAML callback")
-    auth = await init_saml_auth(request)
     
-    auth.process_response()
-    errors = auth.get_errors()
-    
-    if errors:
-        error_reason = auth.get_last_error_reason()
-        logger.error(f"SAML authentication errors: {errors}, reason: {error_reason}")
-        return {"errors": errors, "reason": error_reason}
-
-    # Extract attributes
-    attrs = auth.get_attributes()
-    nameid = auth.get_nameid()
-    
-    # Log all SAML data for debugging
-    logger.info(f"SAML NameID: {nameid}")
-    logger.info(f"SAML Attributes: {json.dumps(attrs, default=str)}")
-    
-    # Get user information from SAML attributes
-    email = attrs.get(ATTR_EMAIL, [None])[0] if attrs else nameid
-    username = attrs.get(ATTR_USERNAME, [None])[0] if attrs else None
-    
-    # Log all attribute mappings
-    for attr_name, attr_key in [
-        ("Email", ATTR_EMAIL), 
-        ("Username", ATTR_USERNAME), 
-        ("ID", ATTR_ID)
-    ]:
-        attr_value = attrs.get(attr_key, ["NOT_FOUND"])[0] if attrs else "NOT_FOUND"
-        logger.info(f"SAML {attr_name} ({attr_key}): {attr_value}")
-    
-    if not email:
-        # Try with nameid if email attribute not found
-        logger.warning("Email not found in attributes, using NameID instead")
-        email = nameid
+    try:
+        auth = await init_saml_auth(request)
         
-    if not email:
-        logger.error("Email not provided by IdP")
-        return {"error": "Email not provided by IdP"}
+        auth.process_response()
+        errors = auth.get_errors()
+        
+        if errors:
+            error_reason = auth.get_last_error_reason()
+            logger.error(f"SAML authentication errors: {errors}, reason: {error_reason}")
+            return {"errors": errors, "reason": error_reason}
 
-    logger.info(f"Processing authentication for email: {email}, username: {username}")
-    
-    # Get or create user in our system
-    user = await user_manager.get_or_create_saml_user(email, username)
-    
-    # Generate JWT token
-    token_data = {
-        "sub": str(user.id),
-        "aud": "fastapi-users:auth",
-    }
-    logger.info(f"Generating token with data: {token_data}")
-    token = jwt_strategy.write_token(token_data)
-    
-    logger.info(f"Authentication successful for user: {user.email}")
-    
-    # Return HTML response with auto-redirect to frontend
-    redirect_url = f"/auth-success?token={token}"
-    html_content = f"""
-    <!DOCTYPE html>
-    <html>
-        <head>
-            <title>Authentication Successful</title>
-            <meta http-equiv="refresh" content="0;url={redirect_url}">
-        </head>
-        <body>
-            <h1>Authentication Successful</h1>
-            <p>Redirecting to application...</p>
-            <p>If you are not redirected, <a href="{redirect_url}">click here</a></p>
-            <script>
-                window.location.href = "{redirect_url}";
-            </script>
-        </body>
-    </html>
-    """
-    
-    return HTMLResponse(content=html_content)
+        # Extract attributes
+        attrs = auth.get_attributes()
+        nameid = auth.get_nameid()
+        
+        # Log all SAML data for debugging
+        logger.info(f"SAML NameID: {nameid}")
+        logger.info(f"SAML Attributes: {json.dumps(attrs, default=str)}")
+        
+        # Get user information from SAML attributes
+        email = attrs.get(ATTR_EMAIL, [None])[0] if attrs else nameid
+        username = attrs.get(ATTR_USERNAME, [None])[0] if attrs else None
+        
+        # Log all attribute mappings
+        for attr_name, attr_key in [
+            ("Email", ATTR_EMAIL), 
+            ("Username", ATTR_USERNAME), 
+            ("ID", ATTR_ID)
+        ]:
+            attr_value = attrs.get(attr_key, ["NOT_FOUND"])[0] if attrs else "NOT_FOUND"
+            logger.info(f"SAML {attr_name} ({attr_key}): {attr_value}")
+        
+        if not email:
+            # Try with nameid if email attribute not found
+            logger.warning("Email not found in attributes, using NameID instead")
+            email = nameid
+            
+        if not email:
+            logger.error("Email not provided by IdP")
+            return {"error": "Email not provided by IdP"}
+
+        logger.info(f"Processing authentication for email: {email}, username: {username}")
+        
+        # Get or create user in our system
+        user = await user_manager.get_or_create_saml_user(email, username)
+        
+        # Generate JWT token
+        token_data = {
+            "sub": str(user.id),
+            "aud": "fastapi-users:auth",
+        }
+        logger.info(f"Generating token with data: {token_data}")
+        token = jwt_strategy.write_token(token_data)
+        
+        logger.info(f"Authentication successful for user: {user.email}")
+        
+        # Get the RelayState from the request
+        form_data = await request.form()
+        relay_state = form_data.get("RelayState", "/auth-success")
+        
+        # Append token to the relay state URL
+        if "?" in relay_state:
+            redirect_url = f"{relay_state}&token={token}"
+        else:
+            redirect_url = f"{relay_state}?token={token}"
+            
+        logger.info(f"Redirecting to: {redirect_url}")
+        
+        # Return HTML response with auto-redirect to frontend
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+            <head>
+                <title>Authentication Successful</title>
+                <meta http-equiv="refresh" content="0;url={redirect_url}">
+            </head>
+            <body>
+                <h1>Authentication Successful</h1>
+                <p>Redirecting to application...</p>
+                <p>If you are not redirected, <a href="{redirect_url}">click here</a></p>
+                <script>
+                    window.location.href = "{redirect_url}";
+                </script>
+            </body>
+        </html>
+        """
+        
+        return HTMLResponse(content=html_content)
+    except Exception as e:
+        logger.error(f"Error in SAML callback: {str(e)}")
+        return {"error": str(e)}
 
 # Success page after SAML authentication
 @app.get("/auth-success")
-async def auth_success(token: str):
+async def auth_success(token: Optional[str] = None):
     """Success page after SAML authentication"""
-    return {
-        "status": "success",
-        "message": "Authentication successful",
-        "access_token": token,
-        "token_type": "bearer",
-    }
+    if token:
+        return {
+            "status": "success",
+            "message": "Authentication successful",
+            "access_token": token,
+            "token_type": "bearer",
+        }
+    else:
+        return {
+            "status": "waiting",
+            "message": "Waiting for authentication token",
+        }
 
 # Protected route example
 @app.get("/protected")
@@ -486,6 +549,7 @@ async def debug_config():
             "ATTR_EMAIL": ATTR_EMAIL,
             "ATTR_USERNAME": ATTR_USERNAME,
             "ATTR_ID": ATTR_ID,
+            "NAMEID_FORMAT": NAMEID_FORMAT,
             "IDP_CERT": cert_loaded,
             "IDP_CERT_PATH": IDP_CERT_PATH,
             "IDP_ENTITY_ID": saml_settings["idp"]["entityId"],
@@ -502,8 +566,8 @@ async def direct_test():
     entity_id = urllib.parse.quote(SP_ENTITY_ID)
     acs_url = urllib.parse.quote(ACS_URL)
     
-    # Direct URL to EMBL's SAML endpoint
-    direct_url = f"https://auth.embl.org/realms/EMBL-HD/protocol/saml?client_id={entity_id}&redirect_uri={acs_url}"
+    # Direct URL to EMBL's SAML endpoint (using the test domain)
+    direct_url = f"https://auth.ktest.embl.de/realms/EMBL-HD/protocol/saml?client_id={entity_id}&redirect_uri={acs_url}"
     
     logger.info(f"Direct test URL: {direct_url}")
     
