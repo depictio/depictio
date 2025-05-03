@@ -1,10 +1,11 @@
-from datetime import datetime
 import re
+from datetime import datetime
 from typing import List
+
 from pydantic import BaseModel, field_validator
 
 from depictio.models.models.base import PyObjectId
-from depictio.models.models.s3 import MinioConfig
+from depictio.models.models.s3 import S3DepictioCLIConfig
 from depictio.models.models.users import Group
 
 
@@ -79,7 +80,7 @@ class UserCLIConfig(BaseModel):
 class CLIConfig(BaseModel):
     api_base_url: str
     user: UserCLIConfig
-    s3_storage: MinioConfig
+    s3_storage: S3DepictioCLIConfig
 
     class ConfigDict:
         extra = "forbid"  # Reject unexpected fields
