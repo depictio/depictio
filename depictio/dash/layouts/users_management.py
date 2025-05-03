@@ -1,21 +1,22 @@
 import re
-from dash import html, dcc, Input, Output, State, ctx
-import dash_mantine_components as dmc
-import dash
-import httpx
 
-from dash_extensions import EventListener
+import dash
+import dash_mantine_components as dmc
+import httpx
+from dash import Input, Output, State, ctx, dcc, html
 from dash.exceptions import PreventUpdate
+from dash_extensions import EventListener
 
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.endpoints.user_endpoints.core_functions import _verify_password
 from depictio.api.v1.endpoints.user_endpoints.utils import (
-    verify_password,
     login_user,
-    find_user_by_email,
 )
-from depictio.dash.api_calls import api_call_fetch_user_from_email, api_call_register_user
-
+from depictio.dash.api_calls import (
+    api_call_fetch_user_from_email,
+    api_call_register_user,
+)
 
 event = {"event": "keydown", "props": ["key"]}
 
@@ -224,7 +225,7 @@ def validate_login(login_email, login_password):
 
     logger.info(f"User: {user}")
 
-    if verify_password(user.password, login_password):
+    if _verify_password(user.password, login_password):
         logger.info("Password verification successful.")
         # from flask import make_response
         # resp = make_response("Login successful!")
