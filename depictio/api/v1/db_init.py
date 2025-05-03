@@ -1,34 +1,32 @@
 import os
 from typing import Optional
+
 from fastapi import HTTPException
 
+from depictio.api.v1.configs.config import API_BASE_URL, settings
+from depictio.api.v1.configs.custom_logging import format_pydantic, logger
 from depictio.api.v1.endpoints.projects_endpoints.utils import (
     helper_create_project_beanie,
 )
+from depictio.api.v1.endpoints.user_endpoints.core_functions import _create_user_in_db
 from depictio.api.v1.endpoints.user_endpoints.token_utils import create_default_token
 from depictio.api.v1.endpoints.user_endpoints.utils import (
     _ensure_mongodb_connection,
     create_group_helper_beanie,
-    create_user_in_db,
 )
-from depictio.api.v1.configs.custom_logging import format_pydantic, logger
-from depictio.api.v1.configs.config import settings, API_BASE_URL
 from depictio.api.v1.s3 import minios3_external_config
-from depictio.models.utils import get_config
-
-from depictio.models.models.users import (
-    GroupBeanie,
-    UserBeanie,
-    UserBase,
-    CLIConfig,
-    UserBaseCLIConfig,
-    TokenBeanie,
-)
-from depictio.models.models.s3 import S3DepictioCLIConfig
-from depictio.models.models.projects import ProjectBeanie
-
-
 from depictio.cli.cli.utils.helpers import process_data_collection_helper
+from depictio.models.models.projects import ProjectBeanie
+from depictio.models.models.s3 import S3DepictioCLIConfig
+from depictio.models.models.users import (
+    CLIConfig,
+    GroupBeanie,
+    TokenBeanie,
+    UserBase,
+    UserBaseCLIConfig,
+    UserBeanie,
+)
+from depictio.models.utils import get_config
 
 
 async def create_initial_project(
@@ -117,7 +115,7 @@ async def initialize_db(wipe: bool = False) -> Optional[UserBeanie]:
         # Validate user config
         logger.debug(user_config)
 
-        user_payload = await create_user_in_db(
+        user_payload = await _create_user_in_db(
             email=user_config["email"],
             password=user_config["password"],
             is_admin=user_config.get("is_admin", False),
@@ -138,6 +136,7 @@ async def initialize_db(wipe: bool = False) -> Optional[UserBeanie]:
             token_beanie = await TokenBeanie.find_one(
                 {"user_id": user_payload["user"].id, "name": "default_token"}
             )
+            logger.debug(f"Token beanie: {format_pydantic(token_beanie)}")
             if token_beanie:
                 token_payload = {
                     "token": token_beanie.model_dump(),
@@ -161,6 +160,16 @@ async def initialize_db(wipe: bool = False) -> Optional[UserBeanie]:
         admin_user = await UserBeanie.find_one({"is_admin": True})
         if admin_user:
             logger.info(f"Found existing admin user: {admin_user.email}")
+            token_beanie = TokenBeanie.find_one(
+                {"user_id": admin_user.id, "name": "default_token"}
+            )
+
+            logger.debug(f"Token payload: {format_pydantic(token_payload)}")
+            token_payload = {
+                "token": token_beanie.model_dump(),
+                "config_path": None,
+                "new_token_created": False,
+            }
         else:
             logger.warning("No admin user found in the database")
 
