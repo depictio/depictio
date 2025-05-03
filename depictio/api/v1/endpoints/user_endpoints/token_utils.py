@@ -1,14 +1,17 @@
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Tuple, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
+
 import jwt
 from beanie import PydanticObjectId
 
-from depictio.api.v1.configs.custom_logging import logger
 from depictio.api.v1.configs.config import settings
-from depictio.api.v1.endpoints.user_endpoints.agent_config_utils import export_agent_config, generate_agent_config
-
-from depictio.models.models.users import UserBeanie, TokenBeanie
+from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.endpoints.user_endpoints.agent_config_utils import (
+    _generate_agent_config,
+    export_agent_config,
+)
+from depictio.models.models.users import TokenBeanie, UserBeanie
 
 
 # Assuming you have this function somewhere in your codebase
@@ -100,7 +103,7 @@ async def create_default_token(user: UserBeanie) -> Optional[Dict[str, Any]]:
     token = await add_token(token_data)
 
     # Generate and export agent config
-    cli_config = await generate_agent_config(user, token)
+    cli_config = await _generate_agent_config(user, token)
     config_path = await export_agent_config(cli_config=cli_config, email=user.email, wipe=bool(settings.mongodb.wipe))
     config_path = None
 
