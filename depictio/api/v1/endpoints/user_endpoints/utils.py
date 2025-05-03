@@ -1,35 +1,21 @@
-from datetime import datetime, timedelta
 import time
-import hashlib
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple, Union
+
+import jwt
 from beanie import PydanticObjectId
 from bson import ObjectId
-from fastapi import HTTPException
-import httpx
-import jwt
-import bcrypt
-from pydantic import EmailStr, validate_call
+from pydantic import validate_call
 
-from depictio.api.v1.configs.config import API_BASE_URL, PRIVATE_KEY, ALGORITHM
-from depictio.api.v1.configs.custom_logging import format_pydantic, logger
-from depictio.api.v1.endpoints.user_endpoints.core_functions import (
-    async_fetch_user_from_email,
-    fetch_user_from_email,
-    # fetch_user_from_id,
-)
-
-# from depictio.api.v1.endpoints.user_endpoints.models import Token
-from depictio.models.models.base import convert_objectid_to_str, PyObjectId
-from depictio.models.utils import convert_model_to_dict
+from depictio.api.v1.configs.config import ALGORITHM, PRIVATE_KEY
+from depictio.api.v1.configs.custom_logging import logger
+from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.users import (
-    Token,
     Group,
     GroupBeanie,
-    UserBeanie,
     TokenData,
-    TokenBeanie,
-    TokenBase,
     UserBase,
+    UserBeanie,
 )
 
 
@@ -71,43 +57,6 @@ def _ensure_mongodb_connection(max_attempts: int = 5, sleep_interval: int = 5) -
                 raise RuntimeError(f"Could not connect to MongoDB: {e}")
             logger.warning(f"Waiting for MongoDB to start (Attempt {attempt})...")
             time.sleep(sleep_interval)
-
-
-@validate_call(validate_return=True)
-def hash_password(password: str) -> str:
-    # Generate a salt
-    salt = bcrypt.gensalt()
-    # Hash the password with the salt
-    hashed = bcrypt.hashpw(password.encode("utf-8"), salt)
-    # Return the hashed password
-    return hashed.decode("utf-8")
-
-
-@validate_call(validate_return=True)
-def verify_password(stored_hash: str, password: str) -> bool:
-    logger.info(f"Stored hash: {stored_hash}")
-    logger.info(f"Password to verify: {password}")
-    # Verify the password against the stored hash
-    return bcrypt.checkpw(password.encode("utf-8"), stored_hash.encode("utf-8"))
-
-
-@validate_call(validate_return=True)
-async def check_password(email: str, password: str) -> bool:
-    """
-    Check if the provided password matches the stored password for the user.
-    Args:
-        email (str): The email of the user.
-        password (str): The password to verify.
-    Returns:
-        bool: True if the password matches, False otherwise.
-    """
-    logger.debug(f"Checking password for user {email}.")
-    user = await async_fetch_user_from_email(email)
-    logger.debug(f"User found: {user}")
-    if user:
-        if verify_password(user.password, password):
-            return True
-    return False
 
 
 @validate_call(validate_return=True)
@@ -263,128 +212,6 @@ async def create_access_token(token_data: TokenData) -> Tuple[str, datetime]:
 
 
 @validate_call(validate_return=True)
-async def add_token(token_data: TokenData) -> TokenBeanie:
-    email = token_data.sub
-    logger.info(f"Adding token for user {email}.")
-    logger.info(f"Token: {format_pydantic(token_data)}")
-    token_value, expire = await create_access_token(token_data)
-
-    token = TokenBeanie(
-        access_token=token_value,
-        expire_datetime=expire.strftime("%Y-%m-%d %H:%M:%S"),
-        name=token_data.name,
-        token_lifetime=token_data.token_lifetime,
-        user_id=token_data.sub,
-    )
-    logger.debug(f"Token: {format_pydantic(token)}")
-
-    await TokenBeanie.save(token)
-
-    logger.info(f"Token created for user {email}.")
-
-    return token
-
-
-# # Function to add a new user
-# def add_user(email, password, group=None, is_admin=False):
-#     hashed_password = hash_password(password)
-#     # user_dict = {
-#     #     "email": email,
-#     #     "password": hashed_password,
-#     #     "is_admin": is_admin,
-#     #     "registration_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-#     #     "last_login": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-#     # }
-#     from depictio.models.models.users import User
-
-#     logger.info(f"Groups: {group}")
-#     # if not group:
-#     #     group = get_users_group()
-#     #     logger.info(f"Users Group: {group}")
-#     # logger.info(f"Groups: {group}")
-
-#     user = User(
-#         email=email,
-#         password=hashed_password,
-#         is_admin=is_admin,
-#         registration_date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-#         last_login=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-#         groups=[group],
-#     )
-#     from depictio.models.utils import convert_model_to_dict
-
-#     logger.info(f"User: {user}")
-#     user = convert_model_to_dict(user)
-#     logger.info(f"User: {user}")
-#     response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/auth/register", json=user)
-#     if response.status_code == 200:
-#         logger.info(f"User {email} added successfully.")
-#     else:
-#         logger.error(f"Error adding user {email}: {response.text}")
-#     return response
-
-
-@validate_call(validate_return=True)
-async def create_user_in_db(
-    email: EmailStr, password: str, is_admin: bool = False
-) -> Optional[Dict[str, Union[bool, str, Optional[UserBeanie]]]]:
-    """
-    Helper function to create a user in the database using Beanie.
-
-    Args:
-        email: User's email address
-        password: Raw password (will be hashed)
-        group: User's group (optional)
-        is_admin: Whether user is admin
-
-    Returns:
-        The created UserBeanie object if successful
-    """
-    logger.info(f"Creating user with email: {email}")
-
-    # Check if the user already exists
-    existing_user = await UserBeanie.find_one({"email": email})
-
-    if existing_user:
-        logger.warning(f"User {email} already exists in the database")
-        return {
-            "success": False,
-            "message": "User already exists",
-            "user": existing_user,  # The CustomJSONResponse will handle serialization
-        }
-
-    # Hash the password
-    hashed_password = hash_password(password)
-
-    # Create current timestamp
-    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    # Create new UserBeanie
-    user_beanie = UserBeanie(
-        email=email,
-        password=hashed_password,
-        is_admin=is_admin,
-        registration_date=current_time,
-        last_login=current_time,
-        # groups=[group],
-    )
-
-    logger.debug(user_beanie)
-    logger.debug(user_beanie.model_dump())
-
-
-    # Save to database
-    await user_beanie.create()
-    logger.info(f"User created with id: {user_beanie.id}")
-
-    return {
-        "success": True,
-        "message": "User created successfully",
-        "user": user_beanie,
-    }
-
-
-@validate_call(validate_return=True)
 def delete_user_from_db(
     user_id: PyObjectId = None, email: str = None
 ) -> Dict[str, Union[bool, str]]:
@@ -440,61 +267,6 @@ def login_user(email: str):
 # Dummy logout function
 def logout_user():
     return {"logged_in": False, "access_token": None}
-
-
-# def get_users_group() -> Group:
-#     response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/auth/get_users_group")
-#     if response.status_code == 200:
-#         group = response.json()
-#         logger.info(f"Group: {group}")
-#         group = Group.from_mongo(group)
-#         logger.info(f"Group: {group}")
-#         return group
-#     else:
-#         return []
-
-
-def edit_password(email, old_password, new_password, headers):
-    logger.info(f"Editing password for user {email}.")
-    logger.info(f"Old password: {old_password}")
-    logger.info(f"New password: {new_password}")
-    user = find_user_by_email(email)
-    user = convert_objectid_to_str(user.dict())
-    if user:
-        if verify_password(user["password"], old_password):
-            hashed_password = hash_password(new_password)
-            user_dict = {"new_password": hashed_password, "old_password": old_password}
-            logger.info(
-                f"Updating password for user {email} with new password: {new_password}"
-            )
-            response = httpx.post(
-                f"{API_BASE_URL}/depictio/api/v1/auth/edit_password",
-                json=user_dict,
-                headers=headers,
-            )
-            if response.status_code == 200:
-                logger.info(f"Password for user {email} updated successfully.")
-            else:
-                logger.error(
-                    f"Error updating password for user {email}: {response.text}"
-                )
-            return response
-        else:
-            logger.error(f"Old password for user {email} is incorrect.")
-            return {"error": "Old password is incorrect."}
-    else:
-        logger.error(f"User {email} not found.")
-        return {"error": "User not found."}
-
-
-def list_existing_tokens(email):
-    logger.info(f"Listing tokens for user {email}.")
-    user = find_user_by_email(email, return_tokens=True)
-    logger.info(f"User: {user}")
-    if user:
-        user = user.model_dump()
-        return user.get("tokens", [])
-    return None
 
 
 def update_group_in_users_helper(
@@ -561,21 +333,3 @@ def update_group_in_users_helper(
         "message": f"Updated group membership for users: {updated_users}",
         "updated_users": updated_users,
     }
-
-
-@validate_call()
-def find_user_by_email(email: str, return_tokens: bool = False) -> Optional[Dict]:
-    """
-    Find a user by email.
-    Args:
-        email (str): The email of the user.
-        return_tokens (bool): Whether to return tokens or not.
-    Returns:
-        dict: The user data if found, None otherwise.
-    """
-    logger.debug(f"Finding user with email: {email}")
-    user_data = fetch_user_from_email(email, return_tokens)
-    if user_data:
-        logger.info(f"Found user data: {user_data}")
-        return user_data
-    return None
