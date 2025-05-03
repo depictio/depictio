@@ -1,4 +1,4 @@
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 import httpx
 import sys
 import os
@@ -10,8 +10,7 @@ from depictio.api.v1.configs.config import (
 )
 from depictio.api.v1.configs.custom_logging import format_pydantic, logger
 
-from depictio.api.v1.endpoints.user_endpoints.utils import find_user_by_email
-from depictio.models.models.users import User, TokenBase
+from depictio.models.models.users import TokenData, User, TokenBase
 from depictio.models.utils import convert_model_to_dict
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 
@@ -59,12 +58,12 @@ def api_call_register_user(
 
         response = httpx.post(
             f"{API_BASE_URL}/depictio/api/v1/auth/register",
-            params=params,
+            json=params,
         )
 
         if response.status_code == 200:
             logger.info("User registered successfully.")
-            return response.json()
+            return dict(response.json())
         else:
             logger.error(f"Registration error: {response.text}")
             return None
@@ -147,6 +146,32 @@ def api_call_fetch_user_from_email(email: EmailStr) -> Optional[User]:
 
 
 @validate_call(validate_return=True)
+def api_call_create_token(token_data: TokenData) -> Optional[Dict[str, Any]]:
+    """
+    Create a new token for a user by calling the API.
+
+    Args:
+        token_data: TokenData object containing token information
+
+    Returns:
+        Optional[Dict[str, Any]]: The response from the token creation or None if failed
+    """
+    logger.debug(f"Creating token: {format_pydantic(token_data)}")
+    response = httpx.post(
+        f"{API_BASE_URL}/depictio/api/v1/auth/create_token",
+        json=convert_model_to_dict(token_data),
+        headers={"api-key": FASTAPI_INTERNAL_API_KEY},
+    )
+
+    if response.status_code == 200:
+        logger.info("Token created successfully.")
+        return dict(response.json())
+    else:
+        logger.error(f"Token creation error: {response.text}")
+        return None
+
+
+@validate_call(validate_return=True)
 def purge_expired_tokens(token: str) -> Optional[Dict[str, Any]]:
     """
     Purge expired tokens from the database.
@@ -159,12 +184,12 @@ def purge_expired_tokens(token: str) -> Optional[Dict[str, Any]]:
         # Clean existing expired token from DB
         response = httpx.post(
             f"{API_BASE_URL}/depictio/api/v1/auth/purge_expired_tokens",
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"api-key": FASTAPI_INTERNAL_API_KEY},
         )
 
         if response.status_code == 200:
             logger.info("Expired tokens purged successfully.")
-            return response.json()
+            return dict(response.json())
         else:
             logger.error(f"Error purging expired tokens: {response.text}")
             return None
@@ -223,51 +248,81 @@ def api_update_group_in_users(group_id: str, payload: dict, current_token: str):
     return response
 
 
-def delete_token(email, token_id, current_token):
-    logger.info(f"Deleting token for user {email}.")
-    user = find_user_by_email(email)
-    user = convert_objectid_to_str(user.dict())
-    logger.info(f"User: {user}")
-    if user:
-        logger.info(f"Deleting token for user {email}.")
-        request_body = {"user": user, "token_id": token_id}
-        response = httpx.post(
-            f"{API_BASE_URL}/depictio/api/v1/auth/delete_token",
-            json=request_body,
-            headers={"Authorization": f"Bearer {current_token}"},
-        )
-        if response.status_code == 200:
-            logger.info(f"Token deleted for user {email}.")
-        else:
-            logger.error(f"Error deleting token for user {email}: {response.text}")
-        return response
-    return None
+def api_call_delete_token(token_id):
+    response = httpx.post(
+        f"{API_BASE_URL}/depictio/api/v1/auth/delete_token",
+        params={"token_id": token_id},
+        headers={"api-key": FASTAPI_INTERNAL_API_KEY},
+    )
+    if response.status_code == 200:
+        logger.info(f"Token {token_id} deleted successfully.")
+        return True
+    else:
+        logger.error(f"Error deleting token {token_id}: {response.text}")
+        return False
 
 
-def generate_agent_config(email, token, current_token):
-    user = api_call_fetch_user_from_email(email)
-    user = convert_objectid_to_str(user.model_dump())
-    logger.info(f"User: {user}")
+def api_call_list_tokens(
+    current_token: str,
+    token_lifetime: Optional[str] = None,
+) -> Optional[List]:
+    """
+    List all tokens for the current user.
 
-    token = convert_objectid_to_str(token)
-    token = {
-        "access_token": token["access_token"],
-        "expire_datetime": token["expire_datetime"],
-        "name": token["name"],
-    }
+    Args:
+        current_token: The current authentication token
 
-    logger.info(f"Generating agent config for user {user}.")
-    result = httpx.post(
-        f"{API_BASE_URL}/depictio/api/v1/auth/generate_agent_config",
-        json={"user": user, "token": token},
+    Returns:
+        Response from the token listing or None if failed
+    """
+    if token_lifetime:
+        params = {"token_lifetime": token_lifetime}
+    else:
+        params = {}
+
+    response = httpx.get(
+        f"{API_BASE_URL}/depictio/api/v1/auth/list_tokens",
+        params=params,
         headers={"Authorization": f"Bearer {current_token}"},
     )
-    # logger.info(f"Result: {result.json()}")
-    if result.status_code == 200:
-        logger.info(f"Agent config generated for user {user}.")
-        return result.json()
+    if response.status_code == 200:
+        logger.info("Tokens listed successfully.")
+        tokens = response.json()
+        if isinstance(tokens, list):
+            return tokens
+        else:
+            logger.error(f"Expected list but got {type(tokens)}: {tokens}")
+            return None
     else:
-        logger.error(f"Error generating agent config for user {user}: {result.text}")
+        logger.error(f"Error listing tokens: {response.text}")
+        return None
+
+
+def api_call_generate_agent_config(
+    token: TokenData, current_token: str
+) -> Optional[Dict[str, Any]]:
+    """
+    Generate an agent configuration for a user with the given token.
+
+    Args:
+        token: The TokenData object
+        current_token: The current authentication token
+
+    Returns:
+        Response from the agent config generation or None if failed
+    """
+    logger.info(f"Generating agent config for token: {token}")
+    response = httpx.post(
+        f"{API_BASE_URL}/depictio/api/v1/auth/generate_agent_config",
+        json=convert_model_to_dict(token),
+        headers={"Authorization": f"Bearer {current_token}"},
+    )
+    if response.status_code == 200:
+        logger.info("Agent config generated successfully.")
+        return dict(response.json())
+    else:
+        logger.error(f"Error generating agent config: {response.text}")
+        return None
 
 
 @validate_call(config=dict(arbitrary_types_allowed=True), validate_return=True)
@@ -279,7 +334,41 @@ def api_get_project_from_id(project_id: PyObjectId, token: str) -> httpx.Respons
     logger.info(f"Getting project with ID: {project_id}")
     response = httpx.get(
         f"{API_BASE_URL}/depictio/api/v1/projects/get/from_id",
-        params={"project_id": project_id},
+        params={"project_id": convert_objectid_to_str(project_id)},
         headers={"Authorization": f"Bearer {token}"},
     )
     return response
+
+
+@validate_call(validate_return=True)
+def api_call_edit_password(
+    old_password: str,
+    new_password: str,
+    access_token: str,
+) -> Optional[Dict[str, Any]]:
+    """
+    Edit the password of a user by calling the API.
+    Args:
+        old_password: The old password
+        new_password: The new password
+        access_token: The user's access token
+    Returns:
+        Optional[Dict[str, Any]]: The response from the password edit or None if failed
+    """
+    response = httpx.post(
+        f"{API_BASE_URL}/depictio/api/v1/auth/edit_password",
+        json={
+            "old_password": old_password,
+            "new_password": new_password,
+        },
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    if response.status_code == 200:
+        logger.info("Password edited successfully.")
+        return dict(response.json())
+    else:
+        logger.error(f"Error editing password: {response.text}")
+        return {
+            "success": False,
+            "message": f"Error editing password: {response.text}",
+        }
