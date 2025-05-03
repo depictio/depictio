@@ -1,55 +1,55 @@
-from contextlib import asynccontextmanager
+import asyncio
 import logging
+import os
+from contextlib import asynccontextmanager
 from typing import Any
+
+import httpx
 from beanie import PydanticObjectId, init_beanie
 from bson import ObjectId
 from dotenv import load_dotenv
-from fastapi import FastAPI, BackgroundTasks
+from fastapi import BackgroundTasks, FastAPI
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-import httpx
 from motor.motor_asyncio import AsyncIOMotorClient
-import os
-import asyncio
 
+from depictio import BASE_PATH
+from depictio.api.v1.configs.config import MONGODB_URL, settings
 from depictio.api.v1.endpoints.routers import router
-from depictio.api.v1.initialization import run_initialization
 from depictio.api.v1.endpoints.utils_endpoints.process_data_collections import (
     process_collections,
     process_initial_data_collections,
 )
-from depictio import BASE_PATH
-from depictio.api.v1.configs.config import settings, MONGODB_URL
-from depictio.version import get_version, get_api_version
-
+from depictio.api.v1.initialization import run_initialization
 from depictio.api.v1.utils import clean_screenshots
 from depictio.models.models.base import PyObjectId
-from depictio.models.utils import get_depictio_context
-from depictio.models.models.users import TokenBeanie, GroupBeanie, UserBeanie
 from depictio.models.models.projects import ProjectBeanie
+from depictio.models.models.users import GroupBeanie, TokenBeanie, UserBeanie
+from depictio.models.utils import get_depictio_context
+from depictio.version import get_api_version, get_version
 
 # Explicitly load environment variables
 load_dotenv(BASE_PATH.parent / ".env", override=False)
 
 # Detailed .env file debugging
-print(f"BASE_PATH: {BASE_PATH}")
-print(f"BASE_PATH.parent: {BASE_PATH.parent}")
-print(f"Attempting to load .env from: {BASE_PATH.parent / '.env'}")
-print(f"Does .env file exist? {os.path.exists(BASE_PATH.parent / '.env')}")
-print(f"Full .env file path: {os.path.abspath(BASE_PATH.parent / '.env')}")
+# print(f"BASE_PATH: {BASE_PATH}")
+# print(f"BASE_PATH.parent: {BASE_PATH.parent}")
+# print(f"Attempting to load .env from: {BASE_PATH.parent / '.env'}")
+# print(f"Does .env file exist? {os.path.exists(BASE_PATH.parent / '.env')}")
+# print(f"Full .env file path: {os.path.abspath(BASE_PATH.parent / '.env')}")
 
 # Try alternative loading methods
 try:
     from dotenv import dotenv_values
     env_values = dotenv_values(BASE_PATH.parent / ".env")
-    print(f"Dotenv values: {env_values}")
+    # print(f"Dotenv values: {env_values}")
 except Exception as e:
     print(f"Error loading .env with dotenv_values: {e}")
 
 # Ensure context is loaded before first use
 DEPICTIO_CONTEXT = get_depictio_context()
-print(f"DEPICTIO_CONTEXT set to: {DEPICTIO_CONTEXT}")
+# print(f"DEPICTIO_CONTEXT set to: {DEPICTIO_CONTEXT}")
 
 # Database initialization
 async def init_motor_beanie():
@@ -104,8 +104,8 @@ def delayed_process_data_collections():
     """
     Process initial data collections after a delay to ensure the API is fully started.
     """
-    import time
     import threading
+    import time
 
     # Check first if files exist
     from depictio.api.v1.db import deltatables_collection, projects_collection
