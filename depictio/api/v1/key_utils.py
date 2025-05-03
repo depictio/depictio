@@ -38,6 +38,9 @@ def _load_or_generate_api_internal_key() -> str:
         "keys",
         "internal_api_key.pem",
     )
+    # Create the directory if it doesn't exist
+    os.makedirs(os.path.dirname(key_path), exist_ok=True)
+
     logger.debug(f"Key path: {key_path}")
     if os.path.exists(key_path):
         with open(key_path, "r") as f:
