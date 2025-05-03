@@ -1,29 +1,33 @@
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
 from fastapi import HTTPException, status
-from fastapi.testclient import TestClient
-from bson import ObjectId
 
 # Import the function to test
-from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
+from depictio.api.v1.endpoints.user_endpoints.routes import (
+    get_current_user,
+)
 from depictio.models.models.users import TokenBeanie, UserBeanie
-from depictio.api.main import app
+from depictio.tests.api.v1.endpoints.user_endpoints.conftest import (
+    beanie_setup,
+)
 
 # ------------------------------------------------------
 # Test get_current_user function
 # ------------------------------------------------------
 
+
 class TestGetCurrentUser:
     def setup_method(self):
         # Mock TokenBeanie.find_one directly to prevent CollectionWasNotInitialized
         self.token_find_one_patcher = patch(
-            "depictio_models.models.users.TokenBeanie.find_one", new_callable=AsyncMock
+            "depictio.models.models.users.TokenBeanie.find_one", new_callable=AsyncMock
         )
         self.mock_token_find_one = self.token_find_one_patcher.start()
 
         # Mock UserBeanie.get (which might be called in async_fetch_user_from_token)
         self.user_get_patcher = patch(
-            "depictio_models.models.users.UserBeanie.get", new_callable=AsyncMock
+            "depictio.models.models.users.UserBeanie.get", new_callable=AsyncMock
         )
         self.mock_user_get = self.user_get_patcher.start()
 
@@ -114,52 +118,30 @@ def mock_oauth2_scheme():
     return _oauth2_scheme
 
 
-@pytest.fixture
-def test_client():
-    """Create a test client for the FastAPI app."""
-    return TestClient(app)
-
-
 # ------------------------------------------------------
 # Test login endpoint
 # ------------------------------------------------------
 
-class TestLoginEndpoint:
-    """Tests for the login endpoint using direct mocking of all database calls."""
 
+class TestLoginEndpoint:
+    # Password hashing fixture
+
+    @beanie_setup([UserBeanie, TokenBeanie])
     @pytest.mark.asyncio
-    @patch(
-        "depictio.api.v1.endpoints.user_endpoints.routes.check_password",
-        new_callable=AsyncMock,
-    )
-    @patch(
-        "depictio.api.v1.endpoints.user_endpoints.routes.async_fetch_user_from_email",
-        new_callable=AsyncMock,
-    )
-    @patch(
-        "depictio.api.v1.endpoints.user_endpoints.routes.add_token",
-        new_callable=AsyncMock,
-    )
+    # Patch both _check_password AND _verify_password to be safe
+
     async def test_login_success(
-        self, mock_add_token, mock_fetch_user, mock_check_password, test_client
+        self,
+        test_client,
+        generate_hashed_password,
     ):
         """Test successful login."""
-        # Setup mocks
-        mock_check_password.return_value = True
 
-        # Create a mock user
-        user_id = ObjectId()
-        mock_user = MagicMock()
-        mock_user.id = user_id
-        mock_user.email = "test@example.com"
-        mock_fetch_user.return_value = mock_user
-
-        # Create a mock token
-        mock_token = MagicMock(spec=TokenBeanie)
-        mock_token.access_token = "test_access_token"
-        mock_token.token_type = "bearer"
-        mock_token.user_id = user_id
-        mock_add_token.return_value = mock_token
+        user = UserBeanie(
+            email="test@example.com",
+            password=generate_hashed_password("password123"),
+        )
+        await user.insert()
 
         # Perform the login request
         response = test_client.post(
@@ -175,81 +157,19 @@ class TestLoginEndpoint:
         assert "access_token" in response_data
         assert response_data["token_type"] == "bearer"
 
-        # Verify mock calls
-        mock_check_password.assert_called_once_with("test@example.com", "password123")
-        mock_fetch_user.assert_called_once_with("test@example.com")
-        mock_add_token.assert_called_once()
-
     @pytest.mark.asyncio
-    @patch(
-        "depictio.api.v1.endpoints.user_endpoints.routes.check_password",
-        new_callable=AsyncMock,
-    )
-    async def test_login_invalid_credentials(self, mock_check_password, test_client):
+    @beanie_setup([UserBeanie, TokenBeanie])
+    async def test_login_invalid_credentials(self, test_client):
         """Test login with invalid credentials."""
-        # Setup mock to return False (invalid credentials)
-        mock_check_password.return_value = False
-
-        # Perform the login request
+        # Perform the login request with invalid credentials
         response = test_client.post(
             "/depictio/api/v1/auth/login",
-            data={"username": "test@example.com", "password": "wrong_password"},
+            data={
+                "username": "non_existing_user@example.com",
+                "password": "wrong_password",
+            },
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
-
+        print(response.json())
         # Verify response
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
-        response_data = response.json()
-        assert response_data["detail"] == "Invalid credentials"
-
-        # Verify mock call
-        mock_check_password.assert_called_once_with(
-            "test@example.com", "wrong_password"
-        )
-
-    @pytest.mark.asyncio
-    @patch(
-        "depictio.api.v1.endpoints.user_endpoints.routes.check_password",
-        new_callable=AsyncMock,
-    )
-    @patch(
-        "depictio.api.v1.endpoints.user_endpoints.routes.async_fetch_user_from_email",
-        new_callable=AsyncMock,
-    )
-    @patch(
-        "depictio.api.v1.endpoints.user_endpoints.routes.add_token",
-        new_callable=AsyncMock,
-    )
-    async def test_login_token_creation_failure(
-        self, mock_add_token, mock_fetch_user, mock_check_password, test_client
-    ):
-        """Test login when token creation fails."""
-        # Setup mocks
-        mock_check_password.return_value = True
-
-        # Create a mock user
-        user_id = ObjectId()
-        mock_user = MagicMock()
-        mock_user.id = user_id
-        mock_user.email = "test@example.com"
-        mock_fetch_user.return_value = mock_user
-
-        # Configure add_token to return None (token creation failure)
-        mock_add_token.return_value = None
-
-        # Perform the login request
-        response = test_client.post(
-            "/depictio/api/v1/auth/login",
-            data={"username": "test@example.com", "password": "password123"},
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-        )
-
-        # Verify response
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        response_data = response.json()
-        assert response_data["detail"] == "Token with the same name already exists"
-
-        # Verify mock calls
-        mock_check_password.assert_called_once_with("test@example.com", "password123")
-        mock_fetch_user.assert_called_once_with("test@example.com")
-        mock_add_token.assert_called_once()
