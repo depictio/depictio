@@ -1,47 +1,39 @@
 from typing import List
+
 from bson import ObjectId
-from fastapi import HTTPException, Depends, APIRouter, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 # depictio imports
 from depictio.api.v1.configs.custom_logging import logger
-from depictio.api.v1.db import projects_collection, dashboards_collection
+from depictio.api.v1.db import dashboards_collection, projects_collection
+from depictio.api.v1.endpoints.projects_endpoints.utils import (
+    _async_get_all_projects,
+    _async_get_project_from_id,
+    _async_get_project_from_name,
+)
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
+from depictio.models.models.base import PyObjectId
 
 ## depictio-models imports
-from depictio.models.models.projects import Project
+from depictio.models.models.projects import Project, ProjectPermissionRequest
 from depictio.models.models.users import User
-from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 
 # Define the router
 projects_endpoint_router = APIRouter()
 
 
+# Endpoints
 @projects_endpoint_router.get("/get/all", response_model=List[Project])
 async def get_all_projects(current_user: User = Depends(get_current_user)) -> List:
-    # Find projects where current_user is either an owner or a viewer
-    current_user_id = ObjectId(current_user.id)
-    logger.info(f"Current user ID: {current_user_id}")
-    query = {
-        "$or": [
-            {"permissions.owners._id": current_user_id},
-            {"permissions.editors._id": current_user_id},
-            {"permissions.viewers._id": current_user_id},
-            {"is_public": True},
-        ],
-    }
-    logger.info(f"Query: {query}")
+    """Get all projects accessible for the current user.
 
-    if current_user.is_admin:
-        query = {}
-    logger.info(f"Query: {query}")
+    Args:
+        current_user (User, optional): _description_. Defaults to Depends(get_current_user).
 
-    projects = list(projects_collection.find(query))
-    logger.info(f"Projects: {projects}")
-    if projects:
-        projects = [Project.from_mongo(project) for project in projects]
-        return projects
-    else:
-        return []
+    Returns:
+        List: List of projects.
+    """
+    return _async_get_all_projects(current_user, projects_collection)
 
 
 @projects_endpoint_router.get("/get/from_id", response_model=Project)
@@ -49,30 +41,37 @@ async def get_project_from_id(
     project_id: PyObjectId = Query(default="646b0f3c1e4a2d7f8e5b8c9a"),
     current_user: User = Depends(get_current_user),
 ):
-    logger.info(f"Getting project with ID: {project_id}")
-    current_user_id = ObjectId(current_user.id)
-    query = {
-        "$or": [
-            {"permissions.owners._id": current_user_id},
-            {"permissions.editors._id": current_user_id},
-            {"permissions.viewers._id": current_user_id},
-            {"is_public": True},
-        ],
-    }
-    logger.info(f"Query: {query}")
+    """Get a project by ID.
+    This endpoint retrieves a project from the database using its ID. It checks if the user has the necessary permissions to access the project.
 
-    if current_user.is_admin:
-        query = {"_id": ObjectId(project_id)}
+    Args:
+        project_id (PyObjectId, optional): _description_. Defaults to Query(default="646b0f3c1e4a2d7f8e5b8c9a").
+        current_user (User, optional): _description_. Defaults to Depends(get_current_user).
 
-    logger.info(f"Query: {query}")
+    Returns:
+        _type_: Project: The project object retrieved from the database.
+    """
+    return _async_get_project_from_id(
+        project_id, current_user, projects_collection
+    )
 
-    project = projects_collection.find_one(query)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found.")
 
-    project = convert_objectid_to_str(project)
+@projects_endpoint_router.get("/get/from_name/{project_name}", response_model=Project)
+async def get_project_from_name(
+    project_name: str, current_user: User = Depends(get_current_user)
+):
+    """Get a project by name.
 
-    return project
+    Args:
+        project_name (str): _Description of the project name to be retrieved.
+        current_user (User, optional): _description_. Defaults to Depends(get_current_user).
+
+    Returns:
+        _type_: Project: The project object retrieved from the database.
+    """
+    return _async_get_project_from_name(
+        project_name, current_user, projects_collection
+    )
 
 
 @projects_endpoint_router.get(
@@ -104,36 +103,6 @@ async def get_project_from_dashboard_id(
     project_id = response.get("project_id")
 
     project = await get_project_from_id(str(project_id), current_user)
-    return project
-
-
-@projects_endpoint_router.get("/get/from_name/{project_name}", response_model=Project)
-async def get_project_from_name(
-    project_name: str, current_user: User = Depends(get_current_user)
-):
-    logger.info(f"Getting project with ID: {project_name}")
-
-    # Find projects where current_user is either an owner or a viewer
-    query = {
-        "name": project_name,
-        "$or": [
-            {"permissions.owners._id": current_user.id},
-            {"permissions.viewers._id": current_user.id},
-            {
-                "permissions.viewers": "*"
-            },  # This makes projects with "*" publicly accessible
-        ],
-    }
-
-    if current_user.is_admin:
-        query = {"name": project_name}
-
-    project = projects_collection.find_one(query)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found.")
-
-    project = convert_objectid_to_str(Project.from_mongo(project).model_dump())
-
     return project
 
 
@@ -235,18 +204,6 @@ async def delete_project(
         "success": True,
         "message": f"Project '{project.name}' with ID '{project.id}' deleted.",
     }
-
-
-from pydantic import BaseModel, ConfigDict
-
-
-class ProjectPermissionRequest(BaseModel):
-    project_id: str
-    permissions: dict
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    # class Config:
-    #     arbitrary_types_allowed = True
 
 
 @projects_endpoint_router.post("/update_project_permissions")
