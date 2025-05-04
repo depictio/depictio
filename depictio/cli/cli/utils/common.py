@@ -5,7 +5,7 @@ import typer
 from pydantic import validate_call
 
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
-from depictio.cli.logging import logger
+from depictio.cli.cli_logging import logger
 from depictio.models.models.users import CLIConfig
 from depictio.models.utils import get_config
 
