@@ -1,13 +1,14 @@
+import re
 from pathlib import Path
 from typing import List, Optional, Union
-import re
+
 from pydantic import BaseModel, field_validator, model_validator
 
+from depictio.models.logging import logger
 from depictio.models.models.base import MongoModel
 from depictio.models.models.data_collections_types.jbrowse import DCJBrowse2Config
 from depictio.models.models.data_collections_types.table import DCTableConfig
 from depictio.models.utils import get_depictio_context
-from depictio.models.logging import logger
 
 
 class WildcardRegexBase(BaseModel):
@@ -138,11 +139,15 @@ class DataCollectionConfig(MongoModel):
         if type_value == "table":
             # Check if it's already a DCTableConfig instance
             if not isinstance(dc_specific_properties, DCTableConfig):
-                values["dc_specific_properties"] = DCTableConfig(**dc_specific_properties)
+                values["dc_specific_properties"] = DCTableConfig(
+                    **dc_specific_properties
+                )
         elif type_value == "jbrowse2":
             # Check if it's already a DCJBrowse2Config instance
             if not isinstance(dc_specific_properties, DCJBrowse2Config):
-                values["dc_specific_properties"] = DCJBrowse2Config(**dc_specific_properties)
+                values["dc_specific_properties"] = DCJBrowse2Config(
+                    **dc_specific_properties
+                )
         return values
 
 
