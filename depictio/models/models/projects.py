@@ -1,15 +1,21 @@
-from datetime import datetime
 import os
 import re
+from datetime import datetime
 from typing import List, Optional
-from beanie import Document
-from pydantic import field_validator
 
+from beanie import Document
+from pydantic import BaseModel, ConfigDict, field_validator
+
+from depictio.models.config import DEPICTIO_CONTEXT
+from depictio.models.models.base import MongoModel
 from depictio.models.models.users import Permission
 from depictio.models.models.workflows import Workflow
-from depictio.models.models.base import MongoModel
-from depictio.models.config import DEPICTIO_CONTEXT
 
+
+class ProjectPermissionRequest(BaseModel):
+    project_id: str
+    permissions: dict
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 class Project(MongoModel):
     name: str

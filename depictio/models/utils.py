@@ -1,11 +1,12 @@
-from datetime import datetime
 import os
-from beanie import PydanticObjectId
-import yaml
+from datetime import datetime
 from typing import Any, Dict, Type
-from pydantic import BaseModel, ValidationError, validate_call
+
+import yaml
+from beanie import PydanticObjectId
 from bson import ObjectId
 from dotenv import load_dotenv
+from pydantic import BaseModel, ValidationError, validate_call
 
 from depictio.models.logging import logger
 from depictio.models.models.base import convert_objectid_to_str
@@ -53,16 +54,38 @@ def get_config(filename: str) -> Dict:
 def substitute_env_vars(config: Any) -> Any:
     """
     Recursively substitute environment variables in the configuration dictionary.
+    Also handles special case for $PWD.
     """
     if isinstance(config, dict):
         return {k: substitute_env_vars(v) for k, v in config.items()}
     elif isinstance(config, list):
         return [substitute_env_vars(item) for item in config]
     elif isinstance(config, str):
-        # Substitute environment variables in string values
-        return os.path.expandvars(config)
+        # First substitute environment variables
+        result = os.path.expandvars(config)
+        
+        # Special handling for $PWD if it wasn't expanded
+        if "$PWD" in result:
+            current_dir = os.getcwd()
+            result = result.replace("$PWD", current_dir)
+            
+        return result
     else:
         return config
+
+# def substitute_env_vars(config: Any) -> Any:
+#     """
+#     Recursively substitute environment variables in the configuration dictionary.
+#     """
+#     if isinstance(config, dict):
+#         return {k: substitute_env_vars(v) for k, v in config.items()}
+#     elif isinstance(config, list):
+#         return [substitute_env_vars(item) for item in config]
+#     elif isinstance(config, str):
+#         # Substitute environment variables in string values
+#         return os.path.expandvars(config)
+#     else:
+#         return config
 
 
 @validate_call

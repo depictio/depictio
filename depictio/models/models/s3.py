@@ -1,11 +1,7 @@
-import os
 import re
-from typing import Optional
 
-from pydantic import AliasChoices, BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-from depictio.api.v1.configs.custom_logging import logger
 
 
 class PolarsStorageOptions(BaseModel):
@@ -79,6 +75,7 @@ class PolarsStorageOptions(BaseModel):
 
 class S3DepictioCLIConfig(BaseSettings):
     """Test-specific version of S3DepictioCLIConfig for isolated testing."""
+
     service_name: str = Field(default="http://minio")
     endpoint_url: str = Field(default="http://localhost:9000")
     root_user: str = Field(default="minio")
