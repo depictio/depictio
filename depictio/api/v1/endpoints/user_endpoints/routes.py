@@ -468,7 +468,7 @@ async def list_tokens_(
     current_user: UserBase = Depends(get_current_user),
     token_lifetime: Optional[str] = None,
 ):
-    cli_configs = _list_tokens(
+    cli_configs = await _list_tokens(
         user_id=current_user.id,
         token_lifetime=token_lifetime,
     )
