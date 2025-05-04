@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.custom_logging import format_pydantic, logger
 from depictio.api.v1.endpoints.projects_endpoints.utils import (
-    helper_create_project_beanie,
+    _helper_create_project_beanie,
 )
 from depictio.api.v1.endpoints.user_endpoints.core_functions import _create_user_in_db
 from depictio.api.v1.endpoints.user_endpoints.token_utils import create_default_token
@@ -59,7 +59,7 @@ async def create_initial_project(
     logger.debug(f"Token: {format_pydantic(token)}")
 
     try:
-        payload = await helper_create_project_beanie(project)
+        payload = await _helper_create_project_beanie(project)
 
         logger.debug(f"Project creation payload: {payload}")
         if payload["success"]:
