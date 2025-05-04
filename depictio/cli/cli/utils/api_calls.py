@@ -6,7 +6,7 @@ from pydantic import validate_call
 
 from depictio.cli.cli.utils.common import generate_api_headers, load_depictio_config
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
-from depictio.cli.logging import logger
+from depictio.cli.cli_logging import logger
 from depictio.models.models.base import BaseModel, convert_objectid_to_str
 from depictio.models.models.files import File
 from depictio.models.models.users import CLIConfig
@@ -210,9 +210,7 @@ def api_get_files_by_dc_id(dc_id: str, CLI_config: CLIConfig) -> httpx.Response:
         httpx.Response: The response from the server.
     """
     logger.info(f"Getting files for data collection ID: {dc_id}")
-    logger.info(
-        f"{CLI_config.base_url}/depictio/api/v1/files/list/{dc_id}"
-    )
+    logger.info(f"{CLI_config.base_url}/depictio/api/v1/files/list/{dc_id}")
     logger.info(generate_api_headers(CLI_config))
     response = httpx.get(
         f"{CLI_config.base_url}/depictio/api/v1/files/list/{dc_id}",
@@ -384,8 +382,6 @@ def api_delete_deltatable(delta_table_id: str, CLI_config: CLIConfig) -> httpx.R
     """
     logger.info(f"Deleting Delta Table with ID: {delta_table_id}")
 
-    url = (
-        f"{CLI_config.base_url}/depictio/api/v1/deltatables/delete/{delta_table_id}"
-    )
+    url = f"{CLI_config.base_url}/depictio/api/v1/deltatables/delete/{delta_table_id}"
     response = httpx.delete(url, headers=generate_api_headers(CLI_config))
     return response

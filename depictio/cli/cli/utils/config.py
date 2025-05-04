@@ -7,7 +7,7 @@ import typer
 from pydantic import validate_call
 
 from depictio.cli.cli.utils.api_calls import api_get_project_from_name, api_login
-from depictio.cli.logging import logger
+from depictio.cli.cli_logging import logger
 from depictio.models.models.base import convert_objectid_to_str
 from depictio.models.models.projects import Project
 from depictio.models.models.users import CLIConfig
