@@ -36,6 +36,7 @@ from depictio.models.models.users import (
     CLIConfig,
     GroupBeanie,
     RequestEditPassword,
+    RequestUserRegistration,
     TokenBase,
     TokenBeanie,
     TokenData,
@@ -225,26 +226,23 @@ async def api_fetch_user_from_id(
 
 
 @auth_endpoint_router.post("/register")
-async def create_user(
-    email: EmailStr, password: str, is_admin: bool = False
+async def register(
+    request: RequestUserRegistration,
 ) -> Dict[str, Any]:
     """
     Endpoint to register a new user.
 
     Args:
-        email: User's email address
-        password: User's password
-        group: User's group (optional)
-        is_admin: Whether user is admin
+        request: User registration data containing email and password
 
     Returns:
         Dictionary with user data, success status and message
     """
-    logger.info(f"Registering user with email: {email}")
-    logger.debug(f"Password: {password}")
-    logger.debug(f"Is Admin: {is_admin}")
+    logger.info(f"Registering user with email: {request.email}")
     try:
-        return await _create_user_in_db(email, password, is_admin)
+        return await _create_user_in_db(
+            request.email, request.password, request.is_admin
+        )
 
     except HTTPException as e:
         # Re-raise HTTP exceptions
@@ -427,17 +425,18 @@ async def delete_token(
 
 @auth_endpoint_router.post("/purge_expired_tokens", include_in_schema=False)
 async def purge_expired_tokens_endpoint(
-    api_key: str = Header(..., description="Internal API key for authentication"),
+    # api_key: str = Header(..., description="Internal API key for authentication"),
+    current_user: UserBase = Depends(get_current_user),
 ):
-    logger.debug(f"API key: {api_key}")
-    logger.debug(f"Internal API key: {FASTAPI_INTERNAL_API_KEY}")
-    if api_key != FASTAPI_INTERNAL_API_KEY:
-        raise HTTPException(
-            status_code=403,
-            detail="Invalid API key",
-        )
+    # logger.debug(f"API key: {api_key}")
+    # logger.debug(f"Internal API key: {FASTAPI_INTERNAL_API_KEY}")
+    # if api_key != FASTAPI_INTERNAL_API_KEY:
+    #     raise HTTPException(
+    #         status_code=403,
+    #         detail="Invalid API key",
+    #     )
 
-    result = await _purge_expired_tokens()
+    result = await _purge_expired_tokens(current_user)
 
     if result["success"]:
         return {"success": True}
