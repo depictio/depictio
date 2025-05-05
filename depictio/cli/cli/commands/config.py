@@ -37,7 +37,9 @@ def show_cli_config(
 
     try:
         depictio_CLI_config = load_depictio_config(yaml_config_path=CLI_config_path)
-        rich_print_json("Current Depictio CLI Configuration: ", depictio_CLI_config.model_dump())
+        rich_print_json(
+            "Current Depictio CLI Configuration: ", depictio_CLI_config.model_dump()
+        )
     except Exception as e:
         rich_print_checked_statement(f"Unable to load configuration - {e}", "error")
 
