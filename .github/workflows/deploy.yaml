@@ -45,10 +45,10 @@ jobs:
           docker compose version
 
       # ← Export UID and GID
-      - name: Export UID and GID
-        run: |
-          echo "UID=$(id -u)" >> $GITHUB_ENV
-          echo "GID=$(id -g)" >> $GITHUB_ENV
+      # - name: Export UID and GID
+      #   run: |
+      #     echo "UID=$(id -u)" >> $GITHUB_ENV
+      #     echo "GID=$(id -g)" >> $GITHUB_ENV
 
       - name: Create and Set Permissions for depictioDB
         run: |
@@ -74,12 +74,12 @@ jobs:
       #     chown -R $UID:$GID depictio/.depictio/
       #     chmod -R 775 depictio/.depictio/
 
-      # - name: Set Environment Variables
-      #   run: |
-      #     echo "UID=$(id -u)" >> $GITHUB_ENV
-      #     echo "GID=$(id -g)" >> $GITHUB_ENV
-      #     echo "MINIO_ROOT_USER=minio" >> $GITHUB_ENV
-      #     echo "MINIO_ROOT_PASSWORD=minio123" >> $GITHUB_ENV
+      - name: Set Environment Variables
+        run: |
+          echo "UID=$(id -u)" >> $GITHUB_ENV
+          echo "GID=$(id -g)" >> $GITHUB_ENV
+          echo "MINIO_ROOT_USER=minio" >> $GITHUB_ENV
+          echo "MINIO_ROOT_PASSWORD=minio123" >> $GITHUB_ENV
 
       # - name: Set up Environment Variables
       #   run: echo "DEPICTIO_BACKEND_EXAMPLE_DATA_VOLUME_HOST=/home/runner/work/depictio/depictio/depictio-example-data" >> .env
