@@ -1,5 +1,3 @@
-import hashlib
-import json
 import os
 from typing import Any, Dict, cast
 
@@ -40,7 +38,6 @@ def validate_project_config_and_check_S3_storage(
         return CLI_config, response_validation
     else:
         raise typer.Exit(code=1)
-
 
 
 def find_matching_entry(collection, new_item):
@@ -99,8 +96,6 @@ def assign_ids_by_keys(existing_meta, new_structure):
             new_structure[idx] = assign_ids_by_keys(existing_meta, item)
 
     return new_structure
-
-
 
 
 @validate_call
@@ -165,7 +160,6 @@ def load_and_prepare_config(
 
     logger.debug(f"Pipeline config after adding permissions: {project_config}")
     return cast(Dict[str, Any], project_config)
-
 
 
 @validate_call

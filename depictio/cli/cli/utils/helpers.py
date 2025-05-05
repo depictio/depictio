@@ -43,7 +43,6 @@ def process_data_collection_helper(
     logger.info(f"Mode: {mode}")
 
     if mode == "scan":
-
         result = scan_files_for_data_collection(
             workflow=wf,
             data_collection_id=dc_id,
