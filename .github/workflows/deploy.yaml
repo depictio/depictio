@@ -235,6 +235,41 @@ jobs:
           # Depictio CLI command to show the CLI config
           depictio-cli config show-cli-config --CLI-config-path admin_config.yaml
 
+      # - name: Thorough file check
+      #   run: |
+      #     cd depictio/cli
+      #     echo "=== Current directory ==="
+      #     pwd
+      #     echo "=== List parent directory ==="
+      #     ls -la ../
+      #     echo "=== List api directory ==="
+      #     ls -la ../api/
+      #     echo "=== List v1 directory ==="
+      #     ls -la ../api/v1/
+      #     echo "=== List configs directory ==="
+      #     ls -la ../api/v1/configs/
+      #     echo "=== List iris_dataset directory ==="
+      #     ls -la ../api/v1/configs/iris_dataset/
+      #     echo "=== Try to read the file ==="
+      #     cat ../api/v1/configs/iris_dataset/iris.csv | head -5 || echo "Cannot read file"
+
+      # - name: Debug paths before validation
+      #   run: |
+      #     echo "File exists: $(if [ -f "depictio/api/v1/configs/iris_dataset/iris.csv" ]; then echo "YES"; else echo "NO"; fi)"
+      #     cd depictio/cli
+      #     echo "Current working directory: $(pwd)"
+      #     echo "File exists: $(if [ -f "../api/v1/configs/iris_dataset/iris.csv" ]; then echo "YES"; else echo "NO"; fi)"
+      #     echo "Absolute path: $(realpath "../api/v1/configs/iris_dataset/iris.csv")"
+      #     echo "Environment variables:"
+      #     env | grep -E "(GITHUB_WORKSPACE|PWD)"
+
+      # - name: Check mount points
+      #   run: |
+      #     echo "=== Mount points ==="
+      #     mount | grep -E "(depictio|workspace)"
+      #     echo "=== Docker volume mounts ==="
+      #     docker inspect $(hostname) | grep -A5 Mounts
+
       - name: Validate & Show Project Config
         continue-on-error: true
         run: |
@@ -248,6 +283,8 @@ jobs:
                               --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
                               --CLI-config-path admin_config.yaml
 
+
+
       - name: Check S3 Storage
         continue-on-error: true
         run: |
@@ -257,7 +294,7 @@ jobs:
           source venv/bin/activate
 
           # Depictio CLI command to show the CLI config
-          depictio-cli config check_s3_storage \
+          depictio-cli config check-s3-storage \
                               --CLI-config-path admin_config.yaml
 
       - name: Show Project on server
@@ -270,7 +307,7 @@ jobs:
 
           # Depictio CLI command to show the CLI config
           depictio-cli config show-depictio-project-metadata-on-server \
-                              --project_name "Iris Dataset Project Data Analysis" \
+                              --project-name "Iris Dataset Project Data Analysis" \
                               --CLI-config-path admin_config.yaml
 
       - name: Sync Project to Server
@@ -283,61 +320,61 @@ jobs:
 
           # Depictio CLI command to show the CLI config
           depictio-cli config sync-project-config-to-server \
-                              --project-config-path ../api/v1/configs/iris_dataset/initial_project.yaml \
+                              --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
                               --CLI-config-path admin_config.yaml
 
-      # Sync the iris project configuration to the server
-      # - name: Sync Iris Project Configuration
-      #   continue-on-error: false
-      #   run: |
-      #     source venv/bin/activate
-      #     export POLARS_SKIP_CPU_CHECK=1
-      #     depictio-cli config show-cli-config --CLI-config-path ~/.depictio/admin_config.yaml
-      # # # Scan the iris dataset files
-      # - name: Scan Iris Dataset Files
-      #   continue-on-error: true
-      #   run: |
-      #     source venv/bin/activate
-      #     depictio-cli data scan \
-      #       --agent-config-path depictio/.depictio/admin_config.yaml \
-      #       --project-config-path depictio/api/v1/configs/iris_dataset/initial_project.yaml
+      # # Sync the iris project configuration to the server
+      # # - name: Sync Iris Project Configuration
+      # #   continue-on-error: false
+      # #   run: |
+      # #     source venv/bin/activate
+      # #     export POLARS_SKIP_CPU_CHECK=1
+      # #     depictio-cli config show-cli-config --CLI-config-path ~/.depictio/admin_config.yaml
+      # # # # Scan the iris dataset files
+      # # - name: Scan Iris Dataset Files
+      # #   continue-on-error: true
+      # #   run: |
+      # #     source venv/bin/activate
+      # #     depictio-cli data scan \
+      # #       --agent-config-path depictio/.depictio/admin_config.yaml \
+      # #       --project-config-path depictio/api/v1/configs/iris_dataset/initial_project.yaml
 
-      # # Process the iris dataset
-      # - name: Process Iris Dataset
-      #   continue-on-error: true
-      #   run: |
-      #     source venv/bin/activate
-      #     depictio-cli data process \
-      #       --agent-config-path depictio/.depictio/admin_config.yaml \
-      #       --project-config-path depictio/api/v1/configs/iris_dataset/initial_project.yaml
+      # # # Process the iris dataset
+      # # - name: Process Iris Dataset
+      # #   continue-on-error: true
+      # #   run: |
+      # #     source venv/bin/activate
+      # #     depictio-cli data process \
+      # #       --agent-config-path depictio/.depictio/admin_config.yaml \
+      # #       --project-config-path depictio/api/v1/configs/iris_dataset/initial_project.yaml
 
-      # # Fetch backend logs regardless of CLI step outcome
-      # - name: Fetch Depictio Backend Logs After CLI Run
-      #   if: always()  # Run this step no matter what happens previously
-      #   run: |
-      #     echo "Fetching backend logs after CLI run..."
-      #     docker compose logs depictio_backend
+      # # # Fetch backend logs regardless of CLI step outcome
+      # # - name: Fetch Depictio Backend Logs After CLI Run
+      # #   if: always()  # Run this step no matter what happens previously
+      # #   run: |
+      # #     echo "Fetching backend logs after CLI run..."
+      # #     docker compose logs depictio_backend
 
-      # - name: Check Workflow in MongoDB
-      #   run: |
-      #     docker compose exec -T mongo bash -c "
-      #       echo 'db.workflows.find().pretty()' | mongosh localhost:27018/depictioDB --quiet
-      #     "
-      # - name: Check Users in MongoDB
-      #   run: |
-      #     docker compose exec -T mongo bash -c "
-      #       echo 'db.users.find().pretty()' | mongosh localhost:27018/depictioDB --quiet
-      #     "
-      # - name: Check DeltaTables in MongoDB
-      #   run: |
-      #     docker compose exec -T mongo bash -c "
-      #       echo 'db.deltatables.find().pretty()' | mongosh localhost:27018/depictioDB --quiet
-      #     "
+      # # - name: Check Workflow in MongoDB
+      # #   run: |
+      # #     docker compose exec -T mongo bash -c "
+      # #       echo 'db.workflows.find().pretty()' | mongosh localhost:27018/depictioDB --quiet
+      # #     "
+      # # - name: Check Users in MongoDB
+      # #   run: |
+      # #     docker compose exec -T mongo bash -c "
+      # #       echo 'db.users.find().pretty()' | mongosh localhost:27018/depictioDB --quiet
+      # #     "
+      # # - name: Check DeltaTables in MongoDB
+      # #   run: |
+      # #     docker compose exec -T mongo bash -c "
+      # #       echo 'db.deltatables.find().pretty()' | mongosh localhost:27018/depictioDB --quiet
+      # #     "
 
-      # - name: Check if localhost:5080 (frontend) is up and running
-      #   run: |
-      #     curl -s -o /dev/null -w "%{http_code}" http://localhost:5080
-      #     echo "Frontend is up and running"
+      # # - name: Check if localhost:5080 (frontend) is up and running
+      # #   run: |
+      # #     curl -s -o /dev/null -w "%{http_code}" http://localhost:5080
+      # #     echo "Frontend is up and running"
 
-      # - name: Check Ingestion Success
-      #   run: echo "Data ingestion completed successfully"
+      # # - name: Check Ingestion Success
+      # #   run: echo "Data ingestion completed successfully"
