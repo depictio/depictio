@@ -33,7 +33,9 @@ class TokenData(BaseModel):
         base64url_pattern = re.compile(r"^[A-Za-z0-9_-]+$")
         for part in parts:
             if not part or not base64url_pattern.fullmatch(part):
-                raise ValueError("One of the JWT parts is not properly Base64URL-encoded")
+                raise ValueError(
+                    "One of the JWT parts is not properly Base64URL-encoded"
+                )
 
         return v
 

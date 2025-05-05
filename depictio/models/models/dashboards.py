@@ -1,5 +1,4 @@
 from typing import Dict, List, Optional
-from bson import ObjectId
 from pydantic import ConfigDict, field_serializer
 
 from depictio.models.models.users import Permission
@@ -34,15 +33,15 @@ class DashboardData(MongoModel):
         # Convert any ObjectIds in the permissions object to strings
         # The exact implementation depends on what's in your Permission class
         return permissions.model_dump()
-    
+
     @field_serializer("project_id")
     def serialize_project_id(self, project_id: PyObjectId) -> str:
         return str(project_id)
-    
+
     @field_serializer("dashboard_id")
     def serialize_dashboard_id(self, dashboard_id: PyObjectId) -> str:
         return str(dashboard_id)
-    
+
     @field_serializer("stored_metadata")
     def serialize_stored_metadata(self, stored_metadata: List) -> List:
         # Convert any ObjectIds in the stored_metadata list to strings
