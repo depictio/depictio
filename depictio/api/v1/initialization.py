@@ -45,21 +45,6 @@ async def run_initialization(
     # Step 2: Generate Keys (if not already generated)
     logger.info("Generating cryptographic keys...")
 
-    # Algorithm used for signing
-    ALGORITHM = settings.auth.keys_algorithm
-
-    # Lazy-loaded settings and paths
-    _KEYS_DIR = settings.auth.keys_dir
-    DEFAULT_PRIVATE_KEY_PATH = None
-    DEFAULT_PUBLIC_KEY_PATH = None
-
-    generate_keys(
-        private_key_path=DEFAULT_PRIVATE_KEY_PATH,
-        public_key_path=DEFAULT_PUBLIC_KEY_PATH,
-        keys_dir=_KEYS_DIR,
-        algorithm=ALGORITHM,
-        wipe=bool(settings.mongodb.wipe),
-    )
 
     # Step 3: Initialize Database (users, groups, agent config)
     logger.info("Initializing database...")

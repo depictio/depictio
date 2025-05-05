@@ -17,10 +17,6 @@ services:
       - 5080:5080
     volumes:
       - ./depictio:/app/depictio
-      - ./data:/app/data
-      - ./.env:/app/.env
-      # - ../depictio-cli:/app/depictio-cli
-      # - ../depictio-models:/app/depictio-models
     env_file:
       - .env
     environment:
@@ -43,13 +39,7 @@ services:
     ports:
       - 8058:8058
     volumes:
-      - $PWD/depictio-example-data:/app/depictio-example-data
       - ./depictio:/app/depictio
-      - ./data:/app/data
-      - ./.env:/app/.env
-      # - ../depictio-cli:/app/depictio-cli
-      # - ../depictio-cli/configs:/configs
-      # - ../depictio-models:/app/depictio-models
     env_file:
       - .env
     environment:
