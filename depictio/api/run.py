@@ -1,5 +1,4 @@
 import uvicorn
-from depictio.api.main import app
 from depictio.api.v1.configs.config import settings
 
 
