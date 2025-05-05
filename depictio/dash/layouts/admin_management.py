@@ -1,34 +1,27 @@
 import datetime
 from typing import List
-import dash_mantine_components as dmc
+
 import dash
-import dash_bootstrap_components as dbc
-from dash import html, dcc, Input, Output, State, ctx, ALL, MATCH, get_app
+import dash_mantine_components as dmc
 import httpx
+from dash import ALL, MATCH, Input, Output, State, ctx, html
 from dash_iconify import DashIconify
 from pydantic import validate_call
 
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.custom_logging import logger
-from depictio.api.v1.endpoints.user_endpoints.utils import (
-    create_group_helper,
-)
 from depictio.dash.api_calls import (
     api_call_fetch_user_from_token,
     api_create_group,
-    api_update_group_in_users,
 )
-from depictio.dash.api_calls import api_call_fetch_user_from_token
 from depictio.dash.layouts.layouts_toolbox import (
     create_delete_confirmation_modal,
     # register_delete_confirmation_modal_callbacks,
 )
 from depictio.dash.layouts.projects import render_project_item
-
 from depictio.models.models.dashboards import DashboardData
-from depictio.models.models.users import UserBase, Group, User, GroupUI, UserBaseUI
 from depictio.models.models.projects import Project
-
+from depictio.models.models.users import GroupUI, UserBase, UserBaseUI
 
 # Define styles and colors
 card_styles = {
@@ -48,6 +41,7 @@ def render_dashboardwise_layout(dashboard):
 
     # Badge color based on admin status
     import json
+
     from depictio.models.models.base import convert_objectid_to_str
 
     dashboard_owner_raw = (
@@ -59,11 +53,11 @@ def render_dashboardwise_layout(dashboard):
         if dashboard.permissions.owners
         else "Unknown"
     )
-    dashboard_owner = (
-        json.dumps(dashboard_owner_raw)
-        if dashboard_owner_raw != "Unknown"
-        else "Unknown"
-    )
+    # dashboard_owner = (
+    #     json.dumps(dashboard_owner_raw)
+    #     if dashboard_owner_raw != "Unknown"
+    #     else "Unknown"
+    # )
     dashboard_viewers = ["None"]
     if dashboard.permissions.viewers:
         dashboard_viewers = [
@@ -890,7 +884,8 @@ def register_admin_callbacks(app):
                 users = response.json()
                 logger.info(f"Users: {users}")
                 userwise_layouts = [
-                    render_userwise_layout(UserBaseUI.from_mongo(user)) for user in users
+                    render_userwise_layout(UserBaseUI.from_mongo(user))
+                    for user in users
                 ]
                 content = html.Div(userwise_layouts)
             else:

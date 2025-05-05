@@ -130,7 +130,9 @@ layout = dbc.Container(
                                                     "&:hover": {
                                                         "transform": "translateY(-2px)",
                                                         "boxShadow": "0 4px 8px rgba(0, 0, 0, 0.2)",
-                                                        "backgroundColor": colors["red"],
+                                                        "backgroundColor": colors[
+                                                            "red"
+                                                        ],
                                                     },
                                                     "backgroundColor": colors["red"],
                                                 },
@@ -486,7 +488,10 @@ def register_profile_callbacks(app):
                         dmc.Group(
                             [
                                 dmc.Text(
-                                    key, weight=700, color=colors["black"], size="sm",
+                                    key,
+                                    weight=700,
+                                    color=colors["black"],
+                                    size="sm",
                                 ),
                                 dmc.Text(
                                     str(value),

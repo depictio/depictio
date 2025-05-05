@@ -1,10 +1,7 @@
 import dash_mantine_components as dmc
 from dash_iconify import DashIconify
-from dash import Input, Output, State, MATCH, html
+from dash import html
 from dash_extensions import EventListener
-from dash.exceptions import PreventUpdate
-
-from depictio.api.v1.configs.custom_logging import logger
 
 
 def create_dashboard_modal(
@@ -416,6 +413,7 @@ def create_add_with_input_modal(
 #             return not opened
 #         return opened
 
+
 def create_edit_password_modal(
     title="Edit Password",
     opened=False,
@@ -423,7 +421,7 @@ def create_edit_password_modal(
 ):
     """
     Creates a password editing modal with improved styling.
-    
+
     Parameters:
     -----------
     title : str, optional
@@ -432,7 +430,7 @@ def create_edit_password_modal(
         Whether the modal is initially opened
     event : dict, optional
         Event dictionary for EventListener
-        
+
     Returns:
     --------
     dmc.Modal
@@ -522,11 +520,13 @@ def create_edit_password_modal(
                                             color="blue",
                                             id="save-password",
                                             radius="md",
-                                            leftIcon=DashIconify(icon="mdi:content-save", width=16),
+                                            leftIcon=DashIconify(
+                                                icon="mdi:content-save", width=16
+                                            ),
                                         ),
-                                    ]
+                                    ],
                                 ),
-                            ]
+                            ],
                         ),
                     ]
                 ),
@@ -536,8 +536,9 @@ def create_edit_password_modal(
             ),
         ],
     )
-    
+
     return modal
+
 
 # Example usage:
 # password_modal = create_edit_password_modal(

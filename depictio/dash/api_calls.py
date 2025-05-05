@@ -1,18 +1,19 @@
-from typing import Dict, Any, List, Optional
-import httpx
-import sys
 import os
+import sys
+from typing import Any, Dict, List, Optional
+
+import httpx
 from pydantic import EmailStr, validate_call
 
 from depictio.api.v1.configs.config import (
-    FASTAPI_INTERNAL_API_KEY,
     API_BASE_URL,
+    FASTAPI_INTERNAL_API_KEY,
 )
 from depictio.api.v1.configs.custom_logging import format_pydantic, logger
-
-from depictio.models.models.users import TokenData, User, TokenBase
-from depictio.models.utils import convert_model_to_dict
+from depictio.api.v1.endpoints.user_endpoints.core_functions import _hash_password
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
+from depictio.models.models.users import TokenBase, TokenData, User
+from depictio.models.utils import convert_model_to_dict
 
 # Check if running in a test environment
 # First check environment variable, then check for pytest in sys.argv
@@ -56,11 +57,16 @@ def api_call_register_user(
         # Add test mode parameter if in test environment
         # params.update(API_QUERY_PARAMS)
 
+        # Convert boolean to string for is_admin
         response = httpx.post(
             f"{API_BASE_URL}/depictio/api/v1/auth/register",
             json=params,
         )
-
+        # Sending parameters as URL query parameters to match the FastAPI endpoint signature
+        # response = httpx.post(
+        #     f"{API_BASE_URL}/depictio/api/v1/auth/register",
+        #     params={"email": email, "password": password, "is_admin": str(is_admin)},
+        # )
         if response.status_code == 200:
             logger.info("User registered successfully.")
             return dict(response.json())
@@ -184,7 +190,7 @@ def purge_expired_tokens(token: str) -> Optional[Dict[str, Any]]:
         # Clean existing expired token from DB
         response = httpx.post(
             f"{API_BASE_URL}/depictio/api/v1/auth/purge_expired_tokens",
-            headers={"api-key": FASTAPI_INTERNAL_API_KEY},
+            headers={"Authorization": f"Bearer {token}"},
         )
 
         if response.status_code == 200:
@@ -355,10 +361,11 @@ def api_call_edit_password(
     Returns:
         Optional[Dict[str, Any]]: The response from the password edit or None if failed
     """
+    old_password_hashed = _hash_password(old_password)
     response = httpx.post(
         f"{API_BASE_URL}/depictio/api/v1/auth/edit_password",
         json={
-            "old_password": old_password,
+            "old_password": old_password_hashed,
             "new_password": new_password,
         },
         headers={"Authorization": f"Bearer {access_token}"},

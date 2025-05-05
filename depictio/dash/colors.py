@@ -16,11 +16,25 @@ colors = {
 
 # Color combinations for various chart types
 color_sequences = {
-    "main": [colors["purple"], colors["blue"], colors["teal"], colors["green"], colors["yellow"], colors["orange"]],
+    "main": [
+        colors["purple"],
+        colors["blue"],
+        colors["teal"],
+        colors["green"],
+        colors["yellow"],
+        colors["orange"],
+    ],
     "cool": [colors["purple"], colors["violet"], colors["blue"], colors["teal"]],
     "warm": [colors["yellow"], colors["orange"], colors["red"], colors["pink"]],
     "alert": [colors["green"], colors["yellow"], colors["orange"], colors["red"]],
-    "gradient": [colors["purple"], colors["blue"], colors["teal"], colors["green"], colors["yellow"], colors["orange"]],
+    "gradient": [
+        colors["purple"],
+        colors["blue"],
+        colors["teal"],
+        colors["green"],
+        colors["yellow"],
+        colors["orange"],
+    ],
 }
 
 # Template for Dash

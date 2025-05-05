@@ -1,6 +1,6 @@
-from dash import html
-from depictio.api.v1.configs.custom_logging import logger
-from depictio.dash.layouts.stepper import create_stepper_output, create_stepper_output_edit
+from depictio.dash.layouts.stepper import (
+    create_stepper_output,
+)
 
 
 def add_new_component(
@@ -16,4 +16,3 @@ def add_new_component(
     )
 
     return current_draggable_children
-

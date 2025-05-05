@@ -1,9 +1,10 @@
 import datetime
+
+import dash
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
-from dash import html, dcc, Input, Output, State, ALL
-import dash
 import httpx
+from dash import Input, Output, State, dcc, html
 
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.custom_logging import logger
@@ -272,55 +273,55 @@ def design_header(data, local_store):
     )
     from dash_iconify import DashIconify
 
-    modal_share_dashboard = dbc.Modal(
-        [
-            dbc.ModalHeader(
-                html.H1(
-                    "Share dashboard",
-                    className="text-primary",
-                )
-            ),
-            dbc.ModalBody(
-                [
-                    html.H5(
-                        "Share this dashboard by copying the link below:",
-                        className="text-primary",
-                    ),
-                    dmc.TextInput(
-                        type="text",
-                        value="https://depict.io/dashboard/1",
-                        style={"width": "100%"},
-                        icon=DashIconify(icon="mdi:link", width=16, color="grey"),
-                    ),
-                ],
-                style={"background-color": "#F0F8FF"},
-            ),
-            dbc.ModalFooter(
-                dbc.Button(
-                    "Close",
-                    id="share-modal-close",
-                    className="ml-auto",
-                    color="primary",
-                )
-            ),
-        ],
-        id="share-modal-dashboard",
-        centered=True,
-    )
+    # modal_share_dashboard = dbc.Modal(
+    #     [
+    #         dbc.ModalHeader(
+    #             html.H1(
+    #                 "Share dashboard",
+    #                 className="text-primary",
+    #             )
+    #         ),
+    #         dbc.ModalBody(
+    #             [
+    #                 html.H5(
+    #                     "Share this dashboard by copying the link below:",
+    #                     className="text-primary",
+    #                 ),
+    #                 dmc.TextInput(
+    #                     type="text",
+    #                     value="https://depict.io/dashboard/1",
+    #                     style={"width": "100%"},
+    #                     icon=DashIconify(icon="mdi:link", width=16, color="grey"),
+    #                 ),
+    #             ],
+    #             style={"background-color": "#F0F8FF"},
+    #         ),
+    #         dbc.ModalFooter(
+    #             dbc.Button(
+    #                 "Close",
+    #                 id="share-modal-close",
+    #                 className="ml-auto",
+    #                 color="primary",
+    #             )
+    #         ),
+    #     ],
+    #     id="share-modal-dashboard",
+    #     centered=True,
+    # )
 
     # APP Header
 
-    header_style = {
-        "display": "flex",
-        "alignItems": "center",
-        "justifyContent": "space-between",
-        "padding": "10px 20px",
-        "backgroundColor": "#FCFCFC",
-        "borderBottom": "1px solid #eaeaea",
-        "fontFamily": "'Open Sans', sans-serif",
-    }
+    # header_style = {
+    #     "display": "flex",
+    #     "alignItems": "center",
+    #     "justifyContent": "space-between",
+    #     "padding": "10px 20px",
+    #     "backgroundColor": "#FCFCFC",
+    #     "borderBottom": "1px solid #eaeaea",
+    #     "fontFamily": "'Open Sans', sans-serif",
+    # }
 
-    title_style = {"fontWeight": "bold", "fontSize": "24px", "color": "#333"}
+    # title_style = {"fontWeight": "bold", "fontSize": "24px", "color": "#333"}
     button_style = {"margin": "0 0px", "fontFamily": "Virgil", "marginTop": "5px"}
 
     sx = {
@@ -628,7 +629,7 @@ def design_header(data, local_store):
         ]
     )
 
-    title_style = {"fontWeight": "bold", "fontSize": "24px", "color": "#333"}
+    # title_style = {"fontWeight": "bold", "fontSize": "24px", "color": "#333"}
     header = dmc.Header(
         [
             offcanvas_parameters,
