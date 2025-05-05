@@ -414,7 +414,9 @@ class TestSettings:
             mongo_config = MongoConfig(port=12345)
             fastapi_config = FastAPIConfig(port=9000)
             dash_config = DashConfig(port=4000)
-            minio_config = S3DepictioCLIConfig(endpoint_url="https://custom-s3.example.com")
+            minio_config = S3DepictioCLIConfig(
+                endpoint_url="https://custom-s3.example.com"
+            )
             jbrowse_config = JbrowseConfig(enabled=False)
             auth_config = Auth(tmp_token="custom_token")
 
@@ -444,7 +446,7 @@ class TestSettings:
             "DEPICTIO_JBROWSE_ENABLED": "false",
             "DEPICTIO_AUTH_TMP_TOKEN": "env_token",
         }
-        
+
         with env_vars(env):
             # Instead of using the composite Settings class, test each component individually
             # to ensure each one is initialized with the current environment variables
@@ -454,14 +456,14 @@ class TestSettings:
             minio = S3DepictioCLIConfig()
             jbrowse = JbrowseConfig()
             auth = Auth()
-            
+
             assert mongodb.port == 54321
             assert fastapi.port == 7000
             assert dash.port == 6000
             assert minio.endpoint_url == "https://env-s3.example.com"
             assert jbrowse.enabled is False
             assert auth.tmp_token == "env_token"
-            
+
             # Create Settings instance explicitly with our configs
             settings = Settings(
                 mongodb=mongodb,
@@ -469,9 +471,9 @@ class TestSettings:
                 dash=dash,
                 minio=minio,
                 jbrowse=jbrowse,
-                auth=auth
+                auth=auth,
             )
-            
+
             # Verify settings contains our configs
             assert settings.mongodb.port == 54321
             assert settings.fastapi.port == 7000

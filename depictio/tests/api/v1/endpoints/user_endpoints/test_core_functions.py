@@ -20,7 +20,7 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     _list_tokens,
     _purge_expired_tokens,
 )
-from depictio.models.models.users import TokenBeanie, TokenData, UserBeanie
+from depictio.models.models.users import TokenBeanie, TokenData, UserBase, UserBeanie
 from depictio.tests.api.v1.endpoints.user_endpoints.conftest import beanie_setup
 
 # ------------------------------------------------------
@@ -251,7 +251,6 @@ class TestAsyncFetchUserFromEmail:
 # ------------------------------------------------------
 
 
-
 @pytest.mark.asyncio
 class TestAsyncFetchUserFromId:
     # @pytest.mark.asyncio
@@ -286,7 +285,6 @@ class TestAsyncFetchUserFromId:
         assert result.email == "test_id@example.com"
         assert result.password == hash_password
         assert isinstance(result, UserBeanie)
-
 
     async def test_fetch_user_from_id_not_found(self):
         """Test when no user is found with the given ID."""
@@ -342,7 +340,9 @@ class TestPurgeExpiredTokensFromUser:
         await valid_token.save()
 
         # Act
-        result = await _purge_expired_tokens()
+        result = await _purge_expired_tokens(
+            user=UserBase(id=user_id, email="test_email@example.com")
+        )
 
         # Assert
         # Verify the result structure
@@ -380,7 +380,9 @@ class TestPurgeExpiredTokensFromUser:
             await token.save()
 
         # Act
-        result = await _purge_expired_tokens()
+        result = await _purge_expired_tokens(
+            user=UserBase(id=user_id, email="test_email@example.com")
+        )
 
         # Assert
         assert result["success"] is True
@@ -399,7 +401,9 @@ class TestPurgeExpiredTokensFromUser:
         )
 
         # Act
-        result = await _purge_expired_tokens()
+        result = await _purge_expired_tokens(
+            user=UserBase(id=PydanticObjectId(), email="test_email@example.com")
+        )
 
         # Assert
         assert result["success"] is True

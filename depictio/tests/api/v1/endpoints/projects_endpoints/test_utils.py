@@ -14,9 +14,8 @@ from depictio.api.v1.endpoints.projects_endpoints.utils import (
     _async_get_project_from_name,
     _helper_create_project_beanie,
 )
-from depictio.api.v1.endpoints.user_endpoints.core_functions import _hash_password
 from depictio.models.models.projects import Project
-from depictio.models.models.users import Permission, User, UserBase
+from depictio.models.models.users import Permission, UserBase
 
 
 # Fixtures available for all test classes
@@ -217,17 +216,19 @@ class TestGetAllProjects:
 
         return [owner_project, viewer_project, public_project]
 
-    def test_async_get_all_projects_user(
+    async def test_async_get_all_projects_user(
         self, sample_user, mock_projects_collection, setup_multiple_projects
     ):
         """Test getting all projects for a regular user."""
-        current_user = UserBase(id=sample_user.id, email=sample_user.email, is_admin=False)
+        current_user = UserBase(
+            id=sample_user.id, email=sample_user.email, is_admin=False
+        )
         result = _async_get_all_projects(current_user, mock_projects_collection)
 
         assert len(result) == 3  # owner, viewer, and public projects
         assert all(isinstance(p, Project) for p in result)
 
-    def test_async_get_all_projects_admin(
+    async def test_async_get_all_projects_admin(
         self, sample_user, mock_projects_collection, setup_multiple_projects
     ):
         """Test getting all projects for an admin user."""
@@ -260,11 +261,13 @@ class TestGetProjectFromId:
         mock_projects_collection.insert_one(mongo_doc)
         return str(project.id)
 
-    def test_async_get_project_from_id_success(
+    async def test_async_get_project_from_id_success(
         self, sample_user, mock_projects_collection, setup_single_project
     ):
         """Test getting a project by ID successfully."""
-        current_user = UserBase(id=sample_user.id, email=sample_user.email, is_admin=False)
+        current_user = UserBase(
+            id=sample_user.id, email=sample_user.email, is_admin=False
+        )
         result = _async_get_project_from_id(
             setup_single_project, current_user, mock_projects_collection
         )
@@ -274,14 +277,16 @@ class TestGetProjectFromId:
         assert "permissions" in result
         assert "owners" in result["permissions"]
 
-    def test_async_get_project_from_id_not_found(
+    async def test_async_get_project_from_id_not_found(
         self, sample_user, mock_projects_collection
     ):
         """Test getting a non-existent project by ID."""
         # Clear the collection first
         mock_projects_collection.delete_many({})
 
-        current_user = UserBase(id=sample_user.id, email=sample_user.email, is_admin=False)
+        current_user = UserBase(
+            id=sample_user.id, email=sample_user.email, is_admin=False
+        )
         non_existent_id = str(ObjectId())
 
         with pytest.raises(HTTPException) as excinfo:
@@ -315,11 +320,13 @@ class TestGetProjectFromName:
         mock_projects_collection.insert_one(mongo_doc)
         return project.name
 
-    def test_async_get_project_from_name_success(
+    async def test_async_get_project_from_name_success(
         self, sample_user, mock_projects_collection, setup_named_project
     ):
         """Test getting a project by name successfully."""
-        current_user = UserBase(id=sample_user.id, email=sample_user.email, is_admin=False)
+        current_user = UserBase(
+            id=sample_user.id, email=sample_user.email, is_admin=False
+        )
         result = _async_get_project_from_name(
             setup_named_project, current_user, mock_projects_collection
         )
@@ -329,14 +336,16 @@ class TestGetProjectFromName:
         assert "permissions" in result
         assert "owners" in result["permissions"]
 
-    def test_async_get_project_from_name_not_found(
+    async def test_async_get_project_from_name_not_found(
         self, sample_user, mock_projects_collection
     ):
         """Test getting a non-existent project by name."""
         # Clear the collection first
         mock_projects_collection.delete_many({})
 
-        current_user = UserBase(id=sample_user.id, email=sample_user.email, is_admin=False)
+        current_user = UserBase(
+            id=sample_user.id, email=sample_user.email, is_admin=False
+        )
 
         with pytest.raises(HTTPException) as excinfo:
             _async_get_project_from_name(
@@ -346,7 +355,7 @@ class TestGetProjectFromName:
         assert excinfo.value.status_code == 404
         assert "Project not found" in excinfo.value.detail
 
-    def test_async_get_project_from_name_public_access(
+    async def test_async_get_project_from_name_public_access(
         self, sample_user, yaml_config, test_yaml_path, mock_projects_collection
     ):
         """Test getting a public project by name with wildcard permissions."""
@@ -366,7 +375,9 @@ class TestGetProjectFromName:
         mock_projects_collection.insert_one(mongo_doc)
 
         # Create a different user
-        other_user = UserBase(id=str(ObjectId()), email="other@example.com", is_admin=False)
+        other_user = UserBase(
+            id=str(ObjectId()), email="other@example.com", is_admin=False
+        )
         result = _async_get_project_from_name(
             project.name, other_user, mock_projects_collection
         )
