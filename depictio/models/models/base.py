@@ -232,7 +232,9 @@ class MongoModel(BaseModel):
 
         return parsed
 
+
 # TODO: move to pydantic DirectoryPath (https://docs.pydantic.dev/latest/api/types/#pydantic.types.DirectoryPath)
+
 
 class DirectoryPath(BaseModel):
     path: str
