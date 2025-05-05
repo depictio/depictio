@@ -61,8 +61,28 @@ class ScanSingle(BaseModel):
     @field_validator("filename")
     def validate_filename(cls, v):
         DEPICTIO_CONTEXT = get_depictio_context()
+        logger.debug(f"CONTEXT: {DEPICTIO_CONTEXT}")
 
         if DEPICTIO_CONTEXT.lower() == "cli":
+            # Add debugging
+            import os
+
+            current_dir = os.getcwd()
+            abs_path = os.path.abspath(v)
+            normalized_path = os.path.normpath(v)
+
+            # Log the paths for debugging
+            logger.debug(f"Current working directory: {current_dir}")
+            logger.debug(f"Relative path: {v}")
+            logger.debug(f"Absolute path: {abs_path}")
+            logger.debug(f"Normalized path: {normalized_path}")
+            logger.debug(f"Path exists check: {Path(v).exists()}")
+
+            # Try to see if the file exists with different path resolutions
+            resolved_path = Path(v).resolve()
+            logger.debug(f"Resolved path: {resolved_path}")
+            logger.debug(f"Resolved path exists: {resolved_path.exists()}")
+
             # validate filename & check if it exists
             if not Path(v).exists():
                 raise ValueError(f"File {v} does not exist")
@@ -99,7 +119,7 @@ class Scan(BaseModel):
 
 class TableJoinConfig(BaseModel):
     on_columns: List[str]
-    how: Optional[str]
+    how: str = "inner"
     with_dc: List[str]
 
     class Config:
