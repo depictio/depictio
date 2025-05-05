@@ -1,29 +1,24 @@
 from typing import List
-from bson import ObjectId
-import dash_mantine_components as dmc
+
 import dash
-import dash_bootstrap_components as dbc
-from dash import html, dcc, Input, Output, State, MATCH, ALL
-import httpx
-from dash_iconify import DashIconify
-import yaml
 import dash_ag_grid as dag
-import polars as pl
+import dash_mantine_components as dmc
+import httpx
+import yaml
+from dash import MATCH, Input, Output, State, dcc, html
+from dash_iconify import DashIconify
 from pydantic import validate_call
 
 from depictio.api.v1.configs.config import API_BASE_URL
-from depictio.api.v1.deltatables_utils import load_deltatable_lite
 from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
 # from depictio.api.v1.endpoints.user_endpoints.models import UserBase
 from depictio.dash.api_calls import api_call_fetch_user_from_token
-from depictio.dash.utils import return_mongoid
-
-from depictio.models.models.users import UserBase
-from depictio.models.models.projects import Project
-from depictio.models.models.workflows import Workflow
 from depictio.models.models.data_collections import DataCollection
-
+from depictio.models.models.projects import Project
+from depictio.models.models.users import UserBase
+from depictio.models.models.workflows import Workflow
 
 # =========================
 # Data Fetching Functions
@@ -39,6 +34,10 @@ def fetch_projects(token: str) -> List[Project]:
 
     headers = {"Authorization": f"Bearer {token}"}
     projects = httpx.get(url, headers=headers)
+    logger.info(f"Response status code: {projects.status_code}")
+    logger.info(f"Response content: {projects.content}")
+    logger.info(f"Response headers: {projects.headers}")
+    logger.info(f"Response JSON: {projects.json()}")
     logger.info("Successfully fetched projects.")
     logger.info(f"Projects: {projects.json()}")
 
@@ -466,9 +465,7 @@ def render_workflow_item(wf: Workflow, token: str):
         # default icon for unknown or unsupported engines -
         "none": "hugeicons:workflow-square-01",
     }
-    wf_icon = wf_icon_map.get(
-        wf.engine.name.lower(), "hugeicons:workflow-square-01"
-    )
+    wf_icon = wf_icon_map.get(wf.engine.name.lower(), "hugeicons:workflow-square-01")
 
     return dmc.AccordionItem(
         children=[

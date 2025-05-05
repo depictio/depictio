@@ -1,14 +1,16 @@
 from typing import Optional
-from typeguard import typechecked
+
 from pydantic import validate_call
+from typeguard import typechecked
+
 from depictio.cli.cli.utils.deltatables import client_aggregate_data
 from depictio.cli.cli.utils.rich_utils import (
     rich_print_checked_statement,
 )
 from depictio.cli.cli.utils.scan import scan_files_for_data_collection
-from depictio.cli.logging import logger
-from depictio.models.models.users import CLIConfig
+from depictio.cli.cli_logging import logger
 from depictio.models.models.projects import Project, Workflow
+from depictio.models.models.users import CLIConfig
 
 
 @validate_call
@@ -41,7 +43,6 @@ def process_data_collection_helper(
     logger.info(f"Mode: {mode}")
 
     if mode == "scan":
-
         result = scan_files_for_data_collection(
             workflow=wf,
             data_collection_id=dc_id,

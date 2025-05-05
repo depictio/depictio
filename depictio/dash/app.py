@@ -4,12 +4,11 @@ Main entry point for the Depictio Dash application.
 This module initializes the Dash application, registers callbacks,
 and sets up the application layout.
 """
+
 # Standard library imports
-import os
 
 # Depictio core imports
 from depictio.api.v1.configs.config import settings
-from depictio.api.v1.configs.custom_logging import logger
 
 # Depictio dash core imports
 from depictio.dash.core.app_factory import create_dash_app

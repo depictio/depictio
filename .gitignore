@@ -1,12 +1,13 @@
-# Byte-compiled / optimized / DLL files
+# Python
+## Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
 
-# C extensions
+## C extensions
 *.so
 
-# Distribution / packaging
+## Distribution / packaging
 .Python
 build/
 develop-eggs/
@@ -26,11 +27,35 @@ share/python-wheels/
 *.egg
 MANIFEST
 
-# Installer logs
+## Virtual environments
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+depictio-cli-venv/
+depictio-venv/
+
+## Package managers
+### pipenv
+#Pipfile.lock
+
+### poetry  
+#poetry.lock
+
+### pdm
+.pdm.toml
+#pdm.lock
+
+### pip
 pip-log.txt
 pip-delete-this-directory.txt
 
-# Unit test / coverage reports
+## PEP 582
+__pypackages__/
+
+# Testing & Coverage
 htmlcov/
 .tox/
 .nox/
@@ -44,103 +69,64 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 cover/
+test-results/
 
-# Translations
-*.mo
-*.pot
+# IDEs & Editors
+## PyCharm and other JetBrains IDEs
+.nfs*
+# Refer to the JetBrains-specific .gitignore: https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
 
-# Django stuff
+## Spyder
+.spyderproject
+.spyproject
+
+## Rope
+.ropeproject
+
+# Type Checkers
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+
+# Cython & Compilation
+cython_debug/
+*.manifest
+*.spec
+
+# Framework Specific
+## Django
 *.log
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
 
-# Flask stuff
+## Flask
 instance/
 .webassets-cache
 
-# Scrapy stuff
+## Scrapy
 .scrapy
 
-# Sphinx documentation
-docs/_build/
-
-# PyBuilder
-.pybuilder/
-target/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# IPython
-profile_default/
-ipython_config.py
-
-# pyenv
-# Ignore .python-version for libraries; otherwise, include it for projects
-#.python-version
-
-# pipenv
-#Pipfile.lock
-
-# poetry
-#poetry.lock
-
-# pdm
-.pdm.toml
-#pdm.lock
-
-# PEP 582
-__pypackages__/
-
-# Celery stuff
+## Celery
 celerybeat-schedule
 celerybeat.pid
 
-# SageMath parsed files
+## Jupyter
+.ipynb_checkpoints
+
+## SageMath
 *.sage.py
 
-# Environments
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
+# Documentation
+## Sphinx
+docs/_build/
 
-# Spyder project settings
-.spyderproject
-.spyproject
-
-# Rope project settings
-.ropeproject
-
-# mkdocs documentation
+## mkdocs
 /site
 
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre type checker
-.pyre/
-
-# pytype static type analyzer
-.pytype/
-
-# Cython debug symbols
-cython_debug/
-
-# PyInstaller
-*.manifest
-*.spec
-
-# PyCharm and other JetBrains IDEs
-.nfs*
-# Refer to the JetBrains-specific .gitignore: https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
-
-# Data and Logs
+# Databases
 depictioDB/
 depictioDB_bak/
 depictioDB_dev/
@@ -149,24 +135,46 @@ diagnostic.data/
 journal/
 *.db
 dump.rdb
-data_prepare.json
-data.json
-data/depictio_data.json
-data/jbrowse_df_mapping_dict.json
-wf_data/
-data/minio/
-user_data.json
-data/depictio_data.json.bak
-*.b64
 
-# Heavy files
+# Data Files
+## Large/Heavy files
 *.parquet
 *.gz
 *.csv
 *.tsv
 
-# Dev
+## Application Data
+data_prepare.json
+data.json
+data/depictio_data.json
+data/depictio_data.json.bak
+data/jbrowse_df_mapping_dict.json
+wf_data/
+data/minio/
+user_data.json
+*.b64
+dashboards.json
+
+# Security & Keys
+## Keys
+depictio/private_key.pem
+depictio/public_key.pem
+depictio/tmp_token.pem
+depictio/keys/
+keys/internal_api_key.pem
+
+## Sensitive data
+.env
+.env.*
+!.env.example
+*_token.yaml
+depictio/.depictio/
+depictio/.depictio/default_admin_agent.yaml
+
+# Development Environment
+## Dev directories
 bak/
+dev/
 dev/jbrowse_dev/assets/multiqc/
 dev/jbrowse_dev/assets/
 dev/flask-login/.env
@@ -176,28 +184,20 @@ dev/token/token.txt
 dev/celery/jobs.json
 dev/dev_design_visu/data/
 dev/dev_delta/
-dashboards.json
-
-# Keys & sensitive data
-depictio/private_key.pem
-depictio/public_key.pem
-depictio/tmp_token.pem
-depictio/keys/
-depictio/.depictio/default_admin_agent.yaml
-
-# Venv
-depictio-cli-venv/
-
-# Screenshots
-screenshot_*.png
-depictio/dash/assets/screenshots/
-
-# S3 
-minio_data/
-delta_dev/
 dev/dev_minio/
 
-# JBrowse2
+## Screenshots
+screenshot_*.png
+depictio/dash/assets/screenshots/
+depictio/tests/dash/screenshots/
+
+# Cloud Storage
+## S3/MinIO
+minio_data/
+delta_dev/
+
+# Software Specific
+## JBrowse2
 jbrowse2/
 depictio/jbrowse2_configs/
 jbrowse-watcher-plugin/jbrowse2_sessions/
@@ -205,23 +205,28 @@ jbrowse2_sessions/
 jbrowse2_configs/
 jbrowse-watcher-plugin/
 
-# macOS and system files
+## PyBuilder
+.pybuilder/
+target/
+
+# System Files
 .DS_Store
 
-# Misc
-.env*
-!.env
+# Application Specific
+## Depictio
+depictio/dash/static/
+# depictio/dash/assets/
 ldap_config/
 ldap_db/
-depictio/dash/static/
-depictio/dash/assets/
+
+# Development Tools
 .aider*
-.env
 
-# Tokens
-*_token.yaml
-depictio/.depictio/
-depictio/keys/
+# CI/CD
+## GitHub Actions
+!iris.csv
 
-# Dependencies & Envs
-depictio-venv/
+# Cypress
+depictio/tests/e2e-tests/node_modules/
+depictio/tests/e2e-tests/cypress/screenshots/
+depictio/tests/e2e-tests/package-lock.json

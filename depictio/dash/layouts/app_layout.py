@@ -1,44 +1,36 @@
+import dash
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
+from dash import dcc, html
+from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.custom_logging import logger
-import os
-from dash import html, Input, Output, State, dcc, ctx, ALL
-import dash
-from dash_iconify import DashIconify
-import httpx
-
-
 from depictio.dash.api_calls import (
     api_call_fetch_user_from_token,
     purge_expired_tokens,
-    check_token_validity,
-)
-
-
-from depictio.dash.layouts.layouts_toolbox import create_add_with_input_modal
-
-from depictio.dash.layouts.profile import layout as profile_layout
-from depictio.dash.layouts.users_management import layout as users_management_layout
-from depictio.dash.layouts.tokens_management import layout as tokens_management_layout
-from depictio.dash.layouts.projectwise_user_management import (
-    layout as projectwise_user_management_layout,
 )
 from depictio.dash.layouts.dashboards_management import (
     layout as dashboards_management_layout,
 )
-from depictio.dash.layouts.header import design_header
 
 # from depictio.dash.layouts.draggable_scenarios.add_component import register_callbacks_add_component
 from depictio.dash.layouts.draggable import (
     design_draggable,
 )
 
-
 # Depictio utils imports
 from depictio.dash.layouts.draggable_scenarios.restore_dashboard import (
     load_depictio_data,
 )
+from depictio.dash.layouts.header import design_header
+from depictio.dash.layouts.layouts_toolbox import create_add_with_input_modal
+from depictio.dash.layouts.palette import create_color_palette_page
+from depictio.dash.layouts.profile import layout as profile_layout
+from depictio.dash.layouts.projectwise_user_management import (
+    layout as projectwise_user_management_layout,
+)
+from depictio.dash.layouts.tokens_management import layout as tokens_management_layout
+from depictio.dash.layouts.users_management import layout as users_management_layout
 
 
 def return_create_dashboard_button(email):
@@ -73,7 +65,7 @@ def handle_authenticated_user(pathname, local_data):
     logger.info("User logged in")
     logger.info(f"Local data: {local_data}")
 
-    response = purge_expired_tokens(local_data["access_token"])
+    purge_expired_tokens(local_data["access_token"])
 
     # Map the pathname to the appropriate content and header
     if pathname.startswith("/dashboard/"):
@@ -117,6 +109,10 @@ def handle_authenticated_user(pathname, local_data):
         header = create_default_header("Profile")
         return create_profile_layout(), header, pathname, local_data
 
+    elif pathname == "/palette":
+        header = create_default_header("Depictio Color Palette")
+        return create_color_palette_page(), header, pathname, local_data
+
     elif pathname == "/cli_configs":
         header = create_default_header("Depictio-CLI configs Management")
         return create_tokens_management_layout(), header, pathname, local_data
@@ -138,340 +134,9 @@ def handle_authenticated_user(pathname, local_data):
 
     elif pathname == "/about":
         header = create_default_header("About")
+        from depictio.dash.layouts.about import layout as about_layout
 
-        # Create a Stack to vertically arrange all elements with proper spacing
-        page_content = dmc.Stack(
-            spacing="xl",  # Extra large spacing between stack items
-            children=[
-                # First section: Main cards (GitHub and Documentation)
-                dmc.Stack(
-                    spacing="md",
-                    children=[
-                        # Title for Repository & Documentation section
-                        dmc.Text(
-                            "Resources",
-                            size="xl",
-                            weight=700,
-                            align="center",
-                            mb="md",
-                        ),
-                        # Main cards in a 2-column grid
-                        dmc.SimpleGrid(
-                            cols=2,  # Number of columns in the grid
-                            spacing="xl",  # Space between the cards
-                            breakpoints=[
-                                {
-                                    "maxWidth": 980,
-                                    "cols": 1,
-                                    "spacing": "md",
-                                },  # Responsive design: 1 column on smaller screens
-                            ],
-                            children=[
-                                # Github Repository Card
-                                dmc.Card(
-                                    withBorder=True,  # Adds a border to the card
-                                    shadow="md",  # Medium shadow for depth
-                                    radius="md",  # Medium border radius for rounded corners
-                                    p="lg",  # Padding inside the card
-                                    style={
-                                        "textAlign": "center"
-                                    },  # Center-align text and elements
-                                    children=[
-                                        # Icon and Title
-                                        dmc.Group(
-                                            position="center",
-                                            spacing="sm",
-                                            children=[
-                                                DashIconify(
-                                                    icon="mdi:github",
-                                                    width=40,
-                                                    color="#333",
-                                                ),
-                                                dmc.Text(
-                                                    "GitHub Repository",
-                                                    size="xl",
-                                                    weight=700,  # Bold text
-                                                ),
-                                            ],
-                                        ),
-                                        # Description
-                                        dmc.Text(
-                                            "Explore the source code of Depictio on GitHub.",
-                                            size="md",
-                                            color="dimmed",
-                                            mt="sm",  # Margin top for spacing
-                                        ),
-                                        # GitHub Button with Link
-                                        dmc.Anchor(
-                                            href="https://github.com/depictio/depictio",  # Replace with your GitHub repo URL
-                                            target="_blank",  # Opens the link in a new tab
-                                            children=dmc.Button(
-                                                "GitHub",
-                                                color="dark",
-                                                variant="filled",
-                                                size="md",
-                                                radius="md",
-                                                mt="md",  # Margin top for spacing
-                                                leftIcon=DashIconify(
-                                                    icon="mdi:github-circle", width=20
-                                                ),
-                                            ),
-                                        ),
-                                    ],
-                                ),
-                                # Documentation Card
-                                dmc.Card(
-                                    withBorder=True,
-                                    shadow="md",
-                                    radius="md",
-                                    p="lg",  # Padding inside the card
-                                    style={"textAlign": "center"},
-                                    children=[
-                                        # Icon and Title
-                                        dmc.Group(
-                                            position="center",
-                                            spacing="sm",
-                                            children=[
-                                                DashIconify(
-                                                    icon="mdi:file-document",
-                                                    width=40,
-                                                    color="#333",
-                                                ),
-                                                dmc.Text(
-                                                    "Documentation",
-                                                    size="xl",
-                                                    weight=700,
-                                                ),
-                                            ],
-                                        ),
-                                        # Description
-                                        dmc.Text(
-                                            "Learn how to use Depictio with our comprehensive documentation.",
-                                            size="md",
-                                            color="dimmed",
-                                            mt="sm",
-                                        ),
-                                        # Documentation Button with Link
-                                        dmc.Anchor(
-                                            href="https://depictio.github.io/depictio-docs/",  # Replace with your documentation URL
-                                            target="_blank",
-                                            children=dmc.Button(
-                                                "Documentation",
-                                                color="dark",
-                                                variant="filled",
-                                                size="md",
-                                                radius="md",
-                                                mt="md",
-                                                leftIcon=DashIconify(
-                                                    icon="mdi:file-document-box",
-                                                    width=20,
-                                                ),
-                                            ),
-                                        ),
-                                    ],
-                                ),
-                            ],
-                        ),
-                    ],
-                ),
-                # Second section: Funding & Partners
-                dmc.Paper(
-                    p="xl",  # Extra large padding
-                    radius="md",  # Medium border radius
-                    withBorder=True,  # Border around the section
-                    shadow="xs",  # Light shadow
-                    mt="xl",  # Margin top
-                    children=[
-                        # Title for Funding & Partners section
-                        dmc.Text(
-                            "Funding",
-                            size="xl",
-                            weight=700,
-                            align="center",
-                            mb="xl",  # Margin bottom (increased spacing)
-                        ),
-                        # Funding & Partners cards in a 3-column grid
-                        dmc.SimpleGrid(
-                            cols=3,  # Three columns for the three partner cards
-                            spacing="xl",  # Space between cards
-                            breakpoints=[
-                                {"maxWidth": 1200, "cols": 3, "spacing": "md"},
-                                {"maxWidth": 980, "cols": 2, "spacing": "md"},
-                                {"maxWidth": 755, "cols": 1, "spacing": "md"},
-                            ],  # Responsive design
-                            children=[
-                                # Marie Skłodowska-Curie grant Card
-                                dmc.Card(
-                                    withBorder=True,
-                                    shadow="md",
-                                    radius="md",
-                                    p="lg",  # Padding inside the card
-                                    style={"textAlign": "center"},
-                                    children=[
-                                        # Logo Image
-                                        html.Img(
-                                            src=dash.get_asset_url(
-                                                "EN_fundedbyEU_VERTICAL_RGB_POS.png"
-                                            ),
-                                            style={
-                                                "height": "100px",
-                                                "objectFit": "contain",
-                                                "marginBottom": "10px",
-                                            },
-                                        ),
-                                        # Title
-                                        dmc.Text(
-                                            "Marie Skłodowska-Curie Grant",
-                                            size="lg",
-                                            weight=700,
-                                        ),
-                                        # Description
-                                        dmc.Text(
-                                            "This project has received funding from the European Union's Horizon 2020 research and innovation programme under the Marie Skłodowska-Curie grant agreement No 945405",
-                                            size="sm",
-                                            color="dimmed",
-                                            mt="sm",
-                                        ),
-                                        # Link Button
-                                        dmc.Anchor(
-                                            href="https://marie-sklodowska-curie-actions.ec.europa.eu/",
-                                            target="_blank",
-                                            children=dmc.Button(
-                                                "Learn More",
-                                                color="dark",
-                                                variant="outline",
-                                                size="sm",
-                                                radius="md",
-                                                mt="md",
-                                            ),
-                                        ),
-                                    ],
-                                ),
-                                # ARISE Programme Card
-                                dmc.Card(
-                                    withBorder=True,
-                                    shadow="md",
-                                    radius="md",
-                                    p="lg",  # Padding inside the card
-                                    style={"textAlign": "center"},
-                                    children=[
-                                        # Logo Image
-                                        html.Img(
-                                            src=dash.get_asset_url(
-                                                "AriseLogo300dpi.png"
-                                            ),
-                                            style={
-                                                "height": "100px",
-                                                "objectFit": "contain",
-                                                "marginBottom": "10px",
-                                            },
-                                        ),
-                                        # Title
-                                        dmc.Text(
-                                            "ARISE Programme",
-                                            size="lg",
-                                            weight=700,
-                                        ),
-                                        # Description
-                                        dmc.Text(
-                                            "ARISE is a postdoctoral research programme for technology developers, hosted at EMBL.",
-                                            size="sm",
-                                            color="dimmed",
-                                            mt="sm",
-                                        ),
-                                        # Link Button
-                                        dmc.Anchor(
-                                            href="https://www.embl.org/about/info/arise/",
-                                            target="_blank",
-                                            children=dmc.Button(
-                                                "Learn More",
-                                                color="dark",
-                                                variant="outline",
-                                                size="sm",
-                                                radius="md",
-                                                mt="md",
-                                            ),
-                                        ),
-                                    ],
-                                ),
-                                # EMBL Card
-                                dmc.Card(
-                                    withBorder=True,
-                                    shadow="md",
-                                    radius="md",
-                                    p="lg",  # Padding inside the card
-                                    style={"textAlign": "center"},
-                                    children=[
-                                        # Logo Image
-                                        html.Img(
-                                            src=dash.get_asset_url(
-                                                "EMBL_logo_colour_DIGITAL.png"
-                                            ),
-                                            style={
-                                                "height": "100px",
-                                                "objectFit": "contain",
-                                                "marginBottom": "10px",
-                                            },
-                                        ),
-                                        # Title
-                                        dmc.Text(
-                                            "EMBL",
-                                            size="lg",
-                                            weight=700,
-                                        ),
-                                        # Description
-                                        dmc.Text(
-                                            "The European Molecular Biology Laboratory is Europe's flagship laboratory for the life sciences.",
-                                            size="sm",
-                                            color="dimmed",
-                                            mt="sm",
-                                        ),
-                                        # Link Button
-                                        dmc.Anchor(
-                                            href="https://www.embl.org/",
-                                            target="_blank",
-                                            children=dmc.Button(
-                                                "Learn More",
-                                                color="dark",
-                                                variant="outline",
-                                                size="sm",
-                                                radius="md",
-                                                mt="md",
-                                            ),
-                                        ),
-                                    ],
-                                ),
-                            ],
-                        ),
-                    ],
-                ),
-                # Copyright notice
-                dmc.Text(
-                    "© 2025 Depictio. All rights reserved.",
-                    size="xs",
-                    color="dimmed",
-                    align="center",
-                    mt="xl",
-                    mb="xl",  # Add margin bottom to ensure space at page end
-                ),
-            ],
-        )
-
-        # Combine the header and page content in a container with proper padding
-        return (
-            html.Div(
-                [
-                    dmc.Container(
-                        size="xl",  # Extra large container for content
-                        py="xl",  # Padding top and bottom
-                        children=[page_content],
-                    ),
-                ]
-            ),
-            header,
-            pathname,
-            local_data,
-        )
+        return about_layout, header, pathname, local_data
     else:
         # Fallback to dashboards if path is unrecognized
         return dash.no_update, dash.no_update, "/dashboards", local_data

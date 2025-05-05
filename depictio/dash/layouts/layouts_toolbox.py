@@ -1,7 +1,7 @@
 import dash_mantine_components as dmc
 from dash_iconify import DashIconify
-from dash import Input, Output, State, MATCH
-from depictio.api.v1.configs.custom_logging import logger
+from dash import html
+from dash_extensions import EventListener
 
 
 def create_dashboard_modal(
@@ -412,3 +412,145 @@ def create_add_with_input_modal(
 #         if n_clicks:
 #             return not opened
 #         return opened
+
+
+def create_edit_password_modal(
+    title="Edit Password",
+    opened=False,
+    event=None,
+):
+    """
+    Creates a password editing modal with improved styling.
+
+    Parameters:
+    -----------
+    title : str, optional
+        Title for the modal
+    opened : bool, optional
+        Whether the modal is initially opened
+    event : dict, optional
+        Event dictionary for EventListener
+
+    Returns:
+    --------
+    dmc.Modal
+        The modal component
+    """
+    modal = dmc.Modal(
+        opened=opened,
+        id="edit-password-modal",
+        centered=True,
+        withCloseButton=False,
+        closeOnEscape=True,
+        closeOnClickOutside=True,
+        size="lg",
+        # title=title,
+        overlayOpacity=0.55,
+        overlayBlur=3,
+        shadow="xl",
+        radius="md",
+        styles={
+            "modal": {
+                "padding": "24px",
+            }
+        },
+        children=[
+            EventListener(
+                html.Div(
+                    [
+                        dmc.Stack(
+                            spacing="md",
+                            children=[
+                                # Header with icon and title
+                                dmc.Group(
+                                    position="left",
+                                    spacing="sm",
+                                    children=[
+                                        DashIconify(
+                                            icon="carbon:password",
+                                            width=28,
+                                            height=28,
+                                            color="grey",
+                                        ),
+                                        dmc.Title(
+                                            title,
+                                            order=4,
+                                            style={"margin": 0},
+                                            color="blue",
+                                        ),
+                                    ],
+                                ),
+                                # Divider
+                                dmc.Divider(),
+                                # Form inputs
+                                dmc.PasswordInput(
+                                    placeholder="Old Password",
+                                    label="Old Password",
+                                    id="old-password",
+                                    required=True,
+                                    radius="md",
+                                ),
+                                dmc.PasswordInput(
+                                    placeholder="New Password",
+                                    label="New Password",
+                                    id="new-password",
+                                    required=True,
+                                    radius="md",
+                                ),
+                                dmc.PasswordInput(
+                                    placeholder="Confirm Password",
+                                    label="Confirm Password",
+                                    id="confirm-new-password",
+                                    required=True,
+                                    radius="md",
+                                ),
+                                dmc.Text(
+                                    id="message-password",
+                                    color="red",
+                                    size="sm",
+                                    style={"display": "none"},
+                                ),
+                                # Button
+                                dmc.Group(
+                                    position="right",
+                                    mt="lg",
+                                    children=[
+                                        dmc.Button(
+                                            "Save",
+                                            color="blue",
+                                            id="save-password",
+                                            radius="md",
+                                            leftIcon=DashIconify(
+                                                icon="mdi:content-save", width=16
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            ],
+                        ),
+                    ]
+                ),
+                events=[event] if event else [],
+                logging=True,
+                id="edit-password-modal-listener",
+            ),
+        ],
+    )
+
+    return modal
+
+
+# Example usage:
+# password_modal = create_edit_password_modal(
+#     title="Update Password",
+#     opened=False,
+#     event={"event": "click", "props": ["n_clicks"]}
+# )
+
+# Example usage:
+# password_modal, password_modal_id = create_edit_password_modal(
+#     id_prefix="user",
+#     item_id="123",
+#     title="Update Password",
+#     save_button_text="Update"
+# )

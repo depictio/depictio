@@ -1,17 +1,25 @@
-from datetime import datetime
 import os
-from beanie import PydanticObjectId
-import yaml
+import re
+from datetime import datetime
 from typing import Any, Dict, Type
-from pydantic import BaseModel, ValidationError, validate_call
+
+import yaml
+from beanie import PydanticObjectId
 from bson import ObjectId
-from dotenv import load_dotenv
+
+# from dotenv import load_dotenv
+from pydantic import BaseModel, ValidationError, validate_call
 
 from depictio.models.logging import logger
 from depictio.models.models.base import convert_objectid_to_str
 
-# Explicitly load environment variables
-load_dotenv()
+# logger.info(f"Pre-loading environment variables {os.environ}")
+
+# # Explicitly load environment variables
+# # load_dotenv()
+
+# logger.info(f"Post-loading environment variables {os.environ}")
+
 
 def get_depictio_context():
     # Ensure environment variables are loaded before accessing
@@ -53,16 +61,62 @@ def get_config(filename: str) -> Dict:
 def substitute_env_vars(config: Any) -> Any:
     """
     Recursively substitute environment variables in the configuration dictionary.
+    Handles environment variables with or without curly braces.
     """
     if isinstance(config, dict):
         return {k: substitute_env_vars(v) for k, v in config.items()}
     elif isinstance(config, list):
         return [substitute_env_vars(item) for item in config]
     elif isinstance(config, str):
-        # Substitute environment variables in string values
-        return os.path.expandvars(config)
+        # Check if string contains environment variables
+        if re.search(r"\$|{\$", config):
+            logger.info(f"Processing string with env vars: '{config}'")
+
+            # Handle variables with curly braces: {$VAR} -> $VAR
+            processed = re.sub(r"\{\$([A-Za-z_][A-Za-z0-9_]*)\}", r"$\1", config)
+            logger.info(f"After brace removal: '{processed}'")
+
+            # Now substitute environment variables
+            result = os.path.expandvars(processed)
+            logger.info(f"After expandvars: '{result}'")
+
+            # Special handling for $PWD if it wasn't expanded
+            if "$PWD" in result:
+                current_dir = os.getcwd()
+                result = result.replace("$PWD", current_dir)
+                logger.info(f"After PWD replacement: '{result}'")
+
+            # Special handling for $GITHUB_WORKSPACE
+            if "$GITHUB_WORKSPACE" in result:
+                if "GITHUB_WORKSPACE" in os.environ:
+                    workspace = os.environ["GITHUB_WORKSPACE"]
+                    result = result.replace("$GITHUB_WORKSPACE", workspace)
+                    logger.info(f"After GITHUB_WORKSPACE replacement: '{result}'")
+                else:
+                    logger.warning("GITHUB_WORKSPACE not found in environment")
+                    logger.info(f"Current environment variables: {os.environ}")
+
+            return result
+        else:
+            # No environment variables, return as-is
+            return config
     else:
         return config
+
+
+# def substitute_env_vars(config: Any) -> Any:
+#     """
+#     Recursively substitute environment variables in the configuration dictionary.
+#     """
+#     if isinstance(config, dict):
+#         return {k: substitute_env_vars(v) for k, v in config.items()}
+#     elif isinstance(config, list):
+#         return [substitute_env_vars(item) for item in config]
+#     elif isinstance(config, str):
+#         # Substitute environment variables in string values
+#         return os.path.expandvars(config)
+#     else:
+#         return config
 
 
 @validate_call

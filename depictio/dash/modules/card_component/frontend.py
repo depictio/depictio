@@ -1,15 +1,10 @@
 # Import necessary libraries
-from dash import html, dcc, Input, Output, State, MATCH
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
-from dash_iconify import DashIconify
 import httpx
+from dash import MATCH, Input, Output, State, dcc, html
+from dash_iconify import DashIconify
 
-# Depictio imports
-from depictio.dash.utils import (
-    get_component_data,
-    load_depictio_data_mongo,
-)
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.custom_logging import logger
 from depictio.dash.modules.card_component.utils import (
@@ -17,9 +12,13 @@ from depictio.dash.modules.card_component.utils import (
     build_card,
     build_card_frame,
 )
+
+# Depictio imports
 from depictio.dash.utils import (
     UNSELECTED_STYLE,
     get_columns_from_data_collection,
+    get_component_data,
+    load_depictio_data_mongo,
 )
 
 
@@ -264,7 +263,7 @@ def register_callbacks_card_component(app):
 
         # Get the type of the selected column and the value for the selected aggregation
         column_type = cols_json[column_name]["type"]
-        v = cols_json[column_name]["specs"][aggregation_value]
+        # v = cols_json[column_name]["specs"][aggregation_value]
 
         dashboard_data
 

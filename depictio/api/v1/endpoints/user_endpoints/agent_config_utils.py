@@ -1,22 +1,23 @@
 import os
+
 import yaml
-from pydantic import HttpUrl
+from pydantic import validate_call
 
-from depictio.api.v1.configs.custom_logging import logger
 from depictio.api.v1.configs.config import settings
+from depictio.api.v1.configs.custom_logging import logger
 from depictio.api.v1.s3 import minios3_external_config
-
 from depictio.models.models.users import (
-    UserBeanie,
+    CLIConfig,
     TokenBeanie,
     UserBaseCLIConfig,
-    CLIConfig,
+    UserBeanie,
 )
 from depictio.models.utils import make_json_serializable
 
 
 # Helper function to generate agent config
-async def generate_agent_config(user: UserBeanie, token: TokenBeanie) -> CLIConfig:
+@validate_call(validate_return=True)
+async def _generate_agent_config(user: UserBeanie, token: TokenBeanie) -> CLIConfig:
     """
     Generate an agent configuration for a user with the given token.
 
@@ -76,24 +77,26 @@ async def export_agent_config(
     config_path = f"{config_dir}/{config_filename}"
     # Create the config directory if it doesn't exist
     os.makedirs(config_dir, exist_ok=True)
-    
+
     logger.debug(f"Creating config directory: {config_dir}")
     logger.debug(f"Wipe flag is set to: {wipe}")
 
     # Check if file exists and respect the wipe flag
     if os.path.exists(config_path) and not wipe:
-        logger.warning(f"Config file {config_path} already exists. Use wipe=True to overwrite.")
+        logger.warning(
+            f"Config file {config_path} already exists. Use wipe=True to overwrite."
+        )
     else:
         # Log appropriate message based on whether we're overwriting
         if os.path.exists(config_path):
             logger.warning(f"Config file {config_path} already exists. Overwriting.")
         else:
             logger.debug(f"Creating new config file: {config_path}")
-        
+
         # Write the config file
         with open(config_path, "w") as f:
             f.write(agent_config_yaml)
-            
+
         logger.debug(f"Agent config for {email} exported to {config_path}")
-    
+
     return config_path

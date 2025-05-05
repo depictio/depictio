@@ -1,16 +1,16 @@
 from abc import ABC
-from typing import Optional, List
-from pydantic import validate_call
-import boto3
-from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ClientError
+from typing import List, Optional
 
-from depictio.models.models.users import CLIConfig
-from depictio.models.models.s3 import MinioConfig, PolarsStorageOptions, S3DepictioCLIConfig
+import boto3
+from botocore.exceptions import ClientError, NoCredentialsError, PartialCredentialsError
+from pydantic import validate_call
+
 from depictio.models.logging import logger
+from depictio.models.models.s3 import PolarsStorageOptions, S3DepictioCLIConfig
 
 
 class S3ProviderBase(ABC):
-    def __init__(self, config: MinioConfig):
+    def __init__(self, config: S3DepictioCLIConfig):
         self.config = config
         self.bucket_name = config.bucket
         self.endpoint_url = config.endpoint_url
@@ -71,7 +71,9 @@ class S3ProviderBase(ABC):
         """
         try:
             test_key = ".depictio/write_test"
-            self.s3_client.put_object(Bucket=self.bucket_name, Key=test_key, Body="test")
+            self.s3_client.put_object(
+                Bucket=self.bucket_name, Key=test_key, Body="test"
+            )
             self.s3_client.delete_object(Bucket=self.bucket_name, Key=test_key)
             logger.info("Write policy is correctly configured.")
             return True
@@ -96,10 +98,14 @@ class S3ProviderBase(ABC):
             suggestions.append("Verify the endpoint URL, access key, and secret key.")
 
         if "bucket" in checks and not self.check_bucket_accessibility():
-            suggestions.append(f"Ensure the bucket '{self.bucket_name}' exists and is accessible.")
+            suggestions.append(
+                f"Ensure the bucket '{self.bucket_name}' exists and is accessible."
+            )
 
         if "write" in checks and not self.check_write_policy():
-            suggestions.append("Adjust bucket policies to allow write access for this client.")
+            suggestions.append(
+                "Adjust bucket policies to allow write access for this client."
+            )
 
         if suggestions:
             logger.error("Suggested Adjustments:")
@@ -111,12 +117,15 @@ class S3ProviderBase(ABC):
 
 
 class MinIOManager(S3ProviderBase):
-    def __init__(self, config: MinioConfig):
+    def __init__(self, config: S3DepictioCLIConfig):
         logger.info(f"Initializing MinIOManager with bucket '{config.bucket}'")
         super().__init__(config)
 
 
-def S3_storage_checks(s3_config: MinioConfig, checks: Optional[List[str]] = None):
+@validate_call
+def S3_storage_checks(
+    s3_config: S3DepictioCLIConfig, checks: Optional[List[str]] = None
+):
     """
     Flexible S3 storage checks.
 
@@ -133,7 +142,9 @@ def S3_storage_checks(s3_config: MinioConfig, checks: Optional[List[str]] = None
 
 
 @validate_call
-def turn_S3_config_into_polars_storage_options(s3_config: S3DepictioCLIConfig) -> PolarsStorageOptions:
+def turn_S3_config_into_polars_storage_options(
+    s3_config: S3DepictioCLIConfig,
+) -> PolarsStorageOptions:
     """
     Convert S3 configuration into storage options for the client.
     """

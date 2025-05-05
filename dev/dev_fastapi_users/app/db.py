@@ -1,6 +1,6 @@
 # app/db.py
 import motor.motor_asyncio
-from beanie import Document, Link
+from beanie import Document, Link, PydanticObjectId
 from fastapi_users.db import BeanieBaseUser, BaseOAuthAccount
 from fastapi_users_db_beanie import BeanieUserDatabase
 from typing import List, Optional
@@ -30,7 +30,7 @@ class User(BeanieBaseUser, Document):
     # Adding custom fields to the user model
     first_name: Optional[str] = None
     last_name: Optional[str] = None
-    groups: List[Link[Group]] = []
+    groups_ids: List[PydanticObjectId] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     oauth_accounts: list[OAuthAccount] = Field(default_factory=list)
 

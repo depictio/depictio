@@ -9,10 +9,12 @@ if [ "$DEV_MODE" = "true" ]; then
     # Development mode with reload
     # Debug mode is passed to Dash in app.py
     export DEV_MODE=true
+    echo "Running in development mode on $DASH_HOST:$DASH_PORT"
     python depictio/dash/app.py
 else
     # Production mode with workers
     export DEV_MODE=false
+    echo "Running in production mode on $DASH_HOST:$DASH_PORT with $DASH_WORKERS workers"
     gunicorn \
         --workers="$DASH_WORKERS" \
         --bind="$DASH_HOST:$DASH_PORT" \

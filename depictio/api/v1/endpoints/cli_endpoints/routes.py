@@ -1,46 +1,43 @@
-from fastapi import APIRouter, Depends, HTTPException
-from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
+from datetime import datetime
 
-from depictio.api.v1.endpoints.user_endpoints.core_functions import async_fetch_user_from_email
+from fastapi import APIRouter
+
 from depictio.api.v1.configs.custom_logging import logger
-
-
-from depictio.models.models.base import convert_objectid_to_str
-from depictio.models.models.projects import Project
-from depictio.models.models.users import UserBase
-
+from depictio.api.v1.endpoints.user_endpoints.core_functions import (
+    _async_fetch_user_from_id,
+)
+from depictio.models.models.api import BaseApiResponse
+from depictio.models.models.users import CLIConfig, TokenBeanie
 
 cli_endpoint_router = APIRouter()
 
 
-@cli_endpoint_router.post("/validate_cli_config")
-async def validate_cli_config_endpoint(cli_config: dict):
+@cli_endpoint_router.post("/validate_cli_config", response_model=BaseApiResponse)
+async def validate_cli_config_endpoint(cli_config: CLIConfig):
     logger.info(f"CLI config: {cli_config}")
 
-    # Validate that the cli config is correct using token and email
-    user = cli_config["user"]
-    token = user["token"]
-    email = user["email"]
+    token = cli_config.user.token
 
-    logger.info(f"cli config: {cli_config}")
-    logger.info(f"User: {user}")
-    logger.info(f"Token: {token}")
-    logger.info(f"Email: {email}")
+    _token_check = await TokenBeanie.find_one(
+        {
+            "_id": token.id,
+            # check expire datetime is greater than now
+            "expire_datetime": {"$gt": datetime.now()},
+        }
+    )
 
-    db_user = async_fetch_user_from_email(email, return_tokens=True)
+    if not _token_check:
+        logger.error("Token expired or not found.")
+        return {"success": False, "message": "Token expired or not found."}
+    logger.info(f"Token check: {_token_check}")
+    # Check if the user exists in the database
+    user = await _async_fetch_user_from_id(token.user_id)
+    if not user:
+        logger.error("User not found.")
+        return {"success": False, "message": "User not found."}
+    logger.info(f"User check: {user}")
 
-    if db_user:
-        tokens = db_user.tokens
-        for t in tokens:
-            t = t.dict()
-            if t["name"] == token["name"] and t["access_token"] == token["access_token"]:
-                logger.info("Token is valid.")
-                return {"valid": True}
-        return {"valid": False}
-    else:
-        return {"valid": False}
-
-
+    return {"success": True, "message": "CLI config is valid."}
 
 
 # @cli_endpoint_router.post("/validate_project_config")

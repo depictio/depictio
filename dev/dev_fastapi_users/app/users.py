@@ -49,7 +49,17 @@ bearer_transport = BearerTransport(tokenUrl="auth/jwt/login")
 
 
 def get_jwt_strategy() -> JWTStrategy[models.UP, models.ID]:
-    return JWTStrategy(secret=SECRET, lifetime_seconds=3600)
+    strategy = JWTStrategy(secret=SECRET, lifetime_seconds=3600)
+    
+    # Monkey patch the generate method to add token logging
+    original_generate = strategy.generate
+    def logged_generate(*args, **kwargs):
+        token = original_generate(*args, **kwargs)
+        print(f"Generated JWT Token: {token}")
+        return token
+    strategy.generate = logged_generate
+    
+    return strategy
 
 
 auth_backend = AuthenticationBackend(

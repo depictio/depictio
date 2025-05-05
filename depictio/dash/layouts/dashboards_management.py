@@ -1,22 +1,18 @@
-from datetime import datetime
-import json
 import os
 import shutil
-from bson import ObjectId
-import dash
-from dash import html, dcc, ctx, MATCH, Input, Output, State, ALL
-import dash_mantine_components as dmc
-import dash_bootstrap_components as dbc
-from dash_iconify import DashIconify
-import httpx
+from datetime import datetime
 
+import dash
+import dash_mantine_components as dmc
+import httpx
+from bson import ObjectId
+from dash import ALL, MATCH, Input, Output, State, ctx, dcc, html
+from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL
-from depictio.api.v1.db import dashboards_collection
 from depictio.api.v1.configs.custom_logging import logger
 
 # from depictio.api.v1.endpoints.dashboards_endpoints.models import DashboardData
-
 # from depictio.api.v1.endpoints.user_endpoints.models import UserBase
 from depictio.dash.api_calls import (
     api_call_fetch_user_from_token,
@@ -27,12 +23,7 @@ from depictio.dash.layouts.layouts_toolbox import (
     create_delete_confirmation_modal,
 )
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
-from depictio.models.utils import convert_model_to_dict
-from depictio.dash.utils import generate_unique_index
-
 from depictio.models.models.dashboards import DashboardData
-from depictio.models.models.users import UserBase
-
 
 modal, modal_id = create_dashboard_modal()
 
@@ -168,10 +159,10 @@ def edit_dashboard_name(new_name, dashboard_id, dashboards, token):
 
 
 def render_welcome_section(email):
-    style = {
-        "border": f"1px solid {dmc.theme.DEFAULT_COLORS['indigo'][4]}",
-        "textAlign": "center",
-    }
+    # style = {
+    #     "border": f"1px solid {dmc.theme.DEFAULT_COLORS['indigo'][4]}",
+    #     "textAlign": "center",
+    # }
     return dmc.Grid(
         children=[
             dmc.Col(
@@ -244,7 +235,7 @@ def register_callbacks_dashboards_management(app):
                         ),
                         html.A(
                             dmc.Button(
-                                f"View",
+                                "View",
                                 id={
                                     "type": "view-dashboard-button",
                                     "index": dashboard["dashboard_id"],
@@ -284,7 +275,7 @@ def register_callbacks_dashboards_management(app):
 
         # dashboards = [convert_objectid_to_str(dashboard.mongo()) for dashboard in dashboards]
 
-        title = dmc.Title("Recently viewed:", order=3)
+        # title = dmc.Title("Recently viewed:", order=3)
 
         def modal_edit_name_dashboard(dashboard):
             modal = dmc.Modal(
@@ -462,7 +453,7 @@ def register_callbacks_dashboards_management(app):
                         [
                             html.A(
                                 dmc.Button(
-                                    f"View",
+                                    "View",
                                     id={
                                         "type": "view-dashboard-button",
                                         "index": dashboard["dashboard_id"],
@@ -540,7 +531,6 @@ def register_callbacks_dashboards_management(app):
 
         def return_thumbnail(user_id, dashboard):
             import os
-
             import sys
 
             # log current working directory
@@ -1130,7 +1120,7 @@ def register_callbacks_dashboards_management(app):
             dashboards, current_userbase.id, user_data["access_token"]
         )
         # new_index_data = {"next_index": next_index, "dashboards": dashboards}
-        new_index_data = {"dashboards": dashboards}
+        # new_index_data = {"dashboards": dashboards}
 
         logger.info(f"Generated dashboard view: {dashboards_view}")
         return [dashboards_view] * len(store_data_list)
@@ -1373,7 +1363,7 @@ def register_callbacks_dashboards_management(app):
                 logger.info(f"trigger_id: {trigger_id}")
                 logger.info(f"URL pathname: {pathname}")
                 if pathname.startswith("/dashboard/"):
-                    dashboard_id = pathname.split("/")[-1]
+                    # dashboard_id = pathname.split("/")[-1]
                     # Fetch dashboard data based on dashboard_id and return the appropriate layout
                     # return html.Div([f"Displaying Dashboard {dashboard_id}", dbc.Button("Go back", href="/", color="black", external_link=True)])
                     return dash.no_update

@@ -1,14 +1,16 @@
-from datetime import datetime
 import os
+import re
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
-import re
+
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+from depictio.models.config import DEPICTIO_CONTEXT
+from depictio.models.logging import logger
 from depictio.models.models.base import DirectoryPath, MongoModel, PyObjectId
 from depictio.models.models.data_collections import DataCollection
-from depictio.models.logging import logger
 from depictio.models.models.users import Permission
-from depictio.models.config import DEPICTIO_CONTEXT
 
 
 class WorkflowDataLocation(MongoModel):
@@ -35,7 +37,7 @@ class WorkflowDataLocation(MongoModel):
                 for match in matches:
                     env_value = os.environ.get(match)
                     logger.debug(f"Original path: {location}")
-                    logger.debug(f"Expanded path: {location.replace(f'{{{match}}}', env_value)}")
+                    # logger.debug(f"Expanded path: {location.replace(f'{{{match}}}', env_value)}")
 
                     if not env_value:
                         raise ValueError(
@@ -46,7 +48,9 @@ class WorkflowDataLocation(MongoModel):
                 expanded_paths.append(location)
 
             # Validate the expanded paths if in CLI context
-            return [DirectoryPath(path=Path(location)).path for location in expanded_paths]
+            return [
+                DirectoryPath(path=Path(location)).path for location in expanded_paths
+            ]
         else:
             return value
 
@@ -54,8 +58,10 @@ class WorkflowDataLocation(MongoModel):
     def validate_regex(cls, values):
         # only if mode is 'sequencing-runs' - check mode first
         if values["structure"] == "sequencing-runs":
-            if not values["runs_regex"]:
-                raise ValueError("runs_regex is required when mode is 'sequencing-runs'")
+            if "runs_regex" not in values or not values["runs_regex"]:
+                raise ValueError(
+                    "runs_regex is required when structure is 'sequencing-runs'"
+                )
             # just check if the regex is valid
             try:
                 re.compile(values["runs_regex"])
@@ -101,7 +107,9 @@ class WorkflowRun(MongoModel):
             for match in matches:
                 env_value = os.environ.get(match)
                 logger.debug(f"Original path: {location}")
-                logger.debug(f"Expanded path: {location.replace(f'{{{match}}}', env_value)}")
+                logger.debug(
+                    f"Expanded path: {location.replace(f'{{{match}}}', env_value)}"
+                )
 
                 if not env_value:
                     raise ValueError(
@@ -222,6 +230,7 @@ class WorkflowCatalog(BaseModel):
     def validate_workflow_catalog_name(cls, value):
         if value not in ["workflowhub", "nf-core", "smk-wf-catalog"]:
             raise ValueError("Invalid workflow catalog name")
+        return value
 
 
 class Workflow(MongoModel):

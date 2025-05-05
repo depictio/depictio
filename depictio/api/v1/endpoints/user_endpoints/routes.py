@@ -1,42 +1,49 @@
-from typing import Annotated, Dict, Optional, Any
-from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException, Header, status
-from beanie import PydanticObjectId
-from pydantic import EmailStr
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from datetime import datetime
+from typing import Annotated, Any, Dict, List, Optional
+
+from beanie import PydanticObjectId
+from bson import ObjectId
+from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from pydantic import EmailStr
 
 from depictio.api.v1.configs.config import FASTAPI_INTERNAL_API_KEY
-from depictio.api.v1.endpoints.user_endpoints.core_functions import (
-    async_fetch_user_from_token,
-    async_fetch_user_from_email,
-    async_fetch_user_from_id,
-    check_if_token_is_valid,
-    # create_user_in_db,
-    purge_expired_tokens_from_user,
-)
+from depictio.api.v1.configs.custom_logging import format_pydantic, logger
+from depictio.api.v1.db import users_collection
 from depictio.api.v1.endpoints.user_endpoints.agent_config_utils import (
-    generate_agent_config,
+    _generate_agent_config,
 )
-
+from depictio.api.v1.endpoints.user_endpoints.core_functions import (
+    _add_token,
+    _async_fetch_user_from_email,
+    _async_fetch_user_from_id,
+    _async_fetch_user_from_token,
+    _check_if_token_is_valid,
+    _check_password,
+    _create_user_in_db,
+    _delete_token,
+    _edit_password,
+    _hash_password,
+    _list_tokens,
+    _purge_expired_tokens,
+)
 from depictio.api.v1.endpoints.user_endpoints.utils import (
-    add_token,
-    check_password,
-    create_user_in_db,
     delete_group_helper,
     update_group_in_users_helper,
 )
-from depictio.api.v1.configs.custom_logging import format_pydantic, logger
-from depictio.api.v1.db import users_collection
-
 from depictio.models.models.base import convert_objectid_to_str
 from depictio.models.models.users import (
-    TokenBase,
-    User,
-    UserBase,
+    CLIConfig,
     GroupBeanie,
+    RequestEditPassword,
+    RequestUserRegistration,
+    TokenBase,
     TokenBeanie,
     TokenData,
+    User,
+    UserBase,
+    UserBaseUI,
+    UserBeanie,
 )
 from depictio.models.utils import convert_model_to_dict
 
@@ -63,7 +70,7 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> Use
     if token is None:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    user = await async_fetch_user_from_token(token)
+    user = await _async_fetch_user_from_token(token)
     logger.debug(f"User: {user}")
 
     if user is None:
@@ -90,7 +97,7 @@ async def login(login_request: OAuth2PasswordRequestForm = Depends()):
     logger.info(f"Login attempt for user: {login_request.username}")
 
     # Verify credentials
-    _ = await check_password(login_request.username, login_request.password)
+    _ = await _check_password(login_request.username, login_request.password)
     if not _:
         logger.error("Invalid credentials")
         raise HTTPException(
@@ -100,7 +107,7 @@ async def login(login_request: OAuth2PasswordRequestForm = Depends()):
     # Generate random name for the token
     token_name = f"{login_request.username}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
 
-    user = await async_fetch_user_from_email(login_request.username)
+    user = await _async_fetch_user_from_email(login_request.username)
     logger.debug(f"User: {user}")
 
     token_data = TokenData(
@@ -111,7 +118,7 @@ async def login(login_request: OAuth2PasswordRequestForm = Depends()):
     logger.debug(f"Token data: {token_data}")
 
     # Generate and store token
-    token = await add_token(token_data)
+    token = await _add_token(token_data)
     logger.info(f"Token : {format_pydantic(token)}")
     if token is None:
         logger.error("Token with the same name already exists.")
@@ -126,11 +133,38 @@ async def login(login_request: OAuth2PasswordRequestForm = Depends()):
     return token  # TokenBeanie
 
 
+@auth_endpoint_router.post("/create_token", include_in_schema=False)
+async def create_token(
+    token: TokenData,
+    api_key: str = Header(..., description="Internal API key for authentication"),
+) -> TokenBeanie:
+    logger.info(f"API key: {api_key}")
+    logger.info(f"Token: {token}")
+    logger.info(f"Internal API key: {FASTAPI_INTERNAL_API_KEY}")
+
+    if api_key != FASTAPI_INTERNAL_API_KEY:
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid API key",
+        )
+
+    # Generate and store token
+    token = await _add_token(token)
+    logger.info(f"Token : {format_pydantic(token)}")
+    if token is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token with the same name already exists",
+        )
+
+    return token
+
+
 @auth_endpoint_router.get("/fetch_user/from_token")
 async def api_fetch_user_from_token(
     token: str, current_user=Depends(get_current_user)
 ) -> User:
-    user = await async_fetch_user_from_token(token)
+    user = await _async_fetch_user_from_token(token)
 
     if not user:
         raise HTTPException(
@@ -151,7 +185,6 @@ async def api_fetch_user_from_email(
     email: EmailStr,
     api_key: str = Header(..., description="Internal API key for authentication"),
 ) -> User:
-
     logger.info(f"API key: {api_key}")
     logger.info(f"Email: {email}")
     logger.info(f"Internal API key: {FASTAPI_INTERNAL_API_KEY}")
@@ -162,18 +195,12 @@ async def api_fetch_user_from_email(
             detail="Invalid API key",
         )
 
-    user = await async_fetch_user_from_email(email)
+    user = await _async_fetch_user_from_email(email)
 
     if not user:
         raise HTTPException(
             status_code=404, detail="User not found for the provided email"
         )
-
-    # if user id differs from current user id
-    # if user.id != current_user.id:
-    #     raise HTTPException(
-    #         status_code=403, detail="Email does not belong to the current user"
-    #     )
 
     return user
 
@@ -182,7 +209,7 @@ async def api_fetch_user_from_email(
 async def api_fetch_user_from_id(
     user_id: PydanticObjectId, current_user=Depends(get_current_user)
 ) -> User:
-    user = await async_fetch_user_from_id(user_id)
+    user = await _async_fetch_user_from_id(user_id)
 
     if not user:
         raise HTTPException(
@@ -199,26 +226,23 @@ async def api_fetch_user_from_id(
 
 
 @auth_endpoint_router.post("/register")
-async def create_user(
-    email: EmailStr, password: str, is_admin: bool = False
+async def register(
+    request: RequestUserRegistration,
 ) -> Dict[str, Any]:
     """
     Endpoint to register a new user.
 
     Args:
-        email: User's email address
-        password: User's password
-        group: User's group (optional)
-        is_admin: Whether user is admin
+        request: User registration data containing email and password
 
     Returns:
         Dictionary with user data, success status and message
     """
-    logger.info(f"Registering user with email: {email}")
-    logger.debug(f"Password: {password}")
-    logger.debug(f"Is Admin: {is_admin}")
+    logger.info(f"Registering user with email: {request.email}")
     try:
-        return await create_user_in_db(email, password, is_admin)
+        return await _create_user_in_db(
+            request.email, request.password, request.is_admin
+        )
 
     except HTTPException as e:
         # Re-raise HTTP exceptions
@@ -226,33 +250,6 @@ async def create_user(
     except Exception as e:
         logger.error(f"Error creating user: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to create user: {str(e)}")
-
-
-# @auth_endpoint_router.post("/register")
-# async def create_user(user: User):
-#     # Add user to the database
-#     logger.info(f"Creating user: {user}")
-#     user_dict = convert_model_to_dict(user)
-#     logger.info(f"User dict: {user_dict}")
-#     # Check if the user already exists
-#     existing_user = users_collection.find_one({"email": user.email})
-#     logger.info(f"Existing user: {existing_user}")
-#     if existing_user:
-#         raise HTTPException(status_code=400, detail="User already exists")
-#     # Insert the user into the database
-#     else:
-#         user_db = User.from_mongo(user_dict).mongo()
-#         logger.info(f"User: {user_db}")
-#         result = users_collection.insert_one(user_db)
-
-#         # Retrieve the user from the database and convert ObjectIds to strings
-#         created_user = users_collection.find_one({"_id": result.inserted_id})
-#         if created_user:
-#             return convert_objectid_to_str(created_user)
-#         else:
-#             raise HTTPException(
-#                 status_code=500, detail="Failed to retrieve created user"
-#             )
 
 
 @auth_endpoint_router.get("/get_all_groups")
@@ -328,126 +325,118 @@ async def get_users_group():
 
 
 @auth_endpoint_router.post("/edit_password")
-async def edit_password(request: dict, current_user=Depends(get_current_user)):
-    # user_data = users_collection.find_one({"id": current_user.id})
+async def edit_password(
+    request: RequestEditPassword, current_user: UserBeanie = Depends(get_current_user)
+) -> Dict:
+    """
+    Endpoint to handle user password updates.
+    """
+    logger.debug(f"User data: {current_user}")
 
-    logger.info(f"Current user: {current_user}")
-
-    if not request:
-        raise HTTPException(status_code=400, detail="No request provided")
-
-    if not "old_password" in request:
-        raise HTTPException(status_code=400, detail="No old password provided")
-
-    if not "new_password" in request:
-        raise HTTPException(status_code=400, detail="No new password provided")
-
-    old_password = request.get("old_password")
-    new_password = request.get("new_password")
-
-    if not old_password:
-        raise HTTPException(status_code=400, detail="No old password provided")
-
-    if not new_password:
-        raise HTTPException(status_code=400, detail="No new password provided")
-
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Current user not found.")
-
-    if not check_password(current_user.email, old_password):
+    # Validate password change request
+    if not _check_password(current_user.email, request.old_password):
         raise HTTPException(status_code=400, detail="Old password is incorrect")
 
-    if current_user.password == new_password:
+    # Hash the new password
+    hashed_password = _hash_password(request.new_password)
+
+    if current_user.password == hashed_password:
         raise HTTPException(
             status_code=400,
             detail="New password cannot be the same as the old password",
         )
 
-    current_user.password = new_password
+    # Call the core function to update the password
+    success = await _edit_password(current_user.id, hashed_password)
 
-    update_data = current_user.mongo()
-    logger.info(f"Update data: {update_data}")
-
-    # Ensure user_id is an ObjectId for the query
-    user_id = current_user.id
-    if not isinstance(user_id, ObjectId):
-        if isinstance(user_id, str):
-            user_id = ObjectId(user_id)
-        else:
-            user_id = ObjectId(str(user_id))
-
-    # Update the user in the database by replacing ONLY the password field
-    result = users_collection.update_one(
-        {"_id": user_id}, {"$set": {"password": new_password}}
-    )
-
-    # Log the update result
-    logger.info(f"Update result: {result.modified_count} document(s) updated")
-    logger.info(
-        f"Show updated user from database: {users_collection.find_one({'email': current_user.email})}"
-    )
-
-    if result.modified_count == 1:
-        return convert_model_to_dict(current_user)
+    if success:
+        return {"success": True, "message": "Password updated successfully"}
     else:
-        raise HTTPException(status_code=500, detail="Failed to update password")
+        return {"success": False, "message": "Failed to update password"}
 
 
-@auth_endpoint_router.post("/delete_token")
-async def delete_token(request: dict, current_user=Depends(get_current_user)):
-    if not request:
-        raise HTTPException(status_code=400, detail="No request provided")
+@auth_endpoint_router.post("/delete_token", include_in_schema=False)
+async def delete_token(
+    token_id: PydanticObjectId,
+    api_key: str = Header(..., description="Internal API key for authentication"),
+):
+    if api_key != FASTAPI_INTERNAL_API_KEY:
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid API key",
+        )
 
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Current user not found.")
+    result = await _delete_token(token_id)
 
-    logger.debug(f"Request: {request}")
-
-    token_id = request["token_id"]
-    user_id = current_user.id
-    logger.debug(f"Token ID: {token_id}")
-
-    # Ensure user_id is an ObjectId
-    if isinstance(user_id, str):
-        user_id = ObjectId(user_id)
-    elif isinstance(user_id, dict) and "$oid" in user_id:
-        user_id = ObjectId(user_id["$oid"])
-    elif isinstance(user_id, ObjectId):
-        # Already an ObjectId, no conversion needed
-        pass
-    else:
-        # Convert to string first, then to ObjectId
-        user_id = ObjectId(str(user_id))
-
-    # Log the _id and the query structure
-    logger.debug(f"User _id (ObjectId): {user_id}")
-    query = {"_id": user_id}
-
-    # Get existing tokens from the user and remove the token to be deleted
-    user_data = users_collection.find_one(query)
-    if not user_data:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    tokens = user_data.get("tokens", [])
-    logger.debug(f"Tokens: {tokens}")
-    tokens = [e for e in tokens if str(e["_id"]) != str(token_id)]
-    logger.debug(f"Tokens after deletion: {tokens}")
-
-    # Update the user with the new tokens
-    update = {"$set": {"tokens": tokens}}
-    logger.debug(f"Query: {query}")
-
-    # Update the user collection
-    result = users_collection.update_one(query, update)
-    logger.debug(f"Update result: {result.modified_count} document(s) updated")
-
-    # Return success status
-    return {"success": result.modified_count > 0}
+    return {"success": result, "message": "Token deleted successfully"}
 
 
-@auth_endpoint_router.post("/purge_expired_tokens")
-async def purge_expired_tokens_endpoint(current_user=Depends(get_current_user)) -> Dict:
-    result = await purge_expired_tokens_from_user(current_user.id)
+# @auth_endpoint_router.post("/delete_token")
+# async def delete_token(request: dict, current_user=Depends(get_current_user)):
+#     if not request:
+#         raise HTTPException(status_code=400, detail="No request provided")
+
+#     if not current_user:
+#         raise HTTPException(status_code=401, detail="Current user not found.")
+
+#     logger.debug(f"Request: {request}")
+
+#     token_id = request["token_id"]
+#     user_id = current_user.id
+#     logger.debug(f"Token ID: {token_id}")
+
+#     # Ensure user_id is an ObjectId
+#     if isinstance(user_id, str):
+#         user_id = ObjectId(user_id)
+#     elif isinstance(user_id, dict) and "$oid" in user_id:
+#         user_id = ObjectId(user_id["$oid"])
+#     elif isinstance(user_id, ObjectId):
+#         # Already an ObjectId, no conversion needed
+#         pass
+#     else:
+#         # Convert to string first, then to ObjectId
+#         user_id = ObjectId(str(user_id))
+
+#     # Log the _id and the query structure
+#     logger.debug(f"User _id (ObjectId): {user_id}")
+#     query = {"_id": user_id}
+
+#     # Get existing tokens from the user and remove the token to be deleted
+#     user_data = users_collection.find_one(query)
+#     if not user_data:
+#         raise HTTPException(status_code=404, detail="User not found")
+
+#     tokens = user_data.get("tokens", [])
+#     logger.debug(f"Tokens: {tokens}")
+#     tokens = [e for e in tokens if str(e["_id"]) != str(token_id)]
+#     logger.debug(f"Tokens after deletion: {tokens}")
+
+#     # Update the user with the new tokens
+#     update = {"$set": {"tokens": tokens}}
+#     logger.debug(f"Query: {query}")
+
+#     # Update the user collection
+#     result = users_collection.update_one(query, update)
+#     logger.debug(f"Update result: {result.modified_count} document(s) updated")
+
+#     # Return success status
+#     return {"success": result.modified_count > 0}
+
+
+@auth_endpoint_router.post("/purge_expired_tokens", include_in_schema=False)
+async def purge_expired_tokens_endpoint(
+    # api_key: str = Header(..., description="Internal API key for authentication"),
+    current_user: UserBase = Depends(get_current_user),
+):
+    # logger.debug(f"API key: {api_key}")
+    # logger.debug(f"Internal API key: {FASTAPI_INTERNAL_API_KEY}")
+    # if api_key != FASTAPI_INTERNAL_API_KEY:
+    #     raise HTTPException(
+    #         status_code=403,
+    #         detail="Invalid API key",
+    #     )
+
+    result = await _purge_expired_tokens(current_user)
 
     if result["success"]:
         return {"success": True}
@@ -457,44 +446,39 @@ async def purge_expired_tokens_endpoint(current_user=Depends(get_current_user)) 
 
 @auth_endpoint_router.post("/check_token_validity")
 async def check_token_validity_endpoint(token: TokenBase):
-    is_valid = await check_if_token_is_valid(token)
+    is_valid = await _check_if_token_is_valid(token)
 
     return {"success": is_valid}
 
 
-@auth_endpoint_router.post("/generate_agent_config")
-def generate_agent_config_endpoint(
-    request: dict, current_user=Depends(get_current_user)
-):
-    if not request:
-        raise HTTPException(status_code=400, detail="No request provided")
-
-    if "token" not in request:
-        raise HTTPException(status_code=400, detail="No token provided")
-
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Current user not found.")
-
-    # Convert current_user to dict with ObjectIds as strings
-    user_dict = convert_model_to_dict(current_user)
-
-    depictio_agent_config = generate_agent_config(
-        current_user=user_dict, request=request
-    )
+@auth_endpoint_router.post("/generate_agent_config", response_model=CLIConfig)
+async def generate_agent_config_endpoint(
+    token: TokenBeanie, current_user: UserBase = Depends(get_current_user)
+) -> CLIConfig:
+    logger.info(f"Token: {token}")
+    logger.info(f"Token: {format_pydantic(token)}")
+    depictio_agent_config = await _generate_agent_config(user=current_user, token=token)
 
     return depictio_agent_config
 
 
-@auth_endpoint_router.get("/list")
-def list_users(current_user=Depends(get_current_user)):
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Current user not found.")
-    # Check if the current user is an admin
-    if not current_user.is_admin:
-        raise HTTPException(status_code=401, detail="Current user is not an admin.")
+@auth_endpoint_router.get("/list_tokens", response_model=List[TokenBeanie])
+async def list_tokens_(
+    current_user: UserBase = Depends(get_current_user),
+    token_lifetime: Optional[str] = None,
+):
+    cli_configs = await _list_tokens(
+        user_id=current_user.id,
+        token_lifetime=token_lifetime,
+    )
+    return cli_configs
 
-    users = users_collection.find()
-    users = [convert_objectid_to_str(user) for user in users]
+
+@auth_endpoint_router.get("/list", response_model=List[UserBaseUI])
+async def list_users(current_user: UserBase = Depends(get_current_user)):
+    users = await UserBeanie.find_all().to_list()
+    logger.debug(f"Users: {users}")
+    users = [user.turn_to_userbaseui() for user in users]
     return users
 
 

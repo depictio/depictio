@@ -1,11 +1,17 @@
 import os
+
+from dotenv import load_dotenv
+
+from depictio import BASE_PATH
+from depictio.api.v1.configs.custom_logging import logger
 from depictio.api.v1.configs.settings_models import Settings
 from depictio.api.v1.key_utils import (
     load_private_key,
     load_public_key,
 )
-from depictio.api.v1.configs.custom_logging import logger
 
+# Explicitly load environment variables
+load_dotenv(BASE_PATH.parent / ".env", override=False)
 
 # Settings
 # Overwrite priority: environment variables (.env) > config file (.yaml) > default values
@@ -16,10 +22,10 @@ DASH_BASE_URL = f"http://{settings.dash.service_name}:{settings.dash.port}"
 MONGODB_URL = f"mongodb://{settings.mongodb.service_name}:{settings.mongodb.port}/"
 _KEYS_DIR = settings.auth.keys_dir
 # Use the shared internal API key from settings
-FASTAPI_INTERNAL_API_KEY = os.getenv("DEPICTIO_INTERNAL_API_KEY", settings.fastapi.internal_api_key)
+FASTAPI_INTERNAL_API_KEY = os.getenv(
+    "DEPICTIO_INTERNAL_API_KEY", settings.fastapi.internal_api_key
+)
 ALGORITHM = settings.auth.keys_algorithm
-DEPICTIO_CONTEXT = os.getenv("DEPICTIO_CONTEXT", None)
-logger.info(f"DEPICTIO_CONTEXT: {DEPICTIO_CONTEXT}")
 
 
 PRIVATE_KEY = load_private_key(

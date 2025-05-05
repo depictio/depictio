@@ -43,8 +43,6 @@ dependencies = [
   "uvicorn==0.34.0",
   "dash-draggable==0.1.2",
   "dash-ag-grid==31.3.0",
-  ###4
-  "depictio-models"
 ]
 authors = [
   { name = "Thomas Weber", email = "thomas.weber@embl.de" }
@@ -68,8 +66,8 @@ build-backend = "setuptools.build_meta"
 packages = ["depictio"]
 
 [tool.mypy]
-exclude = ["build/", "depictio/"]
-files = ["depictio/tests/"]
+exclude = ["build/", "depictio/api/", "depictio/dash/"]
+files = ["depictio/tests/", "depictio/models/", "depictio/cli/"]
 
 [tool.pytest.ini_options]
 pythonpath = "."

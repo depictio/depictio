@@ -1,7 +1,8 @@
-from dash import html, dcc
 import dash_bootstrap_components as dbc
 import numpy as np
 import pandas as pd
+from dash import dcc, html
+
 from depictio.api.v1.configs.custom_logging import logger
 
 # Mapping from custom aggregation names to pandas functions
@@ -44,7 +45,9 @@ def compute_value(data, column_name, aggregation):
             new_value = series.max() - series.min()
             logger.info(f"Computed range: {new_value} (Type: {type(new_value)})")
         else:
-            logger.error(f"Range aggregation is not supported for non-numeric column '{column_name}'.")
+            logger.error(
+                f"Range aggregation is not supported for non-numeric column '{column_name}'."
+            )
             new_value = None
 
     else:
@@ -55,7 +58,9 @@ def compute_value(data, column_name, aggregation):
             return None
         elif pandas_agg == "range":
             # This case is already handled above
-            logger.error(f"Aggregation '{aggregation}' requires special handling and should not reach here.")
+            logger.error(
+                f"Aggregation '{aggregation}' requires special handling and should not reach here."
+            )
             return None
         else:
             try:
@@ -66,7 +71,9 @@ def compute_value(data, column_name, aggregation):
                 logger.info(f"Data type: {data[column_name].dtype}")
                 logger.info(f"Data: {data[column_name]}")
                 new_value = data[column_name].agg(pandas_agg)
-                logger.info(f"Computed {aggregation} ({pandas_agg}): {new_value} (Type: {type(new_value)})")
+                logger.info(
+                    f"Computed {aggregation} ({pandas_agg}): {new_value} (Type: {type(new_value)})"
+                )
             except AttributeError as e:
                 logger.error(f"Aggregation function '{pandas_agg}' failed: {e}")
                 new_value = None
@@ -155,14 +162,12 @@ def build_card(**kwargs):
     v = kwargs.get("value")
     build_frame = kwargs.get("build_frame", False)
     refresh = kwargs.get("refresh", False)
-    stepper = kwargs.get("stepper", False)
+    # stepper = kwargs.get("stepper", False)
 
     # if stepper:
     #     index = f"{index}-tmp"
     # else:
     index = index
-
-
 
     logger.info(f"Card kwargs: {kwargs}")
 
@@ -173,7 +178,6 @@ def build_card(**kwargs):
 
         logger.info(f"Existing data: {data}")
         logger.info(f"Existing data columns: {list(data.to_pandas().columns)}")
-
 
         if data.is_empty():
             from depictio.api.v1.deltatables_utils import load_deltatable_lite
@@ -188,7 +192,7 @@ def build_card(**kwargs):
 
     try:
         v = round(float(v), 4)
-    except:
+    except ValueError:
         pass
 
     # Metadata management - Create a store component to store the metadata of the card
