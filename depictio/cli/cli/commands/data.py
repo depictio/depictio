@@ -179,9 +179,7 @@ def process(
         project_config = response["project_config"]
 
         # Get remote project configuration
-        remote_project_config = api_get_project_from_id(
-            project_config.id, CLI_config
-        )
+        remote_project_config = api_get_project_from_id(project_config.id, CLI_config)
 
         if remote_project_config.status_code == 200:
             logger.info("Remote project configuration fetched successfully.")
