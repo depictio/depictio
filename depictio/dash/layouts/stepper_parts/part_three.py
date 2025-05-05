@@ -1,25 +1,16 @@
-import json
-from dash import html, Input, Output, State, ALL, MATCH, ctx
 import dash
-import dash_bootstrap_components as dbc
-import dash_mantine_components as dmc
-from dash_iconify import DashIconify
-import httpx
-import pandas as pd
-import yaml
+from dash import ALL, MATCH, Input, Output, State, html
 
+from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
 # Depictio components imports - design step
 from depictio.dash.modules.card_component.frontend import design_card
-from depictio.dash.modules.interactive_component.frontend import design_interactive
 from depictio.dash.modules.figure_component.frontend import design_figure
-from depictio.dash.modules.jbrowse_component.frontend import design_jbrowse
+from depictio.dash.modules.interactive_component.frontend import design_interactive
 
 # Depictio utils imports
 from depictio.dash.modules.table_component.frontend import design_table
-from depictio.dash.utils import return_mongoid
-from depictio.api.v1.configs.custom_logging import logger
-from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
 
 def return_design_component(component_selected, id, df, btn_component):
@@ -65,16 +56,14 @@ def register_callbacks_stepper_part_three(app):
         last_button,
         local_data,
     ):
-        
         wf_id = workflow_selection
         dc_id = data_collection_selection
 
         if not local_data:
             raise dash.exceptions.PreventUpdate
-        
+
         TOKEN = local_data["access_token"]
 
-        
         logger.info(f"workflow_selection: {workflow_selection}")
         logger.info(f"data_collection_selection: {data_collection_selection}")
         logger.info(f"btn_component: {btn_component}")
@@ -100,11 +89,15 @@ def register_callbacks_stepper_part_three(app):
         # wf_id, dc_id = return_mongoid(workflow_tag=workflow_selection, data_collection_tag=data_collection_selection, TOKEN=TOKEN)
 
         # Check if any button has been clicked more than stored
-        button_clicked = False
+        # button_clicked = False
         if btn_component is not None and store_btn_component is not None:
-            btn_index = [i for i, (x, y) in enumerate(zip(btn_component, store_btn_component)) if x > y]
+            btn_index = [
+                i
+                for i, (x, y) in enumerate(zip(btn_component, store_btn_component))
+                if x > y
+            ]
             if btn_index:
-                button_clicked = True
+                # button_clicked = True
                 component_selected = components_list[btn_index[0]]
                 if component_selected in [
                     "Figure",
@@ -115,10 +108,12 @@ def register_callbacks_stepper_part_three(app):
                     df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
 
                     id = ids[btn_index[0]]
-                    return return_design_component(component_selected, id, df, btn_component)
+                    return return_design_component(
+                        component_selected, id, df, btn_component
+                    )
                 # elif component_selected == "JBrowse2":
                 #     return design_jbrowse(ids[btn_index[0]]), btn_component
-                    # return html.Div("Not implemented yet"), btn_component
+                # return html.Div("Not implemented yet"), btn_component
 
                 else:
                     return html.Div("Not implemented yet"), btn_component
@@ -138,7 +133,9 @@ def register_callbacks_stepper_part_three(app):
                         logger.info(f"id: {id}")
                         df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
 
-                        return return_design_component(last_button, id, df, btn_component)
+                        return return_design_component(
+                            last_button, id, df, btn_component
+                        )
                     # elif last_button == "JBrowse2":
                     #     id = ids[components_list.index(last_button)]
                     #     return design_jbrowse(id), btn_component

@@ -1,7 +1,6 @@
 # This file serves as the WSGI entry point for Gunicorn
 # It imports the Flask server instance from the Dash app
 
-from depictio.dash.app import server
 
 # The 'server' variable is the Flask server instance that Gunicorn will use
 # In app.py, it's defined as: server = app.server

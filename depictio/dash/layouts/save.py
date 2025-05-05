@@ -1,7 +1,6 @@
 import httpx
 from datetime import datetime
-import os, sys
-from dash import html, dcc, Input, Output, State, ALL
+from dash import Input, Output, State, ALL
 import dash
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.custom_logging import logger

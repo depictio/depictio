@@ -6,7 +6,10 @@ from dash_iconify import DashIconify
 import httpx
 
 
-from depictio.dash.modules.jbrowse_component.utils import build_jbrowse, build_jbrowse_frame
+from depictio.dash.modules.jbrowse_component.utils import (
+    build_jbrowse,
+    build_jbrowse_frame,
+)
 from depictio.dash.utils import list_workflows, return_mongoid
 
 # Depictio imports
@@ -16,6 +19,7 @@ from depictio.dash.utils import (
 )
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.custom_logging import logger
+
 
 def register_callbacks_jbrowse_component(app):
     @app.callback(
@@ -31,19 +35,24 @@ def register_callbacks_jbrowse_component(app):
         prevent_initial_call=True,
     )
     def update_jbrowse(wf_id, dc_id, n_clicks, id, data, pathname):
-
         if not data:
             return None
-        
+
         TOKEN = data["access_token"]
-        logger.info(f"update_jbrowse TOKEN : {TOKEN}") 
+        logger.info(f"update_jbrowse TOKEN : {TOKEN}")
 
         dashboard_id = pathname.split("/")[-1]
 
         workflows = list_workflows(TOKEN)
 
         workflow_id = [e for e in workflows if e["workflow_tag"] == wf_id][0]["_id"]
-        data_collection_id = [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["data_collection_tag"] == dc_id][0]["_id"]
+        data_collection_id = [
+            f
+            for e in workflows
+            if e["_id"] == workflow_id
+            for f in e["data_collections"]
+            if f["data_collection_tag"] == dc_id
+        ][0]["_id"]
 
         dc_specs = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{data_collection_id}",
@@ -56,7 +65,9 @@ def register_callbacks_jbrowse_component(app):
         if "join" in dc_specs["config"]:
             dc_specs["config"]["join"]["with_dc_id"] = list()
             for dc_tag in dc_specs["config"]["join"]["with_dc"]:
-                _, dc_id = return_mongoid(workflow_id=workflow_id, data_collection_tag=dc_tag, TOKEN=TOKEN)
+                _, dc_id = return_mongoid(
+                    workflow_id=workflow_id, data_collection_tag=dc_tag, TOKEN=TOKEN
+                )
                 dc_specs["config"]["join"]["with_dc_id"].append(dc_id)
 
         jbrowse_kwargs = {
@@ -83,12 +94,17 @@ def design_jbrowse(id):
                     style=UNSELECTED_STYLE,
                     size="xl",
                     color="yellow",
-                    leftIcon=DashIconify(icon="material-symbols:table-rows-narrow-rounded", color="white"),
+                    leftIcon=DashIconify(
+                        icon="material-symbols:table-rows-narrow-rounded", color="white"
+                    ),
                 ),
             ),
         ),
         dbc.Row(
-            html.Div(build_jbrowse_frame(index=id["index"]), id={"type": "component-container", "index": id["index"]}),
+            html.Div(
+                build_jbrowse_frame(index=id["index"]),
+                id={"type": "component-container", "index": id["index"]},
+            ),
             # dbc.Card(
             #     dbc.CardBody(
             #         id={
@@ -119,7 +135,9 @@ def create_stepper_jbrowse_button(n, disabled=False):
             style=UNSELECTED_STYLE,
             size="xl",
             color="yellow",
-            leftIcon=DashIconify(icon="material-symbols:table-rows-narrow-rounded", color="white"),
+            leftIcon=DashIconify(
+                icon="material-symbols:table-rows-narrow-rounded", color="white"
+            ),
             # disabled=True,
         )
     )
