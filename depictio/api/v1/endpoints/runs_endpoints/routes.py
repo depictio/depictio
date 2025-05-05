@@ -19,7 +19,9 @@ async def list_runs(workflow_id: str, current_user: str = Depends(get_current_us
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
     if not workflow_id:
-        raise HTTPException(status_code=400, detail="Workflow ID is required to list runs.")
+        raise HTTPException(
+            status_code=400, detail="Workflow ID is required to list runs."
+        )
     workflow_oid = ObjectId(workflow_id)
 
     # Find the workflow by ID
@@ -74,7 +76,9 @@ async def delete_run(run_id: str, current_user: str = Depends(get_current_user))
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
     if not run_id:
-        raise HTTPException(status_code=400, detail="Run ID is required to delete a run.")
+        raise HTTPException(
+            status_code=400, detail="Run ID is required to delete a run."
+        )
     run_oid = ObjectId(run_id)
 
     user_oid = ObjectId(current_user.id)
@@ -96,7 +100,10 @@ async def delete_run(run_id: str, current_user: str = Depends(get_current_user))
     # Delete the run
     result = runs_collection.delete_one(query)
 
-    return {"result": "deleted" if result.deleted_count == 1 else "not deleted", "message": f"Run '{run_id}' deleted."}
+    return {
+        "result": "deleted" if result.deleted_count == 1 else "not deleted",
+        "message": f"Run '{run_id}' deleted.",
+    }
 
 
 class UpsertWorkflowRunBatchRequest(BaseModel):
@@ -106,7 +113,9 @@ class UpsertWorkflowRunBatchRequest(BaseModel):
 
 
 @runs_endpoint_router.post("/upsert_batch")
-async def create_run(payload: UpsertWorkflowRunBatchRequest, current_user=Depends(get_current_user)):
+async def create_run(
+    payload: UpsertWorkflowRunBatchRequest, current_user=Depends(get_current_user)
+):
     # return
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
@@ -119,12 +128,16 @@ async def create_run(payload: UpsertWorkflowRunBatchRequest, current_user=Depend
     workflow_id = payload.runs[0].workflow_id
     for run in payload.runs:
         if run.workflow_id != workflow_id:
-            raise HTTPException(status_code=400, detail="All runs must belong to the same workflow.")
+            raise HTTPException(
+                status_code=400, detail="All runs must belong to the same workflow."
+            )
 
     # assert all runs have unique run_tag
     run_tags = {run.run_tag for run in payload.runs}
     if len(run_tags) != len(payload.runs):
-        raise HTTPException(status_code=400, detail="All runs must have unique run_tag.")
+        raise HTTPException(
+            status_code=400, detail="All runs must have unique run_tag."
+        )
 
     # logger.info(f"Current user: {current_user}")
     # logger.info(f"Files: {payload.files}")
@@ -134,10 +147,21 @@ async def create_run(payload: UpsertWorkflowRunBatchRequest, current_user=Depend
     # Notice that since workflows are stored as subdocuments,
     # we use "workflows._id" to match the workflow's ObjectId.
     workflow_oid = ObjectId(workflow_id)
-    project = projects_collection.find_one({"workflows._id": workflow_oid, "$or": [{"permissions.owners._id": user_oid}, {"permissions.owners.is_admin": True}]})
+    project = projects_collection.find_one(
+        {
+            "workflows._id": workflow_oid,
+            "$or": [
+                {"permissions.owners._id": user_oid},
+                {"permissions.owners.is_admin": True},
+            ],
+        }
+    )
 
     if not project:
-        raise HTTPException(status_code=404, detail=f"User does not have permission on the project containing workflow '{workflow_id}'.")
+        raise HTTPException(
+            status_code=404,
+            detail=f"User does not have permission on the project containing workflow '{workflow_id}'.",
+        )
 
     # If permission is granted, retrieve all runs for the given workflow.
     runs_cursor = runs_collection.find({"workflow_id": workflow_oid})
@@ -151,13 +175,21 @@ async def create_run(payload: UpsertWorkflowRunBatchRequest, current_user=Depend
         run_data = run.mongo()  # run_data is a dict representation of the run
 
         # Query the existing document (if it exists) to extract its current scan_results:
-        existing_doc = runs_collection.find_one({"_id": run_obj.id}, {"scan_results": 1})
-        existing_scan_results = existing_doc.get("scan_results", []) if existing_doc else []
+        existing_doc = runs_collection.find_one(
+            {"_id": run_obj.id}, {"scan_results": 1}
+        )
+        existing_scan_results = (
+            existing_doc.get("scan_results", []) if existing_doc else []
+        )
 
         # Compute only the new scan results:
         # (This assumes that a simple equality comparison between dicts is sufficient.
         # You might need to customize this if the dicts differ only in field order or extra fields.)
-        new_scan_results = [sr for sr in run_data.get("scan_results", []) if sr not in existing_scan_results]
+        new_scan_results = [
+            sr
+            for sr in run_data.get("scan_results", [])
+            if sr not in existing_scan_results
+        ]
 
         if run_obj.run_tag in existing_run_tags:
             logger.info(f"Run with run_tag '{run_obj.run_tag}' already exists.")
@@ -173,13 +205,17 @@ async def create_run(payload: UpsertWorkflowRunBatchRequest, current_user=Depend
                     },
                 )
             else:
-                logger.info(f"Skipping run: {run_obj.run_tag}. If you want to update, set 'update' to True.")
+                logger.info(
+                    f"Skipping run: {run_obj.run_tag}. If you want to update, set 'update' to True."
+                )
 
         else:
             # If the run does not exist, you might decide to insert it or handle it differently.
             # For example, you could add an InsertOne operation here.
             # For now, we'll just skip it.
-            logger.info(f"Run with run_tag '{run_obj.run_tag}' does not exist. Creating it.")
+            logger.info(
+                f"Run with run_tag '{run_obj.run_tag}' does not exist. Creating it."
+            )
             op = UpdateOne(
                 {"_id": run_obj.id},
                 {"$set": run_data},
@@ -204,7 +240,9 @@ async def create_run(payload: UpsertWorkflowRunBatchRequest, current_user=Depend
             inserted_count = result.upserted_count  # Count of newly inserted files
             existing_count = len(payload.runs) - inserted_count
             if existing_count > 0:
-                logger.error(f"{existing_count} runs(s) already exist and were not updated.")
+                logger.error(
+                    f"{existing_count} runs(s) already exist and were not updated."
+                )
             return {
                 "inserted_count": inserted_count,
                 "existing_count": existing_count,

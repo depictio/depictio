@@ -6,13 +6,18 @@ from fastapi import HTTPException, Depends, APIRouter
 import polars as pl
 import boto3
 from botocore.exceptions import ClientError
-from fastapi import HTTPException
 
 from depictio.api.v1.configs.config import settings
-from depictio.api.v1.db import users_collection, deltatables_collection, projects_collection
-from depictio.api.v1.endpoints.deltatables_endpoints.utils import precompute_columns_specs
+from depictio.api.v1.db import (
+    users_collection,
+    deltatables_collection,
+    projects_collection,
+)
+from depictio.api.v1.endpoints.deltatables_endpoints.utils import (
+    precompute_columns_specs,
+)
 from depictio.api.v1.s3 import polars_s3_config
-from depictio.api.v1.utils import serialize_for_mongo, agg_functions
+from depictio.api.v1.utils import agg_functions
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.api.v1.configs.custom_logging import format_pydantic, logger
 
@@ -36,8 +41,6 @@ def sanitize_for_json(obj):
         if math.isnan(obj) or math.isinf(obj):
             return None
     return obj
-
-
 
 
 @deltatables_endpoint_router.post("/upsert")
@@ -73,7 +76,10 @@ async def upsert_deltatable(
     assert isinstance(data_collection_oid, ObjectId)
     # Construct the query to look into the projects_collection if the user is an admin or has permissions over the project by looking at the data_collection id
     query = {
-        "$or": [{"permissions.owners._id": ObjectId(current_user.id)}, {"permissions.is_admin": True}],
+        "$or": [
+            {"permissions.owners._id": ObjectId(current_user.id)},
+            {"permissions.is_admin": True},
+        ],
         "workflows.data_collections._id": data_collection_oid,
     }
     logger.info(query)
@@ -89,7 +95,14 @@ async def upsert_deltatable(
         # Search for the correct data collection inside workflows
         dc_config = None
         for workflow in project.get("workflows", []):  # Iterate through workflows
-            dc_config = next((dc for dc in workflow.get("data_collections", []) if str(dc["_id"]) == str(data_collection_oid)), None)
+            dc_config = next(
+                (
+                    dc
+                    for dc in workflow.get("data_collections", [])
+                    if str(dc["_id"]) == str(data_collection_oid)
+                ),
+                None,
+            )
             if dc_config:  # Stop if found
                 break
             else:
@@ -97,7 +110,9 @@ async def upsert_deltatable(
 
     # read deltatable using polars
     df = pl.read_delta(payload.delta_table_location, storage_options=polars_s3_config)
-    logger.info(f"DeltaTableAggregated read from MinIO at location: {payload.delta_table_location}")
+    logger.info(
+        f"DeltaTableAggregated read from MinIO at location: {payload.delta_table_location}"
+    )
 
     # Precompute columns specs
     results = precompute_columns_specs(df, agg_functions, dc_config)
@@ -115,13 +130,21 @@ async def upsert_deltatable(
     logger.info(f"Hash DataFrame: {hash_df}")
 
     # Generate final hash string
-    final_hash = hashlib.sha256(f"{payload.delta_table_location}{datetime.now()}{hash_df}".encode()).hexdigest()
+    final_hash = hashlib.sha256(
+        f"{payload.delta_table_location}{datetime.now()}{hash_df}".encode()
+    ).hexdigest()
 
-    query_dt = deltatables_collection.find_one({"data_collection_id": data_collection_oid})
+    query_dt = deltatables_collection.find_one(
+        {"data_collection_id": data_collection_oid}
+    )
     if query_dt:
         logger.warning("DeltaTable exists")
         deltatable = DeltaTableAggregated.from_mongo(query_dt)
-        version = 1 if not deltatable.aggregation else deltatable.aggregation[-1].aggregation_version + 1
+        version = (
+            1
+            if not deltatable.aggregation
+            else deltatable.aggregation[-1].aggregation_version + 1
+        )
     else:
         logger.info("DeltaTable does not exist")
         logger.info(f"DeltaTableAggregated: {payload.delta_table_location}")
@@ -133,7 +156,9 @@ async def upsert_deltatable(
 
     logger.info(f"DeltaTableAggregated: {format_pydantic(deltatable)}")
 
-    user = User.from_mongo(users_collection.find_one({"_id": ObjectId(current_user.id)}))
+    user = User.from_mongo(
+        users_collection.find_one({"_id": ObjectId(current_user.id)})
+    )
 
     userbase = user.turn_to_userbase()
     logger.info(f"UserBase: {userbase}")
@@ -169,7 +194,9 @@ async def upsert_deltatable(
         )
     else:
         # check if the DeltaTableAggregated exists
-        query_dt = deltatables_collection.find_one({"data_collection_id": data_collection_oid})
+        query_dt = deltatables_collection.find_one(
+            {"data_collection_id": data_collection_oid}
+        )
         if query_dt:
             # stop
             raise HTTPException(
@@ -180,7 +207,10 @@ async def upsert_deltatable(
         logger.info("Inserting new DeltaTableAggregated")
         # logger.debug(serialize_for_mongo(deltatable))
         deltatables_collection.insert_one(deltatable.model_dump())
-    return {"message": "DeltaTableAggregated upserted successfully", "result": "success"}
+    return {
+        "message": "DeltaTableAggregated upserted successfully",
+        "result": "success",
+    }
 
 
 @deltatables_endpoint_router.get("/get/{data_collection_id}")
@@ -294,10 +324,10 @@ async def delete_deltatable(
         )
     data_collection_oid = ObjectId(deltatable["data_collection_id"])
 
-
-
     # Delete S3 DeltaTable
-    deltatable_location = deltatable["delta_table_location"].lstrip("/")  # Ensure no leading "/"
+    deltatable_location = deltatable["delta_table_location"].lstrip(
+        "/"
+    )  # Ensure no leading "/"
     bucket_name = settings.minio.bucket
 
     # Initialize S3 client
@@ -311,10 +341,14 @@ async def delete_deltatable(
 
     # Delete all objects in the Delta table directory
     try:
-        response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=deltatable_location)
+        response = s3_client.list_objects_v2(
+            Bucket=bucket_name, Prefix=deltatable_location
+        )
         if "Contents" in response:
             objects_to_delete = [{"Key": obj["Key"]} for obj in response["Contents"]]
-            s3_client.delete_objects(Bucket=bucket_name, Delete={"Objects": objects_to_delete})
+            s3_client.delete_objects(
+                Bucket=bucket_name, Delete={"Objects": objects_to_delete}
+            )
             logger.info(f"Deleted DeltaTable at {deltatable_location}")
         else:
             logger.warning(f"DeltaTable not found at {deltatable_location}")
@@ -336,4 +370,6 @@ async def delete_deltatable(
 
     # Delete the DeltaTableAggregated
     deltatables_collection.delete_one({"_id": deltatable_oid})
-    return {"message": f"DeltaTableAggregated with id {deltatable_oid} deleted successfully."}
+    return {
+        "message": f"DeltaTableAggregated with id {deltatable_oid} deleted successfully."
+    }

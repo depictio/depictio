@@ -51,9 +51,7 @@ async def get_project_from_id(
     Returns:
         _type_: Project: The project object retrieved from the database.
     """
-    return _async_get_project_from_id(
-        project_id, current_user, projects_collection
-    )
+    return _async_get_project_from_id(project_id, current_user, projects_collection)
 
 
 @projects_endpoint_router.get("/get/from_name/{project_name}", response_model=Project)
@@ -69,9 +67,7 @@ async def get_project_from_name(
     Returns:
         _type_: Project: The project object retrieved from the database.
     """
-    return _async_get_project_from_name(
-        project_name, current_user, projects_collection
-    )
+    return _async_get_project_from_name(project_name, current_user, projects_collection)
 
 
 @projects_endpoint_router.get(
