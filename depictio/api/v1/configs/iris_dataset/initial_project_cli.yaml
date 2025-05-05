@@ -8,7 +8,7 @@ workflows:
     data_location:
       structure: "flat"
       locations:
-        - "{$PWD}/../../depictio/api/v1/configs/iris_dataset"
+        - "../api/v1/configs/iris_dataset"
     data_collections:
       - id: "646b0f3c1e4a2d7f8e5b8c9c"
         data_collection_tag: "iris_table"
@@ -19,7 +19,7 @@ workflows:
           scan:
             mode: single
             scan_parameters:
-              filename: "{$PWD}/../../depictio/api/v1/configs/iris_dataset/iris.csv"
+              filename: "../api/v1/configs/iris_dataset/iris.csv"
           dc_specific_properties:
             format: "CSV"
             polars_kwargs:
