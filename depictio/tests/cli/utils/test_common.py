@@ -30,7 +30,7 @@ class TestCommon:
                     "token_lifetime": "short-lived",
                     "expire_datetime": datetime(2023, 12, 31, 23, 59, 59),
                     "created_at": datetime(2023, 1, 1, 0, 0, 0),
-                    "logged_in": True
+                    "logged_in": True,
                 },
                 "email": "test@example.com",
             },
@@ -39,8 +39,8 @@ class TestCommon:
                 "endpoint_url": "http://localhost:9000",
                 "root_user": "minio",
                 "root_password": "minio123",
-                "bucket": "depictio-bucket"
-            }
+                "bucket": "depictio-bucket",
+            },
         }
 
     @pytest.fixture
@@ -87,8 +87,7 @@ class TestCommon:
             """Test format_timestamp with an invalid timestamp"""
             # Using an invalid timestamp
             with pytest.raises(ValidationError):
-                formatted = format_timestamp("not_a_timestamp")
-
+                format_timestamp("not_a_timestamp")
 
     class TestValidateDepictioCliConfig:
         """Tests for validate_depictio_cli_config function"""
@@ -122,7 +121,7 @@ class TestCommon:
                         "token_lifetime": "short-lived",
                         "expire_datetime": datetime(2023, 12, 31, 23, 59, 59),
                         "created_at": datetime(2023, 1, 1, 0, 0, 0),
-                        "logged_in": True
+                        "logged_in": True,
                     },
                     "email": "test@example.com",
                 },
@@ -131,35 +130,39 @@ class TestCommon:
                     "endpoint_url": "http://localhost:9000",
                     "root_user": "minio",
                     "root_password": "minio123",
-                    "bucket": "depictio-bucket"
-                }
+                    "bucket": "depictio-bucket",
+                },
             }
-            
+
             # Mock the get_config and validate_depictio_cli_config functions
-            with patch("depictio.cli.cli.utils.common.get_config") as mock_get_config, \
-                patch("depictio.cli.cli.utils.common.validate_depictio_cli_config") as mock_validate, \
-                patch("depictio.cli.cli.utils.common.rich_print_checked_statement"):
-                
+            with patch(
+                "depictio.cli.cli.utils.common.get_config"
+            ) as mock_get_config, patch(
+                "depictio.cli.cli.utils.common.validate_depictio_cli_config"
+            ) as mock_validate, patch(
+                "depictio.cli.cli.utils.common.rich_print_checked_statement"
+            ):
                 mock_get_config.return_value = mock_config
                 mock_validate.return_value = CLIConfig(**mock_config)
-                
+
                 result = load_depictio_config()
-                
+
                 # Verify that the functions were called
                 mock_get_config.assert_called_once()
                 mock_validate.assert_called_once_with(mock_config)
-                
+
                 # Verify the result
                 assert isinstance(result, CLIConfig)
 
         def test_file_not_found(self):
             """Test load_depictio_config when file is not found"""
             # Mock the get_config function to raise FileNotFoundError
-            with patch("depictio.cli.cli.utils.common.get_config") as mock_get_config, \
-                patch("depictio.cli.cli.utils.common.rich_print_checked_statement"), \
-                patch("depictio.cli.cli.utils.common.logger"):
-                
+            with patch(
+                "depictio.cli.cli.utils.common.get_config"
+            ) as mock_get_config, patch(
+                "depictio.cli.cli.utils.common.rich_print_checked_statement"
+            ), patch("depictio.cli.cli.utils.common.logger"):
                 mock_get_config.side_effect = FileNotFoundError()
-                
+
                 with pytest.raises(Exit):
                     load_depictio_config()

@@ -1,11 +1,10 @@
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from unittest.mock import MagicMock, call, patch
 
 import bcrypt
 import mongomock
 import pytest
 from beanie import init_beanie
 from bson import ObjectId
-from fastapi import HTTPException
 from mongomock_motor import AsyncMongoMockClient
 
 from depictio.api.v1.endpoints.user_endpoints.core_functions import (
@@ -13,8 +12,7 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     _hash_password,
     _verify_password,
 )
-from depictio.models.models.base import PyObjectId
-from depictio.models.models.users import Group, GroupBeanie, UserBeanie
+from depictio.models.models.users import UserBeanie
 
 
 # Patch pymongo.MongoClient before any module using it is imported.

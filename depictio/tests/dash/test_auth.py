@@ -1,10 +1,12 @@
 import os
+
 import pytest
 from playwright.sync_api import Page, expect
+
+from depictio import BASE_PATH
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.endpoints.user_endpoints.utils import delete_user_from_db
 from depictio.models.utils import get_config
-from depictio import BASE_PATH
 
 # Load initial users configuration
 config_path = os.path.join(
@@ -117,7 +119,7 @@ def test_user_registration(page: Page):
     page.get_by_role("textbox", name="Confirm your password").fill(test_password)
 
     # Wait for the register button to be enabled
-    page.wait_for_selector("#register-button:not([disabled])", timeout=5000)
+    # page.wait_for_selector("#register-button:not([disabled])", timeout=5000)
 
     # Click the register button
     page.get_by_role("button", name="Register").click()
@@ -353,8 +355,9 @@ def test_edit_password(page: Page):
         f"Unexpected message: {feedback_message}"
     )
 
-    # Close the modal using the X button
-    page.locator(".mantine-Modal-close").first.click()
+    # Close the modal using the Escape key
+    page.keyboard.press("Escape")
+    # page.locator(".mantine-Modal-close").first.click()
 
     # Log out
     page.get_by_role("button", name="Logout").click()
