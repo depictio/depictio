@@ -1,13 +1,16 @@
-from datetime import datetime
 import os
+from datetime import datetime
+
 import typer
-from typeguard import typechecked
+from pydantic import validate_call
 
-from depictio.cli.logging import logger
+from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
+from depictio.cli.cli_logging import logger
 from depictio.models.models.users import CLIConfig
+from depictio.models.utils import get_config
 
 
-@typechecked
+@validate_call(validate_return=True)
 def generate_api_headers(CLI_config: CLIConfig) -> dict:
     """
     Generate the API headers.
@@ -16,8 +19,6 @@ def generate_api_headers(CLI_config: CLIConfig) -> dict:
         raise ValueError("CLI_config is required.")
 
     if isinstance(CLI_config, CLIConfig):
-        # logger.debug(f"CLI_config: {CLI_config}")
-        # logger.debug(f"Type of CLI_config: {type(CLI_config)}")
         cli_config_dict = CLI_config.model_dump()
 
     elif isinstance(CLI_config, dict):
@@ -32,7 +33,7 @@ def generate_api_headers(CLI_config: CLIConfig) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
-@typechecked
+@validate_call(validate_return=True)
 def format_timestamp(timestamp: float) -> str:
     """
     Format the timestamp.
@@ -44,14 +45,11 @@ def format_timestamp(timestamp: float) -> str:
         return str(timestamp)
 
 
-@typechecked
+@validate_call(validate_return=True)
 def validate_depictio_cli_config(depictio_cli_config: dict) -> CLIConfig:
     """
     Validate the Depictio CLI configuration.
     """
-    # Validate the Depictio CLI configuration
-    from depictio.models.models.users import CLIConfig
-
     config = CLIConfig(**depictio_cli_config)
     logger.info(f"Depictio CLI configuration validated: {config}")
     # config = convert_model_to_dict(config)
@@ -59,15 +57,12 @@ def validate_depictio_cli_config(depictio_cli_config: dict) -> CLIConfig:
     return config
 
 
-@typechecked
+@validate_call(validate_return=True)
 def load_depictio_config(yaml_config_path: str = "~/.depictio/cli.yaml") -> CLIConfig:
     """
     Load the Depictio configuration file.
     """
     try:
-        from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
-        from depictio.models.utils import get_config
-
         rich_print_checked_statement("Loading Depictio configuration...", "loading")
         config = get_config(os.path.expanduser(yaml_config_path))
         config = validate_depictio_cli_config(config)

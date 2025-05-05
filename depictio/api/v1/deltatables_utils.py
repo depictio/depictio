@@ -1,15 +1,13 @@
 import itertools
-from typing import Optional
-from bson import ObjectId
+from typing import Dict, List, Optional, Set
+
 import httpx
 import polars as pl
-import pandas as pd
+from bson import ObjectId
+
 from depictio.api.v1.configs.config import API_BASE_URL
-from depictio.api.v1.s3 import polars_s3_config
 from depictio.api.v1.configs.custom_logging import logger
-
-
-import polars as pl
+from depictio.api.v1.s3 import polars_s3_config
 
 
 # Function to add filter criteria to a list
@@ -266,11 +264,6 @@ def load_deltatable_lite(
 
     logger.info(f"Loaded DataFrame with {df.height} rows and {df.width} columns.")
     return df
-
-
-import polars as pl
-from typing import List, Dict, Set
-import logging
 
 
 def merge_multiple_dataframes(

@@ -1,12 +1,11 @@
-import polars as pl
+import dash_ag_grid as dag
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
-from dash import html, dcc
-import dash_ag_grid as dag
+import polars as pl
+from dash import dcc, html
 
-from depictio.api.v1.deltatables_utils import load_deltatable_lite
-from depictio.dash.utils import get_columns_from_data_collection
 from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
 
 def build_table_frame(index, children=None):
@@ -85,7 +84,7 @@ def build_table(**kwargs):
 
     df = kwargs.get("df", pl.DataFrame())
     TOKEN = kwargs.get("access_token")
-    stepper = kwargs.get("stepper", False)
+    # stepper = kwargs.get("stepper", False)
 
     df = kwargs.get("df", pl.DataFrame())
 
@@ -109,12 +108,24 @@ def build_table(**kwargs):
             cols[c]["filter"] = "agDateColumnFilter"
 
     # print(cols)
-    columnDefs = [{"field": c, "headerTooltip": f"Column type: {e['type']}", "filter": e["filter"]} for c, e in cols.items()]
+    columnDefs = [
+        {
+            "field": c,
+            "headerTooltip": f"Column type: {e['type']}",
+            "filter": e["filter"],
+        }
+        for c, e in cols.items()
+    ]
 
     # if description in col sub dict, update headerTooltip
     for col in columnDefs:
-        if "description" in cols[col["field"]] and cols[col["field"]]["description"] is not None:
-            col["headerTooltip"] = f"{col['headerTooltip']} | Description: {cols[col['field']]['description']}"
+        if (
+            "description" in cols[col["field"]]
+            and cols[col["field"]]["description"] is not None
+        ):
+            col["headerTooltip"] = (
+                f"{col['headerTooltip']} | Description: {cols[col['field']]['description']}"
+            )
 
     style_partial_data_displayed = {"display": "none"}
 

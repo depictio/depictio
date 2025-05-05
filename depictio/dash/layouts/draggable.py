@@ -1,41 +1,35 @@
 import copy
-import json
 from typing import Dict, List
-from bson import ObjectId
-from dash import html, Input, Output, State, ALL, MATCH, ctx, dcc
-import dash_mantine_components as dmc
-from dash_iconify import DashIconify
-import dash_draggable
+
 import dash
+import dash_draggable
+import dash_mantine_components as dmc
 import httpx
+from dash import ALL, Input, Output, State, ctx, dcc, html
+from dash_iconify import DashIconify
+
+from depictio.api.v1.configs.config import API_BASE_URL
+from depictio.api.v1.configs.custom_logging import logger
 from depictio.dash.layouts.draggable_scenarios.add_component import add_new_component
 from depictio.dash.layouts.draggable_scenarios.graphs_interactivity import (
     refresh_children_based_on_click_data,
     refresh_children_based_on_selected_data,
 )
-from depictio.dash.layouts.edit import edit_component
-
-from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.dash.layouts.draggable_scenarios.interactive_component_update import (
     render_raw_children,
     update_interactive_component,
 )
 from depictio.dash.layouts.draggable_scenarios.restore_dashboard import render_dashboard
-from depictio.api.v1.configs.custom_logging import logger
 
 # Depictio layout imports for stepper
-
 # Depictio layout imports for header
-from depictio.dash.layouts.edit import enable_box_edit_mode
+from depictio.dash.layouts.edit import edit_component, enable_box_edit_mode
 from depictio.dash.utils import (
     generate_unique_index,
-    get_columns_from_data_collection,
     get_component_data,
     return_dc_tag_from_id,
-    return_mongoid,
     return_wf_tag_from_id,
 )
-
 
 # Mapping of component types to their respective dimensions (width and height)
 component_dimensions = {
@@ -119,8 +113,6 @@ def clean_stored_metadata(stored_metadata):
 
 
 def register_callbacks_draggable(app):
-    from dash import callback_context
-
     @app.callback(
         Output("local-store-components-metadata", "data"),
         [
@@ -192,14 +184,18 @@ def register_callbacks_draggable(app):
             # Update workflow ID directly
             components_store.setdefault(trigger_index, {})
             components_store[trigger_index]["wf_id"] = wf_id_value
-            
+
             # Get the workflow tag from the ID for reference/display purposes
             try:
                 wf_tag = return_wf_tag_from_id(workflow_id=wf_id_value, TOKEN=TOKEN)
                 components_store[trigger_index]["wf_tag"] = wf_tag
-                logger.debug(f"Updated component '{trigger_index}' with wf_tag: {wf_tag} from wf_id: {wf_id_value}")
+                logger.debug(
+                    f"Updated component '{trigger_index}' with wf_tag: {wf_tag} from wf_id: {wf_id_value}"
+                )
             except Exception as e:
-                logger.error(f"Error retrieving workflow tag for component '{trigger_index}': {e}")
+                logger.error(
+                    f"Error retrieving workflow tag for component '{trigger_index}': {e}"
+                )
                 components_store[trigger_index]["wf_tag"] = ""
 
         # Process datacollection selections (now using IDs directly)
@@ -208,7 +204,9 @@ def register_callbacks_draggable(app):
             try:
                 trigger_id = dc_id_prop
             except Exception as e:
-                logger.error(f"Error parsing datacollection ID prop '{dc_id_prop}': {e}")
+                logger.error(
+                    f"Error parsing datacollection ID prop '{dc_id_prop}': {e}"
+                )
                 continue  # Skip this iteration
 
             trigger_index = str(trigger_id.get("index"))
@@ -219,14 +217,20 @@ def register_callbacks_draggable(app):
             # Update datacollection ID directly
             components_store.setdefault(trigger_index, {})
             components_store[trigger_index]["dc_id"] = dc_id_value
-            
+
             # Get the datacollection tag from the ID for reference/display purposes
             try:
-                dc_tag = return_dc_tag_from_id(data_collection_id=dc_id_value, TOKEN=TOKEN)
+                dc_tag = return_dc_tag_from_id(
+                    data_collection_id=dc_id_value, TOKEN=TOKEN
+                )
                 components_store[trigger_index]["dc_tag"] = dc_tag
-                logger.debug(f"Updated component '{trigger_index}' with dc_tag: {dc_tag} from dc_id: {dc_id_value}")
+                logger.debug(
+                    f"Updated component '{trigger_index}' with dc_tag: {dc_tag} from dc_id: {dc_id_value}"
+                )
             except Exception as e:
-                logger.error(f"Error retrieving datacollection tag for component '{trigger_index}': {e}")
+                logger.error(
+                    f"Error retrieving datacollection tag for component '{trigger_index}': {e}"
+                )
                 components_store[trigger_index]["dc_tag"] = ""
 
         logger.debug(f"Components store data after update: {components_store}")
@@ -425,18 +429,24 @@ def register_callbacks_draggable(app):
             "Stored draggable layouts: {}".format(state_stored_draggable_layouts)
         )
         logger.info(f"Stored draggable children: {state_stored_draggable_children}")
-        logger.info(f"Input stored draggable children: {input_stored_draggable_children}")
-        
+        logger.info(
+            f"Input stored draggable children: {input_stored_draggable_children}"
+        )
+
         # Extract dashboard_id from the pathname
         dashboard_id = pathname.split("/")[-1]
-        
+
         # Initialize layouts from stored layouts if available
         if dashboard_id in state_stored_draggable_layouts:
             # Check if draggable_layouts is empty or doesn't have the required breakpoints with content
-            is_empty = not draggable_layouts or not any(draggable_layouts.get(bp, []) for bp in required_breakpoints)
-            
+            is_empty = not draggable_layouts or not any(
+                draggable_layouts.get(bp, []) for bp in required_breakpoints
+            )
+
             if is_empty:
-                logger.info(f"Initializing layouts from stored layouts for dashboard {dashboard_id}")
+                logger.info(
+                    f"Initializing layouts from stored layouts for dashboard {dashboard_id}"
+                )
                 draggable_layouts = state_stored_draggable_layouts[dashboard_id]
                 logger.info(f"Updated draggable layouts: {draggable_layouts}")
 
@@ -826,7 +836,7 @@ def register_callbacks_draggable(app):
 
                         # Ensure we're using the stored layouts
                         current_layouts = state_stored_draggable_layouts[dashboard_id]
-                        
+
                         # Make sure the layouts have the required breakpoints
                         for key in required_breakpoints:
                             if key not in current_layouts:
@@ -1018,14 +1028,14 @@ def register_callbacks_draggable(app):
 
                 if (
                     type(duplicated_component["props"]["children"]["props"]["children"])
-                    == list
+                    is list
                 ):
                     duplicated_component["props"]["children"]["props"]["children"] += [
                         new_store
                     ]
                 elif (
                     type(duplicated_component["props"]["children"]["props"]["children"])
-                    == dict
+                    is dict
                 ):
                     duplicated_component["props"]["children"]["props"]["children"][
                         "props"
@@ -1180,8 +1190,6 @@ def register_callbacks_draggable(app):
         logger.info(f"initialized_add_button: {initialized_add_button}")
         # logger.info(f"edit_button_nclicks: {edit_button_nclicks}")
         # logger.info(f"initialized_edit_button: {initialized_edit_button}")
-
-        from dash import ctx
 
         if not initialized_add_button:
             logger.info("Initializing add button")
@@ -1377,7 +1385,7 @@ def design_draggable(
             if key not in init_layout:
                 init_layout[key] = []
         logger.info(f"Initialized layout with required breakpoints: {init_layout}")
-    
+
     # Create the draggable layout outside of the if-else to keep it in the DOM
     draggable = dash_draggable.ResponsiveGridLayout(
         id="draggable",

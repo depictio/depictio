@@ -1,12 +1,13 @@
 import collections
+import hashlib
+import os
+import re
+from datetime import datetime
 from typing import Any, DefaultDict, Dict, List, Optional, Union, cast
+
 from bson import ObjectId
 from pydantic import validate_call
 from typeguard import typechecked
-import os
-import re
-import hashlib
-from datetime import datetime
 
 from depictio.cli.cli.utils.api_calls import (
     api_create_files,
@@ -18,14 +19,10 @@ from depictio.cli.cli.utils.api_calls import (
 )
 from depictio.cli.cli.utils.common import format_timestamp
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
-from depictio.cli.logging import logger, setup_logging
-
-# Ensure the logger is properly configured
-logger = setup_logging(verbose=True, verbose_level="DEBUG")
-
-from depictio.models.models.users import CLIConfig
+from depictio.cli.cli_logging import logger
 from depictio.models.models.data_collections import DataCollection, Regex
-from depictio.models.models.users import Permission, UserBase
+from depictio.models.models.files import File, FileScanResult
+from depictio.models.models.users import CLIConfig, Permission, UserBase
 from depictio.models.models.workflows import (
     Workflow,
     WorkflowConfig,
@@ -33,7 +30,6 @@ from depictio.models.models.workflows import (
     WorkflowRun,
     WorkflowRunScan,
 )
-from depictio.models.models.files import File, FileScanResult
 
 
 def regex_match(file: File, full_regex: str):
@@ -724,8 +720,8 @@ def scan_parent_folder(
 
 
 def rich_print_summary_scan_table(runs: List[WorkflowRun]) -> None:
-    from rich.table import Table
     from rich.console import Console
+    from rich.table import Table
 
     print("\n")
 
@@ -839,10 +835,7 @@ def scan_files_for_data_collection(
 
     # Convert existing_files from a dict to a list of file dictionaries if needed.
     existing_files_reformated = (
-        {
-            existing_file.file_location: existing_file
-            for existing_file in existing_files
-        }
+        {existing_file.file_location: existing_file for existing_file in existing_files}
         if existing_files
         else {}
     )

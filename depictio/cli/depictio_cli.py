@@ -4,10 +4,10 @@ os.environ["DEPICTIO_CONTEXT"] = "CLI"
 
 import typer
 from typer.main import get_command
+
 from depictio.cli.cli.commands.config import app as config
 from depictio.cli.cli.commands.data import app as data
-from depictio.cli.logging import setup_logging
-
+from depictio.cli.cli_logging import setup_logging
 
 app = typer.Typer()
 

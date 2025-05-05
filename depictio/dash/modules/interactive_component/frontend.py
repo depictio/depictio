@@ -1,11 +1,12 @@
 # Import necessary libraries
-import httpx
-
-from dash import html, dcc, Input, Output, State, MATCH
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
+import httpx
+from dash import MATCH, Input, Output, State, dcc, html
 from dash_iconify import DashIconify
-from depictio.dash.utils import get_component_data, return_mongoid
+
+from depictio.api.v1.configs.config import API_BASE_URL
+from depictio.api.v1.configs.custom_logging import logger
 
 # Depictio imports
 from depictio.dash.modules.interactive_component.utils import (
@@ -16,9 +17,8 @@ from depictio.dash.modules.interactive_component.utils import (
 from depictio.dash.utils import (
     UNSELECTED_STYLE,
     get_columns_from_data_collection,
+    get_component_data,
 )
-from depictio.api.v1.configs.config import API_BASE_URL
-from depictio.api.v1.configs.custom_logging import logger
 
 
 def register_callbacks_interactive_component(app):
@@ -34,7 +34,9 @@ def register_callbacks_interactive_component(app):
         ],
         prevent_initial_call=True,
     )
-    def update_aggregation_options(column_value, wf_tag, dc_tag, id, local_data, pathname):
+    def update_aggregation_options(
+        column_value, wf_tag, dc_tag, id, local_data, pathname
+    ):
         """
         Callback to update aggregation dropdown options based on the selected column
         """
@@ -80,7 +82,9 @@ def register_callbacks_interactive_component(app):
         return None
 
     @app.callback(
-        Output({"type": "btn-done-edit", "index": MATCH}, "disabled", allow_duplicate=True),
+        Output(
+            {"type": "btn-done-edit", "index": MATCH}, "disabled", allow_duplicate=True
+        ),
         [
             Input({"type": "input-title", "index": MATCH}, "value"),
             Input({"type": "input-dropdown-column", "index": MATCH}, "value"),
@@ -114,7 +118,17 @@ def register_callbacks_interactive_component(app):
         ],
         # prevent_initial_call=True,
     )
-    def update_card_body(input_value, column_value, aggregation_value, workflow_id, data_collection_id, id, parent_index, local_data, pathname):
+    def update_card_body(
+        input_value,
+        column_value,
+        aggregation_value,
+        workflow_id,
+        data_collection_id,
+        id,
+        parent_index,
+        local_data,
+        pathname,
+    ):
         """
         Callback to update card body based on the selected column and aggregation
         """
@@ -129,20 +143,28 @@ def register_callbacks_interactive_component(app):
         }
 
         dashboard_id = pathname.split("/")[-1]
-        input_id = id["index"]
+        # input_id = id["index"]
 
-        component_data = get_component_data(input_id=parent_index, dashboard_id=dashboard_id, TOKEN=TOKEN)
+        component_data = get_component_data(
+            input_id=parent_index, dashboard_id=dashboard_id, TOKEN=TOKEN
+        )
 
         # Check if value was already assigned
         value = None
 
         # Get the columns from the selected data collection
-        cols_json = get_columns_from_data_collection(workflow_id, data_collection_id, TOKEN)
+        cols_json = get_columns_from_data_collection(
+            workflow_id, data_collection_id, TOKEN
+        )
         logger.info(f"cols_json: {cols_json}")
 
         from dash import dash_table
 
-        data_columns_df = [{"column": c, "description": cols_json[c]["description"]} for c in cols_json if cols_json[c]["description"] is not None]
+        data_columns_df = [
+            {"column": c, "description": cols_json[c]["description"]}
+            for c in cols_json
+            if cols_json[c]["description"] is not None
+        ]
 
         columns_description_df = dash_table.DataTable(
             # id={
@@ -155,12 +177,23 @@ def register_callbacks_interactive_component(app):
             ],
             data=data_columns_df,
             # Small font size, helvetica, no border, center text
-            style_cell={"fontSize": 12, "fontFamily": "Helvetica", "border": "0px", "textAlign": "center"},
+            style_cell={
+                "fontSize": 12,
+                "fontFamily": "Helvetica",
+                "border": "0px",
+                "textAlign": "center",
+            },
             style_header={"fontWeight": "bold"},
         )
 
         # If any of the input values are None, return an empty list
-        if input_value is None or column_value is None or aggregation_value is None or workflow_id is None or data_collection_id is None:
+        if (
+            input_value is None
+            or column_value is None
+            or aggregation_value is None
+            or workflow_id is None
+            or data_collection_id is None
+        ):
             if not component_data:
                 return ([], None, columns_description_df)
             else:
@@ -184,11 +217,18 @@ def register_callbacks_interactive_component(app):
                     children=dmc.Stack(
                         [
                             dmc.Badge(
-                                children="Interactive component description", leftSection=DashIconify(icon="mdi:information", color="grey", width=20), color="gray", radius="lg"
+                                children="Interactive component description",
+                                leftSection=DashIconify(
+                                    icon="mdi:information", color="grey", width=20
+                                ),
+                                color="gray",
+                                radius="lg",
                             ),
                         ]
                     ),
-                    label=agg_functions[str(column_type)]["input_methods"][aggregation_value]["description"],
+                    label=agg_functions[str(column_type)]["input_methods"][
+                        aggregation_value
+                    ]["description"],
                     multiline=True,
                     width=300,
                     transition="pop",
@@ -236,10 +276,13 @@ def register_callbacks_interactive_component(app):
         if value:
             interactive_kwargs["value"] = value
 
-
         new_interactive_component = build_interactive(**interactive_kwargs)
 
-        return new_interactive_component, interactive_description, columns_description_df
+        return (
+            new_interactive_component,
+            interactive_description,
+            columns_description_df,
+        )
 
 
 def design_interactive(id, df):
@@ -324,7 +367,21 @@ def design_interactive(id, df):
                     dbc.Row([left_column, right_column]),
                     html.Hr(),
                     # dmc.Space(h=5),
-                    dbc.Row(dmc.Stack([dmc.Title("Data Collection - Columns description", order=5), html.Div(id={"type": "columns-description", "index": id["index"]})])),
+                    dbc.Row(
+                        dmc.Stack(
+                            [
+                                dmc.Title(
+                                    "Data Collection - Columns description", order=5
+                                ),
+                                html.Div(
+                                    id={
+                                        "type": "columns-description",
+                                        "index": id["index"],
+                                    }
+                                ),
+                            ]
+                        )
+                    ),
                 ]
             ),
         ),

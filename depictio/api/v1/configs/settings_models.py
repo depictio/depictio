@@ -1,9 +1,10 @@
-import os
 from typing import Dict, Union
-from pydantic import AliasChoices, ConfigDict, Field
+
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from depictio.api.v1.key_utils import _generate_api_internal_key, _load_or_generate_api_internal_key
-from depictio.models.models.s3 import MinioConfig
+
+from depictio.api.v1.key_utils import _load_or_generate_api_internal_key
+from depictio.models.models.s3 import S3DepictioCLIConfig
 
 
 class Collections(BaseSettings):
@@ -29,12 +30,10 @@ class MongoConfig(BaseSettings):
 
     collections: Collections = Collections()
     service_name: str = "mongo"
-    port: int = Field(default=27018, json_schema_extra={"env": "DEPICTIO_MONGODB_PORT"})
-    db_name: str = Field(
-        default="depictioDB", json_schema_extra={"env": "DEPICTIO_MONGODB_DB_NAME"}
-    )
+    port: int = Field(default=27018)
+    db_name: str = Field(default="depictioDB")
     wipe: bool = Field(
-        default=False, json_schema_extra={"env": "DEPICTIO_MONGODB_WIPE"}
+        default=False,
     )
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_MONGODB_")
 
@@ -44,22 +43,13 @@ class FastAPIConfig(BaseSettings):
 
     host: str = "0.0.0.0"
     service_name: str = "depictio_backend"
-    port: int = Field(default=8058, json_schema_extra={"env": "DEPICTIO_FASTAPI_PORT"})
+    port: int = Field(default=8058)
     logging_level: str = "INFO"
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_FASTAPI_")
-    workers: int = Field(
-        default=1, json_schema_extra={"env": "DEPICTIO_FASTAPI_WORKERS"}
-    )
-    ssl: bool = Field(default=False, json_schema_extra={"env": "DEPICTIO_FASTAPI_SSL"})
-    internal_api_key: str = Field(
-        default_factory=_load_or_generate_api_internal_key,
-        json_schema_extra={
-            "env": "DEPICTIO_INTERNAL_API_KEY"
-        },  # Shared across components
-    )
-    playwright_dev_mode: bool = Field(
-        default=False, json_schema_extra={"env": "DEPICTIO_PLAYWRIGHT_DEV_MODE"}
-    )
+    workers: int = Field(default=1)
+    ssl: bool = Field(default=False)
+    internal_api_key: str = Field(default_factory=_load_or_generate_api_internal_key)
+    playwright_dev_mode: bool = Field(default=False)
 
 
 class DashConfig(BaseSettings):
@@ -68,8 +58,8 @@ class DashConfig(BaseSettings):
     debug: bool = True
     host: str = "0.0.0.0"
     service_name: str = "depictio_frontend"
-    workers: int = Field(default=1, json_schema_extra={"env": "DEPICTIO_DASH_WORKERS"})
-    port: int = Field(default=5080, json_schema_extra={"env": "DEPICTIO_DASH_PORT"})
+    workers: int = Field(default=1)
+    port: int = Field(default=5080)
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_DASH_")
 
 
@@ -92,12 +82,11 @@ class Auth(BaseSettings):
 
     tmp_token: str = Field(default="eyJhb...")
     keys_dir: str = Field(
-        default="depictio/keys", json_schema_extra={"env": "DEPICTIO_AUTH_KEYS_DIR"}
+        default="depictio/keys",
     )
     keys_algorithm: str = "RS256"
     cli_config_dir: str = Field(
         default="depictio/.depictio",
-        json_schema_extra={"env": "DEPICTIO_AUTH_CLI_CONFIG_DIR"},
     )
     model_config = SettingsConfigDict(
         arbitrary_types_allowed=True, env_prefix="DEPICTIO_AUTH_"
@@ -110,6 +99,6 @@ class Settings(BaseSettings):
     mongodb: MongoConfig = MongoConfig()
     fastapi: FastAPIConfig = FastAPIConfig()
     dash: DashConfig = DashConfig()
-    minio: MinioConfig = MinioConfig()
+    minio: S3DepictioCLIConfig = S3DepictioCLIConfig()
     jbrowse: JbrowseConfig = JbrowseConfig()
     auth: Auth = Auth()

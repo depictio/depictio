@@ -1,15 +1,16 @@
 import json
 import sys
 from typing import Dict, List, Union
-from typeguard import typechecked
+
+from pydantic import validate_call
+from rich import print, print_json
 from rich.console import Console
 from rich.panel import Panel
-from rich import print, print_json
 
 console = Console()
 
 
-@typechecked
+@validate_call
 def handle_error(message: str, exit: bool = False):
     """Print an error message and raise a ValueError."""
     print(f"• [bold red]:x: {message}[/bold red]")
@@ -17,7 +18,7 @@ def handle_error(message: str, exit: bool = False):
         sys.exit()
 
 
-@typechecked
+@validate_call
 def rich_print_command_usage(command: str):
     """
     Print the command usage in a styled panel.
@@ -32,7 +33,7 @@ def rich_print_command_usage(command: str):
     )
 
 
-@typechecked
+@validate_call
 def rich_print_section_separator(title: str):
     """
     Print a section separator.
@@ -48,7 +49,7 @@ def rich_print_section_separator(title: str):
     )
 
 
-@typechecked
+@validate_call
 # json can be a dict or a list of dicts
 def rich_print_json(statement: str, json_obj: Union[Dict, List[Dict]]):
     """
@@ -58,7 +59,7 @@ def rich_print_json(statement: str, json_obj: Union[Dict, List[Dict]]):
     print_json(json.dumps(json_obj, indent=4))
 
 
-@typechecked
+@validate_call
 def rich_print_checked_statement(statement: str, mode: str, exit: bool = False):
     """
     Print a statement with a check mark or cross.

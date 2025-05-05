@@ -113,7 +113,9 @@ class FileScanResult(BaseModel):
         if value["result"] not in ["success", "failure"]:
             raise ValueError("Scan result must be one of ['success', 'failure']")
         if value["reason"] not in ["added", "skipped", "updated", "failed"]:
-            raise ValueError("Scan reason must be one of ['added', 'skipped', 'updated', 'failed']")
+            raise ValueError(
+                "Scan reason must be one of ['added', 'skipped', 'updated', 'failed']"
+            )
         return value
 
     @field_validator("scan_time", mode="before")

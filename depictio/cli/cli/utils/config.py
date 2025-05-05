@@ -1,41 +1,15 @@
-import hashlib
-import json
 import os
 from typing import Any, Dict, cast
-from pydantic import validate_call
+
 import typer
+from pydantic import validate_call
 
-# depictio-cli imports
 from depictio.cli.cli.utils.api_calls import api_get_project_from_name, api_login
-from depictio.cli.logging import logger
-
-# depictio-models imports
-from depictio.models.utils import get_config
-from depictio.models.models.users import CLIConfig
-from depictio.models.utils import validate_model_config
-from depictio.models.models.projects import Project
+from depictio.cli.cli_logging import logger
 from depictio.models.models.base import convert_objectid_to_str
-
-
-KEYS_TO_SAVE = {
-    "id": None,
-    "name": None,
-    "hash": None,
-    "yaml_config_path": None,
-    "permissions": {
-        "owners": [{"id": None}],
-        "editors": [{"id": None}],
-        "viewers": [{"id": None}],
-    },
-    "workflows": [
-        {
-            "id": None,
-            "name": None,
-            "workflow_tag": None,
-            "data_collections": [{"id": None, "data_collection_tag": None}],
-        }
-    ],
-}
+from depictio.models.models.projects import Project
+from depictio.models.models.users import CLIConfig
+from depictio.models.utils import get_config, validate_model_config
 
 
 @validate_call
@@ -64,17 +38,6 @@ def validate_project_config_and_check_S3_storage(
         return CLI_config, response_validation
     else:
         raise typer.Exit(code=1)
-
-
-def find_by_name(collection, name):
-    """
-    Search a list of dicts for an item with a matching 'name'.
-    Returns the dict if found, otherwise None.
-    """
-    for item in collection:
-        if isinstance(item, dict) and item.get("name") == name:
-            return item
-    return None
 
 
 def find_matching_entry(collection, new_item):
@@ -136,36 +99,6 @@ def assign_ids_by_keys(existing_meta, new_structure):
 
 
 @validate_call
-def load_and_prepare_config(
-    CLI_config: CLIConfig, project_yaml_config_path: str
-) -> Dict[str, Any]:
-    """
-    Load the pipeline configuration, set the YAML config path, and add permissions.
-    """
-    # Load the pipeline configuration
-    project_config = get_config(project_yaml_config_path)
-    full_path = os.path.abspath(project_yaml_config_path)
-    project_config["yaml_config_path"] = full_path
-
-    # Add permissions based on the CLI user, removing 'token'
-    # user_light = CLI_config["user"].copy()
-    # user_light.pop("token", None)
-    user_light = CLI_config.user.model_copy()
-    user_light.token = None
-    user_light = user_light.model_dump()
-
-    project_config["permissions"] = {
-        "owners": [user_light],
-        "editors": [],
-        "viewers": [],
-    }
-    # project_config["permissions"] = {"owners": [user_light], "editors": [], "viewers": []}
-
-    logger.debug(f"Pipeline config after adding permissions: {project_config}")
-    return cast(Dict[str, Any], project_config)
-
-
-@validate_call
 def merge_existing_ids(existing_entry: dict, project_config: dict) -> dict:
     """
     If a project with the same name exists, checks ownership and merges existing IDs.
@@ -199,44 +132,34 @@ def merge_existing_ids(existing_entry: dict, project_config: dict) -> dict:
     return project_config
 
 
-# Define nested keys to save
-def extract_metadata(data, keys_structure):
-    """
-    Recursively extract metadata based on a keys structure.
-    """
-    if isinstance(keys_structure, dict):
-        return {
-            key: extract_metadata(data.get(key, {}), sub_keys)
-            for key, sub_keys in keys_structure.items()
-        }
-    elif isinstance(keys_structure, list):
-        return (
-            [extract_metadata(item, keys_structure[0]) for item in data]
-            if isinstance(data, list)
-            else []
-        )
-    else:
-        return data
-
-
 @validate_call
-def create_metadata_entry(
-    validated_config: Project, keys_to_save: dict
+def load_and_prepare_config(
+    CLI_config: CLIConfig, project_yaml_config_path: str
 ) -> Dict[str, Any]:
     """
-    Convert validated configuration to a metadata entry, compute hash, and return the entry.
+    Load the pipeline configuration, set the YAML config path, and add permissions.
     """
-    # Convert ObjectId to str if necessary and extract metadata
-    config_dict = convert_objectid_to_str(validated_config.model_dump())
-    metadata_entry = extract_metadata(config_dict, keys_to_save)
+    # Load the pipeline configuration
+    project_config = get_config(project_yaml_config_path)
+    full_path = os.path.abspath(project_yaml_config_path)
+    project_config["yaml_config_path"] = full_path
 
-    # Compute hash for the metadata entry
-    hash_value = hashlib.md5(
-        json.dumps(metadata_entry, sort_keys=True).encode()
-    ).hexdigest()
-    metadata_entry["hash"] = hash_value
-    logger.debug(f"Metadata entry: {metadata_entry}")
-    return cast(Dict[str, Any], metadata_entry)
+    # Add permissions based on the CLI user, removing 'token'
+    # user_light = CLI_config["user"].copy()
+    # user_light.pop("token", None)
+    user_light = CLI_config.user.model_copy()
+    user_light.token = None
+    user_light = user_light.model_dump()
+
+    project_config["permissions"] = {
+        "owners": [user_light],
+        "editors": [],
+        "viewers": [],
+    }
+    # project_config["permissions"] = {"owners": [user_light], "editors": [], "viewers": []}
+
+    logger.debug(f"Pipeline config after adding permissions: {project_config}")
+    return cast(Dict[str, Any], project_config)
 
 
 @validate_call

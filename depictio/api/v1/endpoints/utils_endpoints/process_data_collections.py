@@ -3,9 +3,8 @@ from typing import Dict, Any
 import httpx
 import pymongo
 from bson import ObjectId
-from fastapi import HTTPException
 
-from depictio.api.v1.configs.config import settings, API_BASE_URL, MONGODB_URL
+from depictio.api.v1.configs.config import settings, MONGODB_URL
 from depictio.api.v1.configs.custom_logging import logger, format_pydantic
 from depictio.models.models.projects import Project
 from depictio.models.models.users import CLIConfig, UserBaseCLIConfig

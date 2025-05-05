@@ -1,23 +1,22 @@
 from datetime import datetime
 from typing import Dict, List, Union, cast
+
 import deltalake
 import polars as pl
 from pydantic import validate_call
-
-
-from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
-from depictio.models.models.base import convert_objectid_to_str
-from depictio.models.models.data_collections import DataCollection
-from depictio.models.models.files import File
-from depictio.models.models.users import CLIConfig
-from depictio.models.models.s3 import PolarsStorageOptions
 
 from depictio.cli.cli.utils.api_calls import (
     api_get_files_by_dc_id,
     api_upsert_deltatable,
 )
+from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
+from depictio.cli.cli_logging import logger
+from depictio.models.models.base import convert_objectid_to_str
+from depictio.models.models.data_collections import DataCollection
+from depictio.models.models.files import File
+from depictio.models.models.s3 import PolarsStorageOptions
+from depictio.models.models.users import CLIConfig
 from depictio.models.s3_utils import turn_S3_config_into_polars_storage_options
-from depictio.cli.logging import logger
 
 
 @validate_call

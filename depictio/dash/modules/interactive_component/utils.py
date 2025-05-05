@@ -1,7 +1,6 @@
 import numpy as np
 import math
 from dash import dcc, html
-import polars as pl
 import pandas as pd
 import dash_mantine_components as dmc
 import dash_bootstrap_components as dbc
@@ -141,17 +140,25 @@ def generate_log_marks(min_val, max_val, data_min, data_max, tolerance=0.5):
             too_close_min = data_min >= original_value * (1 - tolerance)
             logger.info(f"Too close to data_min: {too_close_min}")
             logger.info(f"Data min: {data_min}")
-            logger.info(f"Original value * (1 - tolerance): {original_value * (1 - tolerance)}")
+            logger.info(
+                f"Original value * (1 - tolerance): {original_value * (1 - tolerance)}"
+            )
             too_close_max = data_max <= original_value * (1 + tolerance)
             logger.info(f"Too close to data_max: {too_close_max}")
             logger.info(f"Data max: {data_max}")
-            logger.info(f"Original value * (1 + tolerance): {original_value * (1 + tolerance)}")
+            logger.info(
+                f"Original value * (1 + tolerance): {original_value * (1 + tolerance)}"
+            )
 
             if too_close_min or too_close_max:
                 if too_close_max:
-                    logger.info(f"Mark at {original_value} is too close to data_max ({data_max}). Skipping.")
+                    logger.info(
+                        f"Mark at {original_value} is too close to data_max ({data_max}). Skipping."
+                    )
                 if too_close_min:
-                    logger.info(f"Mark at {original_value} is too close to data_min ({data_min}). Skipping.")
+                    logger.info(
+                        f"Mark at {original_value} is too close to data_min ({data_min}). Skipping."
+                    )
                 continue  # Skip the first mark if too close to data_min
 
             # Ensure that pos is within the slider's range
@@ -161,7 +168,9 @@ def generate_log_marks(min_val, max_val, data_min, data_max, tolerance=0.5):
                     marks[int(pos)] = label
                     logger.info(f"Added mark: pos={pos}, label={label}")
                 else:
-                    logger.warning(f"Label for value {original_value} is None. Skipping.")
+                    logger.warning(
+                        f"Label for value {original_value} is None. Skipping."
+                    )
 
         # Add the max value mark
         marks[np.log10(data_max)] = format_mark_label(data_max)
@@ -234,7 +243,9 @@ def get_valid_min_max(df, column_name, cols_json):
         else:
             # Define a default min_value if DataFrame min is not available
             min_value = 0.0
-            logger.warning(f"DataFrame min is not available. Setting Min value to default: {min_value}")
+            logger.warning(
+                f"DataFrame min is not available. Setting Min value to default: {min_value}"
+            )
 
     # If max_value is invalid, compute it from the DataFrame
     if max_value is None:
@@ -245,11 +256,15 @@ def get_valid_min_max(df, column_name, cols_json):
         else:
             # Define a default max_value if DataFrame max is not available
             max_value = 1.0
-            logger.warning(f"DataFrame max is not available. Setting Max value to default: {max_value}")
+            logger.warning(
+                f"DataFrame max is not available. Setting Max value to default: {max_value}"
+            )
 
     # Final validation to ensure min_value <= max_value
     if min_value > max_value:
-        logger.error(f"Min value ({min_value}) is greater than Max value ({max_value}). Swapping values.")
+        logger.error(
+            f"Min value ({min_value}) is greater than Max value ({max_value}). Swapping values."
+        )
         min_value, max_value = max_value, min_value
 
     logger.info(f"Final Min value: {min_value} (Type: {type(min_value)})")
@@ -323,7 +338,9 @@ def build_interactive(**kwargs):
     else:
         value_div_type = "interactive-component-value"
 
-    func_name = agg_functions[column_type]["input_methods"][interactive_component_type]["component"]
+    func_name = agg_functions[column_type]["input_methods"][interactive_component_type][
+        "component"
+    ]
 
     # Common Store Component
     store_index = index.replace("-tmp", "")
@@ -357,7 +374,9 @@ def build_interactive(**kwargs):
         data = sorted(df[column_name].drop_nulls().unique())
 
         # WARNING: This is a temporary solution to avoid modifying dashboard data - the -tmp suffix is added to the id and removed once clicked on the btn-done D
-        interactive_component = func_name(data=data, id={"type": value_div_type, "index": str(index)})
+        interactive_component = func_name(
+            data=data, id={"type": value_div_type, "index": str(index)}
+        )
 
         # If the aggregation value is MultiSelect, make the component searchable and clearable
         if interactive_component_type == "MultiSelect":
@@ -534,7 +553,6 @@ def build_interactive(**kwargs):
     #     kwargs_component.update({"marks": marks})
     #     interactive_component = func_name(**kwargs_component)
 
-
     ## Numerical data
 
     # If the aggregation value is Slider or RangeSlider
@@ -559,10 +577,13 @@ def build_interactive(**kwargs):
         kwargs.update({"value": value})
         # If the number of unique values is less than 30, use the unique values as marks
         if interactive_component_type == "Slider":
-            marks = {str(elem): str(elem) for elem in df[column_name].unique()} if df[column_name].n_unique() < 30 else {}
+            marks = (
+                {str(elem): str(elem) for elem in df[column_name].unique()}
+                if df[column_name].n_unique() < 30
+                else {}
+            )
             kwargs.update({"marks": marks, "step": None, "included": False})
         interactive_component = func_name(**kwargs)
-
 
     # If no title is provided, use the aggregation value on the selected column
     if not title:
@@ -585,7 +606,9 @@ def build_interactive(**kwargs):
 
     logger.info(f"Interactive - store_component: {store_component}")
 
-    new_interactive_component = html.Div([card_title_h5, interactive_component, store_component])
+    new_interactive_component = html.Div(
+        [card_title_h5, interactive_component, store_component]
+    )
 
     if not build_frame:
         return new_interactive_component

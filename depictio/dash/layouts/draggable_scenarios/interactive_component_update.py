@@ -1,23 +1,34 @@
 import collections
 from typing import Any, Dict, List, Tuple
+
 import pandas as pd
+
 from depictio.api.v1.configs.custom_logging import logger
-from depictio.api.v1.deltatables_utils import iterative_join, join_deltatables_dev, return_joins_dict
+from depictio.api.v1.deltatables_utils import (
+    iterative_join,
+    join_deltatables_dev,
+    return_joins_dict,
+)
 from depictio.dash.layouts.edit import enable_box_edit_mode
 from depictio.dash.modules.card_component.utils import build_card
 from depictio.dash.modules.figure_component.utils import build_figure
 from depictio.dash.modules.interactive_component.utils import build_interactive
-
-from depictio.dash.modules.jbrowse_component.utils import build_jbrowse, build_jbrowse_df_mapping_dict
+from depictio.dash.modules.jbrowse_component.utils import (
+    build_jbrowse,
+    build_jbrowse_df_mapping_dict,
+)
 from depictio.dash.modules.table_component.utils import build_table
-from depictio.dash.utils import generate_unique_index
 
 
 def apply_dropdowns(df, n_dict):
     # if there is a filter applied, filter the df
     if n_dict["value"] is not None:
         # if the value is a string, convert it to a list
-        n_dict["value"] = list(n_dict["value"]) if isinstance(n_dict["value"], str) else n_dict["value"]
+        n_dict["value"] = (
+            list(n_dict["value"])
+            if isinstance(n_dict["value"], str)
+            else n_dict["value"]
+        )
         # filter the df based on the selected values using pandas isin method
         df = df[df[n_dict["metadata"]["column_name"]].isin(n_dict["value"])]
     else:
@@ -45,7 +56,10 @@ def apply_sliders(df, n_dict):
     # if the interactive component is a RangeSlider
     if n_dict["metadata"]["interactive_component_type"] == "RangeSlider":
         # filter the df based on the selected range
-        df = df[(df[n_dict["metadata"]["column_name"]] >= n_dict["value"][0]) & (df[n_dict["metadata"]["column_name"]] <= n_dict["value"][1])]
+        df = df[
+            (df[n_dict["metadata"]["column_name"]] >= n_dict["value"][0])
+            & (df[n_dict["metadata"]["column_name"]] <= n_dict["value"][1])
+        ]
     # if the interactive component is a Slider
     elif n_dict["metadata"]["interactive_component_type"] == "Slider":
         # filter the df based on the selected value
@@ -63,16 +77,26 @@ def filter_data(new_df, n_dict):
     # Handles the case of the object type
     if n_dict["metadata"]["column_type"] == "object":
         # if the interactive component is a Select or MultiSelect
-        if n_dict["metadata"]["interactive_component_type"] in ["Select", "MultiSelect", "SegmentedControl"]:
+        if n_dict["metadata"]["interactive_component_type"] in [
+            "Select",
+            "MultiSelect",
+            "SegmentedControl",
+        ]:
             new_df = apply_dropdowns(new_df, n_dict)
         # if the interactive component is a TextInput
         elif n_dict["metadata"]["interactive_component_type"] == "TextInput":
             new_df = apply_textinput(new_df, n_dict)
 
     # Handles the case of the int64 and float64 types
-    elif n_dict["metadata"]["column_type"] == "int64" or n_dict["metadata"]["column_type"] == "float64":
+    elif (
+        n_dict["metadata"]["column_type"] == "int64"
+        or n_dict["metadata"]["column_type"] == "float64"
+    ):
         # if the interactive component is a RangeSlider or Slider
-        if n_dict["metadata"]["interactive_component_type"] in ["RangeSlider", "Slider"]:
+        if n_dict["metadata"]["interactive_component_type"] in [
+            "RangeSlider",
+            "Slider",
+        ]:
             new_df = apply_sliders(new_df, n_dict)
     return new_df
 
@@ -160,7 +184,9 @@ def render_raw_children(
     index = component["index"]
 
     # Set flags and tokens
-    component.update({"build_frame": True, "refresh": True, "access_token": TOKEN, "no_store": True})
+    component.update(
+        {"build_frame": True, "refresh": True, "access_token": TOKEN, "no_store": True}
+    )
     logger.info(f"Component: {component}")
 
     # Attach relevant metadata if available
@@ -186,7 +212,13 @@ def render_raw_children(
         logger.error(f"No helper found for component type '{comp_type}': {e}")
 
     # Enable edit mode on the component
-    child = enable_box_edit_mode(child.to_plotly_json(), switch_state=switch_state, dashboard_id=dashboard_id, component_data=component, TOKEN=TOKEN)
+    child = enable_box_edit_mode(
+        child.to_plotly_json(),
+        switch_state=switch_state,
+        dashboard_id=dashboard_id,
+        component_data=component,
+        TOKEN=TOKEN,
+    )
 
     # Append the processed child
     children.append(child)
@@ -198,18 +230,29 @@ def render_raw_children(
     return child, index
 
 
-def update_interactive_component(stored_metadata_raw, interactive_components_dict, current_draggable_children, switch_state, TOKEN, dashboard_id):
+def update_interactive_component(
+    stored_metadata_raw,
+    interactive_components_dict,
+    current_draggable_children,
+    switch_state,
+    TOKEN,
+    dashboard_id,
+):
     children = list()
 
     logger.info(f"interactive_components_dict - {interactive_components_dict}")
 
     if not interactive_components_dict:
         for metadata in stored_metadata_raw:
-            child, index = render_raw_children(metadata, switch_state, dashboard_id, TOKEN)
+            child, index = render_raw_children(
+                metadata, switch_state, dashboard_id, TOKEN
+            )
             children.append(child)
         return children
 
-    workflow_ids = list(set([v["metadata"]["wf_id"] for k, v in interactive_components_dict.items()]))
+    workflow_ids = list(
+        set([v["metadata"]["wf_id"] for k, v in interactive_components_dict.items()])
+    )
     stored_metadata = list()
 
     for wf in workflow_ids:
@@ -220,10 +263,18 @@ def update_interactive_component(stored_metadata_raw, interactive_components_dic
         logger.info(f"wf - {wf}")
         logger.info(f"stored_metadata_raw - {stored_metadata_raw}")
         stored_metadata = [v for v in stored_metadata_raw if v["wf_id"] == wf]
-        stored_metadata_interactive_components = [e for e in stored_metadata if e["component_type"] in ["interactive"]]
+        stored_metadata_interactive_components = [
+            e for e in stored_metadata if e["component_type"] in ["interactive"]
+        ]
         logger.info(f"stored_metadata - {stored_metadata}")
-        stored_metadata_table_components = [e for e in stored_metadata if e["component_type"] in ["graph", "card", "table"]]
-        stored_metadata_jbrowse_components = [e for e in stored_metadata if e["component_type"] in ["jbrowse"]]
+        # stored_metadata_table_components = [
+        #     e
+        #     for e in stored_metadata
+        #     if e["component_type"] in ["graph", "card", "table"]
+        # ]
+        stored_metadata_jbrowse_components = [
+            e for e in stored_metadata if e["component_type"] in ["jbrowse"]
+        ]
 
         joins_dict = return_joins_dict(wf, stored_metadata, TOKEN)
 
@@ -234,14 +285,20 @@ def update_interactive_component(stored_metadata_raw, interactive_components_dic
             logger.info(f"Processing joins for: {join_key_tuple}")
             logger.info(f"joins - {joins}")
             logger.info(f"interactive_components_dict - {interactive_components_dict}")
-            logger.info(f"stored_metadata_interactive_components - {stored_metadata_interactive_components}")
-            merged_df = iterative_join(wf, {join_key_tuple: joins}, interactive_components_dict, TOKEN)
+            logger.info(
+                f"stored_metadata_interactive_components - {stored_metadata_interactive_components}"
+            )
+            merged_df = iterative_join(
+                wf, {join_key_tuple: joins}, interactive_components_dict, TOKEN
+            )
             logger.info(f"merged_df - {merged_df}")
             df_dict_processed[wf][join_key_tuple] = merged_df
         for e in stored_metadata:
             if e["component_type"] == "jbrowse":
                 logger.info(f"build_jbrowse_df_mapping_dict - access_token: {TOKEN}")
-                build_jbrowse_df_mapping_dict(stored_metadata, df_dict_processed[wf], access_token=TOKEN)
+                build_jbrowse_df_mapping_dict(
+                    stored_metadata, df_dict_processed[wf], access_token=TOKEN
+                )
 
     # Initialize the children list with the interactive components
     # children = [
@@ -261,39 +318,38 @@ def update_interactive_component(stored_metadata_raw, interactive_components_dic
     #     elif component["component_type"] == "interactive":
     #         logger.info(f"Interactive CHILD - {child}")
     #         logger.info(f"Interactive CHILD keys - {child.keys()}")
-            
+
     #         try:
     #             level1 = child["props"]
     #             logger.info(f"Level 1 props: {level1}")
-                
+
     #             level2 = level1["children"][1]
     #             logger.info(f"Level 2 children[1]: {level2}")
-                
+
     #             level3 = level2["props"]
     #             logger.info(f"Level 3 props: {level3}")
-                
+
     #             level4 = level3["children"]["props"]
     #             logger.info(f"Level 4 children.props: {level4}")
-                
+
     #             level5 = level4["children"]["props"]
     #             logger.info(f"Level 5 children.props: {level5}")
-                
+
     #             level6 = level5["children"]["props"]
     #             logger.info(f"Level 6 children.props: {level6}")
-                
+
     #             level7 = level6["children"][2]["props"]["data"]["value"]
     #             logger.info(f"Level 7 data.value: {level7}")
-                
+
     #             # Now perform the assignment
     #             child["props"]["children"][1]["props"]["children"]["props"]["children"]["props"]["children"][2]["props"]["data"]["value"] = interactive_components_dict[component["index"]]["value"]
-                
+
     #         except KeyError as e:
     #             logger.error(f"KeyError encountered: {e}")
     #             # Handle the error or re-raise with more context
     #             raise
-            
-    #         logger.info(f"Interactive CHILD after update - {child}")
 
+    #         logger.info(f"Interactive CHILD after update - {child}")
 
     logger.info(f"df_dict_processed - {df_dict_processed}")
 
@@ -307,7 +363,9 @@ def update_interactive_component(stored_metadata_raw, interactive_components_dic
                     break
 
             if component["component_type"] == "interactive":
-                component["value"] = interactive_components_dict[component["index"]]["value"]
+                component["value"] = interactive_components_dict[component["index"]][
+                    "value"
+                ]
 
             # component["df"] = df_dict_processed[component["wf_id"], component["dc_id"]]
             component["build_frame"] = True
@@ -320,7 +378,12 @@ def update_interactive_component(stored_metadata_raw, interactive_components_dic
             child = helpers_mapping[component["component_type"]](**component)
             if component["component_type"] == "card":
                 logger.info(f"Card CHILD - {child}")
-            child = enable_box_edit_mode(child.to_plotly_json(), switch_state=switch_state, dashboard_id=dashboard_id, TOKEN=TOKEN)
+            child = enable_box_edit_mode(
+                child.to_plotly_json(),
+                switch_state=switch_state,
+                dashboard_id=dashboard_id,
+                TOKEN=TOKEN,
+            )
             children.append(child)
 
         elif component["component_type"] == "jbrowse":
@@ -333,7 +396,12 @@ def update_interactive_component(stored_metadata_raw, interactive_components_dic
 
             logger.info(f"JBROWSE CHILD - {child}")
 
-            child = enable_box_edit_mode(child.to_plotly_json(), switch_state=switch_state, dashboard_id=dashboard_id, TOKEN=TOKEN)
+            child = enable_box_edit_mode(
+                child.to_plotly_json(),
+                switch_state=switch_state,
+                dashboard_id=dashboard_id,
+                TOKEN=TOKEN,
+            )
             children.append(child)
         logger.info(f"ITERATIVE - len(children) - {len(children)}")
 

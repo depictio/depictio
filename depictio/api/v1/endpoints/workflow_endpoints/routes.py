@@ -1,23 +1,21 @@
 import hashlib
 import json
+
 from bson import ObjectId
-from fastapi import HTTPException, Depends, APIRouter
+from fastapi import APIRouter, Depends, HTTPException
 from pymongo import ReturnDocument
 
 from depictio.api.v1.configs.custom_logging import logger
 from depictio.api.v1.db import (
-    workflows_collection,
-    users_collection,
     projects_collection,
+    users_collection,
+    workflows_collection,
 )
-
-from depictio.api.v1.endpoints.workflow_endpoints.utils import compare_models
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
-
+from depictio.api.v1.endpoints.workflow_endpoints.utils import compare_models
 from depictio.models.models.base import convert_objectid_to_str
-from depictio.models.utils import convert_model_to_dict
-from depictio.models.models.workflows import Workflow
 from depictio.models.models.users import UserBase
+from depictio.models.models.workflows import Workflow
 
 # Define the router
 workflows_endpoint_router = APIRouter()
@@ -415,12 +413,14 @@ async def update_workflow(
         return_document=ReturnDocument.AFTER,
     )
 
+    logger.info(f"res: {res}")
+
     # Verify the update was successful
     # if not res:
     #     raise HTTPException(status_code=500, detail="Failed to update the workflow.")
 
     # Return a mapping of workflow ID to data collection IDs
-    updated_data_collection_ids = [str(dc.id) for dc in workflow.data_collections]
+    # updated_data_collection_ids = [str(dc.id) for dc in workflow.data_collections]
     return_data = convert_objectid_to_str(updated_workflow_data)
 
     return return_data
@@ -446,7 +446,7 @@ async def delete_workflow(
 
     workflow_tag = existing_workflow["workflow_tag"]
 
-    data_collections = existing_workflow["data_collections"]
+    # data_collections = existing_workflow["data_collections"]
 
     # Ensure that the current user is authorized to update the workflow
     user_id = current_user.id

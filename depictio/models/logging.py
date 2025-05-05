@@ -35,5 +35,6 @@ def setup_logging(verbose: bool = False, verbose_level: str = "INFO") -> logging
 
     return logger
 
+
 # Automatically set up logging when the module is imported
 logger = setup_logging()

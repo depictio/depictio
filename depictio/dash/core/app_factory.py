@@ -3,12 +3,8 @@ Factory module for creating and configuring the Dash application.
 """
 
 import os
-import sys
 import dash
 import dash_bootstrap_components as dbc
-from flask import send_from_directory
-from depictio.api.v1.configs.config import settings
-from depictio.version import get_version
 from depictio.api.v1.configs.custom_logging import logger
 
 # Set environment context
@@ -56,7 +52,7 @@ def create_dash_app():
     server = app.server
     server.logger.handlers = logger.handlers
     server.logger.setLevel(logger.level)
-    
+
     # Configure static folder for Flask server
     # This is separate from Dash's assets folder
     static_folder = os.path.join(dash_root_path, "static")

@@ -1,15 +1,19 @@
-import typer
 from typing import Annotated, Optional
 
-from depictio.cli.cli.utils.api_calls import api_get_project_from_id, api_get_project_from_name
+import typer
+
+from depictio.cli.cli.utils.api_calls import (
+    api_get_project_from_id,
+    api_get_project_from_name,
+)
+from depictio.cli.cli.utils.config import validate_project_config_and_check_S3_storage
 from depictio.cli.cli.utils.helpers import process_project_helper
-from depictio.cli.logging import logger
 from depictio.cli.cli.utils.rich_utils import (
     rich_print_checked_statement,
     rich_print_command_usage,
     rich_print_section_separator,
 )
-from depictio.cli.cli.utils.config import validate_project_config_and_check_S3_storage
+from depictio.cli.cli_logging import logger
 
 app = typer.Typer()
 
@@ -175,9 +179,7 @@ def process(
         project_config = response["project_config"]
 
         # Get remote project configuration
-        remote_project_config = api_get_project_from_id(
-            project_config.id, CLI_config
-        )
+        remote_project_config = api_get_project_from_id(project_config.id, CLI_config)
 
         if remote_project_config.status_code == 200:
             logger.info("Remote project configuration fetched successfully.")

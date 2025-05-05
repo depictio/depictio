@@ -1,10 +1,9 @@
-from dash import html, Input, Output, State, ALL, MATCH, ctx, dcc
+from dash import html, Input, Output, State, ALL, MATCH, ctx
 import dash
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 from dash_iconify import DashIconify
 import httpx
-import pandas as pd
 
 # Depictio imports
 from depictio.api.v1.configs.config import API_BASE_URL
@@ -15,12 +14,6 @@ from depictio.dash.modules.interactive_component.frontend import design_interact
 from depictio.api.v1.configs.custom_logging import logger
 
 # from depictio.dash.modules.table_component.frontend import design_table
-from depictio.dash.utils import (
-    get_component_data,
-    return_dc_tag_from_id,
-    return_mongoid,
-    return_wf_tag_from_id,
-)
 
 
 min_step = 0
@@ -107,7 +100,7 @@ def register_callbacks_stepper(app):
                 seen_workflow_ids.add(wf["id"])
                 valid_wfs.append(
                     {
-                        "label": f"{wf["engine"]["name"]}/{wf["name"]}",
+                        "label": f"{wf['engine']['name']}/{wf['name']}",
                         "value": wf["id"],
                     }
                 )

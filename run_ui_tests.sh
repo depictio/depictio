@@ -11,18 +11,18 @@ if [ "$1" == "--local" ]; then
     
     # Run the tests
     echo "Running tests..."
-    pytest depictio/tests/dash/test_auth.py -v
+    pytest depictio/tests/dash/test_auth.py -v --headed
 else
     # Docker mode - start containers
     echo "Running in Docker mode..."
     
     # Stop any running containers
     echo "Stopping any running containers..."
-    docker-compose down
+    docker compose down
     
     # Start the containers in test mode
     echo "Starting containers in test mode..."
-    DEPICTIO_TEST_MODE=true DEPICTIO_MONGODB_DB_NAME=depictioDB_test docker-compose up -d
+    DEPICTIO_TEST_MODE=true DEPICTIO_MONGODB_DB_NAME=depictioDB_test DEV_MODE=true docker compose -f docker-compose/docker-compose.vnc.yaml up --build -d 
     
     # Wait for the containers to be ready
     echo "Waiting for containers to be ready..."
@@ -30,7 +30,7 @@ else
     
     # Run the tests
     echo "Running tests..."
-    pytest depictio/tests/dash/test_auth.py -v
+    pytest depictio/tests/dash/test_auth.py -v --headed
     
     # Optional: Stop the containers after tests
     # echo "Stopping containers..."

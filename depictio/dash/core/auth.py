@@ -1,6 +1,7 @@
 """
 Authentication handling for the Depictio Dash application.
 """
+
 from depictio.api.v1.configs.custom_logging import logger
 from depictio.dash.api_calls import check_token_validity
 from depictio.dash.layouts.app_layout import (
@@ -13,18 +14,18 @@ from depictio.models.models.users import TokenBase
 def process_authentication(pathname, local_data):
     """
     Process authentication and return appropriate page content.
-    
+
     Args:
         pathname (str): Current URL pathname
         local_data (dict): Local storage data containing authentication information
-        
+
     Returns:
         tuple: (page_content, header, pathname, local_data)
     """
-    trigger = pathname  # For logging purposes
+    # trigger = pathname  # For logging purposes
     logger.debug(f"URL Pathname: {pathname}")
     logger.debug(f"Local Data: {local_data}")
-    
+
     # Check if user is authenticated
     if (
         not local_data

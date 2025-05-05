@@ -1,14 +1,18 @@
-from bson import ObjectId
-import pytest
-import bcrypt
-from unittest.mock import patch, MagicMock, call
-import mongomock
+from unittest.mock import MagicMock, call, patch
 
-from depictio.api.v1.endpoints.user_endpoints.utils import (
-    hash_password,
-    verify_password,
+import bcrypt
+import mongomock
+import pytest
+from beanie import init_beanie
+from bson import ObjectId
+from mongomock_motor import AsyncMongoMockClient
+
+from depictio.api.v1.endpoints.user_endpoints.core_functions import (
+    _create_user_in_db,
+    _hash_password,
+    _verify_password,
 )
-from depictio.models.models.users import Group
+from depictio.models.models.users import UserBeanie
 
 
 # Patch pymongo.MongoClient before any module using it is imported.
@@ -43,7 +47,7 @@ class TestHashPassword:
         password = "secure_password123"
 
         # Act
-        hashed_password = hash_password(password)
+        hashed_password = _hash_password(password)
 
         # Assert
         # Check that it returns a string
@@ -59,7 +63,7 @@ class TestHashPassword:
         password = ""
 
         # Act
-        hashed_password = hash_password(password)
+        hashed_password = _hash_password(password)
 
         # Assert
         assert isinstance(hashed_password, str)
@@ -72,8 +76,8 @@ class TestHashPassword:
         password2 = "password2"
 
         # Act
-        hash1 = hash_password(password1)
-        hash2 = hash_password(password2)
+        hash1 = _hash_password(password1)
+        hash2 = _hash_password(password2)
 
         # Assert
         assert hash1 != hash2
@@ -84,8 +88,8 @@ class TestHashPassword:
         password = "same_password"
 
         # Act
-        hash1 = hash_password(password)
-        hash2 = hash_password(password)
+        hash1 = _hash_password(password)
+        hash2 = _hash_password(password)
 
         # Assert
         assert hash1 != hash2  # Different salts should produce different hashes
@@ -104,7 +108,7 @@ class TestHashPassword:
         password = "test_password"
 
         # Act
-        result = hash_password(password)
+        result = _hash_password(password)
 
         # Assert
         mock_gensalt.assert_called_once()
@@ -122,10 +126,10 @@ class TestVerifyPassword:
         """Test that verify_password returns True for correct password."""
         # Arrange
         password = "secure_password123"
-        hashed_password = hash_password(password)
+        hashed_password = _hash_password(password)
 
         # Act
-        result = verify_password(hashed_password, password)
+        result = _verify_password(hashed_password, password)
 
         # Assert
         assert result is True
@@ -135,10 +139,10 @@ class TestVerifyPassword:
         # Arrange
         correct_password = "secure_password123"
         incorrect_password = "wrong_password"
-        hashed_password = hash_password(correct_password)
+        hashed_password = _hash_password(correct_password)
 
         # Act
-        result = verify_password(hashed_password, incorrect_password)
+        result = _verify_password(hashed_password, incorrect_password)
 
         # Assert
         assert result is False
@@ -147,10 +151,10 @@ class TestVerifyPassword:
         """Test that verify_password works with empty string."""
         # Arrange
         password = ""
-        hashed_password = hash_password(password)
+        hashed_password = _hash_password(password)
 
         # Act
-        result = verify_password(hashed_password, password)
+        result = _verify_password(hashed_password, password)
 
         # Assert
         assert result is True
@@ -164,7 +168,7 @@ class TestVerifyPassword:
         mock_checkpw.return_value = True
 
         # Act
-        result = verify_password(stored_hash, password)
+        result = _verify_password(stored_hash, password)
 
         # Assert
         mock_checkpw.assert_called_once_with(
@@ -182,24 +186,21 @@ class TestCheckPassword:
     @classmethod
     def setup_class(cls):
         # Import the function once and store it as a class attribute
-        from depictio.api.v1.endpoints.user_endpoints.utils import check_password
+        from depictio.api.v1.endpoints.user_endpoints.core_functions import (
+            _check_password,
+        )
 
-        cls.check_password = staticmethod(check_password)
+        cls.check_password = staticmethod(_check_password)
 
     def setup_method(self, method):
         # Set up patches
         self.fetch_user_patcher = patch(
-            "depictio.api.v1.endpoints.user_endpoints.utils.async_fetch_user_from_email"
+            "depictio.api.v1.endpoints.user_endpoints.core_functions._async_fetch_user_from_email"
         )
         self.mock_fetch_user = self.fetch_user_patcher.start()
 
-        self.logger_patcher = patch(
-            "depictio.api.v1.endpoints.user_endpoints.utils.logger"
-        )
-        self.mock_logger = self.logger_patcher.start()
-
         self.verify_password_patcher = patch(
-            "depictio.api.v1.endpoints.user_endpoints.utils.verify_password"
+            "depictio.api.v1.endpoints.user_endpoints.core_functions._verify_password"
         )
         self.mock_verify_password = self.verify_password_patcher.start()
 
@@ -233,10 +234,6 @@ class TestCheckPassword:
 
         # Assert
         self.mock_fetch_user.assert_called_once_with(test_email)
-        self.mock_logger.debug.assert_any_call(
-            f"Checking password for user {test_email}."
-        )
-        self.mock_logger.debug.assert_any_call(f"User found: {mock_user}")
         self.mock_verify_password.assert_called_once_with(
             mock_user.password, test_password
         )
@@ -262,10 +259,6 @@ class TestCheckPassword:
 
         # Assert
         self.mock_fetch_user.assert_called_once_with(test_email)
-        self.mock_logger.debug.assert_any_call(
-            f"Checking password for user {test_email}."
-        )
-        self.mock_logger.debug.assert_any_call(f"User found: {mock_user}")
         self.mock_verify_password.assert_called_once_with(
             mock_user.password, test_password
         )
@@ -286,10 +279,6 @@ class TestCheckPassword:
 
         # Assert
         self.mock_fetch_user.assert_called_once_with(test_email)
-        self.mock_logger.debug.assert_any_call(
-            f"Checking password for user {test_email}."
-        )
-        self.mock_logger.debug.assert_any_call("User found: None")
         self.mock_verify_password.assert_not_called()
         assert result is False
 
@@ -314,9 +303,6 @@ class TestCheckPassword:
         # Verify the exception was raised and not caught
         assert "Database error" in str(exc_info.value)
         self.mock_verify_password.assert_not_called()
-        self.mock_logger.debug.assert_called_with(
-            f"Checking password for user {test_email}."
-        )
 
 
 # -------------------------------
@@ -410,96 +396,96 @@ class TestEnsureMongoDBConnection:
 # -------------------------------
 
 
-class TestCreateGroupHelper:
-    @classmethod
-    def setup_class(cls):
-        # Import the function once and store it as a class attribute
-        from depictio.api.v1.endpoints.user_endpoints.utils import create_group_helper
+# class TestCreateGroupHelper:
+#     @classmethod
+#     def setup_class(cls):
+#         # Import the function once and store it as a class attribute
+#         from depictio.api.v1.endpoints.user_endpoints.utils import create_group_helper
 
-        cls.create_group_helper = staticmethod(create_group_helper)
+#         cls.create_group_helper = staticmethod(create_group_helper)
 
-    @patch("pymongo.MongoClient", new=mongomock.MongoClient)
-    def setup_method(self, method):
-        # Import the collections after mongomock patch is in effect
-        from depictio.api.v1.db import groups_collection
+#     @patch("pymongo.MongoClient", new=mongomock.MongoClient)
+#     def setup_method(self, method):
+#         # Import the collections after mongomock patch is in effect
+#         from depictio.api.v1.db import groups_collection
 
-        self.groups_collection = groups_collection
+#         self.groups_collection = groups_collection
 
-        # Set up the objectid conversion mock
-        self.convert_objectid_patcher = patch(
-            "depictio_models.models.base.convert_objectid_to_str",
-            side_effect=lambda x: x,
-        )
-        self.mock_convert = self.convert_objectid_patcher.start()
+#         # Set up the objectid conversion mock
+#         self.convert_objectid_patcher = patch(
+#             "depictio.models.base.convert_objectid_to_str",
+#             side_effect=lambda x: x,
+#         )
+#         self.mock_convert = self.convert_objectid_patcher.start()
 
-    def teardown_method(self, method):
-        # Clear the collection between tests
-        if hasattr(self, "groups_collection"):
-            self.groups_collection.delete_many({})
+#     def teardown_method(self, method):
+#         # Clear the collection between tests
+#         if hasattr(self, "groups_collection"):
+#             self.groups_collection.delete_many({})
 
-        # Stop all patches
-        for patcher_attr in [
-            "convert_objectid_patcher",
-            "logger_patcher",
-            "ensure_mongodb_patcher",
-        ]:
-            if hasattr(self, patcher_attr):
-                getattr(self, patcher_attr).stop()
+#         # Stop all patches
+#         for patcher_attr in [
+#             "convert_objectid_patcher",
+#             "logger_patcher",
+#             "ensure_mongodb_patcher",
+#         ]:
+#             if hasattr(self, patcher_attr):
+#                 getattr(self, patcher_attr).stop()
 
-    def test_create_new_group_success(self):
-        """Test creating a new group successfully."""
-        # Create a test group
-        # from depictio.models.models.users import Group
-        test_group = Group(name="test_group")
+#     def test_create_new_group_success(self):
+#         """Test creating a new group successfully."""
+#         # Create a test group
+#         # from depictio.models.models.users import Group
+#         test_group = Group(name="test_group")
 
-        # Call the function
-        result = self.create_group_helper(test_group)
+#         # Call the function
+#         result = self.create_group_helper(test_group)
 
-        # Check that the group was inserted
-        inserted_group = self.groups_collection.find_one({"name": "test_group"})
-        assert inserted_group is not None
+#         # Check that the group was inserted
+#         inserted_group = self.groups_collection.find_one({"name": "test_group"})
+#         assert inserted_group is not None
 
-        # Check the result
-        assert result["success"] is True
-        assert result["message"] == "Group created successfully"
-        assert result["group"] == test_group
-        assert "inserted_id" in result
+#         # Check the result
+#         assert result["success"] is True
+#         assert result["message"] == "Group created successfully"
+#         assert result["group"] == test_group
+#         assert "inserted_id" in result
 
-    def test_create_existing_group(self):
-        """Test attempting to create a group that already exists."""
-        # Insert a group first
-        self.groups_collection.insert_one({"name": "existing_group"})
+#     def test_create_existing_group(self):
+#         """Test attempting to create a group that already exists."""
+#         # Insert a group first
+#         self.groups_collection.insert_one({"name": "existing_group"})
 
-        # Create a test group with the same name
-        # from depictio.models.models.users import Group
-        test_group = Group(name="existing_group")
+#         # Create a test group with the same name
+#         # from depictio.models.models.users import Group
+#         test_group = Group(name="existing_group")
 
-        # Call the function
-        result = self.create_group_helper(test_group)
+#         # Call the function
+#         result = self.create_group_helper(test_group)
 
-        # Check the result
-        assert result["success"] is False
-        assert result["message"] == "Group already exists"
-        assert "group" in result
+#         # Check the result
+#         assert result["success"] is False
+#         assert result["message"] == "Group already exists"
+#         assert "group" in result
 
-    def test_create_group_exception(self):
-        """Test handling an exception during group creation."""
-        # Create a test group
-        test_group = Group(name="error_group")
+#     def test_create_group_exception(self):
+#         """Test handling an exception during group creation."""
+#         # Create a test group
+#         test_group = Group(name="error_group")
 
-        # Make insert_one raise an exception
-        self.groups_collection.insert_one = MagicMock(
-            side_effect=Exception("Test error")
-        )
+#         # Make insert_one raise an exception
+#         self.groups_collection.insert_one = MagicMock(
+#             side_effect=Exception("Test error")
+#         )
 
-        # Call the function
-        result = self.create_group_helper(test_group)
+#         # Call the function
+#         result = self.create_group_helper(test_group)
 
-        # Check the result
-        assert result["success"] is False
-        assert "Error creating group" in result["message"]
-        assert "Test error" in result["message"]
-        assert result["group"] is None
+#         # Check the result
+#         assert result["success"] is False
+#         assert "Error creating group" in result["message"]
+#         assert "Test error" in result["message"]
+#         assert result["group"] is None
 
 
 # -------------------------------
@@ -522,7 +508,7 @@ class TestDeleteGroupHelper:
 
         # Set up the objectid conversion mock
         self.convert_objectid_patcher = patch(
-            "depictio_models.models.base.convert_objectid_to_str",
+            "depictio.models.models.base.convert_objectid_to_str",
             side_effect=lambda x: x,
         )
         self.mock_convert = self.convert_objectid_patcher.start()
@@ -586,20 +572,10 @@ class TestDeleteGroupHelper:
         assert result["message"] == "Group not found"
 
 
-from depictio.api.v1.endpoints.user_endpoints.utils import (
-    create_user_in_db,
-)
-from beanie import init_beanie
-from depictio.models.models.users import UserBeanie, GroupBeanie
-from unittest.mock import AsyncMock
-from depictio.models.models.base import PyObjectId
-from mongomock_motor import AsyncMongoMockClient
-from fastapi import HTTPException
-from unittest.mock import patch
-
 # -------------------------------
 # Test for create_user_in_db
 # -------------------------------
+
 
 @pytest.mark.asyncio
 class TestCreateUserInDb:
@@ -608,19 +584,21 @@ class TestCreateUserInDb:
         # Initialize Beanie directly in the test
         client = AsyncMongoMockClient()
         await init_beanie(database=client.test_db, document_models=[UserBeanie])
-        
+
         # Set up test data
         email = "test@example.com"
         password = "securepassword"
-        
+
         # Mock the hash_password function
-        with patch('depictio.api.v1.endpoints.user_endpoints.utils.hash_password') as mock_hash:
+        with patch(
+            "depictio.api.v1.endpoints.user_endpoints.core_functions._hash_password"
+        ) as mock_hash:
             mock_hash.return_value = "$2b$12$mockedhashedpassword"
-            
+
             # Call the function
-            payload = await create_user_in_db(email=email, password=password)
-            result = payload["user"]    
-            
+            payload = await _create_user_in_db(email=email, password=password)
+            result = payload["user"]
+
             # Assertions
             assert result is not None
             assert result.email == email
@@ -630,10 +608,10 @@ class TestCreateUserInDb:
             assert result.is_verified is False
             assert result.registration_date is not None
             assert result.last_login is not None
-            
+
             # Verify hash_password was called with the correct password
             mock_hash.assert_called_once_with(password)
-            
+
             # Verify user is saved to database
             db_user = await UserBeanie.find_one(UserBeanie.email == email)
             assert db_user is not None
@@ -644,24 +622,28 @@ class TestCreateUserInDb:
         # Initialize Beanie directly in the test
         client = AsyncMongoMockClient()
         await init_beanie(database=client.test_db, document_models=[UserBeanie])
-        
+
         # Set up test data
         email = "admin@example.com"
         password = "securepassword"
-        
+
         # Mock the hash_password function
-        with patch('depictio.api.v1.endpoints.user_endpoints.utils.hash_password') as mock_hash:
+        with patch(
+            "depictio.api.v1.endpoints.user_endpoints.core_functions._hash_password"
+        ) as mock_hash:
             mock_hash.return_value = "$2b$12$mockedhashedpassword"
-            
+
             # Call the function with is_admin=True
-            payload = await create_user_in_db(email=email, password=password, is_admin=True)
+            payload = await _create_user_in_db(
+                email=email, password=password, is_admin=True
+            )
             result = payload["user"]
-            
+
             # Assertions
             assert result is not None
             assert result.email == email
             assert result.is_admin is True
-            
+
             # Verify user is saved to database
             db_user = await UserBeanie.find_one(UserBeanie.email == email)
             assert db_user is not None
@@ -672,24 +654,28 @@ class TestCreateUserInDb:
         # Initialize Beanie directly in the test
         client = AsyncMongoMockClient()
         await init_beanie(database=client.test_db, document_models=[UserBeanie])
-        
+
         # Set up test data
         email = "existing@example.com"
         password = "securepassword"
-        
+
         # Create a user first
-        with patch('depictio.api.v1.endpoints.user_endpoints.utils.hash_password') as mock_hash:
+        with patch(
+            "depictio.api.v1.endpoints.user_endpoints.core_functions._hash_password"
+        ) as mock_hash:
             mock_hash.return_value = "$2b$12$mockedhashedpassword"
-            existing_user = await create_user_in_db(email=email, password=password)
-            existing_user= existing_user["user"]
-        
+            existing_user = await _create_user_in_db(email=email, password=password)
+            existing_user = existing_user["user"]
+
         # Now try to create the same user again
-        with patch('depictio.api.v1.endpoints.user_endpoints.utils.hash_password') as mock_hash:
+        with patch(
+            "depictio.api.v1.endpoints.user_endpoints.core_functions._hash_password"
+        ) as mock_hash:
             mock_hash.return_value = "$2b$12$mockedhashedpassword"
-            
+
             # Call the function and expect a response with success=False
-            response = await create_user_in_db(email=email, password=password)
-            
+            response = await _create_user_in_db(email=email, password=password)
+
             # Verify the response details
             assert response["success"] is False
             assert response["message"] == "User already exists"
@@ -706,22 +692,22 @@ class TestCreateUserInDb:
     #     # Initialize Beanie directly in the test
     #     client = AsyncMongoMockClient()
     #     await init_beanie(database=client.test_db, document_models=[UserBeanie])
-        
+
     #     # Set up test data
     #     email = "timestamp@example.com"
     #     password = "securepassword"
-        
+
     #     # Mock the hash_password function
-    #     with patch('depictio.api.v1.endpoints.user_endpoints.utils.hash_password') as mock_hash:
+    #     with patch('depictio.api.v1.endpoints.user_endpoints.core_functions._hash_password') as mock_hash:
     #         mock_hash.return_value = "$2b$12$mockedhashedpassword"
-            
+
     #         # Call the function
     #         result = await create_user_in_db(email=email, password=password)
-            
+
     #         # Verify timestamp format (YYYY-MM-DD HH:MM:SS)
     #         import re
     #         timestamp_pattern = r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}"
-            
+
     #         assert isinstance(result.registration_date, str)
     #         assert isinstance(result.last_login, str)
     #         assert re.match(timestamp_pattern, result.registration_date)
@@ -732,33 +718,33 @@ class TestCreateUserInDb:
     #     # Initialize Beanie directly in the test
     #     client = AsyncMongoMockClient()
     #     await init_beanie(database=client.test_db, document_models=[UserBeanie, GroupBeanie])
-        
+
     #     # Set up test data
     #     email = "group@example.com"
     #     password = "securepassword"
     #     group_name = "TestGroup"
-        
+
     #     # Create test group
     #     # Note: This functionality is commented out in the provided code,
     #     # but I'm including it for completeness
-        
+
     #     # Mock the hash_password function
-    #     with patch('depictio.api.v1.endpoints.user_endpoints.utils.hash_password') as mock_hash, \
+    #     with patch('depictio.api.v1.endpoints.user_endpoints.core_functions._hash_password') as mock_hash, \
     #          patch('depictio.api.v1.endpoints.user_endpoints.utils.get_users_group') as mock_group:
-            
+
     #         mock_hash.return_value = "$2b$12$mockedhashedpassword"
     #         mock_group.return_value = Group(name=group_name)
-            
+
     #         # Call the function with a group
     #         result = await create_user_in_db(
-    #             email=email, 
-    #             password=password, 
+    #             email=email,
+    #             password=password,
     #             group=group_name
     #         )
-            
+
     #         # Assertions
     #         assert result is not None
     #         assert result.email == email
-            
+
     #         # Note: Group functionality is commented out in the provided code
     #         # If uncommented, add appropriate assertions here

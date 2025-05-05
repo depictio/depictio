@@ -1,20 +1,19 @@
 import collections
+
 import httpx
+
 from depictio.api.v1.configs.config import API_BASE_URL
+from depictio.api.v1.configs.custom_logging import logger
 from depictio.dash.api_calls import api_call_fetch_user_from_token
 from depictio.dash.layouts.draggable_scenarios.interactive_component_update import (
     update_interactive_component,
 )
+from depictio.dash.layouts.edit import enable_box_edit_mode
 from depictio.dash.modules.card_component.utils import build_card
 from depictio.dash.modules.figure_component.utils import build_figure
-from depictio.api.v1.db import dashboards_collection
-from dash import html
-from depictio.dash.layouts.edit import enable_box_edit_mode
-from depictio.api.v1.configs.custom_logging import logger
 from depictio.dash.modules.interactive_component.utils import build_interactive
 from depictio.dash.modules.jbrowse_component.utils import build_jbrowse
 from depictio.dash.modules.table_component.utils import build_table
-
 from depictio.models.models.dashboards import DashboardData
 from depictio.models.utils import convert_model_to_dict
 
@@ -172,14 +171,14 @@ def load_depictio_data(dashboard_id, local_data):
             viewer = is_viewer or has_wildcard
 
             if not owner and viewer:
-                disabled = True
-                edit_dashboard_mode_button_checked = True
+                # disabled = True
+                # edit_dashboard_mode_button_checked = True
                 edit_components_button_checked = False
             else:
-                disabled = False
-                edit_dashboard_mode_button_checked = dashboard_data.buttons_data[
-                    "edit_dashboard_mode_button"
-                ]
+                # disabled = False
+                # edit_dashboard_mode_button_checked = dashboard_data.buttons_data[
+                #     "edit_dashboard_mode_button"
+                # ]
                 edit_components_button_checked = dashboard_data.buttons_data[
                     "edit_components_button"
                 ]

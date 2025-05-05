@@ -1,19 +1,9 @@
-import json
-from dash import html, Input, Output, State, ALL, MATCH, ctx
 import dash
-import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
-from dash_iconify import DashIconify
 import httpx
-import yaml
-import dash_ag_grid as dag
+from dash import ALL, MATCH, Input, Output, State, ctx, html
+from dash_iconify import DashIconify
 
-from depictio.dash.utils import (
-    list_workflows,
-    get_columns_from_data_collection,
-    return_mongoid,
-)
-from depictio.api.v1.deltatables_utils import load_deltatable_lite
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.custom_logging import logger
 
@@ -75,7 +65,6 @@ def register_callbacks_stepper_part_one(app):
 
         # logger.info(f"component_selected: {component_selected}")
 
-
         # workflow_id, data_collection_id = return_mongoid(
         #     workflow_tag=workflow_selection,
         #     data_collection_tag=data_collection_selection,
@@ -106,23 +95,23 @@ def register_callbacks_stepper_part_one(app):
         if workflow_id is not None and data_collection_id is not None:
             # component_selected = html.Div(f"{component_selected}")
 
-            config_title = dmc.Title(
-                "Data collection config", order=3, align="left", weight=500
-            )
-            json_formatted = yaml.dump(dc_specs["config"], indent=2)
-            prism = dbc.Col(
-                [
-                    dmc.AccordionPanel(
-                        dmc.Prism(
-                            f"""{json_formatted}""",
-                            language="yaml",
-                            colorScheme="light",
-                            noCopy=True,
-                        )
-                    ),
-                ],
-                width=6,
-            )
+            # config_title = dmc.Title(
+            #     "Data collection config", order=3, align="left", weight=500
+            # )
+            # json_formatted = yaml.dump(dc_specs["config"], indent=2)
+            # prism = dbc.Col(
+            #     [
+            #         dmc.AccordionPanel(
+            #             dmc.Prism(
+            #                 f"""{json_formatted}""",
+            #                 language="yaml",
+            #                 colorScheme="light",
+            #                 noCopy=True,
+            #             )
+            #         ),
+            #     ],
+            #     width=6,
+            # )
 
             dc_main_info = dmc.Title(
                 "Data collection info", order=3, align="left", weight=500
@@ -154,9 +143,9 @@ def register_callbacks_stepper_part_one(app):
                                 },
                             ),
                             html.Td(
-                                # camelcase 
+                                # camelcase
                                 dc_specs["config"]["type"].capitalize(),
-                                style={"text-align": "left"}
+                                style={"text-align": "left"},
                             ),
                         ]
                     ),
@@ -171,9 +160,9 @@ def register_callbacks_stepper_part_one(app):
                                 },
                             ),
                             html.Td(
-                                # camelcase 
+                                # camelcase
                                 dc_specs["config"]["metatype"].capitalize(),
-                                style={"text-align": "left"}
+                                style={"text-align": "left"},
                             ),
                         ]
                     ),

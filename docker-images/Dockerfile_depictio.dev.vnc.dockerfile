@@ -4,6 +4,12 @@
 FROM mambaorg/micromamba:latest
 
 # -----------------------------
+# Inherit base configuration from Dockerfile_depictio.dockerfile
+# -----------------------------
+# Note: This Dockerfile follows the same base configuration 
+# as Dockerfile_depictio.dockerfile, with additional VNC tools
+
+# -----------------------------
 # Set Working Directory
 # -----------------------------
 WORKDIR /app
@@ -24,18 +30,14 @@ RUN micromamba create -n depictio -f depictio.yaml && \
 # -----------------------------
 ARG MAMBA_DOCKERFILE_ACTIVATE=1
 
-# RUN micromamba shell init -s bash -p /opt/conda/envs/depictio && \
-#     echo "source activate depictio" >> ~/.bashrc && \
-#     echo "conda list" >> ~/.bashrc
 RUN micromamba shell init -s bash && \
     echo "source activate depictio" >> ~/.bashrc && \
     echo "conda list" >> ~/.bashrc
 
 # -----------------------------
-# Install Playwright Dependencies
+# Install Playwright and VNC Dependencies
 # -----------------------------
 USER root
-RUN bash -c 'whoami'
 
 # Ensure /etc/apt/sources.list exists and configure it
 RUN if [ ! -f /etc/apt/sources.list ]; then \
@@ -48,6 +50,7 @@ RUN sed -i 's|http://deb.debian.org|http://ftp.us.debian.org|g' /etc/apt/sources
 # Install dependencies using apt
 RUN apt-get update && apt-get install --fix-missing -y \
     xvfb xauth sudo git git-lfs curl \
+    xvfb x11vnc fluxbox \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -62,63 +65,36 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/usr/local/share/playwright-browsers
 RUN /opt/conda/envs/depictio/bin/playwright install --with-deps chromium && \
     chmod -R 755 /usr/local/share/playwright-browsers
 
-    RUN apt-get update && apt-get install -y \
-    xvfb \
-    x11vnc \
-    fluxbox \
-    && rm -rf /var/lib/apt/lists/*
-
 # Switch back to non-root user
 USER $MAMBA_USER
 
 # Ensure the environment variable is also available to the non-root user
 ENV PLAYWRIGHT_BROWSERS_PATH=/usr/local/share/playwright-browsers
 
-
-RUN bash -c 'whoami'
+# -----------------------------
+# Copy Necessary Files
+# -----------------------------
+COPY ./docker-images/run_dash.sh /app/run_dash.sh
+COPY ./docker-images/run_fastapi.sh /app/run_fastapi.sh
+COPY ./pyproject.toml /app/pyproject.toml
 
 # -----------------------------
 # Environment Variables
 # -----------------------------
 ENV PATH="/opt/conda/envs/depictio/bin:${PATH}"
 ENV PYTHONPATH="${PYTHONPATH}:/mnt"
+ENV DISPLAY=:99
 
 # -----------------------------
-# Install Playwright
+# User Management
 # -----------------------------
-# RUN bash -c 'playwright install --with-deps chromium'
-
-# -----------------------------
-# Install depictio-cli
-# -----------------------------
-# WORKDIR /app/depictio-cli
-# RUN /opt/conda/envs/depictio/bin/pip install .  
-
-# -----------------------------
-# Install depictio-models
-# -----------------------------
-# COPY ./depictio-models /app/depictio-models
-# USER root
-# # RUN rm -rf /app/depictio-models/depictio_models.egg-info
-# RUN pwd
-# RUN ls
-# COPY ./depictio-models /app/depictio-models
-# RUN pip install -e /app/depictio-models --config-settings "editable_mode=compat"
-
-# COPY ./depictio-cli /app/depictio-cli
-# RUN pip install -e /app/depictio-cli --config-settings "editable_mode=compat"
-
-
-
 USER appuser  # Switch back if needed
-# RUN pip install -e /app/depictio-models --config-settings "editable_mode=compat"
 
 # -----------------------------
-# Final Commands
 # -----------------------------
-CMD ["/bin/bash"]
+# CMD ["/bin/bash"]
 
 # -----------------------------
-# Use xvfb-run to execute Playwright in a virtual display (if needed)
+# Optional VNC/Display Commands
 # -----------------------------
-# CMD ["xvfb-run", "-a", "--server-args=-screen 0 1920x1080x24", "python", "depictio/api/run.py"]
+CMD ["xvfb-run", "-a", "--server-args=-screen 0 1920x1080x24", "python", "depictio/api/run.py"]

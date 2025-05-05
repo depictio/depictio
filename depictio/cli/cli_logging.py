@@ -1,4 +1,5 @@
 import logging
+
 from colorlog import ColoredFormatter
 
 # Initialize logger without handlers
@@ -34,6 +35,7 @@ def setup_logging(verbose: bool = False, verbose_level: str = "INFO") -> logging
         logger.setLevel(logging.DEBUG)  # Set default level to INFO instead of ERROR
 
     return logger
+
 
 # Automatically set up logging when the module is imported
 logger = setup_logging()

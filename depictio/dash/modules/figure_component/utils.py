@@ -79,7 +79,9 @@ def build_figure_frame(index, children=None):
 def render_figure(dict_kwargs, visu_type, df, cutoff=100000, selected_point=None):
     if dict_kwargs and visu_type.lower() in plotly_vizu_dict and df is not None:
         if df.height > cutoff:
-            figure = plotly_vizu_dict[visu_type.lower()](df.sample(n=cutoff, seed=0).to_pandas(), **dict_kwargs)
+            figure = plotly_vizu_dict[visu_type.lower()](
+                df.sample(n=cutoff, seed=0).to_pandas(), **dict_kwargs
+            )
         else:
             figure = plotly_vizu_dict[visu_type.lower()](df.to_pandas(), **dict_kwargs)
     else:
@@ -93,9 +95,15 @@ def render_figure(dict_kwargs, visu_type, df, cutoff=100000, selected_point=None
         # Update marker colors
         figure.update_traces(
             marker=dict(
-                color=["red" if (x == selected_x and y == selected_y) else "blue" for x, y in zip(df[dict_kwargs["x"]], df[dict_kwargs["y"]])],
+                color=[
+                    "red" if (x == selected_x and y == selected_y) else "blue"
+                    for x, y in zip(df[dict_kwargs["x"]], df[dict_kwargs["y"]])
+                ],
                 # size=[15 if (x == selected_x and y == selected_y) else 10 for x, y in zip(df[dict_kwargs['x']], df[dict_kwargs['y']])],
-                opacity=[1.0 if (x == selected_x and y == selected_y) else 0.3 for x, y in zip(df[dict_kwargs["x"]], df[dict_kwargs["y"]])],
+                opacity=[
+                    1.0 if (x == selected_x and y == selected_y) else 0.3
+                    for x, y in zip(df[dict_kwargs["x"]], df[dict_kwargs["y"]])
+                ],
             )
         )
 
@@ -154,8 +162,6 @@ def build_figure(**kwargs):
     # wf_id, dc_id = return_mongoid(workflow_id=wf_id, data_collection_id=dc_id)
     if df.is_empty():
         df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
-
-
 
     # figure = render_figure(dict_kwargs, visu_type, df)
 
@@ -218,11 +224,16 @@ def build_figure(**kwargs):
         openDelay=500,
     )
 
-    
     row_badges = html.Div()
     if build_frame:
-        row_badges = dbc.Row(dmc.Group([partial_data_badge, filter_badge], grow=False, spacing="xl", style={"margin-left": "12px"}))
-
+        row_badges = dbc.Row(
+            dmc.Group(
+                [partial_data_badge, filter_badge],
+                grow=False,
+                spacing="xl",
+                style={"margin-left": "12px"},
+            )
+        )
 
     figure_div = html.Div(
         [
@@ -317,7 +328,9 @@ def get_param_info(plotly_vizu_list):
     param_info = {}
     for func in plotly_vizu_list:
         param_info[func.__name__] = extract_info_from_docstring(func.__doc__)
-        param_info[func.__name__] = process_json_from_docstring(param_info[func.__name__])
+        param_info[func.__name__] = process_json_from_docstring(
+            param_info[func.__name__]
+        )
     return param_info
 
 
@@ -330,10 +343,14 @@ def get_common_params(plotly_vizu_list):
     Get the common parameters between a list of Plotly visualizations
     """
     # Iterate over the list of visualizations and get the parameters, then get the common ones
-    common_params = set.intersection(*[set(inspect.signature(func).parameters.keys()) for func in plotly_vizu_list])
+    common_params = set.intersection(
+        *[set(inspect.signature(func).parameters.keys()) for func in plotly_vizu_list]
+    )
     # Sort the common parameters based on the order of the first visualization
     common_param_names = [p for p in list(common_params)]
-    common_param_names.sort(key=lambda x: list(inspect.signature(plotly_vizu_list[0]).parameters).index(x))
+    common_param_names.sort(
+        key=lambda x: list(inspect.signature(plotly_vizu_list[0]).parameters).index(x)
+    )
     return common_params, common_param_names
 
 
@@ -346,8 +363,14 @@ def get_specific_params(plotly_vizu_list, common_params):
     for vizu_func in plotly_vizu_list:
         func_params = inspect.signature(vizu_func).parameters
         param_names = list(func_params.keys())
-        common_params_tmp = common_params.intersection(func_params.keys()) if common_params else set(func_params.keys())
-        specific_params[vizu_func.__name__] = [p for p in param_names if p not in common_params_tmp]
+        common_params_tmp = (
+            common_params.intersection(func_params.keys())
+            if common_params
+            else set(func_params.keys())
+        )
+        specific_params[vizu_func.__name__] = [
+            p for p in param_names if p not in common_params_tmp
+        ]
     return specific_params
 
 
