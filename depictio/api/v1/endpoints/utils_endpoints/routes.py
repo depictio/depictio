@@ -1,8 +1,9 @@
-from beanie import PydanticObjectId
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 
 from depictio.api.v1.configs.config import settings
-from depictio.api.v1.endpoints.utils_endpoints.process_data_collections import process_initial_data_collections
+from depictio.api.v1.endpoints.utils_endpoints.process_data_collections import (
+    process_initial_data_collections,
+)
 from depictio.api.v1.db import (
     workflows_collection,
     data_collections_collection,
@@ -14,7 +15,7 @@ from depictio.api.v1.db import (
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.api.v1.endpoints.utils_endpoints.core_functions import create_bucket
 from depictio.api.v1.s3 import s3_client
-from depictio.api.v1.configs.custom_logging import format_pydantic, logger
+from depictio.api.v1.configs.custom_logging import logger
 from depictio.version import get_version
 
 # Define the router
@@ -98,25 +99,24 @@ async def status():
 
 @utils_endpoint_router.post("/process_initial_data_collections")
 async def process_initial_data_collections_endpoint(
-    background_tasks: BackgroundTasks,
-    current_user=Depends(get_current_user)
+    background_tasks: BackgroundTasks, current_user=Depends(get_current_user)
 ):
     """
     Process the initial data collections for the first project.
     This endpoint should be called after the API is fully started.
-    
+
     The processing is done in the background to avoid blocking the request.
     """
     if not current_user:
         raise HTTPException(status_code=401, detail="Current user not found.")
-    
+
     # Check if the user is an admin
     if not current_user.is_admin:
         raise HTTPException(status_code=401, detail="User is not an admin.")
-    
+
     # Add the task to the background tasks
     background_tasks.add_task(process_initial_data_collections)
-    
+
     return {
         "message": "Processing initial data collections in the background. Check the logs for progress."
     }

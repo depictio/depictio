@@ -77,24 +77,26 @@ async def export_agent_config(
     config_path = f"{config_dir}/{config_filename}"
     # Create the config directory if it doesn't exist
     os.makedirs(config_dir, exist_ok=True)
-    
+
     logger.debug(f"Creating config directory: {config_dir}")
     logger.debug(f"Wipe flag is set to: {wipe}")
 
     # Check if file exists and respect the wipe flag
     if os.path.exists(config_path) and not wipe:
-        logger.warning(f"Config file {config_path} already exists. Use wipe=True to overwrite.")
+        logger.warning(
+            f"Config file {config_path} already exists. Use wipe=True to overwrite."
+        )
     else:
         # Log appropriate message based on whether we're overwriting
         if os.path.exists(config_path):
             logger.warning(f"Config file {config_path} already exists. Overwriting.")
         else:
             logger.debug(f"Creating new config file: {config_path}")
-        
+
         # Write the config file
         with open(config_path, "w") as f:
             f.write(agent_config_yaml)
-            
+
         logger.debug(f"Agent config for {email} exported to {config_path}")
-    
+
     return config_path

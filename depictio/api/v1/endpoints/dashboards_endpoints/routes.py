@@ -1,25 +1,21 @@
-import asyncio
-from datetime import datetime
 import json
-import os, sys
+import os
+from datetime import datetime
 from typing import Dict
 from uuid import UUID
-from fastapi import Depends, HTTPException, APIRouter
 
+from fastapi import APIRouter, Depends, HTTPException
 
-from depictio.api.v1.configs.config import API_BASE_URL, DASH_BASE_URL
+from depictio.api.v1.configs.config import DASH_BASE_URL
+from depictio.api.v1.configs.custom_logging import logger
 from depictio.api.v1.db import dashboards_collection
 from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
     load_dashboards_from_db,
 )
-
-from depictio.api.v1.configs.custom_logging import logger
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
-
-from depictio.models.models.base import convert_objectid_to_str, PyObjectId
+from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.dashboards import DashboardData
-from depictio.models.models.users import Permission, TokenBeanie, User
-from depictio.models.utils import convert_model_to_dict
+from depictio.models.models.users import TokenBeanie, User
 
 dashboards_endpoint_router = APIRouter()
 
@@ -324,7 +320,7 @@ async def screenshot_dashboard(
 
             # Wait for the page content to load
             await page.wait_for_selector("div#page-content")
-            logger.info(f"Wait for selector: div#page-content")
+            logger.info("Wait for selector: div#page-content")
 
             # # Check if the iframe is present
             # iframe_element = await page.query_selector('iframe[src*="jbrowse"]')  # Adjust the selector to match the iframe's source or other attributes
@@ -348,7 +344,7 @@ async def screenshot_dashboard(
                     debugMenu.remove();
                 }
             }""")
-            logger.info(f"Removed debug menu")
+            logger.info("Removed debug menu")
 
             # Capture a screenshot of the content below the 'div#page-content'
             element = await page.query_selector("div#page-content")
@@ -357,8 +353,8 @@ async def screenshot_dashboard(
                 # await page.wait_for_timeout(3000)
                 # logger.info(f"Wait for timeout: 3000")
 
-                user = current_user.email.split("_")[0]
-                user_id = current_user.id
+                # user = current_user.email.split("_")[0]
+                # user_id = current_user.id
 
                 # find corresponding mongoid for the dashboard
 

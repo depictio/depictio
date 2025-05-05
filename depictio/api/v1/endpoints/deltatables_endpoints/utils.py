@@ -1,15 +1,17 @@
-
 import collections
-from bson import ObjectId
-import numpy as np
-from depictio.api.v1.configs.custom_logging import logger
-import polars as pl
 import os
-from depictio.api.v1.db import files_collection
-from depictio.api.v1.utils import numpy_to_python
+
+import numpy as np
+import polars as pl
 from botocore.exceptions import ClientError
+from bson import ObjectId
 from fastapi import HTTPException
+
+from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.db import files_collection
 from depictio.api.v1.s3 import s3_client
+from depictio.api.v1.utils import numpy_to_python
+
 
 def get_s3_folder_size(bucket_name, prefix):
     """
@@ -22,22 +24,30 @@ def get_s3_folder_size(bucket_name, prefix):
     total_size = 0
     try:
         # List all objects within the given prefix
-        logger.info(f"Listing objects in folder '{prefix}' within bucket '{bucket_name}'.")
-        paginator = s3_client.get_paginator('list_objects_v2')
+        logger.info(
+            f"Listing objects in folder '{prefix}' within bucket '{bucket_name}'."
+        )
+        paginator = s3_client.get_paginator("list_objects_v2")
         response_iterator = paginator.paginate(Bucket=bucket_name, Prefix=prefix)
 
         # Sum the sizes of all objects found in the folder
         objects_found = False
         for page in response_iterator:
-            if 'Contents' in page:
+            if "Contents" in page:
                 objects_found = True
-                for obj in page['Contents']:
-                    total_size += obj['Size']
-                    logger.debug(f"Adding size of object: {obj['Key']} - {obj['Size']} bytes.")
+                for obj in page["Contents"]:
+                    total_size += obj["Size"]
+                    logger.debug(
+                        f"Adding size of object: {obj['Key']} - {obj['Size']} bytes."
+                    )
 
         if not objects_found:
-            logger.warning(f"No objects found in the folder '{prefix}'. It may be empty or not exist.")
-            raise HTTPException(status_code=404, detail="Folder is empty or does not exist.")
+            logger.warning(
+                f"No objects found in the folder '{prefix}'. It may be empty or not exist."
+            )
+            raise HTTPException(
+                status_code=404, detail="Folder is empty or does not exist."
+            )
 
         logger.info(f"Total size of objects in folder '{prefix}': {total_size} bytes.")
         return total_size
@@ -46,8 +56,10 @@ def get_s3_folder_size(bucket_name, prefix):
         raise HTTPException(status_code=500, detail="Error listing folder contents.")
     except Exception as e:
         logger.error(f"Unexpected error calculating folder size: {str(e)}")
-        raise HTTPException(status_code=500, detail="Unexpected error occurred while calculating folder size.")
-
+        raise HTTPException(
+            status_code=500,
+            detail="Unexpected error occurred while calculating folder size.",
+        )
 
 
 def read_table_for_DC_table(file_info, data_collection_config_raw, deltaTable):
@@ -59,7 +71,7 @@ def read_table_for_DC_table(file_info, data_collection_config_raw, deltaTable):
     data_collection_config = data_collection_config_raw["dc_specific_properties"]
 
     if data_collection_config["format"].lower() in ["csv", "tsv", "txt"]:
-            # Read the file using polars
+        # Read the file using polars
 
         df = pl.read_csv(
             file_path,
@@ -67,10 +79,10 @@ def read_table_for_DC_table(file_info, data_collection_config_raw, deltaTable):
         )
     elif data_collection_config["format"].lower() in ["parquet"]:
         df = pl.read_parquet(file_path, **dict(data_collection_config["polars_kwargs"]))
-    
+
     elif data_collection_config["format"].lower() in ["feather"]:
         df = pl.read_feather(file_path, **dict(data_collection_config["polars_kwargs"]))
-    
+
     elif data_collection_config["format"].lower() in ["xls", "xlsx"]:
         df = pl.read_excel(file_path, **dict(data_collection_config["polars_kwargs"]))
 
@@ -78,13 +90,15 @@ def read_table_for_DC_table(file_info, data_collection_config_raw, deltaTable):
     raw_cols = df.columns
     no_run_id = False
     logger.debug(f"data_collection_config : {data_collection_config_raw}")
-    if "metatype" in data_collection_config_raw and data_collection_config_raw["metatype"] != None:
-        logger.debug(f'metatype : {data_collection_config_raw["metatype"]}')
+    if (
+        "metatype" in data_collection_config_raw
+        and data_collection_config_raw["metatype"] is not None
+    ):
+        logger.debug(f"metatype : {data_collection_config_raw['metatype']}")
 
-        if  data_collection_config_raw["metatype"].lower() == "metadata":
+        if data_collection_config_raw["metatype"].lower() == "metadata":
             logger.debug("Metadata file detected")
             no_run_id = True
-
 
     if not no_run_id:
         df = df.with_columns(pl.lit(file_info.run_id).alias("depictio_run_id"))
@@ -121,7 +135,9 @@ def upload_dir_to_s3(bucket_name, s3_folder, local_dir, s3_client):
             s3_client.upload_file(local_path, bucket_name, s3_path)
 
 
-def precompute_columns_specs(aggregated_df: pl.DataFrame, agg_functions: dict, dc_data: dict):
+def precompute_columns_specs(
+    aggregated_df: pl.DataFrame, agg_functions: dict, dc_data: dict
+):
     """
     Aggregate dataframes and return a list of dictionaries with column names, types and specs.
     """
@@ -135,7 +151,9 @@ def precompute_columns_specs(aggregated_df: pl.DataFrame, agg_functions: dict, d
     logger.info(dc_config["dc_specific_properties"])
     if "columns_description" in dc_config["dc_specific_properties"]:
         logger.info(dc_config["dc_specific_properties"]["columns_description"])
-        logger.info(list(dc_config["dc_specific_properties"]["columns_description"].keys()))
+        logger.info(
+            list(dc_config["dc_specific_properties"]["columns_description"].keys())
+        )
     for column in aggregated_df.columns:
         logger.info(f"Processing column: {column}")
         tmp_dict = collections.defaultdict(dict)
@@ -143,8 +161,12 @@ def precompute_columns_specs(aggregated_df: pl.DataFrame, agg_functions: dict, d
         column_description = None
 
         if "columns_description" in dc_config["dc_specific_properties"]:
-            if column in list(dc_config["dc_specific_properties"]["columns_description"].keys()):
-                column_description = dc_config["dc_specific_properties"]["columns_description"][column]
+            if column in list(
+                dc_config["dc_specific_properties"]["columns_description"].keys()
+            ):
+                column_description = dc_config["dc_specific_properties"][
+                    "columns_description"
+                ][column]
 
         tmp_dict["description"] = column_description
         # Identify the column data type
