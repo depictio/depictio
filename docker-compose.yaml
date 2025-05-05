@@ -21,6 +21,8 @@ services:
       - ./.env:/app/.env
       # - ../depictio-cli:/app/depictio-cli
       # - ../depictio-models:/app/depictio-models
+    env_file:
+      - .env
     environment:
         DEPICTIO_CONTAINER: "True"
         DEPICTIO_TEST_MODE: "${DEPICTIO_TEST_MODE:-false}"
@@ -48,6 +50,8 @@ services:
       # - ../depictio-cli:/app/depictio-cli
       # - ../depictio-cli/configs:/configs
       # - ../depictio-models:/app/depictio-models
+    env_file:
+      - .env
     environment:
         DEPICTIO_CONTAINER: "True"
         DEPICTIO_TEST_MODE: "${DEPICTIO_TEST_MODE:-false}"
