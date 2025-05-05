@@ -306,7 +306,7 @@ class TestMongoModel:
         desc = "<script>alert('XSS')</script><b>Bold text</b>"
         # Based on the logs, HTML content should cause a validation error
         with pytest.raises(ValueError, match="disallowed HTML content"):
-            model = MongoModel(description=desc)
+            MongoModel(description=desc)
 
     def test_description_sanitization_length_limit(self):
         """Test description length limit."""

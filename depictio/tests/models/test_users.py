@@ -9,7 +9,6 @@ from pydantic import ValidationError
 
 from depictio.models.models.s3 import S3DepictioCLIConfig
 from depictio.models.models.users import (
-    CLIConfig,
     Group,
     GroupBeanie,
     Permission,
@@ -1032,6 +1031,7 @@ class TestUserBaseCLIConfig:
 # Tests for S3DepictioCLIConfig
 # ---------------------------------
 
+
 @contextmanager
 def env_vars(env_dict):
     """Context manager for temporarily setting environment variables."""
@@ -1055,7 +1055,6 @@ def env_vars(env_dict):
                     del os.environ[key]
 
 
-
 class TestS3DepictioCLIConfig:
     def test_default_values(self):
         """Test with default values."""
@@ -1064,16 +1063,16 @@ class TestS3DepictioCLIConfig:
             "DEPICTIO_MINIO_ENDPOINT_URL": None,
             "DEPICTIO_MINIO_ROOT_USER": None,
             "DEPICTIO_MINIO_ROOT_PASSWORD": None,
-            "DEPICTIO_MINIO_BUCKET": None
+            "DEPICTIO_MINIO_BUCKET": None,
         }
-        
+
         with env_vars(env_to_clear):  # Empty environment
             config = S3DepictioCLIConfig()
             assert config.endpoint_url == "http://localhost:9000"
             assert config.root_user == "minio"
             assert config.root_password == "minio123"
             assert config.bucket == "depictio-bucket"
-    
+
     def test_custom_values(self):
         """Test with custom constructor values."""
         # Clear any existing environment variables that might affect the test
@@ -1081,28 +1080,28 @@ class TestS3DepictioCLIConfig:
             "DEPICTIO_MINIO_ENDPOINT_URL": None,
             "DEPICTIO_MINIO_ROOT_USER": None,
             "DEPICTIO_MINIO_ROOT_PASSWORD": None,
-            "DEPICTIO_MINIO_BUCKET": None
+            "DEPICTIO_MINIO_BUCKET": None,
         }
-        
+
         with env_vars(env_to_clear):  # Empty environment
             config = S3DepictioCLIConfig(
                 endpoint_url="https://custom-s3.example.com",
                 root_user="custom-user",
                 root_password="custom-password",
-                bucket="custom-bucket"
+                bucket="custom-bucket",
             )
             assert config.endpoint_url == "https://custom-s3.example.com"
             assert config.root_user == "custom-user"
             assert config.root_password == "custom-password"
             assert config.bucket == "custom-bucket"
-    
+
     def test_env_variables(self):
         """Test with environment variables."""
         env = {
             "DEPICTIO_MINIO_ENDPOINT_URL": "https://env-s3.example.com",
-            "DEPICTIO_MINIO_ROOT_USER": "env-user", 
+            "DEPICTIO_MINIO_ROOT_USER": "env-user",
             "DEPICTIO_MINIO_ROOT_PASSWORD": "env-password",
-            "DEPICTIO_MINIO_BUCKET": "env-bucket"
+            "DEPICTIO_MINIO_BUCKET": "env-bucket",
         }
         with env_vars(env):
             config = S3DepictioCLIConfig()
@@ -1110,7 +1109,7 @@ class TestS3DepictioCLIConfig:
             assert config.root_user == "env-user"
             assert config.root_password == "env-password"
             assert config.bucket == "env-bucket"
-            
+
     def test_env_and_constructor_mixed(self):
         """Test with both environment variables and constructor values."""
         env = {
@@ -1121,8 +1120,7 @@ class TestS3DepictioCLIConfig:
         with env_vars(env):
             # Constructor values should override environment variables
             config = S3DepictioCLIConfig(
-                endpoint_url="https://custom-s3.example.com",
-                bucket="custom-bucket"
+                endpoint_url="https://custom-s3.example.com", bucket="custom-bucket"
             )
             # endpoint_url from constructor should override env var
             assert config.endpoint_url == "https://custom-s3.example.com"
