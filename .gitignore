@@ -221,3 +221,12 @@ ldap_db/
 
 # Development Tools
 .aider*
+
+# CI/CD
+## GitHub Actions
+!iris.csv
+
+# Cypress
+depictio/tests/e2e-tests/node_modules/
+depictio/tests/e2e-tests/cypress/screenshots/
+depictio/tests/e2e-tests/package-lock.json
