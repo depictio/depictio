@@ -2,12 +2,10 @@ from datetime import datetime
 from typing import List, Optional, Union
 
 from beanie import Document, Link, PydanticObjectId
-from bson import ObjectId
 from pydantic import (
     BaseModel,
     EmailStr,
     Field,
-    HttpUrl,
     field_serializer,
     field_validator,
     model_validator,
@@ -320,3 +318,20 @@ class RequestEditPassword(BaseModel):
         if v.startswith("$2b$"):
             raise ValueError("Password is already hashed")
         return v
+
+class RequestUserRegistration(BaseModel):
+    email: EmailStr
+    password: str
+    is_admin: bool = False
+    # is_active: bool = True
+    # is_verified: bool = False
+    # last_login: Optional[str] = None
+    # registration_date: Optional[str] = None
+
+    # @field_validator("password")
+    # def hash_password(cls, v):
+    #     if v.startswith("$2b$"):
+    #         return v
+    #     else:
+    #         # Raise an error if the password is not hashed
+    #         raise ValueError("Password must be hashed")

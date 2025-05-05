@@ -17,6 +17,7 @@ class ProjectPermissionRequest(BaseModel):
     permissions: dict
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
+
 class Project(MongoModel):
     name: str
     data_management_platform_project_url: Optional[str] = None
