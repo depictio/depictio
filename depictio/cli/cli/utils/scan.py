@@ -19,11 +19,7 @@ from depictio.cli.cli.utils.api_calls import (
 )
 from depictio.cli.cli.utils.common import format_timestamp
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
-from depictio.cli.cli_logging import logger, setup_logging
-
-# Ensure the logger is properly configured
-logger = setup_logging(verbose=True, verbose_level="DEBUG")
-
+from depictio.cli.cli_logging import logger
 from depictio.models.models.data_collections import DataCollection, Regex
 from depictio.models.models.files import File, FileScanResult
 from depictio.models.models.users import CLIConfig, Permission, UserBase
@@ -839,10 +835,7 @@ def scan_files_for_data_collection(
 
     # Convert existing_files from a dict to a list of file dictionaries if needed.
     existing_files_reformated = (
-        {
-            existing_file.file_location: existing_file
-            for existing_file in existing_files
-        }
+        {existing_file.file_location: existing_file for existing_file in existing_files}
         if existing_files
         else {}
     )
