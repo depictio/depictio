@@ -62,9 +62,7 @@ async def _async_fetch_user_from_token(token: str) -> Optional[UserBeanie]:
 
 
 @validate_call(validate_return=True)
-async def _async_fetch_user_from_email(
-    email: EmailStr, return_tokens: bool = False
-) -> Optional[UserBeanie]:
+async def _async_fetch_user_from_email(email: EmailStr) -> Optional[UserBeanie]:
     """
     Fetch a user based on their email address.
 
@@ -129,7 +127,7 @@ async def _check_if_token_is_valid(token: TokenBase) -> bool:
 
 
 @validate_call(validate_return=True)
-async def _purge_expired_tokens() -> Dict[str, bool | int]:
+async def _purge_expired_tokens(user) -> Dict[str, bool | int]:
     """
     Purge expired tokens for a user.
     Args:
@@ -140,7 +138,7 @@ async def _purge_expired_tokens() -> Dict[str, bool | int]:
 
     # Delete the expired tokens - delete many
     outdated_tokens = await TokenBeanie.find(
-        {"expire_datetime": {"$lt": datetime.now()}}
+        {"user_id": user.id, "expire_datetime": {"$lt": datetime.now()}}
     ).to_list()
 
     for token in outdated_tokens:
@@ -205,11 +203,11 @@ async def _delete_token(token_id: PydanticObjectId) -> bool:
 async def _edit_password(user_id: PydanticObjectId, new_password: str) -> bool:
     """
     Core function to update a user's password in the database.
-    
+
     Args:
         user_id: The ID of the user
         new_password: The new password to set
-        
+
     Returns:
         bool: True if the password was updated successfully, False otherwise
     """
@@ -218,19 +216,19 @@ async def _edit_password(user_id: PydanticObjectId, new_password: str) -> bool:
     if not user:
         logger.error(f"User with ID {user_id} not found")
         return False
-    
+
     # Update the password
     user.password = new_password
-    
+
     # Save the user to the database
     try:
         await user.save()
         logger.info(f"Password updated successfully for user with email {user.email}")
-        
+
         # Fetch and log the updated user for verification
         updated_user = await UserBeanie.find_one({"email": user.email})
         logger.info(f"Show updated user from database: {updated_user}")
-        
+
         return True
     except Exception as e:
         logger.error(f"Failed to update password: {e}")
