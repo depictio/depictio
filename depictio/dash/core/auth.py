@@ -4,10 +4,7 @@ Authentication handling for the Depictio Dash application.
 
 from depictio.api.v1.configs.custom_logging import logger
 from depictio.dash.api_calls import check_token_validity
-from depictio.dash.layouts.app_layout import (
-    handle_authenticated_user,
-    handle_unauthenticated_user,
-)
+from depictio.dash.layouts.app_layout import handle_authenticated_user, handle_unauthenticated_user
 from depictio.models.models.users import TokenBase
 
 

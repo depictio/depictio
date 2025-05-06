@@ -1,5 +1,6 @@
+from typing import Any
+
 from pydantic import BaseModel
-from typing import List, Any, Dict
 
 
 class Block(BaseModel):
@@ -13,7 +14,7 @@ class Block(BaseModel):
     end: float
     reversed: bool
     offsetPx: int
-    parentRegion: Dict[str, Any]
+    parentRegion: dict[str, Any]
     regionNumber: int
     isLeftEndOfDisplayedRegion: bool
     isRightEndOfDisplayedRegion: bool
@@ -25,13 +26,13 @@ class Track(BaseModel):
         extra = "forbid"  # Reject unexpected fields
 
     viewId: str
-    tracks: List[str]
+    tracks: list[str]
 
 
 class LogData(BaseModel):
     class Config:
         extra = "forbid"  # Reject unexpected fields
 
-    assemblyNames: List[str]
-    coarseDynamicBlocks: List[List[Block]]
-    selectedTracks: List[Track]
+    assemblyNames: list[str]
+    coarseDynamicBlocks: list[list[Block]]
+    selectedTracks: list[Track]

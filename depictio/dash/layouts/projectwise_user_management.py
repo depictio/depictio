@@ -14,17 +14,16 @@ The module is organized into:
 
 import dash
 import dash_ag_grid as dag
-from dash import html, dcc, Input, Output, State, ctx
 import dash_mantine_components as dmc
 import httpx
 import requests
+from dash import Input, Output, State, ctx, dcc, html
 
-from depictio.dash.layouts.layouts_toolbox import create_add_with_input_modal
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.custom_logging import logger
+from depictio.dash.layouts.layouts_toolbox import create_add_with_input_modal
 from depictio.models.models.base import convert_objectid_to_str
 from depictio.models.models.users import Permission
-
 
 # Initialize empty structures - will be populated by callback
 GROUPS_DATA = {}
@@ -155,9 +154,7 @@ def _process_permission_users(users, token, permission_type):
                 "groups": group_name,
                 **permission_flags,
                 "is_admin": user_api.get("is_admin", False),
-                "groups_with_metadata": convert_objectid_to_str(
-                    user_api.get("groups", [])
-                ),
+                "groups_with_metadata": convert_objectid_to_str(user_api.get("groups", [])),
             }
         )
     return processed_users
@@ -323,9 +320,9 @@ def create_column_defs(is_admin=False, is_owner=False):
             "field": "actions",
             "headerName": "Actions",
             "cellRenderer": "Button" if (is_admin or is_owner) else None,
-            "cellRendererParams": {"className": "btn", "value": "🗑️"}
-            if (is_admin or is_owner)
-            else {},
+            "cellRendererParams": (
+                {"className": "btn", "value": "🗑️"} if (is_admin or is_owner) else {}
+            ),
         },
         {"field": "is_admin", "hide": True},
         {"field": "groups_with_metadata", "hide": True},
@@ -412,19 +409,17 @@ cannot_delete_owner_modal, cannot_delete_owner_modal_id = create_add_with_input_
     opened=False,
 )
 
-cannot_change_last_owner_modal, cannot_change_last_owner_modal_id = (
-    create_add_with_input_modal(
-        id_prefix="cannot-change-last-owner",
-        input_field=None,
-        title="Cannot Change Last Owner Permissions",
-        title_color="red",
-        message="You cannot change your permissions from Owner to Editor or Viewer as you are the last owner of the project. Please assign ownership to another user first.",
-        confirm_button_text="OK",
-        confirm_button_color="red",
-        cancel_button_text="Cancel",
-        icon="mdi:alert-circle",
-        opened=False,
-    )
+cannot_change_last_owner_modal, cannot_change_last_owner_modal_id = create_add_with_input_modal(
+    id_prefix="cannot-change-last-owner",
+    input_field=None,
+    title="Cannot Change Last Owner Permissions",
+    title_color="red",
+    message="You cannot change your permissions from Owner to Editor or Viewer as you are the last owner of the project. Please assign ownership to another user first.",
+    confirm_button_text="OK",
+    confirm_button_color="red",
+    cancel_button_text="Cancel",
+    icon="mdi:alert-circle",
+    opened=False,
 )
 
 make_project_public_modal, make_project_public_modal_id = create_add_with_input_modal(
@@ -444,9 +439,7 @@ store_make_project_public_modal = dcc.Store(
     id="store-make-project-public", data=None, storage_type="memory"
 )
 
-text_table_header = dmc.Text(
-    "Project Permissions", size="xl", weight="bold", color="black"
-)
+text_table_header = dmc.Text("Project Permissions", size="xl", weight="bold", color="black")
 
 # -----------------------------------------------------------------------------
 # Main Layout Definition
@@ -710,9 +703,7 @@ def register_projectwise_user_management_callbacks(app):
         Initialize UI components with data fetched from the API when the page loads.
         """
         global GROUPS_DATA, GROUP_OPTIONS
-        GROUPS_DATA, GROUP_OPTIONS = fetch_groups_data(
-            token=local_store_data["access_token"]
-        )
+        GROUPS_DATA, GROUP_OPTIONS = fetch_groups_data(token=local_store_data["access_token"])
         logger.info(f"Groups data: {GROUPS_DATA}")
         logger.info(f"Group options: {GROUP_OPTIONS}")
         project_id = pathname.split("/")[-1]
@@ -843,9 +834,7 @@ def register_projectwise_user_management_callbacks(app):
         Add an individual user or a group of users based on selections.
         """
         triggered_id = ctx.triggered_id
-        email = next(
-            (item["label"] for item in dropdown_data if item["value"] == user_id), None
-        )
+        email = next((item["label"] for item in dropdown_data if item["value"] == user_id), None)
         logger.info(
             f"Triggered ID: {triggered_id}, user_id: {user_id}, Email: {email}, Group ID: {group_id}, Permissions: {permissions}"
         )
@@ -911,9 +900,7 @@ def register_projectwise_user_management_callbacks(app):
             for user in GROUPS_DATA[group_id]["users"]:
                 retrieve_user_resp = httpx.get(
                     f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_id/{str(user['id'])}",
-                    headers={
-                        "Authorization": f"Bearer {local_store_data['access_token']}"
-                    },
+                    headers={"Authorization": f"Bearer {local_store_data['access_token']}"},
                 )
                 if retrieve_user_resp.status_code != 200:
                     logger.error(f"Error fetching user data: {retrieve_user_resp.text}")
@@ -944,9 +931,7 @@ def register_projectwise_user_management_callbacks(app):
                     )
 
         updated_rows = current_rows + new_users
-        update_permissions_api(
-            updated_rows, project_id, local_store_data["access_token"]
-        )
+        update_permissions_api(updated_rows, project_id, local_store_data["access_token"])
         return updated_rows, grid_options, "", "", []
 
     @app.callback(
@@ -1011,15 +996,10 @@ def register_projectwise_user_management_callbacks(app):
                     owner_count = sum(1 for row in current_rows if row["Owner"])
                     if owner_count <= 1:
                         return current_rows, current_rows, True
-                updated_rows = [
-                    row for row in current_rows if str(row["id"]) != str(row_id)
-                ]
+                updated_rows = [row for row in current_rows if str(row["id"]) != str(row_id)]
 
         # Handle checkbox changes for permissions.
-        if (
-            triggered_id == "permissions-manager-grid.cellValueChanged"
-            and value_changed_data
-        ):
+        if triggered_id == "permissions-manager-grid.cellValueChanged" and value_changed_data:
             cell_data = value_changed_data[0]
             column = cell_data.get("colId")
             row_id = cell_data.get("rowId")
@@ -1067,9 +1047,7 @@ def register_projectwise_user_management_callbacks(app):
         State("permissions-manager-grid", "rowData"),
         prevent_initial_call=True,
     )
-    def toggle_user_exists_modal(
-        add_clicks, confirm_clicks, cancel_clicks, email, current_rows
-    ):
+    def toggle_user_exists_modal(add_clicks, confirm_clicks, cancel_clicks, email, current_rows):
         """
         Toggle the modal warning if the user already exists.
         """
@@ -1093,9 +1071,7 @@ def register_projectwise_user_management_callbacks(app):
         State("permissions-manager-grid", "rowData"),
         prevent_initial_call=True,
     )
-    def toggle_cannot_delete_owner_modal(
-        clicked_data, confirm_clicks, cancel_clicks, current_rows
-    ):
+    def toggle_cannot_delete_owner_modal(clicked_data, confirm_clicks, cancel_clicks, current_rows):
         """
         Toggle the modal warning if trying to delete the last owner.
         """

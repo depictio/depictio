@@ -1,4 +1,5 @@
 import logging
+
 from colorlog import ColoredFormatter
 
 # Initialize logger without handlers

@@ -2,7 +2,7 @@
 
 import os
 from pathlib import Path
-from typing import Literal, Optional, Tuple, TypeVar, Union, cast
+from typing import Literal, TypeVar, cast
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
@@ -10,16 +10,13 @@ from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
 from pydantic import validate_call
 
-from depictio import BASE_PATH
 from depictio.api.v1.configs.custom_logging import logger
 
 # Type definitions
 Algorithm = Literal["RS256", "RS512", "ES256", "SHA256"]
 KeyPathStr = str
-PrivateKeyT = TypeVar(
-    "PrivateKeyT", bound=Union[RSAPrivateKey, ec.EllipticCurvePrivateKey]
-)
-PublicKeyT = TypeVar("PublicKeyT", bound=Union[RSAPublicKey, ec.EllipticCurvePublicKey])
+PrivateKeyT = TypeVar("PrivateKeyT", bound=RSAPrivateKey | ec.EllipticCurvePrivateKey)
+PublicKeyT = TypeVar("PublicKeyT", bound=RSAPublicKey | ec.EllipticCurvePublicKey)
 
 
 class KeyGenerationError(Exception):
@@ -27,23 +24,27 @@ class KeyGenerationError(Exception):
 
 
 @validate_call(validate_return=True)
-def _load_or_generate_api_internal_key() -> str:
+def _load_or_generate_api_internal_key(
+    keys_dir: Path = Path("./depictio/keys"),
+    algorithm: Algorithm = "RS256",
+) -> str:
     """Check if the API internal key is set in the environment.
 
     Returns:
         API internal key if set, otherwise generates a new one
     """
-    key_path = os.path.join(
-        BASE_PATH,
-        "keys",
-        "internal_api_key.pem",
-    )
+    logger.info("Checking for API internal key in environment variables.")
+    key_path = os.path.join(keys_dir, "api_internal_key.pem")
+    logger.info(f"Key path: {key_path}")
+    logger.info(f"Loading or generating API internal key with algorithm: {algorithm}")
+
     # Create the directory if it doesn't exist
+    logger.debug(f"Creating directory if it doesn't exist: {os.path.dirname(key_path)}")
     os.makedirs(os.path.dirname(key_path), exist_ok=True)
 
     logger.debug(f"Key path: {key_path}")
     if os.path.exists(key_path):
-        with open(key_path, "r") as f:
+        with open(key_path) as f:
             key = f.read().strip()
             logger.debug(f"Loaded API internal key: {key}")
             return key
@@ -81,7 +82,7 @@ def _generate_api_internal_key() -> str:
 
 
 @validate_call()
-def _ensure_directory_exists(path: Union[str, Path]) -> None:
+def _ensure_directory_exists(path: str | Path) -> None:
     """Ensure the directory for a file exists.
 
     Args:
@@ -96,10 +97,10 @@ def _ensure_directory_exists(path: Union[str, Path]) -> None:
 
 @validate_call(validate_return=True)
 def _resolve_key_paths(
-    private_key_path: Optional[str],
-    public_key_path: Optional[str],
-    keys_dir: Optional[Path],
-) -> Tuple[str, str]:
+    private_key_path: str | None,
+    public_key_path: str | None,
+    keys_dir: Path | None,
+) -> tuple[str, str]:
     """Resolve key paths based on input parameters.
 
     Args:
@@ -120,9 +121,7 @@ def _resolve_key_paths(
         pub_path = public_key_path or str(keys_dir / "public_key.pem")
     else:
         if not private_key_path or not public_key_path:
-            raise ValueError(
-                "Both key paths must be specified if keys_dir is not provided"
-            )
+            raise ValueError("Both key paths must be specified if keys_dir is not provided")
         priv_path = private_key_path
         pub_path = public_key_path
 
@@ -186,12 +185,12 @@ def _save_public_key(public_key: PublicKeyT, path: str) -> None:
 
 
 def generate_keys(
-    private_key_path: Optional[str] = None,
-    public_key_path: Optional[str] = None,
-    keys_dir: Optional[Path] = None,
-    algorithm: Optional[Algorithm] = None,
+    private_key_path: str | None = None,
+    public_key_path: str | None = None,
+    keys_dir: Path | None = None,
+    algorithm: Algorithm | None = None,
     wipe: bool = False,
-) -> Tuple[str, str]:
+) -> tuple[str, str]:
     """Generate a new key pair with the specified algorithm.
 
     Args:
@@ -267,11 +266,11 @@ def generate_keys(
 
 @validate_call(validate_return=True, config={"arbitrary_types_allowed": True})
 def check_and_generate_keys(
-    private_key_path: Optional[str] = None,
-    public_key_path: Optional[str] = None,
-    keys_dir: Optional[Union[str, Path]] = None,
-    algorithm: Optional[Algorithm] = None,
-) -> Tuple[str, str]:
+    private_key_path: str | None = None,
+    public_key_path: str | None = None,
+    keys_dir: str | Path | None = None,
+    algorithm: Algorithm | None = None,
+) -> tuple[str, str]:
     """Check if key files exist, generate if they don't.
 
     Args:
@@ -304,7 +303,7 @@ def check_and_generate_keys(
 
 
 @validate_call(validate_return=True, config={"arbitrary_types_allowed": True})
-def load_private_key(private_key_path: str) -> RSAPrivateKey:
+def load_private_key(private_key_path: Path) -> RSAPrivateKey:
     """Load a private key from a file.
 
     Args:
@@ -332,7 +331,7 @@ def load_private_key(private_key_path: str) -> RSAPrivateKey:
 
 
 @validate_call(validate_return=True, config={"arbitrary_types_allowed": True})
-def load_public_key(public_key_path: str) -> RSAPublicKey:
+def load_public_key(public_key_path: Path) -> RSAPublicKey:
     """Load a public key from a file.
 
     Args:
@@ -361,10 +360,10 @@ def load_public_key(public_key_path: str) -> RSAPublicKey:
 def import_keys(
     private_key_content: str,
     public_key_content: str,
-    private_key_path: Optional[str] = None,
-    public_key_path: Optional[str] = None,
-    keys_dir: Optional[Path] = None,
-) -> Tuple[str, str]:
+    private_key_path: str | None = None,
+    public_key_path: str | None = None,
+    keys_dir: Path | None = None,
+) -> tuple[str, str]:
     """Import keys from provided PEM content.
 
     Args:

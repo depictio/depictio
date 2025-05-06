@@ -1,11 +1,12 @@
-from dash import dcc, html
+import inspect
+import re
+
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
-from dash_iconify import DashIconify
-import inspect
 import plotly.express as px
-import re
 import polars as pl
+from dash import dcc, html
+from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.custom_logging import logger
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
@@ -328,9 +329,7 @@ def get_param_info(plotly_vizu_list):
     param_info = {}
     for func in plotly_vizu_list:
         param_info[func.__name__] = extract_info_from_docstring(func.__doc__)
-        param_info[func.__name__] = process_json_from_docstring(
-            param_info[func.__name__]
-        )
+        param_info[func.__name__] = process_json_from_docstring(param_info[func.__name__])
     return param_info
 
 
@@ -368,9 +367,7 @@ def get_specific_params(plotly_vizu_list, common_params):
             if common_params
             else set(func_params.keys())
         )
-        specific_params[vizu_func.__name__] = [
-            p for p in param_names if p not in common_params_tmp
-        ]
+        specific_params[vizu_func.__name__] = [p for p in param_names if p not in common_params_tmp]
     return specific_params
 
 

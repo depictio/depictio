@@ -1,6 +1,5 @@
 import json
 import sys
-from typing import Dict, List, Union
 
 from pydantic import validate_call
 from rich import print, print_json
@@ -51,7 +50,7 @@ def rich_print_section_separator(title: str):
 
 @validate_call
 # json can be a dict or a list of dicts
-def rich_print_json(statement: str, json_obj: Union[Dict, List[Dict]]):
+def rich_print_json(statement: str, json_obj: dict | list[dict]):
     """
     Pretty print JSON object.
     """

@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 import jwt
 from beanie import PydanticObjectId
@@ -14,12 +14,10 @@ from depictio.models.models.users import TokenBeanie, UserBeanie
 
 
 # Assuming you have this function somewhere in your codebase
-async def create_access_token(token_data: Dict) -> Tuple[str, datetime]:
+async def create_access_token(token_data: dict) -> tuple[str, datetime]:
     """Create a JWT access token."""
     # This is a placeholder - replace with your actual token creation logic
-    expires_delta = timedelta(
-        days=30 if token_data["token_lifetime"] == "long-lived" else 1
-    )
+    expires_delta = timedelta(days=30 if token_data["token_lifetime"] == "long-lived" else 1)
     expire = datetime.now() + expires_delta
 
     to_encode = token_data.copy()
@@ -29,7 +27,7 @@ async def create_access_token(token_data: Dict) -> Tuple[str, datetime]:
     return encoded_jwt, expire
 
 
-async def add_token(token_data: Dict) -> TokenBeanie:
+async def add_token(token_data: dict) -> TokenBeanie:
     """
     Add a token for a user using Beanie.
 
@@ -74,7 +72,7 @@ async def add_token(token_data: Dict) -> TokenBeanie:
     return token
 
 
-async def create_default_token(user: UserBeanie) -> Optional[Dict[str, Any]]:
+async def create_default_token(user: UserBeanie) -> dict[str, Any] | None:
     """
     Create a default token for a user if it doesn't exist.
 
@@ -85,9 +83,7 @@ async def create_default_token(user: UserBeanie) -> Optional[Dict[str, Any]]:
         TokenBeanie object if created, None if token already exists
     """
     # Check if default token exists for this user
-    existing_token = await TokenBeanie.find_one(
-        {"user_id": user.id, "name": "default_token"}
-    )
+    existing_token = await TokenBeanie.find_one({"user_id": user.id, "name": "default_token"})
 
     if existing_token:
         logger.warning(f"Default token for {user.email} already exists")

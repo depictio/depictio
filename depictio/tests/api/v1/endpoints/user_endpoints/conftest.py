@@ -1,5 +1,4 @@
 import functools
-from typing import List, Optional, Type
 
 import bcrypt
 import pytest
@@ -26,7 +25,7 @@ def generate_hashed_password():
     return _generate_hashed_password
 
 
-def beanie_setup(models: Optional[List[Type[Document]]] = None):
+def beanie_setup(models: list[type[Document]] | None = None):
     """
     Decorator to initialize Beanie and AsyncMongoMockClient before running a test.
     This decorator allows specifying which models to initialize.

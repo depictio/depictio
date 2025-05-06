@@ -1,13 +1,13 @@
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, field_validator
 
 
 class DCTableConfig(BaseModel):
     format: str
-    polars_kwargs: Dict[str, Any] = {}
-    keep_columns: Optional[List[str]] = []
-    columns_description: Optional[Dict[str, str]] = {}
+    polars_kwargs: dict[str, Any] = {}
+    keep_columns: list[str] | None = []
+    columns_description: dict[str, str] | None = {}
     # TODO: validate than the columns are in the dataframe
 
     class Config:

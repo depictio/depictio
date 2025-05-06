@@ -35,6 +35,6 @@ dependencies:
   # - python-multipart
   - pyyaml
   # - uvicorn==0.34.0
-  - pip:  
+  - pip:
     - dash-draggable==0.1.2
     - dash-ag-grid==31.3.0

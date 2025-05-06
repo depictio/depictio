@@ -40,13 +40,16 @@ class TestAsyncFetchUserFromToken:
 
         # IMPORTANT: Make sure to patch the exact path where the function is imported
         # Not where it's defined, but where it's imported in the module being tested
-        with patch(
-            "depictio.api.v1.endpoints.user_endpoints.core_functions.TokenBeanie.find_one",
-            new_callable=AsyncMock,
-        ) as mock_token_find, patch(
-            "depictio.api.v1.endpoints.user_endpoints.core_functions.UserBeanie.get",
-            new_callable=AsyncMock,
-        ) as mock_user_get:
+        with (
+            patch(
+                "depictio.api.v1.endpoints.user_endpoints.core_functions.TokenBeanie.find_one",
+                new_callable=AsyncMock,
+            ) as mock_token_find,
+            patch(
+                "depictio.api.v1.endpoints.user_endpoints.core_functions.UserBeanie.get",
+                new_callable=AsyncMock,
+            ) as mock_user_get,
+        ):
             # Mock token and user objects
             mock_token = MagicMock()
             mock_token.user_id = test_user_id
@@ -136,13 +139,16 @@ class TestAsyncFetchUserFromToken:
         test_user_id = ObjectId("60d5ec9af682dcd2651257a1")
 
         # Arrange with mocks
-        with patch(
-            "depictio.api.v1.endpoints.user_endpoints.core_functions.TokenBeanie.find_one",
-            new_callable=AsyncMock,
-        ) as mock_token_find, patch(
-            "depictio.api.v1.endpoints.user_endpoints.core_functions.UserBeanie.get",
-            new_callable=AsyncMock,
-        ) as mock_user_get:
+        with (
+            patch(
+                "depictio.api.v1.endpoints.user_endpoints.core_functions.TokenBeanie.find_one",
+                new_callable=AsyncMock,
+            ) as mock_token_find,
+            patch(
+                "depictio.api.v1.endpoints.user_endpoints.core_functions.UserBeanie.get",
+                new_callable=AsyncMock,
+            ) as mock_user_get,
+        ):
             # Create mock token
             mock_token = MagicMock()
             mock_token.user_id = test_user_id
@@ -173,12 +179,15 @@ class TestAsyncFetchUserFromEmail:
         test_email = "test@example.com"
 
         # Set up mocks
-        with patch(
-            "depictio.api.v1.endpoints.user_endpoints.core_functions.UserBeanie.find_one",
-            new_callable=AsyncMock,
-        ) as mock_user_find_one, patch(
-            "depictio.api.v1.endpoints.user_endpoints.core_functions.format_pydantic"
-        ) as mock_format_pydantic:
+        with (
+            patch(
+                "depictio.api.v1.endpoints.user_endpoints.core_functions.UserBeanie.find_one",
+                new_callable=AsyncMock,
+            ) as mock_user_find_one,
+            patch(
+                "depictio.api.v1.endpoints.user_endpoints.core_functions.format_pydantic"
+            ) as mock_format_pydantic,
+        ):
             # Configure mocks
             mock_user = MagicMock(spec=UserBeanie)
             mock_user_find_one.return_value = mock_user
@@ -222,9 +231,7 @@ class TestAsyncFetchUserFromEmail:
         # Create and save a real user in the mock database
         # hash a password
         password = "hashed_password"
-        hash_password = bcrypt.hashpw(
-            password.encode("utf-8"), bcrypt.gensalt()
-        ).decode("utf-8")
+        hash_password = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
         # Create a real user object
         real_user = UserBeanie(
             email=test_email,
@@ -263,9 +270,7 @@ class TestAsyncFetchUserFromId:
         # Create and save a real user in the mock database
         # hash a password
         password = "hashed_password"
-        hash_password = bcrypt.hashpw(
-            password.encode("utf-8"), bcrypt.gensalt()
-        ).decode("utf-8")
+        hash_password = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
         # Create a real user object
         real_user = UserBeanie(
@@ -311,9 +316,7 @@ class TestPurgeExpiredTokensFromUser:
         """Test successful purging of expired tokens."""
         # Initialize Beanie directly in the test
         client = AsyncMongoMockClient()
-        await init_beanie(
-            database=client.test_db, document_models=[TokenBeanie, UserBeanie]
-        )
+        await init_beanie(database=client.test_db, document_models=[TokenBeanie, UserBeanie])
 
         # Set up test data
         user_id = PydanticObjectId()
@@ -361,9 +364,7 @@ class TestPurgeExpiredTokensFromUser:
         """Test when no expired tokens are found to delete."""
         # Initialize Beanie directly in the test
         client = AsyncMongoMockClient()
-        await init_beanie(
-            database=client.test_db, document_models=[TokenBeanie, UserBeanie]
-        )
+        await init_beanie(database=client.test_db, document_models=[TokenBeanie, UserBeanie])
 
         # Set up test data
         user_id = PydanticObjectId()
@@ -396,9 +397,7 @@ class TestPurgeExpiredTokensFromUser:
         """Test when user has no tokens at all."""
         # Initialize Beanie directly in the test
         client = AsyncMongoMockClient()
-        await init_beanie(
-            database=client.test_db, document_models=[TokenBeanie, UserBeanie]
-        )
+        await init_beanie(database=client.test_db, document_models=[TokenBeanie, UserBeanie])
 
         # Act
         result = await _purge_expired_tokens(
@@ -461,9 +460,7 @@ class TestCheckIfTokenIsValid:
         await token.save()
 
         # Patch the logger to avoid actual logging during tests
-        with patch(
-            "depictio.api.v1.endpoints.user_endpoints.core_functions.logger"
-        ) as mock_logger:
+        with patch("depictio.api.v1.endpoints.user_endpoints.core_functions.logger") as mock_logger:
             # Act
             result = await _check_if_token_is_valid(token)
 
@@ -492,9 +489,7 @@ class TestCheckIfTokenIsValid:
         )
 
         # Patch the logger to avoid actual logging during tests
-        with patch(
-            "depictio.api.v1.endpoints.user_endpoints.core_functions.logger"
-        ) as mock_logger:
+        with patch("depictio.api.v1.endpoints.user_endpoints.core_functions.logger") as mock_logger:
             # Act
             result = await _check_if_token_is_valid(token)
 
@@ -533,9 +528,7 @@ class TestCheckIfTokenIsValid:
         )
 
         # Patch the logger to avoid actual logging during tests
-        with patch(
-            "depictio.api.v1.endpoints.user_endpoints.core_functions.logger"
-        ) as mock_logger:
+        with patch("depictio.api.v1.endpoints.user_endpoints.core_functions.logger") as mock_logger:
             # Act
             result = await _check_if_token_is_valid(token_to_check)
 

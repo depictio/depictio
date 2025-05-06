@@ -103,9 +103,7 @@ class TestConfigCommands:
     class TestShowCliConfig:
         """Tests for show_cli_config command"""
 
-        def test_success(
-            self, command, cli_config_path, mock_load_config, base_patches
-        ):
+        def test_success(self, command, cli_config_path, mock_load_config, base_patches):
             """Test successful execution"""
             result = command.run("show-cli-config", cli_config=cli_config_path)
             assert result.exit_code == 0
@@ -123,9 +121,7 @@ class TestConfigCommands:
     class TestCheckS3Storage:
         """Tests for check_s3_storage command"""
 
-        def test_success(
-            self, command, cli_config_path, mock_load_config, base_patches
-        ):
+        def test_success(self, command, cli_config_path, mock_load_config, base_patches):
             """Test successful execution"""
             with patch("depictio.cli.cli.commands.config.S3_storage_checks"):
                 result = command.run("check-s3-storage", cli_config=cli_config_path)
@@ -143,9 +139,7 @@ class TestConfigCommands:
     class TestShowDepictioProjectMetadataOnServer:
         """Tests for show_depictio_project_metadata_on_server command"""
 
-        def test_success(
-            self, command, cli_config_path, mock_load_config, base_patches
-        ):
+        def test_success(self, command, cli_config_path, mock_load_config, base_patches):
             """Test successful execution"""
             # Create a mock for the project metadata
             mock_project_metadata = MagicMock()

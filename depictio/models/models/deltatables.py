@@ -1,15 +1,16 @@
 from datetime import datetime
-from typing import Dict, List, Optional, Union
+
 from pydantic import BaseModel, field_validator
-from depictio.models.models.users import UserBase
+
 from depictio.models.models.base import MongoModel, PyObjectId
+from depictio.models.models.users import UserBase
 
 
 class DeltaTableColumn(BaseModel):
     name: str
     type: str
-    description: Optional[str] = None  # Optional description
-    specs: Optional[Dict] = None
+    description: str | None = None  # Optional description
+    specs: dict | None = None
 
     class Config:
         extra = "forbid"  # Reject unexpected fields
@@ -38,7 +39,7 @@ class Aggregation(MongoModel):
     aggregation_by: UserBase
     aggregation_version: int = 1
     aggregation_hash: str
-    aggregation_columns_specs: List[DeltaTableColumn] = []
+    aggregation_columns_specs: list[DeltaTableColumn] = []
 
     @field_validator("aggregation_version")
     def validate_version(cls, value):
@@ -51,17 +52,17 @@ class FilterCondition(BaseModel):
     class Config:
         extra = "forbid"  # Reject unexpected fields
 
-    above: Optional[Union[int, float, str]] = None
-    equal: Optional[Union[int, float, str]] = None
-    under: Optional[Union[int, float, str]] = None
+    above: int | float | str | None = None
+    equal: int | float | str | None = None
+    under: int | float | str | None = None
 
 
 class DeltaTableQuery(MongoModel):
-    columns: List[str]
-    filters: Dict[str, FilterCondition]
-    sort: Optional[List[str]] = []
-    limit: Optional[int] = None
-    offset: Optional[int] = None
+    columns: list[str]
+    filters: dict[str, FilterCondition]
+    sort: list[str] | None = []
+    limit: int | None = None
+    offset: int | None = None
 
 
 class Test(BaseModel):
@@ -71,7 +72,7 @@ class Test(BaseModel):
 class DeltaTableAggregated(MongoModel):
     data_collection_id: PyObjectId
     delta_table_location: str
-    aggregation: List[Aggregation] = []
+    aggregation: list[Aggregation] = []
 
 
 class UpsertDeltaTableAggregated(BaseModel):

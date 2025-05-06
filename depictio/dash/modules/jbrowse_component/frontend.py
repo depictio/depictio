@@ -1,24 +1,16 @@
 # Import necessary libraries
-from dash import html, dcc, Input, Output, MATCH, State
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
-from dash_iconify import DashIconify
 import httpx
+from dash import MATCH, Input, Output, State, dcc, html
+from dash_iconify import DashIconify
 
-
-from depictio.dash.modules.jbrowse_component.utils import (
-    build_jbrowse,
-    build_jbrowse_frame,
-)
-from depictio.dash.utils import list_workflows, return_mongoid
-
-# Depictio imports
-
-from depictio.dash.utils import (
-    UNSELECTED_STYLE,
-)
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.custom_logging import logger
+from depictio.dash.modules.jbrowse_component.utils import build_jbrowse, build_jbrowse_frame
+from depictio.dash.utils import UNSELECTED_STYLE, list_workflows, return_mongoid
+
+# Depictio imports
 
 
 def register_callbacks_jbrowse_component(app):
@@ -135,9 +127,7 @@ def create_stepper_jbrowse_button(n, disabled=False):
             style=UNSELECTED_STYLE,
             size="xl",
             color="yellow",
-            leftIcon=DashIconify(
-                icon="material-symbols:table-rows-narrow-rounded", color="white"
-            ),
+            leftIcon=DashIconify(icon="material-symbols:table-rows-narrow-rounded", color="white"),
             # disabled=True,
         )
     )

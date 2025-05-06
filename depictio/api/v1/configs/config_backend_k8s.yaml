@@ -1,7 +1,7 @@
 fastapi:
   port: 8058
   service_name: "depictio-backend.depictio"
-  logging_level: "INFO"  
+  logging_level: "INFO"
 
 dash:
   port: 5080

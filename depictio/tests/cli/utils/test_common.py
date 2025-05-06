@@ -135,12 +135,12 @@ class TestCommon:
             }
 
             # Mock the get_config and validate_depictio_cli_config functions
-            with patch(
-                "depictio.cli.cli.utils.common.get_config"
-            ) as mock_get_config, patch(
-                "depictio.cli.cli.utils.common.validate_depictio_cli_config"
-            ) as mock_validate, patch(
-                "depictio.cli.cli.utils.common.rich_print_checked_statement"
+            with (
+                patch("depictio.cli.cli.utils.common.get_config") as mock_get_config,
+                patch(
+                    "depictio.cli.cli.utils.common.validate_depictio_cli_config"
+                ) as mock_validate,
+                patch("depictio.cli.cli.utils.common.rich_print_checked_statement"),
             ):
                 mock_get_config.return_value = mock_config
                 mock_validate.return_value = CLIConfig(**mock_config)
@@ -157,11 +157,11 @@ class TestCommon:
         def test_file_not_found(self):
             """Test load_depictio_config when file is not found"""
             # Mock the get_config function to raise FileNotFoundError
-            with patch(
-                "depictio.cli.cli.utils.common.get_config"
-            ) as mock_get_config, patch(
-                "depictio.cli.cli.utils.common.rich_print_checked_statement"
-            ), patch("depictio.cli.cli.utils.common.logger"):
+            with (
+                patch("depictio.cli.cli.utils.common.get_config") as mock_get_config,
+                patch("depictio.cli.cli.utils.common.rich_print_checked_statement"),
+                patch("depictio.cli.cli.utils.common.logger"),
+            ):
                 mock_get_config.side_effect = FileNotFoundError()
 
                 with pytest.raises(Exit):

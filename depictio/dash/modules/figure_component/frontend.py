@@ -69,9 +69,7 @@ def register_callbacks_figure_component(app):
 
         TOKEN = local_data["access_token"]
         # Retrieve the columns from the selected data collection
-        columns_json = get_columns_from_data_collection(
-            workflow, data_collection, TOKEN
-        )
+        columns_json = get_columns_from_data_collection(workflow, data_collection, TOKEN)
         columns = list(columns_json.keys())
 
         dashboard_id = pathname.split("/")[-1]
@@ -83,9 +81,7 @@ def register_callbacks_figure_component(app):
 
         if not visu_type:
             if not component_data:
-                visu_type = [e.capitalize() for e in sorted(plotly_vizu_dict.keys())][
-                    -1
-                ]
+                visu_type = [e.capitalize() for e in sorted(plotly_vizu_dict.keys())][-1]
             else:
                 visu_type = component_data["visu_type"]
         logger.info(f"visu_type: {visu_type}")
@@ -323,9 +319,7 @@ def register_callbacks_figure_component(app):
             return html.Div()
 
     def generate_dropdown_ids(value):
-        specific_param_ids = [
-            f"{value}-{param_name}" for param_name in specific_params[value]
-        ]
+        specific_param_ids = [f"{value}-{param_name}" for param_name in specific_params[value]]
         secondary_param_ids = [f"{value}-{e}" for e in secondary_common_params]
 
         return secondary_param_ids + specific_param_ids
@@ -366,9 +360,7 @@ def register_callbacks_figure_component(app):
             return True
 
     @app.callback(
-        Output(
-            {"type": "btn-done-edit", "index": MATCH}, "disabled", allow_duplicate=True
-        ),
+        Output({"type": "btn-done-edit", "index": MATCH}, "disabled", allow_duplicate=True),
         [
             Input({"type": "dict_kwargs", "index": MATCH}, "data"),
         ],
@@ -419,9 +411,9 @@ def register_callbacks_figure_component(app):
 
         if children:
             # accordion_secondary_common_params = children[0]["props"]["children"]["props"]["children"]
-            accordion_primary_common_params = children[0]["props"]["children"]["props"][
-                "children"
-            ][0]["props"]["children"]
+            accordion_primary_common_params = children[0]["props"]["children"]["props"]["children"][
+                0
+            ]["props"]["children"]
 
             # accordion_secondary_common_params = children[1]["props"]["children"]
             if accordion_primary_common_params:
@@ -430,37 +422,30 @@ def register_callbacks_figure_component(app):
                     for param in accordion_primary_common_params
                 ]
                 accordion_primary_common_params_args = {
-                    elem["props"]["id"]["type"].replace("tmp-", ""): elem["props"][
-                        "value"
-                    ]
+                    elem["props"]["id"]["type"].replace("tmp-", ""): elem["props"]["value"]
                     for elem in accordion_primary_common_params
                 }
-            accordion_secondary_common_params = children[1]["props"]["children"][
-                "props"
-            ]["children"][0]["props"]["children"]
+            accordion_secondary_common_params = children[1]["props"]["children"]["props"][
+                "children"
+            ][0]["props"]["children"]
             if accordion_secondary_common_params:
                 accordion_secondary_common_params = [
                     param["props"]["children"][0]["props"]["children"]
                     for param in accordion_secondary_common_params
                 ]
                 accordion_secondary_common_params_args = {
-                    elem["props"]["id"]["type"].replace("tmp-", ""): elem["props"][
-                        "value"
-                    ]
+                    elem["props"]["id"]["type"].replace("tmp-", ""): elem["props"]["value"]
                     for elem in accordion_secondary_common_params
                 }
-            specific_params = children[2]["props"]["children"]["props"]["children"][0][
-                "props"
-            ]["children"]
+            specific_params = children[2]["props"]["children"]["props"]["children"][0]["props"][
+                "children"
+            ]
             if specific_params:
                 specific_params = [
-                    param["props"]["children"][0]["props"]["children"]
-                    for param in specific_params
+                    param["props"]["children"][0]["props"]["children"] for param in specific_params
                 ]
                 specific_params_args = {
-                    elem["props"]["id"]["type"].replace("tmp-", ""): elem["props"][
-                        "value"
-                    ]
+                    elem["props"]["id"]["type"].replace("tmp-", ""): elem["props"]["value"]
                     for elem in specific_params
                 }
 
@@ -528,15 +513,10 @@ def register_callbacks_figure_component(app):
         )
         logger.info(f"component_data: {component_data}")
 
-        columns_json = get_columns_from_data_collection(
-            workflow_id, data_collection_id, TOKEN
-        )
+        columns_json = get_columns_from_data_collection(workflow_id, data_collection_id, TOKEN)
 
         columns_specs_reformatted = collections.defaultdict(list)
-        {
-            columns_specs_reformatted[v["type"]].append(k)
-            for k, v in columns_json.items()
-        }
+        {columns_specs_reformatted[v["type"]].append(k) for k, v in columns_json.items()}
 
         x_col, color_col, y_col = None, None, None
 
@@ -626,9 +606,11 @@ def design_figure(id, component_data=None):
                     persistence_type="memory",
                     # FIXME: the default value is not the first element of the list - set to scatter plot (last element)
                     # value=[e.capitalize() for e in sorted(plotly_vizu_dict.keys())][-1],
-                    value=component_data["visu_type"]
-                    if component_data
-                    else [e.capitalize() for e in sorted(plotly_vizu_dict.keys())][-1],
+                    value=(
+                        component_data["visu_type"]
+                        if component_data
+                        else [e.capitalize() for e in sorted(plotly_vizu_dict.keys())][-1]
+                    ),
                 ),
             ],
             style={"height": "5%"},
@@ -669,9 +651,7 @@ def design_figure(id, component_data=None):
                                         ),
                                         dbc.Col(
                                             dmc.ActionIcon(
-                                                DashIconify(
-                                                    icon="mdi:refresh", width=30
-                                                ),
+                                                DashIconify(icon="mdi:refresh", width=30),
                                                 id={
                                                     "type": "refresh-button",
                                                     "index": id["index"],

@@ -1,11 +1,14 @@
-import pymongo
 import os
-import sys
 import socket
-from depictio.api.v1.configs.config import settings, MONGODB_URL
+import sys
+
+import pymongo
+
+from depictio.api.v1.configs.config import MONGODB_URL, settings
 
 # from depictio.api.v1.db_init import initialize_db
 from depictio.api.v1.configs.custom_logging import logger
+
 # from depictio.api.v1.endpoints.user_endpoints.utils import _ensure_mongodb_connection
 
 # Check if running in a test environment
@@ -28,9 +31,7 @@ if is_running_locally:
     # When running locally, use localhost instead of 'mongo'
     MONGODB_LOCAL_URL = "mongodb://localhost:27018/"
     client = pymongo.MongoClient(MONGODB_LOCAL_URL)
-    logger.info(
-        f"Running locally, MongoDB client created with URL: {MONGODB_LOCAL_URL}"
-    )
+    logger.info(f"Running locally, MongoDB client created with URL: {MONGODB_LOCAL_URL}")
 else:
     # When running in Docker, use the original URL
     client = pymongo.MongoClient(MONGODB_URL)

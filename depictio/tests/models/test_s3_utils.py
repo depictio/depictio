@@ -34,9 +34,13 @@ class TestS3Utils:
             mock_minio_manager = MagicMock()
 
             # Patch the MinIOManager constructor to return our mock
-            with patch(
-                "depictio.models.s3_utils.MinIOManager", return_value=mock_minio_manager
-            ), patch("depictio.models.s3_utils.logger"):
+            with (
+                patch(
+                    "depictio.models.s3_utils.MinIOManager",
+                    return_value=mock_minio_manager,
+                ),
+                patch("depictio.models.s3_utils.logger"),
+            ):
                 # Call the function
                 S3_storage_checks(sample_s3_config)
 
@@ -53,9 +57,13 @@ class TestS3Utils:
             checks = ["s3", "bucket"]
 
             # Patch the MinIOManager constructor to return our mock
-            with patch(
-                "depictio.models.s3_utils.MinIOManager", return_value=mock_minio_manager
-            ), patch("depictio.models.s3_utils.logger"):
+            with (
+                patch(
+                    "depictio.models.s3_utils.MinIOManager",
+                    return_value=mock_minio_manager,
+                ),
+                patch("depictio.models.s3_utils.logger"),
+            ):
                 # Call the function with specific checks
                 S3_storage_checks(sample_s3_config, checks=checks)
 
@@ -66,10 +74,13 @@ class TestS3Utils:
             """Test when MinIOManager initialization raises an exception"""
 
             # Patch MinIOManager to raise an exception
-            with patch(
-                "depictio.models.s3_utils.MinIOManager",
-                side_effect=Exception("Connection error"),
-            ), patch("depictio.models.s3_utils.logger"):
+            with (
+                patch(
+                    "depictio.models.s3_utils.MinIOManager",
+                    side_effect=Exception("Connection error"),
+                ),
+                patch("depictio.models.s3_utils.logger"),
+            ):
                 # Call should raise the exception
                 with pytest.raises(Exception, match="Connection error"):
                     S3_storage_checks(sample_s3_config)
@@ -84,13 +95,15 @@ class TestS3Utils:
             )
 
             # Patch the MinIOManager constructor to return our mock
-            with patch(
-                "depictio.models.s3_utils.MinIOManager", return_value=mock_minio_manager
-            ), patch("depictio.models.s3_utils.logger"):
+            with (
+                patch(
+                    "depictio.models.s3_utils.MinIOManager",
+                    return_value=mock_minio_manager,
+                ),
+                patch("depictio.models.s3_utils.logger"),
+            ):
                 # Call should raise the exception
-                with pytest.raises(
-                    Exception, match="S3 storage is not correctly configured"
-                ):
+                with pytest.raises(Exception, match="S3 storage is not correctly configured"):
                     S3_storage_checks(sample_s3_config)
 
     class TestTurnS3ConfigIntoPolarsStorageOptions:
@@ -175,8 +188,9 @@ class TestMinIOManager:
         """Test MinIOManager initialization"""
 
         # Patch boto3.client to avoid actual S3 connection
-        with patch("boto3.client", return_value=MagicMock()), patch(
-            "depictio.models.s3_utils.logger"
+        with (
+            patch("boto3.client", return_value=MagicMock()),
+            patch("depictio.models.s3_utils.logger"),
         ):
             # Initialize MinIOManager
             manager = MinIOManager(sample_s3_config)
@@ -191,8 +205,9 @@ class TestMinIOManager:
         """Test successful S3 accessibility check"""
 
         # Patch boto3.client to return our mock
-        with patch("boto3.client", return_value=mock_boto3_client), patch(
-            "depictio.models.s3_utils.logger"
+        with (
+            patch("boto3.client", return_value=mock_boto3_client),
+            patch("depictio.models.s3_utils.logger"),
         ):
             # Initialize MinIOManager
             manager = MinIOManager(sample_s3_config)
@@ -209,8 +224,9 @@ class TestMinIOManager:
         """Test S3 accessibility check with error"""
 
         # Patch boto3.client to return our mock
-        with patch("boto3.client", return_value=mock_boto3_client), patch(
-            "depictio.models.s3_utils.logger"
+        with (
+            patch("boto3.client", return_value=mock_boto3_client),
+            patch("depictio.models.s3_utils.logger"),
         ):
             # Initialize MinIOManager
             manager = MinIOManager(sample_s3_config)
@@ -227,12 +243,12 @@ class TestMinIOManager:
         """Test suggest_adjustments when all checks pass"""
 
         # Create a partial mock of MinIOManager to control check results
-        with patch("boto3.client", return_value=MagicMock()), patch.object(
-            MinIOManager, "check_s3_accessibility", return_value=True
-        ), patch.object(
-            MinIOManager, "check_bucket_accessibility", return_value=True
-        ), patch.object(MinIOManager, "check_write_policy", return_value=True), patch(
-            "depictio.models.s3_utils.logger"
+        with (
+            patch("boto3.client", return_value=MagicMock()),
+            patch.object(MinIOManager, "check_s3_accessibility", return_value=True),
+            patch.object(MinIOManager, "check_bucket_accessibility", return_value=True),
+            patch.object(MinIOManager, "check_write_policy", return_value=True),
+            patch("depictio.models.s3_utils.logger"),
         ):
             # Initialize MinIOManager
             manager = MinIOManager(sample_s3_config)
@@ -245,18 +261,16 @@ class TestMinIOManager:
         """Test suggest_adjustments when some checks fail"""
 
         # Create a partial mock of MinIOManager to control check results
-        with patch("boto3.client", return_value=MagicMock()), patch.object(
-            MinIOManager, "check_s3_accessibility", return_value=False
-        ), patch.object(
-            MinIOManager, "check_bucket_accessibility", return_value=True
-        ), patch.object(MinIOManager, "check_write_policy", return_value=False), patch(
-            "depictio.models.s3_utils.logger"
+        with (
+            patch("boto3.client", return_value=MagicMock()),
+            patch.object(MinIOManager, "check_s3_accessibility", return_value=False),
+            patch.object(MinIOManager, "check_bucket_accessibility", return_value=True),
+            patch.object(MinIOManager, "check_write_policy", return_value=False),
+            patch("depictio.models.s3_utils.logger"),
         ):
             # Initialize MinIOManager
             manager = MinIOManager(sample_s3_config)
 
             # Call suggest_adjustments, should raise exception
-            with pytest.raises(
-                Exception, match="S3 storage is not correctly configured"
-            ):
+            with pytest.raises(Exception, match="S3 storage is not correctly configured"):
                 manager.suggest_adjustments()

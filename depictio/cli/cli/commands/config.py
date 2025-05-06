@@ -37,9 +37,7 @@ def show_cli_config(
 
     try:
         depictio_CLI_config = load_depictio_config(yaml_config_path=CLI_config_path)
-        rich_print_json(
-            "Current Depictio CLI Configuration: ", depictio_CLI_config.model_dump()
-        )
+        rich_print_json("Current Depictio CLI Configuration: ", depictio_CLI_config.model_dump())
     except Exception as e:
         rich_print_checked_statement(f"Unable to load configuration - {e}", "error")
 
@@ -69,9 +67,7 @@ def show_depictio_project_metadata_on_server(
     CLI_config_path: Annotated[
         str, typer.Option("--CLI-config-path", help="Path to the configuration file")
     ] = "~/.depictio/CLI.yaml",
-    project_name: Annotated[
-        str, typer.Option("--project-name", help="Name of the project")
-    ] = "",
+    project_name: Annotated[str, typer.Option("--project-name", help="Name of the project")] = "",
 ):
     """
     Show Depictio metadata for registered Depictio projects in the JSON format.
@@ -81,9 +77,7 @@ def show_depictio_project_metadata_on_server(
         CLI_config = load_depictio_config(yaml_config_path=CLI_config_path)
         project_metadata = api_get_project_from_name(project_name, CLI_config)
         metadata = project_metadata.json()
-        rich_print_json(
-            "Depictio metadata for registered Depictio projects: ", metadata
-        )
+        rich_print_json("Depictio metadata for registered Depictio projects: ", metadata)
     except Exception as e:
         rich_print_checked_statement(f"Unable to load metadata - {e}", "error")
 
@@ -95,9 +89,7 @@ def validate_project_config(
     ] = "~/.depictio/CLI.yaml",
     project_config_path: Annotated[
         str,
-        typer.Option(
-            "--project-config-path", help="Path to the pipeline configuration file"
-        ),
+        typer.Option("--project-config-path", help="Path to the pipeline configuration file"),
     ] = "",
 ):
     """
@@ -113,9 +105,7 @@ def validate_project_config(
         CLI_config_path=CLI_config_path, project_config_path=project_config_path
     )
     if response["success"]:
-        rich_print_checked_statement(
-            "Depictio Project configuration validated", "success"
-        )
+        rich_print_checked_statement("Depictio Project configuration validated", "success")
         project_config = convert_model_to_dict(response["project_config"])
         rich_print_json("Validated Depictio Project Configuration: ", project_config)
     else:
@@ -131,9 +121,7 @@ def sync_project_config_to_server(
     ] = "~/.depictio/CLI.yaml",
     project_config_path: Annotated[
         str,
-        typer.Option(
-            "--project-config-path", help="Path to the pipeline configuration file"
-        ),
+        typer.Option("--project-config-path", help="Path to the pipeline configuration file"),
     ] = "",
     update: Annotated[
         bool,

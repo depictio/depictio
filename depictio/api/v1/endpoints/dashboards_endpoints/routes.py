@@ -1,7 +1,6 @@
 import json
 import os
 from datetime import datetime
-from typing import Dict
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -9,9 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from depictio.api.v1.configs.config import DASH_BASE_URL
 from depictio.api.v1.configs.custom_logging import logger
 from depictio.api.v1.db import dashboards_collection
-from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
-    load_dashboards_from_db,
-)
+from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import load_dashboards_from_db
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.dashboards import DashboardData
@@ -135,9 +132,7 @@ async def make_dashboard_public(
             {
                 "$set": {
                     "permissions.viewers": [
-                        e
-                        for e in get_current_permissions["permissions"]["viewers"]
-                        if e != "*"
+                        e for e in get_current_permissions["permissions"]["viewers"] if e != "*"
                     ]
                 }
             },
@@ -146,9 +141,7 @@ async def make_dashboard_public(
         logger.info(f"Dashboard with ID '{dashboard_id}' made private.")
 
     if result:
-        logger.info(
-            f"Dashboard with ID '{dashboard_id}' changed status to public: {status}"
-        )
+        logger.info(f"Dashboard with ID '{dashboard_id}' changed status to public: {status}")
         logger.info(f"Result: {result}")
         logger.info(f"Permissions: {result['permissions']}")
 
@@ -165,7 +158,7 @@ async def make_dashboard_public(
 @dashboards_endpoint_router.post("/edit_name/{dashboard_id}")
 async def edit_dashboard_name(
     dashboard_id: str,
-    data: Dict,
+    data: dict,
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -232,9 +225,7 @@ async def save_dashboard(
     else:
         logger.error("Failed to insert or update dashboard data.")
         # It's unlikely to reach this point due to upsert=True, but included for completeness
-        raise HTTPException(
-            status_code=404, detail="Failed to insert or update dashboard data."
-        )
+        raise HTTPException(status_code=404, detail="Failed to insert or update dashboard data.")
 
 
 @dashboards_endpoint_router.get("/screenshot/{dashboard_id}")
@@ -246,11 +237,8 @@ async def screenshot_dashboard(
 
     # Folder where screenshots will be saved
     # output_folder = "/app/depictio/dash/assets/screenshots"
-
     # Define the shared static directory
-    output_folder = (
-        "/app/depictio/dash/static/screenshots"  # Directly set to the desired path
-    )
+    output_folder = "/app/depictio/dash/static/screenshots"  # Directly set to the desired path
     logger.info(f"Output folder: {output_folder}")
 
     # Ensure the directory exists
@@ -261,9 +249,7 @@ async def screenshot_dashboard(
     # url = f"{DASH_BASE_URL}/{dashboard_id}"
     logger.info(f"Dashboard URL: {url}")
 
-    playwright_dev_mode = (
-        not os.getenv("DEPICTIO_PLAYWRIGHT_DEV_MODE", "False").lower() == "true"
-    )
+    playwright_dev_mode = not os.getenv("DEPICTIO_PLAYWRIGHT_DEV_MODE", "False").lower() == "true"
 
     try:
         async with async_playwright() as p:
@@ -305,17 +291,17 @@ async def screenshot_dashboard(
             logger.info(f"Token data: {token_data_json}")
 
             # Set data in the local storage
-            await page.evaluate(f"""() => {{
+            await page.evaluate(
+                f"""() => {{
                 localStorage.setItem('local-store', '{token_data_json}');
-            }}""")
+            }}"""
+            )
             # await asyncio.sleep(3600)  # Keeps the browser open for 1 hour
 
             await page.reload()
 
             # Navigate to the target dashboard page
-            await page.goto(
-                f"{url}/dashboard/{str(dashboard_id)}", wait_until="networkidle"
-            )
+            await page.goto(f"{url}/dashboard/{str(dashboard_id)}", wait_until="networkidle")
             logger.info(f"Page URL: {url}/dashboard/{str(dashboard_id)}")
 
             # Wait for the page content to load
@@ -334,7 +320,8 @@ async def screenshot_dashboard(
             #     logger.info("Iframe not found, proceeding without waiting for iframe content")
 
             # Remove the debug menu if it exists
-            await page.evaluate("""() => {
+            await page.evaluate(
+                """() => {
                 const debugMenuOuter = document.querySelector('.dash-debug-menu__outer');
                 if (debugMenuOuter) {
                     debugMenuOuter.remove();
@@ -343,7 +330,8 @@ async def screenshot_dashboard(
                 if (debugMenu) {
                     debugMenu.remove();
                 }
-            }""")
+            }"""
+            )
             logger.info("Removed debug menu")
 
             # Capture a screenshot of the content below the 'div#page-content'
@@ -361,9 +349,7 @@ async def screenshot_dashboard(
                 output_file = f"{output_folder}/{str(dashboard_id)}.png"
                 logger.info(f"Output file: {output_file}")
                 await element.screenshot(path=output_file)
-                logger.info(
-                    f"Screenshot captured for dashboard ID: {str(dashboard_id)}"
-                )
+                logger.info(f"Screenshot captured for dashboard ID: {str(dashboard_id)}")
             else:
                 logger.error("Could not find 'div#page-content' element")
 
@@ -391,9 +377,7 @@ async def delete_dashboard(
     )
 
     if result.deleted_count > 0:
-        return {
-            "message": f"Dashboard with ID '{str(dashboard_id)}' deleted successfully."
-        }
+        return {"message": f"Dashboard with ID '{str(dashboard_id)}' deleted successfully."}
     else:
         raise HTTPException(
             status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found."
@@ -447,9 +431,7 @@ async def get_component_data_endpoint(
         None,
     )
     if not component_metadata:
-        logger.error(
-            f"Component with ID {str(component_id)} not found in stored_metadata."
-        )
+        logger.error(f"Component with ID {str(component_id)} not found in stored_metadata.")
         return None
 
     logger.info(f"Component metadata found: {component_metadata}")

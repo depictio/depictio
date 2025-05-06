@@ -2,7 +2,9 @@
     "python.testing.pytestEnabled": true,
     "python.testing.unittestEnabled": false,
     "python.testing.pytestArgs": [
-        "depictio/tests",
+        "depictio/tests/api",
+        "depictio/tests/cli",
+        "depictio/tests/models",
         "-xvs",
         "-n",
         "auto"

@@ -21,7 +21,7 @@ COPY .devcontainer/post_create_setup.sh /bin
 # Switch to vscode user and install pipenv package manager for creating venvs
 USER vscode
 
-# Install uv 
+# Install uv
 # RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 # RUN echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && \
 #     echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc

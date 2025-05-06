@@ -13,8 +13,8 @@ from depictio.api.v1.configs.config import settings
 # Depictio dash core imports
 from depictio.dash.core.app_factory import create_dash_app
 from depictio.dash.core.callbacks import register_all_callbacks
-from depictio.dash.layouts.app_layout import create_app_layout
 from depictio.dash.flask_custom import register_static_routes
+from depictio.dash.layouts.app_layout import create_app_layout
 
 # Create and configure the Dash application
 app, dev_mode = create_dash_app()

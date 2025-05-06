@@ -92,9 +92,7 @@ def register_callbacks_stepper_part_three(app):
         # button_clicked = False
         if btn_component is not None and store_btn_component is not None:
             btn_index = [
-                i
-                for i, (x, y) in enumerate(zip(btn_component, store_btn_component))
-                if x > y
+                i for i, (x, y) in enumerate(zip(btn_component, store_btn_component)) if x > y
             ]
             if btn_index:
                 # button_clicked = True
@@ -108,9 +106,7 @@ def register_callbacks_stepper_part_three(app):
                     df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
 
                     id = ids[btn_index[0]]
-                    return return_design_component(
-                        component_selected, id, df, btn_component
-                    )
+                    return return_design_component(component_selected, id, df, btn_component)
                 # elif component_selected == "JBrowse2":
                 #     return design_jbrowse(ids[btn_index[0]]), btn_component
                 # return html.Div("Not implemented yet"), btn_component
@@ -133,9 +129,7 @@ def register_callbacks_stepper_part_three(app):
                         logger.info(f"id: {id}")
                         df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
 
-                        return return_design_component(
-                            last_button, id, df, btn_component
-                        )
+                        return return_design_component(last_button, id, df, btn_component)
                     # elif last_button == "JBrowse2":
                     #     id = ids[components_list.index(last_button)]
                     #     return design_jbrowse(id), btn_component

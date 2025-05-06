@@ -25,6 +25,11 @@ from depictio.models.models.workflows import (
 class TestWorkflowDataLocation:
     """Test suite for WorkflowDataLocation model."""
 
+    @pytest.fixture(autouse=True)
+    def set_depictio_context(self, monkeypatch):
+        """Set DEPICTIO_CONTEXT for all tests."""
+        monkeypatch.setattr("depictio.models.models.workflows.DEPICTIO_CONTEXT", "server")
+
     def test_valid_config_flat_structure(self):
         """Test creating a valid WorkflowDataLocation with flat structure."""
         config = WorkflowDataLocation(
@@ -49,17 +54,13 @@ class TestWorkflowDataLocation:
         """Test validation with invalid structure."""
         with pytest.raises(ValidationError) as exc_info:
             WorkflowDataLocation(structure="invalid", locations=["/path"])
-        assert "structure must be either 'flat' or 'sequencing-runs'" in str(
-            exc_info.value
-        )
+        assert "structure must be either 'flat' or 'sequencing-runs'" in str(exc_info.value)
 
     def test_missing_runs_regex_for_sequencing_runs(self):
         """Test validation when runs_regex is missing for sequencing-runs structure."""
         with pytest.raises(ValidationError) as exc_info:
             WorkflowDataLocation(structure="sequencing-runs", locations=["/path"])
-        assert "runs_regex is required when structure is 'sequencing-runs'" in str(
-            exc_info.value
-        )
+        assert "runs_regex is required when structure is 'sequencing-runs'" in str(exc_info.value)
 
     def test_invalid_runs_regex_pattern(self):
         """Test validation with invalid runs_regex pattern."""
@@ -73,9 +74,7 @@ class TestWorkflowDataLocation:
     @patch("depictio.models.config.DEPICTIO_CONTEXT", "cli")
     def test_location_with_env_var_in_cli(self):
         """Test location with environment variable in CLI context."""
-        config = WorkflowDataLocation(
-            structure="flat", locations=["/base/{TEST_DIR}/subdir"]
-        )
+        config = WorkflowDataLocation(structure="flat", locations=["/base/{TEST_DIR}/subdir"])
         # The exact path validation would depend on DirectoryPath implementation
         # Just verify the structure is correct
         assert config.structure == "flat"
@@ -87,19 +86,13 @@ class TestWorkflowDataLocation:
     def test_location_with_missing_env_var(self):
         """Test location with missing environment variable."""
         with pytest.raises(ValidationError) as exc_info:
-            print(
-                WorkflowDataLocation(
-                    structure="flat", locations=["/base/{MISSING_VAR}/subdir"]
-                )
-            )
+            print(WorkflowDataLocation(structure="flat", locations=["/base/{MISSING_VAR}/subdir"]))
         assert "Environment variable 'MISSING_VAR' is not set" in str(exc_info.value)
 
     @patch("depictio.models.config.DEPICTIO_CONTEXT", "web")
     def test_location_in_non_cli_context(self):
         """Test location handling in non-CLI context."""
-        config = WorkflowDataLocation(
-            structure="flat", locations=["/path/with/{ENV_VAR}"]
-        )
+        config = WorkflowDataLocation(structure="flat", locations=["/path/with/{ENV_VAR}"])
         assert config.locations == ["/path/with/{ENV_VAR}"]
 
 
@@ -126,9 +119,7 @@ class TestWorkflowRunScan:
     def test_valid_workflow_run_scan(self):
         """Test creating a valid WorkflowRunScan instance."""
         obj_ids = [PyObjectId(), PyObjectId()]
-        scan = WorkflowRunScan(
-            stats={"files": 100, "directories": 10}, files_id={"data": obj_ids}
-        )
+        scan = WorkflowRunScan(stats={"files": 100, "directories": 10}, files_id={"data": obj_ids})
         assert scan.stats == {"files": 100, "directories": 10}
         assert scan.files_id == {"data": obj_ids}
         assert isinstance(scan.scan_time, str)
@@ -379,12 +370,16 @@ class TestWorkflowCatalog:
 class TestWorkflow:
     """Test suite for Workflow model."""
 
+    @pytest.fixture(autouse=True)
+    def set_depictio_context(self, monkeypatch):
+        """Set DEPICTIO_CONTEXT for all tests."""
+        monkeypatch.setattr("depictio.models.models.workflows.DEPICTIO_CONTEXT", "server")
+        monkeypatch.setattr("depictio.models.models.data_collections.DEPICTIO_CONTEXT", "server")
+
     def test_valid_workflow_minimal(self):
         """Test creating a valid Workflow with minimal fields."""
         engine = WorkflowEngine(name="nextflow")
-        data_location = WorkflowDataLocation(
-            structure="flat", locations=["/path/to/data"]
-        )
+        data_location = WorkflowDataLocation(structure="flat", locations=["/path/to/data"])
         data_collections = [
             DataCollection(
                 data_collection_tag="dc1",
@@ -420,9 +415,7 @@ class TestWorkflow:
         """Test creating a valid Workflow with all fields."""
         engine = WorkflowEngine(name="nextflow", version="21.10")
         catalog = WorkflowCatalog(name="nf-core", url="https://nf-co.re")
-        data_location = WorkflowDataLocation(
-            structure="flat", locations=["/path/to/data"]
-        )
+        data_location = WorkflowDataLocation(structure="flat", locations=["/path/to/data"])
 
         userbase = UserBase(email="test_user@example.com", is_admin=False)
 
@@ -471,9 +464,7 @@ class TestWorkflow:
         with pytest.raises(ValidationError) as exc_info:
             Workflow(
                 engine=WorkflowEngine(name="nextflow"),
-                data_location=WorkflowDataLocation(
-                    structure="flat", locations=["/path"]
-                ),
+                data_location=WorkflowDataLocation(structure="flat", locations=["/path"]),
                 data_collections=[],
             )
         assert "Field required" in str(exc_info.value)
@@ -483,9 +474,7 @@ class TestWorkflow:
         with pytest.raises(ValidationError) as exc_info:
             Workflow(
                 name="test",
-                data_location=WorkflowDataLocation(
-                    structure="flat", locations=["/path"]
-                ),
+                data_location=WorkflowDataLocation(structure="flat", locations=["/path"]),
                 data_collections=[],
             )
         assert "Field required" in str(exc_info.value)
@@ -529,9 +518,7 @@ class TestWorkflow:
             Workflow(
                 name="test",
                 engine=WorkflowEngine(name="nextflow"),
-                data_location=WorkflowDataLocation(
-                    structure="flat", locations=["/path"]
-                ),
+                data_location=WorkflowDataLocation(structure="flat", locations=["/path"]),
                 data_collections="not a list",
             )
         assert "data_collections must be a list" in str(exc_info.value)
@@ -541,9 +528,7 @@ class TestWorkflow:
             Workflow(
                 name="test",
                 engine=WorkflowEngine(name="nextflow"),
-                data_location=WorkflowDataLocation(
-                    structure="flat", locations=["/path"]
-                ),
+                data_location=WorkflowDataLocation(structure="flat", locations=["/path"]),
                 data_collections=[],
                 runs="not a dict",
             )
@@ -553,16 +538,22 @@ class TestWorkflow:
 class TestWorkflowIntegration:
     """Integration tests for Workflow using real YAML configurations."""
 
-    @patch("depictio.models.utils.get_depictio_context")
-    def test_load_iris_workflow_yaml(self, mock_context):
+    @pytest.fixture(autouse=True)
+    def set_depictio_context(self, monkeypatch):
+        """Set DEPICTIO_CONTEXT for all tests."""
+        monkeypatch.setattr("depictio.models.models.workflows.DEPICTIO_CONTEXT", "server")
+        monkeypatch.setattr("depictio.models.models.data_collections.DEPICTIO_CONTEXT", "server")
+
+    # @patch("depictio.models.utils.get_depictio_context")
+    def test_load_iris_workflow_yaml(self):
         """Test loading and validating the Iris workflow YAML configuration."""
-        mock_context.return_value = "server"
+        # mock_context.return_value = "server"
 
         # Path to the actual YAML file
         yaml_file_path = "depictio/api/v1/configs/iris_dataset/initial_project.yaml"
 
         # Parse YAML
-        with open(yaml_file_path, "r") as file:
+        with open(yaml_file_path) as file:
             project_config = yaml.safe_load(file)
 
         # Extract workflow data from the YAML

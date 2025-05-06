@@ -233,7 +233,7 @@ spec:
             - name: DEPICTIO_BACKEND_PORT
               value: "8058"
             - name: DEPICTIO_FRONTEND_PORT
-              value: "80" 
+              value: "80"
             - name: DEPICTIO_FRONTEND_SERVICE_NAME
               value: "depictio-frontend"
           # command: ["/bin/bash"]
@@ -256,13 +256,13 @@ spec:
               mountPath: /app/kubernetes
 
             - name: depictio-example-data  # New Volume Mount
-              mountPath: /app/depictio-example-data        
+              mountPath: /app/depictio-example-data
 
 
             - name: depictio-screenshots  # New Volume Mount
               mountPath: /app/depictio/dash/static/screenshots
 
-            
+
           resources:
             requests:
               memory: "1Gi"
@@ -325,7 +325,7 @@ metadata:
   namespace: datasci-depictio-project
 spec:
   replicas: 1
-  strategy: 
+  strategy:
     type: Recreate
   selector:
     matchLabels:
@@ -379,8 +379,8 @@ spec:
               mountPath: /app/configs
 
             - name: depictio-example-data  # New Volume Mount
-              mountPath: /app/depictio-example-data        
-            
+              mountPath: /app/depictio-example-data
+
             - name: depictio-screenshots  # New Volume Mount
               mountPath: /app/depictio/dash/static/screenshots
           resources:
@@ -591,4 +591,3 @@ data:
     jbrowse:
       data_dir: "/data"
       config_dir: "/jbrowse-watcher-plugin/sessions"
-

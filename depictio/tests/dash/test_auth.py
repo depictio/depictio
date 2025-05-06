@@ -9,9 +9,7 @@ from depictio.api.v1.endpoints.user_endpoints.utils import delete_user_from_db
 from depictio.models.utils import get_config
 
 # Load initial users configuration
-config_path = os.path.join(
-    BASE_PATH, "depictio", "api", "v1", "configs", "initial_users.yaml"
-)
+config_path = os.path.join(BASE_PATH, "depictio", "api", "v1", "configs", "initial_users.yaml")
 initial_config = get_config(config_path)
 
 # Get test user credentials from initial_users.yaml
@@ -200,9 +198,7 @@ def test_unsuccessful_registration_already_registered(page: Page):
     )
 
     # Take a screenshot
-    page.screenshot(
-        path="depictio/tests/dash/screenshots/registration_duplicate_error.png"
-    )
+    page.screenshot(path="depictio/tests/dash/screenshots/registration_duplicate_error.png")
 
     print("Successfully tested all unsuccessful registration scenarios")
 
@@ -257,9 +253,7 @@ def test_unsuccessful_registration_password_mismatch(page: Page):
     )
 
     # Take a screenshot
-    page.screenshot(
-        path="depictio/tests/dash/screenshots/registration_duplicate_error.png"
-    )
+    page.screenshot(path="depictio/tests/dash/screenshots/registration_duplicate_error.png")
 
     print("Successfully tested all unsuccessful registration scenarios")
 

@@ -1,5 +1,3 @@
-from typing import List
-
 from bson import ObjectId
 from fastapi import APIRouter, HTTPException
 
@@ -14,7 +12,7 @@ projects_endpoint_router = APIRouter()
 
 
 # Core functions
-def _async_get_all_projects(current_user: User, projects_collection) -> List[Project]:
+def _async_get_all_projects(current_user: User, projects_collection) -> list[Project]:
     """Core function to get all projects for a user."""
     current_user_id = ObjectId(current_user.id)
 
@@ -74,9 +72,7 @@ def _async_get_project_from_name(
         "$or": [
             {"permissions.owners._id": current_user.id},
             {"permissions.viewers._id": current_user.id},
-            {
-                "permissions.viewers": "*"
-            },  # This makes projects with "*" publicly accessible
+            {"permissions.viewers": "*"},  # This makes projects with "*" publicly accessible
         ],
     }
 

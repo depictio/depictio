@@ -41,7 +41,7 @@ depictio-venv/
 ### pipenv
 #Pipfile.lock
 
-### poetry  
+### poetry
 #poetry.lock
 
 ### pdm
@@ -127,7 +127,7 @@ docs/_build/
 /site
 
 # Databases
-depictioDB/
+/depictioDB/*
 depictioDB_bak/
 depictioDB_dev/
 depictioDB_K8S/
@@ -157,11 +157,15 @@ dashboards.json
 
 # Security & Keys
 ## Keys
-depictio/private_key.pem
-depictio/public_key.pem
-depictio/tmp_token.pem
-depictio/keys/
-keys/internal_api_key.pem
+### ignore everything under depictio/keys
+/depictio/keys/*
+
+### but keep the folder itself
+!/depictio/keys/
+
+### and keep your placeholder file
+!/depictio/keys/.gitkeep
+
 
 ## Sensitive data
 .env
@@ -230,3 +234,5 @@ ldap_db/
 depictio/tests/e2e-tests/node_modules/
 depictio/tests/e2e-tests/cypress/screenshots/
 depictio/tests/e2e-tests/package-lock.json
+
+depictio/depictio/keys/internal_api_key.pem

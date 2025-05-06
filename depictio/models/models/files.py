@@ -1,11 +1,12 @@
-from datetime import datetime
 import os
-from typing import Dict, Optional, Union
+from datetime import datetime
+
 from pydantic import BaseModel, FilePath, field_validator
+
+from depictio.models.config import DEPICTIO_CONTEXT
+from depictio.models.models.base import MongoModel, PyObjectId
 from depictio.models.models.data_collections import WildcardRegexBase
 from depictio.models.models.users import Permission
-from depictio.models.models.base import MongoModel, PyObjectId
-from depictio.models.config import DEPICTIO_CONTEXT
 
 
 class WildcardRegex(WildcardRegexBase):
@@ -17,7 +18,7 @@ class File(MongoModel):
     filename: str
     creation_time: str
     modification_time: str
-    run_id: Optional[Union[PyObjectId, str]] = None
+    run_id: PyObjectId | str | None = None
     data_collection_id: PyObjectId
     registration_time: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     file_hash: str
@@ -93,7 +94,7 @@ class File(MongoModel):
 
 class FileScanResult(BaseModel):
     file: File
-    scan_result: Dict[str, str]
+    scan_result: dict[str, str]
     scan_time: str
 
     class Config:
@@ -113,9 +114,7 @@ class FileScanResult(BaseModel):
         if value["result"] not in ["success", "failure"]:
             raise ValueError("Scan result must be one of ['success', 'failure']")
         if value["reason"] not in ["added", "skipped", "updated", "failed"]:
-            raise ValueError(
-                "Scan reason must be one of ['added', 'skipped', 'updated', 'failed']"
-            )
+            raise ValueError("Scan reason must be one of ['added', 'skipped', 'updated', 'failed']")
         return value
 
     @field_validator("scan_time", mode="before")

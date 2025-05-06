@@ -16,7 +16,7 @@ rm -rdf depictio/.depictio/ && mkdir -p depictio/.depictio/ && chmod -R 775 depi
 # echo 'MINIO_ROOT_USER=minio' >> ~/.bashrc
 # echo 'MINIO_ROOT_PASSWORD=minio123' >> ~/.bashrc
 if [ $(grep DEPICTIO_BACKEND_EXAMPLE_DATA_VOLUME_HOST .env) ]; then
-    echo "Reusing existing variable for backend data volume..."; 
+    echo "Reusing existing variable for backend data volume...";
 else
     echo DEPICTIO_BACKEND_EXAMPLE_DATA_VOLUME_HOST='/app/depictio-example-data' >> .env
 fi

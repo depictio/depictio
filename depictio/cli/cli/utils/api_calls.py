@@ -1,5 +1,3 @@
-from typing import List
-
 import httpx
 import typer
 from pydantic import validate_call
@@ -171,7 +169,7 @@ def api_sync_project_config_to_server(
 
 @validate_call
 def api_create_files(
-    files: List[File], CLI_config: "CLIConfig", update: bool = False
+    files: list[File], CLI_config: "CLIConfig", update: bool = False
 ) -> httpx.Response:
     """
     Create or update files on the server using a bulk upsert.
@@ -243,13 +241,13 @@ def api_get_runs_by_wf_id(wf_id: str, CLI_config: CLIConfig) -> httpx.Response:
 
 
 class UpsertWorkflowRun(BaseModel):
-    runs: List[WorkflowRun]
+    runs: list[WorkflowRun]
     update: bool = False
 
 
 @validate_call
 def api_upsert_runs_batch(
-    runs: List[WorkflowRun], CLI_config: CLIConfig, update: bool = False
+    runs: list[WorkflowRun], CLI_config: CLIConfig, update: bool = False
 ) -> httpx.Response:
     """
     Create or update runs on the server using a bulk upsert.

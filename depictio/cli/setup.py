@@ -29,13 +29,11 @@ def update_cli_pyproject_version(version):
 
     try:
         # Read the current content
-        with open(cli_pyproject_path, "r") as f:
+        with open(cli_pyproject_path) as f:
             content = f.read()
 
         # Replace the version
-        updated_content = re.sub(
-            r'version\s*=\s*"[^"]+"', f'version = "{version}"', content
-        )
+        updated_content = re.sub(r'version\s*=\s*"[^"]+"', f'version = "{version}"', content)
 
         # Write back the updated content
         with open(cli_pyproject_path, "w") as f:

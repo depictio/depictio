@@ -36,9 +36,7 @@ class TestWildcardRegexBase:
     def test_extra_fields_forbidden(self):
         """Test that extra fields are not allowed."""
         with pytest.raises(ValidationError) as exc_info:
-            WildcardRegexBase(
-                name="test", wildcard_regex="^test$", extra_field="should not work"
-            )
+            WildcardRegexBase(name="test", wildcard_regex="^test$", extra_field="should not work")
         assert "extra" in str(exc_info.value) or "unexpected" in str(exc_info.value)
 
 
@@ -108,21 +106,31 @@ class TestScanRecursive:
 class TestScanSingle:
     """Test suite for ScanSingle model."""
 
-    @patch("depictio.models.utils.get_depictio_context")
+    @pytest.fixture(autouse=True)
+    def set_depictio_context(self, monkeypatch):
+        """Set DEPICTIO_CONTEXT for all tests."""
+        monkeypatch.setattr("depictio.models.models.data_collections.DEPICTIO_CONTEXT", "server")
+
+    # @patch("depictio.models.models.data_collections.get_depictio_context")
     @patch("pathlib.Path.exists")
-    def test_valid_config_cli_context(self, mock_exists, mock_context):
+    def test_valid_config_cli_context(self, mock_exists):
+        # def test_valid_config_cli_context(self, mock_exists, mock_context):
         """Test creating a valid ScanSingle instance in CLI context."""
-        mock_context.return_value = "cli"
+        # mock_context.return_value = "cli"
         mock_exists.return_value = True
 
         config = ScanSingle(filename="/path/to/file.txt")
         assert config.filename == "/path/to/file.txt"
 
-    @patch("depictio.models.models.data_collections.get_depictio_context")
+    # @patch("depictio.models.models.data_collections.get_depictio_context")
     @patch("pathlib.Path.exists")
-    def test_invalid_file_cli_context(self, mock_exists, mock_context):
+    def test_invalid_file_cli_context(self, mock_exists, monkeypatch):
+        # def test_invalid_file_cli_context(self, mock_exists, mock_context):
         """Test validation with non-existent file in CLI context."""
-        mock_context.return_value = "cli"
+        # mock_context.return_value = "cli"
+        # mock depictio context to simulate CLI
+        monkeypatch.setattr("depictio.models.models.data_collections.DEPICTIO_CONTEXT", "cli")
+
         mock_exists.return_value = False
 
         with pytest.raises(ValidationError) as exc_info:
@@ -164,8 +172,10 @@ class TestScan:
         assert isinstance(config.scan_parameters, ScanRecursive)
         assert config.scan_parameters.max_depth == 3
 
-    def test_valid_single_mode(self):
+    def test_valid_single_mode(self, monkeypatch):
         """Test creating a valid Scan instance with single mode."""
+        monkeypatch.setattr("depictio.models.models.data_collections.DEPICTIO_CONTEXT", "server")
+
         scan_params = {"filename": "test.txt"}
         config = Scan(mode="single", scan_parameters=scan_params)
         assert config.mode == "single"
@@ -178,8 +188,10 @@ class TestScan:
             Scan(mode="invalid", scan_parameters={})
         assert "mode must be one of" in str(exc_info.value)
 
-    def test_mode_case_insensitive(self):
+    def test_mode_case_insensitive(self, monkeypatch):
         """Test that mode validation is case insensitive."""
+        monkeypatch.setattr("depictio.models.models.data_collections.DEPICTIO_CONTEXT", "server")
+
         scan_params = {"filename": "test.txt"}
         config = Scan(mode="SINGLE", scan_parameters=scan_params)
         assert config.mode == "SINGLE"  # maintains original case
@@ -190,9 +202,7 @@ class TestTableJoinConfig:
 
     def test_valid_config_all_fields(self):
         """Test creating a valid TableJoinConfig instance with all fields."""
-        config = TableJoinConfig(
-            on_columns=["col1", "col2"], how="inner", with_dc=["dc1", "dc2"]
-        )
+        config = TableJoinConfig(on_columns=["col1", "col2"], how="inner", with_dc=["dc1", "dc2"])
         assert config.on_columns == ["col1", "col2"]
         assert config.how == "inner"
         assert config.with_dc == ["dc1", "dc2"]
@@ -219,17 +229,21 @@ class TestTableJoinConfig:
     def test_extra_fields_forbidden(self):
         """Test that extra fields are not allowed."""
         with pytest.raises(ValidationError) as exc_info:
-            TableJoinConfig(
-                on_columns=["col1"], with_dc=["dc1"], extra_field="should not work"
-            )
+            TableJoinConfig(on_columns=["col1"], with_dc=["dc1"], extra_field="should not work")
         assert "extra" in str(exc_info.value) or "unexpected" in str(exc_info.value)
 
 
 class TestDataCollectionConfig:
     """Test suite for DataCollectionConfig model."""
 
+    @pytest.fixture(autouse=True)
+    def set_depictio_context(self, monkeypatch):
+        """Set DEPICTIO_CONTEXT for all tests."""
+        monkeypatch.setattr("depictio.models.models.data_collections.DEPICTIO_CONTEXT", "server")
+
     def test_valid_table_config(self):
         """Test creating a valid DataCollectionConfig instance with table type."""
+
         dc_specific = {"format": "csv"}
         scan_config = {"mode": "single", "scan_parameters": {"filename": "test.txt"}}
 
@@ -296,6 +310,11 @@ class TestDataCollectionConfig:
 class TestDataCollection:
     """Test suite for DataCollection model."""
 
+    @pytest.fixture(autouse=True)
+    def set_depictio_context(self, monkeypatch):
+        """Set DEPICTIO_CONTEXT for all tests."""
+        monkeypatch.setattr("depictio.models.models.data_collections.DEPICTIO_CONTEXT", "server")
+
     def test_valid_data_collection(self):
         """Test creating a valid DataCollection instance."""
         config_dict = {
@@ -304,9 +323,7 @@ class TestDataCollection:
             "dc_specific_properties": {"format": "csv"},
         }
 
-        data_collection = DataCollection(
-            data_collection_tag="test_collection", config=config_dict
-        )
+        data_collection = DataCollection(data_collection_tag="test_collection", config=config_dict)
         assert data_collection.data_collection_tag == "test_collection"
         assert isinstance(data_collection.config, DataCollectionConfig)
         assert data_collection.config.type == "table"
@@ -319,15 +336,9 @@ class TestDataCollection:
             "dc_specific_properties": {"format": "csv"},
         }
 
-        data_collection1 = DataCollection(
-            data_collection_tag="test_collection", config=config_dict
-        )
-        data_collection2 = DataCollection(
-            data_collection_tag="test_collection", config=config_dict
-        )
-        data_collection3 = DataCollection(
-            data_collection_tag="different_tag", config=config_dict
-        )
+        data_collection1 = DataCollection(data_collection_tag="test_collection", config=config_dict)
+        data_collection2 = DataCollection(data_collection_tag="test_collection", config=config_dict)
+        data_collection3 = DataCollection(data_collection_tag="different_tag", config=config_dict)
 
         assert data_collection1 == data_collection2
         assert data_collection1 != data_collection3
@@ -339,18 +350,22 @@ class TestDataCollection:
 class TestDataCollectionIntegration:
     """Integration tests for DataCollection using real YAML configurations."""
 
-    @patch("depictio.models.models.data_collections.get_depictio_context")
+    @pytest.fixture(autouse=True)
+    def set_depictio_context(self, monkeypatch):
+        """Set DEPICTIO_CONTEXT for all tests."""
+        monkeypatch.setattr("depictio.models.models.data_collections.DEPICTIO_CONTEXT", "server")
+
     @patch("pathlib.Path.exists")
-    def test_load_iris_yaml_config(self, mock_exists, mock_context):
+    def test_load_iris_yaml_config(self, mock_exists):
         """Test loading and validating the Iris dataset YAML configuration."""
-        mock_context.return_value = "cli"
+        # mock_context.return_value = "cli"
         mock_exists.return_value = True  # Simulate file exists
 
         # Path to the actual YAML file
         yaml_file_path = "depictio/api/v1/configs/iris_dataset/initial_project.yaml"
 
         # Parse YAML
-        with open(yaml_file_path, "r") as file:
+        with open(yaml_file_path) as file:
             project_config = yaml.safe_load(file)
 
         # Extract data collection config
@@ -377,21 +392,20 @@ class TestDataCollectionIntegration:
         # Assert DC specific properties
         assert isinstance(data_collection.config.dc_specific_properties, DCTableConfig)
         assert data_collection.config.dc_specific_properties.format == "csv"
-        assert data_collection.config.dc_specific_properties.polars_kwargs == {
-            "separator": ","
-        }
+        assert data_collection.config.dc_specific_properties.polars_kwargs == {"separator": ","}
 
-    @patch("depictio.models.models.data_collections.get_depictio_context")
+    # @patch("depictio.models.models.data_collections.DEPICTIO_CONTEXT")
     @patch("pathlib.Path.exists")
-    def test_load_iris_yaml_with_file_validation(self, mock_exists, mock_context):
+    def test_load_iris_yaml_with_file_validation(self, mock_exists, monkeypatch):
         """Test loading Iris YAML config with file validation in CLI context."""
-        mock_context.return_value = "cli"
+        monkeypatch.setattr("depictio.models.models.data_collections.DEPICTIO_CONTEXT", "cli")
+
         mock_exists.return_value = True  # Simulate file exists
 
         # Load the actual YAML file
         yaml_file_path = "depictio/api/v1/configs/iris_dataset/initial_project.yaml"
 
-        with open(yaml_file_path, "r") as file:
+        with open(yaml_file_path) as file:
             project_config = yaml.safe_load(file)
         dc_data = project_config["workflows"][0]["data_collections"][0]
         dc_data["config"]["scan"]["scan_parameters"]["filename"] = (
@@ -414,7 +428,7 @@ class TestDataCollectionIntegration:
         # Load the actual YAML file
         yaml_file_path = "depictio/api/v1/configs/iris_dataset/initial_project.yaml"
 
-        with open(yaml_file_path, "r") as file:
+        with open(yaml_file_path) as file:
             project_config = yaml.safe_load(file)
 
         # Extract data collection config

@@ -1,13 +1,9 @@
-from typing import Optional
-from pydantic import (
-    BaseModel,
-    field_validator,
-)
+from pydantic import BaseModel, field_validator
 
 
 class DCJBrowse2Config(BaseModel):
-    index_extension: Optional[str] = None
-    jbrowse_template_location: Optional[str] = None
+    index_extension: str | None = None
+    jbrowse_template_location: str | None = None
 
     class Config:
         extra = "forbid"  # Reject unexpected fields
@@ -44,9 +40,7 @@ class DCJBrowse2Config(BaseModel):
         ]
 
         # Use the 'type' to determine allowed formats
-        data_type = values.get(
-            "type", ""
-        ).lower()  # Ensuring type is accessed in lowercase
+        data_type = values.get("type", "").lower()  # Ensuring type is accessed in lowercase
         if data_type:  # Check if 'type' is available
             allowed_values = {
                 "table": allowed_values_for_table,

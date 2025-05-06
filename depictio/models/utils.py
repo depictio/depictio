@@ -1,7 +1,7 @@
 import os
 import re
 from datetime import datetime
-from typing import Any, Dict, Type
+from typing import Any
 
 import yaml
 from beanie import PydanticObjectId
@@ -29,7 +29,7 @@ def get_depictio_context():
 
 
 @validate_call
-def convert_model_to_dict(model: BaseModel, exclude_none: bool = False) -> Dict:
+def convert_model_to_dict(model: BaseModel, exclude_none: bool = False) -> dict:
     """
     Convert a Pydantic model to a dictionary.
 
@@ -41,7 +41,7 @@ def convert_model_to_dict(model: BaseModel, exclude_none: bool = False) -> Dict:
 
 
 @validate_call
-def get_config(filename: str) -> Dict:
+def get_config(filename: str) -> dict:
     """
     Get the config file.
     """
@@ -51,7 +51,7 @@ def get_config(filename: str) -> Dict:
         raise ValueError(f"The file '{filename}' does not exist.")
     if not os.path.isfile(filename):
         raise ValueError(f"'{filename}' is not a file.")
-    with open(filename, "r") as f:
+    with open(filename) as f:
         yaml_data = yaml.safe_load(f)
     if not isinstance(yaml_data, dict):
         raise ValueError("Invalid config file: expected a dictionary.")
@@ -120,7 +120,7 @@ def substitute_env_vars(config: Any) -> Any:
 
 
 @validate_call
-def validate_model_config(config: dict, pydantic_model: Type[BaseModel]) -> BaseModel:
+def validate_model_config(config: dict, pydantic_model: type[BaseModel]) -> BaseModel:
     """
     Load and validate the YAML configuration
     """
@@ -148,7 +148,7 @@ def make_json_serializable(data):
     """Convert any non-JSON serializable objects (like ObjectId) to strings."""
     result = {}
     for key, value in data.items():
-        if isinstance(value, (PydanticObjectId, ObjectId)):
+        if isinstance(value, PydanticObjectId | ObjectId):
             result[key] = str(value)
         elif isinstance(value, datetime):
             result[key] = value.isoformat()
@@ -158,11 +158,11 @@ def make_json_serializable(data):
             result[key] = make_json_serializable(value)
         elif isinstance(value, list):
             result[key] = [
-                make_json_serializable(item)
-                if isinstance(item, dict)
-                else str(item)
-                if isinstance(item, (PydanticObjectId, ObjectId))
-                else item
+                (
+                    make_json_serializable(item)
+                    if isinstance(item, dict)
+                    else (str(item) if isinstance(item, PydanticObjectId | ObjectId) else item)
+                )
                 for item in value
             ]
         else:

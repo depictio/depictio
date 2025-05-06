@@ -1,21 +1,14 @@
-import os
-from typing import List, Optional
-
-from dotenv import load_dotenv
-
-from depictio import BASE_PATH
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.custom_logging import logger
 from depictio.api.v1.db_init import initialize_db
 from depictio.api.v1.endpoints.utils_endpoints.core_functions import create_bucket
-from depictio.api.v1.key_utils import generate_keys
 from depictio.api.v1.s3 import minios3_external_config
 from depictio.models.models.s3 import S3DepictioCLIConfig
 from depictio.models.s3_utils import S3_storage_checks
 
 
 async def run_initialization(
-    checks: Optional[List[str]] = None, s3_config: Optional[S3DepictioCLIConfig] = None
+    checks: list[str] | None = None, s3_config: S3DepictioCLIConfig | None = None
 ):
     """
     Orchestrate system initialization in a logical order.
@@ -44,7 +37,6 @@ async def run_initialization(
 
     # Step 2: Generate Keys (if not already generated)
     logger.info("Generating cryptographic keys...")
-
 
     # Step 3: Initialize Database (users, groups, agent config)
     logger.info("Initializing database...")

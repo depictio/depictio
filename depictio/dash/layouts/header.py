@@ -59,8 +59,7 @@ def register_callbacks_header(app):
         # Check if data is available, if not set the buttons to disabled
         owner = (
             True
-            if str(current_user.id)
-            in [str(e["id"]) for e in data["permissions"]["owners"]]
+            if str(current_user.id) in [str(e["id"]) for e in data["permissions"]["owners"]]
             else False
         )
 
@@ -184,9 +183,7 @@ def design_header(data, local_store):
     logger.info(f"current_user: {current_user}")
 
     init_nclicks_add_button = (
-        data["stored_add_button"]
-        if data
-        else {"count": 0, "initialized": False, "_id": ""}
+        data["stored_add_button"] if data else {"count": 0, "initialized": False, "_id": ""}
     )
     init_nclicks_edit_dashboard_mode_button = (
         data["stored_edit_dashboard_mode_button"] if data else [int(0)]
@@ -212,15 +209,11 @@ def design_header(data, local_store):
         edit_components_button_checked = False
     else:
         disabled = False
-        edit_dashboard_mode_button_checked = data["buttons_data"][
-            "edit_dashboard_mode_button"
-        ]
+        edit_dashboard_mode_button_checked = data["buttons_data"]["edit_dashboard_mode_button"]
         edit_components_button_checked = data["buttons_data"]["edit_components_button"]
 
     logger.info(f"owner: {owner}, viewer: {viewer}")
-    logger.info(
-        f"edit_dashboard_mode_button_checked: {edit_dashboard_mode_button_checked}"
-    )
+    logger.info(f"edit_dashboard_mode_button_checked: {edit_dashboard_mode_button_checked}")
     logger.info(f"edit_components_button_checked: {edit_components_button_checked}")
     logger.info(f"disabled: {disabled}")
 
@@ -308,9 +301,7 @@ def design_header(data, local_store):
     #     id="share-modal-dashboard",
     #     centered=True,
     # )
-
     # APP Header
-
     # header_style = {
     #     "display": "flex",
     #     "alignItems": "center",
@@ -320,7 +311,6 @@ def design_header(data, local_store):
     #     "borderBottom": "1px solid #eaeaea",
     #     "fontFamily": "'Open Sans', sans-serif",
     # }
-
     # title_style = {"fontWeight": "bold", "fontSize": "24px", "color": "#333"}
     button_style = {"margin": "0 0px", "fontFamily": "Virgil", "marginTop": "5px"}
 
@@ -412,16 +402,12 @@ def design_header(data, local_store):
                     dmc.Badge(
                         f"Project: {project_name}",
                         color="green",
-                        leftSection=DashIconify(
-                            icon="mdi:jira", width=16, color="grey"
-                        ),
+                        leftSection=DashIconify(icon="mdi:jira", width=16, color="grey"),
                     ),
                     dmc.Badge(
                         f"Owner: {data['permissions']['owners'][0]['email']}",
                         color="blue",
-                        leftSection=DashIconify(
-                            icon="mdi:account", width=16, color="grey"
-                        ),
+                        leftSection=DashIconify(icon="mdi:account", width=16, color="grey"),
                     ),
                     dmc.Badge(
                         f"Last saved: {formated_ts}",
@@ -480,9 +466,7 @@ def design_header(data, local_store):
                         disabled=disabled,
                         color="gray",
                     ),
-                    dmc.Text(
-                        "Display components options", style={"fontFamily": "default"}
-                    ),
+                    dmc.Text("Display components options", style={"fontFamily": "default"}),
                 ],
                 align="center",
                 spacing="sm",

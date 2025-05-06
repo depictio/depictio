@@ -1,5 +1,3 @@
-from typing import List
-
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -25,14 +23,12 @@ bucket_name = settings.minio.bucket
 
 
 class UpsertFilesBatchRequest(BaseModel):
-    files: List[File]
+    files: list[File]
     update: bool = False
 
 
 @files_endpoint_router.post("/upsert_batch")
-async def create_file(
-    payload: UpsertFilesBatchRequest, current_user=Depends(get_current_user)
-):
+async def create_file(payload: UpsertFilesBatchRequest, current_user=Depends(get_current_user)):
     """
     Create one or more files in the database using bulk upsert.
 
@@ -63,9 +59,7 @@ async def create_file(
             op = UpdateOne({"_id": file_obj.id}, {"$set": file_data}, upsert=True)
         else:
             # $setOnInsert will only insert the file if it doesn't already exist.
-            op = UpdateOne(
-                {"_id": file_obj.id}, {"$setOnInsert": file_data}, upsert=True
-            )
+            op = UpdateOne({"_id": file_obj.id}, {"$setOnInsert": file_data}, upsert=True)
         operations.append(op)
 
     try:
@@ -84,9 +78,7 @@ async def create_file(
             inserted_count = result.upserted_count  # Count of newly inserted files
             existing_count = len(payload.files) - inserted_count
             if existing_count > 0:
-                logger.error(
-                    f"{existing_count} file(s) already exist and were not updated."
-                )
+                logger.error(f"{existing_count} file(s) already exist and were not updated.")
             return {
                 "inserted_count": inserted_count,
                 "existing_count": existing_count,
@@ -98,9 +90,7 @@ async def create_file(
 
 @files_endpoint_router.get("/list/{data_collection_id}")
 # @datacollections_endpoint_router.get("/files/{workflow_id}/{data_collection_id}", response_model=List[GridFSFileInfo])
-async def list_registered_files(
-    data_collection_id: str, current_user=Depends(get_current_user)
-):
+async def list_registered_files(data_collection_id: str, current_user=Depends(get_current_user)):
     """
     Fetch all files registered from a Data Collection registered into a workflow.
     """

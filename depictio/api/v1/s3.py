@@ -31,9 +31,9 @@ minios3_external_config = S3DepictioCLIConfig(
 )
 logger.info(f"minios3_external_config: {minios3_external_config}")
 
-polars_s3_config = turn_S3_config_into_polars_storage_options(
-    minios3_external_config
-).model_dump(exclude_none=True)
+polars_s3_config = turn_S3_config_into_polars_storage_options(minios3_external_config).model_dump(
+    exclude_none=True
+)
 logger.info(f"polars_s3_config: {polars_s3_config}")
 
 
@@ -47,6 +47,4 @@ s3_client = boto3.client(
     # verify=False,
 )
 logger.info(f"minio s3 client {s3_client}")
-logger.info(
-    f"Successfully created S3 client with endpoint: {settings.minio.endpoint_url}"
-)
+logger.info(f"Successfully created S3 client with endpoint: {settings.minio.endpoint_url}")

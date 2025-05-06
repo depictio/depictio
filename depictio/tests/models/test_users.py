@@ -8,7 +8,7 @@ from mongomock_motor import AsyncMongoMockClient
 from pydantic import ValidationError
 
 from depictio.models.models.s3 import S3DepictioCLIConfig
-from depictio.models.models.users import (
+from depictio.models.models.users import (  # UserBaseGroupLess,
     Group,
     GroupBeanie,
     Permission,
@@ -17,7 +17,6 @@ from depictio.models.models.users import (
     TokenBase,
     TokenBeanie,
     TokenData,
-    # UserBaseGroupLess,
     User,
     UserBase,
     UserBaseCLIConfig,
@@ -60,8 +59,7 @@ class TestTokenData:
 
         # Check that the error is related to pattern mismatch
         assert any(
-            error.get("type") == "string_pattern_mismatch"
-            for error in exc_info.value.errors()
+            error.get("type") == "string_pattern_mismatch" for error in exc_info.value.errors()
         )
 
         # Optional: more detailed error checking
@@ -76,8 +74,7 @@ class TestTokenData:
 
         # Check that the error is related to pattern mismatch
         assert any(
-            error.get("type") == "string_pattern_mismatch"
-            for error in exc_info.value.errors()
+            error.get("type") == "string_pattern_mismatch" for error in exc_info.value.errors()
         )
 
         # Optional: more detailed error checking
@@ -96,9 +93,7 @@ class TestToken:
         sub = PydanticObjectId()
         future_time = datetime.now() + timedelta(hours=1)
 
-        token = Token(
-            access_token="ValidToken123", expire_datetime=future_time, sub=sub
-        )
+        token = Token(access_token="ValidToken123", expire_datetime=future_time, sub=sub)
 
         assert token.access_token == "ValidToken123"
         assert token.expire_datetime == future_time
@@ -112,9 +107,7 @@ class TestToken:
 
         # Past datetime
         past_time = datetime.now() - timedelta(hours=1)
-        with pytest.raises(
-            ValidationError, match="Expiration datetime must be in the future"
-        ):
+        with pytest.raises(ValidationError, match="Expiration datetime must be in the future"):
             Token(access_token="ValidToken123", expire_datetime=past_time, sub=sub)
 
     def test_token_invalid_access_token(self):
@@ -138,9 +131,7 @@ class TestToken:
         sub = PydanticObjectId()
         future_time = datetime.now() + timedelta(hours=1)
 
-        token = Token(
-            access_token="ValidToken123", expire_datetime=future_time, sub=sub
-        )
+        token = Token(access_token="ValidToken123", expire_datetime=future_time, sub=sub)
 
         # Test JSON serialization
         token_dict = token.model_dump()
@@ -314,9 +305,7 @@ class TestTokenBeanie:
 
         # Find valid tokens (not expired)
         current_time = datetime.now()
-        valid_tokens = await TokenBeanie.find(
-            {"expire_datetime": {"$gt": current_time}}
-        ).to_list()
+        valid_tokens = await TokenBeanie.find({"expire_datetime": {"$gt": current_time}}).to_list()
 
         # Should find only the valid token
         assert len(valid_tokens) == 1
@@ -379,9 +368,9 @@ class TestTokenBase:
         assert isinstance(token_base.serialize_user_id(user_id), str)
 
         # Test datetime serializers
-        assert token_base.serialize_expire_datetime(
-            future_time
-        ) == future_time.strftime("%Y-%m-%d %H:%M:%S")
+        assert token_base.serialize_expire_datetime(future_time) == future_time.strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
         assert token_base.serialize_created_at(creation_time) == creation_time.strftime(
             "%Y-%m-%d %H:%M:%S"
         )
@@ -564,9 +553,7 @@ class TestUserBeanie:
         await user.save()
 
         # Retrieve the document
-        retrieved_user = await UserBeanie.find_one(
-            UserBeanie.email == "test@example.com"
-        )
+        retrieved_user = await UserBeanie.find_one(UserBeanie.email == "test@example.com")
 
         assert retrieved_user is not None
         assert retrieved_user.email == "test@example.com"
@@ -608,7 +595,7 @@ class TestUserBeanie:
         assert "user2@example.com" in emails
 
         # Test filtering by is_admin
-        admin_users = await UserBeanie.find(UserBeanie.is_admin == True).to_list()  # noqa: E712
+        admin_users = await UserBeanie.find(UserBeanie.is_admin is True).to_list()  # noqa: E712
         assert len(admin_users) == 1
         assert admin_users[0].email == "user2@example.com"
 
@@ -629,9 +616,7 @@ class TestUserBeanie:
         await user.save()
 
         # Retrieve the document
-        retrieved_user = await UserBeanie.find_one(
-            UserBeanie.email == "admin@example.com"
-        )
+        retrieved_user = await UserBeanie.find_one(UserBeanie.email == "admin@example.com")
 
         # Test turn_to_userbase method
         userbase = retrieved_user.turn_to_userbase()
@@ -701,9 +686,7 @@ class TestGroupBeanie:
         assert "Group 3" in group_names
 
         # Test filtering by name
-        filtered_groups = await GroupBeanie.find(
-            GroupBeanie.name == "Group 2"
-        ).to_list()
+        filtered_groups = await GroupBeanie.find(GroupBeanie.name == "Group 2").to_list()
         assert len(filtered_groups) == 1
         assert filtered_groups[0].name == "Group 2"
 
@@ -718,9 +701,7 @@ class TestGroupBeanie:
         await group.save()
 
         # Retrieve and update the group
-        retrieved_group = await GroupBeanie.find_one(
-            GroupBeanie.name == "Original Name"
-        )
+        retrieved_group = await GroupBeanie.find_one(GroupBeanie.name == "Original Name")
         retrieved_group.name = "Updated Name"
         await retrieved_group.save()
 
@@ -845,21 +826,15 @@ class TestPermission:
         user.id = "same_id"
 
         # Test user in owners and editors
-        with pytest.raises(
-            ValidationError, match="A User cannot be both an owner and an editor"
-        ):
+        with pytest.raises(ValidationError, match="A User cannot be both an owner and an editor"):
             Permission(owners=[user], editors=[user])
 
         # Test user in owners and viewers
-        with pytest.raises(
-            ValidationError, match="A User cannot be both an owner and a viewer"
-        ):
+        with pytest.raises(ValidationError, match="A User cannot be both an owner and a viewer"):
             Permission(owners=[user], viewers=[user])
 
         # Test user in editors and viewers
-        with pytest.raises(
-            ValidationError, match="A User cannot be both an editor and a viewer"
-        ):
+        with pytest.raises(ValidationError, match="A User cannot be both an editor and a viewer"):
             Permission(editors=[user], viewers=[user])
 
     def test_permission_invalid_types(self):
@@ -1021,8 +996,7 @@ class TestUserBaseCLIConfig:
 
         # Check that the error is related to email format
         assert any(
-            error.get("type") == "value_error"
-            and "email" in str(error.get("msg")).lower()
+            error.get("type") == "value_error" and "email" in str(error.get("msg")).lower()
             for error in exc_info.value.errors()
         )
 

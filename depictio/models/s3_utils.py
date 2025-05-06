@@ -1,5 +1,4 @@
 from abc import ABC
-from typing import List, Optional
 
 import boto3
 from botocore.exceptions import ClientError, NoCredentialsError, PartialCredentialsError
@@ -71,9 +70,7 @@ class S3ProviderBase(ABC):
         """
         try:
             test_key = ".depictio/write_test"
-            self.s3_client.put_object(
-                Bucket=self.bucket_name, Key=test_key, Body="test"
-            )
+            self.s3_client.put_object(Bucket=self.bucket_name, Key=test_key, Body="test")
             self.s3_client.delete_object(Bucket=self.bucket_name, Key=test_key)
             logger.info("Write policy is correctly configured.")
             return True
@@ -81,7 +78,7 @@ class S3ProviderBase(ABC):
             logger.error(f"Write policy check failed: {e.response['Error']['Message']}")
             return False
 
-    def suggest_adjustments(self, checks: Optional[List[str]] = None) -> None:
+    def suggest_adjustments(self, checks: list[str] | None = None) -> None:
         """
         Perform specified S3 checks and suggest adjustments.
 
@@ -98,14 +95,10 @@ class S3ProviderBase(ABC):
             suggestions.append("Verify the endpoint URL, access key, and secret key.")
 
         if "bucket" in checks and not self.check_bucket_accessibility():
-            suggestions.append(
-                f"Ensure the bucket '{self.bucket_name}' exists and is accessible."
-            )
+            suggestions.append(f"Ensure the bucket '{self.bucket_name}' exists and is accessible.")
 
         if "write" in checks and not self.check_write_policy():
-            suggestions.append(
-                "Adjust bucket policies to allow write access for this client."
-            )
+            suggestions.append("Adjust bucket policies to allow write access for this client.")
 
         if suggestions:
             logger.error("Suggested Adjustments:")
@@ -123,9 +116,7 @@ class MinIOManager(S3ProviderBase):
 
 
 @validate_call
-def S3_storage_checks(
-    s3_config: S3DepictioCLIConfig, checks: Optional[List[str]] = None
-):
+def S3_storage_checks(s3_config: S3DepictioCLIConfig, checks: list[str] | None = None):
     """
     Flexible S3 storage checks.
 

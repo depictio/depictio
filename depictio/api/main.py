@@ -13,12 +13,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from motor.motor_asyncio import AsyncIOMotorClient
 
-from depictio import BASE_PATH
 from depictio.api.v1.configs.config import MONGODB_URL, settings
 from depictio.api.v1.endpoints.routers import router
-from depictio.api.v1.endpoints.utils_endpoints.process_data_collections import (
-    process_collections,
-)
+from depictio.api.v1.endpoints.utils_endpoints.process_data_collections import process_collections
 from depictio.api.v1.initialization import run_initialization
 from depictio.api.v1.utils import clean_screenshots
 from depictio.models.models.base import PyObjectId
@@ -121,9 +118,7 @@ def delayed_process_data_collections():
         )
         print(f"Check deltatables: {_check_deltatables}")
         if _check_deltatables:
-            print(
-                f"Data collection with ID {dc_id} already exists in deltatables_collection."
-            )
+            print(f"Data collection with ID {dc_id} already exists in deltatables_collection.")
             return
 
     # Wait longer to ensure the API has fully started
@@ -146,7 +141,7 @@ def objectid_serializer(oid: PydanticObjectId | ObjectId | PyObjectId) -> str:
 
 # Custom JSON encoder function to handle ObjectId serialization
 def custom_jsonable_encoder(obj, **kwargs):
-    if isinstance(obj, (ObjectId, PydanticObjectId, PyObjectId)):
+    if isinstance(obj, ObjectId | PydanticObjectId | PyObjectId):
         return str(obj)
 
     # Handle dictionaries
@@ -154,7 +149,7 @@ def custom_jsonable_encoder(obj, **kwargs):
         return {k: custom_jsonable_encoder(v, **kwargs) for k, v in obj.items()}
 
     # Handle lists or other iterables
-    if isinstance(obj, (list, tuple, set)):
+    if isinstance(obj, list | tuple | set):
         return [custom_jsonable_encoder(i, **kwargs) for i in obj]
 
     # Use the default jsonable_encoder for other types

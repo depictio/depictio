@@ -5,18 +5,10 @@ from unittest.mock import patch
 
 import pytest
 from bson import ObjectId
-from pydantic import (
-    BaseModel,
-    Field,
-    ValidationError,
-)
+from pydantic import BaseModel, Field, ValidationError
 
 from depictio.api.v1.configs.custom_logging import format_pydantic
-from depictio.models.models.base import (
-    MongoModel,
-    PyObjectId,
-    convert_objectid_to_str,
-)
+from depictio.models.models.base import MongoModel, PyObjectId, convert_objectid_to_str
 
 # --------------------------------------------------------
 # Tests for the convert_objectid_to_str function
@@ -409,15 +401,11 @@ class TestMongoModel:
         """Test mongo method with non-canonical ID field."""
         model = MongoModel(
             id=ObjectId(),
-            flexible_metadata={
-                "non_canonical_id": ObjectId("507f1f77bcf86cd799439011")
-            },
+            flexible_metadata={"non_canonical_id": ObjectId("507f1f77bcf86cd799439011")},
         )
         print(format_pydantic(model))
         print(format_pydantic(model.flexible_metadata))
-        assert model.flexible_metadata["non_canonical_id"] == ObjectId(
-            "507f1f77bcf86cd799439011"
-        )
+        assert model.flexible_metadata["non_canonical_id"] == ObjectId("507f1f77bcf86cd799439011")
         mongo_data = model.mongo()
         print(format_pydantic(mongo_data))
         assert "_id" not in mongo_data["flexible_metadata"]
@@ -483,9 +471,7 @@ class TestMongoModel:
         assert model.description == "Test description"
         print(format_pydantic(model.flexible_metadata))
         assert isinstance(model.flexible_metadata["nested"]["id"], ObjectId)
-        assert (
-            str(model.flexible_metadata["nested"]["id"]) == "507f1f77bcf86cd799439012"
-        )
+        assert str(model.flexible_metadata["nested"]["id"]) == "507f1f77bcf86cd799439012"
         assert isinstance(model.flexible_metadata["items"][0]["id"], ObjectId)
         assert model.hash == "test_hash"
 
@@ -494,7 +480,4 @@ class TestMongoModel:
         assert isinstance(mongo_data["_id"], ObjectId)
         assert str(mongo_data["_id"]) == "507f1f77bcf86cd799439011"
         assert isinstance(mongo_data["flexible_metadata"]["nested"]["_id"], ObjectId)
-        assert (
-            str(mongo_data["flexible_metadata"]["items"][0]["_id"])
-            == "507f1f77bcf86cd799439013"
-        )
+        assert str(mongo_data["flexible_metadata"]["items"][0]["_id"]) == "507f1f77bcf86cd799439013"

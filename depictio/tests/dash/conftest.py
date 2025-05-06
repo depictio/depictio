@@ -22,19 +22,13 @@ def setup_test_database():
     This cleans the database and initializes it with test data.
     """
     # Import the database modules
-    from depictio.api.v1.db import (
-        clean_test_database,
-        groups_collection,
-        users_collection,
-    )
+    from depictio.api.v1.db import clean_test_database, groups_collection, users_collection
 
     # Clean the test database
     clean_test_database()
 
     # Load initial users from config
-    config_path = os.path.join(
-        BASE_PATH, "depictio", "api", "v1", "configs", "initial_users.yaml"
-    )
+    config_path = os.path.join(BASE_PATH, "depictio", "api", "v1", "configs", "initial_users.yaml")
     initial_config = get_config(config_path)
 
     # Initialize the test database with test users
@@ -60,9 +54,7 @@ def setup_test_database():
                 "_id": ObjectId(group_config["id"]),
                 "name": group_config["name"],
                 "description": group_config.get("description", ""),
-                "users_ids": [
-                    ObjectId(user_id) for user_id in group_config.get("users_ids", [])
-                ],
+                "users_ids": [ObjectId(user_id) for user_id in group_config.get("users_ids", [])],
             }
         )
 
@@ -82,14 +74,10 @@ async def mock_mongodb_async():
     db = client.test_db
 
     # Initialize Beanie with the mock database
-    await init_beanie(
-        database=db, document_models=[UserBeanie, GroupBeanie, TokenBeanie]
-    )
+    await init_beanie(database=db, document_models=[UserBeanie, GroupBeanie, TokenBeanie])
 
     # Load initial users from config
-    config_path = os.path.join(
-        BASE_PATH, "depictio", "api", "v1", "configs", "initial_users.yaml"
-    )
+    config_path = os.path.join(BASE_PATH, "depictio", "api", "v1", "configs", "initial_users.yaml")
     initial_config = get_config(config_path)
 
     # Initialize the mock database with test users

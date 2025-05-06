@@ -6,12 +6,7 @@ from pydantic import validate_call
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.custom_logging import logger
 from depictio.api.v1.s3 import minios3_external_config
-from depictio.models.models.users import (
-    CLIConfig,
-    TokenBeanie,
-    UserBaseCLIConfig,
-    UserBeanie,
-)
+from depictio.models.models.users import CLIConfig, TokenBeanie, UserBaseCLIConfig, UserBeanie
 from depictio.models.utils import make_json_serializable
 
 
@@ -47,9 +42,7 @@ async def _generate_agent_config(user: UserBeanie, token: TokenBeanie) -> CLICon
 
 
 # Function to export agent config to a YAML file
-async def export_agent_config(
-    cli_config: CLIConfig, email: str, wipe: bool = False
-) -> str:
+async def export_agent_config(cli_config: CLIConfig, email: str, wipe: bool = False) -> str:
     """
     Export the agent configuration to a YAML file.
 
@@ -83,9 +76,7 @@ async def export_agent_config(
 
     # Check if file exists and respect the wipe flag
     if os.path.exists(config_path) and not wipe:
-        logger.warning(
-            f"Config file {config_path} already exists. Use wipe=True to overwrite."
-        )
+        logger.warning(f"Config file {config_path} already exists. Use wipe=True to overwrite.")
     else:
         # Log appropriate message based on whether we're overwriting
         if os.path.exists(config_path):

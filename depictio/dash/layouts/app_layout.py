@@ -5,23 +5,14 @@ from dash import dcc, html
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.custom_logging import logger
-from depictio.dash.api_calls import (
-    api_call_fetch_user_from_token,
-    purge_expired_tokens,
-)
-from depictio.dash.layouts.dashboards_management import (
-    layout as dashboards_management_layout,
-)
+from depictio.dash.api_calls import api_call_fetch_user_from_token, purge_expired_tokens
+from depictio.dash.layouts.dashboards_management import layout as dashboards_management_layout
 
 # from depictio.dash.layouts.draggable_scenarios.add_component import register_callbacks_add_component
-from depictio.dash.layouts.draggable import (
-    design_draggable,
-)
+from depictio.dash.layouts.draggable import design_draggable
 
 # Depictio utils imports
-from depictio.dash.layouts.draggable_scenarios.restore_dashboard import (
-    load_depictio_data,
-)
+from depictio.dash.layouts.draggable_scenarios.restore_dashboard import load_depictio_data
 from depictio.dash.layouts.header import design_header
 from depictio.dash.layouts.layouts_toolbox import create_add_with_input_modal
 from depictio.dash.layouts.palette import create_color_palette_page
@@ -420,9 +411,7 @@ def create_app_layout():
                 storage_type="local",
             ),
             dcc.Store(id="current-edit-parent-index", storage_type="memory"),
-            dcc.Interval(
-                id="interval-component", interval=60 * 60 * 1000, n_intervals=0
-            ),
+            dcc.Interval(id="interval-component", interval=60 * 60 * 1000, n_intervals=0),
             navbar,
             dmc.Drawer(
                 title="",

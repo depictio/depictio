@@ -20,9 +20,7 @@ from depictio.models.models.users import UserBeanie
 def test_dummy_connection():
     # Now import the modules after the patch is in place.
     from depictio.api.v1.db import client  # This will be a mongomock client
-    from depictio.api.v1.endpoints.user_endpoints.utils import (
-        _ensure_mongodb_connection,
-    )
+    from depictio.api.v1.endpoints.user_endpoints.utils import _ensure_mongodb_connection
 
     # Update _dummy_mongodb_connection to call server_info() for example
     result = _ensure_mongodb_connection()  # Ensure this calls client.server_info()
@@ -171,9 +169,7 @@ class TestVerifyPassword:
         result = _verify_password(stored_hash, password)
 
         # Assert
-        mock_checkpw.assert_called_once_with(
-            password.encode("utf-8"), stored_hash.encode("utf-8")
-        )
+        mock_checkpw.assert_called_once_with(password.encode("utf-8"), stored_hash.encode("utf-8"))
         assert result is True
 
 
@@ -186,9 +182,7 @@ class TestCheckPassword:
     @classmethod
     def setup_class(cls):
         # Import the function once and store it as a class attribute
-        from depictio.api.v1.endpoints.user_endpoints.core_functions import (
-            _check_password,
-        )
+        from depictio.api.v1.endpoints.user_endpoints.core_functions import _check_password
 
         cls.check_password = staticmethod(_check_password)
 
@@ -234,9 +228,7 @@ class TestCheckPassword:
 
         # Assert
         self.mock_fetch_user.assert_called_once_with(test_email)
-        self.mock_verify_password.assert_called_once_with(
-            mock_user.password, test_password
-        )
+        self.mock_verify_password.assert_called_once_with(mock_user.password, test_password)
         assert result is True
 
     @pytest.mark.asyncio
@@ -259,9 +251,7 @@ class TestCheckPassword:
 
         # Assert
         self.mock_fetch_user.assert_called_once_with(test_email)
-        self.mock_verify_password.assert_called_once_with(
-            mock_user.password, test_password
-        )
+        self.mock_verify_password.assert_called_once_with(mock_user.password, test_password)
         assert result is False
 
     @pytest.mark.asyncio
@@ -312,9 +302,7 @@ class TestEnsureMongoDBConnection:
     @classmethod
     def setup_class(cls):
         # Import _ensure_mongodb_connection once and store it as a class attribute.
-        from depictio.api.v1.endpoints.user_endpoints.utils import (
-            _ensure_mongodb_connection,
-        )
+        from depictio.api.v1.endpoints.user_endpoints.utils import _ensure_mongodb_connection
 
         cls._ensure_mongodb_connection = staticmethod(_ensure_mongodb_connection)
 
@@ -375,9 +363,7 @@ class TestEnsureMongoDBConnection:
         exhausting all connection attempts*.
         """
         # Configure the mock so that every attempt raises an exception.
-        self.db_client.server_info = MagicMock(
-            side_effect=Exception("Connection refused")
-        )
+        self.db_client.server_info = MagicMock(side_effect=Exception("Connection refused"))
 
         with pytest.raises(RuntimeError) as exc_info:
             self._ensure_mongodb_connection(max_attempts=3, sleep_interval=5)
@@ -538,9 +524,7 @@ class TestDeleteGroupHelper:
 
     def test_delete_regular_group(self):
         # Insert a test group
-        self.groups_collection.insert_one(
-            {"_id": self.test_group_id, "name": "test_group"}
-        )
+        self.groups_collection.insert_one({"_id": self.test_group_id, "name": "test_group"})
 
         # Call the function
         result = self.delete_group_helper(self.test_group_id)
@@ -634,9 +618,7 @@ class TestCreateUserInDb:
             mock_hash.return_value = "$2b$12$mockedhashedpassword"
 
             # Call the function with is_admin=True
-            payload = await _create_user_in_db(
-                email=email, password=password, is_admin=True
-            )
+            payload = await _create_user_in_db(email=email, password=password, is_admin=True)
             result = payload["user"]
 
             # Assertions

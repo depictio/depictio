@@ -33,7 +33,7 @@ jobs:
           VERSION=$(grep -m 1 'version = "' pyproject.toml | cut -d'"' -f2)
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "Extracted version: $VERSION"
-      
+
       - name: Log in to the Container registry
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3

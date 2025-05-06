@@ -4,13 +4,9 @@ import pytest
 from fastapi import HTTPException, status
 
 # Import the function to test
-from depictio.api.v1.endpoints.user_endpoints.routes import (
-    get_current_user,
-)
+from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.models.models.users import TokenBeanie, UserBeanie
-from depictio.tests.api.v1.endpoints.user_endpoints.conftest import (
-    beanie_setup,
-)
+from depictio.tests.api.v1.endpoints.user_endpoints.conftest import beanie_setup
 
 # ------------------------------------------------------
 # Test get_current_user function
@@ -55,9 +51,7 @@ class TestGetCurrentUser:
         result = await get_current_user(self.test_token)
 
         # Assert
-        self.mock_token_find_one.assert_called_once_with(
-            {"access_token": self.test_token}
-        )
+        self.mock_token_find_one.assert_called_once_with({"access_token": self.test_token})
         self.mock_user_get.assert_called_once()
         assert result == self.mock_user
 

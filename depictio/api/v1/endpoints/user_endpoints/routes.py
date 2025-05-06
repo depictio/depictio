@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Annotated, Any, Dict, List, Optional
+from typing import Annotated, Any
 
 from beanie import PydanticObjectId
 from bson import ObjectId
@@ -7,12 +7,10 @@ from fastapi import APIRouter, Depends, Header, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import EmailStr
 
-from depictio.api.v1.configs.config import FASTAPI_INTERNAL_API_KEY
+from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.custom_logging import format_pydantic, logger
 from depictio.api.v1.db import users_collection
-from depictio.api.v1.endpoints.user_endpoints.agent_config_utils import (
-    _generate_agent_config,
-)
+from depictio.api.v1.endpoints.user_endpoints.agent_config_utils import _generate_agent_config
 from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     _add_token,
     _async_fetch_user_from_email,
@@ -100,9 +98,7 @@ async def login(login_request: OAuth2PasswordRequestForm = Depends()):
     _ = await _check_password(login_request.username, login_request.password)
     if not _:
         logger.error("Invalid credentials")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     # Generate random name for the token
     token_name = f"{login_request.username}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -140,9 +136,9 @@ async def create_token(
 ) -> TokenBeanie:
     logger.info(f"API key: {api_key}")
     logger.info(f"Token: {token}")
-    logger.info(f"Internal API key: {FASTAPI_INTERNAL_API_KEY}")
+    logger.info(f"Internal API key: {settings.auth.internal_api_key}")
 
-    if api_key != FASTAPI_INTERNAL_API_KEY:
+    if api_key != settings.auth.internal_api_key:
         raise HTTPException(
             status_code=403,
             detail="Invalid API key",
@@ -161,21 +157,15 @@ async def create_token(
 
 
 @auth_endpoint_router.get("/fetch_user/from_token")
-async def api_fetch_user_from_token(
-    token: str, current_user=Depends(get_current_user)
-) -> User:
+async def api_fetch_user_from_token(token: str, current_user=Depends(get_current_user)) -> User:
     user = await _async_fetch_user_from_token(token)
 
     if not user:
-        raise HTTPException(
-            status_code=404, detail="User not found for the provided token"
-        )
+        raise HTTPException(status_code=404, detail="User not found for the provided token")
 
     # if user id differs from current user id
     if user.id != current_user.id:
-        raise HTTPException(
-            status_code=403, detail="Token does not belong to the current user"
-        )
+        raise HTTPException(status_code=403, detail="Token does not belong to the current user")
 
     return user
 
@@ -187,9 +177,9 @@ async def api_fetch_user_from_email(
 ) -> User:
     logger.info(f"API key: {api_key}")
     logger.info(f"Email: {email}")
-    logger.info(f"Internal API key: {FASTAPI_INTERNAL_API_KEY}")
+    logger.info(f"Internal API key: {settings.auth.internal_api_key}")
 
-    if api_key != FASTAPI_INTERNAL_API_KEY:
+    if api_key != settings.auth.internal_api_key:
         raise HTTPException(
             status_code=403,
             detail="Invalid API key",
@@ -198,9 +188,7 @@ async def api_fetch_user_from_email(
     user = await _async_fetch_user_from_email(email)
 
     if not user:
-        raise HTTPException(
-            status_code=404, detail="User not found for the provided email"
-        )
+        raise HTTPException(status_code=404, detail="User not found for the provided email")
 
     return user
 
@@ -212,15 +200,11 @@ async def api_fetch_user_from_id(
     user = await _async_fetch_user_from_id(user_id)
 
     if not user:
-        raise HTTPException(
-            status_code=404, detail="User not found for the provided ID"
-        )
+        raise HTTPException(status_code=404, detail="User not found for the provided ID")
 
     # if user id differs from current user id
     if user.id != current_user.id:
-        raise HTTPException(
-            status_code=403, detail="ID does not belong to the current user"
-        )
+        raise HTTPException(status_code=403, detail="ID does not belong to the current user")
 
     return user
 
@@ -228,7 +212,7 @@ async def api_fetch_user_from_id(
 @auth_endpoint_router.post("/register")
 async def register(
     request: RequestUserRegistration,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Endpoint to register a new user.
 
@@ -240,9 +224,7 @@ async def register(
     """
     logger.info(f"Registering user with email: {request.email}")
     try:
-        return await _create_user_in_db(
-            request.email, request.password, request.is_admin
-        )
+        return await _create_user_in_db(request.email, request.password, request.is_admin)
 
     except HTTPException as e:
         # Re-raise HTTP exceptions
@@ -318,16 +300,14 @@ async def get_users_group():
     if len(groups) == 0:
         return None
     if len(groups) > 1:
-        raise HTTPException(
-            status_code=500, detail="Multiple groups with the same name"
-        )
+        raise HTTPException(status_code=500, detail="Multiple groups with the same name")
     return groups[0]
 
 
 @auth_endpoint_router.post("/edit_password")
 async def edit_password(
     request: RequestEditPassword, current_user: UserBeanie = Depends(get_current_user)
-) -> Dict:
+) -> dict:
     """
     Endpoint to handle user password updates.
     """
@@ -360,7 +340,7 @@ async def delete_token(
     token_id: PydanticObjectId,
     api_key: str = Header(..., description="Internal API key for authentication"),
 ):
-    if api_key != FASTAPI_INTERNAL_API_KEY:
+    if api_key != settings.auth.internal_api_key:
         raise HTTPException(
             status_code=403,
             detail="Invalid API key",
@@ -462,10 +442,10 @@ async def generate_agent_config_endpoint(
     return depictio_agent_config
 
 
-@auth_endpoint_router.get("/list_tokens", response_model=List[TokenBeanie])
+@auth_endpoint_router.get("/list_tokens", response_model=list[TokenBeanie])
 async def list_tokens_(
     current_user: UserBase = Depends(get_current_user),
-    token_lifetime: Optional[str] = None,
+    token_lifetime: str | None = None,
 ):
     cli_configs = await _list_tokens(
         user_id=current_user.id,
@@ -474,7 +454,7 @@ async def list_tokens_(
     return cli_configs
 
 
-@auth_endpoint_router.get("/list", response_model=List[UserBaseUI])
+@auth_endpoint_router.get("/list", response_model=list[UserBaseUI])
 async def list_users(current_user: UserBase = Depends(get_current_user)):
     users = await UserBeanie.find_all().to_list()
     logger.debug(f"Users: {users}")
@@ -531,9 +511,7 @@ def turn_sysadmin(user_id: str, is_admin: bool, current_user=Depends(get_current
         user_id = ObjectId(str(user_id))
 
     # Update the user in the database
-    result = users_collection.update_one(
-        {"_id": user_id}, {"$set": {"is_admin": is_admin}}
-    )
+    result = users_collection.update_one({"_id": user_id}, {"$set": {"is_admin": is_admin}})
     if result.modified_count == 1:
         return {"success": True}
     else:
@@ -565,9 +543,7 @@ def delete_group(group_id: str, current_user=Depends(get_current_user)):
 
 
 @auth_endpoint_router.post("/update_group_in_users/{group_id}")
-def update_group_in_users(
-    group_id: str, request: dict, current_user=Depends(get_current_user)
-):
+def update_group_in_users(group_id: str, request: dict, current_user=Depends(get_current_user)):
     if not current_user:
         raise HTTPException(status_code=401, detail="Current user not found.")
     # Check if the current user is an admin
@@ -594,11 +570,13 @@ def update_group_in_users(
     group_id_obj = (
         ObjectId(group_id["$oid"])
         if isinstance(group_id, dict) and "$oid" in group_id
-        else ObjectId(group_id)
-        if isinstance(group_id, str)
-        else group_id
-        if isinstance(group_id, ObjectId)
-        else ObjectId(str(group_id))
+        else (
+            ObjectId(group_id)
+            if isinstance(group_id, str)
+            else group_id
+            if isinstance(group_id, ObjectId)
+            else ObjectId(str(group_id))
+        )
     )
     logger.info(f"Group ID: {group_id_obj}")
 

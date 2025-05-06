@@ -1,14 +1,11 @@
 import os
 import sys
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import httpx
 from pydantic import EmailStr, validate_call
 
-from depictio.api.v1.configs.config import (
-    API_BASE_URL,
-    FASTAPI_INTERNAL_API_KEY,
-)
+from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.custom_logging import format_pydantic, logger
 from depictio.api.v1.endpoints.user_endpoints.core_functions import _hash_password
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
@@ -27,8 +24,8 @@ API_QUERY_PARAMS = {"test_mode": "true"} if is_testing else {}
 
 @validate_call(validate_return=True)
 def api_call_register_user(
-    email: EmailStr, password: str, group: Optional[str] = None, is_admin: bool = False
-) -> Optional[Dict[str, Any]]:
+    email: EmailStr, password: str, group: str | None = None, is_admin: bool = False
+) -> dict[str, Any] | None:
     """
     Register a new user by calling the API.
 
@@ -80,7 +77,7 @@ def api_call_register_user(
 
 
 @validate_call(validate_return=True)
-def api_call_fetch_user_from_token(token: str) -> Optional[User]:
+def api_call_fetch_user_from_token(token: str) -> User | None:
     """
     Fetch a user from the authentication service using a token.
     Synchronous version for Dash compatibility.
@@ -114,7 +111,7 @@ def api_call_fetch_user_from_token(token: str) -> Optional[User]:
 
 
 @validate_call(validate_return=True)
-def api_call_fetch_user_from_email(email: EmailStr) -> Optional[User]:
+def api_call_fetch_user_from_email(email: EmailStr) -> User | None:
     """
     Fetch a user from the authentication service using an email.
     Synchronous version for Dash compatibility.
@@ -127,12 +124,12 @@ def api_call_fetch_user_from_email(email: EmailStr) -> Optional[User]:
     """
     logger.debug(f"Fetching user with email: {email}")
     logger.debug(f"API Base URL: {API_BASE_URL}")
-    logger.debug(f"Internal API Key: {FASTAPI_INTERNAL_API_KEY}")
+    logger.debug(f"Internal API Key: {settings.auth.internal_api_key}")
 
     response = httpx.get(
         f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_email",
         params={"email": email},
-        headers={"api-key": FASTAPI_INTERNAL_API_KEY},
+        headers={"api-key": settings.auth.internal_api_key},
     )
 
     if response.status_code == 404:
@@ -152,7 +149,7 @@ def api_call_fetch_user_from_email(email: EmailStr) -> Optional[User]:
 
 
 @validate_call(validate_return=True)
-def api_call_create_token(token_data: TokenData) -> Optional[Dict[str, Any]]:
+def api_call_create_token(token_data: TokenData) -> dict[str, Any] | None:
     """
     Create a new token for a user by calling the API.
 
@@ -166,7 +163,7 @@ def api_call_create_token(token_data: TokenData) -> Optional[Dict[str, Any]]:
     response = httpx.post(
         f"{API_BASE_URL}/depictio/api/v1/auth/create_token",
         json=convert_model_to_dict(token_data),
-        headers={"api-key": FASTAPI_INTERNAL_API_KEY},
+        headers={"api-key": settings.auth.internal_api_key},
     )
 
     if response.status_code == 200:
@@ -178,7 +175,7 @@ def api_call_create_token(token_data: TokenData) -> Optional[Dict[str, Any]]:
 
 
 @validate_call(validate_return=True)
-def purge_expired_tokens(token: str) -> Optional[Dict[str, Any]]:
+def purge_expired_tokens(token: str) -> dict[str, Any] | None:
     """
     Purge expired tokens from the database.
     Args:
@@ -258,7 +255,7 @@ def api_call_delete_token(token_id):
     response = httpx.post(
         f"{API_BASE_URL}/depictio/api/v1/auth/delete_token",
         params={"token_id": token_id},
-        headers={"api-key": FASTAPI_INTERNAL_API_KEY},
+        headers={"api-key": settings.auth.internal_api_key},
     )
     if response.status_code == 200:
         logger.info(f"Token {token_id} deleted successfully.")
@@ -270,8 +267,8 @@ def api_call_delete_token(token_id):
 
 def api_call_list_tokens(
     current_token: str,
-    token_lifetime: Optional[str] = None,
-) -> Optional[List]:
+    token_lifetime: str | None = None,
+) -> list | None:
     """
     List all tokens for the current user.
 
@@ -304,9 +301,7 @@ def api_call_list_tokens(
         return None
 
 
-def api_call_generate_agent_config(
-    token: TokenData, current_token: str
-) -> Optional[Dict[str, Any]]:
+def api_call_generate_agent_config(token: TokenData, current_token: str) -> dict[str, Any] | None:
     """
     Generate an agent configuration for a user with the given token.
 
@@ -351,7 +346,7 @@ def api_call_edit_password(
     old_password: str,
     new_password: str,
     access_token: str,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """
     Edit the password of a user by calling the API.
     Args:

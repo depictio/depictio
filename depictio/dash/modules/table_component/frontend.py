@@ -1,18 +1,15 @@
 # Import necessary libraries
-from dash import html, dcc, Input, Output, State, MATCH
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
-from dash_iconify import DashIconify
 import httpx
+from dash import MATCH, Input, Output, State, dcc, html
+from dash_iconify import DashIconify
+
+from depictio.api.v1.configs.config import API_BASE_URL
 
 # Depictio imports
 from depictio.dash.modules.table_component.utils import build_table, build_table_frame
-from depictio.api.v1.configs.config import API_BASE_URL
-
-from depictio.dash.utils import (
-    UNSELECTED_STYLE,
-    get_columns_from_data_collection,
-)
+from depictio.dash.utils import UNSELECTED_STYLE, get_columns_from_data_collection
 
 # TODO: interactivity when selecting table rows
 
@@ -141,9 +138,7 @@ def register_callbacks_table_component(app):
             headers=headers,
         ).json()
 
-        cols_json = get_columns_from_data_collection(
-            workflow_id, data_collection_id, TOKEN
-        )
+        cols_json = get_columns_from_data_collection(workflow_id, data_collection_id, TOKEN)
 
         # Get the join tables for the selected workflow - used in store for metadata management
         # join_tables_for_wf = httpx.get(

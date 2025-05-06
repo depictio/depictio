@@ -154,8 +154,7 @@ def load_depictio_data(dashboard_id, local_data):
             # Check if data is available, if not set the buttons to disabled
             owner = (
                 True
-                if str(current_user.id)
-                in [str(e.id) for e in dashboard_data.permissions.owners]
+                if str(current_user.id) in [str(e.id) for e in dashboard_data.permissions.owners]
                 else False
             )
 

@@ -1,14 +1,11 @@
 from datetime import datetime
-from typing import Dict, List, Union, cast
+from typing import cast
 
 import deltalake
 import polars as pl
 from pydantic import validate_call
 
-from depictio.cli.cli.utils.api_calls import (
-    api_get_files_by_dc_id,
-    api_upsert_deltatable,
-)
+from depictio.cli.cli.utils.api_calls import api_get_files_by_dc_id, api_upsert_deltatable
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
 from depictio.cli.cli_logging import logger
 from depictio.models.models.base import convert_objectid_to_str
@@ -20,7 +17,7 @@ from depictio.models.s3_utils import turn_S3_config_into_polars_storage_options
 
 
 @validate_call
-def fetch_file_data(dc_id: str, CLI_config: CLIConfig) -> List[File]:
+def fetch_file_data(dc_id: str, CLI_config: CLIConfig) -> list[File]:
     """
     Call the API to list files for the given DataCollection.
 
@@ -77,9 +74,7 @@ def convert_to_file_objects(files_data: list) -> list:
     return files
 
 
-def read_single_file_lazy(
-    file_info: File, file_format: str, polars_kwargs: dict
-) -> pl.LazyFrame:
+def read_single_file_lazy(file_info: File, file_format: str, polars_kwargs: dict) -> pl.LazyFrame:
     """
     Lazily scan a single file into a Polars LazyFrame according to the specified format.
 
@@ -238,9 +233,7 @@ def write_delta_table(
         Exception: If writing the Delta table fails.
     """
     try:
-        logger.debug(
-            f"Writing aggregated DataFrame to Delta table at {destination_file}."
-        )
+        logger.debug(f"Writing aggregated DataFrame to Delta table at {destination_file}.")
         logger.debug(f"Aggregated DataFrame schema: {aggregated_df.schema}")
         logger.debug(f"Aggregated DataFrame head: {aggregated_df.head(5)}")
         logger.debug(f"Storage options: {storage_options}")
@@ -266,7 +259,7 @@ def write_delta_table(
 
 def read_delta_table(
     destination_file: str, storage_options: PolarsStorageOptions
-) -> Dict[str, Union[str, pl.DataFrame]]:
+) -> dict[str, str | pl.DataFrame]:
     """
     Read a Delta Lake table into a DataFrame.
 
@@ -280,9 +273,7 @@ def read_delta_table(
         Exception: If reading the Delta table fails.
     """
     try:
-        df = pl.read_delta(
-            destination_file, storage_options=storage_options.model_dump()
-        )
+        df = pl.read_delta(destination_file, storage_options=storage_options.model_dump())
         logger.debug(f"Delta table read from {destination_file}.")
         return {
             "result": "success",
@@ -299,7 +290,7 @@ def client_aggregate_data(
     data_collection: DataCollection,
     CLI_config: CLIConfig,
     command_parameters: dict = {},
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """
     Aggregate files from a DataCollection into a Delta Lake object.
 
@@ -345,9 +336,7 @@ def client_aggregate_data(
     print(f"Destination prefix: {destination_prefix}")
     print(f"Storage options: {storage_options}")
     try:
-        response_read_table = read_delta_table(
-            destination_prefix, storage_options=storage_options
-        )
+        response_read_table = read_delta_table(destination_prefix, storage_options=storage_options)
         print(f"Response read table: {response_read_table}")
 
         if response_read_table["result"] == "success" and "data" in response_read_table:
@@ -359,13 +348,9 @@ def client_aggregate_data(
         else:
             logger.debug("Error reading Delta table or no data returned")
             destination_exists = False
-            print(
-                "Error reading Delta table or no data returned, will create it during processing"
-            )
+            print("Error reading Delta table or no data returned, will create it during processing")
     except deltalake.exceptions.TableNotFoundError:
-        logger.debug(
-            "Destination prefix does not exist yet, will create it during processing"
-        )
+        logger.debug("Destination prefix does not exist yet, will create it during processing")
         destination_exists = False
         print("Destination prefix does not exist yet, will create it during processing")
     print(f"Destination exists: {destination_exists}")
@@ -394,9 +379,7 @@ def client_aggregate_data(
     print(f"Files data: {files}")
 
     # 3. Read files using Polars
-    data_collection_config = convert_objectid_to_str(
-        data_collection_config.model_dump()
-    )
+    data_collection_config = convert_objectid_to_str(data_collection_config.model_dump())
     print(f"Data Collection config: {data_collection_config}")
     logger.debug(f"Data Collection config: {data_collection_config}")
     dc_props = data_collection_config.get("dc_specific_properties", {})

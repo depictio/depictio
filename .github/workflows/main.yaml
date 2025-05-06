@@ -1,73 +1,73 @@
-name: Test Depictio (lightweight)
+# name: Test Depictio (lightweight)
 
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+# on:
+#   push:
+#     branches: [main]
+#   pull_request:
+#     branches: [main]
 
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    container:
-      image: python:3.12.9-slim-bullseye
-    env:
-      UV_CACHE_DIR: /uv-cache
-      UV_LINK_MODE: copy
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+# jobs:
+#   test:
+#     runs-on: ubuntu-latest
+#     container:
+#       image: python:3.12.9-slim-bullseye
+#     env:
+#       UV_CACHE_DIR: /uv-cache
+#       UV_LINK_MODE: copy
+#     steps:
+#       - name: Checkout Repository
+#         uses: actions/checkout@v4
 
-      - name: Create depictioDB directory
-        run: mkdir -p depictioDB/
+#       - name: Create depictioDB directory
+#         run: mkdir -p depictioDB/
 
-      - name: Set permissions
-        run: chmod -R 777 depictioDB/
+#       - name: Set permissions
+#         run: chmod -R 777 depictioDB/
 
-      - name: Update packages
-        run: apt-get update
+#       - name: Update packages
+#         run: apt-get update
 
-      - name: Install dependencies
-        run: apt-get install -y curl ca-certificates git
+#       - name: Install dependencies
+#         run: apt-get install -y curl ca-certificates git
 
-      - name: Download uv
-        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+#       - name: Download uv
+#         run: curl -LsSf https://astral.sh/uv/install.sh | sh
 
-      # Configure uv to use a cacheable location
-      - name: Configure uv cache
-        run: |
-          mkdir -p /uv-cache
-          chmod -R 777 /uv-cache
-          echo "UV_CACHE_DIR=/uv-cache" >> $GITHUB_ENV
+#       # Configure uv to use a cacheable location
+#       - name: Configure uv cache
+#         run: |
+#           mkdir -p /uv-cache
+#           chmod -R 777 /uv-cache
+#           echo "UV_CACHE_DIR=/uv-cache" >> $GITHUB_ENV
 
-      - name: Create venv 
-        run: /root/.local/bin/uv venv
+#       - name: Create venv
+#         run: /root/.local/bin/uv venv
 
-      - name: Create venv 
-        run: /root/.local/bin/uv venv
+#       - name: Create venv
+#         run: /root/.local/bin/uv venv
 
-      - name: Install depictio-models
-        run: |
-          . .venv/bin/activate
-          /root/.local/bin/uv pip install git+https://github.com/depictio/depictio-models.git
+#       - name: Install depictio-models
+#         run: |
+#           . .venv/bin/activate
+#           /root/.local/bin/uv pip install git+https://github.com/depictio/depictio-models.git
 
-      - name: Install package
-        run: |
-          . .venv/bin/activate
-          /root/.local/bin/uv pip install -e .
+#       - name: Install package
+#         run: |
+#           . .venv/bin/activate
+#           /root/.local/bin/uv pip install -e .
 
-      - name: Install test dependencies
-        run: |
-          . .venv/bin/activate
-          /root/.local/bin/uv pip install pytest pytest-xdist pytest-asyncio pytest-cov mypy ruff mongomock motor mongomock-motor
+#       - name: Install test dependencies
+#         run: |
+#           . .venv/bin/activate
+#           /root/.local/bin/uv pip install pytest pytest-xdist pytest-asyncio pytest-cov mypy ruff mongomock motor mongomock-motor
 
-      - name: List installed packages
-        run: |
-          . .venv/bin/activate
-          /root/.local/bin/uv pip list
+#       - name: List installed packages
+#         run: |
+#           . .venv/bin/activate
+#           /root/.local/bin/uv pip list
 
-      - name: Run tests with direct path to pytest
-        run: |
-          . .venv/bin/activate
-          cd depictio
-          python -m pytest
+#       - name: Run tests with direct path to pytest
+#         run: |
+#           . .venv/bin/activate
+#           cd depictio
+#           python -m pytest

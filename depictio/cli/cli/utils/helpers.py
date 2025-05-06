@@ -1,12 +1,8 @@
-from typing import Optional
-
 from pydantic import validate_call
 from typeguard import typechecked
 
 from depictio.cli.cli.utils.deltatables import client_aggregate_data
-from depictio.cli.cli.utils.rich_utils import (
-    rich_print_checked_statement,
-)
+from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
 from depictio.cli.cli.utils.scan import scan_files_for_data_collection
 from depictio.cli.cli_logging import logger
 from depictio.models.models.projects import Project, Workflow
@@ -73,7 +69,7 @@ def process_data_collection_helper(
 def process_workflow_helper(
     CLI_config: CLIConfig,
     workflow: Workflow,
-    data_collection_tag: Optional[str] = None,
+    data_collection_tag: str | None = None,
     command_parameters: dict = {},
     mode: str = "scan",
 ) -> None:
@@ -89,26 +85,19 @@ def process_workflow_helper(
         update_files (bool, optional): Update the files for the data collections.
     """
     logger.info(f"Processing Workflow: {workflow.name}")
-    rich_print_checked_statement(
-        f"Processing Workflow: {workflow.workflow_tag}", "info"
-    )
+    rich_print_checked_statement(f"Processing Workflow: {workflow.workflow_tag}", "info")
 
     for data_collection in workflow.data_collections:
         # Skip if a specific tag is provided and it doesn't match
         if (
             data_collection_tag
-            and data_collection.data_collection_tag.lower()
-            != data_collection_tag.lower()
+            and data_collection.data_collection_tag.lower() != data_collection_tag.lower()
         ):
-            logger.info(
-                f"Skipping data collection: {data_collection.data_collection_tag}"
-            )
+            logger.info(f"Skipping data collection: {data_collection.data_collection_tag}")
             continue
 
         # Process the matching data collection
-        logger.info(
-            f"Processing data collection: {data_collection.data_collection_tag}"
-        )
+        logger.info(f"Processing data collection: {data_collection.data_collection_tag}")
         dc_id = str(data_collection.id)
         process_data_collection_helper(
             CLI_config=CLI_config,
@@ -123,8 +112,8 @@ def process_workflow_helper(
 def process_project_helper(
     CLI_config: CLIConfig,
     project_config: Project,
-    workflow_name: Optional[str] = None,
-    data_collection_tag: Optional[str] = None,
+    workflow_name: str | None = None,
+    data_collection_tag: str | None = None,
     command_parameters: dict = {},
     mode: str = "scan",
 ):
@@ -147,16 +136,12 @@ def process_project_helper(
 
     if workflow_name:
         # Filter workflows if specific name requested
-        rich_print_checked_statement(
-            f"Filtering workflows for name: {workflow_name}", "info"
-        )
+        rich_print_checked_statement(f"Filtering workflows for name: {workflow_name}", "info")
         workflows = [wf for wf in workflows if wf.name == workflow_name]
 
         if not workflows:
             logger.error(f"No workflow found with name: {workflow_name}")
-            rich_print_checked_statement(
-                f"No workflow found with name: {workflow_name}", "error"
-            )
+            rich_print_checked_statement(f"No workflow found with name: {workflow_name}", "error")
 
     # Process selected workflows
     for workflow in workflows:
