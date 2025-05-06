@@ -59,7 +59,8 @@ jobs:
       - name: Install dependencies for quality check & testing
         run: |
           source venv/bin/activate
-          uv pip install black ruff bandit pytest pytest-xdist pytest-asyncio pytest-cov mongomock mongomock-motor
+          uv pip install black ruff bandit pytest pytest-xdist pytest-asyncio pytest-cov mongomock mongomock-motor \
+            bleach typer rich typeguard
 
       - name: Run Ruff for formatting
         run: |
