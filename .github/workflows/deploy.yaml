@@ -112,9 +112,9 @@ jobs:
       #       exit 1
       #     fi
 
-      - name: Verify Permissions Inside Container
-        run: |
-          docker compose exec -T depictio_backend bash -c "ls -la /app/depictio/keys"
+      # - name: Verify Permissions Inside Container
+      #   run: |
+      #     docker compose exec -T depictio_backend bash -c "ls -la /app/depictio/keys"
 
       - name: Wait for Services to Start
         run: sleep 10 # Adjust the wait time if necessary
