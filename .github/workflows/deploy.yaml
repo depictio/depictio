@@ -54,8 +54,8 @@ jobs:
         run: |
           echo "UID=$(id -u)" >> $GITHUB_ENV
           echo "GID=$(id -g)" >> $GITHUB_ENV
-          echo "MINIO_ROOT_USER=minio" >> $GITHUB_ENV
-          echo "MINIO_ROOT_PASSWORD=minio123" >> $GITHUB_ENV
+          echo "DEPICTIO_MINIO_ROOT_USER=minio" >> $GITHUB_ENV
+          echo "DEPICTIO_MINIO_ROOT_PASSWORD=minio123" >> $GITHUB_ENV
 
       - name: Create and Set Permissions for depictioDB
         run: |
