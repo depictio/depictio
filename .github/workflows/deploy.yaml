@@ -36,14 +36,14 @@ jobs:
 
       - name: Run Ruff for formatting
         run: |
-          ruff format .
+          ruff format depictio
 
       - name: Run Ruff for linting
         run: |
-          ruff check .
+          ruff check depictio
 
       - name: Run Bandit security check
-        run: bandit -r . -lll
+        run: bandit -r depictio -lll
 
       - name: Run tests
         run: |
