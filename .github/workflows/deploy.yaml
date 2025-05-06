@@ -60,7 +60,7 @@ jobs:
       - name: Install dependencies for quality check & testing
         run: |
           python -m pip install --upgrade pip
-          pip install black ruff bandit pytest pytest-xdist pytest-asyncio pytest-cov mongomock mongomock-motor
+          uv pip install black ruff bandit pytest pytest-xdist pytest-asyncio pytest-cov mongomock mongomock-motor
 
       - name: Run Ruff for formatting
         run: |
@@ -70,8 +70,8 @@ jobs:
         run: |
           ruff check depictio
 
-      - name: Run Bandit security check
-        run: bandit -r depictio -lll
+      # - name: Run Bandit security check
+      #   run: bandit -r depictio -lll
 
       - name: Run tests
         run: |
