@@ -47,7 +47,7 @@ jobs:
 
       - name: Run tests
         run: |
-          pip install pytest
+          pip install pytest pydantic[email] pydantic-settings pytest-xdist pytest-asyncio pytest-cov mypy ruff mongomock motor mongomock-motor
           pytest
 
   setup:
