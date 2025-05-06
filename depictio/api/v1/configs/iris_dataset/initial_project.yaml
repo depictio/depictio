@@ -1,0 +1,27 @@
+id: "646b0f3c1e4a2d7f8e5b8c9a"
+name: "Iris Dataset Project Data Analysis"
+workflows:
+  - id: "646b0f3c1e4a2d7f8e5b8c9b"
+    name: "iris_workflow"
+    engine:
+      name: "python"
+    data_location:
+      structure: "flat"
+      locations:
+        # - "{DEPICTIO_DEMO_DATA_LOCATION}/iris_dataset"
+        - /app/depictio/depictio/api/v1/configs/iris_dataset
+    data_collections:
+      - id: "646b0f3c1e4a2d7f8e5b8c9c"
+        data_collection_tag: "iris_table"
+        description: "Iris dataset in CSV format"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: single
+            scan_parameters:
+              filename: "/app/depictio/api/v1/configs/iris_dataset/iris.csv"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","

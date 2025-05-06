@@ -1,102 +1,178 @@
-# Create a user if it does not exist
-
-from datetime import time
 import os
+from typing import Optional
 
-import yaml
-from depictio.api.v1.endpoints.user_endpoints.core_functions import generate_agent_config
-from depictio.api.v1.endpoints.user_endpoints.utils import hash_password, list_existing_tokens
-from depictio.api.v1.configs.logging import logger
-from depictio.api.v1.endpoints.user_endpoints.models import User
-from depictio.api.v1.endpoints.user_endpoints.utils import add_token
-from depictio.api.v1.endpoints.utils_endpoints.core_functions import create_bucket
+from fastapi import HTTPException
 
-
-user_dict = {"username": "admin", "password": hash_password("changeme"), "is_admin": True, "email": "admin@embl.de"}
-
-
-def create_admin_user(user_dict=user_dict):
-    from depictio.api.v1.db import users_collection, client
-
-    # Ensure MongoDB is up and running
-    for _ in range(5):
-        try:
-            client.server_info()
-            logger.info("Connected to MongoDB")
-            break
-        except Exception as e:
-            logger.warning("Waiting for MongoDB to start...")
-            time.sleep(5)
-    else:
-        raise Exception("Could not connect to MongoDB")
-
-    # Check if the user already exists
-    existing_user = users_collection.find_one({"email": user_dict["email"]})
-    if existing_user:
-        logger.info("Admin user already exists in the database")
-    # Insert the user into the database
-    else:
-        logger.info("Adding admin user to the database")
-        logger.info(f"User: {user_dict}")
-        user = User(**user_dict)
-        logger.info(f"User: {user}")
-        user = user.mongo()
-        logger.info(f"User.mongo(): {user}")
-        users_collection.insert_one(user)
-        logger.info("Admin user added to the database")
-
-    # Check if default admin token exists
-
-    if not users_collection.find_one({"email": user_dict["email"], "tokens.name": "default_admin_token"}):
-        user = users_collection.find_one({"email": user_dict["email"]})
-        logger.info(f"User: {user}")
-        user = User.from_mongo(user)
-        logger.info(f"User.from_mongo: {user}")
-
-        logger.info("Creating default admin token")
-        token_data = {"sub": user_dict["email"], "name": "default_admin_token", "token_lifetime": "long-lived"}
-        token = add_token(token_data)
-        logger.info("Default admin token created")
-        logger.info(f"Token: {token}")
-        token_data["access_token"] = token.access_token
-        token_data["expire_datetime"] = token.expire_datetime
-
-        # Generate the agent config
-
-        agent_config = generate_agent_config(user, {"token": token_data})
-        agent_config = yaml.dump(agent_config, default_flow_style=False)
-
-        # Export the agent config to a file
-        logger.info(f"Creating .depictio directory in {os.getcwd()}")
-        os.makedirs("/app/depictio/.depictio", exist_ok=True)
-        with open("/app/depictio/.depictio/default_admin_agent.yaml", "w") as f:
-            f.write(agent_config)
-        logger.info("Agent config exported to /app/depictio/.depictio/default_admin_agent.yaml")
-        return user
-
-    else:
-        logger.info("Default admin token already exists")
-        return None
+from depictio.api.v1.configs.config import settings
+from depictio.api.v1.configs.custom_logging import format_pydantic, logger
+from depictio.api.v1.endpoints.projects_endpoints.utils import (
+    _helper_create_project_beanie,
+)
+from depictio.api.v1.endpoints.user_endpoints.core_functions import _create_user_in_db
+from depictio.api.v1.endpoints.user_endpoints.token_utils import create_default_token
+from depictio.api.v1.endpoints.user_endpoints.utils import (
+    _ensure_mongodb_connection,
+    create_group_helper_beanie,
+)
+from depictio.models.models.projects import ProjectBeanie
+from depictio.models.models.users import (
+    GroupBeanie,
+    TokenBeanie,
+    UserBase,
+    UserBeanie,
+)
+from depictio.models.utils import get_config
 
 
-def initialize_db():
-    from depictio.api.v1.db import initialization_collection
+async def create_initial_project(
+    admin_user: UserBeanie, token_payload: TokenBeanie
+) -> None:
+    # from depictio.models.models.projects import Project,
 
-    # Check if the initialization has already been done
-    initialization_status = initialization_collection.find_one({"initialized": True})
-    if not initialization_status:
-        logger.info("Running initial setup...")
+    project_yaml_path = os.path.join(
+        os.path.dirname(__file__), "configs", "iris_dataset", "initial_project.yaml"
+    )
+    project_config = get_config(project_yaml_path)
+    project_config["yaml_config_path"] = project_yaml_path
 
-        # Create the admin user
-        admin_user = create_admin_user(user_dict)
+    project_config["permissions"] = {
+        "owners": [
+            UserBase(
+                id=admin_user.id,
+                email=admin_user.email,
+                is_admin=True,
+            )
+        ],
+        "editors": [],
+        "viewers": [],
+    }
 
+    logger.debug(f"Project config: {project_config}")
+    project = ProjectBeanie(**project_config)
+    logger.debug(f"Project object: {format_pydantic(project)}")
+    token = TokenBeanie(**token_payload["token"])
+    logger.debug(f"Token: {format_pydantic(token)}")
+
+    try:
+        payload = await _helper_create_project_beanie(project)
+
+        logger.debug(f"Project creation payload: {payload}")
+        if payload["success"]:
+            logger.info(
+                f"Project created successfully: {format_pydantic(payload['project'])}"
+            )
+            return {
+                "success": True,
+                "project": payload["project"],
+                "message": "Project created successfully",
+            }
+    except HTTPException as e:
+        logger.error(f"Error creating project: {e}")
+        return {
+            "success": False,
+            "message": f"Error creating project: {e}",
+        }
+
+
+async def initialize_db(wipe: bool = False) -> Optional[UserBeanie]:
+    """
+    Initialize the database with default users and groups.
+    """
+    logger.info(f"Bootstrap: {wipe} and type: {type(wipe)}")
+
+    _ensure_mongodb_connection()
+
+    if wipe:
+        logger.info("Wipe is enabled. Deleting the database...")
+        from depictio.api.v1.db import client
+
+        client.drop_database(settings.mongodb.db_name)
+        logger.info("Database deleted successfully.")
+
+    # Load and validate configuration for initial users and groups
+    config_path = os.path.join(
+        os.path.dirname(__file__), "configs", "initial_users.yaml"
+    )
+    initial_config = get_config(config_path)
+
+    logger.info("Running initial database setup...")
+
+    # Create groups
+    for group_config in initial_config.get("groups", []):
+        group = GroupBeanie(**group_config)
+        payload = await create_group_helper_beanie(group)
+        logger.debug(f"Created group: {format_pydantic(payload['group'])}")
+
+    admin_user = None
+
+    # Create users
+    for user_config in initial_config.get("users", []):
+        # Validate user config
+        logger.debug(user_config)
+
+        user_payload = await _create_user_in_db(
+            email=user_config["email"],
+            password=user_config["password"],
+            is_admin=user_config.get("is_admin", False),
+        )
+        logger.debug(f"User payload: {user_payload}")
+
+        # # Create default token if user was just created
+        if user_payload["success"]:
+            token_payload = await create_default_token(user_payload["user"])
+            if token_payload:
+                logger.info(f"Created token: {format_pydantic(token_payload['token'])}")
+
+            if user_payload["user"].is_admin:
+                admin_user = user_payload["user"]
+                logger.info(f"Admin user created: {admin_user.email}")
+                logger.info(f"Admin token created: {format_pydantic(token_payload)}")
+        else:
+            token_beanie = await TokenBeanie.find_one(
+                {"user_id": user_payload["user"].id, "name": "default_token"}
+            )
+            logger.debug(f"Token beanie: {format_pydantic(token_beanie)}")
+            if token_beanie:
+                token_payload = {
+                    "token": token_beanie.model_dump(),
+                    "config_path": None,
+                    "new_token_created": False,
+                }
+                logger.info(f"Token payload: {format_pydantic(token_payload)}")
+                logger.info(
+                    f"Default token already exists for {user_payload['user'].email}"
+                )
+            else:
+                logger.warning(
+                    f"Failed to create default token for {user_payload['user'].email}"
+                )
+
+    # If no admin user was created through the loop, try to find one
+    if admin_user is None:
+        logger.debug(
+            "No admin user created during initialization, checking if one exists..."
+        )
+        admin_user = await UserBeanie.find_one({"is_admin": True})
         if admin_user:
-            # Create a bucket if it does not exist
-            create_bucket(admin_user)
+            logger.info(f"Found existing admin user: {admin_user.email}")
+            token_beanie = await TokenBeanie.find_one(
+                {"user_id": admin_user.id, "name": "default_token"}
+            )
 
-        # Insert the initialization status
-        initialization_collection.insert_one({"initialized": True})
-        logger.info("Initialization setup done.")
+            logger.debug(f"Token payload: {format_pydantic(token_beanie)}")
+            token_payload = {
+                "token": token_beanie.model_dump(),
+                "config_path": None,
+                "new_token_created": False,
+            }
+        else:
+            logger.warning("No admin user found in the database")
 
-    else:
-        logger.info("Initialization already done. Skipping...")
+    project_payload = await create_initial_project(
+        admin_user=admin_user, token_payload=token_payload
+    )
+    logger.debug(f"Project payload: {project_payload}")
+
+    logger.info("Database initialization completed successfully.")
+
+    return admin_user

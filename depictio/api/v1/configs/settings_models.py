@@ -1,112 +1,104 @@
-import os
 from typing import Dict, Union
-from pydantic import BaseSettings, Field
+
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from depictio.api.v1.key_utils import _load_or_generate_api_internal_key
+from depictio.models.models.s3 import S3DepictioCLIConfig
+
 
 class Collections(BaseSettings):
     """Collections names in MongoDB."""
+
     projects_collection: str = "projects"
     data_collection: str = "data_collections"
     workflow_collection: str = "workflows"
     runs_collection: str = "runs"
     files_collection: str = "files"
     users_collection: str = "users"
+    tokens_collection: str = "tokens"
+    groups_collection: str = "groups"
     deltatables_collection: str = "deltatables"
     jbrowse_collection: str = "jbrowse_collection"
     dashboards_collection: str = "dashboards"
     initialization_collection: str = "initialization"
+    test_collection: str = "test"
+
 
 class MongoConfig(BaseSettings):
     """MongoDB configuration."""
-    service_name: str = "mongo"
-    port: int = Field(default=27018, env='DEPICTIO_MONGO_DB_PORT')
-    db_name: str = "depictioDB"
+
     collections: Collections = Collections()
-    class Config:
-        env_prefix = 'DEPICTIO_MONGO_'
-
-class RedisConfig(BaseSettings):
-    """Redis configuration."""
-    service_name: str = "redis"
-    port: int = 6379
-    db: int = 0
-    cache_ttl: int = 300
-    user_secret_key: str = Field(default="mysecretkey")
-    class Config:
-        env_prefix = 'DEPICTIO_REDIS_'
-
-
-class RabbitMQConfig(BaseSettings):
-    """RabbitMQ configuration."""
-    service_name: str = "rabbitmq"
-    port: int = 5672
-    exchange: str = "direct"
-    routing_key: str = Field(default="depictio_key")
-    queue: str = "jbrowse_logs"
-    class Config:
-        env_prefix = 'DEPICTIO_RABBITMQ_'
+    service_name: str = "mongo"
+    port: int = Field(default=27018)
+    db_name: str = Field(default="depictioDB")
+    wipe: bool = Field(
+        default=False,
+    )
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_MONGODB_")
 
 
 class FastAPIConfig(BaseSettings):
     """Backend configuration."""
+
     host: str = "0.0.0.0"
     service_name: str = "depictio_backend"
-    port: int = Field(default=8058, env='DEPICTIO_BACKEND_PORT')
+    port: int = Field(default=8058)
     logging_level: str = "INFO"
-    class Config:
-        env_prefix = 'DEPICTIO_BACKEND_'
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_FASTAPI_")
+    workers: int = Field(default=1)
+    ssl: bool = Field(default=False)
+    internal_api_key: str = Field(default_factory=_load_or_generate_api_internal_key)
+    playwright_dev_mode: bool = Field(default=False)
+
 
 class DashConfig(BaseSettings):
     """Frontend configuration."""
+
+    debug: bool = True
     host: str = "0.0.0.0"
     service_name: str = "depictio_frontend"
-    port: int = Field(default=5080, env='DEPICTIO_FRONTEND_PORT')
-    class Config:
-        env_prefix = 'DEPICTIO_FRONTEND_'
-
-
-class MinioConfig(BaseSettings):
-    """Minio configuration."""
-    internal_endpoint: str = "http://minio"
-    external_endpoint: str = "http://localhost"
-    port: int = 9000
-    root_user: str = Field(default="minio")
-    root_password: str = Field(default="minio123")
-    secure: bool = False
-    bucket: str = "depictio-bucket"
-    data_dir: str = "/depictio/minio_data"
-    class Config:
-        env_prefix = 'DEPICTIO_MINIO_'
+    workers: int = Field(default=1)
+    port: int = Field(default=5080)
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_DASH_")
 
 
 class JbrowseConfig(BaseSettings):
     """Jbrowse configuration."""
+
     enabled: bool = True
-    instance: Dict[str, Union[str, int]] = {'host': "http://localhost", 'port': 3000}
-    watcher_plugin: Dict[str, Union[str, int]] = {'host': "http://localhost", 'port': 9010}
+    instance: Dict[str, Union[str, int]] = {"host": "http://localhost", "port": 3000}
+    watcher_plugin: Dict[str, Union[str, int]] = {
+        "host": "http://localhost",
+        "port": 9010,
+    }
     data_dir: str = "/data"
     config_dir: str = "/jbrowse-watcher-plugin/sessions"
-    class Config:
-        env_prefix = 'DEPICTIO_JBROWSE_'
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_JBROWSE_")
 
 
 class Auth(BaseSettings):
     """Authentication configuration."""
+
     tmp_token: str = Field(default="eyJhb...")
-
-    class Config:
-        env_prefix = 'DEPICTIO_AUTH_'
-        arbitrary_types_allowed = True
-
-
+    keys_dir: str = Field(
+        default="depictio/keys",
+    )
+    keys_algorithm: str = "RS256"
+    cli_config_dir: str = Field(
+        default="depictio/.depictio",
+    )
+    model_config = SettingsConfigDict(
+        arbitrary_types_allowed=True, env_prefix="DEPICTIO_AUTH_"
+    )
 
 
 class Settings(BaseSettings):
     """Joint settings."""
+
     mongodb: MongoConfig = MongoConfig()
-    redis: RedisConfig = RedisConfig()
-    rabbitmq: RabbitMQConfig = RabbitMQConfig()
     fastapi: FastAPIConfig = FastAPIConfig()
     dash: DashConfig = DashConfig()
-    minio: MinioConfig = MinioConfig()
+    minio: S3DepictioCLIConfig = S3DepictioCLIConfig()
     jbrowse: JbrowseConfig = JbrowseConfig()
     auth: Auth = Auth()

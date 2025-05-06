@@ -1,0 +1,40 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: depictio-frontend-config
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "depictio.labels" . | nindent 4 }}
+data:
+  config_backend_k8s_embl_frontend.yaml: |
+    # Frontend configuration
+    fastapi:
+      port: {{ .Values.configMaps.frontend.data.fastapi.port }}
+      service_name: "{{ .Values.configMaps.frontend.data.fastapi.service_name }}"
+    dash:
+      port: {{ .Values.configMaps.frontend.data.dash.port }}
+      service_name: "{{ .Values.configMaps.frontend.data.dash.service_name }}"
+    jbrowse:
+      data_dir: "{{ .Values.configMaps.frontend.data.jbrowse.data_dir }}"
+      config_dir: "{{ .Values.configMaps.frontend.data.jbrowse.config_dir }}"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: depictio-backend-config
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "depictio.labels" . | nindent 4 }}
+data:
+  config_backend_k8s_embl_backend.yaml: |
+    # Backend configuration
+    fastapi:
+      port: {{ .Values.configMaps.backend.data.fastapi.port }}
+      service_name: "{{ .Values.configMaps.backend.data.fastapi.service_name }}"
+    dash:
+      port: {{ .Values.configMaps.backend.data.dash.port }}
+      service_name: "{{ .Values.configMaps.backend.data.dash.service_name }}"
+    jbrowse:
+      data_dir: "{{ .Values.configMaps.backend.data.jbrowse.data_dir }}"
+      config_dir: "{{ .Values.configMaps.backend.data.jbrowse.config_dir }}"

@@ -1,48 +1,71 @@
 {
-    "name": "depictio devcontainer",
-    "dockerComposeFile": "docker-compose.yaml",
-    "service": "app", // devcontainer (additional container in the docker compose)
-    "workspaceFolder": "/workspace",
-    "customizations": {
-      "vscode": {
-        "extensions": [
-          "ms-python.python",
-          "ms-azuretools.vscode-docker",
-          "ms-python.anaconda-extension-pack",
-          "GitHub.copilot"
-        ],
-        "settings": {
-          "terminal.integrated.shell.linux": "/bin/bash"
-        }
+  "name": "depictio devcontainer",
+  "dockerComposeFile": [
+    "../docker-compose.yaml",
+    "./docker-compose.devcontainer.yaml"
+  ],
+  "service": "app", // devcontainer (additional container in the docker compose)
+  // "workspaceFolder": "/app/depictio",
+  "workspaceFolder": "/workspace/",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-azuretools.vscode-docker",
+        // "ms-python.anaconda-extension-pack",
+        "GitHub.copilot",
+        "saoudrizwan.claude-dev"
+      ],
+      "settings": {
+        "terminal.integrated.shell.linux": "/bin/zsh"
       }
-    },
-    // "initializeCommand": "init", // script to run before the containers are started
-    "initializeCommand": ".devcontainer/pre_create_setup.sh",
-    "postCreateCommand": "post-create.sh", // script to run after the containers are started
-    "forwardPorts": [
-        27018,
-        3000,
-        9010,
-        5080,
-        8058,
-        9000,
-        9001
-    ],
-    "remoteUser": "vscode", // user that must be in devcontainer
-    "remoteEnv": {
-        "MINIO_ROOT_USER": "minio",
-        "MINIO_ROOT_PASSWORD": "minio123",
-        "DEPICTIO_BACKEND_DATA_VOLUME_HOST": "/workspace/depictio-data",
-    },
-    "containerEnv": {
-        "TC_HOST": "host.docker.internal",
-        "DOCKER_HOST": "unix:///var/run/docker.sock",
-        "MINIO_ROOT_USER": "minio",
-        "MINIO_ROOT_PASSWORD": "minio123",
-        "DEPICTIO_BACKEND_DATA_VOLUME_HOST": "/workspace/depictio-data",
-    },
-    "features": {
-        // details can be found here: https://github.com/devcontainers/features/tree/main/src/docker-outside-of-docker
-        "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {} // docker outside of docker
     }
+  },
+  // "initializeCommand": "init", // script to run before the containers are started
+  "initializeCommand": ".devcontainer/pre_create_setup.sh",
+  "postCreateCommand": "post_create_setup.sh", // script to run after the containers are started
+  "forwardPorts": [
+    27018,
+    3000,
+    9010,
+    5080,
+    8058,
+    9000,
+    9001
+  ],
+  "remoteUser": "vscode", // user that must be in devcontainer
+  "remoteEnv": {
+    "MINIO_ROOT_USER": "minio",
+    "MINIO_ROOT_PASSWORD": "minio123",
+    "DEPICTIO_BACKEND_DATA_VOLUME_HOST": "/workspace/depictio-data",
+  },
+  "containerEnv": {
+    "TC_HOST": "host.docker.internal",
+    "DOCKER_HOST": "unix:///var/run/docker.sock",
+    "MINIO_ROOT_USER": "minio",
+    "MINIO_ROOT_PASSWORD": "minio123",
+    "DEPICTIO_BACKEND_DATA_VOLUME_HOST": "/workspace/depictio-data",
+  },
+	"features": {
+		"ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+			"moby": true,
+			"installDockerBuildx": true,
+			"installDockerComposeSwitch": true,
+			"version": "latest",
+			"dockerDashComposeVersion": "none"
+		},
+		"ghcr.io/dhoeric/features/act:1": {},
+		"ghcr.io/hspaans/devcontainer-features/pytest:1": {
+			"version": "latest"
+			// "plugins": "pytest-testinfra"
+		},
+		"ghcr.io/va-h/devcontainers-features/uv:1": {
+			"shellautocompletion": true,
+			"version": "latest"
+		},
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/git-lfs:1": {}
+
+
+	}
 }

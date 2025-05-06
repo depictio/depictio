@@ -1,13 +1,9 @@
+from depictio.api.v1.configs.custom_logging import logger
 
-from depictio.api.v1.endpoints.datacollections_endpoints.models import DataCollection
-from depictio.api.v1.endpoints.workflow_endpoints.models import Workflow
-from depictio.api.v1.configs.logging import logger
-
-logger.info("Imported utils.py")
+from depictio.models.models.data_collections import DataCollection
 
 
 def compare_models(workflow_yaml: dict, workflow_db: dict) -> bool:
-
     """
     Compare the workflow data dictionary with the retrieved workflow JSON.
     """
@@ -23,7 +19,9 @@ def compare_models(workflow_yaml: dict, workflow_db: dict) -> bool:
     set_checks.append(workflow_yaml_only == workflow_db_only)
 
     # Compare the data collections
-    for dc_yaml, dc_db in zip(workflow_yaml_only["data_collections"], workflow_db_only["data_collections"]):
+    for dc_yaml, dc_db in zip(
+        workflow_yaml_only["data_collections"], workflow_db_only["data_collections"]
+    ):
         dc_yaml = DataCollection(**dc_yaml)
         dc_yaml_only = dc_yaml.dict(exclude={"registration_time"})
         dc_db = DataCollection(**dc_db)

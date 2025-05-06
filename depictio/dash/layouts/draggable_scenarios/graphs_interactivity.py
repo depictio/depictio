@@ -1,8 +1,14 @@
 import uuid
+
 import dash
-from depictio.api.v1.configs.logging import logger
-from depictio.dash.layouts.draggable_scenarios.interactive_component_update import update_interactive_component
-from depictio.dash.utils import get_columns_from_data_collection, return_dc_tag_from_id, return_wf_tag_from_id
+
+from depictio.api.v1.configs.custom_logging import logger
+from depictio.dash.layouts.draggable_scenarios.interactive_component_update import (
+    update_interactive_component,
+)
+from depictio.dash.utils import (
+    get_columns_from_data_collection,
+)
 
 
 def process_click_data(dict_graph_data, interactive_components_dict, TOKEN):
@@ -38,11 +44,11 @@ def process_click_data(dict_graph_data, interactive_components_dict, TOKEN):
     logger.info(f"Clicked point values: x={x_value}, y={y_value}")
 
     # Extract columns_description from metadata to determine column types
-    columns_description = metadata.get("dc_config", {}).get("columns_description", {})
+    # columns_description = metadata.get("dc_config", {}).get("columns_description", {})
 
-    wf_tag = return_wf_tag_from_id(metadata.get("wf_id"), TOKEN=TOKEN)
-    dc_tag = return_dc_tag_from_id(metadata.get("wf_id"), metadata.get("dc_id"), TOKEN=TOKEN)
-    cols_json = get_columns_from_data_collection(wf_tag, dc_tag, TOKEN)
+    cols_json = get_columns_from_data_collection(
+        metadata.get("wf_id"), metadata.get("dc_id"), TOKEN
+    )
     logger.info(f"Columns JSON: {cols_json}")
 
     # Get column types; default to 'object' (categorical) if not specified
@@ -119,7 +125,7 @@ def process_click_data(dict_graph_data, interactive_components_dict, TOKEN):
     # Update the interactive_components_dict with new filters
     interactive_components_dict.update(new_filters)
 
-    for k,v in interactive_components_dict.items():
+    for k, v in interactive_components_dict.items():
         logger.info(f"Interactive components dict: {k} - {v}")
         v["component_type"] = "interactive"
 
@@ -163,12 +169,12 @@ def process_selected_data(dict_graph_data, interactive_components_dict, TOKEN):
     logger.info(f"Unique selected y values: {y_values}")
 
     # Extract columns_description from metadata to determine column types
-    columns_description = metadata.get("dc_config", {}).get("columns_description", {})
+    # columns_description = metadata.get("dc_config", {}).get("columns_description", {})
 
     # Fetch column types from data collection (assuming helper functions exist)
-    wf_tag = return_wf_tag_from_id(metadata.get("wf_id"), TOKEN=TOKEN)
-    dc_tag = return_dc_tag_from_id(metadata.get("wf_id"), metadata.get("dc_id"), TOKEN=TOKEN)
-    cols_json = get_columns_from_data_collection(wf_tag, dc_tag, TOKEN)
+    cols_json = get_columns_from_data_collection(
+        metadata.get("wf_id"), metadata.get("dc_id"), TOKEN
+    )
     logger.info(f"Columns JSON: {cols_json}")
 
     # Get column types; default to 'object' (categorical) if not specified
@@ -200,7 +206,9 @@ def process_selected_data(dict_graph_data, interactive_components_dict, TOKEN):
                 },
                 "value": [min_val, max_val],
             }
-            logger.info(f"Added RangeSlider filter for {x_column}: [{min_val}, {max_val}]")
+            logger.info(
+                f"Added RangeSlider filter for {x_column}: [{min_val}, {max_val}]"
+            )
         else:
             # Categorical column, use Select for is_in filter
             new_key = generate_filter_key(x_column)
@@ -231,7 +239,9 @@ def process_selected_data(dict_graph_data, interactive_components_dict, TOKEN):
                 },
                 "value": [min_val, max_val],
             }
-            logger.info(f"Added RangeSlider filter for {y_column}: [{min_val}, {max_val}]")
+            logger.info(
+                f"Added RangeSlider filter for {y_column}: [{min_val}, {max_val}]"
+            )
         else:
             # Categorical column, use Select for is_in filter
             new_key = generate_filter_key(y_column)
@@ -255,14 +265,26 @@ def process_selected_data(dict_graph_data, interactive_components_dict, TOKEN):
 
 
 def refresh_children_based_on_click_data(
-    graph_click_data, graph_ids, ctx_triggered_prop_id_index, stored_metadata, interactive_components_dict, draggable_children, edit_components_mode_button, TOKEN, dashboard_id
+    graph_click_data,
+    graph_ids,
+    ctx_triggered_prop_id_index,
+    stored_metadata,
+    interactive_components_dict,
+    draggable_children,
+    edit_components_mode_button,
+    TOKEN,
+    dashboard_id,
 ):
     logger.info(f"Graph click data: {graph_click_data}")
     logger.info(f"Graph ids: {graph_ids}")
     logger.info(f"Interactive components dict: {interactive_components_dict}")
 
     # Iterate and find the clickData for the triggered graph
-    clickData = [e for e, id in zip(graph_click_data, graph_ids) if id["index"] == ctx_triggered_prop_id_index][0]
+    clickData = [
+        e
+        for e, id in zip(graph_click_data, graph_ids)
+        if id["index"] == ctx_triggered_prop_id_index
+    ][0]
 
     logger.info(f"len(graph_click_data): {len(graph_click_data)}")
     logger.info(f"len(graph_ids): {len(graph_ids)}")
@@ -271,7 +293,9 @@ def refresh_children_based_on_click_data(
         if e:
             if "points" in e:
                 logger.info(f"id['index']: {id['index']}")
-                logger.info(f"ctx_triggered_prop_id_index: {ctx_triggered_prop_id_index}")
+                logger.info(
+                    f"ctx_triggered_prop_id_index: {ctx_triggered_prop_id_index}"
+                )
                 if id["index"] == ctx_triggered_prop_id_index:
                     logger.info(f"BINGO - Graph click data - {id['index']}: {e}")
                     clickData = e
@@ -290,13 +314,24 @@ def refresh_children_based_on_click_data(
         logger.info(f"Clicked point data: {clicked_point}")
 
         # Construct dict_graph_data as per the process_click_data function
-        dict_graph_data = {"value": clicked_point, "metadata": [e for e in stored_metadata if e["index"] == ctx_triggered_prop_id_index][0]}
+        dict_graph_data = {
+            "value": clicked_point,
+            "metadata": [
+                e for e in stored_metadata if e["index"] == ctx_triggered_prop_id_index
+            ][0],
+        }
 
         # Update interactive_components_dict using the process_click_data function
-        updated_interactive_components = process_click_data(dict_graph_data, interactive_components_dict, TOKEN)
+        updated_interactive_components = process_click_data(
+            dict_graph_data, interactive_components_dict, TOKEN
+        )
 
         # Prepare selected_point data to store
-        selected_point = {"x": clicked_point.get("x"), "y": clicked_point.get("y"), "text": clicked_point.get("text", "")}
+        selected_point = {
+            "x": clicked_point.get("x"),
+            "y": clicked_point.get("y"),
+            "text": clicked_point.get("text", ""),
+        }
 
         logger.info(f"Selected point: {selected_point}")
 
@@ -321,9 +356,21 @@ def refresh_children_based_on_click_data(
 
 
 def refresh_children_based_on_selected_data(
-    graph_selected_data, graph_ids, ctx_triggered_prop_id_index, stored_metadata, interactive_components_dict, draggable_children, edit_components_mode_button, TOKEN, dashboard_id
+    graph_selected_data,
+    graph_ids,
+    ctx_triggered_prop_id_index,
+    stored_metadata,
+    interactive_components_dict,
+    draggable_children,
+    edit_components_mode_button,
+    TOKEN,
+    dashboard_id,
 ):
-    selectedData = [e for e, id in zip(graph_selected_data, graph_ids) if id["index"] == ctx_triggered_prop_id_index][0]
+    selectedData = [
+        e
+        for e, id in zip(graph_selected_data, graph_ids)
+        if id["index"] == ctx_triggered_prop_id_index
+    ][0]
     logger.info(f"Selected data: {selectedData}")
     new_children = list()
     if selectedData and "points" in selectedData and len(selectedData["points"]) > 0:
@@ -331,15 +378,33 @@ def refresh_children_based_on_selected_data(
         logger.info(f"Selected points data: {selected_points}")
 
         # Construct dict_graph_data for multiple points
-        dict_graph_data = {"value": selected_points, "metadata": next((e for e in stored_metadata if e["index"] == ctx_triggered_prop_id_index), None)}
+        dict_graph_data = {
+            "value": selected_points,
+            "metadata": next(
+                (
+                    e
+                    for e in stored_metadata
+                    if e["index"] == ctx_triggered_prop_id_index
+                ),
+                None,
+            ),
+        }
         logger.info(f"Dict graph data: {dict_graph_data}")
 
         if dict_graph_data["metadata"] is None:
             logger.error("Metadata not found for the triggered graph.")
-            return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+            return (
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+            )
 
         # Update interactive_components_dict using the process_selected_data function
-        updated_interactive_components = process_selected_data(dict_graph_data, interactive_components_dict, TOKEN)
+        updated_interactive_components = process_selected_data(
+            dict_graph_data, interactive_components_dict, TOKEN
+        )
 
         logger.info(f"Updated interactive components: {updated_interactive_components}")
 

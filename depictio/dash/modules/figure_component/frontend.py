@@ -1,35 +1,32 @@
 # Import necessary libraries
 import collections
-from dash import html, dcc, Input, Output, State, MATCH
-import httpx
+
 import dash
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
+import httpx
+from dash import MATCH, Input, Output, State, dcc, html
 from dash_iconify import DashIconify
 
-from depictio.dash.utils import get_component_data, list_workflows
-from depictio.dash.utils import (
-    UNSELECTED_STYLE,
-    get_columns_from_data_collection,
-)
-
-from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.config import API_BASE_URL
+from depictio.api.v1.configs.custom_logging import logger
 
 # Depictio imports
 from depictio.dash.modules.figure_component.utils import (
+    base_elements,
     build_figure,
     build_figure_frame,
-    specific_params,
     param_info,
     plotly_bootstrap_mapping,
-    secondary_common_params,
-    base_elements,
     plotly_vizu_dict,
+    secondary_common_params,
+    specific_params,
 )
 from depictio.dash.utils import (
+    UNSELECTED_STYLE,
     get_columns_from_data_collection,
+    get_component_data,
 )
-from depictio.api.v1.configs.config import API_BASE_URL
 
 
 def register_callbacks_figure_component(app):
@@ -45,7 +42,11 @@ def register_callbacks_figure_component(app):
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
             State("current-edit-parent-index", "data"),  # Retrieve parent_index
         ],
-        [State({"type": "edit-button", "index": MATCH}, "id"), State("local-store", "data"), State("url", "pathname")],
+        [
+            State({"type": "edit-button", "index": MATCH}, "id"),
+            State("local-store", "data"),
+            State("url", "pathname"),
+        ],
         # prevent_initial_call=True,
     )
     def update_specific_params(
@@ -68,17 +69,23 @@ def register_callbacks_figure_component(app):
 
         TOKEN = local_data["access_token"]
         # Retrieve the columns from the selected data collection
-        columns_json = get_columns_from_data_collection(workflow, data_collection, TOKEN)
+        columns_json = get_columns_from_data_collection(
+            workflow, data_collection, TOKEN
+        )
         columns = list(columns_json.keys())
 
         dashboard_id = pathname.split("/")[-1]
-        input_id = edit_button_id["index"]
+        # input_id = edit_button_id["index"]
 
-        component_data = get_component_data(input_id=parent_index, dashboard_id=dashboard_id, TOKEN=TOKEN)
+        component_data = get_component_data(
+            input_id=parent_index, dashboard_id=dashboard_id, TOKEN=TOKEN
+        )
 
         if not visu_type:
             if not component_data:
-                visu_type = [e.capitalize() for e in sorted(plotly_vizu_dict.keys())][-1]
+                visu_type = [e.capitalize() for e in sorted(plotly_vizu_dict.keys())][
+                    -1
+                ]
             else:
                 visu_type = component_data["visu_type"]
         logger.info(f"visu_type: {visu_type}")
@@ -90,7 +97,10 @@ def register_callbacks_figure_component(app):
             return html.Div()
 
         elif value is not None:
-            specific_params_options = [{"label": param_name, "value": param_name} for param_name in specific_params[value]]
+            # specific_params_options = [
+            #     {"label": param_name, "value": param_name}
+            #     for param_name in specific_params[value]
+            # ]
 
             specific_params_dropdowns = []
             for e in specific_params[value]:
@@ -304,12 +314,18 @@ def register_callbacks_figure_component(app):
                 )
             ]
 
-            return [primary_common_params_layout + secondary_common_params_layout + dynamic_specific_params_layout]
+            return [
+                primary_common_params_layout
+                + secondary_common_params_layout
+                + dynamic_specific_params_layout
+            ]
         else:
             return html.Div()
 
     def generate_dropdown_ids(value):
-        specific_param_ids = [f"{value}-{param_name}" for param_name in specific_params[value]]
+        specific_param_ids = [
+            f"{value}-{param_name}" for param_name in specific_params[value]
+        ]
         secondary_param_ids = [f"{value}-{e}" for e in secondary_common_params]
 
         return secondary_param_ids + specific_param_ids
@@ -350,7 +366,9 @@ def register_callbacks_figure_component(app):
             return True
 
     @app.callback(
-        Output({"type": "btn-done-edit", "index": MATCH}, "disabled", allow_duplicate=True),
+        Output(
+            {"type": "btn-done-edit", "index": MATCH}, "disabled", allow_duplicate=True
+        ),
         [
             Input({"type": "dict_kwargs", "index": MATCH}, "data"),
         ],
@@ -375,7 +393,9 @@ def register_callbacks_figure_component(app):
         ],
         # prevent_initial_call=True,
     )
-    def get_values_to_generate_kwargs(children, existing_kwargs, parent_index, local_data, pathname):
+    def get_values_to_generate_kwargs(
+        children, existing_kwargs, parent_index, local_data, pathname
+    ):
         if not local_data:
             raise dash.exceptions.PreventUpdate
 
@@ -383,7 +403,9 @@ def register_callbacks_figure_component(app):
 
         dashboard_id = pathname.split("/")[-1]
 
-        component_data = get_component_data(input_id=parent_index, dashboard_id=dashboard_id, TOKEN=TOKEN)
+        component_data = get_component_data(
+            input_id=parent_index, dashboard_id=dashboard_id, TOKEN=TOKEN
+        )
         if component_data:
             if "dict_kwargs" in component_data:
                 existing_kwargs = component_data["dict_kwargs"]
@@ -397,20 +419,50 @@ def register_callbacks_figure_component(app):
 
         if children:
             # accordion_secondary_common_params = children[0]["props"]["children"]["props"]["children"]
-            accordion_primary_common_params = children[0]["props"]["children"]["props"]["children"][0]["props"]["children"]
+            accordion_primary_common_params = children[0]["props"]["children"]["props"][
+                "children"
+            ][0]["props"]["children"]
 
             # accordion_secondary_common_params = children[1]["props"]["children"]
             if accordion_primary_common_params:
-                accordion_primary_common_params = [param["props"]["children"][0]["props"]["children"] for param in accordion_primary_common_params]
-                accordion_primary_common_params_args = {elem["props"]["id"]["type"].replace("tmp-", ""): elem["props"]["value"] for elem in accordion_primary_common_params}
-            accordion_secondary_common_params = children[1]["props"]["children"]["props"]["children"][0]["props"]["children"]
+                accordion_primary_common_params = [
+                    param["props"]["children"][0]["props"]["children"]
+                    for param in accordion_primary_common_params
+                ]
+                accordion_primary_common_params_args = {
+                    elem["props"]["id"]["type"].replace("tmp-", ""): elem["props"][
+                        "value"
+                    ]
+                    for elem in accordion_primary_common_params
+                }
+            accordion_secondary_common_params = children[1]["props"]["children"][
+                "props"
+            ]["children"][0]["props"]["children"]
             if accordion_secondary_common_params:
-                accordion_secondary_common_params = [param["props"]["children"][0]["props"]["children"] for param in accordion_secondary_common_params]
-                accordion_secondary_common_params_args = {elem["props"]["id"]["type"].replace("tmp-", ""): elem["props"]["value"] for elem in accordion_secondary_common_params}
-            specific_params = children[2]["props"]["children"]["props"]["children"][0]["props"]["children"]
+                accordion_secondary_common_params = [
+                    param["props"]["children"][0]["props"]["children"]
+                    for param in accordion_secondary_common_params
+                ]
+                accordion_secondary_common_params_args = {
+                    elem["props"]["id"]["type"].replace("tmp-", ""): elem["props"][
+                        "value"
+                    ]
+                    for elem in accordion_secondary_common_params
+                }
+            specific_params = children[2]["props"]["children"]["props"]["children"][0][
+                "props"
+            ]["children"]
             if specific_params:
-                specific_params = [param["props"]["children"][0]["props"]["children"] for param in specific_params]
-                specific_params_args = {elem["props"]["id"]["type"].replace("tmp-", ""): elem["props"]["value"] for elem in specific_params}
+                specific_params = [
+                    param["props"]["children"][0]["props"]["children"]
+                    for param in specific_params
+                ]
+                specific_params_args = {
+                    elem["props"]["id"]["type"].replace("tmp-", ""): elem["props"][
+                        "value"
+                    ]
+                    for elem in specific_params
+                }
 
             return_dict = dict(
                 **specific_params_args,
@@ -454,8 +506,8 @@ def register_callbacks_figure_component(app):
         dict_kwargs = args[0]
 
         visu_type = args[1]
-        workflow = args[2]
-        data_collection = args[3]
+        workflow_id = args[2]
+        data_collection_id = args[3]
         id = args[4]
         parent_index = args[5]
         local_data = args[6]
@@ -471,13 +523,20 @@ def register_callbacks_figure_component(app):
 
         logger.info(f"input_id: {input_id}")
         logger.info(f"parent_index: {parent_index}")
-        component_data = get_component_data(input_id=parent_index, dashboard_id=dashboard_id, TOKEN=TOKEN)
+        component_data = get_component_data(
+            input_id=parent_index, dashboard_id=dashboard_id, TOKEN=TOKEN
+        )
         logger.info(f"component_data: {component_data}")
 
-        columns_json = get_columns_from_data_collection(workflow, data_collection, TOKEN)
+        columns_json = get_columns_from_data_collection(
+            workflow_id, data_collection_id, TOKEN
+        )
 
         columns_specs_reformatted = collections.defaultdict(list)
-        {columns_specs_reformatted[v["type"]].append(k) for k, v in columns_json.items()}
+        {
+            columns_specs_reformatted[v["type"]].append(k)
+            for k, v in columns_json.items()
+        }
 
         x_col, color_col, y_col = None, None, None
 
@@ -506,26 +565,26 @@ def register_callbacks_figure_component(app):
         logger.info(f"visu_type: {visu_type}")
         logger.info(f"dict_kwargs: {dict_kwargs}")
 
-        workflows = list_workflows(TOKEN)
+        # workflows = list_workflows(TOKEN)
 
-        workflow_id = [e for e in workflows if e["workflow_tag"] == workflow][0]["_id"]
-        data_collection_id = [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["data_collection_tag"] == data_collection][0]["_id"]
+        # workflow_id = [e for e in workflows if e["workflow_tag"] == workflow][0]["_id"]
+        # data_collection_id = [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["data_collection_tag"] == data_collection][0]["_id"]
 
         dc_specs = httpx.get(
-            f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
+            f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{data_collection_id}",
             headers={
                 "Authorization": f"Bearer {TOKEN}",
             },
         ).json()
 
-        headers = {
-            "Authorization": f"Bearer {TOKEN}",
-        }
+        # headers = {
+        #     "Authorization": f"Bearer {TOKEN}",
+        # }
 
-        join_tables_for_wf = httpx.get(
-            f"{API_BASE_URL}/depictio/api/v1/workflows/get_join_tables/{workflow_id}",
-            headers=headers,
-        )
+        # join_tables_for_wf = httpx.get(
+        #     f"{API_BASE_URL}/depictio/api/v1/workflows/get_join_tables/{workflow_id}",
+        #     headers=headers,
+        # )
 
         logger.info(f"dict_kwargs: {dict_kwargs}")
         logger.info(f"visu_type: {visu_type}")
@@ -538,7 +597,6 @@ def register_callbacks_figure_component(app):
                 "wf_id": workflow_id,
                 "dc_id": data_collection_id,
                 "dc_config": dc_specs["config"],
-                "visu_type": visu_type,
                 "access_token": TOKEN,
             }
 
@@ -568,7 +626,9 @@ def design_figure(id, component_data=None):
                     persistence_type="memory",
                     # FIXME: the default value is not the first element of the list - set to scatter plot (last element)
                     # value=[e.capitalize() for e in sorted(plotly_vizu_dict.keys())][-1],
-                    value=component_data["visu_type"] if component_data else [e.capitalize() for e in sorted(plotly_vizu_dict.keys())][-1],
+                    value=component_data["visu_type"]
+                    if component_data
+                    else [e.capitalize() for e in sorted(plotly_vizu_dict.keys())][-1],
                 ),
             ],
             style={"height": "5%"},
@@ -609,7 +669,9 @@ def design_figure(id, component_data=None):
                                         ),
                                         dbc.Col(
                                             dmc.ActionIcon(
-                                                DashIconify(icon="mdi:refresh", width=30),
+                                                DashIconify(
+                                                    icon="mdi:refresh", width=30
+                                                ),
                                                 id={
                                                     "type": "refresh-button",
                                                     "index": id["index"],

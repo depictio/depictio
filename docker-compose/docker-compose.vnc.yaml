@@ -1,0 +1,61 @@
+services:
+  mongo:
+    image: mongo:8.0
+    command: mongod --dbpath /data/depictioDB --port 27018 --logpath /dev/null 
+    user: "${UID:-1000}:${GID:-1000}"
+    ports:
+      - 27018:27018
+    volumes:
+      - ./depictioDB:/data/depictioDB
+
+  depictio_frontend:
+    image: depictio:dev
+    build:
+      dockerfile: docker-images/Dockerfile_depictio.dev.vnc.dockerfile
+      context: .
+    ports:
+      - 5080:5080
+    volumes:
+      - ./depictio:/app/depictio
+      - ./data:/app/data
+      - ./.env:/app/.env
+    environment:
+        DEPICTIO_CONTAINER: "True"
+        DEPICTIO_TEST_MODE: "${DEPICTIO_TEST_MODE:-false}"
+        DEPICTIO_MONGODB_DB_NAME: "${DEPICTIO_MONGODB_DB_NAME:-depictioDB}"
+        DEV_MODE: "${DEV_MODE:-false}"
+        DISPLAY: ":99"
+    command: ["python", "depictio/dash/app.py"]
+    user: "${UID:-1000}:${GID:-1000}"
+    depends_on:
+      - mongo
+      - depictio_backend
+
+  depictio_backend:
+    image: depictio:dev
+    build:
+      dockerfile: docker-images/Dockerfile_depictio.dev.vnc.dockerfile
+      context: .
+    ports:
+      - 8058:8058
+      - 5900:5900  # VNC port
+    volumes:
+      - $PWD/depictio-example-data:/app/depictio-example-data
+      - ./depictio:/app/depictio
+      - ./data:/app/data
+      - ./.env:/app/.env
+      - ./docker-images/start_with_display.sh:/app/start_with_display.sh
+    environment:
+        DEPICTIO_CONTAINER: "True"
+        DEPICTIO_TEST_MODE: "${DEPICTIO_TEST_MODE:-false}"
+        DEPICTIO_MONGODB_DB_NAME: "${DEPICTIO_MONGODB_DB_NAME:-depictioDB}"
+        FORCE_COLOR: "1"
+        TERM: "xterm-256color"
+        PYTHONIOENCODING: "UTF-8"
+        DISPLAY: ":99"
+        DEV_MODE: "${DEV_MODE:-false}"
+    command: ["/app/start_with_display.sh"]
+    user: "${UID:-1000}:${GID:-1000}"
+    tty: true
+    depends_on:
+      - mongo

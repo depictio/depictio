@@ -1,0 +1,16 @@
+version: '3'
+services:
+  app:
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile
+    init: true
+    volumes:
+      - ./:/workspace:cached
+    command: sleep infinity
+    user: vscode
+    depends_on:
+      - mongo
+      - minio
+      - depictio_backend
+      - depictio_frontend
