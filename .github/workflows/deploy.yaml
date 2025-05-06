@@ -55,7 +55,6 @@ jobs:
 
           # Verify installation
           python -c "import polars; print(f'Polars {polars.__version__} installed')"
-          depictio-cli --help
 
       - name: Install dependencies for quality check & testing
         run: |
@@ -64,10 +63,12 @@ jobs:
 
       - name: Run Ruff for formatting
         run: |
+          source venv/bin/activate
           ruff format depictio
 
       - name: Run Ruff for linting
         run: |
+          source venv/bin/activate
           ruff check depictio
 
       # - name: Run Bandit security check
@@ -75,6 +76,7 @@ jobs:
 
       - name: Run tests
         run: |
+          source venv/bin/activate
           pytest depictio/tests/api depictio/tests/cli depictio/tests/models -xvs -n auto
 
   setup:
