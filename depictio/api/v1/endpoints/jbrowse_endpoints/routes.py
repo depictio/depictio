@@ -9,11 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.custom_logging import logger
-from depictio.api.v1.db import (
-    files_collection,
-    jbrowse_collection,
-    workflows_collection,
-)
+from depictio.api.v1.db import files_collection, jbrowse_collection, workflows_collection
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.api.v1.endpoints.validators import validate_workflow_and_collection
 from depictio.api.v1.s3 import s3_client
@@ -25,12 +21,8 @@ jbrowse_endpoints_router = APIRouter()
 
 def generate_track_config(track_type, track_details, data_collection_config):
     # Extract common JBrowse parameters from data collection config
-    category = data_collection_config.get("jbrowse_params", {}).get(
-        "category", "Uncategorized"
-    )
-    assemblyName = data_collection_config.get("jbrowse_params", {}).get(
-        "assemblyName", "hg38"
-    )
+    category = data_collection_config.get("jbrowse_params", {}).get("category", "Uncategorized")
+    assemblyName = data_collection_config.get("jbrowse_params", {}).get("assemblyName", "hg38")
 
     # Base configuration common to all tracks
     track_config = {
@@ -44,9 +36,7 @@ def generate_track_config(track_type, track_details, data_collection_config):
     # Configure adapter based on track type and data collection config
     if track_type == "FeatureTrack":
         adapter_type = (
-            "BedTabixAdapter"
-            if data_collection_config.get("format") == "BED"
-            else "UnknownAdapter"
+            "BedTabixAdapter" if data_collection_config.get("format") == "BED" else "UnknownAdapter"
         )
         uri = track_details.get("uri")
         index_uri = f"{uri}.{data_collection_config.get('index_extension', 'tbi')}"
@@ -56,12 +46,11 @@ def generate_track_config(track_type, track_details, data_collection_config):
                 "type": "FeatureTrack",
                 "adapter": {
                     "type": adapter_type,
-                    "bedGzLocation"
-                    if adapter_type == "BedTabixAdapter"
-                    else "location": {"locationType": "UriLocation", "uri": uri},
-                    "index": {
-                        "location": {"locationType": "UriLocation", "uri": index_uri}
+                    ("bedGzLocation" if adapter_type == "BedTabixAdapter" else "location"): {
+                        "locationType": "UriLocation",
+                        "uri": uri,
                     },
+                    "index": {"location": {"locationType": "UriLocation", "uri": index_uri}},
                 },
             }
         )
@@ -105,7 +94,7 @@ def populate_template_recursive(template, values):
 def update_jbrowse_config(config_path, new_tracks=[]):
     # TODO: output a complete and a light minimal config + add a "load full data" to speed up the process
     try:
-        with open(config_path, "r") as file:
+        with open(config_path) as file:
             config = json.load(file)
     except FileNotFoundError:
         logger.warning(f"Config file {config_path} not found.")
@@ -168,12 +157,8 @@ def update_jbrowse_config(config_path, new_tracks=[]):
 def upload_file_to_s3(bucket_name, file_location, s3_key):
     logger.debug(f"S3 client: {s3_client}")
     logger.debug(f"List buckets: {s3_client.list_buckets()}")
-    logger.debug(
-        f"List objects: {s3_client.list_objects_v2(Bucket=bucket_name, Prefix=s3_key)}"
-    )
-    logger.debug(
-        f"File location: {file_location}, Bucket name: {bucket_name}, S3 key: {s3_key}"
-    )
+    logger.debug(f"List objects: {s3_client.list_objects_v2(Bucket=bucket_name, Prefix=s3_key)}")
+    logger.debug(f"File location: {file_location}, Bucket name: {bucket_name}, S3 key: {s3_key}")
 
     # check if the file exists
     if not os.path.exists(file_location):
@@ -216,9 +201,7 @@ def handle_jbrowse_tracks(file, user_id, workflow_id, data_collection):
     path_suffix = file_location.split(f"{run_id}/")[1]
 
     # Get workflow tag from workflow_id
-    wf_tag = workflows_collection.find_one({"_id": ObjectId(workflow_id)})[
-        "workflow_tag"
-    ]
+    wf_tag = workflows_collection.find_one({"_id": ObjectId(workflow_id)})["workflow_tag"]
 
     # Construct the S3 key respecting the structure
     s3_key = f"{user_id}/{workflow_id}/{data_collection.id}/{run_id}/{path_suffix}"
@@ -347,18 +330,14 @@ async def create_trackset(
     for file in files:
         file = File(**file)
 
-        track_config = handle_jbrowse_tracks(
-            file, current_user.id, workflow_id, data_collection
-        )
+        track_config = handle_jbrowse_tracks(file, current_user.id, workflow_id, data_collection)
         if track_config:
             new_tracks.append(track_config)
 
     # Update the JBrowse configuration
     jbrowse_config_dir = settings.jbrowse.config_dir
 
-    config_path = os.path.join(
-        jbrowse_config_dir, f"{current_user.id}_{data_collection_oid}.json"
-    )
+    config_path = os.path.join(jbrowse_config_dir, f"{current_user.id}_{data_collection_oid}.json")
 
     payload = update_jbrowse_config(config_path, new_tracks)
     if payload["type"] == "error":
@@ -374,9 +353,7 @@ async def log_message(log_data: LogData):
 
     if log_data.coarseDynamicBlocks and log_data.selectedTracks:
         # Extract the first block and tracks
-        block = log_data.coarseDynamicBlocks[0][
-            0
-        ]  # Assuming the first block of the first array
+        block = log_data.coarseDynamicBlocks[0][0]  # Assuming the first block of the first array
         tracks = [
             t for track in log_data.selectedTracks for t in track.tracks
         ]  # Flatten track list
@@ -392,9 +369,7 @@ async def log_message(log_data: LogData):
             "loc": f"chr{block.refName}:{start}-{end}",
             "tracks": tracks,
         }
-        current_timestamp = int(
-            datetime.now().timestamp() * 1000
-        )  # Current time in milliseconds
+        current_timestamp = int(datetime.now().timestamp() * 1000)  # Current time in milliseconds
 
     else:
         dict_jbrowse_url_args = {}
@@ -476,9 +451,7 @@ async def get_jbrowse_logs():
         return {"message": "No logs available."}
 
 
-@jbrowse_endpoints_router.get(
-    "/map_tracks_using_wildcards/{workflow_id}/{data_collection_id}"
-)
+@jbrowse_endpoints_router.get("/map_tracks_using_wildcards/{workflow_id}/{data_collection_id}")
 async def map_tracks_using_wildcards(
     workflow_id: str,
     data_collection_id: str,
@@ -497,16 +470,12 @@ async def map_tracks_using_wildcards(
     for file in files:
         # logger.info(file)
         if file["filename"].endswith(
-            file["data_collection"]["config"]["dc_specific_properties"][
-                "index_extension"
-            ]
+            file["data_collection"]["config"]["dc_specific_properties"]["index_extension"]
         ):
             continue
         for wildcard in file["wildcards"]:
             # if file["trackId"]:
-            nested_dict[data_collection_id][wildcard["name"]][wildcard["value"]] = file[
-                "trackId"
-            ]
+            nested_dict[data_collection_id][wildcard["name"]][wildcard["value"]] = file["trackId"]
     logger.debug(len(nested_dict[data_collection_id]["cell"]))
     return nested_dict
 

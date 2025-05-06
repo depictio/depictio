@@ -1,5 +1,4 @@
 import itertools
-from typing import Dict, List, Optional, Set
 
 import httpx
 import polars as pl
@@ -55,9 +54,7 @@ def process_metadata_and_filter(metadata):
             # continue
             logger.info(f"i: {i}")
             logger.info(f"component: {component}")
-            interactive_component_type = component["metadata"][
-                "interactive_component_type"
-            ]
+            interactive_component_type = component["metadata"]["interactive_component_type"]
             column_name = component["metadata"]["column_name"]
         else:
             interactive_component_type = component["interactive_component_type"]
@@ -176,9 +173,9 @@ def convert_filter_model_to_metadata(filter_model):
 def load_deltatable_lite(
     workflow_id: ObjectId,
     data_collection_id: ObjectId,
-    metadata: Optional[dict] = None,
-    TOKEN: Optional[str] = None,
-    limit_rows: Optional[int] = None,
+    metadata: dict | None = None,
+    TOKEN: str | None = None,
+    limit_rows: int | None = None,
 ) -> pl.DataFrame:
     """
     Load a Delta table with optional filtering based on metadata.
@@ -267,9 +264,9 @@ def load_deltatable_lite(
 
 
 def merge_multiple_dataframes(
-    dataframes: Dict[str, pl.DataFrame],
-    join_instructions: List[Dict],
-    essential_cols: Set[str] = set(),
+    dataframes: dict[str, pl.DataFrame],
+    join_instructions: list[dict],
+    essential_cols: set[str] = set(),
 ) -> pl.DataFrame:
     """
     Merge multiple Polars DataFrames based on join instructions, handling type alignment and overlapping columns.
@@ -319,9 +316,7 @@ def merge_multiple_dataframes(
                     else:
                         # Default to Utf8 for complex type mismatches
                         column_types[col] = pl.Utf8
-                    logger.debug(
-                        f"Column '{col}' type promoted to {column_types[col]}."
-                    )
+                    logger.debug(f"Column '{col}' type promoted to {column_types[col]}.")
 
     logger.info(f"Common column types determined: {column_types}")
 
@@ -350,9 +345,7 @@ def merge_multiple_dataframes(
         how = join_step["how"]
         on = join_step["on"].copy()  # Make a copy to modify
 
-        logger.info(
-            f"Join Step {idx}: '{left_id}' {how} joined with '{right_id}' on columns {on}."
-        )
+        logger.info(f"Join Step {idx}: '{left_id}' {how} joined with '{right_id}' on columns {on}.")
 
         # Determine the current left DataFrame
         if merged_df is None:
@@ -361,27 +354,21 @@ def merge_multiple_dataframes(
             left_df = merged_df
 
         if right_id in dc_ids_processed:
-            logger.info(
-                f"Skipping join with '{right_id}' as it has already been processed."
-            )
+            logger.info(f"Skipping join with '{right_id}' as it has already been processed.")
             continue
 
         # The right DataFrame is always from the join instructions
         right_df = dataframes[right_id]
 
         # Identify overlapping columns excluding join keys
-        overlapping_cols = set(left_df.columns).intersection(
-            set(right_df.columns)
-        ) - set(on)
+        overlapping_cols = set(left_df.columns).intersection(set(right_df.columns)) - set(on)
 
         logger.info(f"Overlapping columns detected: {overlapping_cols}")
 
         # Determine overlapping essential columns
         overlapping_essential_cols = overlapping_cols.intersection(essential_cols)
 
-        logger.info(
-            f"Overlapping essential columns detected: {overlapping_essential_cols}"
-        )
+        logger.info(f"Overlapping essential columns detected: {overlapping_essential_cols}")
 
         # # Add overlapping essential columns to 'on' list and drop them from right_df
         if overlapping_cols:
@@ -412,9 +399,7 @@ def merge_multiple_dataframes(
             logger.info(
                 f"Performing '{how}' join between left DataFrame and '{right_id}' on columns: {on}."
             )
-            logger.info(
-                f"Left DataFrame shape: {left_df.shape} and columns: {left_df.columns}"
-            )
+            logger.info(f"Left DataFrame shape: {left_df.shape} and columns: {left_df.columns}")
             logger.info(
                 f"Right DataFrame '{right_id}' shape: {right_df.shape} and columns: {right_df.columns}"
             )
@@ -428,9 +413,7 @@ def merge_multiple_dataframes(
             else:
                 # Subsequent merges
                 merged_df = left_df.join(right_df, on=on, how=how)
-                logger.info(
-                    f"Joined with '{right_id}'. Merged DataFrame shape: {merged_df.shape}"
-                )
+                logger.info(f"Joined with '{right_id}'. Merged DataFrame shape: {merged_df.shape}")
             dc_ids_processed.add(left_id)
             dc_ids_processed.add(right_id)
         except Exception as e:
@@ -442,9 +425,7 @@ def merge_multiple_dataframes(
     # Step 4: Verify Essential Columns
     missing_essentials = essential_cols - set(merged_df.columns)
     if missing_essentials:
-        logger.warning(
-            f"Essential columns missing from the final DataFrame: {missing_essentials}"
-        )
+        logger.warning(f"Essential columns missing from the final DataFrame: {missing_essentials}")
 
     logger.info(f"Final merged DataFrame shape: {merged_df.shape}")
     logger.info(f"Final merged DataFrame columns: {merged_df.columns}")
@@ -453,8 +434,8 @@ def merge_multiple_dataframes(
 
 
 def transform_joins_dict_to_instructions(
-    joins_dict: Dict[tuple, List[Dict]],
-) -> List[Dict]:
+    joins_dict: dict[tuple, list[dict]],
+) -> list[dict]:
     """
     Transform joins_dict into a list of join instructions compatible with merge_multiple_dataframes.
 
@@ -481,7 +462,7 @@ def transform_joins_dict_to_instructions(
     return join_instructions
 
 
-def compute_essential_columns(dataframes: Dict[str, pl.DataFrame]) -> Set[str]:
+def compute_essential_columns(dataframes: dict[str, pl.DataFrame]) -> set[str]:
     """
     Compute essential columns as those appearing in more than one DataFrame.
 
@@ -554,7 +535,10 @@ def compute_essential_columns(dataframes: Dict[str, pl.DataFrame]) -> Set[str]:
 
 
 def iterative_join(
-    workflow_id: ObjectId, joins_dict: dict, metadata_dict: dict, TOKEN: str = None
+    workflow_id: ObjectId,
+    joins_dict: dict,
+    metadata_dict: dict,
+    TOKEN: str | None = None,
 ):
     logger.info(f"worfklow_id: {workflow_id}")
     logger.info(f"joins_dict: {joins_dict}")
@@ -587,9 +571,7 @@ def iterative_join(
                 logger.info(f"Metadata dict: {metadata_dict}")
                 # Filter metadata for the current dc_id
                 relevant_metadata = [
-                    md
-                    for md in metadata_dict.values()
-                    if md["metadata"]["dc_id"] == dc_id
+                    md for md in metadata_dict.values() if md["metadata"]["dc_id"] == dc_id
                 ]
                 logger.info(f"Relevant metadata: {relevant_metadata}")
                 for e in relevant_metadata:
@@ -624,9 +606,7 @@ def iterative_join(
 
             # Determine which dataframe to join with merged_df
             if dc_id1 in used_dcs and dc_id2 in used_dcs:
-                logger.info(
-                    f"Skipping join {join_id} as both data collections are already used."
-                )
+                logger.info(f"Skipping join {join_id} as both data collections are already used.")
                 continue
             elif dc_id1 in used_dcs:
                 logger.info(
@@ -708,13 +688,7 @@ def return_joins_dict(wf, stored_metadata, TOKEN, extra_dc=None):
     logger.info(f"return_joins_dict - stored_metadata - {stored_metadata}")
     # Extract all the data collection IDs from the stored metadata
     dc_ids_all_components = list(
-        set(
-            [
-                v["dc_id"]
-                for v in stored_metadata
-                if v["component_type"] not in ["jbrowse"]
-            ]
-        )
+        set([v["dc_id"] for v in stored_metadata if v["component_type"] not in ["jbrowse"]])
     )
     if extra_dc:
         dc_ids_all_components += [extra_dc]
@@ -723,15 +697,13 @@ def return_joins_dict(wf, stored_metadata, TOKEN, extra_dc=None):
     # Using itertools, generate all the combinations of dc_ids in order to get all the possible joins
     dc_ids_all_joins = list(itertools.combinations(dc_ids_all_components, 2))
     # Turn the list of tuples into a list of strings with -- as separator, and store it in dc_ids_all_joins in the 2 possible orders
-    dc_ids_all_joins = [
-        f"{dc_id1}--{dc_id2}" for dc_id1, dc_id2 in dc_ids_all_joins
-    ] + [f"{dc_id2}--{dc_id1}" for dc_id1, dc_id2 in dc_ids_all_joins]
+    dc_ids_all_joins = [f"{dc_id1}--{dc_id2}" for dc_id1, dc_id2 in dc_ids_all_joins] + [
+        f"{dc_id2}--{dc_id1}" for dc_id1, dc_id2 in dc_ids_all_joins
+    ]
 
     logger.info(f"dc_ids_all_joins - {dc_ids_all_joins}")
 
-    stored_metadata_interactive_components_wf = [
-        e for e in stored_metadata if e["wf_id"] == wf
-    ]
+    stored_metadata_interactive_components_wf = [e for e in stored_metadata if e["wf_id"] == wf]
     # stored_metadata_interactive_components_wf = [e for e in stored_metadata if e["component_type"] in ["interactive"] and e["wf_id"] == wf]
     logger.info(
         f"stored_metadata_interactive_components_wf - {stored_metadata_interactive_components_wf}"
@@ -742,9 +714,7 @@ def return_joins_dict(wf, stored_metadata, TOKEN, extra_dc=None):
 
     # Extract the intersection between dc_ids_all_joins and join_tables_for_wf[wf].keys()
     join_tables_for_wf[wf] = {
-        k: join_tables_for_wf[wf][k]
-        for k in join_tables_for_wf[wf].keys()
-        if k in dc_ids_all_joins
+        k: join_tables_for_wf[wf][k] for k in join_tables_for_wf[wf].keys() if k in dc_ids_all_joins
     }
     logger.info(f"join_tables_for_wf - {join_tables_for_wf}")
 
@@ -813,10 +783,7 @@ def return_joins_dict(wf, stored_metadata, TOKEN, extra_dc=None):
             reverse_join_id = f"{dc_id2}--{dc_id1}"
             if join_id not in added_joins and reverse_join_id not in added_joins:
                 # Create a placeholder join based on available join details
-                if (
-                    dc_id1 in join_tables_for_wf[wf]
-                    and dc_id2 in join_tables_for_wf[wf]
-                ):
+                if dc_id1 in join_tables_for_wf[wf] and dc_id2 in join_tables_for_wf[wf]:
                     example_join = next(iter(join_tables_for_wf[wf].values()))
                     new_join = {
                         join_id: {
@@ -831,7 +798,7 @@ def return_joins_dict(wf, stored_metadata, TOKEN, extra_dc=None):
 
 
 def join_deltatables_dev(
-    wf_id: str, joins: list, metadata: dict = dict(), TOKEN: str = None
+    wf_id: str, joins: list, metadata: dict = dict(), TOKEN: str | None = None
 ):
     # Initialize a dictionary to store loaded dataframes
     loaded_dfs = {}
@@ -917,12 +884,8 @@ def join_deltatables_dev(
             else:
                 continue
 
-            common_columns = list(
-                set(merged_df.columns).intersection(set(new_df.columns))
-            )
-            merged_df = merged_df.join(
-                new_df, on=common_columns, how=join_details["how"]
-            )
+            common_columns = list(set(merged_df.columns).intersection(set(new_df.columns)))
+            merged_df = merged_df.join(new_df, on=common_columns, how=join_details["how"])
 
     logger.info(f"AFTER 2nd FOR LOOP - merged_df shape: {merged_df.shape}")
     logger.info(f"Columns in merged_df: {merged_df.columns}")

@@ -1,28 +1,23 @@
 import collections
-from bson import ObjectId
-from fastapi import HTTPException, Depends, APIRouter
 
+from bson import ObjectId
+from fastapi import APIRouter, Depends, HTTPException
 
 from depictio.api.v1.configs.config import settings
-from depictio.api.v1.db import db
 from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.db import db, projects_collection
 from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
     generate_join_dict,
     normalize_join_details,
 )
-from depictio.api.v1.db import projects_collection
-
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.api.v1.endpoints.validators import validate_workflow_and_collection
 from depictio.api.v1.endpoints.workflow_endpoints.routes import (
     get_all_workflows,
     get_workflow_from_id,
 )
-
-from depictio.models.models.base import convert_objectid_to_str
-
 from depictio.dash.utils import return_dc_tag_from_id, return_mongoid
-
+from depictio.models.models.base import convert_objectid_to_str
 
 datacollections_endpoint_router = APIRouter()
 
@@ -70,9 +65,7 @@ async def specs(
     result = list(projects_collection.aggregate(pipeline))
 
     if not result:
-        raise HTTPException(
-            status_code=404, detail="Data collection not found or access denied."
-        )
+        raise HTTPException(status_code=404, detail="Data collection not found or access denied.")
 
     return convert_objectid_to_str(result[0])
 
@@ -105,9 +98,7 @@ async def delete_datacollection(
     return {"message": "Data collection deleted successfully."}
 
 
-@datacollections_endpoint_router.get(
-    "/get_join_tables/{workflow_id}/{data_collection_id}"
-)
+@datacollections_endpoint_router.get("/get_join_tables/{workflow_id}/{data_collection_id}")
 async def get_join_tables(
     workflow_id: str,
     data_collection_id: str,
@@ -162,9 +153,7 @@ async def get_join_tables(
 
 
 @datacollections_endpoint_router.get("/get_dc_joined/{workflow_id}")
-async def get_dc_joined(
-    workflow_id: str, current_user: str = Depends(get_current_user)
-):
+async def get_dc_joined(workflow_id: str, current_user: str = Depends(get_current_user)):
     """
     Retrieve join details for the data collections in a workflow.
     """
@@ -220,9 +209,7 @@ async def get_tag_from_id(
     result = list(projects_collection.aggregate(pipeline))
 
     if not result:
-        raise HTTPException(
-            status_code=404, detail="Data collection not found or access denied."
-        )
+        raise HTTPException(status_code=404, detail="Data collection not found or access denied.")
 
     if len(result) > 1:
         raise HTTPException(

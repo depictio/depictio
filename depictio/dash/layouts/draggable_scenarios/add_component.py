@@ -1,6 +1,4 @@
-from depictio.dash.layouts.stepper import (
-    create_stepper_output,
-)
+from depictio.dash.layouts.stepper import create_stepper_output
 
 
 def add_new_component(

@@ -57,7 +57,7 @@ def get_test_config():
     """Function to load the YAML configuration file used in tests."""
 
     def _get_config(filepath):
-        with open(filepath, "r") as file:
+        with open(filepath) as file:
             return yaml.safe_load(file)
 
     return _get_config
@@ -102,6 +102,15 @@ def mock_projects_collection():
             client.close()
 
 
+@pytest.fixture(autouse=True)
+def set_depictio_context(monkeypatch):
+    """Set DEPICTIO_CONTEXT to 'api' for all tests."""
+    # Use monkeypatch instead of patch to ensure it works globally
+    monkeypatch.setattr("depictio.models.models.projects.DEPICTIO_CONTEXT", "api")
+    monkeypatch.setattr("depictio.models.models.workflows.DEPICTIO_CONTEXT", "api")
+    monkeypatch.setattr("depictio.models.models.data_collections.DEPICTIO_CONTEXT", "api")
+
+
 @pytest.mark.asyncio
 class TestProjectCreation:
     @pytest.fixture
@@ -120,6 +129,7 @@ class TestProjectCreation:
         self, sample_project_config, mock_projects_collection
     ):
         """Test successful project creation."""
+
         sample_project = Project(**sample_project_config)
         print(f"Sample project object: {format_pydantic(sample_project)}")
 
@@ -129,19 +139,14 @@ class TestProjectCreation:
         assert result["message"] == "Project created successfully."
         assert result["project"] == sample_project
 
-        retrieved_project_dict = mock_projects_collection.find_one(
-            {"name": sample_project.name}
-        )
+        retrieved_project_dict = mock_projects_collection.find_one({"name": sample_project.name})
         assert retrieved_project_dict is not None
         assert retrieved_project_dict["name"] == sample_project.name
         assert "_id" in retrieved_project_dict
         assert len(retrieved_project_dict["workflows"]) == len(sample_project.workflows)
         assert retrieved_project_dict["is_public"] is False
         assert len(retrieved_project_dict["permissions"]["owners"]) == 1
-        assert (
-            retrieved_project_dict["permissions"]["owners"][0]["email"]
-            == "test@example.com"
-        )
+        assert retrieved_project_dict["permissions"]["owners"][0]["email"] == "test@example.com"
 
     @pytest.mark.asyncio
     async def test_helper_create_project_duplicate(
@@ -156,10 +161,7 @@ class TestProjectCreation:
             await _helper_create_project_beanie(sample_project)
 
         assert excinfo.value.status_code == 400
-        assert (
-            f"Project with name '{sample_project.name}' already exists"
-            in excinfo.value.detail
-        )
+        assert f"Project with name '{sample_project.name}' already exists" in excinfo.value.detail
 
 
 @pytest.mark.asyncio
@@ -216,13 +218,19 @@ class TestGetAllProjects:
 
         return [owner_project, viewer_project, public_project]
 
+    @pytest.fixture(autouse=True)
+    def set_depictio_context(self, monkeypatch):
+        """Set DEPICTIO_CONTEXT to 'api' for all tests."""
+        # Use monkeypatch instead of patch to ensure it works globally
+        monkeypatch.setattr("depictio.models.models.projects.DEPICTIO_CONTEXT", "api")
+        monkeypatch.setattr("depictio.models.models.workflows.DEPICTIO_CONTEXT", "api")
+        monkeypatch.setattr("depictio.models.models.data_collections.DEPICTIO_CONTEXT", "api")
+
     async def test_async_get_all_projects_user(
         self, sample_user, mock_projects_collection, setup_multiple_projects
     ):
         """Test getting all projects for a regular user."""
-        current_user = UserBase(
-            id=sample_user.id, email=sample_user.email, is_admin=False
-        )
+        current_user = UserBase(id=sample_user.id, email=sample_user.email, is_admin=False)
         result = _async_get_all_projects(current_user, mock_projects_collection)
 
         assert len(result) == 3  # owner, viewer, and public projects
@@ -265,9 +273,7 @@ class TestGetProjectFromId:
         self, sample_user, mock_projects_collection, setup_single_project
     ):
         """Test getting a project by ID successfully."""
-        current_user = UserBase(
-            id=sample_user.id, email=sample_user.email, is_admin=False
-        )
+        current_user = UserBase(id=sample_user.id, email=sample_user.email, is_admin=False)
         result = _async_get_project_from_id(
             setup_single_project, current_user, mock_projects_collection
         )
@@ -277,22 +283,16 @@ class TestGetProjectFromId:
         assert "permissions" in result
         assert "owners" in result["permissions"]
 
-    async def test_async_get_project_from_id_not_found(
-        self, sample_user, mock_projects_collection
-    ):
+    async def test_async_get_project_from_id_not_found(self, sample_user, mock_projects_collection):
         """Test getting a non-existent project by ID."""
         # Clear the collection first
         mock_projects_collection.delete_many({})
 
-        current_user = UserBase(
-            id=sample_user.id, email=sample_user.email, is_admin=False
-        )
+        current_user = UserBase(id=sample_user.id, email=sample_user.email, is_admin=False)
         non_existent_id = str(ObjectId())
 
         with pytest.raises(HTTPException) as excinfo:
-            _async_get_project_from_id(
-                non_existent_id, current_user, mock_projects_collection
-            )
+            _async_get_project_from_id(non_existent_id, current_user, mock_projects_collection)
 
         assert excinfo.value.status_code == 404
         assert "Project not found" in excinfo.value.detail
@@ -320,13 +320,19 @@ class TestGetProjectFromName:
         mock_projects_collection.insert_one(mongo_doc)
         return project.name
 
+    @pytest.fixture(autouse=True)
+    def set_depictio_context(self, monkeypatch):
+        """Set DEPICTIO_CONTEXT to 'api' for all tests."""
+        # Use monkeypatch instead of patch to ensure it works globally
+        monkeypatch.setattr("depictio.models.models.projects.DEPICTIO_CONTEXT", "api")
+        monkeypatch.setattr("depictio.models.models.workflows.DEPICTIO_CONTEXT", "api")
+        monkeypatch.setattr("depictio.models.models.data_collections.DEPICTIO_CONTEXT", "api")
+
     async def test_async_get_project_from_name_success(
         self, sample_user, mock_projects_collection, setup_named_project
     ):
         """Test getting a project by name successfully."""
-        current_user = UserBase(
-            id=sample_user.id, email=sample_user.email, is_admin=False
-        )
+        current_user = UserBase(id=sample_user.id, email=sample_user.email, is_admin=False)
         result = _async_get_project_from_name(
             setup_named_project, current_user, mock_projects_collection
         )
@@ -343,9 +349,7 @@ class TestGetProjectFromName:
         # Clear the collection first
         mock_projects_collection.delete_many({})
 
-        current_user = UserBase(
-            id=sample_user.id, email=sample_user.email, is_admin=False
-        )
+        current_user = UserBase(id=sample_user.id, email=sample_user.email, is_admin=False)
 
         with pytest.raises(HTTPException) as excinfo:
             _async_get_project_from_name(
@@ -375,12 +379,8 @@ class TestGetProjectFromName:
         mock_projects_collection.insert_one(mongo_doc)
 
         # Create a different user
-        other_user = UserBase(
-            id=str(ObjectId()), email="other@example.com", is_admin=False
-        )
-        result = _async_get_project_from_name(
-            project.name, other_user, mock_projects_collection
-        )
+        other_user = UserBase(id=str(ObjectId()), email="other@example.com", is_admin=False)
+        result = _async_get_project_from_name(project.name, other_user, mock_projects_collection)
 
         assert result is not None
         assert result["name"] == project.name

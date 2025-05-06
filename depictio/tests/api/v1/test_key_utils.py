@@ -138,9 +138,7 @@ class TestCryptoUtils:
         """Test generate_keys with RS512 algorithm."""
         priv_path = str(temp_dir / "private.pem")
         pub_path = str(temp_dir / "public.pem")
-        generate_keys(
-            private_key_path=priv_path, public_key_path=pub_path, algorithm="RS512"
-        )
+        generate_keys(private_key_path=priv_path, public_key_path=pub_path, algorithm="RS512")
 
         # Load key to verify key size
         private_key = load_private_key(priv_path)
@@ -157,9 +155,7 @@ class TestCryptoUtils:
 
     def test_generate_keys_unimplemented_algorithm(self, temp_dir):
         """Test generate_keys with unimplemented algorithm."""
-        with pytest.raises(
-            NotImplementedError, match="ES256 algorithm is not implemented yet"
-        ):
+        with pytest.raises(NotImplementedError, match="ES256 algorithm is not implemented yet"):
             generate_keys(
                 private_key_path=str(temp_dir / "private.pem"),
                 public_key_path=str(temp_dir / "public.pem"),
@@ -184,9 +180,7 @@ class TestCryptoUtils:
         # First generate keys
         priv_path = str(temp_dir / "private.pem")
         pub_path = str(temp_dir / "public.pem")
-        generate_keys(
-            private_key_path=priv_path, public_key_path=pub_path, algorithm="RS256"
-        )
+        generate_keys(private_key_path=priv_path, public_key_path=pub_path, algorithm="RS256")
 
         # Now check if they exist
         with mock.patch("depictio.api.v1.key_utils.generate_keys") as mock_generate:
@@ -213,9 +207,7 @@ class TestCryptoUtils:
         """Test successful loading of private key."""
         priv_path = str(temp_dir / "private.pem")
         pub_path = str(temp_dir / "public.pem")
-        generate_keys(
-            private_key_path=priv_path, public_key_path=pub_path, algorithm="RS256"
-        )
+        generate_keys(private_key_path=priv_path, public_key_path=pub_path, algorithm="RS256")
 
         key = load_private_key(priv_path)
         assert isinstance(key, RSAPrivateKey)
@@ -229,9 +221,7 @@ class TestCryptoUtils:
         """Test successful loading of public key."""
         priv_path = str(temp_dir / "private.pem")
         pub_path = str(temp_dir / "public.pem")
-        generate_keys(
-            private_key_path=priv_path, public_key_path=pub_path, algorithm="RS256"
-        )
+        generate_keys(private_key_path=priv_path, public_key_path=pub_path, algorithm="RS256")
 
         key = load_public_key(pub_path)
         assert isinstance(key, RSAPublicKey)
@@ -253,9 +243,9 @@ class TestCryptoUtils:
         )
 
         # Read key contents
-        with open(orig_priv_path, "r") as f:
+        with open(orig_priv_path) as f:
             priv_content = f.read()
-        with open(orig_pub_path, "r") as f:
+        with open(orig_pub_path) as f:
             pub_content = f.read()
 
         # Import to new location

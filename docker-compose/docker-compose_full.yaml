@@ -72,7 +72,7 @@ services:
   #   # image: registry.git.embl.de/tweber/depictio/jbrowse2:latest
   #   build:
   #     dockerfile: docker-images/Dockerfile_jbrowse.dev.240424.dockerfile
-  #   ports: 
+  #   ports:
   #     - 3000:3000
   #     - 9010:9010
   #   volumes:

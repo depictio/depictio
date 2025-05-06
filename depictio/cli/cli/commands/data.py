@@ -1,11 +1,8 @@
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 
-from depictio.cli.cli.utils.api_calls import (
-    api_get_project_from_id,
-    api_get_project_from_name,
-)
+from depictio.cli.cli.utils.api_calls import api_get_project_from_id, api_get_project_from_name
 from depictio.cli.cli.utils.config import validate_project_config_and_check_S3_storage
 from depictio.cli.cli.utils.helpers import process_project_helper
 from depictio.cli.cli.utils.rich_utils import (
@@ -26,16 +23,14 @@ def scan(
     ] = "~/.depictio/CLI.yaml",
     project_config_path: Annotated[
         str,
-        typer.Option(
-            "--project-config-path", help="Path to the pipeline configuration file"
-        ),
+        typer.Option("--project-config-path", help="Path to the pipeline configuration file"),
     ] = "",
     workflow_name: Annotated[
-        Optional[str],  # Now explicitly Optional
+        str | None,  # Now explicitly Optional
         typer.Option("--workflow-name", help="Name of the workflow to be scanned"),
     ] = None,
     data_collection_tag: Annotated[
-        Optional[str],  # Also make this Optional if its default is None
+        str | None,  # Also make this Optional if its default is None
         typer.Option("--data-collection-tag", help="Data collection tag to be scanned"),
     ] = None,
     rescan_folders: bool = typer.Option(
@@ -70,9 +65,7 @@ def scan(
     )
 
     if response["success"]:
-        rich_print_checked_statement(
-            "Depictio Project configuration validated", "success"
-        )
+        rich_print_checked_statement("Depictio Project configuration validated", "success")
 
         # Get the validated project configuration
         project_config = response["project_config"]
@@ -81,9 +74,7 @@ def scan(
         # remote_project_config = api_get_project_from_id(
         #     str(project_config.id), CLI_config
         # )
-        remote_project_config = api_get_project_from_name(
-            str(project_config.name), CLI_config
-        )
+        remote_project_config = api_get_project_from_name(str(project_config.name), CLI_config)
 
         if remote_project_config.status_code == 200:
             logger.info("Remote project configuration fetched successfully.")
@@ -132,9 +123,7 @@ def scan(
             )
 
     else:
-        rich_print_checked_statement(
-            "Depictio Project configuration validation failed", "error"
-        )
+        rich_print_checked_statement("Depictio Project configuration validation failed", "error")
 
     # Step 2: Process project
     # process_project_helper(cli_config, project_config, headers, update, scan_files, data_collection_tag)
@@ -150,12 +139,10 @@ def process(
     ] = "~/.depictio/CLI.yaml",
     project_config_path: Annotated[
         str,
-        typer.Option(
-            "--project-config-path", help="Path to the pipeline configuration file"
-        ),
+        typer.Option("--project-config-path", help="Path to the pipeline configuration file"),
     ] = "",
     # update: Optional[bool] = typer.Option(False, "--update", help="Update the workflow if it already exists"),
-    overwrite: Optional[bool] = typer.Option(
+    overwrite: bool | None = typer.Option(
         False, "--overwrite", help="Overwrite the workflow if it already exists"
     ),
     # data_collection_tag: Optional[str] = typer.Option(None, "--data-collection-tag", help="Data collection tag to be processed"),
@@ -171,9 +158,7 @@ def process(
     )
 
     if response["success"]:
-        rich_print_checked_statement(
-            "Depictio Project configuration validated", "success"
-        )
+        rich_print_checked_statement("Depictio Project configuration validated", "success")
 
         # Get the validated project configuration
         project_config = response["project_config"]

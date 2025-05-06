@@ -2,7 +2,6 @@ import os
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -15,8 +14,8 @@ from depictio.models.models.users import Permission
 
 class WorkflowDataLocation(MongoModel):
     structure: str
-    locations: List[str]
-    runs_regex: Optional[str] = None
+    locations: list[str]
+    runs_regex: str | None = None
 
     @field_validator("structure", mode="before")
     def validate_mode(cls, value):
@@ -48,9 +47,7 @@ class WorkflowDataLocation(MongoModel):
                 expanded_paths.append(location)
 
             # Validate the expanded paths if in CLI context
-            return [
-                DirectoryPath(path=Path(location)).path for location in expanded_paths
-            ]
+            return [DirectoryPath(path=Path(location)).path for location in expanded_paths]
         else:
             return value
 
@@ -59,9 +56,7 @@ class WorkflowDataLocation(MongoModel):
         # only if mode is 'sequencing-runs' - check mode first
         if values["structure"] == "sequencing-runs":
             if "runs_regex" not in values or not values["runs_regex"]:
-                raise ValueError(
-                    "runs_regex is required when structure is 'sequencing-runs'"
-                )
+                raise ValueError("runs_regex is required when structure is 'sequencing-runs'")
             # just check if the regex is valid
             try:
                 re.compile(values["runs_regex"])
@@ -72,27 +67,27 @@ class WorkflowDataLocation(MongoModel):
 
 
 class WorkflowConfig(MongoModel):
-    version: Optional[str] = None
-    workflow_parameters: Optional[Dict] = None
+    version: str | None = None
+    workflow_parameters: dict | None = None
 
 
 class WorkflowRunScan(BaseModel):
-    stats: Dict[str, int]
-    files_id: Dict[str, List[PyObjectId]]
+    stats: dict[str, int]
+    files_id: dict[str, list[PyObjectId]]
     scan_time: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 class WorkflowRun(MongoModel):
     workflow_id: PyObjectId
     run_tag: str
-    files_id: List[PyObjectId] = []
+    files_id: list[PyObjectId] = []
     workflow_config_id: PyObjectId
     run_location: str
     creation_time: str
     last_modification_time: str
     registration_time: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     run_hash: str = ""
-    scan_results: Optional[List[WorkflowRunScan]] = []
+    scan_results: list[WorkflowRunScan] | None = []
     permissions: Permission
 
     @field_validator("run_location", mode="after")
@@ -107,9 +102,7 @@ class WorkflowRun(MongoModel):
             for match in matches:
                 env_value = os.environ.get(match)
                 logger.debug(f"Original path: {location}")
-                logger.debug(
-                    f"Expanded path: {location.replace(f'{{{match}}}', env_value)}"
-                )
+                logger.debug(f"Expanded path: {location.replace(f'{{{match}}}', env_value)}")
 
                 if not env_value:
                     raise ValueError(
@@ -179,7 +172,7 @@ class WorkflowRun(MongoModel):
 
 class WorkflowEngine(BaseModel):
     name: str
-    version: Optional[str] = None
+    version: str | None = None
 
     class Config:
         extra = "forbid"  # Reject unexpected fields
@@ -214,8 +207,8 @@ class WorkflowEngine(BaseModel):
 
 
 class WorkflowCatalog(BaseModel):
-    name: Optional[str]
-    url: Optional[str]
+    name: str | None
+    url: str | None
 
     class Config:
         extra = "forbid"  # Reject unexpected fields
@@ -236,14 +229,14 @@ class WorkflowCatalog(BaseModel):
 class Workflow(MongoModel):
     name: str
     engine: WorkflowEngine
-    version: Optional[str] = None
-    catalog: Optional[WorkflowCatalog] = None
-    workflow_tag: Optional[str] = None
+    version: str | None = None
+    catalog: WorkflowCatalog | None = None
+    workflow_tag: str | None = None
     # description: Optional[Description] = None
-    repository_url: Optional[str] = None
-    data_collections: List[DataCollection]
-    runs: Optional[Dict[str, WorkflowRun]] = dict()
-    config: Optional[WorkflowConfig] = Field(default_factory=WorkflowConfig)
+    repository_url: str | None = None
+    data_collections: list[DataCollection]
+    runs: dict[str, WorkflowRun] | None = dict()
+    config: WorkflowConfig | None = Field(default_factory=WorkflowConfig)
     data_location: WorkflowDataLocation
     registration_time: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 

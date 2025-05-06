@@ -1,7 +1,8 @@
 import dash
-from dash import html, dcc
 import dash_mantine_components as dmc
+from dash import dcc, html
 from dash_iconify import DashIconify
+
 from depictio.dash.colors import colors  # Import our color palette
 
 # Create a Stack to vertically arrange all elements with proper spacing
@@ -249,9 +250,7 @@ layout = html.Div(
                                         children=[
                                             # Logo Image
                                             html.Img(
-                                                src=dash.get_asset_url(
-                                                    "AriseLogo300dpi.png"
-                                                ),
+                                                src=dash.get_asset_url("AriseLogo300dpi.png"),
                                                 style={
                                                     "height": "100px",
                                                     "objectFit": "contain",
@@ -447,13 +446,9 @@ layout = html.Div(
                                                 ),
                                                 styles={
                                                     "root": {
-                                                        "backgroundColor": colors[
-                                                            "purple"
-                                                        ],
+                                                        "backgroundColor": colors["purple"],
                                                         "&:hover": {
-                                                            "backgroundColor": colors[
-                                                                "purple"
-                                                            ]
+                                                            "backgroundColor": colors["purple"]
                                                             + "cc"
                                                         },
                                                     }

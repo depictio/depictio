@@ -1,7 +1,9 @@
-import httpx
 from datetime import datetime
-from dash import Input, Output, State, ALL
+
 import dash
+import httpx
+from dash import ALL, Input, Output, State
+
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.custom_logging import logger
 from depictio.dash.api_calls import api_call_fetch_user_from_token
@@ -95,23 +97,16 @@ def register_callbacks_save(app):
             dashboard_data_response.raise_for_status()
             dashboard_data = dashboard_data_response.json()
 
-            logger.info(
-                f"Dashboard data fetched successfully for dashboard {dashboard_id}."
-            )
+            logger.info(f"Dashboard data fetched successfully for dashboard {dashboard_id}.")
             logger.info(f"Dashboard data: {dashboard_data}")
         except httpx.HTTPStatusError as e:
             logger.error(f"Failed to fetch dashboard data: {e}")
             return dash.no_update
 
         # Check user permissions
-        owner_ids = [
-            str(e["id"])
-            for e in dashboard_data.get("permissions", {}).get("owners", [])
-        ]
+        owner_ids = [str(e["id"]) for e in dashboard_data.get("permissions", {}).get("owners", [])]
         if str(current_user.id) not in owner_ids:
-            logger.warning(
-                "User does not have permission to edit & save this dashboard."
-            )
+            logger.warning("User does not have permission to edit & save this dashboard.")
             return dash.no_update
 
         # Determine trigger context
@@ -152,19 +147,13 @@ def register_callbacks_save(app):
         logger.info(f"seen_indexes: {seen_indexes}")
         # Remove child components for edit mode
         if "btn-done-edit" in triggered_id:
-            unique_metadata = [
-                elem for elem in unique_metadata if "parent_index" not in elem
-            ]
-            logger.info(
-                f"Unique metadata after removing child components: {unique_metadata}"
-            )
+            unique_metadata = [elem for elem in unique_metadata if "parent_index" not in elem]
+            logger.info(f"Unique metadata after removing child components: {unique_metadata}")
 
         # Use draggable layout metadata if triggered by draggable
         if "draggable" in triggered_id:
             unique_metadata = dashboard_data.get("stored_metadata", unique_metadata)
-            logger.info(
-                f"Unique metadata after using draggable layout metadata: {unique_metadata}"
-            )
+            logger.info(f"Unique metadata after using draggable layout metadata: {unique_metadata}")
 
         updated_dashboard_data = {
             "stored_metadata": unique_metadata,
@@ -192,9 +181,7 @@ def register_callbacks_save(app):
                 headers={"Authorization": f"Bearer {TOKEN}"},
             )
             response.raise_for_status()
-            logger.info(
-                f"Dashboard data saved successfully for dashboard {dashboard_id}."
-            )
+            logger.info(f"Dashboard data saved successfully for dashboard {dashboard_id}.")
         except httpx.HTTPStatusError as e:
             logger.error(f"Failed to save dashboard data: {e}")
 

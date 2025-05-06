@@ -14,10 +14,7 @@ from depictio.api.v1.configs.custom_logging import logger
 
 # from depictio.api.v1.endpoints.dashboards_endpoints.models import DashboardData
 # from depictio.api.v1.endpoints.user_endpoints.models import UserBase
-from depictio.dash.api_calls import (
-    api_call_fetch_user_from_token,
-    api_get_project_from_id,
-)
+from depictio.dash.api_calls import api_call_fetch_user_from_token, api_get_project_from_id
 from depictio.dash.layouts.layouts_toolbox import (
     create_dashboard_modal,
     create_delete_confirmation_modal,
@@ -68,9 +65,7 @@ def load_dashboards_from_db(token):
             return {"dashboards": dashboards}
 
         else:
-            raise ValueError(
-                f"Failed to load dashboards from the database. Error: {response.text}"
-            )
+            raise ValueError(f"Failed to load dashboards from the database. Error: {response.text}")
 
     except Exception as e:
         logger.error(f"Error loading dashboards from the database: {e}")
@@ -83,14 +78,10 @@ def insert_dashboard(dashboard_id, dashboard_data, token):
         raise ValueError("Token is required to insert a dashboard into the database.")
 
     if not dashboard_data:
-        raise ValueError(
-            "Dashboard data is required to insert a dashboard into the database."
-        )
+        raise ValueError("Dashboard data is required to insert a dashboard into the database.")
 
     if not dashboard_id:
-        raise ValueError(
-            "Dashboard ID is required to insert a dashboard into the database."
-        )
+        raise ValueError("Dashboard ID is required to insert a dashboard into the database.")
     logger.info(f"dashboard_id: {dashboard_id}")
     logger.info(f"dashboard_data: {dashboard_data}")
     dashboard_data = convert_objectid_to_str(dashboard_data)
@@ -105,9 +96,7 @@ def insert_dashboard(dashboard_id, dashboard_data, token):
         logger.info(f"Successfully inserted dashboard: {dashboard_data}")
 
     else:
-        raise ValueError(
-            f"Failed to insert dashboard into the database. Error: {response.text}"
-        )
+        raise ValueError(f"Failed to insert dashboard into the database. Error: {response.text}")
 
 
 def delete_dashboard(dashboard_id, token):
@@ -120,9 +109,7 @@ def delete_dashboard(dashboard_id, token):
         logger.info(f"Successfully deleted dashboard with ID: {dashboard_id}")
 
     else:
-        raise ValueError(
-            f"Failed to delete dashboard from the database. Error: {response.text}"
-        )
+        raise ValueError(f"Failed to delete dashboard from the database. Error: {response.text}")
 
 
 def edit_dashboard_name(new_name, dashboard_id, dashboards, token):
@@ -149,9 +136,7 @@ def edit_dashboard_name(new_name, dashboard_id, dashboards, token):
         logger.info(f"Successfully edited dashboard name: {dashboard}")
 
     else:
-        raise ValueError(
-            f"Failed to edit dashboard name in the database. Error: {response.text}"
-        )
+        raise ValueError(f"Failed to edit dashboard name in the database. Error: {response.text}")
 
     logger.info(f"updated_dashboards: {updated_dashboards}")
 
@@ -207,9 +192,7 @@ def render_welcome_section(email):
 
 
 def render_dashboard_list_section(email):
-    return html.Div(
-        id={"type": "dashboard-list", "index": email}, style={"padding": "20px"}
-    )
+    return html.Div(id={"type": "dashboard-list", "index": email}, style={"padding": "20px"})
 
 
 def register_callbacks_dashboards_management(app):
@@ -321,21 +304,13 @@ def register_callbacks_dashboards_management(app):
             return modal
 
         def create_dashboad_view_header(dashboard, user_id, token):
-            public = (
-                True
-                if "*" in [e for e in dashboard["permissions"]["viewers"]]
-                else False
-            )
+            public = True if "*" in [e for e in dashboard["permissions"]["viewers"]] else False
 
-            if str(user_id) in [
-                str(owner["_id"]) for owner in dashboard["permissions"]["owners"]
-            ]:
+            if str(user_id) in [str(owner["_id"]) for owner in dashboard["permissions"]["owners"]]:
                 color_badge_ownership = "blue"
             else:
                 color_badge_ownership = "gray"
-            badge_icon = (
-                "material-symbols:public" if public else "material-symbols:lock"
-            )
+            badge_icon = "material-symbols:public" if public else "material-symbols:lock"
 
             badge_owner = dmc.Badge(
                 f"Owner: {dashboard['permissions']['owners'][0]['email']}",
@@ -351,17 +326,13 @@ def register_callbacks_dashboards_management(app):
             #     headers={"Authorization": f"Bearer {token}"},
             # )
 
-            response = api_get_project_from_id(
-                project_id=dashboard["project_id"], token=token
-            )
+            response = api_get_project_from_id(project_id=dashboard["project_id"], token=token)
             if response.status_code == 200:
                 logger.info(f"Project response: {response.json()}")
                 project = response.json()
                 project_name = project["name"]
             else:
-                logger.error(
-                    f"Failed to get project from ID: {dashboard['project_id']}"
-                )
+                logger.error(f"Failed to get project from ID: {dashboard['project_id']}")
                 project_name = "Unknown"
 
             badge_project = dmc.Badge(
@@ -434,16 +405,10 @@ def register_callbacks_dashboards_management(app):
             disabled = (
                 True
                 if str(user_id)
-                not in [
-                    str(owner["_id"]) for owner in dashboard["permissions"]["owners"]
-                ]
+                not in [str(owner["_id"]) for owner in dashboard["permissions"]["owners"]]
                 else False
             )
-            public = (
-                True
-                if "*" in [e for e in dashboard["permissions"]["viewers"]]
-                else False
-            )
+            public = True if "*" in [e for e in dashboard["permissions"]["viewers"]] else False
             privacy_button_title = "Make private" if public else "Make public"
             color_privacy_button = "violet" if public else "green"
 
@@ -540,7 +505,9 @@ def register_callbacks_dashboards_management(app):
             logger.info(f"dashboard: {dashboard}")
 
             # Define the output folder where screenshots are saved
-            output_folder = "/app/depictio/dash/static/screenshots"  # Directly set to the desired path
+            output_folder = (
+                "/app/depictio/dash/static/screenshots"  # Directly set to the desired path
+            )
             # output_folder = os.path.join(os.path.dirname(__file__), 'static', 'screenshots')
 
             # Define the filename and paths
@@ -592,9 +559,7 @@ def register_callbacks_dashboards_management(app):
             else:
                 thumbnail = html.A(
                     dmc.CardSection(
-                        dmc.Image(
-                            src=thumbnail_url, height=225, width=400, fit="contain"
-                        )
+                        dmc.Image(src=thumbnail_url, height=225, width=400, fit="contain")
                     ),
                     href=f"/dashboard/{dashboard['dashboard_id']}",
                 )
@@ -612,9 +577,7 @@ def register_callbacks_dashboards_management(app):
                 )
                 edit_name_modal = modal_edit_name_dashboard(dashboard)
                 buttons = create_buttons(dashboard, user_id)
-                dashboard_header = create_dashboad_view_header(
-                    dashboard, user_id, token
-                )
+                dashboard_header = create_dashboad_view_header(dashboard, user_id, token)
 
                 buttons = dmc.Accordion(
                     [
@@ -698,9 +661,7 @@ def register_callbacks_dashboards_management(app):
             ],
             order=3,
         )
-        private_dashboards = [
-            d for d in dashboards if "*" not in d["permissions"]["viewers"]
-        ]
+        private_dashboards = [d for d in dashboards if "*" not in d["permissions"]["viewers"]]
         logger.info(f"private_dashboards: {private_dashboards}")
         private_dashboards_ids = [d["dashboard_id"] for d in private_dashboards]
         private_dashboards_view = dmc.SimpleGrid(
@@ -794,9 +755,7 @@ def register_callbacks_dashboards_management(app):
         # [Output({"type": "dashboard-list", "index": ALL}, "children"), Output({"type": "dashboard-index-store", "index": ALL}, "data")],
         [
             # Input({"type": "cancel-dashboard-delete-button", "index": ALL}, "n_clicks"),
-            Input(
-                {"type": "confirm-dashboard-delete-button", "index": ALL}, "n_clicks"
-            ),
+            Input({"type": "confirm-dashboard-delete-button", "index": ALL}, "n_clicks"),
             Input({"type": "save-edit-name-dashboard", "index": ALL}, "n_clicks"),
             Input({"type": "duplicate-dashboard-button", "index": ALL}, "n_clicks"),
             Input({"type": "make-public-dashboard-button", "index": ALL}, "n_clicks"),
@@ -851,16 +810,13 @@ def register_callbacks_dashboards_management(app):
         index_data = load_dashboards_from_db(user_data["access_token"])
         logger.info(f"index_data: {index_data}")
         dashboards = [
-            DashboardData.from_mongo(dashboard)
-            for dashboard in index_data.get("dashboards", [])
+            DashboardData.from_mongo(dashboard) for dashboard in index_data.get("dashboards", [])
         ]
         logger.info(f"dashboards: {dashboards}")
         # next_index = index_data.get("next_index", 1)
 
         if not ctx.triggered_id:
-            return handle_no_trigger(
-                dashboards, store_data_list, current_userbase, user_data
-            )
+            return handle_no_trigger(dashboards, store_data_list, current_userbase, user_data)
             # return handle_no_trigger(dashboards, next_index, store_data_list, current_userbase)
 
         if "type" not in ctx.triggered_id:
@@ -895,9 +851,7 @@ def register_callbacks_dashboards_management(app):
                 if id["index"] == ctx.triggered_id["index"]
             ][0]
             logger.info(f"public_current_status: {public_current_status}")
-            public_current_status = (
-                False if public_current_status == "Make public" else True
-            )
+            public_current_status = False if public_current_status == "Make public" else True
             logger.info(f"public_current_status: {public_current_status}")
 
             return handle_dashboard_make_public(
@@ -960,9 +914,7 @@ def register_callbacks_dashboards_management(app):
                 project_id=PyObjectId(modal_data["project_id"]),
             )
             dashboards.append(new_dashboard)
-            insert_dashboard(
-                dashboard_id, new_dashboard.mongo(), user_data["access_token"]
-            )
+            insert_dashboard(dashboard_id, new_dashboard.mongo(), user_data["access_token"])
             # next_index += 1
 
         return generate_dashboard_view_response(
@@ -974,9 +926,7 @@ def register_callbacks_dashboards_management(app):
         dashboards, delete_ids_list, user_data, store_data_list, current_userbase
     ):
         ctx_triggered_dict = ctx.triggered[0]
-        index_confirm_delete = eval(ctx_triggered_dict["prop_id"].split(".")[0])[
-            "index"
-        ]
+        index_confirm_delete = eval(ctx_triggered_dict["prop_id"].split(".")[0])["index"]
         delete_dashboard(index_confirm_delete, user_data["access_token"])
 
         dashboards = [
@@ -1020,9 +970,7 @@ def register_callbacks_dashboards_management(app):
                     )
 
                 else:
-                    raise ValueError(
-                        f"Failed to make dashboard public. Error: {response.text}"
-                    )
+                    raise ValueError(f"Failed to make dashboard public. Error: {response.text}")
             else:
                 updated_dashboards.append(dashboard)
 
@@ -1030,9 +978,7 @@ def register_callbacks_dashboards_management(app):
             updated_dashboards, store_data_list, current_userbase, user_data
         )
 
-    def handle_dashboard_duplication(
-        dashboards, user_data, store_data_list, current_userbase
-    ):
+    def handle_dashboard_duplication(dashboards, user_data, store_data_list, current_userbase):
         logger.info("Duplicate dashboard button clicked")
         ctx_triggered_dict = ctx.triggered[0]
         index_duplicate = eval(ctx_triggered_dict["prop_id"].split(".")[0])["index"]
@@ -1077,15 +1023,15 @@ def register_callbacks_dashboards_management(app):
                 # Copy thumbnail
                 thumbnail_filename = f"{str(dashboard.id)}.png"
                 # thumbnail_filename = f"{str(current_userbase.id)}_{str(dashboard.id)}.png"
-                thumbnail_fs_path = (
-                    f"/app/depictio/dash/static/screenshots/{thumbnail_filename}"
-                )
+                thumbnail_fs_path = f"/app/depictio/dash/static/screenshots/{thumbnail_filename}"
 
                 if not os.path.exists(thumbnail_fs_path):
                     logger.warning(f"Thumbnail not found at path: {thumbnail_fs_path}")
                 else:
                     # Copy the thumbnail to the new dashboard ID
-                    new_thumbnail_fs_path = f"/app/depictio/dash/static/screenshots/{str(new_dashboard.id)}.png"
+                    new_thumbnail_fs_path = (
+                        f"/app/depictio/dash/static/screenshots/{str(new_dashboard.id)}.png"
+                    )
                     shutil.copy(thumbnail_fs_path, new_thumbnail_fs_path)
 
         return generate_dashboard_view_response(
@@ -1093,9 +1039,7 @@ def register_callbacks_dashboards_management(app):
         )
         # return generate_dashboard_view_response(updated_dashboards, len(updated_dashboards) + 1, store_data_list, current_userbase)
 
-    def handle_dashboard_edit(
-        new_name, dashboards, user_data, store_data_list, current_userbase
-    ):
+    def handle_dashboard_edit(new_name, dashboards, user_data, store_data_list, current_userbase):
         logger.info("Edit dashboard button clicked")
         ctx_triggered_dict = ctx.triggered[0]
         index_edit = eval(ctx_triggered_dict["prop_id"].split(".")[0])["index"]
@@ -1109,12 +1053,8 @@ def register_callbacks_dashboards_management(app):
         )
         # return generate_dashboard_view_response(updated_dashboards, len(updated_dashboards) + 1, store_data_list, current_userbase)
 
-    def generate_dashboard_view_response(
-        dashboards, store_data_list, current_userbase, user_data
-    ):
-        dashboards = [
-            convert_objectid_to_str(dashboard.mongo()) for dashboard in dashboards
-        ]
+    def generate_dashboard_view_response(dashboards, store_data_list, current_userbase, user_data):
+        dashboards = [convert_objectid_to_str(dashboard.mongo()) for dashboard in dashboards]
         logger.info(f"dashboards: {dashboards}")
         dashboards_view = create_homepage_view(
             dashboards, current_userbase.id, user_data["access_token"]
@@ -1201,9 +1141,7 @@ def register_callbacks_dashboards_management(app):
 
         if triggered_id == "create-dashboard-submit":
             logger.info("Submit button clicked")
-            dashboards = load_dashboards_from_db(user_data["access_token"])[
-                "dashboards"
-            ]
+            dashboards = load_dashboards_from_db(user_data["access_token"])["dashboards"]
             logger.info(f"dashboards: {dashboards}")
             logger.info(f"Len dashboards: {len(dashboards)}")
             if len(dashboards) > 0:
@@ -1295,17 +1233,11 @@ def register_callbacks_dashboards_management(app):
     #     return opened
 
     @app.callback(
-        Output(
-            {"type": "dashboard-delete-confirmation-modal", "index": MATCH}, "opened"
-        ),
+        Output({"type": "dashboard-delete-confirmation-modal", "index": MATCH}, "opened"),
         [
             Input({"type": "delete-dashboard-button", "index": MATCH}, "n_clicks"),
-            Input(
-                {"type": "confirm-dashboard-delete-button", "index": MATCH}, "n_clicks"
-            ),
-            Input(
-                {"type": "cancel-dashboard-delete-button", "index": MATCH}, "n_clicks"
-            ),
+            Input({"type": "confirm-dashboard-delete-button", "index": MATCH}, "n_clicks"),
+            Input({"type": "cancel-dashboard-delete-button", "index": MATCH}, "n_clicks"),
         ],
         [
             State(

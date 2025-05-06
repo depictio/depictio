@@ -1,9 +1,7 @@
 from bson import ObjectId
 
-
-from depictio.api.v1.db import dashboards_collection
 from depictio.api.v1.configs.custom_logging import logger
-
+from depictio.api.v1.db import dashboards_collection
 from depictio.models.models.base import convert_objectid_to_str
 
 

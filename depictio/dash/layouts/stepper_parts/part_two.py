@@ -1,21 +1,17 @@
-from dash import html, Input, Output, State, ALL, MATCH, ctx, dcc
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
+from dash import ALL, MATCH, Input, Output, State, ctx, dcc, html
 from dash_iconify import DashIconify
 
-from depictio.dash.modules.table_component.frontend import create_stepper_table_button
-from depictio.dash.utils import UNSELECTED_STYLE
 from depictio.api.v1.configs.custom_logging import logger
+from depictio.dash.modules.card_component.frontend import create_stepper_card_button
 
 # Depictio components imports - button step
 from depictio.dash.modules.figure_component.frontend import create_stepper_figure_button
-from depictio.dash.modules.card_component.frontend import create_stepper_card_button
-from depictio.dash.modules.interactive_component.frontend import (
-    create_stepper_interactive_button,
-)
-from depictio.dash.modules.jbrowse_component.frontend import (
-    create_stepper_jbrowse_button,
-)
+from depictio.dash.modules.interactive_component.frontend import create_stepper_interactive_button
+from depictio.dash.modules.jbrowse_component.frontend import create_stepper_jbrowse_button
+from depictio.dash.modules.table_component.frontend import create_stepper_table_button
+from depictio.dash.utils import UNSELECTED_STYLE
 
 
 def register_callbacks_stepper_part_two(app):
@@ -52,20 +48,21 @@ def register_callbacks_stepper_part_two(app):
             )
         )
 
-        figure_stepper_button, figure_stepper_button_store = (
-            create_stepper_figure_button(n, disabled=False)
+        figure_stepper_button, figure_stepper_button_store = create_stepper_figure_button(
+            n, disabled=False
         )
         card_stepper_button, card_stepper_button_store = create_stepper_card_button(
             n, disabled=False
         )
-        interactive_stepper_button, interactive_stepper_button_store = (
-            create_stepper_interactive_button(n, disabled=False)
-        )
+        (
+            interactive_stepper_button,
+            interactive_stepper_button_store,
+        ) = create_stepper_interactive_button(n, disabled=False)
         table_stepper_button, table_stepper_button_store = create_stepper_table_button(
             n, disabled=False
         )
-        jbrowse_stepper_button, jbrowse_stepper_button_store = (
-            create_stepper_jbrowse_button(n, disabled=False)
+        jbrowse_stepper_button, jbrowse_stepper_button_store = create_stepper_jbrowse_button(
+            n, disabled=False
         )
 
         standard_components = [

@@ -7,11 +7,7 @@ from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.custom_logging import logger
-from depictio.dash.modules.card_component.utils import (
-    agg_functions,
-    build_card,
-    build_card_frame,
-)
+from depictio.dash.modules.card_component.utils import agg_functions, build_card, build_card_frame
 
 # Depictio imports
 from depictio.dash.utils import (
@@ -37,9 +33,7 @@ def register_callbacks_card_component(app):
         prevent_initial_call=True,
     )
     # def update_aggregation_options(column_name, wf_dc_store, component_id, local_data, pathname):
-    def update_aggregation_options(
-        column_name, wf_tag, dc_tag, component_id, local_data, pathname
-    ):
+    def update_aggregation_options(column_name, wf_tag, dc_tag, component_id, local_data, pathname):
         """
         Callback to update aggregation dropdown options based on the selected column
         """
@@ -97,9 +91,7 @@ def register_callbacks_card_component(app):
         return None
 
     @app.callback(
-        Output(
-            {"type": "btn-done-edit", "index": MATCH}, "disabled", allow_duplicate=True
-        ),
+        Output({"type": "btn-done-edit", "index": MATCH}, "disabled", allow_duplicate=True),
         [
             Input({"type": "card-input", "index": MATCH}, "value"),
             Input({"type": "card-dropdown-column", "index": MATCH}, "value"),
@@ -190,12 +182,7 @@ def register_callbacks_card_component(app):
         logger.info(f"cols_json: {cols_json}")
 
         # If any of the input values are None, return an empty list
-        if (
-            column_name is None
-            or aggregation_value is None
-            or wf_id is None
-            or dc_id is None
-        ):
+        if column_name is None or aggregation_value is None or wf_id is None or dc_id is None:
             if not component_data:
                 return ([], None)
             else:
@@ -216,15 +203,13 @@ def register_callbacks_card_component(app):
                 dmc.Tooltip(
                     children=dmc.Badge(
                         children="Aggregation description",
-                        leftSection=DashIconify(
-                            icon="mdi:information", color="grey", width=20
-                        ),
+                        leftSection=DashIconify(icon="mdi:information", color="grey", width=20),
                         color="gray",
                         radius="lg",
                     ),
-                    label=agg_functions[str(column_type)]["card_methods"][
-                        aggregation_value
-                    ]["description"],
+                    label=agg_functions[str(column_type)]["card_methods"][aggregation_value][
+                        "description"
+                    ],
                     multiline=True,
                     width=300,
                     transition="pop",

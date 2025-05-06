@@ -1,5 +1,5 @@
 import collections
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import pandas as pd
 
@@ -25,9 +25,7 @@ def apply_dropdowns(df, n_dict):
     if n_dict["value"] is not None:
         # if the value is a string, convert it to a list
         n_dict["value"] = (
-            list(n_dict["value"])
-            if isinstance(n_dict["value"], str)
-            else n_dict["value"]
+            list(n_dict["value"]) if isinstance(n_dict["value"], str) else n_dict["value"]
         )
         # filter the df based on the selected values using pandas isin method
         df = df[df[n_dict["metadata"]["column_name"]].isin(n_dict["value"])]
@@ -132,13 +130,13 @@ helpers_mapping = {
 
 
 def render_raw_children(
-    stored_metadata: Dict[str, Any],
+    stored_metadata: dict[str, Any],
     # current_draggable_children: List[Dict[str, Any]],
     switch_state: bool,
     dashboard_id: str,
     TOKEN: str,
-    interactive_components_dict: Dict[str, Any] = None,
-) -> Tuple[List[Any], List[str]]:
+    interactive_components_dict: dict[str, Any] | None = None,
+) -> tuple[list[Any], list[str]]:
     """
     Render raw children components based on stored metadata and current draggable children.
 
@@ -244,9 +242,7 @@ def update_interactive_component(
 
     if not interactive_components_dict:
         for metadata in stored_metadata_raw:
-            child, index = render_raw_children(
-                metadata, switch_state, dashboard_id, TOKEN
-            )
+            child, index = render_raw_children(metadata, switch_state, dashboard_id, TOKEN)
             children.append(child)
         return children
 
@@ -363,9 +359,7 @@ def update_interactive_component(
                     break
 
             if component["component_type"] == "interactive":
-                component["value"] = interactive_components_dict[component["index"]][
-                    "value"
-                ]
+                component["value"] = interactive_components_dict[component["index"]]["value"]
 
             # component["df"] = df_dict_processed[component["wf_id"], component["dc_id"]]
             component["build_frame"] = True

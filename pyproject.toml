@@ -3,7 +3,7 @@ name = "depictio"
 version = "0.0.4"
 description = "Depictio API & Frontend"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.11"
 license = {text = "MIT"}
 dependencies = [
   "bcrypt==4.2.1",
@@ -65,13 +65,54 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 packages = ["depictio"]
 
+# [tool.mypy]
+# exclude = ["build/", "depictio/api/", "depictio/dash/"]
+# files = ["depictio/tests/", "depictio/models/", "depictio/cli/"]
+
+[tool.ruff]
+# Other settings...
+line-length = 100
+# Enable the formatter
+
 [tool.mypy]
-exclude = ["build/", "depictio/api/", "depictio/dash/"]
-files = ["depictio/tests/", "depictio/models/", "depictio/cli/"]
+# Basic settings
+python_version = "3.9"  # Adjust to your Python version
+warn_return_any = false
+warn_unused_ignores = false
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = false
+disallow_untyped_decorators = false
+no_implicit_optional = true
+strict_optional = false
+
+# Display settings - simpler output
+show_error_context = false
+show_column_numbers = true
+error_summary = true
+pretty = true
+
+# Permissive settings
+ignore_missing_imports = true
+follow_imports = "silent"
+warn_redundant_casts = false
+warn_no_return = false
+warn_unreachable = false
+
+# Per-module settings - only check specific directories
+[[tool.mypy.overrides]]
+module = ["depictio.models.*", "depictio.cli.*"]
+check_untyped_defs = true
+
 
 [tool.pytest.ini_options]
 pythonpath = "."
 python_files = "test_*.py"
+testpaths = [
+    "depictio/tests/api",
+    "depictio/tests/models",
+    "depictio/tests/cli",
+]
 addopts = "-s"
 markers = [
     "integration: mark test as an integration test.",

@@ -1,15 +1,16 @@
 import os
-from typing import Dict, Any
+from typing import Any
+
 import httpx
 import pymongo
 from bson import ObjectId
 
-from depictio.api.v1.configs.config import settings, MONGODB_URL
-from depictio.api.v1.configs.custom_logging import logger, format_pydantic
-from depictio.models.models.projects import Project
-from depictio.models.models.users import CLIConfig, UserBaseCLIConfig
-from depictio.models.models.s3 import S3DepictioCLIConfig
+from depictio.api.v1.configs.config import MONGODB_URL, settings
+from depictio.api.v1.configs.custom_logging import format_pydantic, logger
 from depictio.cli.cli.utils.helpers import process_data_collection_helper
+from depictio.models.models.projects import Project
+from depictio.models.models.s3 import S3DepictioCLIConfig
+from depictio.models.models.users import CLIConfig, UserBaseCLIConfig
 from depictio.models.utils import get_config
 
 
@@ -38,20 +39,16 @@ def process_collections():
             if result["success"]:
                 logger.info("Initial data collections processed successfully")
             else:
-                logger.error(
-                    f"Failed to process initial data collections: {result['message']}"
-                )
+                logger.error(f"Failed to process initial data collections: {result['message']}")
         else:
             logger.error(
                 f"API returned status code {response.status_code}. Skipping data collection processing."
             )
     except Exception as e:
-        logger.error(
-            f"Error checking API status or processing data collections: {str(e)}"
-        )
+        logger.error(f"Error checking API status or processing data collections: {str(e)}")
 
 
-async def process_initial_data_collections() -> Dict[str, Any]:
+async def process_initial_data_collections() -> dict[str, Any]:
     """
     Process the initial data collections for the first project.
     This function should be called after the API is fully started.
@@ -69,7 +66,7 @@ async def process_initial_data_collections() -> Dict[str, Any]:
     }
 
 
-def sync_process_initial_data_collections() -> Dict[str, Any]:
+def sync_process_initial_data_collections() -> dict[str, Any]:
     """
     Synchronous version of process_initial_data_collections using pymongo directly.
     This function should be called from a separate thread.

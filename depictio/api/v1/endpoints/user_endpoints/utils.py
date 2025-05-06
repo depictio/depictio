@@ -1,6 +1,5 @@
 import time
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple, Union
 
 import jwt
 from beanie import PydanticObjectId
@@ -10,13 +9,7 @@ from pydantic import validate_call
 from depictio.api.v1.configs.config import ALGORITHM, PRIVATE_KEY
 from depictio.api.v1.configs.custom_logging import logger
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
-from depictio.models.models.users import (
-    Group,
-    GroupBeanie,
-    TokenData,
-    UserBase,
-    UserBeanie,
-)
+from depictio.models.models.users import Group, GroupBeanie, TokenData, UserBase, UserBeanie
 
 
 def _dummy_mongodb_connection():
@@ -51,16 +44,14 @@ def _ensure_mongodb_connection(max_attempts: int = 5, sleep_interval: int = 5) -
             return info
         except Exception as e:
             if attempt == max_attempts:
-                logger.error(
-                    f"Failed to connect to MongoDB after {max_attempts} attempts"
-                )
+                logger.error(f"Failed to connect to MongoDB after {max_attempts} attempts")
                 raise RuntimeError(f"Could not connect to MongoDB: {e}")
             logger.warning(f"Waiting for MongoDB to start (Attempt {attempt})...")
             time.sleep(sleep_interval)
 
 
 @validate_call(validate_return=True)
-async def get_users_by_group_id(group_id: PydanticObjectId) -> List[UserBeanie]:
+async def get_users_by_group_id(group_id: PydanticObjectId) -> list[UserBeanie]:
     """
     Retrieve all users that belong to a specific group by group ID.
     """
@@ -75,7 +66,7 @@ async def get_users_by_group_id(group_id: PydanticObjectId) -> List[UserBeanie]:
 @validate_call()
 async def create_group_helper_beanie(
     group: GroupBeanie,
-) -> Dict[str, Union[bool, str, Optional[GroupBeanie]]]:
+) -> dict[str, bool | str | GroupBeanie | None]:
     """
     Create a group in the database using Beanie ODM.
 
@@ -119,7 +110,7 @@ async def create_group_helper_beanie(
 
 
 @validate_call(validate_return=True)
-def create_group_helper(group: Group) -> Dict[str, Union[bool, str, Optional[Group]]]:
+def create_group_helper(group: Group) -> dict[str, bool | str | Group | None]:
     """
     Create a group in the database.
 
@@ -167,7 +158,7 @@ def create_group_helper(group: Group) -> Dict[str, Union[bool, str, Optional[Gro
 
 
 @validate_call(validate_return=True)
-def delete_group_helper(group_id: PyObjectId) -> Dict[str, Union[bool, str]]:
+def delete_group_helper(group_id: PyObjectId) -> dict[str, bool | str]:
     # check first if the group is not in the following groups (users, admin)
     from depictio.api.v1.db import groups_collection
 
@@ -189,7 +180,7 @@ def delete_group_helper(group_id: PyObjectId) -> Dict[str, Union[bool, str]]:
 
 
 @validate_call(validate_return=True)
-async def create_access_token(token_data: TokenData) -> Tuple[str, datetime]:
+async def create_access_token(token_data: TokenData) -> tuple[str, datetime]:
     token_lifetime = token_data.token_lifetime
 
     if token_lifetime == "short-lived":
@@ -213,8 +204,8 @@ async def create_access_token(token_data: TokenData) -> Tuple[str, datetime]:
 
 @validate_call(validate_return=True)
 def delete_user_from_db(
-    user_id: PyObjectId = None, email: str = None
-) -> Dict[str, Union[bool, str]]:
+    user_id: PyObjectId | None = None, email: str | None = None
+) -> dict[str, bool | str]:
     """
     Helper function to delete a user from the database using Beanie.
 
@@ -269,9 +260,7 @@ def logout_user():
     return {"logged_in": False, "access_token": None}
 
 
-def update_group_in_users_helper(
-    group_id: ObjectId, group_users: List[UserBase]
-) -> dict:
+def update_group_in_users_helper(group_id: ObjectId, group_users: list[UserBase]) -> dict:
     # retrieve the group
     from depictio.api.v1.db import groups_collection
 
@@ -310,15 +299,11 @@ def update_group_in_users_helper(
     # SCENARIO 1 & 2: Add or update group for users in group_user_ids
     for user_id in group_user_ids:
         # Then add the updated group info
-        users_collection.update_one(
-            {"_id": user_id}, {"$addToSet": {"groups": group_info}}
-        )
+        users_collection.update_one({"_id": user_id}, {"$addToSet": {"groups": group_info}})
         updated_users.append(str(user_id))
 
     # SCENARIO 3: Remove group from users no longer in the group
-    users_to_remove_from = [
-        uid for uid in current_user_ids if uid not in group_user_ids
-    ]
+    users_to_remove_from = [uid for uid in current_user_ids if uid not in group_user_ids]
     logger.debug(f"Users to remove from group: {users_to_remove_from}")
 
     if users_to_remove_from:

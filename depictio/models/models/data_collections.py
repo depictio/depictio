@@ -1,14 +1,13 @@
 import re
 from pathlib import Path
-from typing import List, Optional, Union
 
 from pydantic import BaseModel, field_validator, model_validator
 
+from depictio.models.config import DEPICTIO_CONTEXT
 from depictio.models.logging import logger
 from depictio.models.models.base import MongoModel
 from depictio.models.models.data_collections_types.jbrowse import DCJBrowse2Config
 from depictio.models.models.data_collections_types.table import DCTableConfig
-from depictio.models.utils import get_depictio_context
 
 
 class WildcardRegexBase(BaseModel):
@@ -29,7 +28,7 @@ class WildcardRegexBase(BaseModel):
 
 class Regex(BaseModel):
     pattern: str
-    wildcards: Optional[List[WildcardRegexBase]] = None
+    wildcards: list[WildcardRegexBase] | None = None
 
     class Config:
         extra = "forbid"  # Reject unexpected fields
@@ -45,8 +44,8 @@ class Regex(BaseModel):
 
 class ScanRecursive(BaseModel):
     regex_config: Regex
-    max_depth: Optional[int] = None
-    ignore: Optional[List[str]] = None
+    max_depth: int | None = None
+    ignore: list[str] | None = None
 
     class Config:
         extra = "forbid"
@@ -60,9 +59,6 @@ class ScanSingle(BaseModel):
 
     @field_validator("filename")
     def validate_filename(cls, v):
-        DEPICTIO_CONTEXT = get_depictio_context()
-        logger.debug(f"CONTEXT: {DEPICTIO_CONTEXT}")
-
         if DEPICTIO_CONTEXT.lower() == "cli":
             # Add debugging
             import os
@@ -95,7 +91,7 @@ class ScanSingle(BaseModel):
 
 class Scan(BaseModel):
     mode: str
-    scan_parameters: Union[ScanRecursive, ScanSingle]
+    scan_parameters: ScanRecursive | ScanSingle
 
     @field_validator("mode")
     def validate_mode(cls, v):
@@ -118,9 +114,9 @@ class Scan(BaseModel):
 
 
 class TableJoinConfig(BaseModel):
-    on_columns: List[str]
+    on_columns: list[str]
     how: str = "inner"
-    with_dc: List[str]
+    with_dc: list[str]
 
     class Config:
         extra = "forbid"  # Reject unexpected fields
@@ -135,10 +131,10 @@ class TableJoinConfig(BaseModel):
 
 class DataCollectionConfig(MongoModel):
     type: str
-    metatype: Optional[str] = None
+    metatype: str | None = None
     scan: Scan
-    dc_specific_properties: Union[DCTableConfig, DCJBrowse2Config]
-    join: Optional[TableJoinConfig] = None
+    dc_specific_properties: DCTableConfig | DCJBrowse2Config
+    join: TableJoinConfig | None = None
 
     @field_validator("type", mode="before")
     def validate_type(cls, v):
@@ -159,15 +155,11 @@ class DataCollectionConfig(MongoModel):
         if type_value == "table":
             # Check if it's already a DCTableConfig instance
             if not isinstance(dc_specific_properties, DCTableConfig):
-                values["dc_specific_properties"] = DCTableConfig(
-                    **dc_specific_properties
-                )
+                values["dc_specific_properties"] = DCTableConfig(**dc_specific_properties)
         elif type_value == "jbrowse2":
             # Check if it's already a DCJBrowse2Config instance
             if not isinstance(dc_specific_properties, DCJBrowse2Config):
-                values["dc_specific_properties"] = DCJBrowse2Config(
-                    **dc_specific_properties
-                )
+                values["dc_specific_properties"] = DCJBrowse2Config(**dc_specific_properties)
         return values
 
 

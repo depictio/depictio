@@ -1,5 +1,4 @@
 import datetime
-from typing import List
 
 import dash
 import dash_mantine_components as dmc
@@ -10,14 +9,12 @@ from pydantic import validate_call
 
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.custom_logging import logger
-from depictio.dash.api_calls import (
-    api_call_fetch_user_from_token,
-    api_create_group,
-)
+from depictio.dash.api_calls import api_call_fetch_user_from_token, api_create_group
 from depictio.dash.layouts.layouts_toolbox import (
     create_delete_confirmation_modal,
-    # register_delete_confirmation_modal_callbacks,
 )
+
+# register_delete_confirmation_modal_callbacks,
 from depictio.dash.layouts.projects import render_project_item
 from depictio.models.models.dashboards import DashboardData
 from depictio.models.models.projects import Project
@@ -46,9 +43,7 @@ def render_dashboardwise_layout(dashboard):
 
     dashboard_owner_raw = (
         convert_objectid_to_str(
-            convert_objectid_to_str(
-                dashboard.permissions.owners[0].model_dump(exclude_none=True)
-            )
+            convert_objectid_to_str(dashboard.permissions.owners[0].model_dump(exclude_none=True))
         )
         if dashboard.permissions.owners
         else "Unknown"
@@ -61,9 +56,7 @@ def render_dashboardwise_layout(dashboard):
     dashboard_viewers = ["None"]
     if dashboard.permissions.viewers:
         dashboard_viewers = [
-            json.dumps(convert_objectid_to_str(viewer.mongo()))
-            if viewer != "*"
-            else "*"
+            (json.dumps(convert_objectid_to_str(viewer.mongo())) if viewer != "*" else "*")
             for viewer in dashboard.permissions.viewers
         ]
 
@@ -117,16 +110,12 @@ def render_dashboardwise_layout(dashboard):
                                                         weight=700,
                                                         size="sm",
                                                     ),
-                                                    dmc.Text(
-                                                        str(dashboard_id), size="sm"
-                                                    ),
+                                                    dmc.Text(str(dashboard_id), size="sm"),
                                                 ]
                                             ),
                                             dmc.Group(
                                                 [
-                                                    dmc.Text(
-                                                        "Owner: ", weight=700, size="sm"
-                                                    ),
+                                                    dmc.Text("Owner: ", weight=700, size="sm"),
                                                     dmc.Text(
                                                         dashboard_owner_raw["email"],
                                                         size="sm",
@@ -156,9 +145,7 @@ def render_dashboardwise_layout(dashboard):
                                                         weight=700,
                                                         size="sm",
                                                     ),
-                                                    dmc.Text(
-                                                        str(components_count), size="sm"
-                                                    ),
+                                                    dmc.Text(str(components_count), size="sm"),
                                                 ]
                                             ),
                                             dmc.Group(
@@ -296,12 +283,14 @@ def render_groupwise_layout(group: GroupUI, all_users: list) -> dmc.Accordion:
                                                         size="sm",
                                                     ),
                                                     dmc.List(
-                                                        [
-                                                            dmc.ListItem(user.email)
-                                                            for user in group.users
-                                                        ]
-                                                        if group.users
-                                                        else [dmc.ListItem("None")],
+                                                        (
+                                                            [
+                                                                dmc.ListItem(user.email)
+                                                                for user in group.users
+                                                            ]
+                                                            if group.users
+                                                            else [dmc.ListItem("None")]
+                                                        ),
                                                         size="sm",
                                                     ),
                                                 ]
@@ -316,23 +305,18 @@ def render_groupwise_layout(group: GroupUI, all_users: list) -> dmc.Accordion:
                                                         value=[
                                                             [
                                                                 {
-                                                                    "value": str(
-                                                                        user.id
-                                                                    ),
+                                                                    "value": str(user.id),
                                                                     "label": user.email,
                                                                 }
                                                                 for user in all_users
                                                                 if user.email
                                                                 not in [
-                                                                    u.email
-                                                                    for u in group.users
+                                                                    u.email for u in group.users
                                                                 ]
                                                             ],
                                                             [
                                                                 {
-                                                                    "value": str(
-                                                                        user.id
-                                                                    ),
+                                                                    "value": str(user.id),
                                                                     "label": user.email,
                                                                 }
                                                                 for user in group.users
@@ -499,9 +483,7 @@ def render_userwise_layout(user: UserBaseUI) -> dmc.Accordion:
                                                         weight=700,
                                                         size="sm",
                                                     ),
-                                                    dmc.Text(
-                                                        registration_date, size="sm"
-                                                    ),
+                                                    dmc.Text(registration_date, size="sm"),
                                                 ]
                                             ),
                                             dmc.Group(
@@ -558,12 +540,14 @@ def render_userwise_layout(user: UserBaseUI) -> dmc.Accordion:
                                                         size="sm",
                                                     ),
                                                     dmc.Badge(
-                                                        "Active"
-                                                        if user.is_active
-                                                        else "Inactive",
-                                                        color="green"
-                                                        if user.is_active
-                                                        else "red",
+                                                        (
+                                                            "Active"
+                                                            if user.is_active
+                                                            else "Inactive"
+                                                        ),
+                                                        color=(
+                                                            "green" if user.is_active else "red"
+                                                        ),
                                                         variant="light",
                                                         size="sm",
                                                         radius="sm",
@@ -578,9 +562,7 @@ def render_userwise_layout(user: UserBaseUI) -> dmc.Accordion:
                                                         size="sm",
                                                     ),
                                                     dmc.Text(
-                                                        "Yes"
-                                                        if user.is_verified
-                                                        else "No",
+                                                        ("Yes" if user.is_verified else "No"),
                                                         size="sm",
                                                     ),
                                                 ]
@@ -617,9 +599,7 @@ def render_userwise_layout(user: UserBaseUI) -> dmc.Accordion:
                                             ),
                                             dmc.Group(
                                                 [
-                                                    dmc.Text(
-                                                        "Actions", weight=700, size="sm"
-                                                    ),
+                                                    dmc.Text("Actions", weight=700, size="sm"),
                                                     delete_user_button,
                                                     modal_delete_user,
                                                 ]
@@ -654,7 +634,7 @@ def render_userwise_layout(user: UserBaseUI) -> dmc.Accordion:
 
 
 @validate_call
-def fetch_projects_for_admin(token: str) -> List[Project]:
+def fetch_projects_for_admin(token: str) -> list[Project]:
     """
     Fetch all projects using the existing get_all_projects endpoint.
     For admin users, this will return all projects in the system.
@@ -677,9 +657,7 @@ def admin_render_project_item(project: Project, current_user: UserBase, token: s
     All badges are blue as requested.
     """
     # Get the original project item
-    project_item = render_project_item(
-        project, current_user, admin_UI=True, token=token
-    )
+    project_item = render_project_item(project, current_user, admin_UI=True, token=token)
 
     return project_item
 
@@ -817,26 +795,22 @@ def register_admin_callbacks(app):
                 logger.info(f"Delete user button clicked: {delete_user_ids}")
                 # retrieve user id by cross-referencing the button id
 
-                for button_id, n_click_index in zip(
-                    delete_user_ids, delete_user_clicks
-                ):
+                for button_id, n_click_index in zip(delete_user_ids, delete_user_clicks):
                     if n_click_index:
                         user_id = button_id["index"]
                         logger.info(f"Deleting user: {user_id}")
                         response = httpx.delete(
                             f"{API_BASE_URL}/depictio/api/v1/auth/delete/{user_id}",
-                            headers={
-                                "Authorization": f"Bearer {local_data['access_token']}"
-                            },
+                            headers={"Authorization": f"Bearer {local_data['access_token']}"},
                         )
                         logger.info(f"Response: {response}")
                         if response.status_code == 200:
                             logger.info(f"Successfully deleted user: {user_id}")
                         else:
                             logger.error(f"Error deleting user: {response.json()}")
-                            return html.P(
-                                "Error deleting user. Please try again later."
-                            ), {"display": "none"}
+                            return html.P("Error deleting user. Please try again later."), {
+                                "display": "none"
+                            }
 
             if "turn-sysadmin-user-button" in trigger_id:
                 # turn into dict
@@ -857,19 +831,13 @@ def register_admin_callbacks(app):
                         logger.error(f"Making user system admin: {user_id}")
                         response = httpx.post(
                             f"{API_BASE_URL}/depictio/api/v1/auth/turn_sysadmin/{user_id}/{is_admin}",
-                            headers={
-                                "Authorization": f"Bearer {local_data['access_token']}"
-                            },
+                            headers={"Authorization": f"Bearer {local_data['access_token']}"},
                         )
                         logger.info(f"Response: {response}")
                         if response.status_code == 200:
-                            logger.info(
-                                f"Successfully made user system admin: {user_id}"
-                            )
+                            logger.info(f"Successfully made user system admin: {user_id}")
                         else:
-                            logger.error(
-                                f"Error making user system admin: {response.json()}"
-                            )
+                            logger.error(f"Error making user system admin: {response.json()}")
                             return html.P(
                                 "Error making user system admin. Please try again later"
                             ), {"display": "none"}
@@ -884,8 +852,7 @@ def register_admin_callbacks(app):
                 users = response.json()
                 logger.info(f"Users: {users}")
                 userwise_layouts = [
-                    render_userwise_layout(UserBaseUI.from_mongo(user))
-                    for user in users
+                    render_userwise_layout(UserBaseUI.from_mongo(user)) for user in users
                 ]
                 content = html.Div(userwise_layouts)
             else:
@@ -1118,9 +1085,7 @@ def register_admin_callbacks(app):
             # Fetch all projects for admin view using the existing endpoint
             try:
                 projects = fetch_projects_for_admin(local_data["access_token"])
-                current_user = api_call_fetch_user_from_token(
-                    local_data["access_token"]
-                )
+                current_user = api_call_fetch_user_from_token(local_data["access_token"])
 
                 if projects:
                     # Create project items with modified render function to show owner email

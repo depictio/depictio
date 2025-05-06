@@ -3,7 +3,7 @@ import hashlib
 import os
 import re
 from datetime import datetime
-from typing import Any, DefaultDict, Dict, List, Optional, Union, cast
+from typing import Any, DefaultDict, cast
 
 from bson import ObjectId
 from pydantic import validate_call
@@ -34,7 +34,7 @@ from depictio.models.models.workflows import (
 
 def regex_match(file: File, full_regex: str):
     # Normalize the regex pattern to match both types of path separators
-    normalized_regex = full_regex.replace("/", "\/")
+    normalized_regex = full_regex.replace("/", "\\/")
     # logger.debug(f"File: {file}, Full Regex: {full_regex}")
     if re.match(normalized_regex, file):
         logger.debug(f"Matched file - file-based: {file}")
@@ -78,9 +78,7 @@ def generate_file_hash(
         f"Generating hash for file {filename} with attributes {filesize}, {creation_time}, {modification_time}"
     )
     # Concatenate the attributes into a single string
-    hash_input = f"{filename}{filesize}{creation_time}{modification_time}".encode(
-        "utf-8"
-    )
+    hash_input = f"{filename}{filesize}{creation_time}{modification_time}".encode()
     # Generate the hash using SHA-256
     file_hash = hashlib.sha256(hash_input).hexdigest()
 
@@ -91,7 +89,7 @@ def generate_run_hash(
     run_location: str,
     creation_time: str,
     last_modification_time: str,
-    files: List[File],
+    files: list[File],
 ) -> str:
     """
     Generates a hash for the run based on its location, creation time, and last modification time, and the files it contains.
@@ -112,11 +110,7 @@ def generate_run_hash(
     files_hash = hashlib.sha256(file_hashes_str.encode("utf-8")).hexdigest()
 
     # Concatenate the attributes into a single string
-    hash_input = (
-        f"{run_location}{creation_time}{last_modification_time}{files_hash}".encode(
-            "utf-8"
-        )
-    )
+    hash_input = f"{run_location}{creation_time}{last_modification_time}{files_hash}".encode()
 
     # Generate the hash using SHA-256
     run_hash = hashlib.sha256(hash_input).hexdigest()
@@ -129,7 +123,7 @@ def check_run_differences(
     run_location: str,
     creation_time: str,
     last_modification_time: str,
-    files: List[File],
+    files: list[File],
 ) -> dict:
     """_summary_
 
@@ -144,11 +138,9 @@ def check_run_differences(
         list: _description_
     """
     # Check if the run hash has changed
-    run_hash = generate_run_hash(
-        run_location, creation_time, last_modification_time, files
-    )
+    run_hash = generate_run_hash(run_location, creation_time, last_modification_time, files)
     if previous_run_entry.run_hash != run_hash:
-        differences: DefaultDict[Any, Dict[Any, Any]] = collections.defaultdict(dict)
+        differences: DefaultDict[Any, dict[Any, Any]] = collections.defaultdict(dict)
         logger.warning(f"Hash mismatch for run {run_location}.")
         # Deconvolute the hash to identify what changed
         # Check what changed
@@ -190,11 +182,11 @@ def scan_single_file(
     run_id: str,
     data_collection: "DataCollection",
     permissions: Permission,
-    existing_files: Dict[str, dict],
+    existing_files: dict[str, dict],
     update_files: bool,
-    full_regex: Union[str, None] = None,
+    full_regex: str | None = None,
     skip_regex: bool = False,
-) -> Optional[FileScanResult]:
+) -> FileScanResult | None:
     """
     Process a single file.
 
@@ -231,9 +223,7 @@ def scan_single_file(
     creation_time_iso = format_timestamp(creation_time_float)
     modification_time_iso = format_timestamp(modification_time_float)
     filesize = os.path.getsize(file_location)
-    file_hash = generate_file_hash(
-        file_name, filesize, creation_time_iso, modification_time_iso
-    )
+    file_hash = generate_file_hash(file_name, filesize, creation_time_iso, modification_time_iso)
     logger.debug(f"File Hash for {file_name}: {file_hash}")
 
     scan_result = None
@@ -249,13 +239,9 @@ def scan_single_file(
             existing_file = existing_files[file_location]
 
             if existing_file["file_hash"] == file_hash:
-                logger.debug(
-                    f"File {file_name} has not changed based on hash since last scan."
-                )
+                logger.debug(f"File {file_name} has not changed based on hash since last scan.")
             else:
-                logger.debug(
-                    f"File {file_name} has changed based on hash since last scan."
-                )
+                logger.debug(f"File {file_name} has changed based on hash since last scan.")
 
             file_id = existing_files[file_location]["_id"]
             if not update_files:
@@ -299,10 +285,10 @@ def process_files(
     run_id: str,
     data_collection: "DataCollection",
     permissions: Permission,
-    existing_files: Dict[str, dict],
+    existing_files: dict[str, dict],
     update_files: bool = False,
     skip_regex: bool = False,
-) -> List[FileScanResult]:
+) -> list[FileScanResult]:
     """
     Scan files from a given directory or a single file path.
 
@@ -383,13 +369,13 @@ def scan_run(
     workflow_config: WorkflowConfig,
     data_collection: DataCollection,
     workflow_id: ObjectId,
-    existing_run: Union[WorkflowRun, None],
+    existing_run: WorkflowRun | None,
     existing_files_reformated: dict,
     CLI_config: CLIConfig,
     permissions: Permission,
     rescan_folders: bool = False,
     update_files: bool = False,
-) -> Union[WorkflowRun, None]:
+) -> WorkflowRun | None:
     """
     Scan a single run folder (a directory containing result files and/or subfolders)
     and update the local TinyDB.
@@ -451,8 +437,7 @@ def scan_run(
     old_updated_files = [
         sc.file.id
         for sc in file_scan_results
-        if sc.scan_result["result"] == "success"
-        and sc.scan_result["reason"] == "updated"
+        if sc.scan_result["result"] == "success" and sc.scan_result["reason"] == "updated"
     ]
     # old_updated_files = [file for file in files if str(file.file_location) in existing_files_reformated]
 
@@ -466,42 +451,34 @@ def scan_run(
     files_skipped = [
         sc.file.id
         for sc in file_scan_results
-        if sc.scan_result["result"] == "failure"
-        and sc.scan_result["reason"] == "skipped"
+        if sc.scan_result["result"] == "failure" and sc.scan_result["reason"] == "skipped"
     ]
 
     missing_files_location = set(existing_files_reformated.keys()) - set(
         [str(sc.file.file_location) for sc in file_scan_results]
     )
     logger.debug(f"Existing Files: {(existing_files_reformated.keys())}")
-    logger.debug(
-        f"Scanned Files: {[str(sc.file.file_location) for sc in file_scan_results]}"
-    )
+    logger.debug(f"Scanned Files: {[str(sc.file.file_location) for sc in file_scan_results]}")
     logger.debug(f"Missing Files Location: {missing_files_location}")
 
     missing_files = [
-        existing_files_reformated[file_location]["_id"]
-        for file_location in missing_files_location
+        existing_files_reformated[file_location]["_id"] for file_location in missing_files_location
     ]
 
     files_other_failure = [
         sc.file.id
         for sc in file_scan_results
-        if sc.scan_result["result"] == "failure"
-        and sc.scan_result["reason"] != "skipped"
+        if sc.scan_result["result"] == "failure" and sc.scan_result["reason"] != "skipped"
     ]
 
     if not update_files:
         files = [
             sc.file
             for sc in file_scan_results
-            if sc.scan_result["result"] == "success"
-            and sc.scan_result["reason"] == "added"
+            if sc.scan_result["result"] == "success" and sc.scan_result["reason"] == "added"
         ]
     else:
-        files = [
-            sc.file for sc in file_scan_results if sc.scan_result["result"] == "success"
-        ]
+        files = [sc.file for sc in file_scan_results if sc.scan_result["result"] == "success"]
 
     stats = {
         "total_files": len(file_scan_results),
@@ -543,9 +520,7 @@ def scan_run(
         files = [File.from_mongo(v) for k, v in existing_files_reformated.items()]
 
     # Generate the hash for the run
-    run_hash = generate_run_hash(
-        run_location, creation_time, last_modification_time, files
-    )
+    run_hash = generate_run_hash(run_location, creation_time, last_modification_time, files)
     logger.debug(f"Run hash: {run_hash}")
 
     if workflow_run.run_hash:
@@ -587,7 +562,7 @@ def scan_parent_folder(
     structure: str = "sequencing-runs",  # or "direct-folder"
     rescan_folders: bool = False,
     update_files: bool = False,
-) -> List[Union[WorkflowRun, None]]:
+) -> list[WorkflowRun | None]:
     """
     Scan a parent folder either as multiple runs (each subdirectory is a run) or as a direct folder (the
     provided directory is a single run).
@@ -613,12 +588,10 @@ def scan_parent_folder(
         raise ValueError(f"'{parent_runs_location}' is not a directory.")
 
     # Pre-allocation of existing runs
-    existing_runs_reformated: Dict[str, dict] = {}
-    existing_files_reformated_run: Dict[str, dict] = {}
+    existing_runs_reformated: dict[str, dict] = {}
+    existing_files_reformated_run: dict[str, dict] = {}
 
-    existing_runs_response = api_get_runs_by_wf_id(
-        wf_id=str(workflow_id), CLI_config=CLI_config
-    )
+    existing_runs_response = api_get_runs_by_wf_id(wf_id=str(workflow_id), CLI_config=CLI_config)
     logger.info(f"Existing Runs Response: {existing_runs_response}")
     if existing_runs_response.status_code == 200:
         existing_runs = existing_runs_response.json()
@@ -652,9 +625,7 @@ def scan_parent_folder(
     elif structure == "sequencing-runs":
         # Each subdirectory that matches the regex is a run
         for run in sorted(os.listdir(parent_runs_location)):
-            logger.debug(
-                f"Scanning run: {run} - Existing Runs: {existing_runs_reformated}"
-            )
+            logger.debug(f"Scanning run: {run} - Existing Runs: {existing_runs_reformated}")
             if run in existing_runs_reformated:
                 logger.debug(f"Run {run} already exists in the database.")
                 logger.debug(f"Existing Run: {existing_runs_reformated[run]}")
@@ -692,9 +663,7 @@ def scan_parent_folder(
         missing_runs_tag = set(existing_runs_reformated.keys()) - set(
             [run.run_tag for run in runs if run]
         )
-        missing_runs = [
-            existing_runs_reformated[run_tag]["_id"] for run_tag in missing_runs_tag
-        ]
+        missing_runs = [existing_runs_reformated[run_tag]["_id"] for run_tag in missing_runs_tag]
 
         if rescan_folders:
             if missing_runs:
@@ -719,7 +688,7 @@ def scan_parent_folder(
     return runs
 
 
-def rich_print_summary_scan_table(runs: List[WorkflowRun]) -> None:
+def rich_print_summary_scan_table(runs: list[WorkflowRun]) -> None:
     from rich.console import Console
     from rich.table import Table
 
@@ -790,17 +759,14 @@ def scan_files_for_data_collection(
     logger.debug(f"Permissions: {permissions}")
 
     # Retrieve workflow and data collection details
-    logger.debug(
-        "Fetching workflow and data collection details from local configurations..."
-    )
+    logger.debug("Fetching workflow and data collection details from local configurations...")
     data_collection = next(
         (dc for dc in workflow.data_collections if str(dc.id) == data_collection_id),
         None,
     )
     if data_collection is None:
         error_msg = (
-            f"Data collection {data_collection_id} not found in workflow "
-            f"{workflow.workflow_tag}."
+            f"Data collection {data_collection_id} not found in workflow {workflow.workflow_tag}."
         )
         logger.error(error_msg)
         rich_print_checked_statement(error_msg, "error")
@@ -810,9 +776,7 @@ def scan_files_for_data_collection(
     locations = workflow.data_location.locations
 
     # Check for the file's existence in the DB
-    response = api_get_files_by_dc_id(
-        dc_id=str(data_collection.id), CLI_config=CLI_config
-    )
+    response = api_get_files_by_dc_id(dc_id=str(data_collection.id), CLI_config=CLI_config)
     print(f"Response: {response}")
     print(f"Response Status Code: {response.status_code}")
     print(f"Response Content: {response.content}")
@@ -875,14 +839,11 @@ def scan_files_for_data_collection(
                 files = [
                     sc.file
                     for sc in scan_file_result
-                    if sc.scan_result["result"] == "success"
-                    and sc.scan_result["reason"] == "added"
+                    if sc.scan_result["result"] == "success" and sc.scan_result["reason"] == "added"
                 ]
             else:
                 files = [
-                    sc.file
-                    for sc in scan_file_result
-                    if sc.scan_result["result"] == "success"
+                    sc.file for sc in scan_file_result if sc.scan_result["result"] == "success"
                 ]
         else:
             files = []

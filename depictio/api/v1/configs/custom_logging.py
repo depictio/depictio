@@ -100,7 +100,7 @@ def _plain_format_value(value: Any) -> str:
         return "None"
     elif isinstance(value, bool):
         return str(value)
-    elif isinstance(value, (int, float)):
+    elif isinstance(value, int | float):
         return str(value)
     elif isinstance(value, str):
         # For strings, use a shortened version if too long
@@ -110,21 +110,13 @@ def _plain_format_value(value: Any) -> str:
     # Check for MongoDB ObjectId - display in full
     elif str(type(value)).find("ObjectId") != -1:
         return str(value)
-    elif isinstance(value, (list, tuple)):
+    elif isinstance(value, list | tuple):
         # For short collections, show content
         if len(value) <= 3:
             items = [_plain_format_value(item) for item in value]
-            return (
-                f"[{', '.join(items)}]"
-                if isinstance(value, list)
-                else f"({', '.join(items)})"
-            )
+            return f"[{', '.join(items)}]" if isinstance(value, list) else f"({', '.join(items)})"
         # Otherwise, indicate length
-        return (
-            f"[{len(value)} items]"
-            if isinstance(value, list)
-            else f"({len(value)} items)"
-        )
+        return f"[{len(value)} items]" if isinstance(value, list) else f"({len(value)} items)"
     elif isinstance(value, dict):
         # For small dicts, show content
         if len(value) <= 2:
@@ -149,10 +141,8 @@ def _color_format_value(value: Any) -> str:
     if value is None:
         return "\033[2mNone\033[0m"  # Dimmed for None
     elif isinstance(value, bool):
-        return (
-            "\033[1;92mTrue\033[0m" if value else "\033[1;91mFalse\033[0m"
-        )  # Green/red for bool
-    elif isinstance(value, (int, float)):
+        return "\033[1;92mTrue\033[0m" if value else "\033[1;91mFalse\033[0m"  # Green/red for bool
+    elif isinstance(value, int | float):
         return f"\033[36m{value}\033[0m"  # Cyan for numbers
     elif isinstance(value, str):
         # For strings, use shortened version if too long
@@ -179,10 +169,7 @@ def _color_format_value(value: Any) -> str:
     elif isinstance(value, dict):
         # For small dicts, show content
         if len(value) <= 2:
-            items = [
-                f"\033[33m{k}\033[0m: {_color_format_value(v)}"
-                for k, v in value.items()
-            ]
+            items = [f"\033[33m{k}\033[0m: {_color_format_value(v)}" for k, v in value.items()]
             return f"\033[1;37m{{\033[0m{', '.join(items)}\033[1;37m}}\033[0m"
         # Otherwise, indicate size
         return f"\033[1;37m{{\033[0m{len(value)} items\033[1;37m}}\033[0m"
@@ -211,21 +198,15 @@ class RichReprFormatter(ColoredFormatter):
             highlight=True, width=120, theme=custom_theme, file=StringIO()
         )
         self.highlighter = ReprHighlighter()
-        self.max_single_line_length = (
-            80  # Adjust this based on your terminal width preference
-        )
+        self.max_single_line_length = 80  # Adjust this based on your terminal width preference
 
     def _is_pydantic_model(self, obj):
         """Check if an object is a Pydantic model instance"""
-        return hasattr(obj, "__class__") and issubclass(
-            obj.__class__, pydantic.BaseModel
-        )
+        return hasattr(obj, "__class__") and issubclass(obj.__class__, pydantic.BaseModel)
 
     def _format_pydantic_model(self, model):
         """Format a Pydantic model with custom styling similar to rich.print"""
-        model_dict = (
-            model.model_dump() if hasattr(model, "model_dump") else model.dict()
-        )
+        model_dict = model.model_dump() if hasattr(model, "model_dump") else model.dict()
         model_name = model.__class__.__name__
 
         # First, try to create a compact single-line representation
@@ -264,7 +245,7 @@ class RichReprFormatter(ColoredFormatter):
             return (
                 "\033[1;92mTrue\033[0m" if value else "\033[1;91mFalse\033[0m"
             )  # Bold green/red for booleans
-        elif isinstance(value, (int, float)):
+        elif isinstance(value, int | float):
             return f"\033[36m{value}\033[0m"  # Cyan for numbers
         elif isinstance(value, str):
             # For strings, use a shortened version if too long
@@ -296,10 +277,7 @@ class RichReprFormatter(ColoredFormatter):
         elif isinstance(value, dict):
             # For small dicts, show content, otherwise show size
             if len(value) <= 2:
-                items = [
-                    f"\033[33m{k}\033[0m: {self._format_value(v)}"
-                    for k, v in value.items()
-                ]
+                items = [f"\033[33m{k}\033[0m: {self._format_value(v)}" for k, v in value.items()]
                 compact = f"\033[1;37m{{\033[0m{', '.join(items)}\033[1;37m}}\033[0m"
                 if len(compact) <= 40:
                     return compact
@@ -359,7 +337,7 @@ class RichReprFormatter(ColoredFormatter):
                         # Last resort: leave as is
                         pass
             # Handle dictionaries and other complex objects with Rich
-            elif not isinstance(record.msg, (str, int, float, bool, type(None))):
+            elif not isinstance(record.msg, str | int | float | bool | type(None)):
                 try:
                     self.string_console.file = StringIO()
                     self.string_console.print(Pretty(record.msg))

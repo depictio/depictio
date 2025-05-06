@@ -1,5 +1,4 @@
 from depictio.api.v1.configs.custom_logging import logger
-
 from depictio.models.models.data_collections import DataCollection
 
 

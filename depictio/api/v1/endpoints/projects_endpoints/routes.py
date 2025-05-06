@@ -1,5 +1,3 @@
-from typing import List
-
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -23,8 +21,8 @@ projects_endpoint_router = APIRouter()
 
 
 # Endpoints
-@projects_endpoint_router.get("/get/all", response_model=List[Project])
-async def get_all_projects(current_user: User = Depends(get_current_user)) -> List:
+@projects_endpoint_router.get("/get/all", response_model=list[Project])
+async def get_all_projects(current_user: User = Depends(get_current_user)) -> list:
     """Get all projects accessible for the current user.
 
     Args:
@@ -55,9 +53,7 @@ async def get_project_from_id(
 
 
 @projects_endpoint_router.get("/get/from_name/{project_name}", response_model=Project)
-async def get_project_from_name(
-    project_name: str, current_user: User = Depends(get_current_user)
-):
+async def get_project_from_name(project_name: str, current_user: User = Depends(get_current_user)):
     """Get a project by name.
 
     Args:
@@ -70,9 +66,7 @@ async def get_project_from_name(
     return _async_get_project_from_name(project_name, current_user, projects_collection)
 
 
-@projects_endpoint_router.get(
-    "/get/from_dashboard_id/{dashboard_id}", response_model=Project
-)
+@projects_endpoint_router.get("/get/from_dashboard_id/{dashboard_id}", response_model=Project)
 async def get_project_from_dashboard_id(
     dashboard_id: PyObjectId, current_user: User = Depends(get_current_user)
 ):
@@ -86,9 +80,7 @@ async def get_project_from_dashboard_id(
         "$or": [
             {"permissions.owners._id": current_user.id},
             {"permissions.viewers._id": current_user.id},
-            {
-                "permissions.viewers": "*"
-            },  # This makes projects with "*" publicly accessible
+            {"permissions.viewers": "*"},  # This makes projects with "*" publicly accessible
         ],
     }
     response = dashboards_collection.find_one(query)
@@ -103,9 +95,7 @@ async def get_project_from_dashboard_id(
 
 
 @projects_endpoint_router.post("/create")
-async def create_project(
-    project: Project, current_user: User = Depends(get_current_user)
-):
+async def create_project(project: Project, current_user: User = Depends(get_current_user)):
     # # Convert project to Project object
     # project = Project.from_mongo(project)
 
@@ -140,9 +130,7 @@ async def create_project(
 
 
 @projects_endpoint_router.put("/update")
-async def update_project(
-    project: Project, current_user: User = Depends(get_current_user)
-):
+async def update_project(project: Project, current_user: User = Depends(get_current_user)):
     # Convert project to Project object
     # project = Project.from_mongo(project)
     logger.info(f"Updating project: {project}")
@@ -177,9 +165,7 @@ async def update_project(
 
 
 @projects_endpoint_router.delete("/delete")
-async def delete_project(
-    project_id: PyObjectId, current_user: User = Depends(get_current_user)
-):
+async def delete_project(project_id: PyObjectId, current_user: User = Depends(get_current_user)):
     # Find the project
     project = await get_project_from_id(project_id, current_user)
 
@@ -213,9 +199,7 @@ async def add_or_update_permission(
     # Find the project
     project = await get_project_from_id(permission_request.project_id, current_user)
     logger.info(f"Project: {project}")
-    logger.info(
-        f"Owners ids : {[owner['_id'] for owner in project['permissions']['owners']]}"
-    )
+    logger.info(f"Owners ids : {[owner['_id'] for owner in project['permissions']['owners']]}")
     logger.info(f"Current user id: {current_user.id}")
     logger.info(f"Is admin: {current_user.is_admin}")
 

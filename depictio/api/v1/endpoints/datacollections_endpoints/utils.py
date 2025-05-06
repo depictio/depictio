@@ -1,8 +1,7 @@
-from typing import Dict, List
 from depictio.api.v1.configs.custom_logging import logger
 
 
-def symmetrize_join_details(join_details_map: Dict[str, List[dict]]):
+def symmetrize_join_details(join_details_map: dict[str, list[dict]]):
     """Ensure symmetric join details across all related data collections."""
     # Create a list of items to iterate over, so the original dict can be modified
     items = list(join_details_map.items())
@@ -29,7 +28,7 @@ def symmetrize_join_details(join_details_map: Dict[str, List[dict]]):
                     join_details_map[related_dc_id].append(symmetric_join)
 
 
-def generate_join_dict(workflow: Dict) -> Dict[str, Dict[str, dict]]:
+def generate_join_dict(workflow: dict) -> dict[str, dict[str, dict]]:
     logger.info(f"Workflow: {workflow}")
 
     join_dict = {}
@@ -97,12 +96,8 @@ def normalize_join_details(join_details):
                 normalized_details[dc_id] = {
                     "on_columns": join["on_columns"],
                     "how": join["how"],
-                    "with_dc": set(
-                        join.get("with_dc", [])
-                    ),  # Use set for unique elements
-                    "with_dc_id": set(
-                        join.get("with_dc_id", [])
-                    ),  # Use set for unique elements
+                    "with_dc": set(join.get("with_dc", [])),  # Use set for unique elements
+                    "with_dc_id": set(join.get("with_dc_id", [])),  # Use set for unique elements
                 }
 
     # Update relationships
@@ -129,11 +124,7 @@ def normalize_join_details(join_details):
 
     # Convert sets back to lists for the final output
     for dc_id in normalized_details:
-        normalized_details[dc_id]["with_dc"] = list(
-            normalized_details[dc_id]["with_dc"]
-        )
-        normalized_details[dc_id]["with_dc_id"] = list(
-            normalized_details[dc_id]["with_dc_id"]
-        )
+        normalized_details[dc_id]["with_dc"] = list(normalized_details[dc_id]["with_dc"])
+        normalized_details[dc_id]["with_dc_id"] = list(normalized_details[dc_id]["with_dc_id"])
 
     return normalized_details

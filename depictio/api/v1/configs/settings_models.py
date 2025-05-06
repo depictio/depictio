@@ -1,4 +1,4 @@
-from typing import Dict, Union
+from pathlib import Path
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -48,7 +48,6 @@ class FastAPIConfig(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_FASTAPI_")
     workers: int = Field(default=1)
     ssl: bool = Field(default=False)
-    internal_api_key: str = Field(default_factory=_load_or_generate_api_internal_key)
     playwright_dev_mode: bool = Field(default=False)
 
 
@@ -67,8 +66,8 @@ class JbrowseConfig(BaseSettings):
     """Jbrowse configuration."""
 
     enabled: bool = True
-    instance: Dict[str, Union[str, int]] = {"host": "http://localhost", "port": 3000}
-    watcher_plugin: Dict[str, Union[str, int]] = {
+    instance: dict[str, str | int] = {"host": "http://localhost", "port": 3000}
+    watcher_plugin: dict[str, str | int] = {
         "host": "http://localhost",
         "port": 9010,
     }
@@ -81,16 +80,30 @@ class Auth(BaseSettings):
     """Authentication configuration."""
 
     tmp_token: str = Field(default="eyJhb...")
-    keys_dir: str = Field(
-        default="depictio/keys",
+    keys_dir: Path = Field(
+        default=Path("depictio/keys"),
     )
     keys_algorithm: str = "RS256"
-    cli_config_dir: str = Field(
+    cli_config_dir: Path = Field(
         default="depictio/.depictio",
     )
-    model_config = SettingsConfigDict(
-        arbitrary_types_allowed=True, env_prefix="DEPICTIO_AUTH_"
-    )
+    internal_api_key: str = ""
+
+    model_config = SettingsConfigDict(arbitrary_types_allowed=True, env_prefix="DEPICTIO_AUTH_")
+
+    def model_post_init(self, __context):
+        """Initialize values after the model is created."""
+        # Only generate a key if one wasn't provided
+        if not self.internal_api_key:
+            try:
+                key = _load_or_generate_api_internal_key(
+                    keys_dir=self.keys_dir,
+                    algorithm=self.keys_algorithm,
+                )
+                if key:
+                    self.internal_api_key = key
+            except Exception as e:
+                print(f"Error generating API key: {e}")
 
 
 class Settings(BaseSettings):

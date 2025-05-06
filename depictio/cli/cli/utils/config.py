@@ -1,5 +1,5 @@
 import os
-from typing import Any, Dict, cast
+from typing import Any, cast
 
 import typer
 from pydantic import validate_call
@@ -13,9 +13,7 @@ from depictio.models.utils import get_config, validate_model_config
 
 
 @validate_call
-def validate_project_config_and_check_S3_storage(
-    CLI_config_path: str, project_config_path: str
-):
+def validate_project_config_and_check_S3_storage(CLI_config_path: str, project_config_path: str):
     """
     Validate the project configuration and check S3 storage.
     """
@@ -32,9 +30,7 @@ def validate_project_config_and_check_S3_storage(
 
         CLI_config = CLIConfig(**CLI_config)
         # Validate the project configuration
-        response_validation = local_validate_project_config(
-            CLI_config, project_config_path
-        )
+        response_validation = local_validate_project_config(CLI_config, project_config_path)
         return CLI_config, response_validation
     else:
         raise typer.Exit(code=1)
@@ -54,14 +50,12 @@ def find_matching_entry(collection, new_item):
         if "name" in new_item and new_item["name"] == item.get("name"):
             return item
         # Check for match on 'workflow_tag'
-        if "workflow_tag" in new_item and new_item["workflow_tag"] == item.get(
-            "workflow_tag"
-        ):
+        if "workflow_tag" in new_item and new_item["workflow_tag"] == item.get("workflow_tag"):
             return item
         # Check for match on 'data_collection_tag'
-        if "data_collection_tag" in new_item and new_item[
+        if "data_collection_tag" in new_item and new_item["data_collection_tag"] == item.get(
             "data_collection_tag"
-        ] == item.get("data_collection_tag"):
+        ):
             return item
     return None
 
@@ -76,14 +70,12 @@ def assign_ids_by_keys(existing_meta, new_structure):
     if isinstance(new_structure, dict):
         match = find_matching_entry(existing_meta, new_structure)
         if match and "id" in match:
-            logger.debug(
-                f"Match found for {new_structure}: {match} ; ID: {match['id']}"
-            )
+            logger.debug(f"Match found for {new_structure}: {match} ; ID: {match['id']}")
             new_structure["id"] = str(match["id"])
 
         # Recurse into nested dictionaries or lists
         for key, value in new_structure.items():
-            if isinstance(value, (dict, list)):
+            if isinstance(value, dict | list):
                 # Determine context for nested lists like workflows or data_collections
                 if key in ["workflows", "data_collections"] and match:
                     nested_context = match.get(key, [])
@@ -113,17 +105,11 @@ def merge_existing_ids(existing_entry: dict, project_config: dict) -> dict:
     if existing_entry:
         logger.info(f"Project : {project_config}")
         user_id = project_config["permissions"]["owners"][0]["id"]
-        logger.info(
-            f"Existing entry user ID: {existing_entry['permissions']['owners'][0]['id']}"
-        )
+        logger.info(f"Existing entry user ID: {existing_entry['permissions']['owners'][0]['id']}")
         if existing_entry["permissions"]["owners"][0]["id"] != user_id:
-            raise ValueError(
-                f"Project '{project_name}' exists but is owned by a different user."
-            )
+            raise ValueError(f"Project '{project_name}' exists but is owned by a different user.")
 
-        logger.info(
-            f"Project owner is the same for '{project_name}' - Owner ID: {user_id}"
-        )
+        logger.info(f"Project owner is the same for '{project_name}' - Owner ID: {user_id}")
         logger.info(f"Project '{project_name}' exists with ID: {existing_entry['id']}")
         # Merge existing IDs using the provided function
         project_config = assign_ids_by_keys([existing_entry], project_config)
@@ -133,9 +119,7 @@ def merge_existing_ids(existing_entry: dict, project_config: dict) -> dict:
 
 
 @validate_call
-def load_and_prepare_config(
-    CLI_config: CLIConfig, project_yaml_config_path: str
-) -> Dict[str, Any]:
+def load_and_prepare_config(CLI_config: CLIConfig, project_yaml_config_path: str) -> dict[str, Any]:
     """
     Load the pipeline configuration, set the YAML config path, and add permissions.
     """
@@ -159,13 +143,11 @@ def load_and_prepare_config(
     # project_config["permissions"] = {"owners": [user_light], "editors": [], "viewers": []}
 
     logger.debug(f"Pipeline config after adding permissions: {project_config}")
-    return cast(Dict[str, Any], project_config)
+    return cast(dict[str, Any], project_config)
 
 
 @validate_call
-def local_validate_project_config(
-    CLI_config: CLIConfig, project_yaml_config_path: str
-) -> dict:
+def local_validate_project_config(CLI_config: CLIConfig, project_yaml_config_path: str) -> dict:
     """
     Validate the pipeline configuration locally and update the metadata.
     """

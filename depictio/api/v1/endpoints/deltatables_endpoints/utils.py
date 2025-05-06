@@ -24,9 +24,7 @@ def get_s3_folder_size(bucket_name, prefix):
     total_size = 0
     try:
         # List all objects within the given prefix
-        logger.info(
-            f"Listing objects in folder '{prefix}' within bucket '{bucket_name}'."
-        )
+        logger.info(f"Listing objects in folder '{prefix}' within bucket '{bucket_name}'.")
         paginator = s3_client.get_paginator("list_objects_v2")
         response_iterator = paginator.paginate(Bucket=bucket_name, Prefix=prefix)
 
@@ -37,17 +35,13 @@ def get_s3_folder_size(bucket_name, prefix):
                 objects_found = True
                 for obj in page["Contents"]:
                     total_size += obj["Size"]
-                    logger.debug(
-                        f"Adding size of object: {obj['Key']} - {obj['Size']} bytes."
-                    )
+                    logger.debug(f"Adding size of object: {obj['Key']} - {obj['Size']} bytes.")
 
         if not objects_found:
             logger.warning(
                 f"No objects found in the folder '{prefix}'. It may be empty or not exist."
             )
-            raise HTTPException(
-                status_code=404, detail="Folder is empty or does not exist."
-            )
+            raise HTTPException(status_code=404, detail="Folder is empty or does not exist.")
 
         logger.info(f"Total size of objects in folder '{prefix}': {total_size} bytes.")
         return total_size
@@ -135,9 +129,7 @@ def upload_dir_to_s3(bucket_name, s3_folder, local_dir, s3_client):
             s3_client.upload_file(local_path, bucket_name, s3_path)
 
 
-def precompute_columns_specs(
-    aggregated_df: pl.DataFrame, agg_functions: dict, dc_data: dict
-):
+def precompute_columns_specs(aggregated_df: pl.DataFrame, agg_functions: dict, dc_data: dict):
     """
     Aggregate dataframes and return a list of dictionaries with column names, types and specs.
     """
@@ -151,9 +143,7 @@ def precompute_columns_specs(
     logger.info(dc_config["dc_specific_properties"])
     if "columns_description" in dc_config["dc_specific_properties"]:
         logger.info(dc_config["dc_specific_properties"]["columns_description"])
-        logger.info(
-            list(dc_config["dc_specific_properties"]["columns_description"].keys())
-        )
+        logger.info(list(dc_config["dc_specific_properties"]["columns_description"].keys()))
     for column in aggregated_df.columns:
         logger.info(f"Processing column: {column}")
         tmp_dict = collections.defaultdict(dict)
@@ -161,12 +151,10 @@ def precompute_columns_specs(
         column_description = None
 
         if "columns_description" in dc_config["dc_specific_properties"]:
-            if column in list(
-                dc_config["dc_specific_properties"]["columns_description"].keys()
-            ):
-                column_description = dc_config["dc_specific_properties"][
-                    "columns_description"
-                ][column]
+            if column in list(dc_config["dc_specific_properties"]["columns_description"].keys()):
+                column_description = dc_config["dc_specific_properties"]["columns_description"][
+                    column
+                ]
 
         tmp_dict["description"] = column_description
         # Identify the column data type

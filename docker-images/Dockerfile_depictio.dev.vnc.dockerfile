@@ -6,7 +6,7 @@ FROM mambaorg/micromamba:latest
 # -----------------------------
 # Inherit base configuration from Dockerfile_depictio.dockerfile
 # -----------------------------
-# Note: This Dockerfile follows the same base configuration 
+# Note: This Dockerfile follows the same base configuration
 # as Dockerfile_depictio.dockerfile, with additional VNC tools
 
 # -----------------------------
@@ -23,7 +23,7 @@ COPY conda_envs/depictio.yaml depictio.yaml
 # Create Conda Environment
 # -----------------------------
 RUN micromamba create -n depictio -f depictio.yaml && \
-    micromamba clean --all --yes 
+    micromamba clean --all --yes
 
 # -----------------------------
 # Environment Configuration

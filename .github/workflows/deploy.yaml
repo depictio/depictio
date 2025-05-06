@@ -19,7 +19,37 @@ on:
     branches: [main]
 
 jobs:
+  quality:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install black ruff bandit
+
+      - name: Run Black formatter check
+        run: black --check .
+
+      - name: Run Ruff linter
+        run: ruff check .
+
+      - name: Run Bandit security check
+        run: bandit -r . -lll
+
+      - name: Run tests
+        run: |
+          pip install pytest
+          pytest
+
   setup:
+    needs: quality # only runs if `quality` succeeds
     runs-on: ubuntu-22.04 # Instead of ubuntu-latest
     steps:
       - name: Checkout code
@@ -59,13 +89,11 @@ jobs:
           DEPICTIO_MINIO_ROOT_PASSWORD=${{ env.DEPICTIO_MINIO_ROOT_PASSWORD }}
           EOF
 
-
       - name: Create and Set Permissions for depictioDB
         run: |
           mkdir -p depictioDB/
           chown -R "$(id -u):$(id -g)" depictioDB/
           chmod -R 777 depictioDB/
-
 
       - name: Create and Set Permissions for minio_data
         run: |
@@ -380,3 +408,35 @@ jobs:
 
       # # - name: Check Ingestion Success
       # #   run: echo "Data ingestion completed successfully"
+
+  cypress:
+    needs: [quality, setup]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure Docker Permissions
+        run: |
+          sudo usermod -aG docker $USER || true
+          sudo chmod 666 /var/run/docker.sock
+
+      - name: Start Services
+        run: docker compose -f docker-compose.yaml -f docker-compose/docker-compose.minio.yaml up -d --build
+
+      - name: Wait for Services
+        run: sleep 15 # allow frontend & backend to spin up
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "16"
+
+      - name: Install Cypress dependencies
+        run: |
+          cd depictio/tests/e2e-tests
+          npm ci
+
+      - name: Run Cypress tests
+        run: |
+          cd depictio/tests/e2e-tests
+          npx cypress run

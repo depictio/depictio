@@ -1,17 +1,17 @@
-from dash import html, Input, Output, State, ALL, MATCH, ctx
 import dash
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
-from dash_iconify import DashIconify
 import httpx
+from dash import ALL, MATCH, Input, Output, State, ctx, html
+from dash_iconify import DashIconify
 
 # Depictio imports
 from depictio.api.v1.configs.config import API_BASE_URL
+from depictio.api.v1.configs.custom_logging import logger
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
 from depictio.dash.modules.card_component.frontend import design_card
 from depictio.dash.modules.figure_component.frontend import design_figure
 from depictio.dash.modules.interactive_component.frontend import design_interactive
-from depictio.api.v1.configs.custom_logging import logger
 
 # from depictio.dash.modules.table_component.frontend import design_table
 
@@ -91,8 +91,7 @@ def register_callbacks_stepper(app):
             # Check if the workflow has any matching data collection
             if (
                 any(
-                    component_selected
-                    in mapping_component_data_collection[dc["config"]["type"]]
+                    component_selected in mapping_component_data_collection[dc["config"]["type"]]
                     for dc in wf["data_collections"]
                 )
                 and wf["id"] not in seen_workflow_ids
@@ -169,9 +168,7 @@ def register_callbacks_stepper(app):
         State("url", "pathname"),
         # prevent_initial_call=True,
     )
-    def set_datacollection_options(
-        selected_workflow, id, n_clicks, local_store, pathname
-    ):
+    def set_datacollection_options(selected_workflow, id, n_clicks, local_store, pathname):
         logger.info(f"CTX Triggered ID: {ctx.triggered_id}")
         logger.info(f"CTX triggered: {ctx.triggered}")
 
@@ -215,8 +212,7 @@ def register_callbacks_stepper(app):
             {
                 dc["data_collection_tag"]
                 for dc in selected_wf_data["data_collections"]
-                if component_selected
-                in mapping_component_data_collection[dc["config"]["type"]]
+                if component_selected in mapping_component_data_collection[dc["config"]["type"]]
             }
         )
 
@@ -226,13 +222,12 @@ def register_callbacks_stepper(app):
                 "value": dc["id"],
             }
             for dc in selected_wf_data["data_collections"]
-            if component_selected
-            in mapping_component_data_collection[dc["config"]["type"]]
+            if component_selected in mapping_component_data_collection[dc["config"]["type"]]
         ]
 
         logger.info(f"valid_dcs: {valid_dcs}")
 
-        logger.info("ID: {}".format(id))
+        logger.info(f"ID: {id}")
         if not selected_workflow:
             raise dash.exceptions.PreventUpdate
 
@@ -283,9 +278,7 @@ def register_callbacks_stepper(app):
         logger.info(f"Triggered ID: {triggered_id}")
         logger.info(f"Inputs list: {inputs_list}")
 
-        next_step = (
-            current_step  # Default to the current step if no actions require a change
-        )
+        next_step = current_step  # Default to the current step if no actions require a change
 
         # Check if any btn-option was clicked
         btn_clicks = [btn for btn in btn_option_clicks if btn > 0]
@@ -303,13 +296,9 @@ def register_callbacks_stepper(app):
 
         # Check if the Next or Back buttons were clicked
         if "next-basic-usage" in triggered_input:
-            next_step = min(
-                3, current_step + 1
-            )  # Move to the next step, max out at step 3
+            next_step = min(3, current_step + 1)  # Move to the next step, max out at step 3
         elif "back-basic-usage" in triggered_input:
-            next_step = max(
-                0, current_step - 1
-            )  # Move to the previous step, minimum is step 0
+            next_step = max(0, current_step - 1)  # Move to the previous step, minimum is step 0
 
         return next_step, disable_next
 
@@ -374,9 +363,7 @@ def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
 
     logger.info(f"Select row: {select_row}")
 
-    df = load_deltatable_lite(
-        component_data["wf_id"], component_data["dc_id"], TOKEN=TOKEN
-    )
+    df = load_deltatable_lite(component_data["wf_id"], component_data["dc_id"], TOKEN=TOKEN)
     logger.info(f"DF: {df}")
 
     def return_design_component(component_selected, id, df):
@@ -401,9 +388,7 @@ def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
     modal = dbc.Modal(
         id={"type": "modal-edit", "index": n},
         children=[
-            dbc.ModalHeader(
-                html.H5("Edit your dashboard component"), close_button=False
-            ),
+            dbc.ModalHeader(html.H5("Edit your dashboard component"), close_button=False),
             dbc.ModalBody(
                 modal_body,
                 # id={"type": "modal-body-edit", "index": n},
@@ -425,9 +410,7 @@ def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
                             # id={"type": "btn-done-edit", "index": n},
                             n_clicks=0,
                             size="xl",
-                            leftIcon=DashIconify(
-                                icon="bi:check-circle", width=30, color="white"
-                            ),
+                            leftIcon=DashIconify(icon="bi:check-circle", width=30, color="white"),
                             disabled=True,
                         )
                     ),
@@ -471,9 +454,7 @@ def create_stepper_output(n, active):
             dbc.Row(
                 [
                     dbc.Col(
-                        dmc.Title(
-                            "Component selected:", order=3, align="left", weight=500
-                        ),
+                        dmc.Title("Component selected:", order=3, align="left", weight=500),
                         width=4,
                     ),
                     dbc.Col(
@@ -602,9 +583,7 @@ def create_stepper_output(n, active):
                             "align": "center",
                             "height": "100px",
                         },
-                        leftIcon=DashIconify(
-                            icon="bi:check-circle", width=30, color="white"
-                        ),
+                        leftIcon=DashIconify(icon="bi:check-circle", width=30, color="white"),
                     ),
                 ]
             ),

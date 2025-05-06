@@ -1,5 +1,4 @@
 import copy
-from typing import Dict, List
 
 import dash
 import dash_draggable
@@ -45,12 +44,8 @@ required_breakpoints = ["lg"]
 def calculate_new_layout_position(child_type, existing_layouts, child_id, n):
     """Calculate position for new layout item based on existing ones and type."""
     # Get the default dimensions from the type
-    logger.info(
-        f"Calculating new layout position for {child_type} with {n} existing components"
-    )
-    dimensions = component_dimensions.get(
-        child_type, {"w": 6, "h": 5}
-    )  # Default if type not found
+    logger.info(f"Calculating new layout position for {child_type} with {n} existing components")
+    dimensions = component_dimensions.get(child_type, {"w": 6, "h": 5})  # Default if type not found
     logger.info(f"Dimensions: {dimensions}")
 
     # Simple positioning logic: place items in rows based on their index
@@ -122,9 +117,7 @@ def register_callbacks_draggable(app):
         ],
         [
             State("local-store", "data"),  # Contains 'access_token'
-            State(
-                "local-store-components-metadata", "data"
-            ),  # Existing components' data
+            State("local-store-components-metadata", "data"),  # Existing components' data
             State({"type": "workflow-selection-label", "index": ALL}, "id"),
             State({"type": "datacollection-selection-label", "index": ALL}, "id"),
         ],
@@ -193,9 +186,7 @@ def register_callbacks_draggable(app):
                     f"Updated component '{trigger_index}' with wf_tag: {wf_tag} from wf_id: {wf_id_value}"
                 )
             except Exception as e:
-                logger.error(
-                    f"Error retrieving workflow tag for component '{trigger_index}': {e}"
-                )
+                logger.error(f"Error retrieving workflow tag for component '{trigger_index}': {e}")
                 components_store[trigger_index]["wf_tag"] = ""
 
         # Process datacollection selections (now using IDs directly)
@@ -204,9 +195,7 @@ def register_callbacks_draggable(app):
             try:
                 trigger_id = dc_id_prop
             except Exception as e:
-                logger.error(
-                    f"Error parsing datacollection ID prop '{dc_id_prop}': {e}"
-                )
+                logger.error(f"Error parsing datacollection ID prop '{dc_id_prop}': {e}")
                 continue  # Skip this iteration
 
             trigger_index = str(trigger_id.get("index"))
@@ -220,9 +209,7 @@ def register_callbacks_draggable(app):
 
             # Get the datacollection tag from the ID for reference/display purposes
             try:
-                dc_tag = return_dc_tag_from_id(
-                    data_collection_id=dc_id_value, TOKEN=TOKEN
-                )
+                dc_tag = return_dc_tag_from_id(data_collection_id=dc_id_value, TOKEN=TOKEN)
                 components_store[trigger_index]["dc_tag"] = dc_tag
                 logger.debug(
                     f"Updated component '{trigger_index}' with dc_tag: {dc_tag} from dc_id: {dc_id_value}"
@@ -425,13 +412,9 @@ def register_callbacks_draggable(app):
 
         logger.info(f"Input draggable layouts: {input_draggable_layouts}")
         logger.info(f"Draggable layout : {draggable_layouts}")
-        logger.info(
-            "Stored draggable layouts: {}".format(state_stored_draggable_layouts)
-        )
+        logger.info(f"Stored draggable layouts: {state_stored_draggable_layouts}")
         logger.info(f"Stored draggable children: {state_stored_draggable_children}")
-        logger.info(
-            f"Input stored draggable children: {input_stored_draggable_children}"
-        )
+        logger.info(f"Input stored draggable children: {input_stored_draggable_children}")
 
         # Extract dashboard_id from the pathname
         dashboard_id = pathname.split("/")[-1]
@@ -488,9 +471,7 @@ def register_callbacks_draggable(app):
                 triggered_index = triggered_input_dict["index"]
 
                 tmp_stored_metadata = [
-                    e
-                    for e in stored_metadata
-                    if f"{e['index']}-tmp" == f"{triggered_index}"
+                    e for e in stored_metadata if f"{e['index']}-tmp" == f"{triggered_index}"
                 ]
 
                 if not tmp_stored_metadata:
@@ -531,9 +512,7 @@ def register_callbacks_draggable(app):
                     logger.info(f"New layout item: {new_layout_item}")
                 logger.info(f"New draggable layouts: {draggable_layouts}")
                 state_stored_draggable_layouts[dashboard_id] = draggable_layouts
-                logger.info(
-                    f"State stored draggable layouts: {state_stored_draggable_layouts}"
-                )
+                logger.info(f"State stored draggable layouts: {state_stored_draggable_layouts}")
 
                 logger.info(f"New draggable children: {draggable_children}")
                 return (
@@ -551,9 +530,7 @@ def register_callbacks_draggable(app):
 
                 logger.info(f"CTX triggered props id: {ctx_triggered_props_id}")
                 logger.info(f"Draggable layouts: {input_draggable_layouts}")
-                logger.info(
-                    f"State stored draggable layouts: {state_stored_draggable_layouts}"
-                )
+                logger.info(f"State stored draggable layouts: {state_stored_draggable_layouts}")
 
                 if "draggable.layouts" in ctx_triggered_props_id:
                     new_layouts = input_draggable_layouts
@@ -582,14 +559,10 @@ def register_callbacks_draggable(app):
                 ctx_triggered = ctx.triggered
                 ctx_triggered = ctx_triggered[0]
                 ctx_triggered_prop_id = ctx_triggered["prop_id"]
-                ctx_triggered_prop_id_index = eval(ctx_triggered_prop_id.split(".")[0])[
-                    "index"
-                ]
+                ctx_triggered_prop_id_index = eval(ctx_triggered_prop_id.split(".")[0])["index"]
 
                 graph_metadata = [
-                    e
-                    for e in stored_metadata
-                    if e["index"] == ctx_triggered_prop_id_index
+                    e for e in stored_metadata if e["index"] == ctx_triggered_prop_id_index
                 ]
                 if graph_metadata:
                     graph_metadata = graph_metadata[0]
@@ -684,12 +657,8 @@ def register_callbacks_draggable(app):
                         for metadata in stored_metadata:
                             if metadata["index"] == ctx_triggered_prop_id_index:
                                 metadata["filter_applied"] = False
-                        logger.info("Stored metadata: {}".format(stored_metadata))
-                        logger.info(
-                            "Interactive components dict: {}".format(
-                                interactive_components_dict
-                            )
-                        )
+                        logger.info(f"Stored metadata: {stored_metadata}")
+                        logger.info(f"Interactive components dict: {interactive_components_dict}")
 
                         new_children = update_interactive_component(
                             stored_metadata,
@@ -723,10 +692,7 @@ def register_callbacks_draggable(app):
                         dash.no_update,
                     )
 
-            elif (
-                "interactive-component" in triggered_input
-                and toggle_interactivity_button
-            ):
+            elif "interactive-component" in triggered_input and toggle_interactivity_button:
                 logger.info("Interactive component triggered")
 
                 def clean_stored_metadata(stored_metadata):
@@ -776,20 +742,14 @@ def register_callbacks_draggable(app):
                 # return new_children, dash.no_update, state_stored_draggable_children, dash.no_update
 
             elif "edit-components-mode-button" in triggered_input:
-                logger.info(
-                    f"Edit components mode button triggered: {edit_components_mode_button}"
-                )
+                logger.info(f"Edit components mode button triggered: {edit_components_mode_button}")
                 new_children = list()
                 # logger.info("Current draggable children: {}".format(draggable_children))
-                logger.info(
-                    "Len Current draggable children: {}".format(len(draggable_children))
-                )
+                logger.info(f"Len Current draggable children: {len(draggable_children)}")
                 for child, child_metadata in zip(draggable_children, stored_metadata):
-                    logger.info("Child: {}".format(child))
+                    logger.info(f"Child: {child}")
                     logger.info("Child props: {}".format(child["props"]))
-                    logger.info(
-                        "Child props children: {}".format(child["props"]["children"])
-                    )
+                    logger.info("Child props children: {}".format(child["props"]["children"]))
                     if type(child["props"]["children"]) is dict:
                         child = enable_box_edit_mode(
                             child["props"]["children"]["props"]["children"][-1],
@@ -816,14 +776,8 @@ def register_callbacks_draggable(app):
 
             elif triggered_input == "stored-draggable-layouts":
                 logger.info("Stored draggable layouts triggered")
-                logger.info(
-                    "Input draggable layouts: {}".format(input_draggable_layouts)
-                )
-                logger.info(
-                    "State stored draggable layouts: {}".format(
-                        state_stored_draggable_layouts
-                    )
-                )
+                logger.info(f"Input draggable layouts: {input_draggable_layouts}")
+                logger.info(f"State stored draggable layouts: {state_stored_draggable_layouts}")
 
                 if state_stored_draggable_layouts:
                     if dashboard_id in state_stored_draggable_layouts:
@@ -954,9 +908,7 @@ def register_callbacks_draggable(app):
                     updated_children = list()
                     for child in draggable_children:
                         if child["props"]["id"] == f"box-{parent_index}":
-                            updated_children.append(
-                                edited_child
-                            )  # Replace the entire child
+                            updated_children.append(edited_child)  # Replace the entire child
                         else:
                             updated_children.append(child)
 
@@ -1026,20 +978,12 @@ def register_callbacks_draggable(app):
                     data=metadata,
                 )
 
-                if (
-                    type(duplicated_component["props"]["children"]["props"]["children"])
-                    is list
-                ):
-                    duplicated_component["props"]["children"]["props"]["children"] += [
-                        new_store
-                    ]
-                elif (
-                    type(duplicated_component["props"]["children"]["props"]["children"])
-                    is dict
-                ):
-                    duplicated_component["props"]["children"]["props"]["children"][
-                        "props"
-                    ]["children"] += [new_store]
+                if type(duplicated_component["props"]["children"]["props"]["children"]) is list:
+                    duplicated_component["props"]["children"]["props"]["children"] += [new_store]
+                elif type(duplicated_component["props"]["children"]["props"]["children"]) is dict:
+                    duplicated_component["props"]["children"]["props"]["children"]["props"][
+                        "children"
+                    ] += [new_store]
 
                 update_nested_ids(duplicated_component, triggered_index, new_index)
 
@@ -1049,9 +993,7 @@ def register_callbacks_draggable(app):
 
                 # Calculate the new layout position
                 # 'child_type' corresponds to the 'type' in the component's ID
-                existing_layouts = (
-                    draggable_layouts  # Current layouts before adding the new one
-                )
+                existing_layouts = draggable_layouts  # Current layouts before adding the new one
                 n = len(updated_children)  # Position based on the number of components
 
                 new_layout = calculate_new_layout_position(
@@ -1113,9 +1055,7 @@ def register_callbacks_draggable(app):
                     dash.no_update,
                 )
             elif triggered_input == "edit-dashboard-mode-button":
-                logger.info(
-                    f"Edit dashboard mode button clicked: {edit_dashboard_mode_button}"
-                )
+                logger.info(f"Edit dashboard mode button clicked: {edit_dashboard_mode_button}")
                 # new_children = list()
                 # for child, child_metadata in zip(draggable_children, stored_metadata):
                 #     if type(child["props"]["children"]) is dict:
@@ -1245,9 +1185,7 @@ def register_callbacks_draggable(app):
         State("url", "pathname"),
         prevent_initial_call=True,
     )
-    def update_interactive_values_store(
-        interactive_values, ids, stored_metadata, pathname
-    ):
+    def update_interactive_values_store(interactive_values, ids, stored_metadata, pathname):
         # logger.info("Callback 'update_interactive_values_store' triggered.")
         # logger.info(f"Interactive values: {interactive_values}")
         # logger.info(f"Interactive ids: {ids}")
@@ -1255,9 +1193,7 @@ def register_callbacks_draggable(app):
         stored_metadata_interactive = [
             e for e in stored_metadata if e["component_type"] == "interactive"
         ]
-        stored_metadata_interactive = remove_duplicates_by_index(
-            stored_metadata_interactive
-        )
+        stored_metadata_interactive = remove_duplicates_by_index(stored_metadata_interactive)
         # logger.info(f"Stored metadata interactive: {stored_metadata_interactive}")
 
         # Extract dashboard_id from the URL pathname
@@ -1265,24 +1201,18 @@ def register_callbacks_draggable(app):
             dashboard_id = pathname.split("/")[-1]
             logger.debug(f"Dashboard ID: {dashboard_id}")
         except Exception as e:
-            logger.error(
-                f"Error extracting dashboard_id from pathname '{pathname}': {e}"
-            )
+            logger.error(f"Error extracting dashboard_id from pathname '{pathname}': {e}")
             raise dash.exceptions.PreventUpdate
 
         # Ensure that the lengths of interactive_values, ids, and stored_metadata match
-        if not (
-            len(interactive_values) == len(ids) == len(stored_metadata_interactive)
-        ):
+        if not (len(interactive_values) == len(ids) == len(stored_metadata_interactive)):
             logger.info(f"Interactive values: {interactive_values}")
             logger.info(f"Interactive ids: {ids}")
             logger.info(f"Stored metadata: {stored_metadata_interactive}")
             logger.info(
                 f"Lengths of interactive_values : {len(interactive_values)}, ids: {len(ids)}, stored_metadata: {len(stored_metadata_interactive)}"
             )
-            logger.error(
-                "Mismatch in lengths of interactive_values, ids, and stored_metadata."
-            )
+            logger.error("Mismatch in lengths of interactive_values, ids, and stored_metadata.")
             raise dash.exceptions.PreventUpdate
 
         # Combine interactive_values with their corresponding metadata
@@ -1291,9 +1221,7 @@ def register_callbacks_draggable(app):
             if metadata is None:
                 logger.warning(f"Metadata is None for a component with value: {value}")
                 continue
-            components.append(
-                {"value": value, "metadata": metadata, "index": metadata["index"]}
-            )
+            components.append({"value": value, "metadata": metadata, "index": metadata["index"]})
 
         output_data = {"interactive_components_values": components}
 
@@ -1302,7 +1230,7 @@ def register_callbacks_draggable(app):
 
 
 def design_draggable(
-    init_layout: Dict, init_children: List[Dict], dashboard_id: str, local_data: dict
+    init_layout: dict, init_children: list[dict], dashboard_id: str, local_data: dict
 ):
     logger.info("design_draggable - Initializing draggable layout")
     logger.info(f"design_draggable - Dashboard ID: {dashboard_id}")

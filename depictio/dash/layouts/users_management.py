@@ -10,13 +10,8 @@ from dash_extensions import EventListener
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.custom_logging import logger
 from depictio.api.v1.endpoints.user_endpoints.core_functions import _verify_password
-from depictio.api.v1.endpoints.user_endpoints.utils import (
-    login_user,
-)
-from depictio.dash.api_calls import (
-    api_call_fetch_user_from_email,
-    api_call_register_user,
-)
+from depictio.api.v1.endpoints.user_endpoints.utils import login_user
+from depictio.dash.api_calls import api_call_fetch_user_from_email, api_call_register_user
 
 event = {"event": "keydown", "props": ["key"]}
 
@@ -175,9 +170,7 @@ def render_register_form():
                         style={"display": "none"},
                     ),
                     # dmc.Button("", radius="md", id="logout-button", fullWidth=True, style={"display": "none"}),
-                    dmc.Button(
-                        "Register", radius="md", id="register-button", fullWidth=True
-                    ),
+                    dmc.Button("Register", radius="md", id="register-button", fullWidth=True),
                     html.A(
                         dmc.Button(
                             "",
@@ -292,9 +285,7 @@ layout = html.Div(
         dcc.Store(
             id="modal-state-store", data="login"
         ),  # Store to control modal content state (login or register)
-        dcc.Store(
-            id="modal-open-store", data=True
-        ),  # Store to control modal state (open or close)
+        dcc.Store(id="modal-open-store", data=True),  # Store to control modal state (open or close)
         dmc.Modal(
             id="auth-modal",
             opened=False,
@@ -476,8 +467,8 @@ def register_callbacks_users_management(app):
             return True, content, dash.no_update, modal_state, True, dash.no_update
 
         elif button_id == "login-button":
-            feedback_message, modal_open_new, session_data, local_data_new = (
-                validate_login(login_email, login_password)
+            feedback_message, modal_open_new, session_data, local_data_new = validate_login(
+                login_email, login_password
             )
             logger.debug(f"Feedback message: {feedback_message}")
             logger.debug(f"Modal open new: {modal_open_new}")

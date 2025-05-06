@@ -1,13 +1,12 @@
-from datetime import datetime
-from pathlib import PosixPath
-from typing import List
-import numpy as np
 import os
 import re
+from datetime import datetime
+from pathlib import PosixPath
+
+import numpy as np
 
 from depictio import BASE_PATH
 from depictio.api.v1.configs.custom_logging import logger
-
 from depictio.models.models.data_collections import DataCollection
 from depictio.models.models.files import File
 from depictio.models.models.workflows import WorkflowConfig, WorkflowRun
@@ -71,7 +70,7 @@ def construct_full_regex(files_regex, regex_config):
 
 def regex_match(root, file, full_regex, data_collection):
     # Normalize the regex pattern to match both types of path separators
-    normalized_regex = full_regex.replace("/", "\/")
+    normalized_regex = full_regex.replace("/", "\\/")
     logger.debug(
         f"Root: {root}, File: {file}, Full Regex: {full_regex}, Data Collection type: {data_collection.config.regex.type.lower()}"
     )
@@ -88,9 +87,7 @@ def regex_match(root, file, full_regex, data_collection):
     return False, None
 
 
-def scan_files(
-    run_location: str, run_id: str, data_collection: DataCollection
-) -> List[File]:
+def scan_files(run_location: str, run_id: str, data_collection: DataCollection) -> list[File]:
     """
     Scan the files for a given workflow.
     """
@@ -136,9 +133,7 @@ def scan_files(
 
                 # Convert the datetime objects to ISO formatted strings
                 creation_time_iso = creation_time_dt.strftime("%Y-%m-%d %H:%M:%S")
-                modification_time_iso = modification_time_dt.strftime(
-                    "%Y-%m-%d %H:%M:%S"
-                )
+                modification_time_iso = modification_time_dt.strftime("%Y-%m-%d %H:%M:%S")
 
                 file_instance = File(
                     filename=filename,
@@ -155,9 +150,7 @@ def scan_files(
                     and data_collection.config.type == "JBrowse2"
                 ):
                     wildcards_list = list()
-                    for j, wildcard in enumerate(
-                        data_collection.config.regex.wildcards, start=1
-                    ):
+                    for j, wildcard in enumerate(data_collection.config.regex.wildcards, start=1):
                         wildcards_list.append(
                             {
                                 "name": wildcard.name,
@@ -178,7 +171,7 @@ def scan_runs(
     workflow_config: WorkflowConfig,
     data_collection: DataCollection,
     workflow_id: str,
-) -> List[WorkflowRun]:
+) -> list[WorkflowRun]:
     """
     Scan the runs for a given workflow.
     """
@@ -261,9 +254,9 @@ def serialize_for_mongo(data):
 
 def numpy_to_python(value):
     """Converts numpy data types to native Python data types."""
-    if isinstance(value, (np.int64, np.int32, np.int16, np.int8)):
+    if isinstance(value, np.int64 | np.int32 | np.int16 | np.int8):
         return int(value)
-    elif isinstance(value, (np.float64, np.float32, np.float16)):
+    elif isinstance(value, np.float64 | np.float32 | np.float16):
         return float(value)
     elif isinstance(value, np.bool_):
         return bool(value)

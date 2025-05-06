@@ -113,9 +113,7 @@ def register_callbacks_stepper_part_one(app):
             #     width=6,
             # )
 
-            dc_main_info = dmc.Title(
-                "Data collection info", order=3, align="left", weight=500
-            )
+            dc_main_info = dmc.Title("Data collection info", order=3, align="left", weight=500)
 
             main_info = html.Table(
                 [
@@ -192,9 +190,7 @@ def register_callbacks_stepper_part_one(app):
                                     "width": "20%",
                                 },
                             ),
-                            html.Td(
-                                dc_specs["description"], style={"text-align": "left"}
-                            ),
+                            html.Td(dc_specs["description"], style={"text-align": "left"}),
                         ]
                     ),
                     html.Tr(

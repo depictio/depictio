@@ -1,13 +1,13 @@
-import uuid
-from bson import ObjectId
-import numpy as np
-from depictio.api.v1.configs.config import API_BASE_URL
 import collections
-import httpx
 import sys
+import uuid
 
+import httpx
+import numpy as np
+from bson import ObjectId
+
+from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.custom_logging import logger
-
 
 SELECTED_STYLE = {
     "display": "inline-block",
@@ -49,7 +49,7 @@ def get_size(obj, seen=None):
         size += sum([get_size(k, seen) for k in obj.keys()])
     elif hasattr(obj, "__dict__"):
         size += get_size(obj.__dict__, seen)
-    elif hasattr(obj, "__iter__") and not isinstance(obj, (str, bytes, bytearray)):
+    elif hasattr(obj, "__iter__") and not isinstance(obj, str | bytes | bytearray):
         size += sum([get_size(i, seen) for i in obj])
     return size
 
@@ -96,7 +96,7 @@ def return_user_from_token(token: str) -> dict:
         return None
 
 
-def list_workflows(token: str = None):
+def list_workflows(token: str | None = None):
     # print("list_workflows")
     # print(token)
 
@@ -140,7 +140,7 @@ def list_workflows(token: str = None):
 #         return data_collections_dict_for_dropdown
 
 
-def return_wf_tag_from_id(workflow_id: ObjectId, TOKEN: str = None):
+def return_wf_tag_from_id(workflow_id: ObjectId, TOKEN: str | None = None):
     # logger.info(f"return_wf_tag_from_id - TOKEN : {TOKEN}")
     # logger.info(f"return_wf_tag_from_id - workflow_id : {workflow_id}")
     # logger.info(f"return_wf_tag_from_id - workflows : {workflows}")
@@ -165,7 +165,7 @@ def return_dc_tag_from_id(
     # workflow_id: ObjectId,
     data_collection_id: ObjectId,
     # workflows: list = None,
-    TOKEN: str = None,
+    TOKEN: str | None = None,
 ):
     # if not workflows:
     #     workflows = list_workflows(TOKEN)
@@ -191,12 +191,12 @@ def return_dc_tag_from_id(
 
 
 def return_mongoid(
-    workflow_tag: str = None,
-    workflow_id: ObjectId = None,
-    data_collection_tag: str = None,
-    data_collection_id: ObjectId = None,
-    workflows: list = None,
-    TOKEN: str = None,
+    workflow_tag: str | None = None,
+    workflow_id: ObjectId | None = None,
+    data_collection_tag: str | None = None,
+    data_collection_id: ObjectId | None = None,
+    workflows: list | None = None,
+    TOKEN: str | None = None,
 ):
     if not workflows:
         workflows = list_workflows(TOKEN)
@@ -205,9 +205,7 @@ def return_mongoid(
 
     if workflow_tag is not None and data_collection_tag is not None:
         # print("workflow_tag and data_collection_tag")
-        workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_tag][0][
-            "_id"
-        ]
+        workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_tag][0]["_id"]
         # print("workflow_id", workflow_id)
         data_collection_id = [
             f
@@ -302,13 +300,10 @@ def analyze_structure(struct, depth=0):
     """
 
     if isinstance(struct, list):
-        logger.info(
-            "  " * depth + f"Depth {depth} Type: List with {len(struct)} elements"
-        )
+        logger.info("  " * depth + f"Depth {depth} Type: List with {len(struct)} elements")
         for idx, child in enumerate(struct):
             logger.info(
-                "  " * depth
-                + f"Element {idx} ID: {child.get('props', {}).get('id', None)}"
+                "  " * depth + f"Element {idx} ID: {child.get('props', {}).get('id', None)}"
             )
             analyze_structure(child, depth=depth + 1)
         return
@@ -331,13 +326,10 @@ def analyze_structure(struct, depth=0):
         analyze_structure(children, depth=depth + 1)
 
     elif isinstance(children, list):
-        logger.info(
-            "  " * depth + f"Depth {depth} Type: List with {len(children)} elements"
-        )
+        logger.info("  " * depth + f"Depth {depth} Type: List with {len(children)} elements")
         for idx, child in enumerate(children):
             logger.info(
-                "  " * depth
-                + f"Element {idx} ID: {child.get('props', {}).get('id', None)}"
+                "  " * depth + f"Element {idx} ID: {child.get('props', {}).get('id', None)}"
             )
             # Recursive call
             analyze_structure(child, depth=depth + 1)
@@ -366,10 +358,7 @@ def analyze_structure_and_get_deepest_type(
     current_type = None
     if isinstance(struct, dict):
         id_value = struct.get("props", {}).get("id", None)
-        if (
-            isinstance(id_value, dict)
-            and id_value.get("type") != "stored-metadata-component"
-        ):
+        if isinstance(id_value, dict) and id_value.get("type") != "stored-metadata-component":
             current_type = id_value.get("type")
             if print:
                 logger.info(
@@ -399,7 +388,7 @@ def analyze_structure_and_get_deepest_type(
             )
     elif isinstance(struct, dict):
         children = struct.get("props", {}).get("children", None)
-        if isinstance(children, (list, dict)):
+        if isinstance(children, list | dict):
             if print:
                 logger.info(f"Descending into dict at depth: {depth}")  # Debug print
             max_depth, deepest_type = analyze_structure_and_get_deepest_type(

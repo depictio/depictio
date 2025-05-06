@@ -1,21 +1,21 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
 from depictio.api.v1.configs.config import settings
-from depictio.api.v1.endpoints.utils_endpoints.process_data_collections import (
-    process_initial_data_collections,
-)
+from depictio.api.v1.configs.custom_logging import logger
 from depictio.api.v1.db import (
-    workflows_collection,
-    data_collections_collection,
-    runs_collection,
-    files_collection,
-    deltatables_collection,
     dashboards_collection,
+    data_collections_collection,
+    deltatables_collection,
+    files_collection,
+    runs_collection,
+    workflows_collection,
 )
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.api.v1.endpoints.utils_endpoints.core_functions import create_bucket
+from depictio.api.v1.endpoints.utils_endpoints.process_data_collections import (
+    process_initial_data_collections,
+)
 from depictio.api.v1.s3 import s3_client
-from depictio.api.v1.configs.custom_logging import logger
 from depictio.version import get_version
 
 # Define the router

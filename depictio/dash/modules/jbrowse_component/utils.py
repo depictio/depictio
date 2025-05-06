@@ -1,12 +1,13 @@
 import collections
 import json
 import os
-import httpx
-from dash import html, dcc
-import dash_bootstrap_components as dbc
 
-from depictio.api.v1.configs.custom_logging import logger
+import dash_bootstrap_components as dbc
+import httpx
+from dash import dcc, html
+
 from depictio.api.v1.configs.config import API_BASE_URL
+from depictio.api.v1.configs.custom_logging import logger
 from depictio.dash.api_calls import api_call_fetch_user_from_token
 
 
@@ -16,9 +17,7 @@ def build_jbrowse_df_mapping_dict(stored_metadata, df_dict_processed, access_tok
     stored_metadata_jbrowse_components = [
         e for e in stored_metadata if e["component_type"] == "jbrowse"
     ]
-    logger.info(
-        f"stored_metadata_jbrowse_components - {stored_metadata_jbrowse_components}"
-    )
+    logger.info(f"stored_metadata_jbrowse_components - {stored_metadata_jbrowse_components}")
 
     logger.info(f"{API_BASE_URL}")
     for e in stored_metadata:
@@ -26,9 +25,7 @@ def build_jbrowse_df_mapping_dict(stored_metadata, df_dict_processed, access_tok
             logger.info(f"df_dict_processed keys {df_dict_processed.keys()}")
             # find df in df_dict_processed key (join) where e["dc_id"] is in the join["with_dc_id"]
             new_df = [
-                df_dict_processed[key]
-                for key in df_dict_processed
-                if e["dc_id"] in "--".join(key)
+                df_dict_processed[key] for key in df_dict_processed if e["dc_id"] in "--".join(key)
             ][0]
             logger.info(f"new_df {new_df}")
             for jbrowse in stored_metadata_jbrowse_components:
@@ -132,17 +129,11 @@ def build_jbrowse(**kwargs):
         url = f"http://localhost:3000?config=http://localhost:9010/sessions/{session}&{updated_jbrowse_config}"
 
     elif refresh is True:
-        jbrowse_df_mapping_dict = json.load(
-            open("data/jbrowse_df_mapping_dict.json", "r")
-        )
+        jbrowse_df_mapping_dict = json.load(open("data/jbrowse_df_mapping_dict.json"))
         logger.info(f"jbrowse_mappind_dict OK {jbrowse_df_mapping_dict.keys()}")
-        logger.info(
-            f"jbrowse_mappind_dict values - {list(jbrowse_df_mapping_dict.values())[:10]}"
-        )
+        logger.info(f"jbrowse_mappind_dict values - {list(jbrowse_df_mapping_dict.values())[:10]}")
 
-        last_jbrowse_status = httpx.get(
-            f"{API_BASE_URL}/depictio/api/v1/jbrowse/last_status"
-        )
+        last_jbrowse_status = httpx.get(f"{API_BASE_URL}/depictio/api/v1/jbrowse/last_status")
         last_jbrowse_status = last_jbrowse_status.json()
 
         # Cross jbrowse_df_mapping_dict and mapping_dict to update the jbrowse iframe
@@ -185,7 +176,9 @@ def build_jbrowse(**kwargs):
                 if response.json()["session"]:
                     session = response.json()["session"]
 
-        updated_jbrowse_config = f"assembly={last_jbrowse_status['assembly']}&loc={last_jbrowse_status['loc']}"
+        updated_jbrowse_config = (
+            f"assembly={last_jbrowse_status['assembly']}&loc={last_jbrowse_status['loc']}"
+        )
         if track_ids:
             updated_jbrowse_config += f"&tracks={','.join(track_ids)}"
         logger.info(f"updated_jbrowse_config {updated_jbrowse_config}")
@@ -220,9 +213,7 @@ def build_jbrowse(**kwargs):
         },
     )
 
-    jbrowse_body = html.Div(
-        [store_component, iframe], id={"type": "jbrowse", "index": index}
-    )
+    jbrowse_body = html.Div([store_component, iframe], id={"type": "jbrowse", "index": index})
     if not build_frame:
         return jbrowse_body
     else:

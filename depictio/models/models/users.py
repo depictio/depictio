@@ -1,15 +1,7 @@
 from datetime import datetime
-from typing import List, Optional, Union
 
 from beanie import Document, Link, PydanticObjectId
-from pydantic import (
-    BaseModel,
-    EmailStr,
-    Field,
-    field_serializer,
-    field_validator,
-    model_validator,
-)
+from pydantic import BaseModel, EmailStr, Field, field_serializer, field_validator, model_validator
 
 from depictio.models.logging import logger
 from depictio.models.models.base import MongoModel, PyObjectId
@@ -17,7 +9,7 @@ from depictio.models.models.s3 import S3DepictioCLIConfig
 
 
 class TokenData(BaseModel):
-    name: Optional[str] = None
+    name: str | None = None
     token_lifetime: str = Field(
         default="short-lived",
         description="Lifetime of the token",
@@ -110,7 +102,7 @@ class TokenBase(MongoModel):
     token_type: str = "bearer"
     token_lifetime: str = "short-lived"
     expire_datetime: datetime
-    name: Optional[str] = None
+    name: str | None = None
     created_at: datetime = Field(default_factory=datetime.now)
     model_config = {"arbitrary_types_allowed": True}
     logged_in: bool = False
@@ -153,7 +145,7 @@ class TokenBeanie(TokenBase, Document):
 
 class Group(MongoModel):
     name: str
-    users_ids: List[PyObjectId] = Field(default_factory=list)
+    users_ids: list[PyObjectId] = Field(default_factory=list)
 
 
 class UserBase(MongoModel):
@@ -166,7 +158,7 @@ class UserBaseCLIConfig(UserBase):
 
 
 class GroupUI(Group):
-    users: List[UserBase] = []
+    users: list[UserBase] = []
 
 
 class CLIConfig(BaseModel):
@@ -180,8 +172,8 @@ class UserBaseUI(UserBase):
     # current_access_token: Optional[str] = None
     is_active: bool = True
     is_verified: bool = False
-    last_login: Optional[str] = None
-    registration_date: Optional[str] = None
+    last_login: str | None = None
+    registration_date: str | None = None
 
 
 class User(UserBaseUI):
@@ -225,16 +217,16 @@ class UserBeanie(User, Document):
 
 class GroupBeanie(Group, Document):
     name: str
-    users_ids: List[Link[UserBeanie]] = Field(default_factory=list)
+    users_ids: list[Link[UserBeanie]] = Field(default_factory=list)
 
     class Settings:
         name = "groups"  # Collection name
 
 
 class Permission(BaseModel):
-    owners: List[UserBase] = []  # Default to an empty list
-    editors: List[UserBase] = []  # Default to an empty list
-    viewers: List[Union[UserBase, str]] = []  # Allow string wildcard "*" in viewers
+    owners: list[UserBase] = []  # Default to an empty list
+    editors: list[UserBase] = []  # Default to an empty list
+    viewers: list[UserBase | str] = []  # Allow string wildcard "*" in viewers
 
     def dict(self, **kwargs):
         # Generate list of owner and viewer dictionaries
@@ -318,6 +310,7 @@ class RequestEditPassword(BaseModel):
         if v.startswith("$2b$"):
             raise ValueError("Password is already hashed")
         return v
+
 
 class RequestUserRegistration(BaseModel):
     email: EmailStr

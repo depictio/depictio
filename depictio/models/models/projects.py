@@ -1,7 +1,6 @@
 import os
 import re
 from datetime import datetime
-from typing import List, Optional
 
 from beanie import Document
 from pydantic import BaseModel, ConfigDict, field_validator
@@ -20,12 +19,12 @@ class ProjectPermissionRequest(BaseModel):
 
 class Project(MongoModel):
     name: str
-    data_management_platform_project_url: Optional[str] = None
-    workflows: List[Workflow]
+    data_management_platform_project_url: str | None = None
+    workflows: list[Workflow]
     yaml_config_path: str
     permissions: Permission
     is_public: bool = False
-    hash: Optional[str] = None
+    hash: str | None = None
     registration_time: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     @field_validator("name")

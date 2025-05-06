@@ -1,10 +1,10 @@
-from pydantic import BaseModel
-from fastapi import HTTPException
 from botocore.exceptions import ClientError
+from fastapi import HTTPException
 from mypy_boto3_s3.client import S3Client
+from pydantic import BaseModel
 
-from depictio.api.v1.configs.custom_logging import logger
 from depictio.api.v1.configs.config import settings
+from depictio.api.v1.configs.custom_logging import logger
 from depictio.api.v1.s3 import s3_client
 from depictio.models.models.users import UserBeanie
 
@@ -66,9 +66,7 @@ def create_s3_bucket(s3_client: S3Client, bucket_name: str) -> BucketResponse:
     try:
         s3_client.create_bucket(Bucket=bucket_name)
         logger.info(f"Bucket '{bucket_name}' created successfully.")
-        return BucketResponse(
-            message="Bucket created successfully", bucket_name=bucket_name
-        )
+        return BucketResponse(message="Bucket created successfully", bucket_name=bucket_name)
     except Exception as e:
         logger.error(f"Failed to create bucket '{bucket_name}': {str(e)}")
         raise HTTPException(status_code=500, detail=f"Bucket creation failed: {str(e)}")
@@ -89,9 +87,7 @@ def create_bucket(current_user: UserBeanie) -> BucketResponse:
     """
     # Validate user is an admin
     if not current_user.is_admin:
-        logger.warning(
-            f"Unauthorized bucket creation attempt by user: {current_user.email}"
-        )
+        logger.warning(f"Unauthorized bucket creation attempt by user: {current_user.email}")
         raise HTTPException(status_code=403, detail="User is not an admin")
 
     # Get bucket name from settings

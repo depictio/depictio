@@ -16,10 +16,7 @@ from depictio.dash.api_calls import (
     api_call_list_tokens,
 )
 from depictio.dash.colors import colors
-from depictio.models.models.users import (
-    TokenBase,
-    TokenData,
-)
+from depictio.models.models.users import TokenBase, TokenData
 
 # Define consistent theme elements
 CARD_SHADOW = "md"
@@ -515,9 +512,11 @@ def register_tokens_management_callbacks(app):
                     delete_token_id,
                     "",
                     {"display": "block"},  # Show alert
-                    "CLI Configuration name already exists. Please choose a different name."
-                    if token_name
-                    else "CLI Configuration name is required.",
+                    (
+                        "CLI Configuration name already exists. Please choose a different name."
+                        if token_name
+                        else "CLI Configuration name is required."
+                    ),
                 )
 
             _token_data_dict = {
@@ -614,9 +613,7 @@ def register_tokens_management_callbacks(app):
                             ),
                             dmc.Paper(
                                 children=[
-                                    dcc.Markdown(
-                                        id="agent-config-md", children=agent_config
-                                    ),
+                                    dcc.Markdown(id="agent-config-md", children=agent_config),
                                 ],
                                 withBorder=True,
                                 p="sm",

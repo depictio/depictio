@@ -1,7 +1,7 @@
 import dash_mantine_components as dmc
-from dash_iconify import DashIconify
 from dash import html
 from dash_extensions import EventListener
+from dash_iconify import DashIconify
 
 
 def create_dashboard_modal(
@@ -520,9 +520,7 @@ def create_edit_password_modal(
                                             color="blue",
                                             id="save-password",
                                             radius="md",
-                                            leftIcon=DashIconify(
-                                                icon="mdi:content-save", width=16
-                                            ),
+                                            leftIcon=DashIconify(icon="mdi:content-save", width=16),
                                         ),
                                     ],
                                 ),

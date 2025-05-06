@@ -34,14 +34,10 @@ def main():
     success = all(check_module(module) for module in modules)
 
     if success:
-        print(
-            "\nAll modules imported successfully! The CLI package is correctly installed."
-        )
+        print("\nAll modules imported successfully! The CLI package is correctly installed.")
         return 0
     else:
-        print(
-            "\nSome modules failed to import. Please check the CLI package installation."
-        )
+        print("\nSome modules failed to import. Please check the CLI package installation.")
         return 1
 
 

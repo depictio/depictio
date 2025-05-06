@@ -119,10 +119,7 @@ def build_table(**kwargs):
 
     # if description in col sub dict, update headerTooltip
     for col in columnDefs:
-        if (
-            "description" in cols[col["field"]]
-            and cols[col["field"]]["description"] is not None
-        ):
+        if "description" in cols[col["field"]] and cols[col["field"]]["description"] is not None:
             col["headerTooltip"] = (
                 f"{col['headerTooltip']} | Description: {cols[col['field']]['description']}"
             )

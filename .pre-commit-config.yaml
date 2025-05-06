@@ -1,0 +1,21 @@
+repos:
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+    -   id: trailing-whitespace
+        exclude: ^dev/
+    -   id: end-of-file-fixer
+        exclude: ^dev/
+    -   id: check-yaml
+        exclude: ^(dev/|helm-charts/|kubernetes/)
+    -   id: check-added-large-files
+        exclude: ^dev/
+
+-   repo: https://github.com/charliermarsh/ruff-pre-commit
+    rev: v0.11.8
+    hooks:
+    -   id: ruff
+        args: [--fix, --exit-non-zero-on-fix, --line-length=100]
+        exclude: ^dev/
+    -   id: ruff-format
+        exclude: ^dev/

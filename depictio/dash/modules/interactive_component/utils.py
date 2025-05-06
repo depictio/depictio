@@ -1,12 +1,13 @@
-import numpy as np
 import math
-from dash import dcc, html
-import pandas as pd
-import dash_mantine_components as dmc
-import dash_bootstrap_components as dbc
 
-from depictio.api.v1.deltatables_utils import load_deltatable_lite
+import dash_bootstrap_components as dbc
+import dash_mantine_components as dmc
+import numpy as np
+import pandas as pd
+from dash import dcc, html
+
 from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
 
 def build_interactive_frame(index, children=None):
@@ -82,7 +83,7 @@ def format_mark_label(value):
     """
     logger.info(f"Formatting mark label for value '{value}'")
     try:
-        if not isinstance(value, (int, float)):
+        if not isinstance(value, int | float):
             raise TypeError(f"Value {value} is not a number.")
 
         # Check if the value is effectively an integer
@@ -140,15 +141,11 @@ def generate_log_marks(min_val, max_val, data_min, data_max, tolerance=0.5):
             too_close_min = data_min >= original_value * (1 - tolerance)
             logger.info(f"Too close to data_min: {too_close_min}")
             logger.info(f"Data min: {data_min}")
-            logger.info(
-                f"Original value * (1 - tolerance): {original_value * (1 - tolerance)}"
-            )
+            logger.info(f"Original value * (1 - tolerance): {original_value * (1 - tolerance)}")
             too_close_max = data_max <= original_value * (1 + tolerance)
             logger.info(f"Too close to data_max: {too_close_max}")
             logger.info(f"Data max: {data_max}")
-            logger.info(
-                f"Original value * (1 + tolerance): {original_value * (1 + tolerance)}"
-            )
+            logger.info(f"Original value * (1 + tolerance): {original_value * (1 + tolerance)}")
 
             if too_close_min or too_close_max:
                 if too_close_max:
@@ -168,9 +165,7 @@ def generate_log_marks(min_val, max_val, data_min, data_max, tolerance=0.5):
                     marks[int(pos)] = label
                     logger.info(f"Added mark: pos={pos}, label={label}")
                 else:
-                    logger.warning(
-                        f"Label for value {original_value} is None. Skipping."
-                    )
+                    logger.warning(f"Label for value {original_value} is None. Skipping.")
 
         # Add the max value mark
         marks[np.log10(data_max)] = format_mark_label(data_max)
@@ -338,9 +333,7 @@ def build_interactive(**kwargs):
     else:
         value_div_type = "interactive-component-value"
 
-    func_name = agg_functions[column_type]["input_methods"][interactive_component_type][
-        "component"
-    ]
+    func_name = agg_functions[column_type]["input_methods"][interactive_component_type]["component"]
 
     # Common Store Component
     store_index = index.replace("-tmp", "")
@@ -606,9 +599,7 @@ def build_interactive(**kwargs):
 
     logger.info(f"Interactive - store_component: {store_component}")
 
-    new_interactive_component = html.Div(
-        [card_title_h5, interactive_component, store_component]
-    )
+    new_interactive_component = html.Div([card_title_h5, interactive_component, store_component])
 
     if not build_frame:
         return new_interactive_component

@@ -1,6 +1,5 @@
 import re
 from datetime import datetime
-from typing import List
 
 from pydantic import BaseModel, field_validator
 
@@ -33,9 +32,7 @@ class TokenData(BaseModel):
         base64url_pattern = re.compile(r"^[A-Za-z0-9_-]+$")
         for part in parts:
             if not part or not base64url_pattern.fullmatch(part):
-                raise ValueError(
-                    "One of the JWT parts is not properly Base64URL-encoded"
-                )
+                raise ValueError("One of the JWT parts is not properly Base64URL-encoded")
 
         return v
 
@@ -56,7 +53,7 @@ class UserCLIConfig(BaseModel):
     email: str
     is_admin: bool
     id: PyObjectId
-    groups: List[Group]
+    groups: list[Group]
     token: TokenData
 
     class ConfigDict:

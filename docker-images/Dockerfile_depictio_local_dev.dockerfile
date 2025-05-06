@@ -17,7 +17,7 @@ COPY conda_envs/depictio.yaml depictio.yaml
 # Create Conda Environment
 # -----------------------------
 RUN micromamba create -n depictio -f depictio.yaml && \
-    micromamba clean --all --yes 
+    micromamba clean --all --yes
 
 # -----------------------------
 # Environment Configuration

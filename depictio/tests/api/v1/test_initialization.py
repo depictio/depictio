@@ -155,9 +155,7 @@ def test_mongodb_connection():
     """Test if MongoDB is accessible on the specified port."""
 
     try:
-        client = pymongo.MongoClient(
-            "mongodb://localhost:27018", serverSelectionTimeoutMS=5000
-        )
+        client = pymongo.MongoClient("mongodb://localhost:27018", serverSelectionTimeoutMS=5000)
         # Force a connection to verify server is available
         client.server_info()
         print("MongoDB connection successful")

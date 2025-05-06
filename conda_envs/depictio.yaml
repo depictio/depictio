@@ -24,7 +24,7 @@ dependencies:
   - gunicorn
   - httpx==0.28.1
   - motor
-  - mypy-boto3-s3 
+  - mypy-boto3-s3
   - numpy==2.2.3
   - pandas==2.2.3
   - playwright==1.50.1
@@ -45,6 +45,6 @@ dependencies:
   - typer
   - typeguard
   - uvicorn==0.34.0
-  - pip:  
+  - pip:
     - dash-draggable==0.1.2
     - dash-ag-grid==31.3.0

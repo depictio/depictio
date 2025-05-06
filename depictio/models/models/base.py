@@ -1,23 +1,24 @@
-from datetime import datetime
 import hashlib
 import html
+import json
 import os
+import re
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
+
 import bleach
 from bson import ObjectId
 from pydantic import (
-    ConfigDict,
     BaseModel,
+    ConfigDict,
     Field,
     GetCoreSchemaHandler,
     GetJsonSchemaHandler,
     field_serializer,
-    model_validator,
     field_validator,
+    model_validator,
 )
-import re
-import json
 from pydantic_core import CoreSchema, core_schema
 
 from depictio.models.logging import logger
@@ -70,9 +71,9 @@ class PyObjectId(ObjectId):
 
 class MongoModel(BaseModel):
     id: PyObjectId = Field(default=PyObjectId())
-    description: Optional[str] = None
-    flexible_metadata: Optional[dict] = None
-    hash: Optional[str] = None
+    description: str | None = None
+    flexible_metadata: dict | None = None
+    hash: str | None = None
     model_config = ConfigDict(
         extra="forbid",
         # allow_population_by_field_name=True,
@@ -194,9 +195,7 @@ class MongoModel(BaseModel):
                         # Ensure value is converted to ObjectId
                         if isinstance(value, str) and ObjectId.is_valid(value):
                             new_dict[new_key] = ObjectId(value)
-                        elif isinstance(value, PyObjectId) or isinstance(
-                            value, ObjectId
-                        ):
+                        elif isinstance(value, PyObjectId) or isinstance(value, ObjectId):
                             new_dict[new_key] = ObjectId(str(value))
                         else:
                             # If it's not a valid ObjectId, keep it as is
@@ -218,11 +217,7 @@ class MongoModel(BaseModel):
         parsed = convert_ids(parsed)
 
         # Double-check the top-level _id to ensure it's an ObjectId
-        if (
-            "_id" in parsed
-            and isinstance(parsed["_id"], str)
-            and ObjectId.is_valid(parsed["_id"])
-        ):
+        if "_id" in parsed and isinstance(parsed["_id"], str) and ObjectId.is_valid(parsed["_id"]):
             parsed["_id"] = ObjectId(parsed["_id"])
 
         # Convert PosixPath to str
@@ -242,10 +237,8 @@ class DirectoryPath(BaseModel):
     @field_validator("path", mode="before")
     def validate_path(cls, v):
         # Ensure the path is valid
-        if not isinstance(v, (str, Path)):
-            raise ValueError(
-                f"Invalid type for path: {type(v)}. Must be a string or Path."
-            )
+        if not isinstance(v, str | Path):
+            raise ValueError(f"Invalid type for path: {type(v)}. Must be a string or Path.")
         v = Path(v)  # Ensure it's a Path object
         if not v.exists():
             raise ValueError(f"The directory '{v}' does not exist.")

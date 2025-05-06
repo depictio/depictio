@@ -93,9 +93,7 @@ def register_sidebar_callbacks(app):
             ),
             href="/profile",
         )
-        name = dmc.Text(
-            name, size="lg", style={"fontSize": "16px", "marginLeft": "10px"}
-        )
+        name = dmc.Text(name, size="lg", style={"fontSize": "16px", "marginLeft": "10px"})
         return [avatar, name]
 
     @app.callback(

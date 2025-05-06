@@ -17,7 +17,7 @@ COPY conda_envs/depictio.yaml depictio.yaml
 # Create Conda Environment
 # -----------------------------
 RUN micromamba create -n depictio -f depictio.yaml && \
-    micromamba clean --all --yes 
+    micromamba clean --all --yes
 
 # -----------------------------
 # Environment Configuration
@@ -91,7 +91,7 @@ ENV PYTHONPATH="${PYTHONPATH}:/mnt"
 # Install depictio-cli
 # -----------------------------
 # WORKDIR /app/depictio-cli
-# RUN /opt/conda/envs/depictio/bin/pip install .  
+# RUN /opt/conda/envs/depictio/bin/pip install .
 
 # -----------------------------
 # Install depictio-models

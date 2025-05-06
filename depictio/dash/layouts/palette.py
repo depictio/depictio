@@ -1,9 +1,10 @@
+import dash
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 from dash import html
 from dash.dependencies import Input, Output
-import dash
-from depictio.dash.colors import colors, color_sequences
+
+from depictio.dash.colors import color_sequences, colors
 
 
 def create_color_palette_page():
@@ -134,9 +135,7 @@ def create_color_palette_page():
 
         sequence_item = html.Div(
             [
-                dmc.Text(
-                    seq["name"], weight=500, size="md", style={"marginBottom": "8px"}
-                ),
+                dmc.Text(seq["name"], weight=500, size="md", style={"marginBottom": "8px"}),
                 color_strip,
             ],
             style={"marginBottom": "24px"},

@@ -32,7 +32,7 @@ To access the MinIO console from inside the cluster:
   $ kubectl port-forward -n {{ .Values.namespace.name }} service/minio 9001:{{ .Values.minio.service.consolePort }}
 
   Then visit: http://localhost:9001
-  
+
   Login with:
     Username: {{ .Values.secrets.minioRootUser }}
     Password: {{ .Values.secrets.minioRootPassword }}

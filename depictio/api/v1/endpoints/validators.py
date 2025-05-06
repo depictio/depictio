@@ -1,21 +1,19 @@
 from bson import ObjectId
 from fastapi import HTTPException
 
-# from depictio.models.models.base import convert_objectid_to_str
-# from depictio.api.v1.endpoints.datacollections_endpoints.models import DataCollection
-# from depictio.api.v1.endpoints.workflow_endpoints.models import Workflow
-
+from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.db import projects_collection
 from depictio.models.models.base import convert_objectid_to_str
 from depictio.models.models.data_collections import DataCollection
 from depictio.models.models.workflows import Workflow
 
-
-from depictio.api.v1.configs.custom_logging import logger
-from depictio.api.v1.db import projects_collection
+# from depictio.models.models.base import convert_objectid_to_str
+# from depictio.api.v1.endpoints.datacollections_endpoints.models import DataCollection
+# from depictio.api.v1.endpoints.workflow_endpoints.models import Workflow
 
 
 # TODO: check if still compliant with the new structure
-def return_project_object(user_id: str, project_id: str, permissions: dict = None):
+def return_project_object(user_id: str, project_id: str, permissions: dict | None = None):
     """
     Validates the existence of a project.
     Raises HTTPException if the validation fails.
@@ -31,9 +29,7 @@ def return_project_object(user_id: str, project_id: str, permissions: dict = Non
             "$or": [
                 {"permissions.owners._id": user_id},
                 {"permissions.viewers._id": user_id},
-                {
-                    "permissions.viewers": "*"
-                },  # This makes projects with "*" publicly accessible
+                {"permissions.viewers": "*"},  # This makes projects with "*" publicly accessible
             ],
         }
 
@@ -54,8 +50,8 @@ def validate_workflow_and_collection(
     collection,
     user_id: str,
     workflow_id: str,
-    data_collection_id: str = None,
-    permissions: dict = None,
+    data_collection_id: str | None = None,
+    permissions: dict | None = None,
 ):
     """
     Validates the existence of a workflow and a specific data collection within it.
@@ -80,9 +76,7 @@ def validate_workflow_and_collection(
             "$or": [
                 {"permissions.owners._id": user_id},
                 {"permissions.viewers._id": user_id},
-                {
-                    "permissions.viewers": "*"
-                },  # This makes workflows with "*" publicly accessible
+                {"permissions.viewers": "*"},  # This makes workflows with "*" publicly accessible
             ],
         }
 
@@ -134,9 +128,7 @@ def validate_workflow_and_collection(
     if workflow_dc:
         logger.debug(f"workflow_dc: {workflow_dc}")
 
-        data_collection = workflow_dc.get("data_collections", [])[
-            0
-        ]  # The matched data collection
+        data_collection = workflow_dc.get("data_collections", [])[0]  # The matched data collection
         logger.debug(f"Data collection: {data_collection}")
 
         # data_collection = collection.find_one(dc_query)

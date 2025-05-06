@@ -43,9 +43,7 @@ def enable_box_edit_mode(
                 component_type = component_data.get("component_type", None)
     else:
         component_type = component_data.get("component_type", None)
-    logger.info(
-        f"ENABLE BOX EDIT MODE - index - component_type: {btn_index} - {component_type}"
-    )
+    logger.info(f"ENABLE BOX EDIT MODE - index - component_type: {btn_index} - {component_type}")
 
     edit_button = dbc.Button(
         "Edit",

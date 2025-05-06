@@ -34,9 +34,7 @@ def register_callbacks_interactive_component(app):
         ],
         prevent_initial_call=True,
     )
-    def update_aggregation_options(
-        column_value, wf_tag, dc_tag, id, local_data, pathname
-    ):
+    def update_aggregation_options(column_value, wf_tag, dc_tag, id, local_data, pathname):
         """
         Callback to update aggregation dropdown options based on the selected column
         """
@@ -82,9 +80,7 @@ def register_callbacks_interactive_component(app):
         return None
 
     @app.callback(
-        Output(
-            {"type": "btn-done-edit", "index": MATCH}, "disabled", allow_duplicate=True
-        ),
+        Output({"type": "btn-done-edit", "index": MATCH}, "disabled", allow_duplicate=True),
         [
             Input({"type": "input-title", "index": MATCH}, "value"),
             Input({"type": "input-dropdown-column", "index": MATCH}, "value"),
@@ -153,9 +149,7 @@ def register_callbacks_interactive_component(app):
         value = None
 
         # Get the columns from the selected data collection
-        cols_json = get_columns_from_data_collection(
-            workflow_id, data_collection_id, TOKEN
-        )
+        cols_json = get_columns_from_data_collection(workflow_id, data_collection_id, TOKEN)
         logger.info(f"cols_json: {cols_json}")
 
         from dash import dash_table
@@ -226,9 +220,9 @@ def register_callbacks_interactive_component(app):
                             ),
                         ]
                     ),
-                    label=agg_functions[str(column_type)]["input_methods"][
-                        aggregation_value
-                    ]["description"],
+                    label=agg_functions[str(column_type)]["input_methods"][aggregation_value][
+                        "description"
+                    ],
                     multiline=True,
                     width=300,
                     transition="pop",
@@ -370,9 +364,7 @@ def design_interactive(id, df):
                     dbc.Row(
                         dmc.Stack(
                             [
-                                dmc.Title(
-                                    "Data Collection - Columns description", order=5
-                                ),
+                                dmc.Title("Data Collection - Columns description", order=5),
                                 html.Div(
                                     id={
                                         "type": "columns-description",

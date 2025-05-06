@@ -4,8 +4,10 @@ Version retrieval module.
 This module provides a way to get the project version from pyproject.toml.
 """
 
-import tomli
 from pathlib import Path
+
+import tomli
+
 from depictio.api.v1.configs.custom_logging import logger
 
 

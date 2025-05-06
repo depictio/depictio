@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Dict, Optional, Union
 
 import bcrypt
 from beanie import PydanticObjectId
@@ -7,14 +6,12 @@ from fastapi import HTTPException
 from pydantic import EmailStr, validate_call
 
 from depictio.api.v1.configs.custom_logging import format_pydantic, logger
-from depictio.api.v1.endpoints.user_endpoints.utils import (
-    create_access_token,
-)
+from depictio.api.v1.endpoints.user_endpoints.utils import create_access_token
 from depictio.models.models.users import TokenBase, TokenBeanie, TokenData, UserBeanie
 
 
 @validate_call(validate_return=True)
-async def _async_fetch_user_from_token(token: str) -> Optional[UserBeanie]:
+async def _async_fetch_user_from_token(token: str) -> UserBeanie | None:
     """
     Fetch a user based on the provided access token by first querying TokenBeanie.
 
@@ -62,7 +59,7 @@ async def _async_fetch_user_from_token(token: str) -> Optional[UserBeanie]:
 
 
 @validate_call(validate_return=True)
-async def _async_fetch_user_from_email(email: EmailStr) -> Optional[UserBeanie]:
+async def _async_fetch_user_from_email(email: EmailStr) -> UserBeanie | None:
     """
     Fetch a user based on their email address.
 
@@ -111,9 +108,7 @@ async def _check_if_token_is_valid(token: TokenBase) -> bool:
     check = await TokenBeanie.find_one(
         {
             "access_token": token.access_token,
-            "expire_datetime": {
-                "$gt": datetime.now()
-            },  # Use datetime object, not string
+            "expire_datetime": {"$gt": datetime.now()},  # Use datetime object, not string
             "user_id": token.user_id,
         }
     )
@@ -127,7 +122,7 @@ async def _check_if_token_is_valid(token: TokenBase) -> bool:
 
 
 @validate_call(validate_return=True)
-async def _purge_expired_tokens(user) -> Dict[str, bool | int]:
+async def _purge_expired_tokens(user) -> dict[str, bool | int]:
     """
     Purge expired tokens for a user.
     Args:
@@ -155,8 +150,8 @@ async def _purge_expired_tokens(user) -> Dict[str, bool | int]:
 
 @validate_call(validate_return=True)
 async def _list_tokens(
-    user_id: PydanticObjectId = None,
-    token_lifetime: Optional[str] = None,
+    user_id: PydanticObjectId | None = None,
+    token_lifetime: str | None = None,
 ) -> list[TokenBeanie]:
     if token_lifetime not in ["short-lived", "long-lived", None]:
         raise HTTPException(
@@ -298,7 +293,7 @@ def _hash_password(password: str) -> str:
 @validate_call(validate_return=True)
 async def _create_user_in_db(
     email: EmailStr, password: str, is_admin: bool = False
-) -> Optional[Dict[str, Union[bool, str, Optional[UserBeanie]]]]:
+) -> dict[str, bool | str | UserBeanie | None] | None:
     """
     Helper function to create a user in the database using Beanie.
 
