@@ -34,11 +34,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install black ruff bandit
 
-      - name: Run Black formatter check
-        run: black --check .
+      - name: Run Ruff for formatting
+        run: |
+          ruff format .
 
-      - name: Run Ruff linter
-        run: ruff check .
+      - name: Run Ruff for linting
+        run: |
+          ruff check .
 
       - name: Run Bandit security check
         run: bandit -r . -lll
