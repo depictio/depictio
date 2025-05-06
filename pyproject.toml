@@ -41,8 +41,6 @@ dependencies = [
   "python-jose==3.3.0",
   "python-multipart",
   "pyyaml",
-  "rich",
-  "typeguard",
   "uvicorn==0.34.0",
   "dash-draggable==0.1.2",
   "dash-ag-grid==31.3.0",
