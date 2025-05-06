@@ -5,7 +5,7 @@ from dash_iconify import DashIconify
 
 from depictio.dash.modules.table_component.frontend import create_stepper_table_button
 from depictio.dash.utils import UNSELECTED_STYLE
-from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.custom_logging import logger
 
 # Depictio components imports - button step
 from depictio.dash.modules.figure_component.frontend import create_stepper_figure_button
@@ -20,12 +20,15 @@ from depictio.dash.modules.jbrowse_component.frontend import (
 
 def register_callbacks_stepper_part_two(app):
     @app.callback(
-        [Output({"type": "buttons-list", "index": MATCH}, "children"), Output({"type": "store-list", "index": MATCH}, "children")],
+        [
+            Output({"type": "buttons-list", "index": MATCH}, "children"),
+            Output({"type": "store-list", "index": MATCH}, "children"),
+        ],
         Input("stored-add-button", "data"),
         prevent_initial_call=True,
     )
     def update_button_list(stored_add_button):
-        n = stored_add_button["id"]
+        n = stored_add_button["_id"]
 
         graph_stepper_button = dbc.Col(
             dmc.Button(
@@ -49,13 +52,28 @@ def register_callbacks_stepper_part_two(app):
             )
         )
 
-        figure_stepper_button, figure_stepper_button_store = create_stepper_figure_button(n, disabled=False)
-        card_stepper_button, card_stepper_button_store = create_stepper_card_button(n, disabled=False)
-        interactive_stepper_button, interactive_stepper_button_store = create_stepper_interactive_button(n, disabled=False)
-        table_stepper_button, table_stepper_button_store = create_stepper_table_button(n, disabled=False)
-        jbrowse_stepper_button, jbrowse_stepper_button_store = create_stepper_jbrowse_button(n, disabled=False)
+        figure_stepper_button, figure_stepper_button_store = (
+            create_stepper_figure_button(n, disabled=False)
+        )
+        card_stepper_button, card_stepper_button_store = create_stepper_card_button(
+            n, disabled=False
+        )
+        interactive_stepper_button, interactive_stepper_button_store = (
+            create_stepper_interactive_button(n, disabled=False)
+        )
+        table_stepper_button, table_stepper_button_store = create_stepper_table_button(
+            n, disabled=False
+        )
+        jbrowse_stepper_button, jbrowse_stepper_button_store = (
+            create_stepper_jbrowse_button(n, disabled=False)
+        )
 
-        standard_components = [figure_stepper_button, card_stepper_button, interactive_stepper_button, table_stepper_button]
+        standard_components = [
+            figure_stepper_button,
+            card_stepper_button,
+            interactive_stepper_button,
+            table_stepper_button,
+        ]
         special_components = [jbrowse_stepper_button]
         # FIXME: remove graph and map buttons
         special_components += [graph_stepper_button, map_stepper_button]
@@ -79,7 +97,11 @@ def register_callbacks_stepper_part_two(app):
             interactive_stepper_button_store,
             table_stepper_button_store,
             jbrowse_stepper_button_store,
-            dcc.Store(id={"type": "last-button", "index": n}, data="None", storage_type="session"),
+            dcc.Store(
+                id={"type": "last-button", "index": n},
+                data="None",
+                storage_type="session",
+            ),
         ]
 
         return buttons_list, store_list

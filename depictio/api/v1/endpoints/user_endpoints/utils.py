@@ -1,109 +1,196 @@
+import time
 from datetime import datetime, timedelta
-import hashlib
-import httpx
+from typing import Dict, List, Optional, Tuple, Union
+
 import jwt
-import bcrypt
+from beanie import PydanticObjectId
+from bson import ObjectId
+from pydantic import validate_call
 
-from depictio.api.v1.configs.config import API_BASE_URL, PRIVATE_KEY, ALGORITHM
-from depictio.api.v1.configs.logging import logger
-from depictio.api.v1.endpoints.user_endpoints.core_functions import add_token_to_user, fetch_user_from_email
-from depictio.api.v1.endpoints.user_endpoints.models import Token
-from depictio.api.v1.models.base import convert_objectid_to_str
-
-
-def login_user(email):
-    return {"logged_in": True, "email": email}
-
-
-# Dummy logout function
-def logout_user():
-    return {"logged_in": False, "access_token": None}
+from depictio.api.v1.configs.config import ALGORITHM, PRIVATE_KEY
+from depictio.api.v1.configs.custom_logging import logger
+from depictio.models.models.base import PyObjectId, convert_objectid_to_str
+from depictio.models.models.users import (
+    Group,
+    GroupBeanie,
+    TokenData,
+    UserBase,
+    UserBeanie,
+)
 
 
-# Check if user is logged in
-def is_user_logged_in(session_data):
-    return session_data.get("logged_in", False)
+def _dummy_mongodb_connection():
+    """
+    Dummy function to simulate MongoDB connection.
+    This function is a placeholder and does not perform any actual connection.
+    """
+    # This function is a placeholder and does not perform any actual connection.
+    from depictio.api.v1.db import client
+
+    return client.server_info()
 
 
-def hash_password(password: str) -> str:
-    # Generate a salt
-    salt = bcrypt.gensalt()
-    # Hash the password with the salt
-    hashed = bcrypt.hashpw(password.encode("utf-8"), salt)
-    # Return the hashed password
-    return hashed.decode("utf-8")
+@validate_call
+def _ensure_mongodb_connection(max_attempts: int = 5, sleep_interval: int = 5) -> None:
+    """
+    Ensure MongoDB connection is established.
+
+    Args:
+        max_attempts (int, optional): Maximum number of connection attempts. Defaults to 5.
+        sleep_interval (int, optional): Sleep time between attempts. Defaults to 5.
+
+    Raises:
+        RuntimeError: If unable to connect to MongoDB after max_attempts.
+    """
+    from depictio.api.v1.db import client
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            info = client.server_info()
+            logger.debug(f"Successfully connected to MongoDB (Attempt {attempt})")
+            return info
+        except Exception as e:
+            if attempt == max_attempts:
+                logger.error(
+                    f"Failed to connect to MongoDB after {max_attempts} attempts"
+                )
+                raise RuntimeError(f"Could not connect to MongoDB: {e}")
+            logger.warning(f"Waiting for MongoDB to start (Attempt {attempt})...")
+            time.sleep(sleep_interval)
 
 
-def verify_password(stored_hash: str, password: str) -> bool:
-    logger.info(f"Stored hash: {stored_hash}")
-    logger.info(f"Password to verify: {password}")
-    # Verify the password against the stored hash
-    return bcrypt.checkpw(password.encode("utf-8"), stored_hash.encode("utf-8"))
+@validate_call(validate_return=True)
+async def get_users_by_group_id(group_id: PydanticObjectId) -> List[UserBeanie]:
+    """
+    Retrieve all users that belong to a specific group by group ID.
+    """
+    # Find users where the groups array contains a reference to this group ID
+    users = await UserBeanie.find(
+        {"groups": {"$elemMatch": {"$ref": "groups", "$id": group_id}}}
+    ).to_list()
+
+    return users
 
 
-def find_user(email, return_tokens=False):
-    # Call the core function directly
-    user_data = fetch_user_from_email(email, return_tokens)
-    if user_data:
-        logger.info(f"Found user data: {user_data}")
-        return user_data
-    return None
+@validate_call()
+async def create_group_helper_beanie(
+    group: GroupBeanie,
+) -> Dict[str, Union[bool, str, Optional[GroupBeanie]]]:
+    """
+    Create a group in the database using Beanie ODM.
+
+    Args:
+        group (GroupBeanie): The group to be created.
+
+    Returns:
+        dict: A dictionary containing the result of the group creation.
+    """
+    # Check if the group already exists
+    existing_group = await GroupBeanie.find_one({"name": group.name})
+    if existing_group:
+        logger.info(f"Group {group.name} already exists in the database")
+        return {
+            "success": False,
+            "message": "Group already exists",
+            "group": existing_group,  # The CustomJSONResponse will handle serialization
+        }
+
+    # Insert the group into the database
+    try:
+        logger.debug(f"Preparing to add group {group.name} to the database")
+
+        # Insert the document
+        await group.insert()
+
+        logger.info(f"Group {group.name} added to the database successfully")
+        return {
+            "success": True,
+            "message": "Group created successfully",
+            "group": group,  # The CustomJSONResponse will handle serialization
+            "inserted_id": group.id,  # No need to manually convert to string
+        }
+    except Exception as e:
+        logger.error(f"Error creating group {group.name}: {e}")
+        return {
+            "success": False,
+            "message": f"Error creating group: {str(e)}",
+            "group": None,
+        }
 
 
-# Function to add a new user
-def add_user(email, password, is_admin=False):
-    hashed_password = hash_password(password)
-    user_dict = {
-        "email": email,
-        "password": hashed_password,
-        "is_admin": is_admin,
-        "registration_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "last_login": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-    }
-    response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/auth/register", json=user_dict)
-    if response.status_code == 200:
-        logger.info(f"User {email} added successfully.")
+@validate_call(validate_return=True)
+def create_group_helper(group: Group) -> Dict[str, Union[bool, str, Optional[Group]]]:
+    """
+    Create a group in the database.
+
+    Args:
+        group (Group): The group to be created.
+
+    Returns:
+        dict: A dictionary containing the result of the group creation.
+    """
+
+    from depictio.api.v1.db import groups_collection
+
+    # Check if the group already exists
+    existing_group = groups_collection.find_one({"name": group.name})
+    if existing_group:
+        logger.info(f"Group {group.name} already exists in the database")
+        return {
+            "success": False,
+            "message": "Group already exists",
+            "group": existing_group,
+        }
+
+    # Insert the group into the database
+    try:
+        logger.debug(f"Preparing to add group {group.name} to the database")
+        group_mongo = group.mongo()
+        logger.debug(f"Group MongoDB object: {group_mongo}")
+
+        result = groups_collection.insert_one(group_mongo)
+
+        logger.info(f"Group {group.name} added to the database successfully")
+        return {
+            "success": True,
+            "message": "Group created successfully",
+            "group": group,
+            "inserted_id": str(result.inserted_id),
+        }
+    except Exception as e:
+        logger.error(f"Error creating group {group.name}: {e}")
+        return {
+            "success": False,
+            "message": f"Error creating group: {str(e)}",
+            "group": None,
+        }
+
+
+@validate_call(validate_return=True)
+def delete_group_helper(group_id: PyObjectId) -> Dict[str, Union[bool, str]]:
+    # check first if the group is not in the following groups (users, admin)
+    from depictio.api.v1.db import groups_collection
+
+    groups = groups_collection.find()
+    groups = [convert_objectid_to_str(group) for group in groups]
+    for group in groups:
+        if group["name"] in ["users", "admin"]:
+            if group_id == group["_id"]:
+                return {
+                    "success": False,
+                    "message": f"Cannot delete group {group['name']}",
+                }
+
+    result = groups_collection.delete_one({"_id": group_id})
+    if result.deleted_count == 1:
+        return {"success": True, "message": "Group deleted successfully"}
     else:
-        logger.error(f"Error adding user {email}: {response.text}")
-    return response
+        return {"success": False, "message": "Group not found"}
 
 
-def edit_password(email, old_password, new_password, headers):
-    logger.info(f"Editing password for user {email}.")
-    logger.info(f"Old password: {old_password}")
-    logger.info(f"New password: {new_password}")
-    user = find_user(email)
-    user = convert_objectid_to_str(user.dict())
-    if user:
-        if verify_password(user["password"], old_password):
-            hashed_password = hash_password(new_password)
-            user_dict = {"new_password": hashed_password, "old_password": old_password}
-            logger.info(f"Updating password for user {email} with new password: {new_password}")
-            response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/auth/edit_password", json=user_dict, headers=headers)
-            if response.status_code == 200:
-                logger.info(f"Password for user {email} updated successfully.")
-            else:
-                logger.error(f"Error updating password for user {email}: {response.text}")
-            return response
-        else:
-            logger.error(f"Old password for user {email} is incorrect.")
-            return {"error": "Old password is incorrect."}
-    else:
-        logger.error(f"User {email} not found.")
-        return {"error": "User not found."}
-
-
-def check_password(email, password):
-    user = find_user(email)
-    logger.info(f"User: {user}")
-    if user:
-        if verify_password(user.password, password):
-            return True
-    return False
-
-
-def create_access_token(token_data):
-    token_lifetime = token_data["token_lifetime"]
+@validate_call(validate_return=True)
+async def create_access_token(token_data: TokenData) -> Tuple[str, datetime]:
+    token_lifetime = token_data.token_lifetime
 
     if token_lifetime == "short-lived":
         expires_delta = timedelta(hours=12)
@@ -112,133 +199,137 @@ def create_access_token(token_data):
     else:
         raise ValueError("Invalid token type. Must be 'short-lived' or 'long-lived'.")
 
-    to_encode = token_data.copy()
+    to_encode = token_data.model_dump()
     expire = datetime.now() + expires_delta
     to_encode.update({"exp": expire})
+    logger.debug(f"Token data: {to_encode}")
+    logger.debug(f"Token expiration: {expire}")
+    logger.debug(f"Token lifetime: {token_lifetime}")
+    logger.debug(f"ALGORITHM: {ALGORITHM}")
     encoded_jwt = jwt.encode(to_encode, PRIVATE_KEY, algorithm=ALGORITHM)
+    logger.debug(f"Encoded JWT: {encoded_jwt}")
     return encoded_jwt, expire
 
 
-def add_token(token_data: dict) -> dict:
-    email = token_data["sub"]
-    logger.info(f"Adding token for user {email}.")
-    logger.info(f"Token: {token_data}")
-    token, expire = create_access_token(token_data)
-    token_data = {"access_token": token, "expire_datetime": expire.strftime("%Y-%m-%d %H:%M:%S"), "name": token_data["name"], "token_lifetime": token_data["token_lifetime"]}
+@validate_call(validate_return=True)
+def delete_user_from_db(
+    user_id: PyObjectId = None, email: str = None
+) -> Dict[str, Union[bool, str]]:
+    """
+    Helper function to delete a user from the database using Beanie.
 
-    # create hash from access token
-    token_data["hash"] = hashlib.sha256(token.encode()).hexdigest()
+    Args:
+        user_id: User's ID
 
-    logger.info(f"Adding token for user {email}.")
-    user = find_user(email)
-    logger.info(f"User: {user}")
-    if user:
-        # Check if the token already exists based on the name
-        tokens = list_existing_tokens(email)
-        logger.info(f"Tokens: {tokens}")
-        for t in tokens:
-            if t["name"] == token_data["name"]:
-                logger.error(f"Token with name {token_data['name']} already exists for user {email}.")
-                return None
+    Returns:
+        A dictionary indicating success or failure
+    """
+    logger.info(f"Deleting user with id: {user_id} or email: {email}")
+    from depictio.api.v1.db import users_collection
 
-        logger.info(f"Adding token for user {email}.")
-        token = Token(**token_data)
-        logger.info(f"Token: {token}")
-        logger.info(f"Token.mongo(): {token.mongo()}")
-
-        result = add_token_to_user(user, token.mongo())
-        logger.info(f"Result: {result}")
-        if result["success"]:
-            logger.info(f"Token added for user {email}.")
-        else:
-            logger.error(f"Error adding token for user {email}")
-        # return token
-    return token
-
-
-def delete_token(email, token_id, current_token):
-    logger.info(f"Deleting token for user {email}.")
-    user = find_user(email)
-    user = convert_objectid_to_str(user.dict())
-    logger.info(f"User: {user}")
-    if user:
-        logger.info(f"Deleting token for user {email}.")
-        request_body = {"user": user, "token_id": token_id}
-        response = httpx.post(f"{API_BASE_URL}/depictio/api/v1/auth/delete_token", json=request_body, headers={"Authorization": f"Bearer {current_token}"})
-        if response.status_code == 200:
-            logger.info(f"Token deleted for user {email}.")
-        else:
-            logger.error(f"Error deleting token for user {email}: {response.text}")
-        return response
-    return None
-
-
-def purge_expired_tokens(token):
-    if token:
-        # Clean existing expired token from DB
-        response = httpx.post(
-            f"{API_BASE_URL}/depictio/api/v1/auth/purge_expired_tokens",
-            headers={"Authorization": f"Bearer {token}"},
-        )
-
-        if response.status_code == 200:
-            logger.info(f"Expired tokens purged successfully.")
-            return response.json()
-        else:
-            logger.error(f"Error purging expired tokens: {response.text}")
-            return None
+    # Cannot use both user_id and email
+    if not user_id and not email:
+        logger.error("Either user_id or email must be provided")
+        return {"success": False, "message": "Either user_id or email must be provided"}
+    if user_id and email:
+        logger.error("Cannot use both user_id and email")
+        return {"success": False, "message": "Cannot use both user_id and email"}
+    # If email is provided, find the user by email
+    if email:
+        user = users_collection.find_one({"email": email})
+        if not user:
+            logger.warning(f"User with email {email} not found")
+            return {"success": False, "message": "User not found"}
+        user_id = user["_id"]
+        logger.info(f"User ID resolved from email: {user_id}")
+    # If user_id is provided, find the user by user_id
     else:
-        logger.error(f"Token not found.")
-        return None
+        user_id = ObjectId(user_id)
+        logger.info(f"User ID provided: {user_id}")
+
+    if not user:
+        logger.warning(f"User with id {user_id} not found")
+        return {"success": False, "message": "User not found"}
+    # Delete the user
+    result = users_collection.delete_one({"_id": user_id})
+    if result.deleted_count == 1:
+        logger.info(f"User with id {user_id} deleted successfully")
+        return {"success": True, "message": "User deleted successfully"}
+    else:
+        logger.error(f"Error deleting user with id {user_id}")
+        return {"success": False, "message": "Error deleting user"}
 
 
-def check_token_validity(token):
-    logger.info(f"Checking token validity.")
-    logger.info(f"Token: {token}")
-    response = httpx.post(
-        f"{API_BASE_URL}/depictio/api/v1/auth/check_token_validity",
-        json={"token": token},  # Sending the token in the body
+def login_user(email: str):
+    return {"logged_in": True, "email": email}
+
+
+# Dummy logout function
+def logout_user():
+    return {"logged_in": False, "access_token": None}
+
+
+def update_group_in_users_helper(
+    group_id: ObjectId, group_users: List[UserBase]
+) -> dict:
+    # retrieve the group
+    from depictio.api.v1.db import groups_collection
+
+    group = groups_collection.find_one({"_id": group_id})
+    if not group:
+        return {"success": False, "error": "Group not found."}
+
+    # Convert group ObjectId to string for logging but keep original for queries
+    group_str = convert_objectid_to_str(group)
+    logger.debug(f"Updating group {group_str['_id']} in users")
+
+    from depictio.api.v1.db import users_collection
+
+    logger.debug(f"Group: {group_str}")
+    logger.debug(f"Group users: {group_users}")
+
+    # Get list of user IDs from the input users list
+    group_user_ids = [ObjectId(user.id) for user in group_users]
+
+    # Track users whose group memberships are updated
+    updated_users = []
+
+    # Create complete group info to add to users
+
+    group_info = Group(
+        id=ObjectId(group_id),
+        name=group_str["name"],
     )
-    if response.status_code == 200:
-        logger.info(f"Token is valid.")
-        return True
-    logger.error(f"Token is invalid.")
-    return False
+    group_info = group_info.mongo()
 
+    # Find all users that have this group
+    current_users = list(users_collection.find({"groups._id": group_id}))
+    current_user_ids = [user["_id"] for user in current_users]
+    logger.debug(f"Current user ids: {current_user_ids}")
 
-def fetch_user_from_token(token):
-    logger.info(f"Fetching user from token.")
-    response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_token", params={"token": token})
-    if response.status_code == 200:
-        user_data = response.json()
-        logger.info(f"Raw user data from response: {user_data}")
-        return user_data
-    return None
+    # SCENARIO 1 & 2: Add or update group for users in group_user_ids
+    for user_id in group_user_ids:
+        # Then add the updated group info
+        users_collection.update_one(
+            {"_id": user_id}, {"$addToSet": {"groups": group_info}}
+        )
+        updated_users.append(str(user_id))
 
+    # SCENARIO 3: Remove group from users no longer in the group
+    users_to_remove_from = [
+        uid for uid in current_user_ids if uid not in group_user_ids
+    ]
+    logger.debug(f"Users to remove from group: {users_to_remove_from}")
 
-def list_existing_tokens(email):
-    logger.info(f"Listing tokens for user {email}.")
-    user = find_user(email, return_tokens=True)
-    logger.info(f"User: {user}")
-    if user:
-        user = user.dict()
-        return user.get("tokens", [])
-    return None
+    if users_to_remove_from:
+        users_collection.update_many(
+            {"_id": {"$in": users_to_remove_from}},
+            {"$pull": {"groups": {"_id": group_id}}},
+        )
+        updated_users.extend([str(uid) for uid in users_to_remove_from])
 
-
-def generate_agent_config(email, token, current_token):
-    user = find_user(email)
-    user = convert_objectid_to_str(user.dict())
-    logger.info(f"User: {user}")
-
-    token = convert_objectid_to_str(token)
-    token = {"access_token": token["access_token"], "expire_datetime": token["expire_datetime"], "name": token["name"]}
-
-    logger.info(f"Generating agent config for user {user}.")
-    result = httpx.post(f"{API_BASE_URL}/depictio/api/v1/auth/generate_agent_config", json={"user": user, "token": token}, headers={"Authorization": f"Bearer {current_token}"})
-    # logger.info(f"Result: {result.json()}")
-    if result.status_code == 200:
-        logger.info(f"Agent config generated for user {user}.")
-        return result.json()
-    else:
-        logger.error(f"Error generating agent config for user {user}: {result.text}")
+    return {
+        "success": True,
+        "message": f"Updated group membership for users: {updated_users}",
+        "updated_users": updated_users,
+    }

@@ -1,0 +1,95 @@
+{% extends "admin/base.html" %}
+
+{% block title %}{% if user %}Edit User{% else %}Create User{% endif %}{% endblock %}
+{% block page_title %}{% if user %}Edit User{% else %}Create User{% endif %}{% endblock %}
+
+{% block breadcrumb_items %}
+<li class="breadcrumb-item"><a href="/admin/users">Users</a></li>
+<li class="breadcrumb-item active">{% if user %}Edit{% else %}Create{% endif %}</li>
+{% endblock %}
+
+{% block content %}
+<div class="card django-card">
+    <div class="card-header django-card-header">
+        <h5 class="card-title mb-0">{% if user %}Edit User: {{ user.email }}{% else %}Create New User{% endif %}</h5>
+    </div>
+    <div class="card-body">
+        <form method="post">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Email</label>
+                        <input type="email" class="form-control" id="email" name="email" value="{{ user.email if user else '' }}" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="first_name" class="form-label">First Name</label>
+                        <input type="text" class="form-control" id="first_name" name="first_name" value="{{ user.first_name if user else '' }}">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="last_name" class="form-label">Last Name</label>
+                        <input type="text" class="form-control" id="last_name" name="last_name" value="{{ user.last_name if user else '' }}">
+                    </div>
+                    
+                    {% if not user %}
+                    <div class="mb-3">
+                        <label for="password" class="form-label">Password</label>
+                        <input type="password" class="form-control" id="password" name="password" required>
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label class="form-label">Status</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="is_active" name="is_active" {% if user and user.is_active %}checked{% endif %}>
+                            <label class="form-check-label" for="is_active">
+                                Active
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="is_verified" name="is_verified" {% if user and user.is_verified %}checked{% endif %}>
+                            <label class="form-check-label" for="is_verified">
+                                Verified
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="is_superuser" name="is_superuser" {% if user and user.is_superuser %}checked{% endif %}>
+                            <label class="form-check-label" for="is_superuser">
+                                Superuser
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="groups" class="form-label">Groups</label>
+                        <select multiple class="form-select" id="groups" name="groups" style="height: 150px;">
+                            {% for group in groups %}
+                            <option value="{{ group.id }}" {% if user and group.id in user_group_ids %}selected{% endif %}>
+                                {{ group.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">Hold Ctrl (or Cmd on Mac) to select multiple groups</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="row mt-3">
+                <div class="col-12">
+                    <button type="submit" class="btn django-btn-primary">Save</button>
+                    <a href="/admin/users" class="btn btn-secondary ms-2">Cancel</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

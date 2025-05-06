@@ -1,0 +1,84 @@
+{{- if .Values.mongo.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongo
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "depictio.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.mongo.service.type }}
+  ports:
+    - name: db
+      port: {{ .Values.mongo.service.port }}
+      targetPort: {{ .Values.mongo.service.port }}
+  selector:
+    {{- include "depictio.mongo.selectorLabels" . | nindent 4 }}
+{{- end }}
+---
+{{- if .Values.minio.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "depictio.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.minio.service.type }}
+  ports:
+    - port: {{ .Values.minio.service.httpPort }}
+      name: http
+      targetPort: {{ .Values.minio.service.httpPort }}
+    - port: {{ .Values.minio.service.consolePort }}
+      name: console
+      targetPort: {{ .Values.minio.service.consolePort }}
+  selector:
+    {{- include "depictio.minio.selectorLabels" . | nindent 4 }}
+{{- end }}
+---
+{{- if .Values.backend.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: depictio-backend
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "depictio.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.backend.service.type }}
+  ports:
+    - port: {{ .Values.backend.service.httpPort }}
+      targetPort: {{ .Values.backend.service.targetPort }}
+      protocol: TCP
+      name: http
+    - port: {{ .Values.backend.service.httpsPort }}
+      targetPort: {{ .Values.backend.service.targetPort }}
+      protocol: TCP
+      name: https
+  selector:
+    {{- include "depictio.backend.selectorLabels" . | nindent 4 }}
+{{- end }}
+---
+{{- if .Values.frontend.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: depictio-frontend
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "depictio.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.frontend.service.type }}
+  ports:
+    - port: {{ .Values.frontend.service.httpPort }}
+      targetPort: {{ .Values.frontend.service.targetPort }}
+      protocol: TCP
+      name: http
+    - port: {{ .Values.frontend.service.httpsPort }}
+      targetPort: {{ .Values.frontend.service.targetPort }}
+      protocol: TCP
+      name: https
+  selector:
+    {{- include "depictio.frontend.selectorLabels" . | nindent 4 }}
+{{- end }}

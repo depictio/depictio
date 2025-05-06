@@ -1,19 +1,24 @@
 import itertools
-from typing import Optional
-from bson import ObjectId
+from typing import Dict, List, Optional, Set
+
 import httpx
 import polars as pl
-import pandas as pd
+from bson import ObjectId
+
 from depictio.api.v1.configs.config import API_BASE_URL
-from depictio.api.v1.s3 import s3_client, minio_storage_options
-from depictio.api.v1.configs.logging import logger
-
-
-import polars as pl
+from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.s3 import polars_s3_config
 
 
 # Function to add filter criteria to a list
-def add_filter(filter_list, interactive_component_type, column_name, value, min_value=None, max_value=None):
+def add_filter(
+    filter_list,
+    interactive_component_type,
+    column_name,
+    value,
+    min_value=None,
+    max_value=None,
+):
     logger.info(f"filter_list: {filter_list}")
     logger.info(f"interactive_component_type: {interactive_component_type}")
     logger.info(f"column_name: {column_name}")
@@ -35,7 +40,9 @@ def add_filter(filter_list, interactive_component_type, column_name, value, min_
 
     elif interactive_component_type == "RangeSlider":
         if value:
-            filter_list.append((pl.col(column_name) >= value[0]) & (pl.col(column_name) <= value[1]))
+            filter_list.append(
+                (pl.col(column_name) >= value[0]) & (pl.col(column_name) <= value[1])
+            )
 
 
 # Function to process metadata and build filter list
@@ -48,7 +55,9 @@ def process_metadata_and_filter(metadata):
             # continue
             logger.info(f"i: {i}")
             logger.info(f"component: {component}")
-            interactive_component_type = component["metadata"]["interactive_component_type"]
+            interactive_component_type = component["metadata"][
+                "interactive_component_type"
+            ]
             column_name = component["metadata"]["column_name"]
         else:
             interactive_component_type = component["interactive_component_type"]
@@ -57,7 +66,12 @@ def process_metadata_and_filter(metadata):
         # logger.info(f"column_name: {column_name}")
         value = component["value"]
 
-        add_filter(filter_list, interactive_component_type=interactive_component_type, column_name=column_name, value=value)
+        add_filter(
+            filter_list,
+            interactive_component_type=interactive_component_type,
+            column_name=column_name,
+            value=value,
+        )
 
     # Apply the filters to the DataFrame
     return filter_list
@@ -80,11 +94,23 @@ def convert_filter_model_to_metadata(filter_model):
             if value is not None and filter_to is not None:
                 metadata.append(
                     {
-                        "metadata": {"interactive_component_type": interactive_component_type, "column_name": column, "min_value": value, "max_value": filter_to},
+                        "metadata": {
+                            "interactive_component_type": interactive_component_type,
+                            "column_name": column,
+                            "min_value": value,
+                            "max_value": filter_to,
+                        },
                         "value": [value, filter_to],
                     }
                 )
-        elif operator in ["equals", "notEqual", "greaterThan", "greaterThanOrEqual", "lessThan", "lessThanOrEqual"]:
+        elif operator in [
+            "equals",
+            "notEqual",
+            "greaterThan",
+            "greaterThanOrEqual",
+            "lessThan",
+            "lessThanOrEqual",
+        ]:
             # Numerical or exact match filters
             if filter_type == "number":
                 interactive_component_type = "Slider"
@@ -109,7 +135,14 @@ def convert_filter_model_to_metadata(filter_model):
                         "value": value,
                     }
                 )
-        elif operator in ["contains", "notContains", "startsWith", "notStartsWith", "endsWith", "notEndsWith"]:
+        elif operator in [
+            "contains",
+            "notContains",
+            "startsWith",
+            "notStartsWith",
+            "endsWith",
+            "notEndsWith",
+        ]:
             # String filters
             interactive_component_type = "TextInput"
             metadata.append(
@@ -123,7 +156,9 @@ def convert_filter_model_to_metadata(filter_model):
             )
         elif operator in ["blank", "notBlank"]:
             # Special filters for null values
-            interactive_component_type = "Select"  # Assuming a select component to choose between blank/notBlank
+            interactive_component_type = (
+                "Select"  # Assuming a select component to choose between blank/notBlank
+            )
             metadata.append(
                 {
                     "metadata": {
@@ -138,7 +173,13 @@ def convert_filter_model_to_metadata(filter_model):
     return metadata
 
 
-def load_deltatable_lite(workflow_id: ObjectId, data_collection_id: ObjectId, metadata: Optional[dict] = None, TOKEN: Optional[str] = None) -> pl.DataFrame:
+def load_deltatable_lite(
+    workflow_id: ObjectId,
+    data_collection_id: ObjectId,
+    metadata: Optional[dict] = None,
+    TOKEN: Optional[str] = None,
+    limit_rows: Optional[int] = None,
+) -> pl.DataFrame:
     """
     Load a Delta table with optional filtering based on metadata.
 
@@ -159,7 +200,7 @@ def load_deltatable_lite(workflow_id: ObjectId, data_collection_id: ObjectId, me
     data_collection_id_str = str(data_collection_id)
 
     # Prepare the request URL and headers
-    url = f"{API_BASE_URL}/depictio/api/v1/deltatables/get/{workflow_id_str}/{data_collection_id_str}"
+    url = f"{API_BASE_URL}/depictio/api/v1/deltatables/get/{data_collection_id_str}"
     headers = {"Authorization": f"Bearer {TOKEN}"} if TOKEN else {}
 
     # Make the HTTP GET request to fetch the Delta table location
@@ -167,19 +208,31 @@ def load_deltatable_lite(workflow_id: ObjectId, data_collection_id: ObjectId, me
         response = httpx.get(url, headers=headers)
         response.raise_for_status()
     except httpx.HTTPError as e:
-        logger.error(f"HTTP error loading deltatable for workflow {workflow_id_str} " f"and data collection {data_collection_id_str}: {e}")
+        logger.error(
+            f"HTTP error loading deltatable for workflow {workflow_id_str} "
+            f"and data collection {data_collection_id_str}: {e}"
+        )
         raise Exception("Error loading deltatable") from e
 
     # Extract the file ID from the response
     file_id = response.json().get("delta_table_location")
     if not file_id:
-        logger.error(f"No 'delta_table_location' found in response for workflow {workflow_id_str} " f"and data collection {data_collection_id_str}: {response.json()}")
+        logger.error(
+            f"No 'delta_table_location' found in response for workflow {workflow_id_str} "
+            f"and data collection {data_collection_id_str}: {response.json()}"
+        )
         raise Exception("Invalid response: missing 'delta_table_location'")
 
-    logger.info(f"Loading deltatable for workflow {workflow_id_str}, data collection " f"{data_collection_id_str}, metadata: {metadata}, from file_id: {file_id}")
+    logger.info(
+        f"Loading deltatable for workflow {workflow_id_str}, data collection "
+        f"{data_collection_id_str}, metadata: {metadata}, from file_id: {file_id}"
+    )
+
+    logger.debug(f"polars_s3_config: {polars_s3_config}")
+    logger.debug(f"file_id: {file_id}")
 
     # Initialize the Delta table scan
-    delta_scan = pl.scan_delta(file_id, storage_options=minio_storage_options)
+    delta_scan = pl.scan_delta(file_id, storage_options=polars_s3_config)
 
     # Apply filtering if metadata is provided
     if metadata:
@@ -192,6 +245,10 @@ def load_deltatable_lite(workflow_id: ObjectId, data_collection_id: ObjectId, me
                 combined_filter &= filt
             delta_scan = delta_scan.filter(combined_filter)
             logger.info("Applied filters based on metadata.")
+
+    if limit_rows:
+        delta_scan = delta_scan.limit(limit_rows)
+        logger.info(f"Applied row limit: {limit_rows}")
 
     # Collect the DataFrame
     try:
@@ -209,12 +266,11 @@ def load_deltatable_lite(workflow_id: ObjectId, data_collection_id: ObjectId, me
     return df
 
 
-import polars as pl
-from typing import List, Dict, Set
-import logging
-
-
-def merge_multiple_dataframes(dataframes: Dict[str, pl.DataFrame], join_instructions: List[Dict], essential_cols: Set[str] = set()) -> pl.DataFrame:
+def merge_multiple_dataframes(
+    dataframes: Dict[str, pl.DataFrame],
+    join_instructions: List[Dict],
+    essential_cols: Set[str] = set(),
+) -> pl.DataFrame:
     """
     Merge multiple Polars DataFrames based on join instructions, handling type alignment and overlapping columns.
 
@@ -263,7 +319,9 @@ def merge_multiple_dataframes(dataframes: Dict[str, pl.DataFrame], join_instruct
                     else:
                         # Default to Utf8 for complex type mismatches
                         column_types[col] = pl.Utf8
-                    logger.debug(f"Column '{col}' type promoted to {column_types[col]}.")
+                    logger.debug(
+                        f"Column '{col}' type promoted to {column_types[col]}."
+                    )
 
     logger.info(f"Common column types determined: {column_types}")
 
@@ -273,7 +331,9 @@ def merge_multiple_dataframes(dataframes: Dict[str, pl.DataFrame], join_instruct
         for col, desired_dtype in column_types.items():
             if col in df.columns and df[col].dtype != desired_dtype:
                 cast_columns.append(pl.col(col).cast(desired_dtype))
-                logger.debug(f"Casting column '{col}' in DataFrame '{df_id}' from {df[col].dtype} to {desired_dtype}.")
+                logger.debug(
+                    f"Casting column '{col}' in DataFrame '{df_id}' from {df[col].dtype} to {desired_dtype}."
+                )
         if cast_columns:
             dataframes[df_id] = df.with_columns(cast_columns)
             logger.info(f"DataFrame '{df_id}' columns casted to common types.")
@@ -285,14 +345,14 @@ def merge_multiple_dataframes(dataframes: Dict[str, pl.DataFrame], join_instruct
         logger.info("No join instructions provided. Returning the first DataFrame.")
         return next(iter(dataframes.values()))
     for idx, join_step in enumerate(join_instructions, start=1):
-        
-
         left_id = join_step["left"]
         right_id = join_step["right"]
         how = join_step["how"]
         on = join_step["on"].copy()  # Make a copy to modify
 
-        logger.info(f"Join Step {idx}: '{left_id}' {how} joined with '{right_id}' on columns {on}.")
+        logger.info(
+            f"Join Step {idx}: '{left_id}' {how} joined with '{right_id}' on columns {on}."
+        )
 
         # Determine the current left DataFrame
         if merged_df is None:
@@ -301,25 +361,33 @@ def merge_multiple_dataframes(dataframes: Dict[str, pl.DataFrame], join_instruct
             left_df = merged_df
 
         if right_id in dc_ids_processed:
-            logger.info(f"Skipping join with '{right_id}' as it has already been processed.")
+            logger.info(
+                f"Skipping join with '{right_id}' as it has already been processed."
+            )
             continue
 
         # The right DataFrame is always from the join instructions
         right_df = dataframes[right_id]
 
         # Identify overlapping columns excluding join keys
-        overlapping_cols = set(left_df.columns).intersection(set(right_df.columns)) - set(on)
+        overlapping_cols = set(left_df.columns).intersection(
+            set(right_df.columns)
+        ) - set(on)
 
         logger.info(f"Overlapping columns detected: {overlapping_cols}")
 
         # Determine overlapping essential columns
         overlapping_essential_cols = overlapping_cols.intersection(essential_cols)
 
-        logger.info(f"Overlapping essential columns detected: {overlapping_essential_cols}")
+        logger.info(
+            f"Overlapping essential columns detected: {overlapping_essential_cols}"
+        )
 
         # # Add overlapping essential columns to 'on' list and drop them from right_df
         if overlapping_cols:
-            logger.info(f"Overlapping essential columns detected: {overlapping_cols}. Adding to join keys.")
+            logger.info(
+                f"Overlapping essential columns detected: {overlapping_cols}. Adding to join keys."
+            )
             on += list(overlapping_cols)
         #     # # Drop these columns from the right DataFrame to prevent duplication
         #     # right_df = right_df.drop(list(overlapping_essential_cols))
@@ -341,18 +409,28 @@ def merge_multiple_dataframes(dataframes: Dict[str, pl.DataFrame], join_instruct
 
         # Perform the join using Polars' join method
         try:
-            logger.info(f"Performing '{how}' join between left DataFrame and '{right_id}' on columns: {on}.")
-            logger.info(f"Left DataFrame shape: {left_df.shape} and columns: {left_df.columns}")
-            logger.info(f"Right DataFrame '{right_id}' shape: {right_df.shape} and columns: {right_df.columns}")
+            logger.info(
+                f"Performing '{how}' join between left DataFrame and '{right_id}' on columns: {on}."
+            )
+            logger.info(
+                f"Left DataFrame shape: {left_df.shape} and columns: {left_df.columns}"
+            )
+            logger.info(
+                f"Right DataFrame '{right_id}' shape: {right_df.shape} and columns: {right_df.columns}"
+            )
 
             if merged_df is None:
                 # Initial merge
                 merged_df = left_df.join(right_df, on=on, how=how)
-                logger.info(f"Joined '{left_id}' and '{right_id}'. Merged DataFrame shape: {merged_df.shape}")
+                logger.info(
+                    f"Joined '{left_id}' and '{right_id}'. Merged DataFrame shape: {merged_df.shape}"
+                )
             else:
                 # Subsequent merges
                 merged_df = left_df.join(right_df, on=on, how=how)
-                logger.info(f"Joined with '{right_id}'. Merged DataFrame shape: {merged_df.shape}")
+                logger.info(
+                    f"Joined with '{right_id}'. Merged DataFrame shape: {merged_df.shape}"
+                )
             dc_ids_processed.add(left_id)
             dc_ids_processed.add(right_id)
         except Exception as e:
@@ -364,7 +442,9 @@ def merge_multiple_dataframes(dataframes: Dict[str, pl.DataFrame], join_instruct
     # Step 4: Verify Essential Columns
     missing_essentials = essential_cols - set(merged_df.columns)
     if missing_essentials:
-        logger.warning(f"Essential columns missing from the final DataFrame: {missing_essentials}")
+        logger.warning(
+            f"Essential columns missing from the final DataFrame: {missing_essentials}"
+        )
 
     logger.info(f"Final merged DataFrame shape: {merged_df.shape}")
     logger.info(f"Final merged DataFrame columns: {merged_df.columns}")
@@ -372,7 +452,9 @@ def merge_multiple_dataframes(dataframes: Dict[str, pl.DataFrame], join_instruct
     return merged_df
 
 
-def transform_joins_dict_to_instructions(joins_dict: Dict[tuple, List[Dict]]) -> List[Dict]:
+def transform_joins_dict_to_instructions(
+    joins_dict: Dict[tuple, List[Dict]],
+) -> List[Dict]:
     """
     Transform joins_dict into a list of join instructions compatible with merge_multiple_dataframes.
 
@@ -389,7 +471,12 @@ def transform_joins_dict_to_instructions(joins_dict: Dict[tuple, List[Dict]]) ->
         for join in join_list:
             for join_id, join_details in join.items():
                 dc_id1, dc_id2 = join_id.split("--")
-                instruction = {"left": dc_id1, "right": dc_id2, "how": join_details["how"], "on": join_details["on_columns"]}
+                instruction = {
+                    "left": dc_id1,
+                    "right": dc_id2,
+                    "how": join_details["how"],
+                    "on": join_details["on_columns"],
+                }
                 join_instructions.append(instruction)
     return join_instructions
 
@@ -466,7 +553,9 @@ def compute_essential_columns(dataframes: Dict[str, pl.DataFrame]) -> Set[str]:
 #     return merged_df
 
 
-def iterative_join(workflow_id: ObjectId, joins_dict: dict, metadata_dict: dict, TOKEN: str = None):
+def iterative_join(
+    workflow_id: ObjectId, joins_dict: dict, metadata_dict: dict, TOKEN: str = None
+):
     logger.info(f"worfklow_id: {workflow_id}")
     logger.info(f"joins_dict: {joins_dict}")
     logger.info(f"metadata_dict: {metadata_dict}")
@@ -478,7 +567,12 @@ def iterative_join(workflow_id: ObjectId, joins_dict: dict, metadata_dict: dict,
                 interactive_components_list.append(metadata)
 
     if not joins_dict:
-        return load_deltatable_lite(workflow_id, next(iter(metadata_dict.keys()))["metadata"]["dc_id"], interactive_components_list, TOKEN=TOKEN)
+        return load_deltatable_lite(
+            workflow_id,
+            next(iter(metadata_dict.keys()))["metadata"]["dc_id"],
+            interactive_components_list,
+            TOKEN=TOKEN,
+        )
 
     # Initialize a dictionary to store loaded dataframes
     loaded_dfs = {}
@@ -492,14 +586,24 @@ def iterative_join(workflow_id: ObjectId, joins_dict: dict, metadata_dict: dict,
             if dc_id not in loaded_dfs:
                 logger.info(f"Metadata dict: {metadata_dict}")
                 # Filter metadata for the current dc_id
-                relevant_metadata = [md for md in metadata_dict.values() if md["metadata"]["dc_id"] == dc_id]
+                relevant_metadata = [
+                    md
+                    for md in metadata_dict.values()
+                    if md["metadata"]["dc_id"] == dc_id
+                ]
                 logger.info(f"Relevant metadata: {relevant_metadata}")
                 for e in relevant_metadata:
                     values_dict[e["metadata"]["dc_id"]] = e["value"]
-                logger.info(f"Loading dataframe for dc_id: {dc_id} with metadata: {relevant_metadata}")
-                loaded_dfs[dc_id] = load_deltatable_lite(workflow_id, dc_id, relevant_metadata, TOKEN=TOKEN)
+                logger.info(
+                    f"Loading dataframe for dc_id: {dc_id} with metadata: {relevant_metadata}"
+                )
+                loaded_dfs[dc_id] = load_deltatable_lite(
+                    workflow_id, dc_id, relevant_metadata, TOKEN=TOKEN
+                )
                 logger.info(f"Loaded df : {loaded_dfs[dc_id]}")
-                logger.info(f"Loaded dataframe for dc_id: {dc_id} with shape: {loaded_dfs[dc_id].shape}")
+                logger.info(
+                    f"Loaded dataframe for dc_id: {dc_id} with shape: {loaded_dfs[dc_id].shape}"
+                )
     logger.info(f"values_dict: {values_dict}")
 
     # Initialize merged_df with the first dataframe in the first join
@@ -520,36 +624,50 @@ def iterative_join(workflow_id: ObjectId, joins_dict: dict, metadata_dict: dict,
 
             # Determine which dataframe to join with merged_df
             if dc_id1 in used_dcs and dc_id2 in used_dcs:
-                logger.info(f"Skipping join {join_id} as both data collections are already used.")
+                logger.info(
+                    f"Skipping join {join_id} as both data collections are already used."
+                )
                 continue
             elif dc_id1 in used_dcs:
-                logger.info(f"dc_id1 already in used_dcs - {dc_id1} - joinin with dc_id2 - {dc_id2}")
+                logger.info(
+                    f"dc_id1 already in used_dcs - {dc_id1} - joinin with dc_id2 - {dc_id2}"
+                )
                 right_df = loaded_dfs[dc_id2]
                 logger.info(f"right_df shape: {right_df.shape}")
                 logger.info(f"right_df columns: {right_df.columns}")
                 used_dcs.add(dc_id2)
             elif dc_id2 in used_dcs:
-                logger.info(f"dc_id2 already in used_dcs - {dc_id2} - joinin with dc_id1 - {dc_id1}")
+                logger.info(
+                    f"dc_id2 already in used_dcs - {dc_id2} - joinin with dc_id1 - {dc_id1}"
+                )
                 right_df = loaded_dfs[dc_id1]
                 logger.info(f"right_df shape: {right_df.shape}")
                 logger.info(f"right_df columns: {right_df.columns}")
                 used_dcs.add(dc_id1)
             else:
-                logger.info(f"Initial join with {dc_id1} and {dc_id2} on columns: {join_details['on_columns']} with method: {join_details['how']}")
+                logger.info(
+                    f"Initial join with {dc_id1} and {dc_id2} on columns: {join_details['on_columns']} with method: {join_details['how']}"
+                )
                 right_df = loaded_dfs[dc_id2]
                 logger.info(f"right_df shape: {right_df.shape}")
                 logger.info(f"right_df columns: {right_df.columns}")
                 used_dcs.add(dc_id2)
                 merged_df = loaded_dfs[dc_id1]
                 used_dcs.add(dc_id1)
-                logger.info(f"Initial join with {dc_id1} and {dc_id2} on columns: {join_details['on_columns']} with method: {join_details['how']}")
+                logger.info(
+                    f"Initial join with {dc_id1} and {dc_id2} on columns: {join_details['on_columns']} with method: {join_details['how']}"
+                )
 
             logger.info(f"Used data collections: {used_dcs}")
 
-            logger.info(f"Joining {dc_id1} and {dc_id2} on columns: {join_details['on_columns']} with method: {join_details['how']}")
+            logger.info(
+                f"Joining {dc_id1} and {dc_id2} on columns: {join_details['on_columns']} with method: {join_details['how']}"
+            )
 
             # Perform the join
-            merged_df = merged_df.join(right_df, on=join_details["on_columns"], how=join_details["how"])
+            merged_df = merged_df.join(
+                right_df, on=join_details["on_columns"], how=join_details["how"]
+            )
 
             logger.info(f"Merged dataframe shape after join: {merged_df.shape}")
             logger.info(f"Merged dataframe columns after join: {merged_df.columns}")
@@ -589,7 +707,15 @@ def return_joins_dict(wf, stored_metadata, TOKEN, extra_dc=None):
     logger.info(f"wf - {wf}")
     logger.info(f"return_joins_dict - stored_metadata - {stored_metadata}")
     # Extract all the data collection IDs from the stored metadata
-    dc_ids_all_components = list(set([v["dc_id"] for v in stored_metadata if v["component_type"] not in ["jbrowse"]]))
+    dc_ids_all_components = list(
+        set(
+            [
+                v["dc_id"]
+                for v in stored_metadata
+                if v["component_type"] not in ["jbrowse"]
+            ]
+        )
+    )
     if extra_dc:
         dc_ids_all_components += [extra_dc]
     logger.info(f"dc_ids_all_components - {dc_ids_all_components}")
@@ -597,19 +723,29 @@ def return_joins_dict(wf, stored_metadata, TOKEN, extra_dc=None):
     # Using itertools, generate all the combinations of dc_ids in order to get all the possible joins
     dc_ids_all_joins = list(itertools.combinations(dc_ids_all_components, 2))
     # Turn the list of tuples into a list of strings with -- as separator, and store it in dc_ids_all_joins in the 2 possible orders
-    dc_ids_all_joins = [f"{dc_id1}--{dc_id2}" for dc_id1, dc_id2 in dc_ids_all_joins] + [f"{dc_id2}--{dc_id1}" for dc_id1, dc_id2 in dc_ids_all_joins]
+    dc_ids_all_joins = [
+        f"{dc_id1}--{dc_id2}" for dc_id1, dc_id2 in dc_ids_all_joins
+    ] + [f"{dc_id2}--{dc_id1}" for dc_id1, dc_id2 in dc_ids_all_joins]
 
     logger.info(f"dc_ids_all_joins - {dc_ids_all_joins}")
 
-    stored_metadata_interactive_components_wf = [e for e in stored_metadata if e["wf_id"] == wf]
+    stored_metadata_interactive_components_wf = [
+        e for e in stored_metadata if e["wf_id"] == wf
+    ]
     # stored_metadata_interactive_components_wf = [e for e in stored_metadata if e["component_type"] in ["interactive"] and e["wf_id"] == wf]
-    logger.info(f"stored_metadata_interactive_components_wf - {stored_metadata_interactive_components_wf}")
+    logger.info(
+        f"stored_metadata_interactive_components_wf - {stored_metadata_interactive_components_wf}"
+    )
     # stored_metadata_interactive_components_wf = [v for k, v in interactive_components_dict.items() if v["metadata"]["wf_id"] == wf]
     join_tables_for_wf = get_join_tables(wf, TOKEN)
     logger.info(f"join_tables_for_wf - {join_tables_for_wf}")
 
     # Extract the intersection between dc_ids_all_joins and join_tables_for_wf[wf].keys()
-    join_tables_for_wf[wf] = {k: join_tables_for_wf[wf][k] for k in join_tables_for_wf[wf].keys() if k in dc_ids_all_joins}
+    join_tables_for_wf[wf] = {
+        k: join_tables_for_wf[wf][k]
+        for k in join_tables_for_wf[wf].keys()
+        if k in dc_ids_all_joins
+    }
     logger.info(f"join_tables_for_wf - {join_tables_for_wf}")
 
     # Initialize Union-Find structure
@@ -617,7 +753,9 @@ def return_joins_dict(wf, stored_metadata, TOKEN, extra_dc=None):
 
     joins = []
 
-    logger.info(f"stored_metadata_interactive_components_wf - {stored_metadata_interactive_components_wf}")
+    logger.info(
+        f"stored_metadata_interactive_components_wf - {stored_metadata_interactive_components_wf}"
+    )
     for interactive_component in stored_metadata_interactive_components_wf:
         wf_dc_key = (interactive_component["wf_id"], interactive_component["dc_id"])
         logger.info(f"wf_dc - {wf_dc_key}")
@@ -675,15 +813,26 @@ def return_joins_dict(wf, stored_metadata, TOKEN, extra_dc=None):
             reverse_join_id = f"{dc_id2}--{dc_id1}"
             if join_id not in added_joins and reverse_join_id not in added_joins:
                 # Create a placeholder join based on available join details
-                if dc_id1 in join_tables_for_wf[wf] and dc_id2 in join_tables_for_wf[wf]:
+                if (
+                    dc_id1 in join_tables_for_wf[wf]
+                    and dc_id2 in join_tables_for_wf[wf]
+                ):
                     example_join = next(iter(join_tables_for_wf[wf].values()))
-                    new_join = {join_id: {"how": example_join["how"], "on_columns": example_join["on_columns"], "dc_tags": example_join["dc_tags"]}}
+                    new_join = {
+                        join_id: {
+                            "how": example_join["how"],
+                            "on_columns": example_join["on_columns"],
+                            "dc_tags": example_join["dc_tags"],
+                        }
+                    }
                     joins_dict[join_key_tuple].append(new_join)
                     added_joins.add(join_id)
     return joins_dict
 
 
-def join_deltatables_dev(wf_id: str, joins: list, metadata: dict = dict(), TOKEN: str = None):
+def join_deltatables_dev(
+    wf_id: str, joins: list, metadata: dict = dict(), TOKEN: str = None
+):
     # Initialize a dictionary to store loaded dataframes
     loaded_dfs = {}
     logger.info(f"Loading dataframes for workflow {wf_id}")
@@ -697,20 +846,38 @@ def join_deltatables_dev(wf_id: str, joins: list, metadata: dict = dict(), TOKEN
 
             if dc_id1 not in loaded_dfs:
                 logger.info(f"Loading dataframe for dc_id1: {dc_id1}")
-                logger.info(f"Metadata: {[e for e in metadata if e['metadata']['dc_id'] == dc_id1]}")
-                loaded_dfs[dc_id1] = load_deltatable_lite(wf_id, dc_id1, [e for e in metadata if e["metadata"]["dc_id"] == dc_id1], TOKEN=TOKEN)
+                logger.info(
+                    f"Metadata: {[e for e in metadata if e['metadata']['dc_id'] == dc_id1]}"
+                )
+                loaded_dfs[dc_id1] = load_deltatable_lite(
+                    wf_id,
+                    dc_id1,
+                    [e for e in metadata if e["metadata"]["dc_id"] == dc_id1],
+                    TOKEN=TOKEN,
+                )
                 logger.info(f"dc1 columns: {loaded_dfs[dc_id1].columns}")
                 logger.info(f"dc1 shape: {loaded_dfs[dc_id1].shape}")
             if dc_id2 not in loaded_dfs:
                 logger.info(f"Loading dataframe for dc_id2: {dc_id2}")
-                logger.info(f"Metadata: {[e for e in metadata if e['metadata']['dc_id'] == dc_id2]}")
+                logger.info(
+                    f"Metadata: {[e for e in metadata if e['metadata']['dc_id'] == dc_id2]}"
+                )
 
-                loaded_dfs[dc_id2] = load_deltatable_lite(wf_id, dc_id2, [e for e in metadata if e["metadata"]["dc_id"] == dc_id2], TOKEN=TOKEN)
+                loaded_dfs[dc_id2] = load_deltatable_lite(
+                    wf_id,
+                    dc_id2,
+                    [e for e in metadata if e["metadata"]["dc_id"] == dc_id2],
+                    TOKEN=TOKEN,
+                )
                 logger.info(f"dc2 columns: {loaded_dfs[dc_id2].columns}")
                 logger.info(f"dc2 shape: {loaded_dfs[dc_id2].shape}")
 
-    logger.info(f"AFTER 1st FOR LOOP - Loaded dataframes columns: {[df.columns for df in loaded_dfs.values()]}")
-    logger.info(f"AFTER 1st FOR LOOP - Loaded dataframes shapes: {[df.shape for df in loaded_dfs.values()]}")
+    logger.info(
+        f"AFTER 1st FOR LOOP - Loaded dataframes columns: {[df.columns for df in loaded_dfs.values()]}"
+    )
+    logger.info(
+        f"AFTER 1st FOR LOOP - Loaded dataframes shapes: {[df.shape for df in loaded_dfs.values()]}"
+    )
 
     # Initialize merged_df with the first join
     join_dict = joins[0]
@@ -718,8 +885,12 @@ def join_deltatables_dev(wf_id: str, joins: list, metadata: dict = dict(), TOKEN
     dc_id1, dc_id2 = join_id.split("--")
 
     # Merge based on common columns
-    common_columns = list(set(loaded_dfs[dc_id1].columns).intersection(set(loaded_dfs[dc_id2].columns)))
-    merged_df = loaded_dfs[dc_id1].join(loaded_dfs[dc_id2], on=common_columns, how=join_details["how"])
+    common_columns = list(
+        set(loaded_dfs[dc_id1].columns).intersection(set(loaded_dfs[dc_id2].columns))
+    )
+    merged_df = loaded_dfs[dc_id1].join(
+        loaded_dfs[dc_id2], on=common_columns, how=join_details["how"]
+    )
 
     # logger.info(f"Initial merged_df shape: {merged_df.shape}")
     # logger.info(f"Columns in merged_df: {merged_df.columns}")
@@ -746,8 +917,12 @@ def join_deltatables_dev(wf_id: str, joins: list, metadata: dict = dict(), TOKEN
             else:
                 continue
 
-            common_columns = list(set(merged_df.columns).intersection(set(new_df.columns)))
-            merged_df = merged_df.join(new_df, on=common_columns, how=join_details["how"])
+            common_columns = list(
+                set(merged_df.columns).intersection(set(new_df.columns))
+            )
+            merged_df = merged_df.join(
+                new_df, on=common_columns, how=join_details["how"]
+            )
 
     logger.info(f"AFTER 2nd FOR LOOP - merged_df shape: {merged_df.shape}")
     logger.info(f"Columns in merged_df: {merged_df.columns}")

@@ -1,33 +1,55 @@
 import os
 
-from depictio.api.v1.configs.settings_models import Settings
-from depictio.api.v1.utils import get_config, validate_config
-from depictio.api.v1.crypto import run_generate_keys
-# from depictio.api.v1.configs.logging import logger
-# from depictio.api.v1.configs.logging import setup_logging
+from dotenv import load_dotenv
 
-config_backend_location = os.getenv("DEPICTIO_CONFIG_BACKEND_LOCATION", "depictio/api/v1/configs/config_backend_dockercompose.yaml")
+from depictio import BASE_PATH
+from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.configs.settings_models import Settings
+from depictio.api.v1.key_utils import (
+    generate_keys,
+    load_private_key,
+    load_public_key,
+)
+
+# Explicitly load environment variables
+load_dotenv(BASE_PATH.parent / ".env", override=False)
 
 # Settings
 # Overwrite priority: environment variables (.env) > config file (.yaml) > default values
-settings = validate_config(get_config(config_backend_location), Settings)
-
-# logger = setup_logging(settings.fastapi.logging_level)
-
+settings = Settings()
+logger.info(f"Settings: {settings}")
 API_BASE_URL = f"http://{settings.fastapi.service_name}:{settings.fastapi.port}"
 DASH_BASE_URL = f"http://{settings.dash.service_name}:{settings.dash.port}"
 MONGODB_URL = f"mongodb://{settings.mongodb.service_name}:{settings.mongodb.port}/"
-# TOKEN = settings.auth.tmp_token
-# TOKEN = TOKEN.strip()
+_KEYS_DIR = settings.auth.keys_dir
+# Use the shared internal API key from settings
+FASTAPI_INTERNAL_API_KEY = os.getenv(
+    "DEPICTIO_INTERNAL_API_KEY", settings.fastapi.internal_api_key
+)
 
 
-# Check if key files exist, generate if they don't
-run_generate_keys()
+# Algorithm used for signing
+ALGORITHM = settings.auth.keys_algorithm
 
+# Lazy-loaded settings and paths
+_KEYS_DIR = settings.auth.keys_dir
+DEFAULT_PRIVATE_KEY_PATH = None
+DEFAULT_PUBLIC_KEY_PATH = None
 
-with open("/app/depictio/keys/private_key.pem", "rb") as f:
-    PRIVATE_KEY = f.read()
-with open("/app/depictio/keys/public_key.pem", "rb") as f:
-    PUBLIC_KEY = f.read()
-ALGORITHM = "RS256"
+generate_keys(
+    private_key_path=DEFAULT_PRIVATE_KEY_PATH,
+    public_key_path=DEFAULT_PUBLIC_KEY_PATH,
+    keys_dir=_KEYS_DIR,
+    algorithm=ALGORITHM,
+    wipe=bool(settings.mongodb.wipe),
+)
 
+PRIVATE_KEY = load_private_key(
+    settings.auth.keys_dir + "/private_key.pem"
+)  # Load private key from file
+PUBLIC_KEY = load_public_key(
+    settings.auth.keys_dir + "/public_key.pem"
+)  # Load public key from file
+
+logger.info(f"Private key value: {PRIVATE_KEY}")
+logger.info(f"Public key value: {PUBLIC_KEY}")

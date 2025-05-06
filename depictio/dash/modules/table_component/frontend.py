@@ -1,19 +1,12 @@
 # Import necessary libraries
-from dash import html, dcc, Input, Output, State, MATCH, ALL
+from dash import html, dcc, Input, Output, State, MATCH
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 from dash_iconify import DashIconify
 import httpx
-import dash_ag_grid as dag
-import dash
-import pandas as pd
 
 # Depictio imports
-from depictio.api.v1.deltatables_utils import convert_filter_model_to_metadata, load_deltatable_lite
-from depictio.dash.layouts.draggable_scenarios.restore_dashboard import return_interactive_components_dict
 from depictio.dash.modules.table_component.utils import build_table, build_table_frame
-from depictio.dash.utils import return_mongoid
-from depictio.api.v1.configs.logging import logger
 from depictio.api.v1.configs.config import API_BASE_URL
 
 from depictio.dash.utils import (
@@ -71,7 +64,7 @@ def register_callbacks_table_component(app):
     #     data_collection_id = stored_metadata["dc_id"]
 
     #     dc_specs = httpx.get(
-    #         f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
+    #         f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{data_collection_id}",
     #         headers={
     #             "Authorization": f"Bearer {TOKEN}",
     #         },
@@ -125,7 +118,7 @@ def register_callbacks_table_component(app):
         ],
         prevent_initial_call=True,
     )
-    def design_table_component(wf_tag, dc_tag, n_clicks, id, data):
+    def design_table_component(workflow_id, data_collection_id, n_clicks, id, data):
         """
         Callback to update card body based on the selected column and aggregation
         """
@@ -140,15 +133,17 @@ def register_callbacks_table_component(app):
         }
 
         # Get the workflow and data collection ids from the tags selected
-        workflow_id, data_collection_id = return_mongoid(workflow_tag=wf_tag, data_collection_tag=dc_tag, TOKEN=TOKEN)
+        # workflow_id, data_collection_id = return_mongoid(workflow_tag=wf_tag, data_collection_tag=dc_tag, TOKEN=TOKEN)
 
         # Get the data collection specs
         dc_specs = httpx.get(
-            f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
+            f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{data_collection_id}",
             headers=headers,
         ).json()
 
-        cols_json = get_columns_from_data_collection(wf_tag, dc_tag, TOKEN)
+        cols_json = get_columns_from_data_collection(
+            workflow_id, data_collection_id, TOKEN
+        )
 
         # Get the join tables for the selected workflow - used in store for metadata management
         # join_tables_for_wf = httpx.get(
@@ -170,10 +165,11 @@ def register_callbacks_table_component(app):
             "dc_config": dc_specs["config"],
             "cols_json": cols_json,
             "access_token": TOKEN,
-            "stepper": True
+            "stepper": True,
         }
         new_table = build_table(**table_kwargs)
         return new_table
+
 
 def design_table(id):
     row = [
@@ -186,7 +182,9 @@ def design_table(id):
                     style=UNSELECTED_STYLE,
                     size="xl",
                     color="green",
-                    leftIcon=DashIconify(icon="material-symbols:table-rows-narrow-rounded", color="white"),
+                    leftIcon=DashIconify(
+                        icon="material-symbols:table-rows-narrow-rounded", color="white"
+                    ),
                 )
             ),
         ),

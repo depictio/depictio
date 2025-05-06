@@ -1,29 +1,15 @@
 services:
   mongo:
-    image: mongo:latest
-    command: --dbpath /data/depictioDB --port 27018
-    user: "${UID}:${GID}"  # Run as the specified user (not root)
+    image: mongo:8.0
+    command: mongod --dbpath /data/depictioDB --port 27018 --logpath /dev/null 
+    user: "${UID:-1000}:${GID:-1000}"
     ports:
       - 27018:27018
     volumes:
       - ./depictioDB:/data/depictioDB
 
-  minio:
-    image: minio/minio:latest
-    user: "${UID}:${GID}"  # Run as the specified user (not root)
-    volumes:
-      - "./minio_data:/data"
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-    command: server /data --console-address :9001
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-
   depictio_frontend:
-    image: depictio:stable
-    # image: registry.git.embl.de/tweber/depictio/depictio:latest
+    image: depictio:dev
     build:
       dockerfile: docker-images/Dockerfile_depictio.dockerfile
       context: .
@@ -31,47 +17,42 @@ services:
       - 5080:5080
     volumes:
       - ./depictio:/app/depictio
-      - ./configs:/configs
-      - ./data:/app/data
-      - ./minio_data:/minio_data
-      - ./.env:/app/.env
-    command: ["python", "depictio/dash/app.py"]
-    user: "${UID}:${GID}"
+    env_file:
+      - .env
+    environment:
+        DEPICTIO_CONTAINER: "True"
+        DEPICTIO_TEST_MODE: "${DEPICTIO_TEST_MODE:-false}"
+        DEPICTIO_MONGODB_DB_NAME: "${DEPICTIO_MONGODB_DB_NAME:-depictioDB}"
+        DEV_MODE: "${DEV_MODE:-false}"
+    command: ["/app/run_dash.sh"]
+    # command: ["python", "depictio/dash/app.py"]
+    user: "${UID:-1000}:${GID:-1000}"
     depends_on:
       - mongo
-      - minio
       - depictio_backend
 
   depictio_backend:
-    # image: registry.git.embl.de/tweber/depictio/depictio:latest
-    image: depictio:stable
+    image: depictio:dev
     build:
       dockerfile: docker-images/Dockerfile_depictio.dockerfile
       context: .
     ports:
       - 8058:8058
     volumes:
-      - ${DEPICTIO_BACKEND_DATA_VOLUME_HOST}:${DEPICTIO_BACKEND_DATA_VOLUME_HOST}
-      - $PWD/depictio-example-data:/app/depictio-example-data
       - ./depictio:/app/depictio
-      - ./data:/app/data
-      - ./minio_data:/minio_data
-      - ./jbrowse-watcher-plugin/sessions:/jbrowse-watcher-plugin/sessions
-      - ./configs:/configs
-      - ./.env:/app/.env
-    command: ["python", "depictio/api/run.py"]
-    user: "${UID}:${GID}"  # Run as the specified user (not root)
+    env_file:
+      - .env
+    environment:
+        DEPICTIO_CONTAINER: "True"
+        DEPICTIO_TEST_MODE: "${DEPICTIO_TEST_MODE:-false}"
+        DEPICTIO_MONGODB_DB_NAME: "${DEPICTIO_MONGODB_DB_NAME:-depictioDB}"
+        FORCE_COLOR: "1"
+        TERM: "xterm-256color"
+        PYTHONIOENCODING: "UTF-8"
+        DEV_MODE: "${DEV_MODE:-false}"
+    command: ["/app/run_fastapi.sh"]
+    # command: ["python", "depictio/api/run.py"]
+    user: "${UID:-1000}:${GID:-1000}"
+    tty: true
     depends_on:
       - mongo
-      - minio
-
-  # jbrowse2:
-  #   # image: registry.git.embl.de/tweber/depictio/jbrowse2:latest
-  #   build:
-  #     dockerfile: docker-images/Dockerfile_jbrowse.dev.240424.dockerfile
-  #   ports: 
-  #     - 3000:3000
-  #     - 9010:9010
-  #   volumes:
-  #     - "./jbrowse-watcher-plugin:/usr/src/plugin"
-  #     - "./jbrowse-watcher-plugin/sessions:/usr/src/jbrowse/plugin/sessions"

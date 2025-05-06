@@ -37,10 +37,9 @@ RUN micromamba shell init -s bash && \
 USER root
 RUN bash -c 'whoami'
 
-
 # Ensure /etc/apt/sources.list exists and configure it
 RUN if [ ! -f /etc/apt/sources.list ]; then \
-      echo "deb http://deb.debian.org/debian buster main" > /etc/apt/sources.list; \
+    echo "deb http://deb.debian.org/debian buster main" > /etc/apt/sources.list; \
     fi
 
 # Optionally switch to an alternative Debian mirror
@@ -48,16 +47,34 @@ RUN sed -i 's|http://deb.debian.org|http://ftp.us.debian.org|g' /etc/apt/sources
 
 # Install dependencies using apt
 RUN apt-get update && apt-get install --fix-missing -y \
-    xvfb xauth \
+    xvfb xauth sudo git git-lfs curl \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+# Create a shared directory for Playwright browsers with appropriate permissions
+RUN mkdir -p /usr/local/share/playwright-browsers && \
+    chmod 777 /usr/local/share/playwright-browsers
 
-RUN bash -c '/opt/conda/envs/depictio/bin/playwright install --with-deps'
+# Set environment variable to use the shared location for browser installation
+ENV PLAYWRIGHT_BROWSERS_PATH=/usr/local/share/playwright-browsers
 
+# Install Playwright browsers as root
+RUN /opt/conda/envs/depictio/bin/playwright install --with-deps chromium && \
+    chmod -R 755 /usr/local/share/playwright-browsers
 
+# Switch back to non-root user
 USER $MAMBA_USER
+
+# Ensure the environment variable is also available to the non-root user
+ENV PLAYWRIGHT_BROWSERS_PATH=/usr/local/share/playwright-browsers
+
+
 RUN bash -c 'whoami'
+
+
+COPY ./docker-images/run_dash.sh /app/run_dash.sh
+COPY ./docker-images/run_fastapi.sh /app/run_fastapi.sh
+COPY ./pyproject.toml /app/pyproject.toml
 
 # -----------------------------
 # Environment Variables
@@ -68,13 +85,32 @@ ENV PYTHONPATH="${PYTHONPATH}:/mnt"
 # -----------------------------
 # Install Playwright
 # -----------------------------
-RUN bash -c 'playwright install chromium'
+# RUN bash -c 'playwright install --with-deps chromium'
 
 # -----------------------------
 # Install depictio-cli
 # -----------------------------
 # WORKDIR /app/depictio-cli
-# RUN /opt/conda/envs/depictio/bin/pip install .
+# RUN /opt/conda/envs/depictio/bin/pip install .  
+
+# -----------------------------
+# Install depictio-models
+# -----------------------------
+# COPY ./depictio-models /app/depictio-models
+# USER root
+# # RUN rm -rf /app/depictio-models/depictio_models.egg-info
+# RUN pwd
+# RUN ls
+# COPY ./depictio-models /app/depictio-models
+# RUN pip install -e /app/depictio-models --config-settings "editable_mode=compat"
+
+# COPY ./depictio-cli /app/depictio-cli
+# RUN pip install -e /app/depictio-cli --config-settings "editable_mode=compat"
+
+
+
+USER appuser  # Switch back if needed
+# RUN pip install -e /app/depictio-models --config-settings "editable_mode=compat"
 
 # -----------------------------
 # Final Commands

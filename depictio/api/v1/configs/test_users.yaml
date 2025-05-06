@@ -1,0 +1,4 @@
+users:
+  - id: "67658ba033c8b59ad489d7d1"
+    email: test_playwright@test.de
+    password: "changeme"

@@ -1,0 +1,183 @@
+# Global values
+nameOverride: ""
+fullnameOverride: ""
+
+# Namespace settings
+namespace:
+  create: false
+  name: "datasci-depictio-project"
+
+# Storage settings
+storageClass: "standard"
+persistence:
+  src:
+    enabled: true
+    size: 1Gi
+    accessMode: ReadWriteOnce
+  data:
+    enabled: true
+    size: 5Gi
+    accessMode: ReadWriteOnce
+  minioData:
+    enabled: true
+    size: 5Gi
+    accessMode: ReadWriteOnce
+  configs:
+    enabled: true
+    size: 1Gi
+    accessMode: ReadWriteOnce
+  kubernetes:
+    enabled: true
+    size: 1Gi
+    accessMode: ReadWriteOnce
+  mongo:
+    enabled: true
+    size: 5Gi
+    accessMode: ReadWriteOnce
+  minio:
+    enabled: true
+    size: 10Gi
+    accessMode: ReadWriteOnce
+  exampleData:
+    enabled: true
+    size: 5Gi
+    accessMode: ReadWriteOnce
+  screenshots:
+    enabled: true
+    size: 5Gi
+    accessMode: ReadWriteOnce
+
+# Secrets
+secrets:
+  minioRootUser: "minio"
+  minioRootPassword: "minio123"
+
+# MongoDB settings
+mongo:
+  enabled: true
+  image:
+    repository: mongo
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "0.5"
+    limits:
+      memory: "2Gi"
+      cpu: "1"
+  service:
+    type: ClusterIP
+    port: 27018
+  args:
+    - "mongod"
+    - "--dbpath"
+    - "/data/depictioDB"
+    - "--port"
+    - "27018"
+
+# MinIO settings
+minio:
+  enabled: true
+  image:
+    repository: minio/minio
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "0.5"
+    limits:
+      memory: "2Gi"
+      cpu: "1"
+  service:
+    type: ClusterIP
+    httpPort: 9000
+    consolePort: 9001
+  args:
+    - "server"
+    - "/data"
+    - "--console-address"
+    - ":9001"
+
+# Backend settings
+backend:
+  enabled: true
+  image:
+    repository: registry.git.embl.de/tweber/depictio/depictio
+    tag: v0.0.3
+    pullPolicy: Always
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "0.5"
+    limits:
+      memory: "2Gi"
+      cpu: "1"
+  service:
+    type: ClusterIP
+    httpPort: 80
+    httpsPort: 443
+    targetPort: 8058
+  env:
+    DEPICTIO_CONFIG_BACKEND_LOCATION: "/app/depictio/api/v1/configs/config_backend_k8s_embl_backend.yaml"
+    DEPICTIO_BACKEND_PORT: "8058"
+    DEPICTIO_FRONTEND_PORT: "80"
+    DEPICTIO_FRONTEND_SERVICE_NAME: "depictio-frontend"
+  command:
+    - "python"
+    - "/app/depictio/api/run.py"
+  securityContext:
+    fsGroup: 2000
+
+# Frontend settings
+frontend:
+  enabled: true
+  image:
+    repository: registry.git.embl.de/tweber/depictio/depictio
+    tag: v0.0.3
+    pullPolicy: Always
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "0.5"
+    limits:
+      memory: "2Gi"
+      cpu: "1"
+  service:
+    type: ClusterIP
+    httpPort: 80
+    httpsPort: 443
+    targetPort: 5080
+  env:
+    DEPICTIO_CONFIG_BACKEND_LOCATION: "/app/depictio/api/v1/configs/config_backend_k8s_embl_frontend.yaml"
+    DEPICTIO_BACKEND_PORT: "80"
+    DEPICTIO_FRONTEND_PORT: "5080"
+  command:
+    - "python"
+    - "/app/depictio/dash/app.py"
+
+# ConfigMap values
+configMaps:
+  frontend:
+    data:
+      fastapi:
+        port: 80
+        service_name: "depictio-backend"
+      dash:
+        port: 5080
+        service_name: "depictio-frontend"
+      jbrowse:
+        data_dir: "/data"
+        config_dir: "/jbrowse-watcher-plugin/sessions"
+  backend:
+    data:
+      fastapi:
+        port: 8058
+        service_name: "depictio-backend"
+      dash:
+        port: 80
+        service_name: "depictio-frontend"
+      jbrowse:
+        data_dir: "/data"
+        config_dir: "/jbrowse-watcher-plugin/sessions"

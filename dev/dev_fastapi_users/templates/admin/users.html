@@ -1,0 +1,72 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Users{% endblock %}
+{% block page_title %}Users{% endblock %}
+
+{% block breadcrumb_items %}
+<li class="breadcrumb-item active">Users</li>
+{% endblock %}
+
+{% block content %}
+<div class="card django-card">
+    <div class="card-header django-card-header d-flex justify-content-between align-items-center">
+        <h5 class="card-title mb-0">User Management</h5>
+        <a href="/admin/users/create" class="btn btn-sm btn-light">Add User</a>
+    </div>
+    <div class="card-body">
+        <table class="table django-table">
+            <thead>
+                <tr>
+                    <th>Email</th>
+                    <th>Name</th>
+                    <th>Status</th>
+                    <th>Verified</th>
+                    <th>Superuser</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                <tr>
+                    <td>{{ user.email }}</td>
+                    <td>{{ user.first_name }} {{ user.last_name }}</td>
+                    <td>
+                        {% if user.is_active %}
+                        <span class="badge bg-success">Active</span>
+                        {% else %}
+                        <span class="badge bg-danger">Inactive</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if user.is_verified %}
+                        <span class="badge bg-success">Verified</span>
+                        {% else %}
+                        <span class="badge bg-warning text-dark">Unverified</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if user.is_superuser %}
+                        <span class="badge bg-primary">Yes</span>
+                        {% else %}
+                        <span class="badge bg-secondary">No</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ user.created_at.strftime('%Y-%m-%d') }}</td>
+                    <td>
+                        <div class="btn-group">
+                            <a href="/admin/users/{{ user.id }}" class="btn btn-sm django-btn-secondary">Edit</a>
+                            <form method="post" action="/admin/users/{{ user.id }}/toggle-active" class="d-inline">
+                                <button type="submit" class="btn btn-sm {% if user.is_active %}btn-danger{% else %}btn-success{% endif %} ms-1">
+                                    {% if user.is_active %}Deactivate{% else %}Activate{% endif %}
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

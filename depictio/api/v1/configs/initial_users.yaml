@@ -1,0 +1,23 @@
+users:
+  - id: "67658ba033c8b59ad489d7c7"
+    email: admin@embl.de
+    password: "changeme"
+    is_admin: true
+
+  - id: "67658ba033c8b59ad489d7c8"
+    email: test_user@embl.de
+    password: "test_pwd"
+    is_admin: false
+
+groups:
+  - name: admin
+    id: "67658ba033c8b59ad489d7c9"
+    description: Admin group
+    users_ids:
+      - "67658ba033c8b59ad489d7c7"
+  - name: users
+    id: "67658ba033c8b59ad489d7d0"
+    description: Users group
+    users_ids:
+      - "67658ba033c8b59ad489d7c8"
+      - "67658ba033c8b59ad489d7c7"

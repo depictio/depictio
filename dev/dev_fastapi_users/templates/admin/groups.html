@@ -1,0 +1,52 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Groups{% endblock %}
+{% block page_title %}Groups{% endblock %}
+
+{% block breadcrumb_items %}
+<li class="breadcrumb-item active">Groups</li>
+{% endblock %}
+
+{% block content %}
+<div class="card django-card">
+    <div class="card-header django-card-header d-flex justify-content-between align-items-center">
+        <h5 class="card-title mb-0">Group Management</h5>
+        <a href="/admin/groups/create" class="btn btn-sm btn-light">Add Group</a>
+    </div>
+    <div class="card-body">
+        <table class="table django-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Description</th>
+                    <th>Permissions</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for group in groups %}
+                <tr>
+                    <td>{{ group.name }}</td>
+                    <td>{{ group.description }}</td>
+                    <td>
+                        {% for permission in group.permissions %}
+                        <span class="badge bg-info">{{ permission }}</span>
+                        {% endfor %}
+                    </td>
+                    <td>
+                        <div class="btn-group">
+                            <a href="/admin/groups/{{ group.id }}" class="btn btn-sm django-btn-secondary">Edit</a>
+                            <form method="post" action="/admin/groups/{{ group.id }}/delete" class="d-inline">
+                                <button type="submit" class="btn btn-sm btn-danger ms-1" onclick="return confirm('Are you sure you want to delete this group?')">
+                                    Delete
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

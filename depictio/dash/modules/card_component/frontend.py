@@ -1,22 +1,24 @@
 # Import necessary libraries
-from dash import html, dcc, Input, Output, State, MATCH
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
-from dash_iconify import DashIconify
 import httpx
+from dash import MATCH, Input, Output, State, dcc, html
+from dash_iconify import DashIconify
 
-# Depictio imports
-from depictio.dash.utils import get_component_data, load_depictio_data_mongo, return_dc_tag_from_id, return_mongoid, return_wf_tag_from_id
 from depictio.api.v1.configs.config import API_BASE_URL
-from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.custom_logging import logger
 from depictio.dash.modules.card_component.utils import (
     agg_functions,
     build_card,
     build_card_frame,
 )
+
+# Depictio imports
 from depictio.dash.utils import (
     UNSELECTED_STYLE,
     get_columns_from_data_collection,
+    get_component_data,
+    load_depictio_data_mongo,
 )
 
 
@@ -35,7 +37,9 @@ def register_callbacks_card_component(app):
         prevent_initial_call=True,
     )
     # def update_aggregation_options(column_name, wf_dc_store, component_id, local_data, pathname):
-    def update_aggregation_options(column_name, wf_tag, dc_tag, component_id, local_data, pathname):
+    def update_aggregation_options(
+        column_name, wf_tag, dc_tag, component_id, local_data, pathname
+    ):
         """
         Callback to update aggregation dropdown options based on the selected column
         """
@@ -91,9 +95,11 @@ def register_callbacks_card_component(app):
     )
     def reset_aggregation_value(column_name):
         return None
-    
+
     @app.callback(
-        Output({"type": "btn-done-edit", "index": MATCH}, "disabled", allow_duplicate=True),
+        Output(
+            {"type": "btn-done-edit", "index": MATCH}, "disabled", allow_duplicate=True
+        ),
         [
             Input({"type": "card-input", "index": MATCH}, "value"),
             Input({"type": "card-dropdown-column", "index": MATCH}, "value"),
@@ -105,7 +111,6 @@ def register_callbacks_card_component(app):
         if column_name and aggregation:
             return False
         return True
-
 
     # Callback to update card body based on the selected column and aggregation
     @app.callback(
@@ -126,7 +131,17 @@ def register_callbacks_card_component(app):
         # prevent_initial_call=True,
     )
     # def design_card_body(input_value, column_name, aggregation_value, wf_dc_store, id, local_data, pathname):
-    def design_card_body(input_value, column_name, aggregation_value, wf_tag, dc_tag, parent_index, id, local_data, pathname):
+    def design_card_body(
+        input_value,
+        column_name,
+        aggregation_value,
+        wf_id,
+        dc_id,
+        parent_index,
+        id,
+        local_data,
+        pathname,
+    ):
         """
         Callback to update card body based on the selected column and aggregation
         """
@@ -149,28 +164,20 @@ def register_callbacks_card_component(app):
         dashboard_id = pathname.split("/")[-1]
         logger.info(f"dashboard_id: {dashboard_id}")
 
-        component_data = get_component_data(input_id=parent_index, dashboard_id=dashboard_id, TOKEN=TOKEN)
+        component_data = get_component_data(
+            input_id=parent_index, dashboard_id=dashboard_id, TOKEN=TOKEN
+        )
 
         if not component_data:
-            if not wf_tag or not dc_tag:
+            if not wf_id or not dc_id:
                 # if not wf_dc_store:
                 return ([], None)
 
-            else:
-                # wf_tag = wf_dc_store[input_id]["wf_tag"]
-                # dc_tag = wf_dc_store[input_id]["dc_tag"]
-                logger.info(f"wf_tag: {wf_tag}")
-                logger.info(f"dc_tag: {dc_tag}")
         else:
             wf_id = component_data["wf_id"]
             dc_id = component_data["dc_id"]
-            wf_tag = return_wf_tag_from_id(wf_id, TOKEN=TOKEN)
-            dc_tag = return_dc_tag_from_id(wf_id, dc_id, TOKEN=TOKEN)
-            logger.info(f"wf_tag: {wf_tag}")
-            logger.info(f"dc_tag: {dc_tag}")
-
-
-
+            logger.info(f"wf_tag: {wf_id}")
+            logger.info(f"dc_tag: {dc_id}")
 
         logger.info(f"component_data: {component_data}")
 
@@ -179,11 +186,16 @@ def register_callbacks_card_component(app):
         }
 
         # Get the columns from the selected data collection
-        cols_json = get_columns_from_data_collection(wf_tag, dc_tag, TOKEN)
+        cols_json = get_columns_from_data_collection(wf_id, dc_id, TOKEN)
         logger.info(f"cols_json: {cols_json}")
 
         # If any of the input values are None, return an empty list
-        if column_name is None or aggregation_value is None or wf_tag is None or dc_tag is None:
+        if (
+            column_name is None
+            or aggregation_value is None
+            or wf_id is None
+            or dc_id is None
+        ):
             if not component_data:
                 return ([], None)
             else:
@@ -202,8 +214,17 @@ def register_callbacks_card_component(app):
             children=[
                 html.Hr(),
                 dmc.Tooltip(
-                    children=dmc.Badge(children="Aggregation description", leftSection=DashIconify(icon="mdi:information", color="grey", width=20), color="gray", radius="lg"),
-                    label=agg_functions[str(column_type)]["card_methods"][aggregation_value]["description"],
+                    children=dmc.Badge(
+                        children="Aggregation description",
+                        leftSection=DashIconify(
+                            icon="mdi:information", color="grey", width=20
+                        ),
+                        color="gray",
+                        radius="lg",
+                    ),
+                    label=agg_functions[str(column_type)]["card_methods"][
+                        aggregation_value
+                    ]["description"],
                     multiline=True,
                     width=300,
                     transition="pop",
@@ -218,53 +239,51 @@ def register_callbacks_card_component(app):
         )
 
         # Get the workflow and data collection ids from the tags selected
-        workflow_id, data_collection_id = return_mongoid(workflow_tag=wf_tag, data_collection_tag=dc_tag, TOKEN=TOKEN)
+        # workflow_id, data_collection_id = return_mongoid(workflow_tag=wf_tag, data_collection_tag=dc_tag, TOKEN=TOKEN)
 
         # stored_metadata_interactive = []
         # if stored_metadata:
         #     stored_metadata_interactive = [e for e in stored_metadata if e["component_type"] == "interactive" and e["wf_id"] == workflow_id and e["dc_id"] == data_collection_id]
 
-
-
-
         if dashboard_id:
             dashboard_data = load_depictio_data_mongo(dashboard_id, TOKEN=TOKEN)
             logger.info(f"dashboard_data: {dashboard_data}")
-            relevant_metadata = [m for m in dashboard_data["stored_metadata"] if m["wf_id"] == workflow_id and m["component_type"] == "interactive"]
+            relevant_metadata = [
+                m
+                for m in dashboard_data["stored_metadata"]
+                if m["wf_id"] == wf_id and m["component_type"] == "interactive"
+            ]
             logger.info(f"BUILD CARD - relevant_metadata: {relevant_metadata}")
 
         # Get the data collection specs
         dc_specs = httpx.get(
-            f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{workflow_id}/{data_collection_id}",
+            f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{dc_id}",
             headers=headers,
         ).json()
 
         # Get the type of the selected column and the value for the selected aggregation
         column_type = cols_json[column_name]["type"]
-        v = cols_json[column_name]["specs"][aggregation_value]
-
-
+        # v = cols_json[column_name]["specs"][aggregation_value]
 
         dashboard_data
-
 
         card_kwargs = {
             "index": id["index"],
             "title": input_value,
-            "wf_id": workflow_id,
-            "dc_id": data_collection_id,
+            "wf_id": wf_id,
+            "dc_id": dc_id,
             "dc_config": dc_specs["config"],
             "column_name": column_name,
             "column_type": column_type,
             "aggregation": aggregation_value,
             # "value": v,
             "access_token": TOKEN,
-            "stepper": True,   
+            "stepper": True,
         }
 
         if relevant_metadata:
             card_kwargs["dashboard_metadata"] = relevant_metadata
-        
+
         logger.info(f"card_kwargs: {card_kwargs}")
 
         if parent_index:

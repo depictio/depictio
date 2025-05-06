@@ -1,14 +1,13 @@
-from dash import html, Input, Output, State, dcc, ctx, ALL
 import dash
-from dash_iconify import DashIconify
-import dash_mantine_components as dmc
-
 import dash.dependencies as dd
+import dash_mantine_components as dmc
 import httpx
+from dash import ALL, Input, Output, State, dcc, html
+from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL
-from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_token
-from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.custom_logging import logger
+from depictio.dash.api_calls import api_call_fetch_user_from_token
 
 
 def register_sidebar_callbacks(app):
@@ -81,7 +80,7 @@ def register_sidebar_callbacks(app):
         if pathname == "/auth":
             return []
 
-        current_user = fetch_user_from_token(local_store["access_token"])
+        current_user = api_call_fetch_user_from_token(local_store["access_token"])
 
         email = current_user.email
         name = email.split("@")[0]
@@ -94,7 +93,9 @@ def register_sidebar_callbacks(app):
             ),
             href="/profile",
         )
-        name = dmc.Text(name, size="lg", style={"fontSize": "16px", "marginLeft": "10px"})
+        name = dmc.Text(
+            name, size="lg", style={"fontSize": "16px", "marginLeft": "10px"}
+        )
         return [avatar, name]
 
     @app.callback(
@@ -108,24 +109,62 @@ def register_sidebar_callbacks(app):
             return []
 
         try:
-            response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/utils/status", headers={"Authorization": f"Bearer {local_store['access_token']}"})
+            response = httpx.get(
+                f"{API_BASE_URL}/depictio/api/v1/utils/status",
+                headers={"Authorization": f"Bearer {local_store['access_token']}"},
+            )
             if response.status_code != 200:
-                server_status_badge = dmc.Col(dmc.Badge("Server offline", variant="dot", color="red", size=14, style={"padding": "5px 5px"}), span="content")
+                server_status_badge = dmc.Col(
+                    dmc.Badge(
+                        "Server offline",
+                        variant="dot",
+                        color="red",
+                        size=14,
+                        style={"padding": "5px 5px"},
+                    ),
+                    span="content",
+                )
                 return [server_status_badge]
             else:
                 logger.info(f"Server status: {response.json()}")
                 server_status = response.json()["status"]
                 if server_status == "online":
-                    server_status_badge = dmc.Col(dmc.Badge(f"Server online : {response.json()['version']}", variant="dot", color="green", size=14), span="content")
+                    server_status_badge = dmc.Col(
+                        dmc.Badge(
+                            f"Server online - {response.json()['version']}",
+                            variant="dot",
+                            color="green",
+                            size=14,
+                        ),
+                        span="content",
+                    )
 
                     return [dmc.Group([server_status_badge], position="apart")]
                 else:
-                    server_status_badge = dmc.Col(dmc.Badge("Server offline", variant="outline", color="red", size=14, style={"padding": "5px 5px"}), span="content")
+                    server_status_badge = dmc.Col(
+                        dmc.Badge(
+                            "Server offline",
+                            variant="outline",
+                            color="red",
+                            size=14,
+                            style={"padding": "5px 5px"},
+                        ),
+                        span="content",
+                    )
                     return [server_status_badge]
 
         except Exception as e:
             logger.error(f"Error fetching server status: {e}")
-            server_status_badge = dmc.Col(dmc.Badge("Server offline", variant="outline", color="red", size=14, style={"padding": "5px 5px"}), span="content")
+            server_status_badge = dmc.Col(
+                dmc.Badge(
+                    "Server offline",
+                    variant="outline",
+                    color="red",
+                    size=14,
+                    style={"padding": "5px 5px"},
+                ),
+                span="content",
+            )
             return [server_status_badge]
 
     @app.callback(
@@ -138,7 +177,7 @@ def register_sidebar_callbacks(app):
         if pathname == "/auth":
             return dash.no_update
 
-        current_user = fetch_user_from_token(local_store["access_token"])
+        current_user = api_call_fetch_user_from_token(local_store["access_token"])
         if current_user.is_admin:
             return {"padding": "20px"}
         else:
@@ -148,7 +187,7 @@ def register_sidebar_callbacks(app):
 
 
 def render_sidebar(email):
-    name = email.split("@")[0]
+    # name = email.split("@")[0]
 
     depictio_logo = dcc.Link(
         html.Img(src=dash.get_asset_url("logo.png"), height=45),
@@ -162,34 +201,47 @@ def render_sidebar(email):
         children=[
             dmc.NavLink(
                 id={"type": "sidebar-link", "index": "dashboards"},
-                label=dmc.Text("Dashboards", size="lg", style={"fontSize": "16px"}),  # Using dmc.Text to set the font size
+                label=dmc.Text(
+                    "Dashboards", size="lg", style={"fontSize": "16px"}
+                ),  # Using dmc.Text to set the font size
                 icon=DashIconify(icon="material-symbols:dashboard", height=25),
                 href="/dashboards",
                 style={"padding": "20px"},
             ),
             dmc.NavLink(
                 id={"type": "sidebar-link", "index": "projects"},
-                label=dmc.Text("Projects", size="lg", style={"fontSize": "16px"}),  # Using dmc.Text to set the font size
+                label=dmc.Text(
+                    "Projects", size="lg", style={"fontSize": "16px"}
+                ),  # Using dmc.Text to set the font size
                 icon=DashIconify(icon="mdi:jira", height=25),
                 href="/projects",
                 style={"padding": "20px"},
             ),
             dmc.NavLink(
                 id={"type": "sidebar-link", "index": "administration"},
-                label=dmc.Text("Administration", size="lg", style={"fontSize": "16px"}),  # Using dmc.Text to set the font size
+                label=dmc.Text(
+                    "Administration", size="lg", style={"fontSize": "16px"}
+                ),  # Using dmc.Text to set the font size
                 icon=DashIconify(icon="material-symbols:settings", height=25),
                 href="/admin",
                 style={"padding": "20px", "display": "none"},
             ),
             dmc.NavLink(
                 id={"type": "sidebar-link", "index": "about"},
-                label=dmc.Text("About", size="lg", style={"fontSize": "16px"}),  # Using dmc.Text to set the font size
+                label=dmc.Text(
+                    "About", size="lg", style={"fontSize": "16px"}
+                ),  # Using dmc.Text to set the font size
                 icon=DashIconify(icon="mingcute:question-line", height=25),
                 href="/about",
                 style={"padding": "20px"},
             ),
         ],
-        style={"white-space": "nowrap", "margin-top": "20px", "flexGrow": "1", "overflowY": "auto"},
+        style={
+            "white-space": "nowrap",
+            "margin-top": "20px",
+            "flexGrow": "1",
+            "overflowY": "auto",
+        },
     )
 
     sidebar_footer = html.Div(

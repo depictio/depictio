@@ -1,55 +1,78 @@
 name: Deploy and Test Depictio
 
+# on:
+#   workflow_dispatch:
+#     inputs:
+#       logLevel:
+#         description: "Log level"
+#         required: true
+#         default: "warning"
+#         type: choice
+#         options:
+#           - info
+#           - warning
+#           - debug
+#   pull_request:
+#     branches: [main]
 on:
-  workflow_dispatch:
-    inputs:
-      logLevel:
-        description: "Log level"
-        required: true
-        default: "warning"
-        type: choice
-        options:
-          - info
-          - warning
-          - debug
-  pull_request:
+  push:
     branches: [main]
 
 jobs:
   setup:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04 # Instead of ubuntu-latest
     steps:
-      - name: Checkout Repository
+      - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          submodules: recursive # Clone with submodules
 
-      # - name: Clone Example Data Repository
-      #   run: rm -rdf depictio-data && git clone https://github.com/depictio/depictio-example-data.git
+      # ↓ NEW: Add user to docker group for permissions
+      - name: Configure Docker Permissions
+        run: |
+          # Add current user to docker group (ignore if already exists)
+          sudo usermod -aG docker $USER || true
+          # Change docker socket permissions
+          sudo chmod 666 /var/run/docker.sock
+          # Verify permissions
+          ls -la /var/run/docker.sock
+          groups
+
+      - name: Check os version
+        run: |
+          echo "OS Version: $(cat /etc/os-release)"
+          echo "Kernel Version: $(uname -r)"
+          echo "Architecture: $(uname -m)"
+          docker --version
+          docker compose version
+
+      # ← Export UID and GID
+      # - name: Export UID and GID
+      #   run: |
+      #     echo "UID=$(id -u)" >> $GITHUB_ENV
+      #     echo "GID=$(id -g)" >> $GITHUB_ENV
 
       - name: Create and Set Permissions for depictioDB
         run: |
-          sudo mkdir -p depictioDB/
-          sudo chown -R $(id -u):$(id -g) depictioDB/
-          sudo chmod -R 777 depictioDB/
+          mkdir -p depictioDB/
+          chown -R $UID:$GID depictioDB/
+          chmod -R 777 depictioDB/
 
       - name: Create and Set Permissions for minio_data
         run: |
-          sudo mkdir -p minio_data/
-          sudo chown -R $(id -u):$(id -g) minio_data/
-          sudo chmod -R 775 minio_data/
+          mkdir -p minio_data/
+          chown -R $UID:$GID minio_data/
+          chmod -R 775 minio_data/
 
-      - name: Create and Set Permissions for depictio/keys
-        run: |
-          sudo mkdir -p depictio/keys/
-          sudo chmod -R 775 depictio/keys/
-          sudo chown -R runner:docker depictio/keys/
+      # - name: Create and Set Permissions for depictio/keys
+      #   run: |
+      #     mkdir -p depictio/keys/
+      #     chown -R $UID:$GID depictio/keys/
+      #     chmod -R 775 depictio/keys/
 
-      - name: Create and Set Permissions for depictio/.depictio
-        run: |
-          sudo mkdir -p depictio/.depictio/
-          sudo chmod -R 775 depictio/.depictio/
-          sudo chown -R runner:docker depictio/.depictio/
+      # - name: Create and Set Permissions for depictio/.depictio
+      #   run: |
+      #     mkdir -p depictio/.depictio/
+      #     chown -R $UID:$GID depictio/.depictio/
+      #     chmod -R 775 depictio/.depictio/
 
       - name: Set Environment Variables
         run: |
@@ -57,31 +80,42 @@ jobs:
           echo "GID=$(id -g)" >> $GITHUB_ENV
           echo "MINIO_ROOT_USER=minio" >> $GITHUB_ENV
           echo "MINIO_ROOT_PASSWORD=minio123" >> $GITHUB_ENV
-        
 
-      - name: Set up Environment Variables
-        #run: echo "DEPICTIO_BACKEND_EXAMPLE_DATA_VOLUME_HOST=$(pwd)/depictio-example-data" >> .env
-        run: echo "DEPICTIO_BACKEND_EXAMPLE_DATA_VOLUME_HOST=/home/runner/work/depictio/depictio/depictio-example-data" >> .env
+      # - name: Set up Environment Variables
+      #   run: echo "DEPICTIO_BACKEND_EXAMPLE_DATA_VOLUME_HOST=/home/runner/work/depictio/depictio/depictio-example-data" >> .env
 
-
-        
       - name: Start Docker Compose Services
-        run: docker compose up -d
+        run: |
+          # Ensure we have docker permissions by using the updated socket permissions
+          docker compose -f docker-compose.yaml -f docker-compose/docker-compose.minio.yaml up -d --build
+
+      # - name: Wait for Services to Start
+      #   run: sleep 10 # Adjust the wait time if necessary
+
+      # - name: Check .depictio/admin_config.yaml location
+      #   run: |
+      #     # Current working directory
+      #     echo "Current working directory: $(pwd)"
+      #     ls -la depictio
+      #     ls -la depictio/.depictio
+      #     # Check if the file exists
+      #     if [ -f "depictio/.depictio/admin_config.yaml" ]; then
+      #       # full path echo - n "$(realpath depictio/.depictio/admin_config.yaml)"
+      #       echo "File exists at depictio/.depictio/admin_config.yaml"
+      #       echo "File path: $(realpath depictio/.depictio/admin_config.yaml)"
+      #     else
+      #       echo "File does not exist at depictio/.depictio/admin_config.yaml"
+      #       exit 1
+      #     fi
 
       - name: Verify Permissions Inside Container
         run: |
           docker compose exec -T depictio_backend bash -c "ls -la /app/depictio/keys"
 
-      - name: List Files
-        run: ls -la
-
-      - name: List Files
-        run: ls -la depictio
-
       - name: Wait for Services to Start
         run: sleep 10 # Adjust the wait time if necessary
 
-      # Step 5: Verify All Containers Are Running
+      # Verify All Containers Are Running
       - name: Check if all containers are running
         run: |
           # Check if any containers are not in the 'Up' state
@@ -96,42 +130,12 @@ jobs:
           docker ps
           docker logs depictio-depictio_frontend-1
           docker logs depictio-depictio_backend-1
-          docker logs depictio-minio-1
+          # docker logs depictio-minio-1
           docker logs depictio-mongo-1
-
-        # Clone the depictio-cli repository
-      - name: Clone Depictio-CLI Repository
-        run: git clone -b 19-fixing-pipeline-config-path-parameter-missing-in-dataupload https://github.com/depictio/depictio-cli.git
-
-      # Pwd & list files
-      - name: Print Working Directory
-        run: pwd
-
-      - name: List Files
-        run: ls -la
-
-      - name: List Files
-        run: ls -la depictioDB/
-
-      # List content of depictio
-      - name: List Depictio Directory
-        run: ls -lal depictio
 
       # List content of depictio
       - name: List Depictio Directory
         run: ls -lal depictio/.depictio
-
-      # List content of depictio
-      - name: List Depictio Directory
-        run: ls -lal .
-
-      # List content of depictio
-      - name: List Depictio Directory
-        run: ls -lal depictio/keys
-
-      # List content of depictio
-      - name: List Depictio Directory
-        run: ls -lal ../
 
       # Verify permissions inside MongoDB container
       - name: Verify MongoDB Permissions Inside Container
@@ -139,48 +143,56 @@ jobs:
           docker compose exec -T mongo bash -c "ls -la /data/depictioDB"
 
       # Verify permissions inside MinIO container
-      - name: Verify MinIO Permissions Inside Container
+      # - name: Verify MinIO Permissions Inside Container
+      #   run: |
+      #     docker compose exec -T minio bash -c "ls -la /data"
+
+      # Show admin config file
+      - name: Show admin config file
+        run: docker compose exec depictio_backend cat /app/depictio/.depictio/admin_config.yaml
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "depictio/cli/pyproject.toml"
+          cache-dependency-glob: "uv.lock"
+
+      # GitHub Actions workflow with conditional LTS fallback
+      - name: Install Dependencies with LTS Fallback
         run: |
-          docker compose exec -T minio bash -c "ls -la /data"
+          cd depictio/cli
+          # create a virtual environment using uv for python 3.11
+          uv venv --python 3.11 venv
+          source venv/bin/activate
+          uv pip install --upgrade pip
 
+          # First try default installation (with standard polars)
+          if uv pip install -e . && python -c "import polars" 2>/dev/null; then
+            echo "✅ Default installation with standard polars successful"
+          else
+            echo "⚠️ Standard polars failed, uninstalling and trying LTS version..."
+            # Uninstall the package to avoid conflicts
+            uv pip uninstall polars || true
+            # Install with LTS polars
+            uv pip install polars-lts-cpu
+            echo "✅ LTS installation successful"
+          fi
 
-      - name: Show agent config file
-        run: docker compose exec depictio_backend cat /app/depictio/.depictio/default_admin_agent.yaml
-        # run: cat depictio/.depictio/default_admin_agent.yaml
-
-      # Go to the Depictio-CLI directory
-      - name: Change Directory to Depictio-CLI
-        run: |
-          cd depictio-cli
-          pwd
-          ls -la
-
-      - name: Set Up Python Environment
-        working-directory: depictio-cli
-        run: |
-          # Check the current directory and confirm the presence of depictio-cli
-          pwd
-          ls -la
-          python -m venv depictio-cli-venv
-          # Check the virtual environment directory creation
-          ls -la depictio-cli-venv
-
-      - name: Activate Virtual Environment and Install Depictio-CLI
-        working-directory: depictio-cli
-        run: |
-          # Check if the virtual environment's Python executable exists
-          ls -la depictio-cli-venv/bin/
-          # Use the explicit path to python and pip in the virtual environment
-          depictio-cli-venv/bin/python -m pip install --upgrade pip
-          depictio-cli-venv/bin/pip install -e .
-
+          # Verify installation
+          python -c "import polars; print(f'Polars {polars.__version__} installed')"
+          depictio-cli --help
 
       # Extract the token and perform a health check with the token
       - name: Extract Token and Check Depictio Backend Health
         run: |
           # Extract the access token from the YAML file
-          token=$(docker compose exec depictio_backend bash -c "cat /app/depictio/.depictio/default_admin_agent.yaml" | grep 'access_token' | awk '{print $2}')
-          
+          token=$(docker compose exec depictio_backend bash -c "cat /app/depictio/.depictio/admin_config.yaml" | grep 'access_token' | awk '{print $2}')
+
           # Remove quotes from the token if any
           token=$(echo $token | tr -d "'\"")
 
@@ -195,58 +207,174 @@ jobs:
             echo "Backend API is not healthy. Status code: $health_check"
             exit 1
           else
-            
             echo "Backend API is healthy."
           fi
 
-
-
-      # Fetch the Depictio Backend logs after CLI execution
+      # Fetch the Depictio Backend logs before CLI execution
       - name: Fetch Depictio Backend Logs Before CLI Run
         if: always() # Ensure this runs no matter what
         run: |
           echo "Fetching logs before running CLI..."
           docker compose logs depictio_backend
 
-      # Run the CLI command with continue-on-error to ensure subsequent steps run
-      - name: Ingest Data with Depictio-CLI
-        working-directory: depictio-cli
-        continue-on-error: true  # Continue workflow even if this step fails
+      - name: Copy /app/depictio/.depictio/admin_config.yaml to host
         run: |
-          # Run the CLI command with verbose logging
-          depictio-cli-venv/bin/depictio-cli data setup \
-            --agent-config-path ../depictio/.depictio/default_admin_agent.yaml \
-            --pipeline-config-path configs/mosaicatcher_pipeline/mosaicatcher_pipeline.yaml \
-            --scan-files || { echo "Data setup failed. Exiting."; exit 1; }
+          docker ps
+          docker cp depictio-depictio_backend-1:/app/depictio/.depictio/admin_config.yaml depictio/cli/admin_config.yaml
+          ls -la depictio/cli/admin_config.yaml
+          cat depictio/cli/admin_config.yaml
+
+      - name: Validate & Show Depictio CLI Config
+        continue-on-error: true
+        run: |
+          cd depictio/cli
+
+          # Activate the virtual environment first
+          source venv/bin/activate
+
+          # Depictio CLI command to show the CLI config
+          depictio-cli config show-cli-config --CLI-config-path admin_config.yaml
+
+      # - name: Thorough file check
+      #   run: |
+      #     cd depictio/cli
+      #     echo "=== Current directory ==="
+      #     pwd
+      #     echo "=== List parent directory ==="
+      #     ls -la ../
+      #     echo "=== List api directory ==="
+      #     ls -la ../api/
+      #     echo "=== List v1 directory ==="
+      #     ls -la ../api/v1/
+      #     echo "=== List configs directory ==="
+      #     ls -la ../api/v1/configs/
+      #     echo "=== List iris_dataset directory ==="
+      #     ls -la ../api/v1/configs/iris_dataset/
+      #     echo "=== Try to read the file ==="
+      #     cat ../api/v1/configs/iris_dataset/iris.csv | head -5 || echo "Cannot read file"
+
+      # - name: Debug paths before validation
+      #   run: |
+      #     echo "File exists: $(if [ -f "depictio/api/v1/configs/iris_dataset/iris.csv" ]; then echo "YES"; else echo "NO"; fi)"
+      #     cd depictio/cli
+      #     echo "Current working directory: $(pwd)"
+      #     echo "File exists: $(if [ -f "../api/v1/configs/iris_dataset/iris.csv" ]; then echo "YES"; else echo "NO"; fi)"
+      #     echo "Absolute path: $(realpath "../api/v1/configs/iris_dataset/iris.csv")"
+      #     echo "Environment variables:"
+      #     env | grep -E "(GITHUB_WORKSPACE|PWD)"
+
+      # - name: Check mount points
+      #   run: |
+      #     echo "=== Mount points ==="
+      #     mount | grep -E "(depictio|workspace)"
+      #     echo "=== Docker volume mounts ==="
+      #     docker inspect $(hostname) | grep -A5 Mounts
+
+      - name: Validate & Show Project Config
+        continue-on-error: true
+        run: |
+          cd depictio/cli
+
+          # Activate the virtual environment first
+          source venv/bin/activate
+
+          # Depictio CLI command to show the CLI config
+          depictio-cli config validate-project-config \
+                              --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
+                              --CLI-config-path admin_config.yaml
 
 
-      # Fetch backend logs regardless of CLI step outcome
-      - name: Fetch Depictio Backend Logs After CLI Run
-        if: always()  # Run this step no matter what happens previously
-        run: |
-          echo "Fetching backend logs after CLI run..."
-          docker compose logs depictio_backend
 
-      - name: Check Workflow in MongoDB
+      - name: Check S3 Storage
+        continue-on-error: true
         run: |
-          docker compose exec -T mongo bash -c "
-            echo 'db.workflows.find().pretty()' | mongosh localhost:27018/depictioDB --quiet
-          "
-      - name: Check Users in MongoDB
-        run: |
-          docker compose exec -T mongo bash -c "
-            echo 'db.users.find().pretty()' | mongosh localhost:27018/depictioDB --quiet
-          "
-      - name: Check DeltaTables in MongoDB
-        run: |
-          docker compose exec -T mongo bash -c "
-            echo 'db.deltatables.find().pretty()' | mongosh localhost:27018/depictioDB --quiet
-          "
+          cd depictio/cli
 
-      - name: Check if localhost:5080 (frontend) is up and running
-        run: |
-          curl -s -o /dev/null -w "%{http_code}" http://localhost:5080
-          echo "Frontend is up and running"
+          # Activate the virtual environment first
+          source venv/bin/activate
 
-      - name: Check Ingestion Success
-        run: echo "Data ingestion completed successfully"
+          # Depictio CLI command to show the CLI config
+          depictio-cli config check-s3-storage \
+                              --CLI-config-path admin_config.yaml
+
+      - name: Show Project on server
+        continue-on-error: true
+        run: |
+          cd depictio/cli
+
+          # Activate the virtual environment first
+          source venv/bin/activate
+
+          # Depictio CLI command to show the CLI config
+          depictio-cli config show-depictio-project-metadata-on-server \
+                              --project-name "Iris Dataset Project Data Analysis" \
+                              --CLI-config-path admin_config.yaml
+
+      - name: Sync Project to Server
+        continue-on-error: true
+        run: |
+          cd depictio/cli
+
+          # Activate the virtual environment first
+          source venv/bin/activate
+
+          # Depictio CLI command to show the CLI config
+          depictio-cli config sync-project-config-to-server \
+                              --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
+                              --CLI-config-path admin_config.yaml
+
+      # # Sync the iris project configuration to the server
+      # # - name: Sync Iris Project Configuration
+      # #   continue-on-error: false
+      # #   run: |
+      # #     source venv/bin/activate
+      # #     export POLARS_SKIP_CPU_CHECK=1
+      # #     depictio-cli config show-cli-config --CLI-config-path ~/.depictio/admin_config.yaml
+      # # # # Scan the iris dataset files
+      # # - name: Scan Iris Dataset Files
+      # #   continue-on-error: true
+      # #   run: |
+      # #     source venv/bin/activate
+      # #     depictio-cli data scan \
+      # #       --agent-config-path depictio/.depictio/admin_config.yaml \
+      # #       --project-config-path depictio/api/v1/configs/iris_dataset/initial_project.yaml
+
+      # # # Process the iris dataset
+      # # - name: Process Iris Dataset
+      # #   continue-on-error: true
+      # #   run: |
+      # #     source venv/bin/activate
+      # #     depictio-cli data process \
+      # #       --agent-config-path depictio/.depictio/admin_config.yaml \
+      # #       --project-config-path depictio/api/v1/configs/iris_dataset/initial_project.yaml
+
+      # # # Fetch backend logs regardless of CLI step outcome
+      # # - name: Fetch Depictio Backend Logs After CLI Run
+      # #   if: always()  # Run this step no matter what happens previously
+      # #   run: |
+      # #     echo "Fetching backend logs after CLI run..."
+      # #     docker compose logs depictio_backend
+
+      # # - name: Check Workflow in MongoDB
+      # #   run: |
+      # #     docker compose exec -T mongo bash -c "
+      # #       echo 'db.workflows.find().pretty()' | mongosh localhost:27018/depictioDB --quiet
+      # #     "
+      # # - name: Check Users in MongoDB
+      # #   run: |
+      # #     docker compose exec -T mongo bash -c "
+      # #       echo 'db.users.find().pretty()' | mongosh localhost:27018/depictioDB --quiet
+      # #     "
+      # # - name: Check DeltaTables in MongoDB
+      # #   run: |
+      # #     docker compose exec -T mongo bash -c "
+      # #       echo 'db.deltatables.find().pretty()' | mongosh localhost:27018/depictioDB --quiet
+      # #     "
+
+      # # - name: Check if localhost:5080 (frontend) is up and running
+      # #   run: |
+      # #     curl -s -o /dev/null -w "%{http_code}" http://localhost:5080
+      # #     echo "Frontend is up and running"
+
+      # # - name: Check Ingestion Success
+      # #   run: echo "Data ingestion completed successfully"

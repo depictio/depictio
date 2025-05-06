@@ -1,0 +1,228 @@
+{{- if .Values.mongo.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongo
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "depictio.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "depictio.mongo.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        {{- include "depictio.mongo.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: mongo
+          image: "{{ .Values.mongo.image.repository }}:{{ .Values.mongo.image.tag }}"
+          imagePullPolicy: {{ .Values.mongo.image.pullPolicy }}
+          args: {{ toYaml .Values.mongo.args | nindent 12 }}
+          ports:
+            - containerPort: {{ .Values.mongo.service.port }}
+          resources: {{ toYaml .Values.mongo.resources | nindent 12 }}
+          volumeMounts:
+            - name: mongo-storage
+              mountPath: /data/depictioDB
+      volumes:
+        - name: mongo-storage
+          persistentVolumeClaim:
+            claimName: mongo-pvc
+{{- end }}
+---
+{{- if .Values.minio.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "depictio.labels" . | nindent 4 }}
+spec:
+  strategy:
+    type: Recreate
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "depictio.minio.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "depictio.minio.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: minio
+          image: "{{ .Values.minio.image.repository }}:{{ .Values.minio.image.tag }}"
+          imagePullPolicy: {{ .Values.minio.image.pullPolicy }}
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: depictio-secrets
+                  key: MINIO_ROOT_USER
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: depictio-secrets
+                  key: MINIO_ROOT_PASSWORD
+          args: {{ toYaml .Values.minio.args | nindent 12 }}
+          ports:
+            - containerPort: {{ .Values.minio.service.httpPort }}
+            - containerPort: {{ .Values.minio.service.consolePort }}
+          resources: {{ toYaml .Values.minio.resources | nindent 12 }}
+          volumeMounts:
+            - name: minio-storage
+              mountPath: /data
+      volumes:
+        - name: minio-storage
+          persistentVolumeClaim:
+            claimName: minio-pvc
+{{- end }}
+---
+{{- if .Values.backend.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: depictio-backend
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "depictio.labels" . | nindent 4 }}
+spec:
+  strategy:
+    type: Recreate
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "depictio.backend.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "depictio.backend.selectorLabels" . | nindent 8 }}
+    spec:
+      securityContext:
+        fsGroup: {{ .Values.backend.securityContext.fsGroup }}
+      containers:
+        - name: depictio-backend
+          image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
+          imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          env:
+            {{- range $key, $value := .Values.backend.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          command: {{ toYaml .Values.backend.command | nindent 12 }}
+          ports:
+            - containerPort: {{ .Values.backend.service.targetPort }}
+          resources: {{ toYaml .Values.backend.resources | nindent 12 }}
+          volumeMounts:
+            - name: config-volume
+              mountPath: /app/depictio/api/v1/configs/config_backend_k8s_embl_backend.yaml
+              subPath: config_backend_k8s_embl_backend.yaml
+            - name: data
+              mountPath: /app/data
+            - name: minio-data
+              mountPath: /app/minio_data
+            - name: configs
+              mountPath: /app/configs
+            - name: kubernetes
+              mountPath: /app/kubernetes
+            - name: depictio-example-data
+              mountPath: /app/depictio-example-data
+            - name: depictio-screenshots
+              mountPath: /app/depictio/dash/static/screenshots
+      volumes:
+        - name: config-volume
+          configMap:
+            name: depictio-backend-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: depictio-data-pvc
+        - name: minio-data
+          persistentVolumeClaim:
+            claimName: depictio-minio-data-pvc
+        - name: configs
+          persistentVolumeClaim:
+            claimName: depictio-configs-pvc
+        - name: kubernetes
+          persistentVolumeClaim:
+            claimName: depictio-kubernetes-pvc
+        - name: depictio-example-data
+          persistentVolumeClaim:
+            claimName: depictio-example-data-pvc
+        - name: depictio-screenshots
+          persistentVolumeClaim:
+            claimName: depictio-screenshots-pvc
+{{- end }}
+---
+{{- if .Values.frontend.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: depictio-frontend
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "depictio.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "depictio.frontend.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "depictio.frontend.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: depictio-frontend
+          image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
+          imagePullPolicy: {{ .Values.frontend.image.pullPolicy }}
+          env:
+            {{- range $key, $value := .Values.frontend.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          command: {{ toYaml .Values.frontend.command | nindent 12 }}
+          ports:
+            - containerPort: {{ .Values.frontend.service.targetPort }}
+          resources: {{ toYaml .Values.frontend.resources | nindent 12 }}
+          volumeMounts:
+            - name: config-volume
+              mountPath: /app/depictio/api/v1/configs/config_backend_k8s_embl_frontend.yaml
+              subPath: config_backend_k8s_embl_frontend.yaml
+            - name: data
+              mountPath: /app/data
+            - name: minio-data
+              mountPath: /app/minio_data
+            - name: configs
+              mountPath: /app/configs
+            - name: depictio-example-data
+              mountPath: /app/depictio-example-data
+            - name: depictio-screenshots
+              mountPath: /app/depictio/dash/static/screenshots
+      volumes:
+        - name: config-volume
+          configMap:
+            name: depictio-frontend-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: depictio-data-pvc
+        - name: minio-data
+          persistentVolumeClaim:
+            claimName: depictio-minio-data-pvc
+        - name: configs
+          persistentVolumeClaim:
+            claimName: depictio-configs-pvc
+        - name: depictio-example-data
+          persistentVolumeClaim:
+            claimName: depictio-example-data-pvc
+        - name: depictio-screenshots
+          persistentVolumeClaim:
+            claimName: depictio-screenshots-pvc
+{{- end }}

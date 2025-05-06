@@ -1,21 +1,25 @@
-from typing import Any, Dict
 from bson import ObjectId
-from fastapi import HTTPException
-from pymongo.collection import Collection
-from pymongo.results import UpdateResult
 
 
 from depictio.api.v1.db import dashboards_collection
-from depictio.api.v1.configs.logging import logger
-from depictio.api.v1.endpoints.dashboards_endpoints.models import DashboardData
-from depictio.api.v1.models.base import convert_objectid_to_str
+from depictio.api.v1.configs.custom_logging import logger
+
+from depictio.models.models.base import convert_objectid_to_str
 
 
 def load_dashboards_from_db(owner, admin_mode=False):
     logger.info("Loading dashboards from MongoDB")
 
     logger.info(f"owner: {owner}")
-    projection = {"_id": 1, "dashboard_id": 1, "version": 1, "title": 1, "permissions": 1, "last_saved_ts": 1}
+    projection = {
+        "_id": 1,
+        "dashboard_id": 1,
+        "version": 1,
+        "title": 1,
+        "permissions": 1,
+        "last_saved_ts": 1,
+        "project_id": 1,
+    }
     if admin_mode:
         projection["stored_metadata"] = 1
 
@@ -29,9 +33,16 @@ def load_dashboards_from_db(owner, admin_mode=False):
         # Sort dashboards by title
         dashboards = sorted(dashboards, key=lambda x: x["title"])
     else:
+        logger.info("Admin mode not enabled.")
         dashboards = list(
             dashboards_collection.find(
-                {"$or": [{"permissions.owners._id": ObjectId(owner)}, {"permissions.viewers._id": ObjectId(owner)}, {"permissions.viewers": "*"}]}, projection
+                {
+                    "$or": [
+                        {"permissions.owners._id": ObjectId(owner)},
+                        {"permissions.viewers._id": ObjectId(owner)},
+                    ]
+                },
+                projection,
             )
         )
 

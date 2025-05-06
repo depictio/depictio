@@ -4,46 +4,47 @@ channels:
   - plotly
   - microsoft
 dependencies:
+  - bcrypt==4.2.1
+  - beanie
+  - bleach
+  - boto3==1.36.21
+  - bson==0.5.10
   - colorlog
   - curl
-  - bcrypt
-  - bleach
-  - boto3
-  - bson
-  - dash
-  - dash-bootstrap-components
-  # - dash-mantine-components
-  - fastapi
+  - dash-bootstrap-components==1.7.1
+  - dash-extensions==1.0.1
+  - dash-iconify==0.1.2
+  - dash-mantine-components==0.12.1
+  - dash==2.14.2
+  - deltalake==0.24.0
+  - devtools
+  - fastapi==0.115.8
   - fastexcel
   - fastparquet
-  - httpx
-  - numpy
-  - pandas
-  - pika # RabbitMQ
+  - gunicorn
+  - httpx==0.28.1
+  - motor
+  - mypy-boto3-s3 
+  - numpy==2.2.3
+  - pandas==2.2.3
+  - playwright==1.50.1
   - plotly_express=0.4.1
-  - polars
-  - pydantic==1.10.10
-  - pymongo
-  - python
-  - python-jose
-  - python-multipart
+  - polars==1.22.0
+  - pydantic==2.10.6
+  - pydantic-settings==2.7.1
+  - pyjwt==2.10.1
+  - pymongo==4.11
+  - pytest-playwright==0.7.0
+  - python==3.12.9
   - python-dotenv
+  - python-jose==3.3.0
+  - python-multipart
   - pyyaml
-  - redis-py
+  - rich
+  - tomli
   - typer
-  - uvicorn
-  - deltalake
-  - pytest-playwright
-  - playwright
+  - typeguard
+  - uvicorn==0.34.0
   - pip:  
-    - pydantic[email]==1.10.10
-    - dash-mantine-components==0.12.1
-    - dash-jbrowse==1.2.0
-    - dash-iconify==0.1.2
-    - dash-extensions==1.0.1
     - dash-draggable==0.1.2
-    - dash-auth==2.0.0
-    - dash-ag-grid==2.2.0
-    - pyjwt
-    - pytest-playwright
-
+    - dash-ag-grid==31.3.0

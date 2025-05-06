@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Django Dash Example</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+        }
+        .header {
+            background-color: #333;
+            color: white;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .user-info {
+            display: flex;
+            align-items: center;
+        }
+        .user-info span {
+            margin-right: 1rem;
+        }
+        .logout-btn {
+            background-color: #f44336;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 3px;
+            cursor: pointer;
+            text-decoration: none;
+        }
+        .logout-btn:hover {
+            background-color: #d32f2f;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+        .dashboard-card {
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        h1, h2 {
+            color: #333;
+        }
+        .admin-link {
+            display: inline-block;
+            margin-top: 1rem;
+            background-color: #2196F3;
+            color: white;
+            padding: 0.5rem 1rem;
+            text-decoration: none;
+            border-radius: 3px;
+        }
+        .admin-link:hover {
+            background-color: #0b7dda;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Django Dash Example</h1>
+        <div class="user-info">
+            <span>Welcome, {{ user.username }}</span>
+            <a href="{% url 'logout' %}" class="logout-btn">Logout</a>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="dashboard-card">
+            <h2>Your Dashboard</h2>
+            <p>This is a simple example of integrating Django with Plotly Dash.</p>
+            
+            {% if user.is_staff %}
+            <p>As an admin user, you can access the Django admin interface to manage users:</p>
+            <a href="/admin/" class="admin-link">Go to Admin Interface</a>
+            {% endif %}
+        </div>
+        
+        <div class="dashboard-card">
+            <h2>Interactive Dash Visualization</h2>
+            <div style="height: 500px;">
+                <iframe src="{{ dash_url }}" width="100%" height="100%" frameborder="0"></iframe>
+                <p class="info-text">The Dash app above is authenticated using your Django user credentials.</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

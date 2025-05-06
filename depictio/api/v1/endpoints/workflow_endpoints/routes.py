@@ -1,22 +1,27 @@
 import hashlib
 import json
+
 from bson import ObjectId
-from fastapi import HTTPException, Depends, APIRouter
+from fastapi import APIRouter, Depends, HTTPException
 from pymongo import ReturnDocument
 
-from depictio.api.v1.configs.logging import logger
-from depictio.api.v1.db import workflows_collection, users_collection
-from depictio.api.v1.endpoints.deltatables_endpoints.routes import delete_deltatable
-from depictio.api.v1.endpoints.files_endpoints.routes import delete_files
-from depictio.api.v1.endpoints.user_endpoints.models import UserBase
-from depictio.api.v1.endpoints.workflow_endpoints.utils import compare_models
-from depictio.api.v1.models.base import convert_objectid_to_str
-from depictio.api.v1.models.top_structure import Workflow
+from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.db import (
+    projects_collection,
+    users_collection,
+    workflows_collection,
+)
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
-
+from depictio.api.v1.endpoints.workflow_endpoints.utils import compare_models
+from depictio.models.models.base import convert_objectid_to_str
+from depictio.models.models.users import UserBase
+from depictio.models.models.workflows import Workflow
 
 # Define the router
 workflows_endpoint_router = APIRouter()
+
+
+# FIXME: refactor that endpoint to be compliant with new architecture
 
 
 @workflows_endpoint_router.get("/get_all_workflows")
@@ -38,7 +43,9 @@ async def get_all_workflows(current_user: str = Depends(get_current_user)):
         "$or": [
             {"permissions.owners._id": user_id},
             {"permissions.viewers._id": user_id},
-            {"permissions.viewers": "*"},  # This makes workflows with "*" publicly accessible
+            {
+                "permissions.viewers": "*"
+            },  # This makes workflows with "*" publicly accessible
         ]
     }
 
@@ -54,7 +61,12 @@ async def get_all_workflows(current_user: str = Depends(get_current_user)):
 
 
 @workflows_endpoint_router.get("/get/from_args")
-async def get_workflow_from_args(name: str, engine: str, permissions: str = None, current_user: str = Depends(get_current_user)):
+async def get_workflow_from_args(
+    name: str,
+    engine: str,
+    permissions: str = None,
+    current_user: str = Depends(get_current_user),
+):
     logger.info(f"workflow_name: {name}")
     logger.info(f"workflow_engine: {engine}")
     logger.info(f"permissions: {permissions}")
@@ -70,15 +82,20 @@ async def get_workflow_from_args(name: str, engine: str, permissions: str = None
     else:
         permissions_request = None
 
-    logger.info(f"Name: {name}, Engine: {engine}, Permissions: {permissions_request}, User: {current_user}")
+    logger.info(
+        f"Name: {name}, Engine: {engine}, Permissions: {permissions_request}, User: {current_user}"
+    )
 
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
 
     if not name or not engine:
-        raise HTTPException(status_code=400, detail="Workflow name and engine are required to get a workflow.")
+        raise HTTPException(
+            status_code=400,
+            detail="Workflow name and engine are required to get a workflow.",
+        )
 
-    # current_user = fetch_user_from_token(token)
+    # current_user = api_call_fetch_user_from_token(token)
 
     logger.info(f"current_user: {current_user}")
 
@@ -94,7 +111,9 @@ async def get_workflow_from_args(name: str, engine: str, permissions: str = None
         "$or": [
             {"permissions.owners._id": user_id},
             {"permissions.viewers._id": user_id},
-            {"permissions.viewers": "*"},  # This makes workflows with "*" publicly accessible
+            {
+                "permissions.viewers": "*"
+            },  # This makes workflows with "*" publicly accessible
         ]
     }
 
@@ -130,10 +149,16 @@ async def get_workflow_from_args(name: str, engine: str, permissions: str = None
     logger.info(f"workflows: {workflows}")
 
     if not workflows:
-        raise HTTPException(status_code=404, detail=f"No workflow found for the current user with name {name} and engine {engine}.")
+        raise HTTPException(
+            status_code=404,
+            detail=f"No workflow found for the current user with name {name} and engine {engine}.",
+        )
 
     if len(workflows) > 1:
-        raise HTTPException(status_code=500, detail=f"Multiple workflows found for the current user with name {name} and engine {engine}.")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Multiple workflows found for the current user with name {name} and engine {engine}.",
+        )
 
     workflows = convert_objectid_to_str(workflows)
 
@@ -142,39 +167,108 @@ async def get_workflow_from_args(name: str, engine: str, permissions: str = None
 
 @workflows_endpoint_router.get("/get/from_id")
 # @workflows_endpoint_router.get("/get_workflows", response_model=List[Workflow])
-async def get_workflow_from_id(workflow_id: str, current_user: str = Depends(get_current_user)):
+async def get_workflow_from_id(
+    workflow_id: str, current_user: str = Depends(get_current_user)
+):
     logger.info(f"workflow_id: {workflow_id}")
 
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
 
-    # Assuming the 'current_user' now holds a 'user_id' as an ObjectId after being parsed in 'get_current_user'
-    user_id = current_user.id  # This should be the ObjectId
+    try:
+        workflow_oid = ObjectId(workflow_id)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
-    # Find workflows where current_user is either an owner or a viewer
-    query = {
-        "_id": ObjectId(workflow_id),
-        "$or": [
-            {"permissions.owners._id": user_id},
-            {"permissions.viewers._id": user_id},
-            {"permissions.viewers": "*"},  # This makes workflows with "*" publicly accessible
-        ],
-    }
-    logger.info(f"query: {query}")
+    # Use MongoDB aggregation to directly retrieve the specific workflow
+    pipeline = [
+        # Match projects containing this workflow and with appropriate permissions
+        {
+            "$match": {
+                "workflows._id": workflow_oid,
+                "$or": [
+                    {"permissions.owners._id": current_user.id},
+                    {"permissions.viewers._id": current_user.id},
+                    {"permissions.viewers": "*"},
+                ],
+            }
+        },
+        # Unwind the workflows array
+        {"$unwind": "$workflows"},
+        # Match the specific workflow ID
+        {"$match": {"workflows._id": workflow_oid}},
+        # Return only the workflow
+        {"$replaceRoot": {"newRoot": "$workflows"}},
+    ]
 
-    # Retrieve the workflows & convert them to Workflow objects to validate the model
-    workflows_cursor = [Workflow(**convert_objectid_to_str(w)) for w in list(workflows_collection.find(query))]
-    workflows = convert_objectid_to_str(list(workflows_cursor))
-    logger.info(f"workflows: {workflows}")
+    result = list(projects_collection.aggregate(pipeline))
 
-    if not workflows:
-        raise HTTPException(status_code=404, detail=f"No workflow found for the current user with ID {workflow_id}.")
+    if not result:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No workflow found for the current user with ID {workflow_id}.",
+        )
 
-    return workflows[0]
+    workflow = result[0]
+    workflow = convert_objectid_to_str(workflow)
+
+    return workflow
+
+
+@workflows_endpoint_router.get("/get_tag_from_id/{workflow_id}")
+async def get_workflow_tag_from_id(
+    workflow_id: str, current_user: str = Depends(get_current_user)
+):
+    logger.info(f"workflow_id: {workflow_id}")
+
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+
+    try:
+        workflow_oid = ObjectId(workflow_id)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # Use MongoDB aggregation to directly retrieve the specific workflow
+    pipeline = [
+        # Match projects containing this workflow and with appropriate permissions
+        {
+            "$match": {
+                "workflows._id": workflow_oid,
+                "$or": [
+                    {"permissions.owners._id": current_user.id},
+                    {"permissions.viewers._id": current_user.id},
+                    {"permissions.viewers": "*"},
+                ],
+            }
+        },
+        # Unwind the workflows array
+        {"$unwind": "$workflows"},
+        # Match the specific workflow ID
+        {"$match": {"workflows._id": workflow_oid}},
+        # Return only the workflow
+        {"$replaceRoot": {"newRoot": "$workflows"}},
+    ]
+
+    result = list(projects_collection.aggregate(pipeline))
+
+    if not result:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No workflow found for the current user with ID {workflow_id}.",
+        )
+
+    workflow = result[0]
+    workflow = convert_objectid_to_str(workflow)
+    wf_tag = workflow["workflow_tag"]
+
+    return wf_tag
 
 
 @workflows_endpoint_router.post("/create")
-async def create_workflow(workflow: dict, current_user: str = Depends(get_current_user)):
+async def create_workflow(
+    workflow: dict, current_user: str = Depends(get_current_user)
+):
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
 
@@ -190,7 +284,9 @@ async def create_workflow(workflow: dict, current_user: str = Depends(get_curren
     logger.info(f"response_user: {response_user}")
 
     if not workflow:
-        raise HTTPException(status_code=400, detail="Workflow is required to create it.")
+        raise HTTPException(
+            status_code=400, detail="Workflow is required to create it."
+        )
 
     existing_workflow = workflows_collection.find_one(
         {
@@ -209,7 +305,9 @@ async def create_workflow(workflow: dict, current_user: str = Depends(get_curren
         )
 
     # Correctly update the owners list in the permissions attribute
-    new_owner = UserBase(id=current_user.id, email=current_user.email, groups=current_user.groups)
+    new_owner = UserBase(
+        id=current_user.id, email=current_user.email, groups=current_user.groups
+    )
     logger.info(f"new_owner: {new_owner}")
     # new_owner = convert_objectid_to_str(new_owner.mongo())
     # logger.info(f"new_owner: {new_owner}")
@@ -253,7 +351,11 @@ async def create_workflow(workflow: dict, current_user: str = Depends(get_curren
     res = workflows_collection.find_one({"workflow_tag": workflow.workflow_tag})
     logger.info(f"res query tag : {res}")
 
-    return_dict = {str(workflow.id): [str(data_collection.id) for data_collection in workflow.data_collections]}
+    return_dict = {
+        str(workflow.id): [
+            str(data_collection.id) for data_collection in workflow.data_collections
+        ]
+    }
 
     return_dict = convert_objectid_to_str(workflow)
     logger.info(f"return_dict: {return_dict}")
@@ -261,12 +363,18 @@ async def create_workflow(workflow: dict, current_user: str = Depends(get_curren
 
 
 @workflows_endpoint_router.put("/update")
-async def update_workflow(workflow: Workflow, current_user: str = Depends(get_current_user)):
+async def update_workflow(
+    workflow: Workflow, current_user: str = Depends(get_current_user)
+):
     if not current_user:
-        raise HTTPException(status_code=401, detail="Token is required to update a workflow.")
+        raise HTTPException(
+            status_code=401, detail="Token is required to update a workflow."
+        )
 
     if not workflow:
-        raise HTTPException(status_code=400, detail="Workflow is required to update it.")
+        raise HTTPException(
+            status_code=400, detail="Workflow is required to update it."
+        )
 
     existing_workflow = workflows_collection.find_one(
         {
@@ -282,7 +390,10 @@ async def update_workflow(workflow: Workflow, current_user: str = Depends(get_cu
             status_code=404,
             detail=f"Workflow with name '{workflow.workflow_tag}' does not exist. Use create option to create it.",
         )
-    existing_data_collections = {dc["data_collection_tag"]: dc["_id"] for dc in existing_workflow.get("data_collections", [])}
+    existing_data_collections = {
+        dc["data_collection_tag"]: dc["_id"]
+        for dc in existing_workflow.get("data_collections", [])
+    }
     for dc in workflow.data_collections:
         if dc.data_collection_tag in existing_data_collections:
             # If the data collection exists, preserve its ID
@@ -290,16 +401,26 @@ async def update_workflow(workflow: Workflow, current_user: str = Depends(get_cu
 
     # Update the workflow with potentially new or modified data collections
     updated_workflow_data = workflow.mongo()
-    updated_workflow_data["_id"] = existing_workflow["_id"]  # Ensure the workflow ID is preserved
-    updated_workflow_data["permissions"] = existing_workflow["permissions"]  # Ensure the permissions are preserved
-    res = workflows_collection.find_one_and_update({"_id": existing_workflow["_id"]}, {"$set": updated_workflow_data}, return_document=ReturnDocument.AFTER)
+    updated_workflow_data["_id"] = existing_workflow[
+        "_id"
+    ]  # Ensure the workflow ID is preserved
+    updated_workflow_data["permissions"] = existing_workflow[
+        "permissions"
+    ]  # Ensure the permissions are preserved
+    res = workflows_collection.find_one_and_update(
+        {"_id": existing_workflow["_id"]},
+        {"$set": updated_workflow_data},
+        return_document=ReturnDocument.AFTER,
+    )
+
+    logger.info(f"res: {res}")
 
     # Verify the update was successful
     # if not res:
     #     raise HTTPException(status_code=500, detail="Failed to update the workflow.")
 
     # Return a mapping of workflow ID to data collection IDs
-    updated_data_collection_ids = [str(dc.id) for dc in workflow.data_collections]
+    # updated_data_collection_ids = [str(dc.id) for dc in workflow.data_collections]
     return_data = convert_objectid_to_str(updated_workflow_data)
 
     return return_data
@@ -308,7 +429,9 @@ async def update_workflow(workflow: Workflow, current_user: str = Depends(get_cu
 
 
 @workflows_endpoint_router.delete("/delete/{workflow_id}")
-async def delete_workflow(workflow_id: str, current_user: str = Depends(get_current_user)):
+async def delete_workflow(
+    workflow_id: str, current_user: str = Depends(get_current_user)
+):
     # Find the workflow by ID
     workflow_oid = ObjectId(workflow_id)
     assert isinstance(workflow_oid, ObjectId)
@@ -317,11 +440,13 @@ async def delete_workflow(workflow_id: str, current_user: str = Depends(get_curr
     print(existing_workflow)
 
     if not existing_workflow:
-        raise HTTPException(status_code=404, detail=f"Workflow with ID '{workflow_id}' does not exist.")
+        raise HTTPException(
+            status_code=404, detail=f"Workflow with ID '{workflow_id}' does not exist."
+        )
 
     workflow_tag = existing_workflow["workflow_tag"]
 
-    data_collections = existing_workflow["data_collections"]
+    # data_collections = existing_workflow["data_collections"]
 
     # Ensure that the current user is authorized to update the workflow
     user_id = current_user.id
@@ -331,7 +456,9 @@ async def delete_workflow(workflow_id: str, current_user: str = Depends(get_curr
         existing_workflow["permissions"]["owners"],
         [u["user_id"] for u in existing_workflow["permissions"]["owners"]],
     )
-    if user_id not in [u["user_id"] for u in existing_workflow["permissions"]["owners"]]:
+    if user_id not in [
+        u["user_id"] for u in existing_workflow["permissions"]["owners"]
+    ]:
         raise HTTPException(
             status_code=403,
             detail=f"User with ID '{user_id}' is not authorized to delete workflow with ID '{workflow_id}'",
@@ -340,24 +467,37 @@ async def delete_workflow(workflow_id: str, current_user: str = Depends(get_curr
     workflows_collection.delete_one({"_id": workflow_oid})
     assert workflows_collection.find_one({"_id": workflow_oid}) is None
 
-    for data_collection in data_collections:
-        delete_files_message = await delete_files(workflow_id, data_collection["data_collection_id"], current_user)
+    # for data_collection in data_collections:
+    #     delete_files_message = await delete_files(workflow_id, data_collection["data_collection_id"], current_user)
 
-        delete_datatable_message = await delete_deltatable(workflow_id, data_collection["data_collection_id"], current_user)
+    #     delete_datatable_message = await delete_deltatable(workflow_id, data_collection["data_collection_id"], current_user)
 
-    return {"message": f"Workflow {workflow_tag} with ID '{id}' deleted successfully, as well as all files"}
+    return {
+        "message": f"Workflow {workflow_tag} with ID '{id}' deleted successfully, as well as all files"
+    }
 
 
 @workflows_endpoint_router.post("/compare_workflow_models")
-async def compare_models_endpoint(new_workflow: Workflow, existing_workflow: Workflow, current_user=Depends(get_current_user)):
+async def compare_models_endpoint(
+    new_workflow: Workflow,
+    existing_workflow: Workflow,
+    current_user=Depends(get_current_user),
+):
     logger.info(f"new_workflow: {new_workflow}")
     logger.info(f"existing_workflow: {existing_workflow}")
 
     if not current_user:
         raise HTTPException(status_code=401, detail="Current user not found.")
     if not new_workflow or not existing_workflow:
-        raise HTTPException(status_code=400, detail="Both new and existing workflows are required to compare them.")
+        raise HTTPException(
+            status_code=400,
+            detail="Both new and existing workflows are required to compare them.",
+        )
 
     result = compare_models(new_workflow, existing_workflow)
 
-    return {"exists": True, "match": result, "message": f"Workflow with name '{new_workflow.workflow_tag}' exists."}
+    return {
+        "exists": True,
+        "match": result,
+        "message": f"Workflow with name '{new_workflow.workflow_tag}' exists.",
+    }

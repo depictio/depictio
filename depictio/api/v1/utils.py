@@ -1,21 +1,59 @@
 from datetime import datetime
 from pathlib import PosixPath
-import dash_mantine_components as dmc
-from dash import dcc
-
-# import jsonschema
+from typing import List
 import numpy as np
-
 import os
 import re
-from typing import List
 
-from depictio.api.v1.endpoints.datacollections_endpoints.models import DataCollection
-from depictio.api.v1.endpoints.files_endpoints.models import File
-from depictio.api.v1.endpoints.workflow_endpoints.models import WorkflowConfig, WorkflowRun
-from depictio.api.v1.models.top_structure import RootConfig
-from depictio.api.v1.models_utils import get_config, validate_all_workflows, validate_config
-from depictio.api.v1.configs.logging import logger
+from depictio import BASE_PATH
+from depictio.api.v1.configs.custom_logging import logger
+
+from depictio.models.models.data_collections import DataCollection
+from depictio.models.models.files import File
+from depictio.models.models.workflows import WorkflowConfig, WorkflowRun
+
+
+async def clean_screenshots():
+    """
+    Clean up screenshots directory if it exists.
+    """
+    screenshots_dir = os.path.join(BASE_PATH, "dash", "static", "screenshots")
+
+    # Get list of all dashboards in DB
+    from depictio.api.v1.db import dashboards_collection
+
+    # project to only retrieve the _id field
+    dashboards = dashboards_collection.find({}, {"_id": 1})
+    print(f"Dashboards list: {dashboards}")
+    # Get all dashboards
+    dashboards_list = dashboards.to_list(length=None)
+    print(f"Dashboards list: {dashboards_list}")
+    # Get all dashboard IDs
+    dashboard_ids = [str(dashboard["_id"]) for dashboard in dashboards_list]
+    print(f"Dashboard IDs: {dashboard_ids}")
+
+    if os.path.exists(screenshots_dir):
+        for filename in os.listdir(screenshots_dir):
+            if filename.endswith(".png"):
+                file_path = os.path.join(screenshots_dir, filename)
+                print(f"Checking file: {file_path}")
+                # Extract the dashboard ID from the filename
+                dashboard_id = filename.split(".")[0]
+                # Check if the dashboard ID is in the list of dashboard IDs
+                if dashboard_id not in dashboard_ids:
+                    print(
+                        f"Dashboard ID {dashboard_id} not found in DB. Removing file: {file_path}"
+                    )
+                    try:
+                        os.remove(file_path)
+                        print(f"Removed file: {file_path}")
+                    except Exception as e:
+                        print(f"Error removing file {file_path}: {e}")
+    else:
+        print(f"Directory {screenshots_dir} does not exist.")
+        return {"success": False, "message": "No project found in the database"}
+    return {"success": True, "message": "Screenshots cleaned up"}
+
 
 # FIXME: update model & function using a list of dict instead of a dict
 def construct_full_regex(files_regex, regex_config):
@@ -34,21 +72,25 @@ def construct_full_regex(files_regex, regex_config):
 def regex_match(root, file, full_regex, data_collection):
     # Normalize the regex pattern to match both types of path separators
     normalized_regex = full_regex.replace("/", "\/")
-    logger.debug(f"Root: {root}, File: {file}, Full Regex: {full_regex}, Data Collection type: {data_collection.config.regex.type.lower()}")
+    logger.debug(
+        f"Root: {root}, File: {file}, Full Regex: {full_regex}, Data Collection type: {data_collection.config.regex.type.lower()}"
+    )
     # If regex pattern is file-based, match the file name directly
     if data_collection.config.regex.type.lower() == "file-based":
         if re.match(normalized_regex, file):
             logger.debug(f"Matched file - file-based: {file}")
             return True, re.match(normalized_regex, file)
-    elif data_collection.config.regex.type.lower() == "path-based":
-        # If regex pattern is path-based, match the full path
-        file_location = os.path.join(root, file)
-        if re.match(normalized_regex, file_location):
-            return True, re.match(normalized_regex, file)
+    # elif data_collection.config.regex.type.lower() == "path-based":
+    #     # If regex pattern is path-based, match the full path
+    #     file_location = os.path.join(root, file)
+    #     if re.match(normalized_regex, file_location):
+    #         return True, re.match(normalized_regex, file)
     return False, None
 
 
-def scan_files(run_location: str, run_id: str, data_collection: DataCollection) -> List[File]:
+def scan_files(
+    run_location: str, run_id: str, data_collection: DataCollection
+) -> List[File]:
     """
     Scan the files for a given workflow.
     """
@@ -65,17 +107,18 @@ def scan_files(run_location: str, run_id: str, data_collection: DataCollection) 
 
     logger.debug(f"Data Collection: {data_collection}")
     logger.debug(f"Regex Pattern: {data_collection.config.regex.pattern}")
-    logger.debug(f"Wildcards: {data_collection.config.regex.wildcards}")    
+    logger.debug(f"Wildcards: {data_collection.config.regex.wildcards}")
 
     # Construct the full regex using the wildcards defined in the config
     full_regex = None
     if data_collection.config.regex.wildcards:
-        full_regex = construct_full_regex(data_collection.config.regex.pattern, data_collection.config.regex)
+        full_regex = construct_full_regex(
+            data_collection.config.regex.pattern, data_collection.config.regex
+        )
     else:
         full_regex = data_collection.config.regex.pattern
 
     logger.debug(f"Full Regex: {full_regex}")
-
 
     # Scan the files
     for root, dirs, files in os.walk(run_location):
@@ -93,7 +136,9 @@ def scan_files(run_location: str, run_id: str, data_collection: DataCollection) 
 
                 # Convert the datetime objects to ISO formatted strings
                 creation_time_iso = creation_time_dt.strftime("%Y-%m-%d %H:%M:%S")
-                modification_time_iso = modification_time_dt.strftime("%Y-%m-%d %H:%M:%S")
+                modification_time_iso = modification_time_dt.strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
 
                 file_instance = File(
                     filename=filename,
@@ -105,14 +150,24 @@ def scan_files(run_location: str, run_id: str, data_collection: DataCollection) 
                 )
                 logger.debug(f"File Instance: {file_instance}")
 
-                if data_collection.config.regex.wildcards and data_collection.config.type == "JBrowse2":
+                if (
+                    data_collection.config.regex.wildcards
+                    and data_collection.config.type == "JBrowse2"
+                ):
                     wildcards_list = list()
-                    for j, wildcard in enumerate(data_collection.config.regex.wildcards, start=1):
-                        wildcards_list.append({"name": wildcard.name, "value": result.group(j), "wildcard_regex": wildcard.wildcard_regex})
+                    for j, wildcard in enumerate(
+                        data_collection.config.regex.wildcards, start=1
+                    ):
+                        wildcards_list.append(
+                            {
+                                "name": wildcard.name,
+                                "value": result.group(j),
+                                "wildcard_regex": wildcard.wildcard_regex,
+                            }
+                        )
                     file_instance.wildcards = wildcards_list
 
                 file_list.append(file_instance)
-
 
     logger.debug(f"File List: {file_list}")
     return file_list
@@ -139,7 +194,11 @@ def scan_runs(
         if os.path.isdir(os.path.join(parent_runs_location, run)):
             if re.match(workflow_config.runs_regex, run):
                 run_location = os.path.join(parent_runs_location, run)
-                files = scan_files(run_location=run_location, run_id=run, data_collection=data_collection)
+                files = scan_files(
+                    run_location=run_location,
+                    run_id=run,
+                    data_collection=data_collection,
+                )
                 execution_time = datetime.fromtimestamp(os.path.getctime(run_location))
 
                 workflow_run = WorkflowRun(
@@ -155,34 +214,34 @@ def scan_runs(
     return runs
 
 
-def populate_database(config_path: str, workflow_id: str, data_collection_id: str) -> List[WorkflowRun]:
-    """
-    Populate the database with files for a given workflow.
-    """
-    config_data = get_config(config_path)
-    config = validate_config(config_data, RootConfig)
-    validated_config = validate_all_workflows(config)
+# def populate_database(config_path: str, workflow_id: str, data_collection_id: str) -> List[WorkflowRun]:
+#     """
+#     Populate the database with files for a given workflow.
+#     """
+#     config_data = get_config(config_path)
+#     config = validate_config(config_data, RootConfig)
+#     validated_config = validate_all_workflows(config)
 
-    config_dict = {f"{e.workflow_id}": e for e in validated_config.workflows}
+#     config_dict = {f"{e.workflow_id}": e for e in validated_config.workflows}
 
-    if workflow_id not in config_dict:
-        raise ValueError(f"Workflow '{workflow_id}' not found in the config file.")
+#     if workflow_id not in config_dict:
+#         raise ValueError(f"Workflow '{workflow_id}' not found in the config file.")
 
-    if workflow_id is None:
-        raise ValueError("Please provide a workflow name.")
+#     if workflow_id is None:
+#         raise ValueError("Please provide a workflow name.")
 
-    workflow = config_dict[workflow_id]
-    workflow.runs = {}
-    data_collection = workflow.data_collections[data_collection_id]
+#     workflow = config_dict[workflow_id]
+#     workflow.runs = {}
+#     data_collection = workflow.data_collections[data_collection_id]
 
-    runs_and_content = scan_runs(
-        parent_runs_location=workflow.config.parent_runs_location,
-        workflow_config=workflow.config,
-        data_collection=data_collection,
-        workflow_id=workflow_id,
-    )
+#     runs_and_content = scan_runs(
+#         parent_runs_location=workflow.config.parent_runs_location,
+#         workflow_config=workflow.config,
+#         data_collection=data_collection,
+#         workflow_id=workflow_id,
+#     )
 
-    return runs_and_content
+#     return runs_and_content
 
 
 def serialize_for_mongo(data):
@@ -216,11 +275,11 @@ agg_functions = {
         "title": "Integer",
         "input_methods": {
             "Slider": {
-                "component": dcc.Slider,
+                "component": "dcc.Slider",
                 "description": "Single value slider",
             },
             "RangeSlider": {
-                "component": dcc.RangeSlider,
+                "component": "dcc.RangeSlider",
                 "description": "Two values slider",
             },
         },
@@ -301,11 +360,11 @@ agg_functions = {
         "title": "Floating Point",
         "input_methods": {
             "Slider": {
-                "component": dcc.Slider,
+                "component": "dcc.Slider",
                 "description": "Single value slider",
             },
             "RangeSlider": {
-                "component": dcc.RangeSlider,
+                "component": "dcc.RangeSlider",
                 "description": "Two values slider",
             },
         },
@@ -387,11 +446,11 @@ agg_functions = {
         "description": "Boolean values",
         "input_methods": {
             "Checkbox": {
-                "component": dmc.Checkbox,
+                "component": "dmc.Checkbox",
                 "description": "Checkbox",
             },
             "Switch": {
-                "component": dmc.Switch,
+                "component": "dmc.Switch",
                 "description": "Switch",
             },
         },
@@ -485,19 +544,19 @@ agg_functions = {
         "title": "Object",
         "input_methods": {
             "TextInput": {
-                "component": dmc.TextInput,
+                "component": "dmc.TextInput",
                 "description": "Text input box",
             },
             "Select": {
-                "component": dmc.Select,
+                "component": "dmc.Select",
                 "description": "Select",
             },
             "MultiSelect": {
-                "component": dmc.MultiSelect,
+                "component": "dmc.MultiSelect",
                 "description": "MultiSelect",
             },
             "SegmentedControl": {
-                "component": dmc.SegmentedControl,
+                "component": "dmc.SegmentedControl",
                 "description": "SegmentedControl",
             },
         },
@@ -524,19 +583,19 @@ agg_functions = {
         "title": "Object",
         "input_methods": {
             "TextInput": {
-                "component": dmc.TextInput,
+                "component": "dmc.TextInput",
                 "description": "Text input box",
             },
             "Select": {
-                "component": dmc.Select,
+                "component": "dmc.Select",
                 "description": "Select",
             },
             "MultiSelect": {
-                "component": dmc.MultiSelect,
+                "component": "dmc.MultiSelect",
                 "description": "MultiSelect",
             },
             "SegmentedControl": {
-                "component": dmc.SegmentedControl,
+                "component": "dmc.SegmentedControl",
                 "description": "SegmentedControl",
             },
         },

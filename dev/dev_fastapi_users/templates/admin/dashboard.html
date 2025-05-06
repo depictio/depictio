@@ -1,0 +1,96 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Admin Dashboard{% endblock %}
+
+{% block breadcrumb_items %}
+<li class="breadcrumb-item active">Dashboard</li>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-4">
+        <div class="card django-card">
+            <div class="card-header django-card-header">
+                <h5 class="card-title mb-0">Users</h5>
+            </div>
+            <div class="card-body">
+                <h2 class="card-title">{{ user_count }}</h2>
+                <div class="mt-3">
+                    <a href="/admin/users" class="btn btn-sm django-btn-primary">Manage Users</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card django-card">
+            <div class="card-header django-card-header">
+                <h5 class="card-title mb-0">Active Users</h5>
+            </div>
+            <div class="card-body">
+                <h2 class="card-title">{{ active_user_count }}</h2>
+                <div class="mt-3">
+                    <a href="/admin/users" class="btn btn-sm django-btn-primary">View Details</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card django-card">
+            <div class="card-header django-card-header">
+                <h5 class="card-title mb-0">Groups</h5>
+            </div>
+            <div class="card-body">
+                <h2 class="card-title">{{ group_count }}</h2>
+                <div class="mt-3">
+                    <a href="/admin/groups" class="btn btn-sm django-btn-primary">Manage Groups</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card django-card">
+            <div class="card-header django-card-header">
+                <h5 class="card-title mb-0">Recent Users</h5>
+            </div>
+            <div class="card-body">
+                <table class="table django-table">
+                    <thead>
+                        <tr>
+                            <th>Email</th>
+                            <th>Name</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for user in recent_users %}
+                        <tr>
+                            <td>{{ user.email }}</td>
+                            <td>{{ user.first_name }} {{ user.last_name }}</td>
+                            <td>
+                                {% if user.is_active %}
+                                <span class="badge bg-success">Active</span>
+                                {% else %}
+                                <span class="badge bg-danger">Inactive</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ user.created_at.strftime('%Y-%m-%d') }}</td>
+                            <td>
+                                <a href="/admin/users/{{ user.id }}" class="btn btn-sm django-btn-secondary">Edit</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

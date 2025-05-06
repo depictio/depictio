@@ -1,0 +1,41 @@
+{% extends "admin/base.html" %}
+
+{% block title %}{% if group %}Edit Group{% else %}Create Group{% endif %}{% endblock %}
+{% block page_title %}{% if group %}Edit Group{% else %}Create Group{% endif %}{% endblock %}
+
+{% block breadcrumb_items %}
+<li class="breadcrumb-item"><a href="/admin/groups">Groups</a></li>
+<li class="breadcrumb-item active">{% if group %}Edit{% else %}Create{% endif %}</li>
+{% endblock %}
+
+{% block content %}
+<div class="card django-card">
+    <div class="card-header django-card-header">
+        <h5 class="card-title mb-0">{% if group %}Edit Group: {{ group.name }}{% else %}Create New Group{% endif %}</h5>
+    </div>
+    <div class="card-body">
+        <form method="post">
+            <div class="mb-3">
+                <label for="name" class="form-label">Name</label>
+                <input type="text" class="form-control" id="name" name="name" value="{{ group.name if group else '' }}" required>
+            </div>
+            
+            <div class="mb-3">
+                <label for="description" class="form-label">Description</label>
+                <textarea class="form-control" id="description" name="description" rows="3">{{ group.description if group else '' }}</textarea>
+            </div>
+            
+            <div class="mb-3">
+                <label for="permissions" class="form-label">Permissions</label>
+                <input type="text" class="form-control" id="permissions" name="permissions" value="{{ ','.join(group.permissions) if group and group.permissions else '' }}" placeholder="read_users,create_users,edit_users">
+                <div class="form-text">Enter permissions as comma-separated values</div>
+            </div>
+            
+            <div class="mt-3">
+                <button type="submit" class="btn django-btn-primary">Save</button>
+                <a href="/admin/groups" class="btn btn-secondary ms-2">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

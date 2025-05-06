@@ -1,13 +1,14 @@
 import datetime
+
+import dash
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
-from dash import html, dcc, Input, Output, State, ALL
-import dash
 import httpx
+from dash import Input, Output, State, dcc, html
 
 from depictio.api.v1.configs.config import API_BASE_URL
-from depictio.api.v1.endpoints.user_endpoints.core_functions import fetch_user_from_token
-from depictio.api.v1.configs.logging import logger
+from depictio.api.v1.configs.custom_logging import logger
+from depictio.dash.api_calls import api_call_fetch_user_from_token
 
 current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -36,7 +37,7 @@ def register_callbacks_header(app):
 
         len_output = 8
 
-        current_user = fetch_user_from_token(local_store["access_token"])
+        current_user = api_call_fetch_user_from_token(local_store["access_token"])
 
         if not local_store["access_token"]:
             switch_state = False
@@ -46,32 +47,48 @@ def register_callbacks_header(app):
 
         dashboard_id = pathname.split("/")[-1]
 
-        dashboard_data_response = httpx.get(f"{API_BASE_URL}/depictio/api/v1/dashboards/get/{dashboard_id}", headers={"Authorization": f"Bearer {TOKEN}"})
+        dashboard_data_response = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/dashboards/get/{dashboard_id}",
+            headers={"Authorization": f"Bearer {TOKEN}"},
+        )
         if dashboard_data_response.status_code != 200:
             return [True] * len_output
 
         data = dashboard_data_response.json()
 
         # Check if data is available, if not set the buttons to disabled
-        owner = True if str(current_user.id) in [str(e["_id"]) for e in data["permissions"]["owners"]] else False
+        owner = (
+            True
+            if str(current_user.id)
+            in [str(e["id"]) for e in data["permissions"]["owners"]]
+            else False
+        )
 
-        logger.info(f'{data["permissions"]["viewers"]}')
+        logger.info(f"{data['permissions']['viewers']}")
 
-        viewer_ids = [str(e["_id"]) for e in data["permissions"]["viewers"] if e != "*"]
+        viewer_ids = [str(e["id"]) for e in data["permissions"]["viewers"] if e != "*"]
         is_viewer = str(current_user.id) in viewer_ids
         has_wildcard = "*" in data["permissions"]["viewers"]
         viewer = is_viewer or has_wildcard
+        logger.info(f"owner: {owner}, viewer: {viewer}")
+        logger.info(f"switch_state: {switch_state}")
+        logger.info(f"current_user: {current_user}")
+        logger.info(f"viewer_ids: {viewer_ids}")
+        logger.info(f"has_wildcard: {has_wildcard}")
+        logger.info(f"is_viewer: {is_viewer}")
+        logger.info(f"owner: {owner}")
+        logger.info(f"viewer: {viewer}")
 
         if not owner and viewer:
             return [dash.no_update] * (len_output - 2) + [False] * 2
 
-        workflows = httpx.get(
-            f"{API_BASE_URL}/depictio/api/v1/workflows/get_all_workflows",
-            headers={"Authorization": f"Bearer {TOKEN}"},
-        ).json()
-        if not workflows:
-            switch_state = False
-            return [True] * len_output
+        # workflows = httpx.get(
+        #     f"{API_BASE_URL}/depictio/api/v1/workflows/get_all_workflows",
+        #     headers={"Authorization": f"Bearer {TOKEN}"},
+        # ).json()
+        # if not workflows:
+        #     switch_state = False
+        #     return [True] * len_output
 
         return [not switch_state] * (len_output - 2) + [switch_state] * 2
 
@@ -163,18 +180,28 @@ def design_header(data, local_store):
         if "stored_edit_dashboard_mode_button" not in data:
             data["stored_edit_dashboard_mode_button"] = [int(0)]
 
-    current_user = fetch_user_from_token(local_store["access_token"])
+    current_user = api_call_fetch_user_from_token(local_store["access_token"])
     logger.info(f"current_user: {current_user}")
 
-    init_nclicks_add_button = data["stored_add_button"] if data else {"count": 0, "initialized": False, "id": ""}
-    init_nclicks_edit_dashboard_mode_button = data["stored_edit_dashboard_mode_button"] if data else [int(0)]
+    init_nclicks_add_button = (
+        data["stored_add_button"]
+        if data
+        else {"count": 0, "initialized": False, "_id": ""}
+    )
+    init_nclicks_edit_dashboard_mode_button = (
+        data["stored_edit_dashboard_mode_button"] if data else [int(0)]
+    )
 
     # Check if data is available, if not set the buttons to disabled
-    owner = True if str(current_user.id) in [str(e["_id"]) for e in data["permissions"]["owners"]] else False
+    owner = (
+        True
+        if str(current_user.id) in [str(e["id"]) for e in data["permissions"]["owners"]]
+        else False
+    )
 
-    logger.info(f'{data["permissions"]["viewers"]}')
+    logger.info(f"{data['permissions']['viewers']}")
 
-    viewer_ids = [str(e["_id"]) for e in data["permissions"]["viewers"] if e != "*"]
+    viewer_ids = [str(e["id"]) for e in data["permissions"]["viewers"] if e != "*"]
     is_viewer = str(current_user.id) in viewer_ids
     has_wildcard = "*" in data["permissions"]["viewers"]
     viewer = is_viewer or has_wildcard
@@ -185,11 +212,15 @@ def design_header(data, local_store):
         edit_components_button_checked = False
     else:
         disabled = False
-        edit_dashboard_mode_button_checked = data["buttons_data"]["edit_dashboard_mode_button"]
+        edit_dashboard_mode_button_checked = data["buttons_data"][
+            "edit_dashboard_mode_button"
+        ]
         edit_components_button_checked = data["buttons_data"]["edit_components_button"]
 
     logger.info(f"owner: {owner}, viewer: {viewer}")
-    logger.info(f"edit_dashboard_mode_button_checked: {edit_dashboard_mode_button_checked}")
+    logger.info(
+        f"edit_dashboard_mode_button_checked: {edit_dashboard_mode_button_checked}"
+    )
     logger.info(f"edit_components_button_checked: {edit_components_button_checked}")
     logger.info(f"disabled: {disabled}")
 
@@ -242,54 +273,58 @@ def design_header(data, local_store):
     )
     from dash_iconify import DashIconify
 
-    modal_share_dashboard = dbc.Modal(
-        [
-            dbc.ModalHeader(
-                html.H1(
-                    "Share dashboard",
-                    className="text-primary",
-                )
-            ),
-            dbc.ModalBody(
-                [
-                    html.H5(
-                        "Share this dashboard by copying the link below:",
-                        className="text-primary",
-                    ),
-                    dmc.TextInput(type="text", value="https://depict.io/dashboard/1", style={"width": "100%"}, icon=DashIconify(icon="mdi:link", width=16, color="grey")),
-                ],
-                style={"background-color": "#F0F8FF"},
-            ),
-            dbc.ModalFooter(
-                dbc.Button(
-                    "Close",
-                    id="share-modal-close",
-                    className="ml-auto",
-                    color="primary",
-                )
-            ),
-        ],
-        id="share-modal-dashboard",
-        centered=True,
-    )
+    # modal_share_dashboard = dbc.Modal(
+    #     [
+    #         dbc.ModalHeader(
+    #             html.H1(
+    #                 "Share dashboard",
+    #                 className="text-primary",
+    #             )
+    #         ),
+    #         dbc.ModalBody(
+    #             [
+    #                 html.H5(
+    #                     "Share this dashboard by copying the link below:",
+    #                     className="text-primary",
+    #                 ),
+    #                 dmc.TextInput(
+    #                     type="text",
+    #                     value="https://depict.io/dashboard/1",
+    #                     style={"width": "100%"},
+    #                     icon=DashIconify(icon="mdi:link", width=16, color="grey"),
+    #                 ),
+    #             ],
+    #             style={"background-color": "#F0F8FF"},
+    #         ),
+    #         dbc.ModalFooter(
+    #             dbc.Button(
+    #                 "Close",
+    #                 id="share-modal-close",
+    #                 className="ml-auto",
+    #                 color="primary",
+    #             )
+    #         ),
+    #     ],
+    #     id="share-modal-dashboard",
+    #     centered=True,
+    # )
 
     # APP Header
 
-    header_style = {
-        "display": "flex",
-        "alignItems": "center",
-        "justifyContent": "space-between",
-        "padding": "10px 20px",
-        "backgroundColor": "#FCFCFC",
-        "borderBottom": "1px solid #eaeaea",
-        "fontFamily": "'Open Sans', sans-serif",
-    }
+    # header_style = {
+    #     "display": "flex",
+    #     "alignItems": "center",
+    #     "justifyContent": "space-between",
+    #     "padding": "10px 20px",
+    #     "backgroundColor": "#FCFCFC",
+    #     "borderBottom": "1px solid #eaeaea",
+    #     "fontFamily": "'Open Sans', sans-serif",
+    # }
 
-    title_style = {"fontWeight": "bold", "fontSize": "24px", "color": "#333"}
+    # title_style = {"fontWeight": "bold", "fontSize": "24px", "color": "#333"}
     button_style = {"margin": "0 0px", "fontFamily": "Virgil", "marginTop": "5px"}
 
-
-    sx={
+    sx = {
         ":hover": {
             "backgroundColor": "#d0d0d0",  # Replace with your desired darker color
             "cursor": "pointer",  # Ensures the cursor changes to pointer on hover
@@ -314,7 +349,7 @@ def design_header(data, local_store):
         style=button_style,
         disabled=disabled,
         # leftIcon=DashIconify(icon="mdi:plus", width=16, color="white"),
-        sx=sx
+        sx=sx,
     )
 
     save_button = dmc.ActionIcon(
@@ -331,7 +366,7 @@ def design_header(data, local_store):
         n_clicks=0,
         disabled=disabled,
         style=button_style,
-        sx=sx
+        sx=sx,
         # leftIcon=DashIconify(icon="mdi:content-save", width=16, color="white"),
         # width of the button
         # style={"width": "120px", "fontFamily": "Virgil"},
@@ -355,7 +390,18 @@ def design_header(data, local_store):
     if data["last_saved_ts"] == "":
         formated_ts = "Never"
     else:
-        formated_ts = datetime.datetime.strptime(data["last_saved_ts"].split(".")[0], "%Y-%m-%d %H:%M:%S")
+        formated_ts = datetime.datetime.strptime(
+            data["last_saved_ts"].split(".")[0], "%Y-%m-%d %H:%M:%S"
+        )
+
+    response = httpx.get(
+        f"{API_BASE_URL}/depictio/api/v1/projects/get/from_id",
+        params={"project_id": data["project_id"]},
+        headers={"Authorization": f"Bearer {local_store['access_token']}"},
+    )
+    if response.status_code != 200:
+        raise Exception("Failed to fetch project data.")
+    project_name = response.json()["name"]
 
     card_section = dbc.Row(
         [
@@ -363,14 +409,33 @@ def design_header(data, local_store):
                 [
                     # dmc.CardSection(
                     # [
-                    dmc.Badge(f"Owner: {data['permissions']['owners'][0]['email']}", color="blue", leftSection=DashIconify(icon="mdi:account", width=16, color="grey")),
-                    dmc.Badge(f"Last saved: {formated_ts}", color="green", leftSection=DashIconify(icon="mdi:clock-time-four-outline", width=16, color="grey")),
+                    dmc.Badge(
+                        f"Project: {project_name}",
+                        color="green",
+                        leftSection=DashIconify(
+                            icon="mdi:jira", width=16, color="grey"
+                        ),
+                    ),
+                    dmc.Badge(
+                        f"Owner: {data['permissions']['owners'][0]['email']}",
+                        color="blue",
+                        leftSection=DashIconify(
+                            icon="mdi:account", width=16, color="grey"
+                        ),
+                    ),
+                    dmc.Badge(
+                        f"Last saved: {formated_ts}",
+                        color="violet",
+                        leftSection=DashIconify(
+                            icon="mdi:clock-time-four-outline", width=16, color="grey"
+                        ),
+                    ),
                     # ]
                     # ),
                 ],
                 justify="center",
                 align="flex-start",
-                spacing="xs",
+                spacing=5,
             ),
         ],
     )
@@ -385,7 +450,11 @@ def design_header(data, local_store):
                     value=f"{data['version']}",
                     label="Dashboard version",
                     style={"width": 150, "padding": "0 10px", "display": "none"},
-                    icon=DashIconify(icon="mdi:format-list-bulleted-square", width=16, color=dmc.theme.DEFAULT_COLORS["blue"][5]),
+                    icon=DashIconify(
+                        icon="mdi:format-list-bulleted-square",
+                        width=16,
+                        color=dmc.theme.DEFAULT_COLORS["blue"][5],
+                    ),
                     # rightSection=DashIconify(icon="radix-icons:chevron-down"),
                 )
             ),
@@ -411,7 +480,9 @@ def design_header(data, local_store):
                         disabled=disabled,
                         color="gray",
                     ),
-                    dmc.Text("Display components options", style={"fontFamily": "default"}),
+                    dmc.Text(
+                        "Display components options", style={"fontFamily": "default"}
+                    ),
                 ],
                 align="center",
                 spacing="sm",
@@ -436,7 +507,12 @@ def design_header(data, local_store):
     buttons_group = html.Div(
         [
             dmc.Title("Buttons", order=4),
-            dmc.Group([remove_all_components_button], align="center", spacing="sm", style={"padding": "10px", "margin": "10px 0"}),
+            dmc.Group(
+                [remove_all_components_button],
+                align="center",
+                spacing="sm",
+                style={"padding": "10px", "margin": "10px 0"},
+            ),
             dmc.Group(
                 [
                     dmc.Button(
@@ -492,7 +568,7 @@ def design_header(data, local_store):
         # variant="filled",
         variant="subtle",
         style=button_style,
-        sx=sx
+        sx=sx,
     )
 
     dummy_output = html.Div(id="dummy-output", style={"display": "none"})
@@ -553,7 +629,7 @@ def design_header(data, local_store):
         ]
     )
 
-    title_style = {"fontWeight": "bold", "fontSize": "24px", "color": "#333"}
+    # title_style = {"fontWeight": "bold", "fontSize": "24px", "color": "#333"}
     header = dmc.Header(
         [
             offcanvas_parameters,
@@ -581,7 +657,7 @@ def design_header(data, local_store):
                         [
                             dmc.Center(
                                 dmc.Title(
-                                    f'{data["title"]}',
+                                    f"{data['title']}",
                                     order=1,  # Increase to order=1 for larger font size
                                     style={
                                         "color": "#333",  # Darker color for more emphasis
