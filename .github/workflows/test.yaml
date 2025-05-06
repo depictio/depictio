@@ -1,61 +1,61 @@
-# .github/workflows/docker-build.yml
-name: Test Workflow
+# # .github/workflows/docker-build.yml
+# name: Test Workflow
 
-on:
-  push:
-    branches: [main]
+# on:
+#   push:
+#     branches: [main]
 
-jobs:
-  build:
-    runs-on: ubuntu-22.04 # Instead of ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
+# jobs:
+#   build:
+#     runs-on: ubuntu-22.04 # Instead of ubuntu-latest
+#     steps:
+#       - name: Checkout code
+#         uses: actions/checkout@v2
 
-      # GitHub Actions workflow with conditional LTS fallback
-      - name: Install Dependencies with LTS Fallback
-        run: |
-          cd depictio/cli
-          pwd
-          ls ../api/v1/configs/iris_dataset
+#       # GitHub Actions workflow with conditional LTS fallback
+#       - name: Install Dependencies with LTS Fallback
+#         run: |
+#           cd depictio/cli
+#           pwd
+#           ls ../api/v1/configs/iris_dataset
 
-      # - name: Show machine info
-      #   run: |
-      #     echo "OS: $(uname -a)"
-      #     echo "Docker version: $(docker --version)"
-      #     echo "Docker Compose version: $(docker compose version)"
-      #     echo "Python version: $(python3 --version)"
-      #     echo "pip version: $(pip --version)"
+#       # - name: Show machine info
+#       #   run: |
+#       #     echo "OS: $(uname -a)"
+#       #     echo "Docker version: $(docker --version)"
+#       #     echo "Docker Compose version: $(docker compose version)"
+#       #     echo "Python version: $(python3 --version)"
+#       #     echo "pip version: $(pip --version)"
 
-      # - name: Install uv
-      #   uses: astral-sh/setup-uv@v5
+#       # - name: Install uv
+#       #   uses: astral-sh/setup-uv@v5
 
-      # - name: "Set up Python"
-      #   uses: actions/setup-python@v5
-      #   with:
-      #     python-version-file: "depictio/cli/pyproject.toml"
+#       # - name: "Set up Python"
+#       #   uses: actions/setup-python@v5
+#       #   with:
+#       #     python-version-file: "depictio/cli/pyproject.toml"
 
-      # GitHub Actions workflow with conditional LTS fallback
-      # - name: Install Dependencies with LTS Fallback
-      #   run: |
-      #     cd depictio/cli
-      #     # create a virtual environment using uv for python 3.11
-      #     uv venv --python 3.11 venv
-      #     source venv/bin/activate
-      #     uv pip install --upgrade pip
+#       # GitHub Actions workflow with conditional LTS fallback
+#       # - name: Install Dependencies with LTS Fallback
+#       #   run: |
+#       #     cd depictio/cli
+#       #     # create a virtual environment using uv for python 3.11
+#       #     uv venv --python 3.11 venv
+#       #     source venv/bin/activate
+#       #     uv pip install --upgrade pip
 
-      #     # First try default installation (with standard polars)
-      #     if uv pip install -e . && python -c "import polars" 2>/dev/null; then
-      #       echo "✅ Default installation with standard polars successful"
-      #     else
-      #       echo "⚠️ Standard polars failed, uninstalling and trying LTS version..."
-      #       # Uninstall the package to avoid conflicts
-      #       uv pip uninstall -y polars || true
-      #       # Install with LTS polars
-      #       uv pip install polars-lts-cpu
-      #       echo "✅ LTS installation successful"
-      #     fi
+#       #     # First try default installation (with standard polars)
+#       #     if uv pip install -e . && python -c "import polars" 2>/dev/null; then
+#       #       echo "✅ Default installation with standard polars successful"
+#       #     else
+#       #       echo "⚠️ Standard polars failed, uninstalling and trying LTS version..."
+#       #       # Uninstall the package to avoid conflicts
+#       #       uv pip uninstall -y polars || true
+#       #       # Install with LTS polars
+#       #       uv pip install polars-lts-cpu
+#       #       echo "✅ LTS installation successful"
+#       #     fi
 
-      #     # Verify installation
-      #     python -c "import polars; print(f'Polars {polars.__version__} installed')"
-      #     depictio-cli --help
+#       #     # Verify installation
+#       #     python -c "import polars; print(f'Polars {polars.__version__} installed')"
+#       #     depictio-cli --help
