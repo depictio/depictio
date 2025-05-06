@@ -37,7 +37,7 @@ jobs:
         run: |
           # cd depictio/cli
           # create a virtual environment using uv for python 3.11
-          uv venv --python 3.13 venv
+          uv venv --python 3.11 venv
           source venv/bin/activate
           uv pip install --upgrade pip
 
