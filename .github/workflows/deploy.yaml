@@ -50,12 +50,15 @@ jobs:
       #     echo "UID=$(id -u)" >> $GITHUB_ENV
       #     echo "GID=$(id -g)" >> $GITHUB_ENV
 
-      - name: Set Environment Variables
+      - name: Generate .env
         run: |
-          echo "UID=$(id -u)" >> $GITHUB_ENV
-          echo "GID=$(id -g)" >> $GITHUB_ENV
-          echo "DEPICTIO_MINIO_ROOT_USER=minio" >> $GITHUB_ENV
-          echo "DEPICTIO_MINIO_ROOT_PASSWORD=minio123" >> $GITHUB_ENV
+          cat > .env <<EOF
+          UID=${{ env.UID }}
+          GID=${{ env.GID }}
+          DEPICTIO_MINIO_ROOT_USER=${{ env.DEPICTIO_MINIO_ROOT_USER }}
+          DEPICTIO_MINIO_ROOT_PASSWORD=${{ env.DEPICTIO_MINIO_ROOT_PASSWORD }}
+          EOF
+
 
       - name: Create and Set Permissions for depictioDB
         run: |
