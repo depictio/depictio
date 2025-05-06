@@ -10,7 +10,6 @@ dependencies = [
   "bleach",
   "beanie",
   "boto3==1.36.21",
-  "bson",
   # "bson==0.5.10",
   "cryptography",
   "colorlog",
