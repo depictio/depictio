@@ -24,15 +24,43 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.12"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
 
-      - name: Install dependencies
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "pyproject.toml"
+
+      # GitHub Actions workflow with conditional LTS fallback
+      - name: Install Dependencies with LTS Fallback
+        run: |
+          cd depictio/cli
+          # create a virtual environment using uv for python 3.11
+          uv venv --python 3.11 venv
+          source venv/bin/activate
+          uv pip install --upgrade pip
+
+          # First try default installation (with standard polars)
+          if uv pip install -e . && python -c "import polars" 2>/dev/null; then
+            echo "✅ Default installation with standard polars successful"
+          else
+            echo "⚠️ Standard polars failed, uninstalling and trying LTS version..."
+            # Uninstall the package to avoid conflicts
+            uv pip uninstall polars || true
+            # Install with LTS polars
+            uv pip install polars-lts-cpu
+            echo "✅ LTS installation successful"
+          fi
+
+          # Verify installation
+          python -c "import polars; print(f'Polars {polars.__version__} installed')"
+          depictio-cli --help
+
+      - name: Install dependencies for quality check & testing
         run: |
           python -m pip install --upgrade pip
-          pip install black ruff bandit
+          pip install black ruff bandit pytest pytest-xdist pytest-asyncio pytest-cov mongomock mongomock-motor
 
       - name: Run Ruff for formatting
         run: |
@@ -47,8 +75,7 @@ jobs:
 
       - name: Run tests
         run: |
-          pip install pytest pydantic[email] pydantic-settings pytest-xdist pytest-asyncio pytest-cov mypy ruff mongomock motor mongomock-motor
-          pytest
+          pytest depictio/tests/api depictio/tests/cli depictio/tests/models -xvs -n auto
 
   setup:
     needs: quality # only runs if `quality` succeeds
