@@ -134,17 +134,17 @@ jobs:
         run: |
           cp .env.example .env
 
-      # - name: Create and Set Permissions for depictioDB
-      #   run: |
-      #     mkdir -p depictioDB/
-      #     chown -R "$(id -u):$(id -g)" depictioDB/
-      #     chmod -R 777 depictioDB/
+      - name: Create and Set Permissions for depictioDB
+        run: |
+          mkdir -p depictioDB/
+          chown -R "$(id -u):$(id -g)" depictioDB/
+          chmod -R 777 depictioDB/
 
-      # - name: Create and Set Permissions for minio_data
-      #   run: |
-      #     mkdir -p minio_data/
-      #     chown -R "$(id -u):$(id -g)" minio_data/
-      #     chmod -R 775 minio_data/
+      - name: Create and Set Permissions for minio_data
+        run: |
+          mkdir -p minio_data/
+          chown -R "$(id -u):$(id -g)" minio_data/
+          chmod -R 775 minio_data/
 
       # - name: Create and Set Permissions for depictio/keys
       #   run: |
