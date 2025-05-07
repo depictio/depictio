@@ -85,7 +85,7 @@ jobs:
   #         pytest depictio/tests/api depictio/tests/cli depictio/tests/models -xvs -n auto
 
   setup:
-    needs: quality # only runs if `quality` succeeds
+    # needs: quality # only runs if `quality` succeeds
     runs-on: ubuntu-22.04 # Instead of ubuntu-latest
     steps:
       - name: Checkout code
