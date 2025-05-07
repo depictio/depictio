@@ -291,6 +291,7 @@ class TestAsyncFetchUserFromId:
         assert result.password == hash_password
         assert isinstance(result, UserBeanie)
 
+    @beanie_setup(models=[TokenBeanie, UserBeanie])
     async def test_fetch_user_from_id_not_found(self):
         """Test when no user is found with the given ID."""
         # Use a random ID that doesn't exist in the database
