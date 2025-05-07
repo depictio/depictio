@@ -26,11 +26,15 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
 
       - name: "Set up Python"
         uses: actions/setup-python@v5
         with:
           python-version-file: "pyproject.toml"
+          cache-dependency-glob: "pyproject.toml"
 
       # GitHub Actions workflow with conditional LTS fallback
       - name: Install Dependencies with LTS Fallback
@@ -93,7 +97,7 @@ jobs:
       - name: Build Docker image (without pushing)
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: docker-images/Dockerfile_depictio.dockerfile
           push: false
           load: true  # This loads the image into Docker's local cache
           tags: depictio:latest
