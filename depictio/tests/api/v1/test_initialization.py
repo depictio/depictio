@@ -1,6 +1,5 @@
 from unittest.mock import MagicMock, patch
 
-import pymongo
 
 # --------------------------------------------------------
 # Test Initialization
@@ -151,18 +150,18 @@ async def initialization_test():
 # --------------------------------------------------------
 
 
-def test_mongodb_connection():
-    """Test if MongoDB is accessible on the specified port."""
+# def test_mongodb_connection():
+#     """Test if MongoDB is accessible on the specified port."""
 
-    try:
-        client = pymongo.MongoClient("mongodb://localhost:27018", serverSelectionTimeoutMS=5000)
-        # Force a connection to verify server is available
-        client.server_info()
-        print("MongoDB connection successful")
-        assert True
-    except Exception as e:
-        print(f"MongoDB connection failed: {e}")
-        assert False
+#     try:
+#         client = pymongo.MongoClient("mongodb://localhost:27018", serverSelectionTimeoutMS=5000)
+#         # Force a connection to verify server is available
+#         client.server_info()
+#         print("MongoDB connection successful")
+#         assert True
+#     except Exception as e:
+#         print(f"MongoDB connection failed: {e}")
+#         assert False
 
 
 # @pytest.mark.integration

@@ -586,6 +586,7 @@ class TestUserBeanie:
 
         # Retrieve users using Beanie's query interface
         all_users = await UserBeanie.find().to_list()
+        print(all_users)
 
         assert len(all_users) == 2
 
@@ -595,7 +596,7 @@ class TestUserBeanie:
         assert "user2@example.com" in emails
 
         # Test filtering by is_admin
-        admin_users = await UserBeanie.find(UserBeanie.is_admin is True).to_list()  # noqa: E712
+        admin_users = await UserBeanie.find({"is_admin": True}).to_list()  # noqa: E712
         assert len(admin_users) == 1
         assert admin_users[0].email == "user2@example.com"
 
