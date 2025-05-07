@@ -91,19 +91,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      # - name: Set up Docker Buildx
+      #   uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image (without pushing)
-        uses: docker/build-push-action@v6
-        with:
-          context: .  # The build context is the root of your repository
-          file: docker-images/Dockerfile_depictio.dockerfile  # Path to the Dockerfile
-          push: false
-          load: true
-          tags: depictio:latest
-          cache-from: type=gha,scope=depictio
-          cache-to: type=gha,mode=max,scope=depictio
+      # - name: Build Docker image (without pushing)
+      #   uses: docker/build-push-action@v6
+      #   with:
+      #     context: .  # The build context is the root of your repository
+      #     file: docker-images/Dockerfile_depictio.dockerfile  # Path to the Dockerfile
+      #     push: false
+      #     load: true
+      #     tags: depictio:latest
+      #     cache-from: type=gha,scope=depictio
+      #     cache-to: type=gha,mode=max,scope=depictio
 
       # ↓ NEW: Add user to docker group for permissions
       - name: Configure Docker Permissions
@@ -161,23 +161,23 @@ jobs:
       # - name: Set up Environment Variables
       #   run: echo "DEPICTIO_BACKEND_EXAMPLE_DATA_VOLUME_HOST=/home/runner/work/depictio/depictio/depictio-example-data" >> .env
 
-      # - name: Start Docker Compose Services
-      #   run: |
-      #     # Ensure we have docker permissions by using the updated socket permissions
-      #     docker compose -f docker-compose.yaml -f docker-compose/docker-compose.minio.yaml up -d --build
-
-      - name: Start Docker Compose Services with Caching
+      - name: Start Docker Compose Services
         run: |
-          # Use BuildKit
-          export DOCKER_BUILDKIT=1
-          export COMPOSE_DOCKER_CLI_BUILD=1
+          # Ensure we have docker permissions by using the updated socket permissions
+          docker compose -f docker-compose.yaml -f docker-compose/docker-compose.minio.yaml up -d --build
 
-          # Build images with cache
-          docker compose -f docker-compose.yaml -f docker-compose/docker-compose.minio.yaml build \
-            --build-arg BUILDKIT_INLINE_CACHE=1
+      # - name: Start Docker Compose Services with Caching
+      #   run: |
+      #     # Use BuildKit
+      #     export DOCKER_BUILDKIT=1
+      #     export COMPOSE_DOCKER_CLI_BUILD=1
 
-          # Start services
-          docker compose -f docker-compose.yaml -f docker-compose/docker-compose.minio.yaml up -d
+      #     # Build images with cache
+      #     docker compose -f docker-compose.yaml -f docker-compose/docker-compose.minio.yaml build \
+      #       --build-arg BUILDKIT_INLINE_CACHE=1
+
+      #     # Start services
+      #     docker compose -f docker-compose.yaml -f docker-compose/docker-compose.minio.yaml up -d
 
       # - name: Wait for Services to Start
       #   run: sleep 10 # Adjust the wait time if necessary
