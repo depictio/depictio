@@ -19,7 +19,7 @@ class S3ProviderBase(ABC):
         self.secret_key = config.root_password
         self.s3_client = boto3.client(
             "s3",
-            endpoint_url=self.endpoint_url if DEPICTIO_CONTEXT != "server" else self.service_name,
+            endpoint_url=self.endpoint_url,
             aws_access_key_id=self.access_key,
             aws_secret_access_key=self.secret_key,
         )
