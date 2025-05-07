@@ -2,7 +2,6 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.custom_logging import logger
 from depictio.api.v1.db_init import initialize_db
 from depictio.api.v1.endpoints.utils_endpoints.core_functions import create_bucket
-from depictio.api.v1.s3 import s3_config
 from depictio.models.models.s3 import S3DepictioCLIConfig
 from depictio.models.s3_utils import S3_storage_checks
 
@@ -26,7 +25,7 @@ async def run_initialization(
 
     # Use internal S3 config if not provided
     if s3_config_input is None:
-        s3_config_input = s3_config
+        s3_config_input = settings.minio
         logger.info(f"Using S3 config: {s3_config_input}")
 
     # logger.info(f"OS Environment: {os.environ}")
