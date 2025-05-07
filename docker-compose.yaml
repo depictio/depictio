@@ -33,6 +33,7 @@ services:
       - depictio_backend
 
   depictio_backend:
+    container_name: depictio_backend
     image: depictio:dev
     build:
       dockerfile: docker-images/Dockerfile_depictio.dockerfile
