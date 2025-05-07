@@ -132,12 +132,7 @@ jobs:
 
       - name: Generate .env
         run: |
-          cat > .env <<EOF
-          UID=${{ env.UID }}
-          GID=${{ env.GID }}
-          DEPICTIO_MINIO_ROOT_USER=${{ env.DEPICTIO_MINIO_ROOT_USER }}
-          DEPICTIO_MINIO_ROOT_PASSWORD=${{ env.DEPICTIO_MINIO_ROOT_PASSWORD }}
-          EOF
+          cp .env.example .env
 
       # - name: Create and Set Permissions for depictioDB
       #   run: |
