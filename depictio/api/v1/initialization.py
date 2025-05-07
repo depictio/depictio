@@ -2,13 +2,13 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.custom_logging import logger
 from depictio.api.v1.db_init import initialize_db
 from depictio.api.v1.endpoints.utils_endpoints.core_functions import create_bucket
-from depictio.api.v1.s3 import minios3_external_config
+from depictio.api.v1.s3 import s3_config
 from depictio.models.models.s3 import S3DepictioCLIConfig
 from depictio.models.s3_utils import S3_storage_checks
 
 
 async def run_initialization(
-    checks: list[str] | None = None, s3_config: S3DepictioCLIConfig | None = None
+    checks: list[str] | None = None, s3_config_input: S3DepictioCLIConfig | None = None
 ):
     """
     Orchestrate system initialization in a logical order.
@@ -25,15 +25,15 @@ async def run_initialization(
     # print(f"os.environ: {os.environ}")
 
     # Use internal S3 config if not provided
-    if s3_config is None:
-        s3_config = minios3_external_config
-        logger.info(f"Using S3 config: {s3_config}")
+    if s3_config_input is None:
+        s3_config_input = s3_config
+        logger.info(f"Using S3 config: {s3_config_input}")
 
     # logger.info(f"OS Environment: {os.environ}")
 
     # Perform S3 storage accessibility check (without bucket check)
     logger.info("Checking S3 storage accessibility...")
-    S3_storage_checks(s3_config, checks or ["s3"])
+    S3_storage_checks(s3_config_input, checks or ["s3"])
 
     # Step 2: Generate Keys (if not already generated)
     logger.info("Generating cryptographic keys...")
@@ -65,7 +65,7 @@ async def run_initialization(
         "initialization_complete": True,
         "admin_user_id": admin_user.id if admin_user else None,
         "s3_checks": checks,
-        "s3_config": s3_config.model_dump_json(),
+        "s3_config": s3_config_input.model_dump_json(),
     }
 
     # Save initialization data to the database

@@ -2,36 +2,12 @@ import boto3
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.custom_logging import logger
-
-# from depictio.models.s3_utils import S3_storage_checks
-from depictio.models.models.s3 import S3DepictioCLIConfig
+from depictio.models.models.s3 import is_minio_running_in_docker
 from depictio.models.s3_utils import turn_S3_config_into_polars_storage_options
 
-# minio_storage_options = {
-#     "endpoint_url": f"{settings.minio.endpoint_url}",
-#     "aws_access_key_id": settings.minio.root_user,
-#     "aws_secret_access_key": settings.minio.root_password,
-#     "use_ssl": "false",
-#     "AWS_REGION": "us-east-1",
-#     "signature_version": "s3v4",
-#     "AWS_ALLOW_HTTP": "true",
-#     "AWS_S3_ALLOW_UNSAFE_RENAME": "true",
-# }
-# logger.info(f"minio_storage_options {minio_storage_options}")
+logger.info(f"Is MinIO running in Docker? {is_minio_running_in_docker()}")
 
-logger.info(f"settings.minio: {settings.minio}")
-
-minios3_external_config = S3DepictioCLIConfig(
-    # provider="minio",
-    bucket=settings.minio.bucket,
-    endpoint_url=f"{settings.minio.endpoint_url}",
-    # port=settings.minio.port,
-    root_user=settings.minio.root_user,
-    root_password=settings.minio.root_password,
-)
-logger.info(f"minios3_external_config: {minios3_external_config}")
-
-polars_s3_config = turn_S3_config_into_polars_storage_options(minios3_external_config).model_dump(
+polars_s3_config = turn_S3_config_into_polars_storage_options(settings.minio).model_dump(
     exclude_none=True
 )
 logger.info(f"polars_s3_config: {polars_s3_config}")
