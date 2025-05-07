@@ -106,11 +106,11 @@ jobs:
           docker --version
           docker compose version
 
-      # ← Export UID and GID
-      # - name: Export UID and GID
-      #   run: |
-      #     echo "UID=$(id -u)" >> $GITHUB_ENV
-      #     echo "GID=$(id -g)" >> $GITHUB_ENV
+      # Export UID and GID
+      - name: Export UID and GID
+        run: |
+          echo "UID=$(id -u)" >> $GITHUB_ENV
+          echo "GID=$(id -g)" >> $GITHUB_ENV
 
       - name: Generate .env
         run: |
@@ -121,17 +121,17 @@ jobs:
           DEPICTIO_MINIO_ROOT_PASSWORD=${{ env.DEPICTIO_MINIO_ROOT_PASSWORD }}
           EOF
 
-      - name: Create and Set Permissions for depictioDB
-        run: |
-          mkdir -p depictioDB/
-          chown -R "$(id -u):$(id -g)" depictioDB/
-          chmod -R 777 depictioDB/
+      # - name: Create and Set Permissions for depictioDB
+      #   run: |
+      #     mkdir -p depictioDB/
+      #     chown -R "$(id -u):$(id -g)" depictioDB/
+      #     chmod -R 777 depictioDB/
 
-      - name: Create and Set Permissions for minio_data
-        run: |
-          mkdir -p minio_data/
-          chown -R "$(id -u):$(id -g)" minio_data/
-          chmod -R 775 minio_data/
+      # - name: Create and Set Permissions for minio_data
+      #   run: |
+      #     mkdir -p minio_data/
+      #     chown -R "$(id -u):$(id -g)" minio_data/
+      #     chmod -R 775 minio_data/
 
       # - name: Create and Set Permissions for depictio/keys
       #   run: |
