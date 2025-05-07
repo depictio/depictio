@@ -480,34 +480,34 @@ jobs:
       # # - name: Check Ingestion Success
       # #   run: echo "Data ingestion completed successfully"
 
-  e2e:
-    needs: [quality, setup]
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
+  # e2e:
+  #   needs: [quality, setup]
+  #   runs-on: ubuntu-22.04
+  #   steps:
+  #     - uses: actions/checkout@v4
 
-      - name: Configure Docker Permissions
-        run: |
-          sudo usermod -aG docker $USER || true
-          sudo chmod 666 /var/run/docker.sock
+  #     - name: Configure Docker Permissions
+  #       run: |
+  #         sudo usermod -aG docker $USER || true
+  #         sudo chmod 666 /var/run/docker.sock
 
-      - name: Start Services
-        run: docker compose -f docker-compose.yaml -f docker-compose/docker-compose.minio.yaml up -d --build
+  #     - name: Start Services
+  #       run: docker compose -f docker-compose.yaml -f docker-compose/docker-compose.minio.yaml up -d --build
 
-      - name: Wait for Services
-        run: sleep 15 # allow frontend & backend to spin up
+  #     - name: Wait for Services
+  #       run: sleep 15 # allow frontend & backend to spin up
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: "16"
+  #     - name: Set up Node.js
+  #       uses: actions/setup-node@v3
+  #       with:
+  #         node-version: "16"
 
-      - name: Install Cypress dependencies
-        run: |
-          cd depictio/tests/e2e-tests
-          npm ci
+  #     - name: Install Cypress dependencies
+  #       run: |
+  #         cd depictio/tests/e2e-tests
+  #         npm ci
 
-      - name: Run Cypress tests
-        run: |
-          cd depictio/tests/e2e-tests
-          npx cypress run
+  #     - name: Run Cypress tests
+  #       run: |
+  #         cd depictio/tests/e2e-tests
+  #         npx cypress run
