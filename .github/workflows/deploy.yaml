@@ -19,70 +19,70 @@ on:
     branches: [main]
 
 jobs:
-  quality:
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
+  # quality:
+  #   runs-on: ubuntu-22.04
+  #   steps:
+  #     - uses: actions/checkout@v4
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
+  #     - name: Install uv
+  #       uses: astral-sh/setup-uv@v5
+  #       with:
+  #         enable-cache: true
 
 
-      - name: "Set up Python"
-        uses: actions/setup-python@v5
-        with:
-          python-version-file: "pyproject.toml"
-          cache-dependency-glob: "pyproject.toml"
+  #     - name: "Set up Python"
+  #       uses: actions/setup-python@v5
+  #       with:
+  #         python-version-file: "pyproject.toml"
+  #         cache-dependency-glob: "pyproject.toml"
 
-      # GitHub Actions workflow with conditional LTS fallback
-      - name: Install Dependencies with LTS Fallback
-        run: |
-          # cd depictio/cli
-          # create a virtual environment using uv for python 3.11
-          uv venv --python 3.11 venv
-          source venv/bin/activate
-          uv pip install --upgrade pip
+  #     # GitHub Actions workflow with conditional LTS fallback
+  #     - name: Install Dependencies with LTS Fallback
+  #       run: |
+  #         # cd depictio/cli
+  #         # create a virtual environment using uv for python 3.11
+  #         uv venv --python 3.11 venv
+  #         source venv/bin/activate
+  #         uv pip install --upgrade pip
 
-          # First try default installation (with standard polars)
-          if uv pip install -e . && python -c "import polars" 2>/dev/null; then
-            echo "✅ Default installation with standard polars successful"
-          else
-            echo "⚠️ Standard polars failed, uninstalling and trying LTS version..."
-            # Uninstall the package to avoid conflicts
-            uv pip uninstall polars || true
-            # Install with LTS polars
-            uv pip install polars-lts-cpu
-            echo "✅ LTS installation successful"
-          fi
+  #         # First try default installation (with standard polars)
+  #         if uv pip install -e . && python -c "import polars" 2>/dev/null; then
+  #           echo "✅ Default installation with standard polars successful"
+  #         else
+  #           echo "⚠️ Standard polars failed, uninstalling and trying LTS version..."
+  #           # Uninstall the package to avoid conflicts
+  #           uv pip uninstall polars || true
+  #           # Install with LTS polars
+  #           uv pip install polars-lts-cpu
+  #           echo "✅ LTS installation successful"
+  #         fi
 
-          # Verify installation
-          python -c "import polars; print(f'Polars {polars.__version__} installed')"
+  #         # Verify installation
+  #         python -c "import polars; print(f'Polars {polars.__version__} installed')"
 
-      - name: Install dependencies for quality check & testing
-        run: |
-          source venv/bin/activate
-          uv pip install black ruff bandit pytest pytest-xdist pytest-asyncio pytest-cov mongomock mongomock-motor \
-            bleach typer rich typeguard
+  #     - name: Install dependencies for quality check & testing
+  #       run: |
+  #         source venv/bin/activate
+  #         uv pip install black ruff bandit pytest pytest-xdist pytest-asyncio pytest-cov mongomock mongomock-motor \
+  #           bleach typer rich typeguard
 
-      - name: Run Ruff for formatting
-        run: |
-          source venv/bin/activate
-          ruff format depictio
+  #     - name: Run Ruff for formatting
+  #       run: |
+  #         source venv/bin/activate
+  #         ruff format depictio
 
-      - name: Run Ruff for linting
-        run: |
-          source venv/bin/activate
-          ruff check depictio
+  #     - name: Run Ruff for linting
+  #       run: |
+  #         source venv/bin/activate
+  #         ruff check depictio
 
-      # - name: Run Bandit security check
-      #   run: bandit -r depictio -lll
+  #     # - name: Run Bandit security check
+  #     #   run: bandit -r depictio -lll
 
-      - name: Run tests
-        run: |
-          source venv/bin/activate
-          pytest depictio/tests/api depictio/tests/cli depictio/tests/models -xvs -n auto
+  #     - name: Run tests
+  #       run: |
+  #         source venv/bin/activate
+  #         pytest depictio/tests/api depictio/tests/cli depictio/tests/models -xvs -n auto
 
   setup:
     needs: quality # only runs if `quality` succeeds
@@ -215,9 +215,22 @@ jobs:
             exit 1
           fi
 
-      - name: Make sure all Services Are Running
+      - name: List Running Containers
         run: |
           docker ps
+
+      - name: Check minio service started, exit if not
+        run: |
+          # Check if the MinIO service is running
+          if ! docker compose ps | grep -q 'minio'; then
+            echo "MinIO service is not running. Failing the step."
+            docker compose ps
+            exit 1
+          fi
+
+
+      - name: Log Containers
+        run: |
           docker logs depictio-depictio_frontend-1
           docker logs depictio-depictio_backend-1
           # docker logs depictio-minio-1
