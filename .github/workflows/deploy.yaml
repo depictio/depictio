@@ -97,9 +97,10 @@ jobs:
       - name: Build Docker image (without pushing)
         uses: docker/build-push-action@v6
         with:
-          context: docker-images/Dockerfile_depictio.dockerfile
+          context: .  # The build context is the root of your repository
+          file: docker-images/Dockerfile_depictio.dockerfile  # Path to the Dockerfile
           push: false
-          load: true  # This loads the image into Docker's local cache
+          load: true
           tags: depictio:latest
           cache-from: type=gha,scope=depictio
           cache-to: type=gha,mode=max,scope=depictio
@@ -471,7 +472,7 @@ jobs:
       # # - name: Check Ingestion Success
       # #   run: echo "Data ingestion completed successfully"
 
-  cypress:
+  e2e:
     needs: [quality, setup]
     runs-on: ubuntu-22.04
     steps:
