@@ -4,6 +4,7 @@ import boto3
 from botocore.exceptions import ClientError, NoCredentialsError, PartialCredentialsError
 from pydantic import validate_call
 
+from depictio.models.config import DEPICTIO_CONTEXT
 from depictio.models.logging import logger
 from depictio.models.models.s3 import PolarsStorageOptions, S3DepictioCLIConfig
 
@@ -13,11 +14,12 @@ class S3ProviderBase(ABC):
         self.config = config
         self.bucket_name = config.bucket
         self.endpoint_url = config.endpoint_url
+        self.service_name = config.service_name
         self.access_key = config.root_user
         self.secret_key = config.root_password
         self.s3_client = boto3.client(
             "s3",
-            endpoint_url=self.endpoint_url,
+            endpoint_url=self.endpoint_url if DEPICTIO_CONTEXT != "server" else self.service_name,
             aws_access_key_id=self.access_key,
             aws_secret_access_key=self.secret_key,
         )
@@ -111,6 +113,8 @@ class S3ProviderBase(ABC):
 
 class MinIOManager(S3ProviderBase):
     def __init__(self, config: S3DepictioCLIConfig):
+        logger.info("Initializing MinIOManager...")
+        logger.info(f"DEPICTIO_CONTEXT: {DEPICTIO_CONTEXT}")
         logger.info(f"Initializing MinIOManager with bucket '{config.bucket}'")
         super().__init__(config)
 

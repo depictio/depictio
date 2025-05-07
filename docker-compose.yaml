@@ -17,6 +17,7 @@ services:
       - 5080:5080
     volumes:
       - ./depictio:/app/depictio
+      # - ./keys:/app/depictio/keys
     env_file:
       - .env
     environment:
@@ -40,6 +41,7 @@ services:
       - 8058:8058
     volumes:
       - ./depictio:/app/depictio
+      # - ./keys:/app/depictio/keys
     env_file:
       - .env
     environment:

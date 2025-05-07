@@ -118,7 +118,8 @@ testpaths = [
 addopts = "-s"
 markers = [
     "integration: mark test as an integration test.",
-    "playwright: mark test as a playwright test."
+    "playwright: mark test as a playwright test.",
+    "docker: mark test as requiring docker.",
 ]
 filterwarnings = [
     "ignore::pydantic.warnings.PydanticDeprecatedSince20",
