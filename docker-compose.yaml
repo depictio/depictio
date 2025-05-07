@@ -1,6 +1,7 @@
 services:
   mongo:
     image: mongo:8.0
+    container_name: mongo
     command: mongod --dbpath /data/depictioDB --port 27018 --logpath /dev/null
     user: "${UID:-1000}:${GID:-1000}"
     ports:
@@ -10,6 +11,7 @@ services:
 
   depictio_frontend:
     image: depictio:dev
+    container_name: depictio_frontend
     build:
       dockerfile: docker-images/Dockerfile_depictio.dockerfile
       context: .

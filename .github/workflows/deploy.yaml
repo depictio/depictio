@@ -324,7 +324,7 @@ jobs:
       - name: Copy /app/depictio/.depictio/admin_config.yaml to host
         run: |
           docker ps
-          docker cp depictio-depictio_backend-1:/app/depictio/.depictio/admin_config.yaml depictio/cli/admin_config.yaml
+          docker cp depictio_backend:/app/depictio/.depictio/admin_config.yaml depictio/cli/admin_config.yaml
           ls -la depictio/cli/admin_config.yaml
           cat depictio/cli/admin_config.yaml
 
