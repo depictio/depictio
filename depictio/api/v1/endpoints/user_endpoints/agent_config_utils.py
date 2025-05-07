@@ -5,7 +5,6 @@ from pydantic import validate_call
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.custom_logging import logger
-from depictio.api.v1.s3 import s3_config
 from depictio.models.models.users import CLIConfig, TokenBeanie, UserBaseCLIConfig, UserBeanie
 from depictio.models.utils import make_json_serializable
 
@@ -34,7 +33,7 @@ async def _generate_agent_config(user: UserBeanie, token: TokenBeanie) -> CLICon
     cli_config = CLIConfig(
         user=user_cli_config,
         base_url=f"http://{settings.fastapi.host}:{settings.fastapi.port}",
-        s3=s3_config,
+        s3=settings.minio,
     )
 
     logger.debug(f"Generated CLI config: {cli_config}")
