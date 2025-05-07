@@ -205,6 +205,9 @@ jobs:
       - name: Wait for Services to Start
         run: sleep 10 # Adjust the wait time if necessary
 
+      - name: Log Containers
+        run: docker compose logs depictio-depictio_backend-1
+
       # Verify All Containers Are Running
       - name: Check if all containers are running
         run: |
@@ -229,12 +232,10 @@ jobs:
           fi
 
 
+
+
       - name: Log Containers
-        run: |
-          docker logs depictio-depictio_frontend-1
-          docker logs depictio-depictio_backend-1
-          # docker logs depictio-minio-1
-          docker logs depictio-mongo-1
+        run: docker compose logs
 
       # List content of depictio
       - name: List Depictio Directory
