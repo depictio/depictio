@@ -23,9 +23,8 @@ services:
     env_file:
       - .env
     environment:
-        DEPICTIO_CONTAINER: "True"
-        DEPICTIO_TEST_MODE: "${DEPICTIO_TEST_MODE:-false}"
-        DEPICTIO_MONGODB_DB_NAME: "${DEPICTIO_MONGODB_DB_NAME:-depictioDB}"
+        # DEPICTIO_CONTAINER: "True"
+        # DEPICTIO_TEST_MODE: "${DEPICTIO_TEST_MODE:-false}"
         DEV_MODE: "${DEV_MODE:-false}"
     command: ["/app/run_dash.sh"]
     # command: ["python", "depictio/dash/app.py"]
@@ -48,12 +47,8 @@ services:
     env_file:
       - .env
     environment:
-        DEPICTIO_CONTAINER: "True"
-        DEPICTIO_TEST_MODE: "${DEPICTIO_TEST_MODE:-false}"
-        DEPICTIO_MONGODB_DB_NAME: "${DEPICTIO_MONGODB_DB_NAME:-depictioDB}"
-        FORCE_COLOR: "1"
-        TERM: "xterm-256color"
-        PYTHONIOENCODING: "UTF-8"
+        # DEPICTIO_CONTAINER: "True"
+        # DEPICTIO_TEST_MODE: "${DEPICTIO_TEST_MODE:-false}"
         DEV_MODE: "${DEV_MODE:-false}"
     command: ["/app/run_fastapi.sh"]
     # command: ["python", "depictio/api/run.py"]
