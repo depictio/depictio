@@ -11,4 +11,4 @@ Depictio is an innovative web-based platform currently under development, aimed 
 
 Homepage: [depictio.github.io](https://depictio.github.io/depictio-docs/)
 
-Copyright(c) 2023-2024 Thomas Weber thomas.weber@embl.de (see LICENSE)
+Copyright(c) 2023-2025 Thomas Weber thomas.weber@embl.de (see LICENSE)
