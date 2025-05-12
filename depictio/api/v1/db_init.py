@@ -64,7 +64,7 @@ async def create_initial_project(admin_user: UserBeanie, token_payload: TokenBea
 
 async def initialize_db(wipe: bool = False) -> UserBeanie | None:
     """
-    Initialize the database with default users and groups.
+    Initialize the database with default users and groups. If wipe is True, the database will be wiped before initialization.
     """
     logger.info(f"Bootstrap: {wipe} and type: {type(wipe)}")
 

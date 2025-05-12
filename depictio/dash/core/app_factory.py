@@ -47,7 +47,6 @@ def create_dash_app():
         title="Depictio",
         assets_folder=assets_folder,
         assets_url_path="/assets",  # Explicitly set the assets URL path
-        # favicon="/assets/logo_icon.png",  # Use logo_icon.png as favicon
     )
 
     # Configure Flask's logger to use custom logging settings

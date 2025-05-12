@@ -19,10 +19,6 @@ async def run_initialization(
     # Step 1: S3 Storage Accessibility Check (just storage, not bucket)
     logger.info("Starting system initialization...")
 
-    # print(f"os.environ: {os.environ}")
-    # load_dotenv(BASE_PATH.parent / ".env", override=False)
-    # print(f"os.environ: {os.environ}")
-
     # Use internal S3 config if not provided
     if s3_config_input is None:
         s3_config_input = settings.minio
@@ -34,10 +30,7 @@ async def run_initialization(
     logger.info("Checking S3 storage accessibility...")
     S3_storage_checks(s3_config_input, checks or ["s3"])
 
-    # Step 2: Generate Keys (if not already generated)
-    logger.info("Generating cryptographic keys...")
-
-    # Step 3: Initialize Database (users, groups, agent config)
+    # Step 2: Initialize Database (users, groups, agent config)
     logger.info("Initializing database...")
 
     # Get the admin user from the initialization process
@@ -46,7 +39,7 @@ async def run_initialization(
     if admin_user:
         logger.info(f"Admin user retrieved: {admin_user.email}")
 
-        # Step 4: S3 Bucket Creation
+        # Step 3: S3 Bucket Creation
         try:
             logger.info("Creating S3 bucket...")
             bucket_result = create_bucket(admin_user)

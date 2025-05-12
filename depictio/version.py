@@ -7,10 +7,12 @@ This module provides a way to get the project version from pyproject.toml.
 from pathlib import Path
 
 import tomli
+from pydantic import validate_call
 
 from depictio.api.v1.configs.custom_logging import logger
 
 
+@validate_call(validate_return=True)  # noqa: F821
 def get_version() -> str:
     """
     Retrieve the version from pyproject.toml.
@@ -30,6 +32,7 @@ def get_version() -> str:
     return version
 
 
+@validate_call(validate_return=True)  # noqa: F821
 def get_api_version() -> str:
     """
     Returns the API version prefix.

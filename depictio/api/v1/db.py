@@ -13,7 +13,7 @@ from depictio.api.v1.configs.custom_logging import logger
 
 # Check if running in a test environment
 # First check environment variable, then check for pytest in sys.argv
-is_testing = os.environ.get("DEPICTIO_TEST_MODE", "false").lower() == "true" or any(
+is_testing = os.environ.get("DEV_MODE", "false").lower() == "true" or any(
     "pytest" in arg for arg in sys.argv
 )
 

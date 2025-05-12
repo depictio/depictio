@@ -90,6 +90,7 @@ def is_minio_running_in_docker():
         return False
 
 
+# DOCS: Document the `is_minio_running_in_docker` function
 class S3DepictioCLIConfig(BaseSettings):
     """Test-specific version of S3DepictioCLIConfig for isolated testing."""
 

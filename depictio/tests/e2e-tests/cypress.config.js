@@ -6,6 +6,8 @@ module.exports = defineConfig({
         specPattern: 'cypress/e2e/**/*.cy.js',
         supportFile: false,
         viewportWidth: 1920,
-        viewportHeight: 1080
+        viewportHeight: 1080,
+        browser: 'chrome',
+        experimentalRunAllSpecs: true
     },
 })

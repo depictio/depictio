@@ -24,25 +24,8 @@ from depictio.models.models.users import GroupBeanie, TokenBeanie, UserBeanie
 from depictio.models.utils import get_depictio_context
 from depictio.version import get_api_version, get_version
 
-# Detailed .env file debugging
-# print(f"BASE_PATH: {BASE_PATH}")
-# print(f"BASE_PATH.parent: {BASE_PATH.parent}")
-# print(f"Attempting to load .env from: {BASE_PATH.parent / '.env'}")
-# print(f"Does .env file exist? {os.path.exists(BASE_PATH.parent / '.env')}")
-# print(f"Full .env file path: {os.path.abspath(BASE_PATH.parent / '.env')}")
-
-# Try alternative loading methods
-# try:
-#     from dotenv import dotenv_values
-
-#     env_values = dotenv_values(BASE_PATH.parent / ".env")
-#     print(f"Dotenv values: {env_values}")
-# except Exception as e:
-#     print(f"Error loading .env with dotenv_values: {e}")
-
 # Ensure context is loaded before first use
 DEPICTIO_CONTEXT = get_depictio_context()
-print(f"DEPICTIO_CONTEXT set to: {DEPICTIO_CONTEXT}")
 
 
 # Database initialization
@@ -109,16 +92,12 @@ def delayed_process_data_collections():
         {"workflows.data_collections.data_collection_tag": "iris_table"}
     )
     dc_id = dc_id.get("workflows", [{}])[0].get("data_collections", [{}])[0].get("_id")
-    print(f"DC id: {dc_id}")
-    print(f"DC id type: {type(dc_id)}")
 
     if dc_id:
         _check_deltatables = deltatables_collection.find_one(
             {"data_collection_id": dc_id}, {"_id": 1}
         )
-        print(f"Check deltatables: {_check_deltatables}")
         if _check_deltatables:
-            print(f"Data collection with ID {dc_id} already exists in deltatables_collection.")
             return
 
     # Wait longer to ensure the API has fully started

@@ -108,6 +108,7 @@ def sync_process_initial_data_collections() -> dict[str, Any]:
     project_config_id = project_config["id"]
     logger.debug(f"Project config ID: {project_config_id}")
 
+    # FIXME: not so clean, should rely on a endpoint
     # Get the first project
     project = projects_collection.find_one({"_id": ObjectId(project_config_id)})
     project = Project.from_mongo(project)
@@ -135,12 +136,6 @@ def sync_process_initial_data_collections() -> dict[str, Any]:
     )
 
     logger.debug(f"CLI config: {format_pydantic(cli_config)}")
-    # project = projects_collection.find_one({})
-    #     logger.info("DC id : %s", str(project["workflows"][0]))
-    #     logger.info("DC id : %s", str(project["workflows"][0]["data_collections"][0]))
-    #     logger.info("DC id : %s", str(project["workflows"][0]["data_collections"][0]["_id"]))
-    #     # project = projects_collection.find_one({})
-    # #
 
     wf = project.workflows[0]
     dc_id = str(project.workflows[0].data_collections[0].id)
@@ -153,22 +148,7 @@ def sync_process_initial_data_collections() -> dict[str, Any]:
         mode="scan",
     )
 
-    logger.debug(f"Result: {result}")
-    # if result["result"] != "success":
-    #     logger.error(f"Error processing data collection: {result['message']}")
-    #     return {
-    #         "success": False,
-    #         "message": f"Error processing data collection: {result['message']}"
-    #     }
-
     logger.info("Data collection processed successfully in scan mode")
-
-    logger.info("Project: %s", format_pydantic(project))
-    logger.info("Worlfow: %s", format_pydantic(project.workflows[0]))
-    logger.info("DC id : %s", str(project.workflows[0].data_collections[0]))
-    logger.info("DC id : %s", str(project.workflows[0].data_collections[0].id))
-    # logger.info("DC id : %s", str(project["workflows"][0]["data_collections"][0]))
-    # # logger.info("DC id : %s", str(project["workflows"][0]["data_collections"][0]["_id"]))
 
     # Process the first data collection in process mode
     result = process_data_collection_helper(
