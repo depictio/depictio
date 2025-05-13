@@ -543,7 +543,16 @@ jobs:
       - name: Install Cypress dependencies
         run: |
           cd depictio/tests/e2e-tests
-          npm ci
+          if [ ! -f "package.json" ]; then
+            echo "Creating package.json..."
+            npm init -y
+            npm install cypress --save-dev
+          elif [ ! -f "package-lock.json" ]; then
+            echo "No package-lock.json found, using npm install..."
+            npm install
+          else
+            npm ci
+          fi
 
       - name: Run Cypress tests
         run: |
