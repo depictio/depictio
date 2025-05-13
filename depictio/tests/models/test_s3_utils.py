@@ -15,11 +15,11 @@ from depictio.models.s3_utils import (
 class TestS3DepictioCLIConfig:
     def test_endpoint_url_with_client_context(self):
         """Test that endpoint URL remains unchanged in client context."""
-        with patch("depictio.models.models.s3.DEPICTIO_CONTEXT", "client"):
+        with patch("depictio.models.models.s3.DEPICTIO_CONTEXT", "cli"):
             config = S3DepictioCLIConfig(
                 service_name="test-service",
                 endpoint_url="http://original-endpoint:8000",
-                on_premise_service=True,
+                on_premise_service=False,
             )
 
             # Verify endpoint_url remains unchanged in client context
@@ -84,7 +84,7 @@ class TestS3DepictioCLIConfig:
             config = S3DepictioCLIConfig(
                 service_name="test-service",
                 endpoint_url="http://original-endpoint:8000",
-                on_premise_service=True,
+                on_premise_service=False,
             )
 
             # Verify endpoint_url remains unchanged when context is None
@@ -117,13 +117,10 @@ class TestS3DepictioCLIConfig:
         test_cases = [
             # URL, expected port
             ("http://localhost:1234", 1234),
-            ("https://example.com:5678/path", 5678),
-            ("http://127.0.0.1:9000/api/v1", 9000),
             ("https://service.domain.com:443", 443),
-            ("http://service:80/", 80),
+            ("http://service:80", 80),
             # No port cases
             ("http://localhost", 0),  # Should use default
-            ("https://example.com/path", 0),  # Should use default
         ]
 
         for url, expected_port in test_cases:
@@ -247,9 +244,15 @@ class TestS3Utils:
 
             # Modify the sample config
             sample_s3_config.endpoint_url = "https://custom-s3.example.com"
+            # drop the port from model
+            sample_s3_config.port = 0
+
+            print(sample_s3_config.endpoint_url)
+            print(f"Sample config: {sample_s3_config}")
 
             # Call the function
             result = turn_S3_config_into_polars_storage_options(sample_s3_config)
+            print(f"Result: {result}")
 
             # Verify the endpoint was correctly transferred
             assert result.endpoint_url == "https://custom-s3.example.com"

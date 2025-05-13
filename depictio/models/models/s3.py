@@ -4,7 +4,6 @@ from typing import Optional
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from depictio.models.config import DEPICTIO_CONTEXT
 from depictio.models.logging import logger
 
 
@@ -121,24 +120,30 @@ class S3DepictioCLIConfig(BaseSettings):
         logger.debug(f"Port match: {port_match}")
         if port_match:
             model.port = int(port_match.group(1))
-        # host_match = re.search(r"^(https?://)?([^:/]+)", model.endpoint_url)
-        # logger.debug(f"Host match: {host_match}")
-        # if host_match:
-        #     model.host = host_match.group(2)
+
+        # If secure is not set, determine it based on the endpoint_url
+        secure = model.endpoint_url.startswith("https://")
+        logger.debug(f"Secure mode set to: {secure}")
 
         # Update endpoint_url when in server context and running on premise
         # try:
         # Try to access DEPICTIO_CONTEXT, using a default if not found
-        if DEPICTIO_CONTEXT == "server" and model.on_premise_service:
+        if model.on_premise_service:
             # Use the correct port value (either extracted or default)
             port = model.port or 9000  # Use default port if not specified
             # If running in server context, use the service name as the endpoint URL
             model.endpoint_url = f"http://{model.service_name}:{port}"
             logger.debug(f"Updated endpoint_url: {model.endpoint_url}")
         else:
-            # If not running in server context, use the provided endpoint URL
-            logger.debug(f"Using provided endpoint_url: {model.endpoint_url}")
-            model.endpoint_url = f"http://{model.host}:{model.port or 9000}"
+            host_match = re.search(r"^https?://([^:/]+)", model.endpoint_url)
+            if host_match:
+                model.host = host_match.group(1)
+                logger.debug(f"Extracted host: {model.host}")
+
+            model.endpoint_url = "http://" if not secure else "https://"
+            model.endpoint_url += model.host
+            model.endpoint_url += f":{model.port}" if model.port else ""
+            logger.debug(f"Updated endpoint_url: {model.endpoint_url}")
         # except NameError:
         #     # DEPICTIO_CONTEXT might not be defined, handle gracefully
         #     pass
