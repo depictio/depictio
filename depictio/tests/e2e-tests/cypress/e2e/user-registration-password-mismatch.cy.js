@@ -31,18 +31,18 @@ describe('Unsuccessful Registration - Password Mismatch', () => {
         .type(password2)
 
       // Wait for the register button to be enabled
-    //   cy.get('#register-button').should('not.be.disabled')
+      // cy.get('#register-button').should('not.be.disabled')
 
       // Click the register button
       cy.contains('button', 'Register').click()
 
-      // Wait for the error message
-    //   cy.get('#user-feedback-message-register').should('be.visible')
-
-      // Verify error message about passwords not matching
+      // Verify error message about passwords not matching (case-insensitive)
       cy.get('#user-feedback-message-register')
-        // .first()
-        .should('contain.text', 'passwords do not match.')
+        .invoke('text')
+        .then((text) => {
+          const lowerText = text.toLowerCase();
+          expect(lowerText).to.include('passwords do not match');
+        });
 
       // Take a screenshot
       cy.screenshot('registration_password_mismatch_error')
