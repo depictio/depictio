@@ -421,6 +421,9 @@ jobs:
                               --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
                               --CLI-config-path admin_config.yaml
 
+      - name: Sync Project to Server - debug
+        continue-on-error: true
+        run: |
           docker compose logs depictio_backend
 
       # # Sync the iris project configuration to the server
