@@ -96,26 +96,30 @@ async def get_project_from_dashboard_id(
 
 @projects_endpoint_router.post("/create")
 async def create_project(project: Project, current_user: User = Depends(get_current_user)):
-    # # Convert project to Project object
-    # project = Project.from_mongo(project)
-
-    # Ensure the current_user is an owner
-    if (
-        current_user.id not in [owner.id for owner in project.permissions.owners]
-        or not current_user.is_admin
-    ):
-        raise HTTPException(
-            status_code=403,
-            detail="User does not have permission to create this project.",
-        )
-
     try:
-        existing_project = await get_project_from_name(project.name, current_user)
-        if existing_project:
-            raise HTTPException(status_code=409, detail="Project already exists.")
+        # Ensure the current_user is an owner
+        if (
+            current_user.id not in [owner.id for owner in project.permissions.owners]
+            and not current_user.is_admin
+        ):
+            return {
+                "success": False,
+                "message": "User does not have permission to create this project.",
+                "status_code": 403,
+            }
+
+        existing_project_using_name = await get_project_from_name(project.name, current_user)
+        existing_project_using_id = await get_project_from_id(project.id, current_user)
+        if existing_project_using_name or existing_project_using_id:
+            reason_tag = "name" if existing_project_using_name else "id"
+            return {
+                "success": False,
+                "message": f"Project already exists using this {reason_tag}.",
+                "status_code": 409,
+            }
     except HTTPException as e:
-        if e.status_code != 404:  # Re-raise if error is not "not found"
-            raise e
+        if e.status_code != 404:  # If error is not "not found"
+            return {"success": False, "message": str(e.detail), "status_code": e.status_code}
 
     logger.info(f"Creating project: {project}")
     logger.info(f"Creating mongo project: {project.mongo()}")
@@ -126,6 +130,7 @@ async def create_project(project: Project, current_user: User = Depends(get_curr
     return {
         "success": True,
         "message": f"Project '{project.name}' with ID '{project.id}' created.",
+        # "status_code": 201,
     }
 
 

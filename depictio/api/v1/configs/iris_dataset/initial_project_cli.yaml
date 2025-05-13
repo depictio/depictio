@@ -1,7 +1,7 @@
-id: "646b0f3c1e4a2d7f8e5b8c9a"
+id: "646b0f3c1e4a2d7f8e5b8c9x"
 name: "Iris Dataset Project Data Analysis CLI"
 workflows:
-  - id: "646b0f3c1e4a2d7f8e5b8c9b"
+  - id: "646b0f3c1e4a2d7f8e5b8c9y"
     name: "iris_workflow"
     engine:
       name: "python"
@@ -10,7 +10,7 @@ workflows:
       locations:
         - "../api/v1/configs/iris_dataset"
     data_collections:
-      - id: "646b0f3c1e4a2d7f8e5b8c9c"
+      - id: "646b0f3c1e4a2d7f8e5b8c9z"
         data_collection_tag: "iris_table"
         description: "Iris dataset in CSV format"
         config:
