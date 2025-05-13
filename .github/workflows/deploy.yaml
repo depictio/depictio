@@ -19,411 +19,409 @@ on:
     branches: [main]
 
 jobs:
-  # quality:
-  #   runs-on: ubuntu-22.04
-  #   steps:
-  #     - uses: actions/checkout@v4
-
-  #     - name: Install uv
-  #       uses: astral-sh/setup-uv@v5
-  #       with:
-  #         enable-cache: true
-
-
-  #     - name: "Set up Python"
-  #       uses: actions/setup-python@v5
-  #       with:
-  #         python-version-file: "pyproject.toml"
-  #         cache-dependency-glob: "pyproject.toml"
-
-  #     # GitHub Actions workflow with conditional LTS fallback
-  #     - name: Install Dependencies with LTS Fallback
-  #       run: |
-  #         # cd depictio/cli
-  #         # create a virtual environment using uv for python 3.11
-  #         uv venv --python 3.11 venv
-  #         source venv/bin/activate
-  #         uv pip install --upgrade pip
-
-  #         # First try default installation (with standard polars)
-  #         if uv pip install -e . && python -c "import polars" 2>/dev/null; then
-  #           echo "✅ Default installation with standard polars successful"
-  #         else
-  #           echo "⚠️ Standard polars failed, uninstalling and trying LTS version..."
-  #           # Uninstall the package to avoid conflicts
-  #           uv pip uninstall polars || true
-  #           # Install with LTS polars
-  #           uv pip install polars-lts-cpu
-  #           echo "✅ LTS installation successful"
-  #         fi
-
-  #         # Verify installation
-  #         python -c "import polars; print(f'Polars {polars.__version__} installed')"
-
-  #     - name: Install dependencies for quality check & testing
-  #       run: |
-  #         source venv/bin/activate
-  #         uv pip install black ruff bandit pytest pytest-xdist pytest-asyncio pytest-cov mongomock mongomock-motor \
-  #           bleach typer rich typeguard
-
-  #     - name: Run Ruff for formatting
-  #       run: |
-  #         source venv/bin/activate
-  #         ruff format depictio
-
-  #     - name: Run Ruff for linting
-  #       run: |
-  #         source venv/bin/activate
-  #         ruff check depictio
-
-  #     # - name: Run Bandit security check
-  #     #   run: bandit -r depictio -lll
-
-  #     - name: Run tests
-  #       run: |
-  #         source venv/bin/activate
-  #         pytest depictio/tests/api depictio/tests/cli depictio/tests/models -xvs -n auto
-
-  # setup:
-  #   # needs: quality # only runs if `quality` succeeds
-  #   runs-on: ubuntu-22.04 # Instead of ubuntu-latest
-  #   steps:
-  #     - name: Checkout code
-  #       uses: actions/checkout@v4
-
-  #     # - name: Set up Docker Buildx
-  #     #   uses: docker/setup-buildx-action@v3
-
-  #     # - name: Build Docker image (without pushing)
-  #     #   uses: docker/build-push-action@v6
-  #     #   with:
-  #     #     context: .  # The build context is the root of your repository
-  #     #     file: docker-images/Dockerfile_depictio.dockerfile  # Path to the Dockerfile
-  #     #     push: false
-  #     #     load: true
-  #     #     tags: depictio:latest
-  #     #     cache-from: type=gha,scope=depictio
-  #     #     cache-to: type=gha,mode=max,scope=depictio
-
-  #     # ↓ NEW: Add user to docker group for permissions
-  #     - name: Configure Docker Permissions
-  #       run: |
-  #         # Add current user to docker group (ignore if already exists)
-  #         sudo usermod -aG docker $USER || true
-  #         # Change docker socket permissions
-  #         sudo chmod 666 /var/run/docker.sock
-  #         # Verify permissions
-  #         ls -la /var/run/docker.sock
-  #         groups
-
-  #     - name: Check os version
-  #       run: |
-  #         echo "OS Version: $(cat /etc/os-release)"
-  #         echo "Kernel Version: $(uname -r)"
-  #         echo "Architecture: $(uname -m)"
-  #         docker --version
-  #         docker compose version
-
-  #     # Export UID and GID
-  #     - name: Export UID and GID
-  #       run: |
-  #         echo "UID=$(id -u)" >> $GITHUB_ENV
-  #         echo "GID=$(id -g)" >> $GITHUB_ENV
-
-  #     - name: Generate .env
-  #       run: |
-  #         cp .env.example .env
-
-  #     - name: Create and Set Permissions for depictioDB
-  #       run: |
-  #         mkdir -p depictioDB/
-  #         chown -R "$(id -u):$(id -g)" depictioDB/
-  #         chmod -R 777 depictioDB/
-
-  #     - name: Create and Set Permissions for minio_data
-  #       run: |
-  #         mkdir -p minio_data/
-  #         chown -R "$(id -u):$(id -g)" minio_data/
-  #         chmod -R 775 minio_data/
-
-  #     # - name: Create and Set Permissions for depictio/keys
-  #     #   run: |
-  #     #     mkdir -p depictio/keys/
-  #     #     chown -R $UID:$GID depictio/keys/
-  #     #     chmod -R 775 depictio/keys/
-
-  #     # - name: Create and Set Permissions for depictio/.depictio
-  #     #   run: |
-  #     #     mkdir -p depictio/.depictio/
-  #     #     chown -R $UID:$GID depictio/.depictio/
-  #     #     chmod -R 775 depictio/.depictio/
-
-  #     # - name: Set up Environment Variables
-  #     #   run: echo "DEPICTIO_BACKEND_EXAMPLE_DATA_VOLUME_HOST=/home/runner/work/depictio/depictio/depictio-example-data" >> .env
-
-  #     - name: Start Docker Compose Services
-  #       run: |
-  #         # Ensure we have docker permissions by using the updated socket permissions
-  #         docker compose -f docker-compose.yaml -f docker-compose/docker-compose.minio.yaml up -d --build
-
-  #     # - name: Start Docker Compose Services with Caching
-  #     #   run: |
-  #     #     # Use BuildKit
-  #     #     export DOCKER_BUILDKIT=1
-  #     #     export COMPOSE_DOCKER_CLI_BUILD=1
-
-  #     #     # Build images with cache
-  #     #     docker compose -f docker-compose.yaml -f docker-compose/docker-compose.minio.yaml build \
-  #     #       --build-arg BUILDKIT_INLINE_CACHE=1
-
-  #     #     # Start services
-  #     #     docker compose -f docker-compose.yaml -f docker-compose/docker-compose.minio.yaml up -d
-
-  #     # - name: Wait for Services to Start
-  #     #   run: sleep 10 # Adjust the wait time if necessary
-
-  #     # - name: Check .depictio/admin_config.yaml location
-  #     #   run: |
-  #     #     # Current working directory
-  #     #     echo "Current working directory: $(pwd)"
-  #     #     ls -la depictio
-  #     #     ls -la depictio/.depictio
-  #     #     # Check if the file exists
-  #     #     if [ -f "depictio/.depictio/admin_config.yaml" ]; then
-  #     #       # full path echo - n "$(realpath depictio/.depictio/admin_config.yaml)"
-  #     #       echo "File exists at depictio/.depictio/admin_config.yaml"
-  #     #       echo "File path: $(realpath depictio/.depictio/admin_config.yaml)"
-  #     #     else
-  #     #       echo "File does not exist at depictio/.depictio/admin_config.yaml"
-  #     #       exit 1
-  #     #     fi
-
-  #     - name: Verify Permissions Inside Container
-  #       run: |
-  #         docker compose exec -T depictio_backend bash -c "ls -la /app/depictio/keys"
-
-  #     - name: Wait for Services to Start
-  #       run: sleep 10 # Adjust the wait time if necessary
-
-  #     - name: Log Containers
-  #       run: docker compose logs depictio_backend
-
-  #     # Verify All Containers Are Running
-  #     - name: Check if all containers are running
-  #       run: |
-  #         # Check if any containers are not in the 'Up' state
-  #         if ! docker compose ps | grep -q 'Up'; then
-  #           echo "One or more containers are not running. Failing the step."
-  #           docker compose ps
-  #           exit 1
-  #         fi
-
-  #     - name: List Running Containers
-  #       run: |
-  #         docker ps
-
-  #     - name: Check minio service started, exit if not
-  #       run: |
-  #         # Check if the MinIO service is running
-  #         if ! docker compose ps | grep -q 'minio'; then
-  #           echo "MinIO service is not running. Failing the step."
-  #           docker compose ps
-  #           exit 1
-  #         fi
-
-
-
-
-  #     - name: Log Containers
-  #       run: docker compose logs
-
-  #     # List content of depictio
-  #     - name: List Depictio Directory
-  #       run: ls -lal depictio/.depictio
-
-  #     # Verify permissions inside MongoDB container
-  #     - name: Verify MongoDB Permissions Inside Container
-  #       run: |
-  #         docker compose exec -T mongo bash -c "ls -la /data/depictioDB"
-
-  #     # Verify permissions inside MinIO container
-  #     # - name: Verify MinIO Permissions Inside Container
-  #     #   run: |
-  #     #     docker compose exec -T minio bash -c "ls -la /data"
-
-  #     # Show admin config file
-  #     - name: Show admin config file
-  #       run: docker compose exec depictio_backend cat /app/depictio/.depictio/admin_config.yaml
-
-  #     - name: Install uv
-  #       uses: astral-sh/setup-uv@v5
-  #       with:
-  #         enable-cache: true
-
-  #     - name: "Set up Python"
-  #       uses: actions/setup-python@v5
-  #       with:
-  #         python-version-file: "depictio/cli/pyproject.toml"
-  #         cache-dependency-glob: "uv.lock"
-
-  #     # GitHub Actions workflow with conditional LTS fallback
-  #     - name: Install Dependencies with LTS Fallback
-  #       run: |
-  #         cd depictio/cli
-  #         # create a virtual environment using uv for python 3.11
-  #         uv venv --python 3.11 venv
-  #         source venv/bin/activate
-  #         uv pip install --upgrade pip
-
-  #         # First try default installation (with standard polars)
-  #         if uv pip install -e . && python -c "import polars" 2>/dev/null; then
-  #           echo "✅ Default installation with standard polars successful"
-  #         else
-  #           echo "⚠️ Standard polars failed, uninstalling and trying LTS version..."
-  #           # Uninstall the package to avoid conflicts
-  #           uv pip uninstall polars || true
-  #           # Install with LTS polars
-  #           uv pip install polars-lts-cpu
-  #           echo "✅ LTS installation successful"
-  #         fi
-
-  #         # Verify installation
-  #         python -c "import polars; print(f'Polars {polars.__version__} installed')"
-  #         depictio-cli --help
-
-  #     # Extract the token and perform a health check with the token
-  #     - name: Extract Token and Check Depictio Backend Health
-  #       run: |
-  #         # Extract the access token from the YAML file
-  #         token=$(docker compose exec depictio_backend bash -c "cat /app/depictio/.depictio/admin_config.yaml" | grep 'access_token' | awk '{print $2}')
-
-  #         # Remove quotes from the token if any
-  #         token=$(echo $token | tr -d "'\"")
-
-  #         # Hash the token using SHA256 for safe logging
-  #         token_hash=$(echo -n "$token" | sha256sum)
-  #         echo "Extracted token hash: $token_hash"
-
-  #         # Perform the health check using the extracted token
-  #         health_check=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $token" http://localhost:8058/depictio/api/v1/utils/status)
-
-  #         if [ "$health_check" != "200" ]; then
-  #           echo "Backend API is not healthy. Status code: $health_check"
-  #           exit 1
-  #         else
-  #           echo "Backend API is healthy."
-  #         fi
-
-  #     # Fetch the Depictio Backend logs before CLI execution
-  #     - name: Fetch Depictio Backend Logs Before CLI Run
-  #       if: always() # Ensure this runs no matter what
-  #       run: |
-  #         echo "Fetching logs before running CLI..."
-  #         docker compose logs depictio_backend
-
-  #     - name: Copy /app/depictio/.depictio/admin_config.yaml to host
-  #       run: |
-  #         docker ps
-  #         docker cp depictio_backend:/app/depictio/.depictio/admin_config.yaml depictio/cli/admin_config.yaml
-  #         ls -la depictio/cli/admin_config.yaml
-  #         cat depictio/cli/admin_config.yaml
-
-  #     - name: Validate & Show Depictio CLI Config
-  #       continue-on-error: true
-  #       run: |
-  #         cd depictio/cli
-
-  #         # Activate the virtual environment first
-  #         source venv/bin/activate
-
-  #         # Depictio CLI command to show the CLI config
-  #         depictio-cli config show-cli-config --CLI-config-path admin_config.yaml
-
-  #     # - name: Thorough file check
-  #     #   run: |
-  #     #     cd depictio/cli
-  #     #     echo "=== Current directory ==="
-  #     #     pwd
-  #     #     echo "=== List parent directory ==="
-  #     #     ls -la ../
-  #     #     echo "=== List api directory ==="
-  #     #     ls -la ../api/
-  #     #     echo "=== List v1 directory ==="
-  #     #     ls -la ../api/v1/
-  #     #     echo "=== List configs directory ==="
-  #     #     ls -la ../api/v1/configs/
-  #     #     echo "=== List iris_dataset directory ==="
-  #     #     ls -la ../api/v1/configs/iris_dataset/
-  #     #     echo "=== Try to read the file ==="
-  #     #     cat ../api/v1/configs/iris_dataset/iris.csv | head -5 || echo "Cannot read file"
-
-  #     # - name: Debug paths before validation
-  #     #   run: |
-  #     #     echo "File exists: $(if [ -f "depictio/api/v1/configs/iris_dataset/iris.csv" ]; then echo "YES"; else echo "NO"; fi)"
-  #     #     cd depictio/cli
-  #     #     echo "Current working directory: $(pwd)"
-  #     #     echo "File exists: $(if [ -f "../api/v1/configs/iris_dataset/iris.csv" ]; then echo "YES"; else echo "NO"; fi)"
-  #     #     echo "Absolute path: $(realpath "../api/v1/configs/iris_dataset/iris.csv")"
-  #     #     echo "Environment variables:"
-  #     #     env | grep -E "(GITHUB_WORKSPACE|PWD)"
-
-  #     # - name: Check mount points
-  #     #   run: |
-  #     #     echo "=== Mount points ==="
-  #     #     mount | grep -E "(depictio|workspace)"
-  #     #     echo "=== Docker volume mounts ==="
-  #     #     docker inspect $(hostname) | grep -A5 Mounts
-
-  #     - name: Validate & Show Project Config
-  #       continue-on-error: true
-  #       run: |
-  #         cd depictio/cli
-
-  #         # Activate the virtual environment first
-  #         source venv/bin/activate
-
-  #         # Depictio CLI command to show the CLI config
-  #         depictio-cli config validate-project-config \
-  #                             --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
-  #                             --CLI-config-path admin_config.yaml
-
-  #     - name: Check S3 Storage
-  #       continue-on-error: true
-  #       run: |
-  #         cd depictio/cli
-
-  #         # Activate the virtual environment first
-  #         source venv/bin/activate
-
-  #         # Depictio CLI command to show the CLI config
-  #         depictio-cli config check-s3-storage \
-  #                             --CLI-config-path admin_config.yaml
-
-  #     - name: Show Project on server
-  #       continue-on-error: true
-  #       run: |
-  #         cd depictio/cli
-
-  #         # Activate the virtual environment first
-  #         source venv/bin/activate
-
-  #         # Depictio CLI command to show the CLI config
-  #         depictio-cli config show-depictio-project-metadata-on-server \
-  #                             --project-name "Iris Dataset Project Data Analysis" \
-  #                             --CLI-config-path admin_config.yaml
-
-  #     - name: Sync Project to Server
-  #       continue-on-error: true
-  #       run: |
-  #         cd depictio/cli
-
-  #         # Activate the virtual environment first
-  #         source venv/bin/activate
-
-  #         # Depictio CLI command to show the CLI config
-  #         depictio-cli config sync-project-config-to-server \
-  #                             --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
-  #                             --CLI-config-path admin_config.yaml
+  quality:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "pyproject.toml"
+          cache-dependency-glob: "pyproject.toml"
+
+      # GitHub Actions workflow with conditional LTS fallback
+      - name: Install Dependencies with LTS Fallback
+        run: |
+          # cd depictio/cli
+          # create a virtual environment using uv for python 3.11
+          uv venv --python 3.11 venv
+          source venv/bin/activate
+          uv pip install --upgrade pip
+
+          # First try default installation (with standard polars)
+          if uv pip install -e . && python -c "import polars" 2>/dev/null; then
+            echo "✅ Default installation with standard polars successful"
+          else
+            echo "⚠️ Standard polars failed, uninstalling and trying LTS version..."
+            # Uninstall the package to avoid conflicts
+            uv pip uninstall polars || true
+            # Install with LTS polars
+            uv pip install polars-lts-cpu
+            echo "✅ LTS installation successful"
+          fi
+
+          # Verify installation
+          python -c "import polars; print(f'Polars {polars.__version__} installed')"
+
+      - name: Install dependencies for quality check & testing
+        run: |
+          source venv/bin/activate
+          uv pip install black ruff bandit pytest pytest-xdist pytest-asyncio pytest-cov mongomock mongomock-motor \
+            bleach typer rich typeguard
+
+      - name: Run Ruff for formatting
+        run: |
+          source venv/bin/activate
+          ruff format depictio
+
+      - name: Run Ruff for linting
+        run: |
+          source venv/bin/activate
+          ruff check depictio
+
+      # - name: Run Bandit security check
+      #   run: bandit -r depictio -lll
+
+      - name: Run tests
+        run: |
+          source venv/bin/activate
+          pytest depictio/tests/api depictio/tests/cli depictio/tests/models -xvs -n auto
+
+  setup:
+    needs: quality # only runs if `quality` succeeds
+    runs-on: ubuntu-22.04 # Instead of ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # - name: Set up Docker Buildx
+      #   uses: docker/setup-buildx-action@v3
+
+      # - name: Build Docker image (without pushing)
+      #   uses: docker/build-push-action@v6
+      #   with:
+      #     context: .  # The build context is the root of your repository
+      #     file: docker-images/Dockerfile_depictio.dockerfile  # Path to the Dockerfile
+      #     push: false
+      #     load: true
+      #     tags: depictio:latest
+      #     cache-from: type=gha,scope=depictio
+      #     cache-to: type=gha,mode=max,scope=depictio
+
+      # ↓ NEW: Add user to docker group for permissions
+      - name: Configure Docker Permissions
+        run: |
+          # Add current user to docker group (ignore if already exists)
+          sudo usermod -aG docker $USER || true
+          # Change docker socket permissions
+          sudo chmod 666 /var/run/docker.sock
+          # Verify permissions
+          ls -la /var/run/docker.sock
+          groups
+
+      - name: Check os version
+        run: |
+          echo "OS Version: $(cat /etc/os-release)"
+          echo "Kernel Version: $(uname -r)"
+          echo "Architecture: $(uname -m)"
+          docker --version
+          docker compose version
+
+      # Export UID and GID
+      - name: Export UID and GID
+        run: |
+          echo "UID=$(id -u)" >> $GITHUB_ENV
+          echo "GID=$(id -g)" >> $GITHUB_ENV
+
+      - name: Generate .env
+        run: |
+          cp .env.example .env
+
+      - name: Create and Set Permissions for depictioDB
+        run: |
+          mkdir -p depictioDB/
+          chown -R "$(id -u):$(id -g)" depictioDB/
+          chmod -R 777 depictioDB/
+
+      - name: Create and Set Permissions for minio_data
+        run: |
+          mkdir -p minio_data/
+          chown -R "$(id -u):$(id -g)" minio_data/
+          chmod -R 775 minio_data/
+
+      # - name: Create and Set Permissions for depictio/keys
+      #   run: |
+      #     mkdir -p depictio/keys/
+      #     chown -R $UID:$GID depictio/keys/
+      #     chmod -R 775 depictio/keys/
+
+      # - name: Create and Set Permissions for depictio/.depictio
+      #   run: |
+      #     mkdir -p depictio/.depictio/
+      #     chown -R $UID:$GID depictio/.depictio/
+      #     chmod -R 775 depictio/.depictio/
+
+      # - name: Set up Environment Variables
+      #   run: echo "DEPICTIO_BACKEND_EXAMPLE_DATA_VOLUME_HOST=/home/runner/work/depictio/depictio/depictio-example-data" >> .env
+
+      - name: Start Docker Compose Services
+        run: |
+          # Ensure we have docker permissions by using the updated socket permissions
+          docker compose -f docker-compose.yaml -f docker-compose/docker-compose.minio.yaml up -d --build
+
+      # - name: Start Docker Compose Services with Caching
+      #   run: |
+      #     # Use BuildKit
+      #     export DOCKER_BUILDKIT=1
+      #     export COMPOSE_DOCKER_CLI_BUILD=1
+
+      #     # Build images with cache
+      #     docker compose -f docker-compose.yaml -f docker-compose/docker-compose.minio.yaml build \
+      #       --build-arg BUILDKIT_INLINE_CACHE=1
+
+      #     # Start services
+      #     docker compose -f docker-compose.yaml -f docker-compose/docker-compose.minio.yaml up -d
+
+      # - name: Wait for Services to Start
+      #   run: sleep 10 # Adjust the wait time if necessary
+
+      # - name: Check .depictio/admin_config.yaml location
+      #   run: |
+      #     # Current working directory
+      #     echo "Current working directory: $(pwd)"
+      #     ls -la depictio
+      #     ls -la depictio/.depictio
+      #     # Check if the file exists
+      #     if [ -f "depictio/.depictio/admin_config.yaml" ]; then
+      #       # full path echo - n "$(realpath depictio/.depictio/admin_config.yaml)"
+      #       echo "File exists at depictio/.depictio/admin_config.yaml"
+      #       echo "File path: $(realpath depictio/.depictio/admin_config.yaml)"
+      #     else
+      #       echo "File does not exist at depictio/.depictio/admin_config.yaml"
+      #       exit 1
+      #     fi
+
+      - name: Verify Permissions Inside Container
+        run: |
+          docker compose exec -T depictio_backend bash -c "ls -la /app/depictio/keys"
+
+      - name: Wait for Services to Start
+        run: sleep 10 # Adjust the wait time if necessary
+
+      - name: Log Containers
+        run: docker compose logs depictio_backend
+
+      # Verify All Containers Are Running
+      - name: Check if all containers are running
+        run: |
+          # Check if any containers are not in the 'Up' state
+          if ! docker compose ps | grep -q 'Up'; then
+            echo "One or more containers are not running. Failing the step."
+            docker compose ps
+            exit 1
+          fi
+
+      - name: List Running Containers
+        run: |
+          docker ps
+
+      - name: Check minio service started, exit if not
+        run: |
+          # Check if the MinIO service is running
+          if ! docker compose ps | grep -q 'minio'; then
+            echo "MinIO service is not running. Failing the step."
+            docker compose ps
+            exit 1
+          fi
+
+      - name: Log Containers
+        run: docker compose logs
+
+      # List content of depictio
+      - name: List Depictio Directory
+        run: ls -lal depictio/.depictio
+
+      # Verify permissions inside MongoDB container
+      - name: Verify MongoDB Permissions Inside Container
+        run: |
+          docker compose exec -T mongo bash -c "ls -la /data/depictioDB"
+
+      # Verify permissions inside MinIO container
+      # - name: Verify MinIO Permissions Inside Container
+      #   run: |
+      #     docker compose exec -T minio bash -c "ls -la /data"
+
+      # Show admin config file
+      - name: Show admin config file
+        run: docker compose exec depictio_backend cat /app/depictio/.depictio/admin_config.yaml
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "depictio/cli/pyproject.toml"
+          cache-dependency-glob: "uv.lock"
+
+      # GitHub Actions workflow with conditional LTS fallback
+      - name: Install Dependencies with LTS Fallback
+        run: |
+          cd depictio/cli
+          # create a virtual environment using uv for python 3.11
+          uv venv --python 3.11 venv
+          source venv/bin/activate
+          uv pip install --upgrade pip
+
+          # First try default installation (with standard polars)
+          if uv pip install -e . && python -c "import polars" 2>/dev/null; then
+            echo "✅ Default installation with standard polars successful"
+          else
+            echo "⚠️ Standard polars failed, uninstalling and trying LTS version..."
+            # Uninstall the package to avoid conflicts
+            uv pip uninstall polars || true
+            # Install with LTS polars
+            uv pip install polars-lts-cpu
+            echo "✅ LTS installation successful"
+          fi
+
+          # Verify installation
+          python -c "import polars; print(f'Polars {polars.__version__} installed')"
+          depictio-cli --help
+
+      # Extract the token and perform a health check with the token
+      - name: Extract Token and Check Depictio Backend Health
+        run: |
+          # Extract the access token from the YAML file
+          token=$(docker compose exec depictio_backend bash -c "cat /app/depictio/.depictio/admin_config.yaml" | grep 'access_token' | awk '{print $2}')
+
+          # Remove quotes from the token if any
+          token=$(echo $token | tr -d "'\"")
+
+          # Hash the token using SHA256 for safe logging
+          token_hash=$(echo -n "$token" | sha256sum)
+          echo "Extracted token hash: $token_hash"
+
+          # Perform the health check using the extracted token
+          health_check=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $token" http://localhost:8058/depictio/api/v1/utils/status)
+
+          if [ "$health_check" != "200" ]; then
+            echo "Backend API is not healthy. Status code: $health_check"
+            exit 1
+          else
+            echo "Backend API is healthy."
+          fi
+
+      # Fetch the Depictio Backend logs before CLI execution
+      - name: Fetch Depictio Backend Logs Before CLI Run
+        if: always() # Ensure this runs no matter what
+        run: |
+          echo "Fetching logs before running CLI..."
+          docker compose logs depictio_backend
+
+      - name: Copy /app/depictio/.depictio/admin_config.yaml to host
+        run: |
+          docker ps
+          docker cp depictio_backend:/app/depictio/.depictio/admin_config.yaml depictio/cli/admin_config.yaml
+          ls -la depictio/cli/admin_config.yaml
+          cat depictio/cli/admin_config.yaml
+
+      - name: Validate & Show Depictio CLI Config
+        continue-on-error: true
+        run: |
+          cd depictio/cli
+
+          # Activate the virtual environment first
+          source venv/bin/activate
+
+          # Depictio CLI command to show the CLI config
+          depictio-cli config show-cli-config --CLI-config-path admin_config.yaml
+
+      # - name: Thorough file check
+      #   run: |
+      #     cd depictio/cli
+      #     echo "=== Current directory ==="
+      #     pwd
+      #     echo "=== List parent directory ==="
+      #     ls -la ../
+      #     echo "=== List api directory ==="
+      #     ls -la ../api/
+      #     echo "=== List v1 directory ==="
+      #     ls -la ../api/v1/
+      #     echo "=== List configs directory ==="
+      #     ls -la ../api/v1/configs/
+      #     echo "=== List iris_dataset directory ==="
+      #     ls -la ../api/v1/configs/iris_dataset/
+      #     echo "=== Try to read the file ==="
+      #     cat ../api/v1/configs/iris_dataset/iris.csv | head -5 || echo "Cannot read file"
+
+      # - name: Debug paths before validation
+      #   run: |
+      #     echo "File exists: $(if [ -f "depictio/api/v1/configs/iris_dataset/iris.csv" ]; then echo "YES"; else echo "NO"; fi)"
+      #     cd depictio/cli
+      #     echo "Current working directory: $(pwd)"
+      #     echo "File exists: $(if [ -f "../api/v1/configs/iris_dataset/iris.csv" ]; then echo "YES"; else echo "NO"; fi)"
+      #     echo "Absolute path: $(realpath "../api/v1/configs/iris_dataset/iris.csv")"
+      #     echo "Environment variables:"
+      #     env | grep -E "(GITHUB_WORKSPACE|PWD)"
+
+      # - name: Check mount points
+      #   run: |
+      #     echo "=== Mount points ==="
+      #     mount | grep -E "(depictio|workspace)"
+      #     echo "=== Docker volume mounts ==="
+      #     docker inspect $(hostname) | grep -A5 Mounts
+
+      - name: Validate & Show Project Config
+        continue-on-error: true
+        run: |
+          cd depictio/cli
+
+          # Activate the virtual environment first
+          source venv/bin/activate
+
+          # Depictio CLI command to show the CLI config
+          depictio-cli config validate-project-config \
+                              --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
+                              --CLI-config-path admin_config.yaml
+
+      - name: Check S3 Storage
+        continue-on-error: true
+        run: |
+          cd depictio/cli
+
+          # Activate the virtual environment first
+          source venv/bin/activate
+
+          # Depictio CLI command to show the CLI config
+          depictio-cli config check-s3-storage \
+                              --CLI-config-path admin_config.yaml
+
+      - name: Show Project on server
+        continue-on-error: true
+        run: |
+          cd depictio/cli
+
+          # Activate the virtual environment first
+          source venv/bin/activate
+
+          # Depictio CLI command to show the CLI config
+          depictio-cli config show-depictio-project-metadata-on-server \
+                              --project-name "Iris Dataset Project Data Analysis" \
+                              --CLI-config-path admin_config.yaml
+
+      - name: Sync Project to Server
+        continue-on-error: true
+        run: |
+          cd depictio/cli
+
+          # Activate the virtual environment first
+          source venv/bin/activate
+
+          # Depictio CLI command to show the CLI config
+          depictio-cli config sync-project-config-to-server \
+                              --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
+                              --CLI-config-path admin_config.yaml
+
+          docker compose logs depictio_backend
 
       # # Sync the iris project configuration to the server
       # # - name: Sync Iris Project Configuration
@@ -481,60 +479,6 @@ jobs:
       # # - name: Check Ingestion Success
       # #   run: echo "Data ingestion completed successfully"
 
-  e2e:
-    # needs: [quality, setup]
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
-
-
-      # Export UID and GID
-      - name: Export UID and GID
-        run: |
-          echo "UID=$(id -u)" >> $GITHUB_ENV
-          echo "GID=$(id -g)" >> $GITHUB_ENV
-
-      - name: Generate .env
-        run: |
-          cp .env.example .env
-
-      - name: Create and Set Permissions for depictioDB
-        run: |
-          mkdir -p depictioDB/
-          chown -R "$(id -u):$(id -g)" depictioDB/
-          chmod -R 777 depictioDB/
-
-      - name: Create and Set Permissions for minio_data
-        run: |
-          mkdir -p minio_data/
-          chown -R "$(id -u):$(id -g)" minio_data/
-          chmod -R 775 minio_data/
-
-      - name: Start Services
-        run: docker compose -f docker-compose.yaml -f docker-compose/docker-compose.minio.yaml up -d --build
-
-      - name: Wait for Services
-        run: sleep 10 # allow frontend & backend to spin up
-
-      # - name: Wait for Services
-      #   # Use a more robust approach to wait for services
-      #   run: |
-      #     echo "Waiting for services to be ready..."
-      #     timeout=60
-      #     while [ $timeout -gt 0 ]; do
-      #       if curl -s http://localhost:5080 > /dev/null; then
-      #         echo "Frontend is ready!"
-      #         break
-      #       fi
-      #       echo "Waiting for frontend... ($timeout seconds left)"
-      #       sleep 5
-      #       timeout=$((timeout-5))
-      #     done
-      #     if [ $timeout -eq 0 ]; then
-      #       echo "Timeout waiting for services to be ready"
-      #       exit 1
-      #     fi
-
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
@@ -574,3 +518,96 @@ jobs:
           name: cypress-videos
           path: depictio/tests/e2e-tests/cypress/videos
           retention-days: 7
+
+  # e2e:
+  #   # needs: [quality, setup]
+  #   runs-on: ubuntu-22.04
+  #   steps:
+  #     - uses: actions/checkout@v4
+
+  #     # Export UID and GID
+  #     - name: Export UID and GID
+  #       run: |
+  #         echo "UID=$(id -u)" >> $GITHUB_ENV
+  #         echo "GID=$(id -g)" >> $GITHUB_ENV
+
+  #     - name: Generate .env
+  #       run: |
+  #         cp .env.example .env
+
+  #     - name: Create and Set Permissions for depictioDB
+  #       run: |
+  #         mkdir -p depictioDB/
+  #         chown -R "$(id -u):$(id -g)" depictioDB/
+  #         chmod -R 777 depictioDB/
+
+  #     - name: Create and Set Permissions for minio_data
+  #       run: |
+  #         mkdir -p minio_data/
+  #         chown -R "$(id -u):$(id -g)" minio_data/
+  #         chmod -R 775 minio_data/
+
+  #     - name: Start Services
+  #       run: docker compose -f docker-compose.yaml -f docker-compose/docker-compose.minio.yaml up -d --build
+
+  #     - name: Wait for Services
+  #       run: sleep 10 # allow frontend & backend to spin up
+
+  # - name: Wait for Services
+  #   # Use a more robust approach to wait for services
+  #   run: |
+  #     echo "Waiting for services to be ready..."
+  #     timeout=60
+  #     while [ $timeout -gt 0 ]; do
+  #       if curl -s http://localhost:5080 > /dev/null; then
+  #         echo "Frontend is ready!"
+  #         break
+  #       fi
+  #       echo "Waiting for frontend... ($timeout seconds left)"
+  #       sleep 5
+  #       timeout=$((timeout-5))
+  #     done
+  #     if [ $timeout -eq 0 ]; then
+  #       echo "Timeout waiting for services to be ready"
+  #       exit 1
+  #     fi
+
+  # - name: Set up Node.js
+  #   uses: actions/setup-node@v3
+  #   with:
+  #     node-version: "16"
+
+  # - name: Install Cypress dependencies
+  #   run: |
+  #     cd depictio/tests/e2e-tests
+  #     if [ ! -f "package.json" ]; then
+  #       echo "Creating package.json..."
+  #       npm init -y
+  #       npm install cypress --save-dev
+  #     elif [ ! -f "package-lock.json" ]; then
+  #       echo "No package-lock.json found, using npm install..."
+  #       npm install
+  #     else
+  #       npm ci
+  #     fi
+
+  # - name: Run Cypress tests
+  #   run: |
+  #     cd depictio/tests/e2e-tests
+  #     npx cypress run --config screenshotsFolder=cypress/screenshots,videosFolder=cypress/videos,trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true
+
+  # - name: Upload screenshots
+  #   uses: actions/upload-artifact@v4
+  #   if: always()
+  #   with:
+  #     name: cypress-screenshots
+  #     path: depictio/tests/e2e-tests/cypress/screenshots
+  #     retention-days: 30
+
+  # - name: Upload videos (only on failure)
+  #   uses: actions/upload-artifact@v4
+  #   if: failure()
+  #   with:
+  #     name: cypress-videos
+  #     path: depictio/tests/e2e-tests/cypress/videos
+  #     retention-days: 7

@@ -5,6 +5,7 @@ from pydantic import validate_call
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.custom_logging import logger
+from depictio.models.models.s3 import S3DepictioCLIConfig
 from depictio.models.models.users import CLIConfig, TokenBeanie, UserBaseCLIConfig, UserBeanie
 from depictio.models.utils import make_json_serializable
 
@@ -29,11 +30,18 @@ async def _generate_agent_config(user: UserBeanie, token: TokenBeanie) -> CLICon
         id=user.id, email=user.email, is_admin=user.is_admin, token=token
     )
 
+    # Create the S3 configuration for the CLI - set on_premise_service to False
+    s3_for_cli = settings.minio.model_dump()
+    logger.debug(f"Minio settings: {s3_for_cli}")
+    s3_for_cli["on_premise_service"] = False
+    s3_for_cli = S3DepictioCLIConfig(**s3_for_cli)
+    logger.debug(f"Generated S3 config for CLI: {s3_for_cli}")
+
     # Create the complete CLI config
     cli_config = CLIConfig(
         user=user_cli_config,
         base_url=f"http://{settings.fastapi.host}:{settings.fastapi.port}",
-        s3=settings.minio,
+        s3=s3_for_cli,
     )
 
     logger.debug(f"Generated CLI config: {cli_config}")

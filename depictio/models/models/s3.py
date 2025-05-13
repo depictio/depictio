@@ -4,7 +4,7 @@ from typing import Optional
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from depictio.models.config import DEPICTIO_CONTEXT
+from depictio.models.logging import logger
 
 
 class PolarsStorageOptions(BaseModel):
@@ -95,31 +95,49 @@ class S3DepictioCLIConfig(BaseSettings):
     """Test-specific version of S3DepictioCLIConfig for isolated testing."""
 
     service_name: str = Field(default="minio")
+    host: str = Field(default="localhost")
     endpoint_url: str = Field(default="http://localhost:9000")
     port: Optional[int] = Field(default=0)
     root_user: str = Field(default="minio")
     root_password: str = Field(default="minio123")
     bucket: str = Field(default="depictio-bucket")
-    on_premise_service: bool = Field(default_factory=is_minio_running_in_docker)
+    on_premise_service: Optional[bool] = Field(default=None)
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_MINIO_")
+
+    @field_validator("on_premise_service", mode="before")
+    def set_on_premise_service_default(cls, v):
+        """Set default value for on_premise_service only if it's None."""
+        logger.debug(f"Setting on_premise_service: {v}")
+        if v is None:
+            return is_minio_running_in_docker()
+        return v
 
     @model_validator(mode="after")
     def update_endpoint_url_based_on_context(cls, model):
+        logger.debug(f"Updating endpoint_url for model: {model}")
         # Extract port from endpoint_url if it contains a port specification
         port_match = re.search(r":(\d+)$", model.endpoint_url)
-        print(f"Port match: {port_match}")
+        logger.debug(f"Port match: {port_match}")
         if port_match:
             model.port = int(port_match.group(1))
+        # host_match = re.search(r"^(https?://)?([^:/]+)", model.endpoint_url)
+        # logger.debug(f"Host match: {host_match}")
+        # if host_match:
+        #     model.host = host_match.group(2)
 
         # Update endpoint_url when in server context and running on premise
         # try:
         # Try to access DEPICTIO_CONTEXT, using a default if not found
-        if DEPICTIO_CONTEXT == "server" and model.on_premise_service:
+        if model.on_premise_service:
             # Use the correct port value (either extracted or default)
             port = model.port or 9000  # Use default port if not specified
             # If running in server context, use the service name as the endpoint URL
             model.endpoint_url = f"http://{model.service_name}:{port}"
-            print(f"Updated endpoint_url: {model.endpoint_url}")
+            logger.debug(f"Updated endpoint_url: {model.endpoint_url}")
+        else:
+            # If not running in server context, use the provided endpoint URL
+            logger.debug(f"Using provided endpoint_url: {model.endpoint_url}")
+            model.endpoint_url = f"http://{model.host}:{model.port or 9000}"
         # except NameError:
         #     # DEPICTIO_CONTEXT might not be defined, handle gracefully
         #     pass
