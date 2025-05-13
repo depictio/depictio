@@ -4,6 +4,7 @@ from typing import Optional
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from depictio.models.config import DEPICTIO_CONTEXT
 from depictio.models.logging import logger
 
 
@@ -128,7 +129,7 @@ class S3DepictioCLIConfig(BaseSettings):
         # Update endpoint_url when in server context and running on premise
         # try:
         # Try to access DEPICTIO_CONTEXT, using a default if not found
-        if model.on_premise_service:
+        if DEPICTIO_CONTEXT == "server" and model.on_premise_service:
             # Use the correct port value (either extracted or default)
             port = model.port or 9000  # Use default port if not specified
             # If running in server context, use the service name as the endpoint URL
