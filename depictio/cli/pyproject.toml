@@ -20,6 +20,7 @@ dependencies = [
   "python-jose",
   "pyyaml",
   "typer",
+  "click>=8.0.0,<8.2.0",
   "typeguard",
   "tomli",
   "rich",
