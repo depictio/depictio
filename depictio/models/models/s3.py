@@ -1,5 +1,6 @@
 import re
 from typing import Optional
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -116,38 +117,64 @@ class S3DepictioCLIConfig(BaseSettings):
     @model_validator(mode="after")
     def update_endpoint_url_based_on_context(cls, model):
         logger.debug(f"Updating endpoint_url for model: {model}")
-        # Extract port from endpoint_url if it contains a port specification
-        port_match = re.search(r":(\d+)$", model.endpoint_url)
-        logger.debug(f"Port match: {port_match}")
-        if port_match:
-            model.port = int(port_match.group(1))
 
-        # If secure is not set, determine it based on the endpoint_url
-        secure = model.endpoint_url.startswith("https://")
+        # First, parse the current endpoint_url to extract information
+        url_parts = urlparse(model.endpoint_url)
+
+        # Extract host from endpoint_url
+        model.host = url_parts.netloc.split(":")[0]
+        logger.debug(f"Extracted host: {model.host}")
+
+        # Extract port from netloc if present
+        if ":" in url_parts.netloc:
+            model.port = int(url_parts.netloc.split(":")[1])
+        logger.debug(f"Using port: {model.port}")
+
+        # Determine secure mode based on the endpoint_url
+        secure = url_parts.scheme == "https"
         logger.debug(f"Secure mode set to: {secure}")
 
-        # Update endpoint_url when in server context and running on premise
-        # try:
-        # Try to access DEPICTIO_CONTEXT, using a default if not found
-        if DEPICTIO_CONTEXT == "server" and model.on_premise_service:
-            # Use the correct port value (either extracted or default)
-            port = model.port or 9000  # Use default port if not specified
-            # If running in server context, use the service name as the endpoint URL
-            model.endpoint_url = f"http://{model.service_name}:{port}"
-            logger.debug(f"Updated endpoint_url: {model.endpoint_url}")
-        else:
-            host_match = re.search(r"^https?://([^:/]+)", model.endpoint_url)
-            if host_match:
-                model.host = host_match.group(1)
-                logger.debug(f"Extracted host: {model.host}")
+        try:
+            logger.debug(f"DEPICTIO_CONTEXT: {DEPICTIO_CONTEXT}")
 
-            model.endpoint_url = "http://" if not secure else "https://"
-            model.endpoint_url += model.host
-            model.endpoint_url += f":{model.port}" if model.port else ""
-            logger.debug(f"Updated endpoint_url: {model.endpoint_url}")
-        # except NameError:
-        #     # DEPICTIO_CONTEXT might not be defined, handle gracefully
-        #     pass
+            # CASE 1: Server context and on-premise - use service name
+            if DEPICTIO_CONTEXT == "server" and model.on_premise_service:
+                port = model.port or 9000
+                new_endpoint = f"http://{model.service_name}:{port}"
+
+                # Only update if different
+                if new_endpoint != model.endpoint_url:
+                    model.endpoint_url = new_endpoint
+                    logger.debug(
+                        f"Updated endpoint_url for server+on-premise: {model.endpoint_url}"
+                    )
+
+            # CASE 2: Using service name but NOT on-premise or not in server context
+            # This is the case that needs fixing according to the logs
+            elif model.host == model.service_name and not model.on_premise_service:
+                # We need to revert to using the actual host, not the service name
+                # Default to localhost if we're not on-premise
+                actual_host = "localhost"  # Default when not on-premise
+                port = model.port or 9000
+
+                model.endpoint_url = f"{'https' if secure else 'http'}://{actual_host}:{port}"
+                model.host = actual_host
+                logger.debug(f"Fixed endpoint_url for non-on-premise: {model.endpoint_url}")
+
+            # CASE 3: Other cases - rebuild URL if needed
+            else:
+                # For other contexts, ensure URL is consistent with host/port
+                new_endpoint = f"{'https' if secure else 'http'}://{model.host}"
+                new_endpoint += f":{model.port}" if model.port else ""
+
+                if new_endpoint != model.endpoint_url:
+                    model.endpoint_url = new_endpoint
+                    logger.debug(f"Standardized endpoint_url: {model.endpoint_url}")
+
+        except NameError:
+            # DEPICTIO_CONTEXT might not be defined, handle gracefully
+            logger.debug("DEPICTIO_CONTEXT not defined, skipping context-specific adjustments")
+            pass
 
         return model
 
