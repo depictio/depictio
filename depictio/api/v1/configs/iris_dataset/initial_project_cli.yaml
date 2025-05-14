@@ -1,7 +1,7 @@
-id: "68239aff70de12ba6b01d48f"
+id: "68244b21853c5097ed039122"
 name: "Iris Dataset Project Data Analysis CLI"
 workflows:
-  - id: "68239aff70de12ba6b01d48g"
+  - id: "68244b21853c5097ed039123"
     name: "iris_workflow"
     engine:
       name: "python"
@@ -10,7 +10,7 @@ workflows:
       locations:
         - "../api/v1/configs/iris_dataset"
     data_collections:
-      - id: "68239aff70de12ba6b01d48h"
+      - id: "68244b21853c5097ed039124"
         data_collection_tag: "iris_table"
         description: "Iris dataset in CSV format"
         config:
