@@ -157,7 +157,7 @@ async def make_dashboard_public(
 
 @dashboards_endpoint_router.post("/edit_name/{dashboard_id}")
 async def edit_dashboard_name(
-    dashboard_id: str,
+    dashboard_id: PyObjectId,
     data: dict,
     current_user: User = Depends(get_current_user),
 ):
@@ -170,6 +170,9 @@ async def edit_dashboard_name(
     new_name = data.get("new_name", None)
     if not new_name:
         raise HTTPException(status_code=400, detail="No new name provided.")
+
+    logger.info(f"New name: {new_name}")
+    logger.info(f"Dashboard ID: {dashboard_id} of type {type(dashboard_id)}")
 
     result = dashboards_collection.find_one_and_update(
         {"dashboard_id": dashboard_id, "permissions.owners._id": user_id},

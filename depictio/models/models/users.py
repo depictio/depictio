@@ -253,11 +253,11 @@ class Permission(BaseModel):
                 item = {
                     key: value
                     for key, value in item.items()
-                    if key in ["id", "email", "is_admin", "groups"]
+                    if key in ["id", "_id", "email", "is_admin", "groups"]
                 }
                 logger.debug(f"Filtered dictionary: {item}")
 
-                result.append(UserBase(**item))  # Convert dictionary to UserBase
+                result.append(UserBase.from_mongo(item))  # Convert dict to UserBase
             elif isinstance(item, str) and item == "*":
                 result.append(item)  # Allow wildcard "*" for viewers
             elif isinstance(item, UserBase):

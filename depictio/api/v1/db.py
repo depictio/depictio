@@ -16,6 +16,7 @@ from depictio.api.v1.configs.logging_init import logger
 is_testing = os.environ.get("DEV_MODE", "false").lower() == "true" or any(
     "pytest" in arg for arg in sys.argv
 )
+logger.info(f"Is testing: {is_testing}")
 
 # Check if running in Docker or locally
 # If we can't resolve 'mongo', we're running locally
@@ -38,11 +39,11 @@ else:
     logger.info(f"Running in Docker, MongoDB client created with URL: {MONGODB_URL}")
 
 # Use a test-specific database name if in test mode
-if is_testing:
-    db_name = os.environ.get("DEPICTIO_MONGODB_DB_NAME", "depictioDB_test")
-    logger.info(f"Using test database: {db_name}")
-else:
-    db_name = settings.mongodb.db_name
+# if is_testing:
+#     db_name = os.environ.get("DEPICTIO_MONGODB_DB_NAME", "depictioDB_test")
+#     logger.info(f"Using test database: {db_name}")
+# else:
+db_name = settings.mongodb.db_name
 
 
 # Function to clean the test database

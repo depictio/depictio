@@ -10,6 +10,7 @@ from dash import ALL, MATCH, Input, Output, State, ctx, dcc, html
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL
+from depictio.api.v1.configs.custom_logging import format_pydantic
 from depictio.api.v1.configs.logging_init import logger
 
 # from depictio.api.v1.endpoints.dashboards_endpoints.models import DashboardData
@@ -21,6 +22,7 @@ from depictio.dash.layouts.layouts_toolbox import (
 )
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.dashboards import DashboardData
+from depictio.models.models.users import Permission
 
 modal, modal_id = create_dashboard_modal()
 
@@ -85,6 +87,7 @@ def insert_dashboard(dashboard_id, dashboard_data, token):
     logger.info(f"dashboard_id: {dashboard_id}")
     logger.info(f"dashboard_data: {dashboard_data}")
     dashboard_data = convert_objectid_to_str(dashboard_data)
+    logger.info(f"dashboard_data converted: {dashboard_data}")
 
     response = httpx.post(
         f"{API_BASE_URL}/depictio/api/v1/dashboards/save/{dashboard_id}",
@@ -313,7 +316,7 @@ def register_callbacks_dashboards_management(app):
             badge_icon = "material-symbols:public" if public else "material-symbols:lock"
 
             badge_owner = dmc.Badge(
-                f"Owner: {dashboard['permissions']['owners'][0]['email']}",
+                f"Owner: {dashboard['permissions']['owners'][0]['email']} - {str(dashboard['permissions']['owners'][0]['_id'])}",
                 color=color_badge_ownership,
                 leftSection=DashIconify(icon="mdi:account", width=16, color="grey"),
             )
@@ -376,7 +379,11 @@ def register_callbacks_dashboards_management(app):
                         [
                             html.Div(
                                 [
-                                    dmc.Title(dashboard["title"], order=5),
+                                    dmc.Title(
+                                        f"{dashboard['title']} - {str(dashboard['dashboard_id'])}",
+                                        order=5,
+                                    ),
+                                    # dmc.Title(dashboard["title"], order=5),
                                     # dmc.Text(f"Last Modified: {dashboard['last_modified']}"),
                                     # dmc.Text(f"Version: {dashboard['version']}"),
                                     # dmc.Text(f"Owner: {dashboard['permissions']['owners'][0]['email']}"),
@@ -522,6 +529,7 @@ def register_callbacks_dashboards_management(app):
 
             logger.info(f"Thumbnail filesystem path: {thumbnail_fs_path}")
             logger.info(f"Thumbnail URL path: {thumbnail_url}")
+
             logger.info(f"Thumbnail exists: {os.path.exists(thumbnail_fs_path)}")
 
             # Check if the thumbnail exists in the static/screenshots folder
@@ -806,6 +814,7 @@ def register_callbacks_dashboards_management(app):
         #     )
         # )
         current_userbase = current_user.turn_to_userbase()
+        logger.info(f"current_userbase : {current_userbase}")
 
         index_data = load_dashboards_from_db(user_data["access_token"])
         logger.info(f"index_data: {index_data}")
@@ -902,17 +911,20 @@ def register_callbacks_dashboards_management(app):
         if modal_data.get("title"):
             logger.info("Creating new dashboard")
 
-            dashboard_id = str(ObjectId())
+            dashboard_id = ObjectId()
             # dashboard_id = generate_unique_index()
 
             new_dashboard = DashboardData(
-                id=str(dashboard_id),
+                id=dashboard_id,
                 title=modal_data["title"],
                 last_saved_ts=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                permissions={"owners": [current_userbase], "viewers": []},
-                dashboard_id=str(dashboard_id),
+                permissions=Permission(owners=[current_userbase]),
+                # permissions={"owners": [current_userbase], "viewers": []},
+                dashboard_id=dashboard_id,
                 project_id=PyObjectId(modal_data["project_id"]),
             )
+            logger.info(f"New dashboard: {format_pydantic(new_dashboard)}")
+            logger.info(f"New dashboard dump : {new_dashboard.model_dump()}")
             dashboards.append(new_dashboard)
             insert_dashboard(dashboard_id, new_dashboard.mongo(), user_data["access_token"])
             # next_index += 1

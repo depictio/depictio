@@ -878,6 +878,35 @@ class TestPermission:
 
         assert perm_dict["viewers"] == ["*"]
 
+    def test_permission_with_existing_ids(self):
+        """Test creating a Permission with existing user IDs."""
+        user1_id = PydanticObjectId()
+        user1 = UserBase(
+            id=user1_id,
+            email="user1@example.com",
+            is_admin=True,
+        )
+        user2_id = PydanticObjectId()
+        user2 = UserBase(
+            id=user2_id,
+            email="user2@example.com",
+            is_admin=False,
+        )
+
+        permission = Permission(owners=[user1], editors=[user2], viewers=[])
+        assert len(permission.owners) == 1
+        assert len(permission.editors) == 1
+        assert len(permission.viewers) == 0
+
+        # Check that the IDs are correctly set
+        assert permission.owners[0].id == user1_id
+        assert permission.editors[0].id == user2_id
+        assert permission.viewers == []
+        # Test dict method with existing IDs
+        perm_dict = permission.dict()
+        assert perm_dict["owners"][0]["id"] == str(user1_id)
+        assert perm_dict["editors"][0]["id"] == str(user2_id)
+
 
 # ---------------------------------
 # Tests for RequestEditPassword

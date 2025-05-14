@@ -25,3 +25,11 @@ workflows:
             format: "CSV"
             polars_kwargs:
               separator: ","
+            columns_description:
+                "sepal_length": "Length of the sepal in cm"
+                "sepal_width": "Width of the sepal in cm"
+                "petal_length": "Length of the petal in cm"
+                "petal_width": "Width of the petal in cm"
+                "species": "Species of the iris flower"
+                "depictio_run_id": "Unique identifier for the run"
+                "aggregation_timestamp": "Timestamp of the aggregation"

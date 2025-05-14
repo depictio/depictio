@@ -58,6 +58,7 @@ def check_s3_storage(
     try:
         CLI_config = load_depictio_config(yaml_config_path=CLI_config_path)
         S3_storage_checks(CLI_config.s3)
+        rich_print_checked_statement("S3 storage configuration is valid", "success")
     except Exception as e:
         rich_print_checked_statement(f"Unable to check S3 storage - {e}", "error")
 

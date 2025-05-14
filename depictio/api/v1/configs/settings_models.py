@@ -48,7 +48,7 @@ class FastAPIConfig(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_FASTAPI_")
     workers: int = Field(default=1)
     ssl: bool = Field(default=False)
-    playwright_dev_mode: bool = Field(default=False)
+    # playwright_dev_mode: bool = Field(default=False)
 
 
 class DashConfig(BaseSettings):

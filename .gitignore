@@ -192,7 +192,18 @@ dev/dev_minio/
 
 ## Screenshots
 screenshot_*.png
-depictio/dash/assets/screenshots/
+# Ignore all screenshots recursively
+depictio/dash/**/screenshots/**
+
+# Allow the specific file
+!depictio/dash/static/screenshots/6824cb3b89d2b72169309737.png
+
+# Ensure parent directories are also un-ignored
+!depictio/
+!depictio/dash/
+!depictio/dash/static/
+!depictio/dash/static/screenshots/
+
 depictio/tests/dash/screenshots/
 
 # Cloud Storage
@@ -218,7 +229,7 @@ target/
 
 # Application Specific
 ## Depictio
-depictio/dash/static/
+# depictio/dash/static/
 # depictio/dash/assets/
 ldap_config/
 ldap_db/
@@ -236,3 +247,4 @@ depictio/tests/e2e-tests/cypress/screenshots/
 depictio/tests/e2e-tests/package-lock.json
 
 depictio/depictio/keys/internal_api_key.pem
+depictio/tests/e2e-tests/package.json

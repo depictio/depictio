@@ -1,0 +1,524 @@
+{
+    "_id": {
+      "$oid": "6824cb3b89d2b72169309737"
+    },
+    "permissions": {
+      "owners": [
+        {
+          "_id": {
+            "$oid": "6824a67837826fa047f61e7b"
+          },
+          "description": null,
+          "flexible_metadata": null,
+          "hash": null,
+          "email": "admin@embl.de",
+          "is_admin": true
+        }
+      ],
+      "editors": [],
+      "viewers": []
+    },
+    "dashboard_id": {
+      "$oid": "6824cb3b89d2b72169309737"
+    },
+    "buttons_data": {
+      "edit_components_button": true,
+      "add_components_button": {
+        "count": 0,
+        "_id": "16a60c79-7d21-4205-b719-f42cb5fd9d0b-tmp"
+      },
+      "edit_dashboard_mode_button": true
+    },
+    "description": null,
+    "flexible_metadata": null,
+    "hash": null,
+    "last_saved_ts": "2025-05-14 16:58:35.457309",
+    "project_id": {
+      "$oid": "646b0f3c1e4a2d7f8e5b8c9a"
+    },
+    "stored_add_button": {
+      "count": 0,
+      "_id": "16a60c79-7d21-4205-b719-f42cb5fd9d0b-tmp"
+    },
+    "stored_children_data": [],
+    "stored_edit_dashboard_mode_button": [],
+    "stored_layout_data": {
+      "lg": [
+        {
+          "w": 6,
+          "h": 14,
+          "x": 6,
+          "y": 0,
+          "i": "box-1eba4e1a-0db0-40e7-aa53-56f9fad4dd5d",
+          "moved": false,
+          "static": false
+        },
+        {
+          "w": 2,
+          "h": 5,
+          "x": 4,
+          "y": 0,
+          "i": "box-a00ec470-2f08-461b-9f29-fe1bfd24da94",
+          "moved": false,
+          "static": false
+        },
+        {
+          "w": 2,
+          "h": 5,
+          "x": 4,
+          "y": 5,
+          "i": "box-69ddd81e-badd-4025-9afe-a91d1a862ac8",
+          "moved": false,
+          "static": false
+        },
+        {
+          "w": 4,
+          "h": 5,
+          "x": 0,
+          "y": 7,
+          "i": "box-0a218dbe-ebab-40c7-bf7c-5a93030f9bb1",
+          "moved": false,
+          "static": false
+        },
+        {
+          "w": 4,
+          "h": 7,
+          "x": 0,
+          "y": 0,
+          "i": "box-16a60c79-7d21-4205-b719-f42cb5fd9d0b",
+          "moved": false,
+          "static": false
+        }
+      ]
+    },
+    "stored_metadata": [
+      {
+        "index": "1eba4e1a-0db0-40e7-aa53-56f9fad4dd5d",
+        "component_type": "figure",
+        "dict_kwargs": {
+          "x": "variety",
+          "y": "sepal.length",
+          "color": "variety"
+        },
+        "visu_type": "Box",
+        "wf_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8c9b"
+        },
+        "dc_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+        },
+        "dc_config": {
+          "description": null,
+          "flexible_metadata": null,
+          "hash": null,
+          "type": "table",
+          "metatype": "Metadata",
+          "scan": {
+            "mode": "single",
+            "scan_parameters": {
+              "filename": "/app/depictio/api/v1/configs/iris_dataset/iris.csv"
+            }
+          },
+          "dc_specific_properties": {
+            "format": "csv",
+            "polars_kwargs": {
+              "separator": ","
+            },
+            "keep_columns": [],
+            "columns_description": {}
+          },
+          "join": null,
+          "_id": {
+            "$oid": "6824a67937826fa047f61e7f"
+          }
+        },
+        "parent_index": null,
+        "filter_applied": false
+      },
+      {
+        "index": "a00ec470-2f08-461b-9f29-fe1bfd24da94",
+        "component_type": "card",
+        "title": "",
+        "wf_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8c9b"
+        },
+        "dc_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+        },
+        "dc_config": {
+          "description": null,
+          "flexible_metadata": null,
+          "hash": null,
+          "type": "table",
+          "metatype": "Metadata",
+          "scan": {
+            "mode": "single",
+            "scan_parameters": {
+              "filename": "/app/depictio/api/v1/configs/iris_dataset/iris.csv"
+            }
+          },
+          "dc_specific_properties": {
+            "format": "csv",
+            "polars_kwargs": {
+              "separator": ","
+            },
+            "keep_columns": [],
+            "columns_description": {}
+          },
+          "join": null,
+          "_id": {
+            "$oid": "6824a67937826fa047f61e7f"
+          }
+        },
+        "aggregation": "median",
+        "column_type": "float64",
+        "column_name": "sepal.length",
+        "value": 5.8,
+        "parent_index": null
+      },
+      {
+        "index": "69ddd81e-badd-4025-9afe-a91d1a862ac8",
+        "component_type": "card",
+        "title": "",
+        "wf_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8c9b"
+        },
+        "dc_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+        },
+        "dc_config": {
+          "description": null,
+          "flexible_metadata": null,
+          "hash": null,
+          "type": "table",
+          "metatype": "Metadata",
+          "scan": {
+            "mode": "single",
+            "scan_parameters": {
+              "filename": "/app/depictio/api/v1/configs/iris_dataset/iris.csv"
+            }
+          },
+          "dc_specific_properties": {
+            "format": "csv",
+            "polars_kwargs": {
+              "separator": ","
+            },
+            "keep_columns": [],
+            "columns_description": {}
+          },
+          "join": null,
+          "_id": {
+            "$oid": "6824a67937826fa047f61e7f"
+          }
+        },
+        "aggregation": "average",
+        "column_type": "float64",
+        "column_name": "sepal.width",
+        "value": 3.0573,
+        "parent_index": null
+      },
+      {
+        "component_type": "interactive",
+        "interactive_component_type": "RangeSlider",
+        "index": "0a218dbe-ebab-40c7-bf7c-5a93030f9bb1",
+        "title": "",
+        "wf_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8c9b"
+        },
+        "dc_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+        },
+        "dc_config": {
+          "description": null,
+          "flexible_metadata": null,
+          "hash": null,
+          "type": "table",
+          "metatype": "Metadata",
+          "scan": {
+            "mode": "single",
+            "scan_parameters": {
+              "filename": "/app/depictio/api/v1/configs/iris_dataset/iris.csv"
+            }
+          },
+          "dc_specific_properties": {
+            "format": "csv",
+            "polars_kwargs": {
+              "separator": ","
+            },
+            "keep_columns": [],
+            "columns_description": {}
+          },
+          "join": null,
+          "_id": {
+            "$oid": "6824a67937826fa047f61e7f"
+          }
+        },
+        "column_name": "petal.length",
+        "column_type": "float64",
+        "cols_json": {
+          "sepal.length": {
+            "type": "float64",
+            "description": null,
+            "specs": {
+              "count": 150,
+              "unique": 35,
+              "sum": 876.5,
+              "average": 5.843333333333334,
+              "median": 5.8,
+              "min": 4.3,
+              "max": 7.9,
+              "range": 3.6000000000000005,
+              "variance": 0.6856935123042507,
+              "std_dev": 0.828066127977863,
+              "percentile": 5.8,
+              "skewness": 0.3149109566369728,
+              "kurtosis": -0.5520640413156395
+            }
+          },
+          "sepal.width": {
+            "type": "float64",
+            "description": null,
+            "specs": {
+              "count": 150,
+              "unique": 23,
+              "sum": 458.6,
+              "average": 3.0573333333333337,
+              "median": 3,
+              "min": 2,
+              "max": 4.4,
+              "range": 2.4000000000000004,
+              "variance": 0.189979418344519,
+              "std_dev": 0.4358662849366982,
+              "percentile": 3,
+              "skewness": 0.31896566471359966,
+              "kurtosis": 0.2282490424681929
+            }
+          },
+          "petal.length": {
+            "type": "float64",
+            "description": null,
+            "specs": {
+              "count": 150,
+              "unique": 43,
+              "sum": 563.7,
+              "average": 3.7580000000000005,
+              "median": 4.35,
+              "min": 1,
+              "max": 6.9,
+              "range": 5.9,
+              "variance": 3.116277852348993,
+              "std_dev": 1.7652982332594662,
+              "percentile": 4.35,
+              "skewness": -0.27488417975101276,
+              "kurtosis": -1.4021034155217518
+            }
+          },
+          "petal.width": {
+            "type": "float64",
+            "description": null,
+            "specs": {
+              "count": 150,
+              "unique": 22,
+              "sum": 179.90000000000003,
+              "average": 1.1993333333333336,
+              "median": 1.3,
+              "min": 0.1,
+              "max": 2.5,
+              "range": 2.4,
+              "variance": 0.5810062639821029,
+              "std_dev": 0.7622376689603465,
+              "percentile": 1.3,
+              "skewness": -0.10296674764898116,
+              "kurtosis": -1.340603996612646
+            }
+          },
+          "variety": {
+            "type": "object",
+            "description": null,
+            "specs": {
+              "count": 150,
+              "mode": "Setosa",
+              "nunique": 3
+            }
+          },
+          "depictio_run_id": {
+            "type": "object",
+            "description": null,
+            "specs": {
+              "count": 150,
+              "mode": "fixed-run-id",
+              "nunique": 1
+            }
+          },
+          "aggregation_time": {
+            "type": "object",
+            "description": null,
+            "specs": {
+              "count": 150,
+              "mode": "2025-05-14 14:19:43",
+              "nunique": 1
+            }
+          }
+        },
+        "value": [
+          1,
+          6.9
+        ],
+        "corrected_value": [
+          1,
+          6.9
+        ],
+        "parent_index": null
+      },
+      {
+        "component_type": "interactive",
+        "interactive_component_type": "MultiSelect",
+        "index": "16a60c79-7d21-4205-b719-f42cb5fd9d0b",
+        "title": "",
+        "wf_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8c9b"
+        },
+        "dc_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8c9c"
+        },
+        "dc_config": {
+          "description": null,
+          "flexible_metadata": null,
+          "hash": null,
+          "type": "table",
+          "metatype": "Metadata",
+          "scan": {
+            "mode": "single",
+            "scan_parameters": {
+              "filename": "/app/depictio/api/v1/configs/iris_dataset/iris.csv"
+            }
+          },
+          "dc_specific_properties": {
+            "format": "csv",
+            "polars_kwargs": {
+              "separator": ","
+            },
+            "keep_columns": [],
+            "columns_description": {}
+          },
+          "join": null,
+          "_id": {
+            "$oid": "6824a67937826fa047f61e7f"
+          }
+        },
+        "column_name": "variety",
+        "column_type": "object",
+        "cols_json": {
+          "sepal.length": {
+            "type": "float64",
+            "description": null,
+            "specs": {
+              "count": 150,
+              "unique": 35,
+              "sum": 876.5,
+              "average": 5.843333333333334,
+              "median": 5.8,
+              "min": 4.3,
+              "max": 7.9,
+              "range": 3.6000000000000005,
+              "variance": 0.6856935123042507,
+              "std_dev": 0.828066127977863,
+              "percentile": 5.8,
+              "skewness": 0.3149109566369728,
+              "kurtosis": -0.5520640413156395
+            }
+          },
+          "sepal.width": {
+            "type": "float64",
+            "description": null,
+            "specs": {
+              "count": 150,
+              "unique": 23,
+              "sum": 458.6,
+              "average": 3.0573333333333337,
+              "median": 3,
+              "min": 2,
+              "max": 4.4,
+              "range": 2.4000000000000004,
+              "variance": 0.189979418344519,
+              "std_dev": 0.4358662849366982,
+              "percentile": 3,
+              "skewness": 0.31896566471359966,
+              "kurtosis": 0.2282490424681929
+            }
+          },
+          "petal.length": {
+            "type": "float64",
+            "description": null,
+            "specs": {
+              "count": 150,
+              "unique": 43,
+              "sum": 563.7,
+              "average": 3.7580000000000005,
+              "median": 4.35,
+              "min": 1,
+              "max": 6.9,
+              "range": 5.9,
+              "variance": 3.116277852348993,
+              "std_dev": 1.7652982332594662,
+              "percentile": 4.35,
+              "skewness": -0.27488417975101276,
+              "kurtosis": -1.4021034155217518
+            }
+          },
+          "petal.width": {
+            "type": "float64",
+            "description": null,
+            "specs": {
+              "count": 150,
+              "unique": 22,
+              "sum": 179.90000000000003,
+              "average": 1.1993333333333336,
+              "median": 1.3,
+              "min": 0.1,
+              "max": 2.5,
+              "range": 2.4,
+              "variance": 0.5810062639821029,
+              "std_dev": 0.7622376689603465,
+              "percentile": 1.3,
+              "skewness": -0.10296674764898116,
+              "kurtosis": -1.340603996612646
+            }
+          },
+          "variety": {
+            "type": "object",
+            "description": null,
+            "specs": {
+              "count": 150,
+              "mode": "Setosa",
+              "nunique": 3
+            }
+          },
+          "depictio_run_id": {
+            "type": "object",
+            "description": null,
+            "specs": {
+              "count": 150,
+              "mode": "fixed-run-id",
+              "nunique": 1
+            }
+          },
+          "aggregation_time": {
+            "type": "object",
+            "description": null,
+            "specs": {
+              "count": 150,
+              "mode": "2025-05-14 14:19:43",
+              "nunique": 1
+            }
+          }
+        },
+        "value": null,
+        "corrected_value": null,
+        "parent_index": null
+      }
+    ],
+    "title": "Iris Dashboard",
+    "tmp_children_data": [],
+    "version": 1
+  }

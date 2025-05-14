@@ -1,9 +1,12 @@
+import json
 import os
 
+from bson import ObjectId
 from fastapi import HTTPException
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import format_pydantic, logger
+from depictio.api.v1.endpoints.dashboards_endpoints.routes import save_dashboard
 from depictio.api.v1.endpoints.projects_endpoints.utils import _helper_create_project_beanie
 from depictio.api.v1.endpoints.user_endpoints.core_functions import _create_user_in_db
 from depictio.api.v1.endpoints.user_endpoints.token_utils import create_default_token
@@ -11,8 +14,9 @@ from depictio.api.v1.endpoints.user_endpoints.utils import (
     _ensure_mongodb_connection,
     create_group_helper_beanie,
 )
+from depictio.models.models.dashboards import DashboardData
 from depictio.models.models.projects import ProjectBeanie
-from depictio.models.models.users import GroupBeanie, TokenBeanie, UserBase, UserBeanie
+from depictio.models.models.users import GroupBeanie, Permission, TokenBeanie, UserBase, UserBeanie
 from depictio.models.utils import get_config
 
 
@@ -60,6 +64,54 @@ async def create_initial_project(admin_user: UserBeanie, token_payload: TokenBea
             "success": False,
             "message": f"Error creating project: {e}",
         }
+
+
+async def create_initial_dashboard(admin_user: UserBeanie) -> None:
+    """
+    Create an initial dashboard for the admin user.
+    This function is a placeholder and should be implemented based on your application's requirements.
+    """
+    # Check if dashboard was already created
+    from depictio.api.v1.db import dashboards_collection
+
+    dashboard_json_path = os.path.join(
+        os.path.dirname(__file__), "configs", "iris_dataset", "initial_dashboard.json"
+    )
+    # Load the dashboard configuration from the JSON file
+    from bson import json_util
+
+    dashboard_data = json.load(open(dashboard_json_path, "r"), object_hook=json_util.object_hook)
+    logger.debug(f"Dashboard data: {dashboard_data}")
+    _check = dashboards_collection.find_one({"_id": ObjectId(dashboard_data["_id"])})
+    if _check:
+        logger.info(f"Dashboard already exists: {_check}")
+        return {
+            "success": True,
+            "message": "Dashboard already exists",
+        }
+
+    # Convert dashboard data to the correct format
+    dashboard_data = DashboardData.from_mongo(dashboard_data)
+    dashboard_data.permissions = Permission(
+        owners=[
+            UserBase(
+                id=admin_user.id,
+                email=admin_user.email,
+                is_admin=True,
+            )
+        ],
+        editors=[],
+        viewers=[],
+    )
+
+    # Create the dashboard object into the database
+    response = await save_dashboard(
+        dashboard_id=dashboard_data.id,
+        data=dashboard_data,
+        current_user=admin_user,
+    )
+    logger.debug(f"Dashboard response: {response}")
+    return response
 
 
 async def initialize_db(wipe: bool = False) -> UserBeanie | None:
@@ -152,6 +204,10 @@ async def initialize_db(wipe: bool = False) -> UserBeanie | None:
         admin_user=admin_user, token_payload=token_payload
     )
     logger.debug(f"Project payload: {project_payload}")
+
+    # Create initial dashboard
+    dashboard_payload = await create_initial_dashboard(admin_user=admin_user)
+    logger.debug(f"Dashboard payload: {dashboard_payload}")
 
     logger.info("Database initialization completed successfully.")
 
