@@ -37,7 +37,7 @@ describe('Create and manage dashboard', () => {
 
         // Select the project from the dropdown
         cy.get('#dashboard-projects').click()
-        cy.contains('Iris Dataset Project Data Analysis').click()
+        cy.contains('Iris Dataset Project Data Analysis (646b0f3c1e4a2d7f8e5b8c9a)').click()
 
         // Click on Create Dashboard button
         cy.get('#create-dashboard-submit').click()
