@@ -8,7 +8,7 @@ from dash import ALL, Input, Output, State, ctx, dcc, html
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL
-from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.layouts.draggable_scenarios.add_component import add_new_component
 from depictio.dash.layouts.draggable_scenarios.graphs_interactivity import (
     refresh_children_based_on_click_data,

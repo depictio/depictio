@@ -8,7 +8,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import EmailStr
 
 from depictio.api.v1.configs.config import settings
-from depictio.api.v1.configs.custom_logging import format_pydantic, logger
+from depictio.api.v1.configs.logging_init import format_pydantic, logger
 from depictio.api.v1.db import users_collection
 from depictio.api.v1.endpoints.user_endpoints.agent_config_utils import _generate_agent_config
 from depictio.api.v1.endpoints.user_endpoints.core_functions import (

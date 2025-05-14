@@ -3,7 +3,7 @@ import os
 from fastapi import HTTPException
 
 from depictio.api.v1.configs.config import settings
-from depictio.api.v1.configs.custom_logging import format_pydantic, logger
+from depictio.api.v1.configs.logging_init import format_pydantic, logger
 from depictio.api.v1.endpoints.projects_endpoints.utils import _helper_create_project_beanie
 from depictio.api.v1.endpoints.user_endpoints.core_functions import _create_user_in_db
 from depictio.api.v1.endpoints.user_endpoints.token_utils import create_default_token

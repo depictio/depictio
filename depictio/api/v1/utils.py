@@ -6,7 +6,7 @@ from pathlib import PosixPath
 import numpy as np
 
 from depictio import BASE_PATH
-from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.configs.logging_init import logger
 from depictio.models.models.data_collections import DataCollection
 from depictio.models.models.files import File
 from depictio.models.models.workflows import WorkflowConfig, WorkflowRun
@@ -23,13 +23,10 @@ async def clean_screenshots():
 
     # project to only retrieve the _id field
     dashboards = dashboards_collection.find({}, {"_id": 1})
-    print(f"Dashboards list: {dashboards}")
     # Get all dashboards
     dashboards_list = dashboards.to_list(length=None)
-    print(f"Dashboards list: {dashboards_list}")
     # Get all dashboard IDs
     dashboard_ids = [str(dashboard["_id"]) for dashboard in dashboards_list]
-    print(f"Dashboard IDs: {dashboard_ids}")
 
     if os.path.exists(screenshots_dir):
         for filename in os.listdir(screenshots_dir):

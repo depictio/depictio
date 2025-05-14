@@ -1,6 +1,6 @@
 import os
 
-from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.configs.logging_init import initialize_loggers, logger
 from depictio.api.v1.configs.settings_models import Settings
 from depictio.api.v1.key_utils import generate_keys, load_private_key, load_public_key
 
@@ -10,6 +10,10 @@ from depictio.api.v1.key_utils import generate_keys, load_private_key, load_publ
 # Settings
 # Overwrite priority: environment variables (.env) > config file (.yaml) > default values
 settings = Settings()
+
+# Initialize all loggers with the verbosity level from settings
+initialize_loggers(verbose_level=settings.logging.verbosity_level)
+
 logger.info(f"Settings: {settings}")
 API_BASE_URL = f"http://{settings.fastapi.service_name}:{settings.fastapi.port}"
 DASH_BASE_URL = f"http://{settings.dash.service_name}:{settings.dash.port}"

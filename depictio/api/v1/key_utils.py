@@ -10,7 +10,7 @@ from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
 from pydantic import validate_call
 
-from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.configs.logging_init import logger
 
 # Type definitions
 Algorithm = Literal["RS256", "RS512", "ES256", "SHA256"]
@@ -23,62 +23,62 @@ class KeyGenerationError(Exception):
     """Custom exception for key generation failures."""
 
 
-@validate_call(validate_return=True)
-def _load_or_generate_api_internal_key(
-    keys_dir: Path = Path("./depictio/keys"),
-    algorithm: Algorithm = "RS256",
-) -> str:
-    """Check if the API internal key is set in the environment.
+# @validate_call(validate_return=True)
+# def _load_or_generate_api_internal_key(
+#     keys_dir: Path = Path("./depictio/keys"),
+#     algorithm: Algorithm = "RS256",
+# ) -> str:
+#     """Check if the API internal key is set in the environment.
 
-    Returns:
-        API internal key if set, otherwise generates a new one
-    """
-    logger.info("Checking for API internal key in environment variables.")
-    key_path = os.path.join(keys_dir, "api_internal_key.pem")
-    logger.info(f"Key path: {key_path}")
-    logger.info(f"Loading or generating API internal key with algorithm: {algorithm}")
+#     Returns:
+#         API internal key if set, otherwise generates a new one
+#     """
+#     logger.info("Checking for API internal key in environment variables.")
+#     key_path = os.path.join(keys_dir, "api_internal_key.pem")
+#     logger.info(f"Key path: {key_path}")
+#     logger.info(f"Loading or generating API internal key with algorithm: {algorithm}")
 
-    # Create the directory if it doesn't exist
-    logger.debug(f"Creating directory if it doesn't exist: {os.path.dirname(key_path)}")
-    os.makedirs(os.path.dirname(key_path), exist_ok=True)
+#     # Create the directory if it doesn't exist
+#     logger.debug(f"Creating directory if it doesn't exist: {os.path.dirname(key_path)}")
+#     os.makedirs(os.path.dirname(key_path), exist_ok=True)
 
-    logger.debug(f"Key path: {key_path}")
-    if os.path.exists(key_path):
-        with open(key_path) as f:
-            key = f.read().strip()
-            logger.debug(f"Loaded API internal key: {key}")
-            return key
-    else:
-        key = _generate_api_internal_key()
-        logger.debug(f"Generated API internal key: {key}")
-        with open(key_path, "w") as f:
-            f.write(key)
-        return key
+#     logger.debug(f"Key path: {key_path}")
+#     if os.path.exists(key_path):
+#         with open(key_path) as f:
+#             key = f.read().strip()
+#             logger.debug(f"Loaded API internal key: {key}")
+#             return key
+#     else:
+#         key = _generate_api_internal_key()
+#         logger.debug(f"Generated API internal key: {key}")
+#         with open(key_path, "w") as f:
+#             f.write(key)
+#         return key
 
 
-@validate_call(validate_return=True)
-def _generate_api_internal_key() -> str:
-    """Generate a consistent API internal key.
+# @validate_call(validate_return=True)
+# def _generate_api_internal_key() -> str:
+#     """Generate a consistent API internal key.
 
-    Returns:
-        Consistently generated API internal key
-    """
-    # Use a combination of environment variables and a salt to generate a consistent key
-    salt = "DEPICTIO_INTERNAL_KEY_SALT"
-    base_key = os.getenv("DEPICTIO_INTERNAL_API_KEY", "")
+#     Returns:
+#         Consistently generated API internal key
+#     """
+#     # Use a combination of environment variables and a salt to generate a consistent key
+#     salt = "DEPICTIO_INTERNAL_KEY_SALT"
+#     base_key = os.getenv("DEPICTIO_INTERNAL_API_KEY", "")
 
-    # If no base key exists, generate a persistent key
-    if not base_key:
-        import hashlib
+#     # If no base key exists, generate a persistent key
+#     if not base_key:
+#         import hashlib
 
-        # Generate a hash based on a combination of system information
-        system_info = f"{os.getpid()}:{os.getuid()}:{salt}"
-        base_key = hashlib.sha256(system_info.encode()).hexdigest()
+#         # Generate a hash based on a combination of system information
+#         system_info = f"{os.getpid()}:{os.getuid()}:{salt}"
+#         base_key = hashlib.sha256(system_info.encode()).hexdigest()
 
-        # Set the environment variable to persist the key
-        os.environ["DEPICTIO_INTERNAL_API_KEY"] = base_key
+#         # Set the environment variable to persist the key
+#         os.environ["DEPICTIO_INTERNAL_API_KEY"] = base_key
 
-    return base_key
+#     return base_key
 
 
 @validate_call()

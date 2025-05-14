@@ -3,7 +3,7 @@ from pathlib import Path
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from depictio.api.v1.key_utils import _load_or_generate_api_internal_key
+from depictio.api.v1.key_utils_base import _load_or_generate_api_internal_key
 from depictio.models.models.s3 import S3DepictioCLIConfig
 
 
@@ -106,6 +106,13 @@ class Auth(BaseSettings):
                 print(f"Error generating API key: {e}")
 
 
+class LoggingConfig(BaseSettings):
+    """Logging configuration."""
+
+    verbosity_level: str = Field(default="INFO")
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_LOGGING_")
+
+
 class Settings(BaseSettings):
     """Joint settings."""
 
@@ -115,3 +122,4 @@ class Settings(BaseSettings):
     minio: S3DepictioCLIConfig = S3DepictioCLIConfig()
     jbrowse: JbrowseConfig = JbrowseConfig()
     auth: Auth = Auth()
+    logging: LoggingConfig = LoggingConfig()

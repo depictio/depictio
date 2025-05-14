@@ -5,7 +5,7 @@ import polars as pl
 from bson import ObjectId
 
 from depictio.api.v1.configs.config import API_BASE_URL
-from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.s3 import polars_s3_config
 
 

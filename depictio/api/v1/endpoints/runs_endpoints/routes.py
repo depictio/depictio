@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from pymongo import UpdateOne
 from pymongo.errors import BulkWriteError
 
-from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import projects_collection, runs_collection
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.models.models.base import convert_objectid_to_str

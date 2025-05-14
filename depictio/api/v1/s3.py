@@ -1,7 +1,7 @@
 import boto3
 
 from depictio.api.v1.configs.config import settings
-from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.configs.logging_init import logger
 from depictio.models.models.s3 import is_minio_running_in_docker
 from depictio.models.s3_utils import turn_S3_config_into_polars_storage_options
 

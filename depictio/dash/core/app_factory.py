@@ -7,7 +7,7 @@ import os
 import dash
 import dash_bootstrap_components as dbc
 
-from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.configs.logging_init import logger
 
 # Set environment context
 os.environ["DEPICTIO_CONTEXT"] = "server"

@@ -9,7 +9,7 @@ from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
 
 from depictio.api.v1.configs.config import settings
-from depictio.api.v1.configs.custom_logging import format_pydantic, logger
+from depictio.api.v1.configs.logging_init import format_pydantic, logger
 from depictio.api.v1.db import deltatables_collection, projects_collection, users_collection
 from depictio.api.v1.endpoints.deltatables_endpoints.utils import precompute_columns_specs
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user

@@ -6,7 +6,7 @@ from dash import MATCH, Input, Output, State, dcc, html
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL
-from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.modules.jbrowse_component.utils import build_jbrowse, build_jbrowse_frame
 from depictio.dash.utils import UNSELECTED_STYLE, list_workflows, return_mongoid
 

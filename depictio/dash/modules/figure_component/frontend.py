@@ -9,7 +9,7 @@ from dash import MATCH, Input, Output, State, dcc, html
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL
-from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.configs.logging_init import logger
 
 # Depictio imports
 from depictio.dash.modules.figure_component.utils import (

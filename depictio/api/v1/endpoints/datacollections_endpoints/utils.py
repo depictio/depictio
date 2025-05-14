@@ -1,4 +1,4 @@
-from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.configs.logging_init import logger
 
 
 def symmetrize_join_details(join_details_map: dict[str, list[dict]]):

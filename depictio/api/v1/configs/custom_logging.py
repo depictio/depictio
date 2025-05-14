@@ -412,4 +412,4 @@ def setup_logging(name=None, level="INFO"):
     return logger
 
 
-logger = setup_logging(__name__, level="DEBUG")
+# The logger will be initialized by logging_init.py

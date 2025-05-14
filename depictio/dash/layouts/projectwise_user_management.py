@@ -20,7 +20,7 @@ import requests
 from dash import Input, Output, State, ctx, dcc, html
 
 from depictio.api.v1.configs.config import API_BASE_URL
-from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.layouts.layouts_toolbox import create_add_with_input_modal
 from depictio.models.models.base import convert_objectid_to_str
 from depictio.models.models.users import Permission

@@ -7,7 +7,7 @@ import pymongo
 from depictio.api.v1.configs.config import MONGODB_URL, settings
 
 # from depictio.api.v1.db_init import initialize_db
-from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.configs.logging_init import logger
 
 # from depictio.api.v1.endpoints.user_endpoints.utils import _ensure_mongodb_connection
 

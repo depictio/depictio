@@ -8,7 +8,7 @@ from dash_iconify import DashIconify
 from pydantic import validate_call
 
 from depictio.api.v1.configs.config import API_BASE_URL
-from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import api_call_fetch_user_from_token, api_create_group
 from depictio.dash.layouts.layouts_toolbox import (
     create_delete_confirmation_modal,

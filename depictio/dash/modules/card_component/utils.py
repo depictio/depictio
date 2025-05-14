@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from dash import dcc, html
 
-from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.configs.logging_init import logger
 
 # Mapping from custom aggregation names to pandas functions
 AGGREGATION_MAPPING = {

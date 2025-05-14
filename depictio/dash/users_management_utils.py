@@ -4,7 +4,7 @@
 # from pydantic import validate_call, EmailStr
 # from fastapi import HTTPException
 
-# from depictio.api.v1.configs.custom_logging import format_pydantic, logger
+# from depictio.api.v1.configs.logging_init import format_pydantic, logger
 # from depictio.api.v1.endpoints.user_endpoints.utils import (
 #     hash_password,
 #     get_users_group,

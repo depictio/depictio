@@ -8,7 +8,7 @@ from dash_extensions.enrich import Output as enrich_Output
 from dash_extensions.enrich import State as enrich_State
 from dash_iconify import DashIconify
 
-from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.endpoints.user_endpoints.core_functions import _check_password
 from depictio.api.v1.endpoints.user_endpoints.utils import logout_user
 from depictio.dash.api_calls import api_call_edit_password, api_call_fetch_user_from_token

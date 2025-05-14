@@ -1,5 +1,5 @@
 from depictio.api.v1.configs.config import settings
-from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db_init import initialize_db
 from depictio.api.v1.endpoints.utils_endpoints.core_functions import create_bucket
 from depictio.models.models.s3 import S3DepictioCLIConfig

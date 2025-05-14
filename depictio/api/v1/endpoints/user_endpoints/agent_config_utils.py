@@ -4,7 +4,7 @@ import yaml
 from pydantic import validate_call
 
 from depictio.api.v1.configs.config import settings
-from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.configs.logging_init import logger
 from depictio.models.models.s3 import S3DepictioCLIConfig
 from depictio.models.models.users import CLIConfig, TokenBeanie, UserBaseCLIConfig, UserBeanie
 from depictio.models.utils import make_json_serializable

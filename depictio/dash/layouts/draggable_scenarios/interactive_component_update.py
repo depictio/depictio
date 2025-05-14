@@ -3,7 +3,7 @@ from typing import Any
 
 import pandas as pd
 
-from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import (
     iterative_join,
     join_deltatables_dev,

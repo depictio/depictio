@@ -4,7 +4,7 @@ Callback registration for the Depictio Dash application.
 
 from dash import Input, Output, ctx
 
-from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.core.auth import process_authentication
 
 

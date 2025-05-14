@@ -7,7 +7,7 @@ from botocore.exceptions import ClientError
 from bson import ObjectId
 from fastapi import HTTPException
 
-from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import files_collection
 from depictio.api.v1.s3 import s3_client
 from depictio.api.v1.utils import numpy_to_python

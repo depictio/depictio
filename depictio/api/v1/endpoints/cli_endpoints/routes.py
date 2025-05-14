@@ -2,7 +2,7 @@ from datetime import datetime
 
 from fastapi import APIRouter
 
-from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.endpoints.user_endpoints.core_functions import _async_fetch_user_from_id
 from depictio.models.models.api import BaseApiResponse
 from depictio.models.models.users import CLIConfig, TokenBeanie

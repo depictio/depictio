@@ -5,7 +5,7 @@ from dash import ALL, MATCH, Input, Output, State, ctx, html
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL
-from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.configs.logging_init import logger
 
 
 def register_callbacks_stepper_part_one(app):

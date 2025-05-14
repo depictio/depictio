@@ -9,7 +9,7 @@ from pathlib import Path
 import tomli
 from pydantic import validate_call
 
-from depictio.api.v1.configs.custom_logging import logger
+from depictio.api.v1.configs.logging_init import logger
 
 
 @validate_call(validate_return=True)  # noqa: F821
