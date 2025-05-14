@@ -6,7 +6,7 @@ from rich import print, print_json
 from rich.console import Console
 from rich.panel import Panel
 
-console = Console()
+console = Console(force_terminal=True)
 
 
 @validate_call

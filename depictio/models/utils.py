@@ -13,18 +13,10 @@ from pydantic import BaseModel, ValidationError, validate_call
 from depictio.models.logging import logger
 from depictio.models.models.base import convert_objectid_to_str
 
-# logger.info(f"Pre-loading environment variables {os.environ}")
-
-# # Explicitly load environment variables
-# # load_dotenv()
-
-# logger.info(f"Post-loading environment variables {os.environ}")
-
 
 def get_depictio_context():
     # Ensure environment variables are loaded before accessing
     context = os.getenv("DEPICTIO_CONTEXT")
-    print(f"get_depictio_context() - DEPICTIO_CONTEXT: {context}")
     return context
 
 

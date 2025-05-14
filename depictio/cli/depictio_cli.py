@@ -7,7 +7,8 @@ from typer.main import get_command
 
 from depictio.cli.cli.commands.config import app as config
 from depictio.cli.cli.commands.data import app as data
-from depictio.cli.cli_logging import setup_logging
+from depictio.cli.cli_logging import setup_logging as setup_cli_logging
+from depictio.models.logging import setup_logging as setup_models_logging
 
 app = typer.Typer()
 
@@ -26,7 +27,9 @@ def verbose_callback(
     ),
 ):
     """Set up logging for all commands"""
-    setup_logging(verbose, verbose_level)
+    # Set up both CLI and models logging with the same verbose settings
+    setup_cli_logging(verbose, verbose_level)
+    setup_models_logging(verbose, verbose_level)
 
 
 app.add_typer(config, name="config")

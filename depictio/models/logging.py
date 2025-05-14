@@ -32,10 +32,9 @@ def setup_logging(verbose: bool = False, verbose_level: str = "INFO") -> logging
         level_name = logging.getLevelNamesMapping().get(verbose_level, verbose_level)  # type: ignore[attr-defined]
         logger.setLevel(level_name)
     else:
-        logger.setLevel(logging.DEBUG)
+        logger.setLevel(logging.CRITICAL)  # Only show critical errors when not in verbose mode
 
     return logger
 
 
-# Automatically set up logging when the module is imported
-logger = setup_logging()
+# Don't automatically set up logging - will be controlled by CLI
