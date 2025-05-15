@@ -307,7 +307,8 @@ def register_callbacks_dashboards_management(app):
             return modal
 
         def create_dashboad_view_header(dashboard, user_id, token):
-            public = True if "*" in [e for e in dashboard["permissions"]["viewers"]] else False
+            public = dashboard["is_public"]
+            # public = True if "*" in [e for e in dashboard["permissions"]["viewers"]] else False
 
             if str(user_id) in [str(owner["_id"]) for owner in dashboard["permissions"]["owners"]]:
                 color_badge_ownership = "blue"
@@ -415,7 +416,8 @@ def register_callbacks_dashboards_management(app):
                 not in [str(owner["_id"]) for owner in dashboard["permissions"]["owners"]]
                 else False
             )
-            public = True if "*" in [e for e in dashboard["permissions"]["viewers"]] else False
+            public = dashboard["is_public"]
+            # public = True if "*" in [e for e in dashboard["permissions"]["viewers"]] else False
             privacy_button_title = "Make private" if public else "Make public"
             color_privacy_button = "violet" if public else "green"
 
@@ -669,9 +671,9 @@ def register_callbacks_dashboards_management(app):
             ],
             order=3,
         )
-        private_dashboards = [d for d in dashboards if "*" not in d["permissions"]["viewers"]]
+        private_dashboards = [d for d in dashboards if d["is_public"] is False]
         logger.info(f"private_dashboards: {private_dashboards}")
-        private_dashboards_ids = [d["dashboard_id"] for d in private_dashboards]
+        # private_dashboards_ids = [d["dashboard_id"] for d in private_dashboards]
         private_dashboards_view = dmc.SimpleGrid(
             loop_over_dashboards(user_id, private_dashboards, token),
             cols=3,  # Default number of columns
@@ -692,12 +694,7 @@ def register_callbacks_dashboards_management(app):
             order=3,
         )
 
-        public_dashboards = [
-            d
-            for d in dashboards
-            if "*" in d["permissions"]["viewers"]
-            and d["dashboard_id"] not in private_dashboards_ids
-        ]
+        public_dashboards = [d for d in dashboards if d["is_public"] is True]
         public_dashboards_view = dmc.SimpleGrid(
             loop_over_dashboards(user_id, public_dashboards, token),
             cols=3,  # Default number of columns
@@ -857,7 +854,7 @@ def register_callbacks_dashboards_management(app):
             public_current_status = [
                 child
                 for child, id in zip(make_public_children_list, make_public_id_list)
-                if id["index"] == ctx.triggered_id["index"]
+                if str(id["index"]) == str(ctx.triggered_id["index"])
             ][0]
             logger.info(f"public_current_status: {public_current_status}")
             public_current_status = False if public_current_status == "Make public" else True
@@ -875,6 +872,9 @@ def register_callbacks_dashboards_management(app):
             logger.info("Edit dashboard button clicked")
             # Extract the new name from the input field
             index = ctx.triggered_id["index"]
+            logger.info(f"index: {index}")
+            logger.info(f"new_name_list_values : {new_name_list_values}")
+            logger.info(f"new_name_list_ids: {new_name_list_ids}")
 
             # Iterate over the new_name_list to find the new name corresponding to the index
             new_name = [
@@ -966,14 +966,17 @@ def register_callbacks_dashboards_management(app):
 
         updated_dashboards = list()
         for dashboard in dashboards:
-            if dashboard.dashboard_id == index_make_public:
+            if str(dashboard.dashboard_id) == str(index_make_public):
                 logger.info(f"Found dashboard to update status: {dashboard}")
                 response = httpx.post(
                     f"{API_BASE_URL}/depictio/api/v1/dashboards/toggle_public_status/{index_make_public}",
                     headers={"Authorization": f"Bearer {user_data['access_token']}"},
                     json={"public": not public_current_status},
                 )
-                dashboard.permissions = response.json()["permissions"]
+                if response.status_code != 200:
+                    raise ValueError(f"Failed to update dashboard status. Error: {response.text}")
+                dashboard.is_public = response.json()["is_public"]
+                # dashboard.permissions = response.json()["permissions"]
                 updated_dashboards.append(dashboard)
 
                 if response.status_code == 200:
@@ -997,11 +1000,12 @@ def register_callbacks_dashboards_management(app):
         logger.info(f"index_duplicate: {index_duplicate}")
         logger.info(f"User data: {user_data}")
         logger.info(f"current_userbase: {current_userbase}")
+        logger.info(f"Dashboards: {dashboards}")
 
         updated_dashboards = list()
         for dashboard in dashboards:
             updated_dashboards.append(dashboard)
-            if dashboard.dashboard_id == index_duplicate:
+            if str(dashboard.dashboard_id) == str(index_duplicate):
                 logger.info(f"Found dashboard to duplicate: {dashboard}")
 
                 # Load full dashboard data from the database
@@ -1023,6 +1027,7 @@ def register_callbacks_dashboards_management(app):
                 new_dashboard.dashboard_id = str(new_dashboard.id)
                 new_dashboard.permissions.owners = [current_userbase]
                 new_dashboard.permissions.viewers = []
+                logger.info(f"New dashboard: {format_pydantic(new_dashboard)}")
                 # new_dashboard.dashboard_id = generate_unique_index()
                 # new_dashboard.dashboard_id = str(len(dashboards) + 1)
                 updated_dashboards.append(new_dashboard)

@@ -112,47 +112,45 @@ async def make_dashboard_public(
     logger.info(f"Current user: {current_user}")
     logger.info(f"Dashboard ID: {dashboard_id}")
 
-    status = bool(params.get("public", None))
+    _public_status = bool(params.get("public", None))
 
     user_id = current_user.id
 
-    if status:
-        result = dashboards_collection.find_one_and_update(
-            {"dashboard_id": dashboard_id, "permissions.owners._id": user_id},
-            {"$set": {"permissions.viewers": ["*"]}},
-            return_document=True,  # Adjust based on your MongoDB driver version, some versions might use ReturnDocument.AFTER
-        )
-        logger.info(f"Dashboard with ID '{dashboard_id}' made public.")
-    else:
-        get_current_permissions = dashboards_collection.find_one(
-            {"dashboard_id": dashboard_id, "permissions.owners._id": user_id}
-        )
-        result = dashboards_collection.find_one_and_update(
-            {"dashboard_id": dashboard_id, "permissions.owners._id": user_id},
-            {
-                "$set": {
-                    "permissions.viewers": [
-                        e for e in get_current_permissions["permissions"]["viewers"] if e != "*"
-                    ]
-                }
-            },
-            return_document=True,  # Adjust based on your MongoDB driver version, some versions might use ReturnDocument.AFTER
-        )
-        logger.info(f"Dashboard with ID '{dashboard_id}' made private.")
+    # if _public_status:
+    dashboards_collection.find_one_and_update(
+        {"dashboard_id": dashboard_id, "permissions.owners._id": user_id},
+        {"$set": {"is_public": True}},
+        # return_document=True,  # Adjust based on your MongoDB driver version, some versions might use ReturnDocument.AFTER
+    )
+    logger.info(f"Dashboard with ID '{dashboard_id}' made public.")
+    # else:
+    #     # get_current_permissions = dashboards_collection.find_one(
+    #     #     {"dashboard_id": dashboard_id, "permissions.owners._id": user_id}
+    #     # )
+    #     result = dashboards_collection.find_one_and_update(
+    #         {"dashboard_id": dashboard_id, "permissions.owners._id": user_id},
+    #         {"$set": {"is_public": False}},
+    #         # return_document=True,  # Adjust based on your MongoDB driver version, some versions might use ReturnDocument.AFTER
+    #     )
+    #     logger.info(f"Dashboard with ID '{dashboard_id}' made private.")
 
-    if result:
-        logger.info(f"Dashboard with ID '{dashboard_id}' changed status to public: {status}")
-        logger.info(f"Result: {result}")
-        logger.info(f"Permissions: {result['permissions']}")
+    # if result:
+    #     logger.info(
+    #         f"Dashboard with ID '{dashboard_id}' changed status to public: {_public_status}"
+    #     )
+    #     logger.info(f"Result: {result}")
+    #     logger.info(f"Permissions: {result['permissions']}")
 
-        return {
-            "message": f"Dashboard with ID '{dashboard_id}' changed status to public: {status}",
-            "permissions": convert_objectid_to_str(result["permissions"]),
-        }
-    else:
-        raise HTTPException(
-            status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found."
-        )
+    return {
+        "success": True,
+        "message": f"Dashboard with ID '{dashboard_id}' changed status to public: {_public_status}",
+        # "permissions": convert_objectid_to_str(result["permissions"]),
+        "is_public": _public_status,
+    }
+    # else:
+    #     raise HTTPException(
+    #         status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found."
+    #     )
 
 
 @dashboards_endpoint_router.post("/edit_name/{dashboard_id}")

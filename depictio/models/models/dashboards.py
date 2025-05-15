@@ -20,6 +20,7 @@ class DashboardData(MongoModel):
     stored_add_button: dict = {"count": 0}
     title: str
     permissions: Permission
+    is_public: bool = False
     last_saved_ts: str = ""
     project_id: PyObjectId
     model_config = ConfigDict(
