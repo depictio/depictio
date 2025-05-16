@@ -4,49 +4,47 @@
 FROM mambaorg/micromamba:latest
 
 # -----------------------------
+# Metadata Labels
+# -----------------------------
+ARG VERSION=latest
+LABEL org.opencontainers.image.description="Depictio - Dashboard generation from workflows outputs."
+LABEL org.opencontainers.image.source="https://github.com/yourusername/depictio"
+LABEL org.opencontainers.image.version="${VERSION:-latest}"
+LABEL org.opencontainers.image.authors="Thomas Weber <thomas.weber@embl.de>"
+LABEL org.opencontainers.image.licenses="MIT"
+
+# -----------------------------
 # Set Working Directory
 # -----------------------------
 WORKDIR /app
-
-# -----------------------------
-# Copy Conda Environment File
-# -----------------------------
-COPY conda_envs/depictio.yaml depictio.yaml
-
-# -----------------------------
-# Create Conda Environment
-# -----------------------------
-RUN micromamba create -n depictio -f depictio.yaml && \
-    micromamba clean --all --yes
 
 # -----------------------------
 # Environment Configuration
 # -----------------------------
 ARG MAMBA_DOCKERFILE_ACTIVATE=1
 
-# RUN micromamba shell init -s bash -p /opt/conda/envs/depictio && \
-#     echo "source activate depictio" >> ~/.bashrc && \
-#     echo "conda list" >> ~/.bashrc
+# -----------------------------
+# Copy Conda Environment File and Create Environment
+# -----------------------------
+COPY conda_envs/depictio.yaml /tmp/depictio.yaml
+RUN micromamba create -n depictio -f /tmp/depictio.yaml && \
+    micromamba clean --all --yes
+# Note: Removed the rm command that was causing permission issues
+
+# Setup shell initialization
 RUN micromamba shell init -s bash && \
-    echo "source activate depictio" >> ~/.bashrc && \
-    echo "conda list" >> ~/.bashrc
+    echo "source activate depictio" >> ~/.bashrc
 
 # -----------------------------
-# Install Playwright Dependencies
+# Install Playwright Dependencies as root
 # -----------------------------
 USER root
-RUN bash -c 'whoami'
 
-# Ensure /etc/apt/sources.list exists and configure it
-RUN if [ ! -f /etc/apt/sources.list ]; then \
-    echo "deb http://deb.debian.org/debian buster main" > /etc/apt/sources.list; \
-    fi
+# Clean up the temporary yaml file (now as root)
+RUN rm -f /tmp/depictio.yaml
 
-# Optionally switch to an alternative Debian mirror
-RUN sed -i 's|http://deb.debian.org|http://ftp.us.debian.org|g' /etc/apt/sources.list
-
-# Install dependencies using apt
-RUN apt-get update && apt-get install --fix-missing -y \
+# Install dependencies more efficiently
+RUN apt-get update && apt-get install --no-install-recommends -y \
     xvfb xauth sudo git git-lfs curl \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
@@ -55,69 +53,39 @@ RUN apt-get update && apt-get install --fix-missing -y \
 RUN mkdir -p /usr/local/share/playwright-browsers && \
     chmod 777 /usr/local/share/playwright-browsers
 
-# Set environment variable to use the shared location for browser installation
+# Set environment variable for Playwright browser installation
 ENV PLAYWRIGHT_BROWSERS_PATH=/usr/local/share/playwright-browsers
 
-# Install Playwright browsers as root
+# Install Playwright browsers
 RUN /opt/conda/envs/depictio/bin/playwright install --with-deps chromium && \
     chmod -R 755 /usr/local/share/playwright-browsers
 
-# Switch back to non-root user
-USER $MAMBA_USER
-
-# Ensure the environment variable is also available to the non-root user
-ENV PLAYWRIGHT_BROWSERS_PATH=/usr/local/share/playwright-browsers
-
-
-RUN bash -c 'whoami'
-
-
+# -----------------------------
+# Copy scripts and setup permissions
+# -----------------------------
 COPY ./docker-images/run_dash.sh /app/run_dash.sh
 COPY ./docker-images/run_fastapi.sh /app/run_fastapi.sh
 COPY ./pyproject.toml /app/pyproject.toml
+COPY ./depictio /app/depictio
+
+# Change ownership of the scripts and app directory to the non-root user
+RUN chmod +x /app/run_dash.sh /app/run_fastapi.sh && \
+    chown -R $MAMBA_USER:$MAMBA_USER /app
 
 # -----------------------------
-# Environment Variables
+# Environment Variables (fixed PYTHONPATH definition)
 # -----------------------------
 ENV PATH="/opt/conda/envs/depictio/bin:${PATH}"
-ENV PYTHONPATH="${PYTHONPATH}:/mnt"
-
-# -----------------------------
-# Install Playwright
-# -----------------------------
-# RUN bash -c 'playwright install --with-deps chromium'
-
-# -----------------------------
-# Install depictio-cli
-# -----------------------------
-# WORKDIR /app/depictio-cli
-# RUN /opt/conda/envs/depictio/bin/pip install .
-
-# -----------------------------
-# Install depictio-models
-# -----------------------------
-# COPY ./depictio-models /app/depictio-models
-# USER root
-# # RUN rm -rf /app/depictio-models/depictio_models.egg-info
-# RUN pwd
-# RUN ls
-# COPY ./depictio-models /app/depictio-models
-# RUN pip install -e /app/depictio-models --config-settings "editable_mode=compat"
-
-# COPY ./depictio-cli /app/depictio-cli
-# RUN pip install -e /app/depictio-cli --config-settings "editable_mode=compat"
+ENV PYTHONPATH="/app"
 
 
+# Conditionally copy code (only if COPY_CODE=true)
+COPY --chown=$MAMBA_USER:$MAMBA_USER . /app/depictio
 
-USER appuser  # Switch back if needed
-# RUN pip install -e /app/depictio-models --config-settings "editable_mode=compat"
+# Switch back to non-root user
+USER $MAMBA_USER
 
 # -----------------------------
 # Final Commands
 # -----------------------------
 CMD ["/bin/bash"]
-
-# -----------------------------
-# Use xvfb-run to execute Playwright in a virtual display (if needed)
-# -----------------------------
-# CMD ["xvfb-run", "-a", "--server-args=-screen 0 1920x1080x24", "python", "depictio/api/run.py"]

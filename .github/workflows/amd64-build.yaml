@@ -1,4 +1,4 @@
-name: AMD64 Docker Image Build
+name: Docker Image Build
 
 on:
   push:
@@ -11,8 +11,7 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  build-amd64:
-    # Use native x86 runner
+  build:
     runs-on: ubuntu-22.04
     permissions:
       contents: read
@@ -58,16 +57,19 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            # Version with architecture suffix
-            type=raw,value=${{ steps.build-type.outputs.VERSION }}-amd64
+            # Version tag
+            type=raw,value=${{ steps.build-type.outputs.VERSION }}
             
-            # Tag with beta/stable and architecture
-            type=raw,value=beta-amd64,enable=${{ steps.build-type.outputs.IS_BETA == 'true' }}
-            type=raw,value=stable-amd64,enable=${{ steps.build-type.outputs.IS_BETA != 'true' }}
+            # Tag as beta or stable based on tag type
+            type=raw,value=beta,enable=${{ steps.build-type.outputs.IS_BETA == 'true' }}
+            type=raw,value=stable,enable=${{ steps.build-type.outputs.IS_BETA != 'true' }}
             
-            # Always tag as dev/edge with architecture
-            type=raw,value=dev-amd64
-            type=raw,value=edge-amd64
+            # Tag as latest if not beta
+            type=raw,value=latest,enable=${{ steps.build-type.outputs.IS_BETA != 'true' }}
+            
+            # Always tag as dev and edge
+            type=raw,value=dev
+            type=raw,value=edge
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -77,6 +79,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # No need to specify platform when running on native hardware
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-amd64
-          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-amd64,mode=max
+          platforms: linux/amd64
+          build-args: |
+            VERSION=${{ steps.build-type.outputs.VERSION }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
