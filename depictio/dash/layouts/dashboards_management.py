@@ -971,10 +971,11 @@ def register_callbacks_dashboards_management(app):
                 response = httpx.post(
                     f"{API_BASE_URL}/depictio/api/v1/dashboards/toggle_public_status/{index_make_public}",
                     headers={"Authorization": f"Bearer {user_data['access_token']}"},
-                    json={"public": not public_current_status},
+                    json={"is_public": not public_current_status},
                 )
                 if response.status_code != 200:
                     raise ValueError(f"Failed to update dashboard status. Error: {response.text}")
+                logger.info(f"Response: {response.json()}")
                 dashboard.is_public = response.json()["is_public"]
                 # dashboard.permissions = response.json()["permissions"]
                 updated_dashboards.append(dashboard)

@@ -101,25 +101,29 @@ async def list_all_dashboards(
 
 @dashboards_endpoint_router.post("/toggle_public_status/{dashboard_id}")
 async def make_dashboard_public(
-    dashboard_id: str,
+    dashboard_id: PyObjectId,
     params: dict,
     current_user: User = Depends(get_current_user),
 ):
     """
     Make a dashboard with the given dashboard ID public or private.
     """
-    logger.info(f"Params: {params}")
+    _public_status = params.get("is_public", None)
+    if not _public_status:
+        return {
+            "success": False,
+            "message": "No public status provided. Use 'is_public' parameter.",
+        }
+    logger.info(f"Making dashboard public: {_public_status}")
     logger.info(f"Current user: {current_user}")
     logger.info(f"Dashboard ID: {dashboard_id}")
-
-    _public_status = bool(params.get("public", None))
 
     user_id = current_user.id
 
     # if _public_status:
     dashboards_collection.find_one_and_update(
         {"dashboard_id": dashboard_id, "permissions.owners._id": user_id},
-        {"$set": {"is_public": True}},
+        {"$set": {"is_public": _public_status}},
         # return_document=True,  # Adjust based on your MongoDB driver version, some versions might use ReturnDocument.AFTER
     )
     logger.info(f"Dashboard with ID '{dashboard_id}' made public.")
