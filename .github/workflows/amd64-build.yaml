@@ -1,9 +1,9 @@
-name: Build and Push Docker Image
+name: AMD64 Docker Image Build
 
 on:
   push:
     tags:
-      - "v[0-9]*.[0-9]*.[0-9]*"        # Regular/stable releases (v0.0.4)
+      - "v[0-9]*.[0-9]*.[0-9]*"        # Stable releases (v0.0.4) 
       - "v[0-9]*.[0-9]*.[0-9]*-beta*"  # Beta releases (v0.0.4-beta)
 
 env:
@@ -11,8 +11,9 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  build-and-push-image:
-    runs-on: ubuntu-latest
+  build-amd64:
+    # Use native x86 runner
+    runs-on: ubuntu-22.04
     permissions:
       contents: read
       packages: write
@@ -37,7 +38,6 @@ jobs:
           # Clean version number (without v prefix)
           CLEAN_VERSION=${GIT_TAG#v}
           echo "VERSION=$CLEAN_VERSION" >> $GITHUB_OUTPUT
-          echo "Version: $CLEAN_VERSION, Is Beta: $(echo $IS_BETA)"
 
       - name: Log in to the Container registry
         uses: docker/login-action@v3
@@ -46,11 +46,11 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GHCR_PAT }}
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:latest
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
@@ -58,19 +58,16 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            # Always tag with the version
-            type=raw,value=${{ steps.build-type.outputs.VERSION }}
+            # Version with architecture suffix
+            type=raw,value=${{ steps.build-type.outputs.VERSION }}-amd64
             
-            # Tag as beta if it's a beta build
-            type=raw,value=beta,enable=${{ steps.build-type.outputs.IS_BETA == 'true' }}
+            # Tag with beta/stable and architecture
+            type=raw,value=beta-amd64,enable=${{ steps.build-type.outputs.IS_BETA == 'true' }}
+            type=raw,value=stable-amd64,enable=${{ steps.build-type.outputs.IS_BETA != 'true' }}
             
-            # Tag as latest and stable if it's not a beta
-            type=raw,value=latest,enable=${{ steps.build-type.outputs.IS_BETA != 'true' }}
-            type=raw,value=stable,enable=${{ steps.build-type.outputs.IS_BETA != 'true' }}
-            
-            # Always tag as dev and edge
-            type=raw,value=dev
-            type=raw,value=edge
+            # Always tag as dev/edge with architecture
+            type=raw,value=dev-amd64
+            type=raw,value=edge-amd64
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -80,4 +77,6 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          platforms: linux/amd64,linux/arm64
+          # No need to specify platform when running on native hardware
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-amd64
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-amd64,mode=max
