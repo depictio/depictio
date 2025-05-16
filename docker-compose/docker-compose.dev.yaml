@@ -10,30 +10,49 @@ services:
       - ./depictioDB:/data/depictioDB
 
   depictio-frontend:
-    image: ghcr.io/depictio/depictio:${DEPICTIO_VERSION:-latest}
+    image: depictio:dev
     container_name: depictio-frontend
+    build:
+      dockerfile: docker-images/Dockerfile_depictio.dockerfile
+      context: .
     ports:
       - 5080:5080
     volumes:
       - ./depictio:/app/depictio
+      # - ./keys:/app/depictio/keys
     env_file:
       - .env
+    environment:
+        # DEPICTIO_CONTAINER: "True"
+        # DEPICTIO_TEST_MODE: "${DEPICTIO_TEST_MODE:-false}"
+        DEV_MODE: "${DEV_MODE:-false}"
     command: ["/app/run_dash.sh"]
+    # command: ["python", "depictio/dash/app.py"]
     user: "${UID:-1000}:${GID:-1000}"
     depends_on:
       - mongo
       - depictio-backend
 
   depictio-backend:
-    image: ghcr.io/depictio/depictio:${DEPICTIO_VERSION:-latest}
     container_name: depictio-backend
+    image: depictio:dev
+    build:
+      dockerfile: docker-images/Dockerfile_depictio.dockerfile
+      context: .
     ports:
       - 8058:8058
     volumes:
       - ./depictio:/app/depictio
+      # - ./keys:/app/depictio/keys
     env_file:
       - .env
+    environment:
+        # DEPICTIO_CONTAINER: "True"
+        # DEPICTIO_TEST_MODE: "${DEPICTIO_TEST_MODE:-false}"
+        DEV_MODE: "${DEV_MODE:-false}"
     command: ["/app/run_fastapi.sh"]
+    # command: ["python", "depictio/api/run.py"]
     user: "${UID:-1000}:${GID:-1000}"
+    tty: true
     depends_on:
       - mongo

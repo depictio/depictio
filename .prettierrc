@@ -1,0 +1,17 @@
+{
+    "plugins": [
+        "prettier-plugin-go-template"
+    ],
+    "overrides": [
+        {
+            "files": [
+                "charts/**/templates/*.yaml",
+                "templates/*.yaml",
+                "*.tpl"
+            ],
+            "options": {
+                "parser": "gotemplate"
+            }
+        }
+    ]
+}

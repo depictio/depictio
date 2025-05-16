@@ -13,13 +13,13 @@ services:
       - "9000:9000"
       - "9001:9001"
 
-  depictio_frontend:
+  depictio-frontend:
     volumes:
       - ./minio_data:/minio_data
     depends_on:
       - minio
 
-  depictio_backend:
+  depictio-backend:
     volumes:
       - ./minio_data:/minio_data
     depends_on:

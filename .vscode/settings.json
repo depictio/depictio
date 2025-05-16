@@ -5,7 +5,6 @@
         "depictio/tests/api",
         "depictio/tests/cli",
         "depictio/tests/models",
-        // "depictio/tests/integration",
         "-xvs",
         "-n",
         "auto"
@@ -13,14 +12,5 @@
     "editor.codeActionsOnSave": {
         "source.organizeImports": "always",
         "source.sortImports": "explicit",
-    },
-    // "python.testing.cwd": "${workspaceFolder:depictio}",
-    // "python.analysis.extraPaths": [
-    //     "../depictio-models",
-    //     "../depictio-cli"
-    // ],
-    // "python.autoComplete.extraPaths": [
-    //     "../depictio-models",
-    //     "../depictio-cli"
-    // ]
+    }
 }

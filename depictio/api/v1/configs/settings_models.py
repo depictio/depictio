@@ -42,7 +42,7 @@ class FastAPIConfig(BaseSettings):
     """Backend configuration."""
 
     host: str = "0.0.0.0"
-    service_name: str = "depictio_backend"
+    service_name: str = "depictio-backend"
     port: int = Field(default=8058)
     logging_level: str = "INFO"
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_FASTAPI_")
@@ -56,7 +56,7 @@ class DashConfig(BaseSettings):
 
     debug: bool = True
     host: str = "0.0.0.0"
-    service_name: str = "depictio_frontend"
+    service_name: str = "depictio-frontend"
     workers: int = Field(default=1)
     port: int = Field(default=5080)
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_DASH_")

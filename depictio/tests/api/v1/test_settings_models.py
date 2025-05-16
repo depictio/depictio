@@ -138,7 +138,7 @@ class TestFastAPIConfig:
             config = FastAPIConfig()
 
             assert config.host == "0.0.0.0"
-            assert config.service_name == "depictio_backend"
+            assert config.service_name == "depictio-backend"
             assert config.port == 8058
             assert config.logging_level == "INFO"
             assert config.workers == 1
@@ -213,7 +213,7 @@ class TestDashConfig:
 
             assert config.debug is True
             assert config.host == "0.0.0.0"
-            assert config.service_name == "depictio_frontend"
+            assert config.service_name == "depictio-frontend"
             assert config.workers == 1
             assert config.port == 5080
 

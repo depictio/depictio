@@ -8,7 +8,7 @@ services:
     volumes:
       - ./depictioDB:/data/depictioDB
 
-  depictio_frontend:
+  depictio-frontend:
     image: depictio:dev
     build:
       dockerfile: docker-images/Dockerfile_depictio.dev.vnc.dockerfile
@@ -29,9 +29,9 @@ services:
     user: "${UID:-1000}:${GID:-1000}"
     depends_on:
       - mongo
-      - depictio_backend
+      - depictio-backend
 
-  depictio_backend:
+  depictio-backend:
     image: depictio:dev
     build:
       dockerfile: docker-images/Dockerfile_depictio.dev.vnc.dockerfile

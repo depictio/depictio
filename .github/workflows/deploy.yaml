@@ -163,7 +163,7 @@ jobs:
       - name: Start Docker Compose Services
         run: |
           # Ensure we have docker permissions by using the updated socket permissions
-          docker compose -f docker-compose.yaml -f docker-compose/docker-compose.minio.yaml up -d --build
+          docker compose -f docker-compose.yaml -f docker-compose/docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d --build
 
       # - name: Start Docker Compose Services with Caching
       #   run: |
@@ -199,13 +199,13 @@ jobs:
 
       - name: Verify Permissions Inside Container
         run: |
-          docker compose exec -T depictio_backend bash -c "ls -la /app/depictio/keys"
+          docker compose exec -T depictio-backend bash -c "ls -la /app/depictio/keys"
 
       - name: Wait for Services to Start
         run: sleep 10 # Adjust the wait time if necessary
 
       - name: Log Containers
-        run: docker compose logs depictio_backend
+        run: docker compose logs depictio-backend
 
       # Verify All Containers Are Running
       - name: Check if all containers are running
@@ -249,7 +249,7 @@ jobs:
 
       # Show admin config file
       - name: Show admin config file
-        run: docker compose exec depictio_backend cat /app/depictio/.depictio/admin_config.yaml
+        run: docker compose exec depictio-backend cat /app/depictio/.depictio/admin_config.yaml
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -291,7 +291,7 @@ jobs:
       - name: Extract Token and Check Depictio Backend Health
         run: |
           # Extract the access token from the YAML file
-          token=$(docker compose exec depictio_backend bash -c "cat /app/depictio/.depictio/admin_config.yaml" | grep 'access_token' | awk '{print $2}')
+          token=$(docker compose exec depictio-backend bash -c "cat /app/depictio/.depictio/admin_config.yaml" | grep 'access_token' | awk '{print $2}')
 
           # Remove quotes from the token if any
           token=$(echo $token | tr -d "'\"")
@@ -315,12 +315,12 @@ jobs:
         if: always() # Ensure this runs no matter what
         run: |
           echo "Fetching logs before running CLI..."
-          docker compose logs depictio_backend
+          docker compose logs depictio-backend
 
       - name: Copy /app/depictio/.depictio/admin_config.yaml to host
         run: |
           docker ps
-          docker cp depictio_backend:/app/depictio/.depictio/admin_config.yaml depictio/cli/admin_config.yaml
+          docker cp depictio-backend:/app/depictio/.depictio/admin_config.yaml depictio/cli/admin_config.yaml
           ls -la depictio/cli/admin_config.yaml
           cat depictio/cli/admin_config.yaml
 
@@ -424,7 +424,7 @@ jobs:
       - name: Sync Project to Server - debug
         continue-on-error: true
         run: |
-          docker compose logs depictio_backend
+          docker compose logs depictio-backend
 
       # # Sync the iris project configuration to the server
       # # - name: Sync Iris Project Configuration
@@ -456,7 +456,7 @@ jobs:
       # #   if: always()  # Run this step no matter what happens previously
       # #   run: |
       # #     echo "Fetching backend logs after CLI run..."
-      # #     docker compose logs depictio_backend
+      # #     docker compose logs depictio-backend
 
       # # - name: Check Workflow in MongoDB
       # #   run: |

@@ -2,34 +2,9 @@
 nameOverride: ""
 fullnameOverride: ""
 
-# Namespace settings
-namespace:
-  create: false
-  name: "datasci-depictio-project"
-
 # Storage settings
 storageClass: "standard"
 persistence:
-  src:
-    enabled: true
-    size: 1Gi
-    accessMode: ReadWriteOnce
-  data:
-    enabled: true
-    size: 5Gi
-    accessMode: ReadWriteOnce
-  minioData:
-    enabled: true
-    size: 5Gi
-    accessMode: ReadWriteOnce
-  configs:
-    enabled: true
-    size: 1Gi
-    accessMode: ReadWriteOnce
-  kubernetes:
-    enabled: true
-    size: 1Gi
-    accessMode: ReadWriteOnce
   mongo:
     enabled: true
     size: 5Gi
@@ -37,10 +12,6 @@ persistence:
   minio:
     enabled: true
     size: 10Gi
-    accessMode: ReadWriteOnce
-  exampleData:
-    enabled: true
-    size: 5Gi
     accessMode: ReadWriteOnce
   screenshots:
     enabled: true
@@ -123,13 +94,13 @@ backend:
     DEPICTIO_CONTEXT: "server"
     DEV_MODE: "true"
     DEPICTIO_LOGGING_VERBOSITY_LEVEL: "DEBUG"
-    # DEPICTIO_CONFIG_BACKEND_LOCATION: "/app/depictio/api/v1/configs/config_backend_k8s_embl_backend.yaml"
     DEPICTIO_FASTAPI_PORT: "8058"
     DEPICTIO_DASH_PORT: "80"
     DEPICTIO_DASH_SERVICE_NAME: "depictio-frontend"
   command:
-    - "python"
-    - "/app/depictio/api/run.py"
+    ["/app/run_fastapi.sh"]
+    # - "python"
+    # - "/app/depictio/api/run.py"
   securityContext:
     fsGroup: 2000
 
@@ -154,13 +125,13 @@ frontend:
     targetPort: 5080
   env:
     DEV_MODE: "true"
-    # DEPICTIO_CONFIG_BACKEND_LOCATION: "/app/depictio/api/v1/configs/config_backend_k8s_embl_frontend.yaml"
     DEPICTIO_FASTAPI_SERVICE_NAME: "depictio-backend"
     DEPICTIO_FASTAPI_PORT: "80"
     DEPICTIO_DASH_PORT: "5080"
   command:
-    - "python"
-    - "/app/depictio/dash/app.py"
+    ["/app/run_dash.sh"]
+    # - "python"
+    # - "/app/depictio/dash/app.py"
 
 # ConfigMap values
 configMaps:
@@ -172,9 +143,6 @@ configMaps:
       dash:
         port: 5080
         service_name: "depictio-frontend"
-      jbrowse:
-        data_dir: "/data"
-        config_dir: "/jbrowse-watcher-plugin/sessions"
   backend:
     data:
       fastapi:
@@ -183,6 +151,3 @@ configMaps:
       dash:
         port: 80
         service_name: "depictio-frontend"
-      jbrowse:
-        data_dir: "/data"
-        config_dir: "/jbrowse-watcher-plugin/sessions"

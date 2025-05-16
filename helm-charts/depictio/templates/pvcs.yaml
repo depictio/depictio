@@ -1,95 +1,9 @@
-{{- if .Values.persistence.src.enabled }}
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: depictio-src-pvc
-  namespace: {{ .Values.namespace.name }}
-  labels:
-    {{- include "depictio.labels" . | nindent 4 }}
-spec:
-  storageClassName: {{ .Values.storageClass }}
-  accessModes:
-    - {{ .Values.persistence.src.accessMode }}
-  resources:
-    requests:
-      storage: {{ .Values.persistence.src.size }}
-{{- end }}
----
-{{- if .Values.persistence.data.enabled }}
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: depictio-data-pvc
-  namespace: {{ .Values.namespace.name }}
-  labels:
-    {{- include "depictio.labels" . | nindent 4 }}
-spec:
-  storageClassName: {{ .Values.storageClass }}
-  accessModes:
-    - {{ .Values.persistence.data.accessMode }}
-  resources:
-    requests:
-      storage: {{ .Values.persistence.data.size }}
-{{- end }}
----
-{{- if .Values.persistence.minioData.enabled }}
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: depictio-minio-data-pvc
-  namespace: {{ .Values.namespace.name }}
-  labels:
-    {{- include "depictio.labels" . | nindent 4 }}
-spec:
-  storageClassName: {{ .Values.storageClass }}
-  accessModes:
-    - {{ .Values.persistence.minioData.accessMode }}
-  resources:
-    requests:
-      storage: {{ .Values.persistence.minioData.size }}
-{{- end }}
----
-{{- if .Values.persistence.configs.enabled }}
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: depictio-configs-pvc
-  namespace: {{ .Values.namespace.name }}
-  labels:
-    {{- include "depictio.labels" . | nindent 4 }}
-spec:
-  storageClassName: {{ .Values.storageClass }}
-  accessModes:
-    - {{ .Values.persistence.configs.accessMode }}
-  resources:
-    requests:
-      storage: {{ .Values.persistence.configs.size }}
-{{- end }}
----
-{{- if .Values.persistence.kubernetes.enabled }}
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: depictio-kubernetes-pvc
-  namespace: {{ .Values.namespace.name }}
-  labels:
-    {{- include "depictio.labels" . | nindent 4 }}
-spec:
-  storageClassName: {{ .Values.storageClass }}
-  accessModes:
-    - {{ .Values.persistence.kubernetes.accessMode }}
-  resources:
-    requests:
-      storage: {{ .Values.persistence.kubernetes.size }}
-{{- end }}
----
-{{- if .Values.persistence.mongo.enabled }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: mongo-pvc
-  namespace: {{ .Values.namespace.name }}
-  labels:
+  namespace: {{ .Release.Namespace }}
+  labels: 
     {{- include "depictio.labels" . | nindent 4 }}
 spec:
   storageClassName: {{ .Values.storageClass }}
@@ -98,15 +12,13 @@ spec:
   resources:
     requests:
       storage: {{ .Values.persistence.mongo.size }}
-{{- end }}
 ---
-{{- if .Values.persistence.minio.enabled }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: minio-pvc
-  namespace: {{ .Values.namespace.name }}
-  labels:
+  namespace: {{ .Release.Namespace }}
+  labels: 
     {{- include "depictio.labels" . | nindent 4 }}
 spec:
   storageClassName: {{ .Values.storageClass }}
@@ -115,32 +27,13 @@ spec:
   resources:
     requests:
       storage: {{ .Values.persistence.minio.size }}
-{{- end }}
 ---
-{{- if .Values.persistence.exampleData.enabled }}
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: depictio-example-data-pvc
-  namespace: {{ .Values.namespace.name }}
-  labels:
-    {{- include "depictio.labels" . | nindent 4 }}
-spec:
-  storageClassName: {{ .Values.storageClass }}
-  accessModes:
-    - {{ .Values.persistence.exampleData.accessMode }}
-  resources:
-    requests:
-      storage: {{ .Values.persistence.exampleData.size }}
-{{- end }}
----
-{{- if .Values.persistence.screenshots.enabled }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: depictio-screenshots-pvc
-  namespace: {{ .Values.namespace.name }}
-  labels:
+  namespace: {{ .Release.Namespace }}
+  labels: 
     {{- include "depictio.labels" . | nindent 4 }}
 spec:
   storageClassName: {{ .Values.storageClass }}
@@ -149,4 +42,3 @@ spec:
   resources:
     requests:
       storage: {{ .Values.persistence.screenshots.size }}
-{{- end }}

@@ -3,7 +3,8 @@ name: depictio
 description: A Helm chart for Depictio application
 type: application
 version: 0.1.0
-appVersion: "v0.0.3"
+appVersion: "v0.0.4"
+icon: https://github.com/depictio/depictio/raw/main/docs/images/logo.png
 maintainers:
   - name: Thomas Weber
     email: thomas.weber@embl.de

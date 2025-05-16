@@ -21,7 +21,7 @@ services:
       - "9000:9000"
       - "9001:9001"
 
-  depictio_frontend:
+  depictio-frontend:
     image: depictio:dev
     # image: registry.git.embl.de/tweber/depictio/depictio:latest
     build:
@@ -42,9 +42,9 @@ services:
     depends_on:
       - mongo
       - minio
-      - depictio_backend
+      - depictio-backend
 
-  depictio_backend:
+  depictio-backend:
     # image: registry.git.embl.de/tweber/depictio/depictio:latest
     image: depictio:dev
     build:

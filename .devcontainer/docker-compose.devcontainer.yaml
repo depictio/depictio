@@ -12,5 +12,5 @@ services:
     depends_on:
       - mongo
       - minio
-      - depictio_backend
-      - depictio_frontend
+      - depictio-backend
+      - depictio-frontend

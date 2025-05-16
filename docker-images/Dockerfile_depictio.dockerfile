@@ -79,8 +79,7 @@ ENV PATH="/opt/conda/envs/depictio/bin:${PATH}"
 ENV PYTHONPATH="/app"
 
 
-# Conditionally copy code (only if COPY_CODE=true)
-COPY --chown=$MAMBA_USER:$MAMBA_USER . /app/depictio
+# COPY --chown=$MAMBA_USER:$MAMBA_USER . /app/depictio
 
 # Switch back to non-root user
 USER $MAMBA_USER

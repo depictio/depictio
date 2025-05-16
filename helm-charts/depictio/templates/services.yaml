@@ -1,9 +1,8 @@
-{{- if .Values.mongo.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
   name: mongo
-  namespace: {{ .Values.namespace.name }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "depictio.labels" . | nindent 4 }}
 spec:
@@ -14,14 +13,13 @@ spec:
       targetPort: {{ .Values.mongo.service.port }}
   selector:
     {{- include "depictio.mongo.selectorLabels" . | nindent 4 }}
-{{- end }}
 ---
 {{- if .Values.minio.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
   name: minio
-  namespace: {{ .Values.namespace.name }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "depictio.labels" . | nindent 4 }}
 spec:
@@ -37,12 +35,11 @@ spec:
     {{- include "depictio.minio.selectorLabels" . | nindent 4 }}
 {{- end }}
 ---
-{{- if .Values.backend.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
   name: depictio-backend
-  namespace: {{ .Values.namespace.name }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "depictio.labels" . | nindent 4 }}
 spec:
@@ -58,14 +55,12 @@ spec:
       name: https
   selector:
     {{- include "depictio.backend.selectorLabels" . | nindent 4 }}
-{{- end }}
 ---
-{{- if .Values.frontend.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
   name: depictio-frontend
-  namespace: {{ .Values.namespace.name }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "depictio.labels" . | nindent 4 }}
 spec:
@@ -81,4 +76,3 @@ spec:
       name: https
   selector:
     {{- include "depictio.frontend.selectorLabels" . | nindent 4 }}
-{{- end }}

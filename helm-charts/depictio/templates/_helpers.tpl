@@ -54,7 +54,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 Create the name of the namespace to use
 */}}
 {{- define "depictio.namespaceName" -}}
-{{- default .Values.namespace.name }}
+{{- default .Release.Namespace }}
 {{- end }}
 
 {{/*

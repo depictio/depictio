@@ -1,9 +1,8 @@
-{{- if .Values.mongo.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: mongo
-  namespace: {{ .Values.namespace.name }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "depictio.labels" . | nindent 4 }}
 spec:
@@ -33,14 +32,13 @@ spec:
         - name: mongo-storage
           persistentVolumeClaim:
             claimName: mongo-pvc
-{{- end }}
 ---
 {{- if .Values.minio.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: minio
-  namespace: {{ .Values.namespace.name }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "depictio.labels" . | nindent 4 }}
 spec:
@@ -84,12 +82,11 @@ spec:
             claimName: minio-pvc
 {{- end }}
 ---
-{{- if .Values.backend.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: depictio-backend
-  namespace: {{ .Values.namespace.name }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "depictio.labels" . | nindent 4 }}
 spec:
@@ -119,52 +116,18 @@ spec:
           ports:
             - containerPort: {{ .Values.backend.service.targetPort }}
           resources: {{ toYaml .Values.backend.resources | nindent 12 }}
-          volumeMounts:
-            - name: config-volume
-              mountPath: /app/depictio/api/v1/configs/config_backend_k8s_embl_backend.yaml
-              subPath: config_backend_k8s_embl_backend.yaml
-            - name: data
-              mountPath: /app/data
-            - name: minio-data
-              mountPath: /app/minio_data
-            - name: configs
-              mountPath: /app/configs
-            - name: kubernetes
-              mountPath: /app/kubernetes
-            - name: depictio-example-data
-              mountPath: /app/depictio-example-data
-            - name: depictio-screenshots
-              mountPath: /app/depictio/dash/static/screenshots
+
       volumes:
-        - name: config-volume
-          configMap:
-            name: depictio-backend-config
-        - name: data
-          persistentVolumeClaim:
-            claimName: depictio-data-pvc
-        - name: minio-data
-          persistentVolumeClaim:
-            claimName: depictio-minio-data-pvc
-        - name: configs
-          persistentVolumeClaim:
-            claimName: depictio-configs-pvc
-        - name: kubernetes
-          persistentVolumeClaim:
-            claimName: depictio-kubernetes-pvc
-        - name: depictio-example-data
-          persistentVolumeClaim:
-            claimName: depictio-example-data-pvc
+
         - name: depictio-screenshots
           persistentVolumeClaim:
             claimName: depictio-screenshots-pvc
-{{- end }}
 ---
-{{- if .Values.frontend.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: depictio-frontend
-  namespace: {{ .Values.namespace.name }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "depictio.labels" . | nindent 4 }}
 spec:
@@ -192,37 +155,11 @@ spec:
           ports:
             - containerPort: {{ .Values.frontend.service.targetPort }}
           resources: {{ toYaml .Values.frontend.resources | nindent 12 }}
-          volumeMounts:
-            - name: config-volume
-              mountPath: /app/depictio/api/v1/configs/config_backend_k8s_embl_frontend.yaml
-              subPath: config_backend_k8s_embl_frontend.yaml
-            - name: data
-              mountPath: /app/data
-            - name: minio-data
-              mountPath: /app/minio_data
-            - name: configs
-              mountPath: /app/configs
-            - name: depictio-example-data
-              mountPath: /app/depictio-example-data
-            - name: depictio-screenshots
-              mountPath: /app/depictio/dash/static/screenshots
+      #     volumeMounts:
+      #       - name: depictio-screenshots
+      #         mountPath: /app/depictio/dash/static/screenshots
       volumes:
-        - name: config-volume
-          configMap:
-            name: depictio-frontend-config
-        - name: data
-          persistentVolumeClaim:
-            claimName: depictio-data-pvc
-        - name: minio-data
-          persistentVolumeClaim:
-            claimName: depictio-minio-data-pvc
-        - name: configs
-          persistentVolumeClaim:
-            claimName: depictio-configs-pvc
-        - name: depictio-example-data
-          persistentVolumeClaim:
-            claimName: depictio-example-data-pvc
+
         - name: depictio-screenshots
           persistentVolumeClaim:
             claimName: depictio-screenshots-pvc
-{{- end }}
