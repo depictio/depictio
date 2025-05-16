@@ -3,7 +3,8 @@ name: Build and Push Docker Image
 on:
   push:
     tags:
-      - "v[0-9]*.[0-9]*.[0-9]*" # Only run on version tags like v0.0.4
+      - "v[0-9]*.[0-9]*.[0-9]*"        # Regular/stable releases (v0.0.4)
+      - "v[0-9]*.[0-9]*.[0-9]*-beta*"  # Beta releases (v0.0.4-beta)
 
 env:
   REGISTRY: ghcr.io
@@ -20,15 +21,25 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Extract version from pyproject.toml
-        id: extract-version
+      - name: Determine build type
+        id: build-type
         run: |
-          VERSION=$(grep -m 1 'version = "' pyproject.toml | cut -d'"' -f2)
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          echo "Extracted version: $VERSION"
+          # Extract the git tag (v0.0.4-beta, v0.0.4, etc.)
+          GIT_TAG=${GITHUB_REF#refs/tags/}
+          
+          # Determine if it's a beta
+          if [[ $GIT_TAG == *"-beta"* ]]; then
+            echo "IS_BETA=true" >> $GITHUB_OUTPUT
+          else
+            echo "IS_BETA=false" >> $GITHUB_OUTPUT
+          fi
+          
+          # Clean version number (without v prefix)
+          CLEAN_VERSION=${GIT_TAG#v}
+          echo "VERSION=$CLEAN_VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $CLEAN_VERSION, Is Beta: $(echo $IS_BETA)"
 
       - name: Log in to the Container registry
-        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -47,21 +58,26 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=${{ steps.extract-version.outputs.VERSION }}
-            type=raw,value=latest
+            # Always tag with the version
+            type=raw,value=${{ steps.build-type.outputs.VERSION }}
+            
+            # Tag as beta if it's a beta build
+            type=raw,value=beta,enable=${{ steps.build-type.outputs.IS_BETA == 'true' }}
+            
+            # Tag as latest and stable if it's not a beta
+            type=raw,value=latest,enable=${{ steps.build-type.outputs.IS_BETA != 'true' }}
+            type=raw,value=stable,enable=${{ steps.build-type.outputs.IS_BETA != 'true' }}
+            
+            # Always tag as dev and edge
             type=raw,value=dev
             type=raw,value=edge
-            type=raw,value=stable
-            type=ref,event=branch
-            type=ref,event=pr
-            type=sha
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: docker-images/Dockerfile_depictio.dockerfile
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/amd64,linux/arm64
