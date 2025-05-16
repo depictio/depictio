@@ -166,7 +166,6 @@ dashboards.json
 ### and keep your placeholder file
 !/depictio/keys/.gitkeep
 
-
 ## Sensitive data
 .env
 .env.*
