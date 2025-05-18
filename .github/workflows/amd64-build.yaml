@@ -1,10 +1,12 @@
 name: Docker Image Build
 
 on:
-  push:
-    tags:
-      - "v[0-9]*.[0-9]*.[0-9]*"        # Stable releases (v0.0.4) 
-      - "v[0-9]*.[0-9]*.[0-9]*-beta*"  # Beta releases (v0.0.4-beta)
+  # push:
+  #   tags:
+  #     - "v[0-9]*.[0-9]*.[0-9]*"        # Stable releases (v0.0.4) 
+  #     - "v[0-9]*.[0-9]*.[0-9]*-beta*"  # Beta releases (v0.0.4-beta)
+  workflow_dispatch:
+    
 
 env:
   REGISTRY: ghcr.io
