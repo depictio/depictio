@@ -9,17 +9,12 @@ from pydantic import ValidationError
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.data_collections import DataCollection
 from depictio.models.models.users import Permission, UserBase
-
 # Import all workflow models we need to test
-from depictio.models.models.workflows import (
-    Workflow,
-    WorkflowCatalog,
-    WorkflowConfig,
-    WorkflowDataLocation,
-    WorkflowEngine,
-    WorkflowRun,
-    WorkflowRunScan,
-)
+from depictio.models.models.workflows import (Workflow, WorkflowCatalog,
+                                              WorkflowConfig,
+                                              WorkflowDataLocation,
+                                              WorkflowEngine, WorkflowRun,
+                                              WorkflowRunScan)
 
 
 class TestWorkflowDataLocation:

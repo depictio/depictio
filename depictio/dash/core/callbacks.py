@@ -74,9 +74,12 @@ def register_layout_callbacks(app):
     from depictio.dash.layouts.save import register_callbacks_save
     from depictio.dash.layouts.sidebar import register_sidebar_callbacks
     from depictio.dash.layouts.stepper import register_callbacks_stepper
-    from depictio.dash.layouts.stepper_parts.part_one import register_callbacks_stepper_part_one
-    from depictio.dash.layouts.stepper_parts.part_three import register_callbacks_stepper_part_three
-    from depictio.dash.layouts.stepper_parts.part_two import register_callbacks_stepper_part_two
+    from depictio.dash.layouts.stepper_parts.part_one import \
+        register_callbacks_stepper_part_one
+    from depictio.dash.layouts.stepper_parts.part_three import \
+        register_callbacks_stepper_part_three
+    from depictio.dash.layouts.stepper_parts.part_two import \
+        register_callbacks_stepper_part_two
 
     # Register layout callbacks
     register_callbacks_stepper(app)
@@ -96,15 +99,16 @@ def register_component_callbacks(app):
     Args:
         app (dash.Dash): The Dash application instance
     """
-    from depictio.dash.modules.card_component.frontend import register_callbacks_card_component
-    from depictio.dash.modules.figure_component.frontend import register_callbacks_figure_component
-    from depictio.dash.modules.interactive_component.frontend import (
-        register_callbacks_interactive_component,
-    )
-    from depictio.dash.modules.jbrowse_component.frontend import (
-        register_callbacks_jbrowse_component,
-    )
-    from depictio.dash.modules.table_component.frontend import register_callbacks_table_component
+    from depictio.dash.modules.card_component.frontend import \
+        register_callbacks_card_component
+    from depictio.dash.modules.figure_component.frontend import \
+        register_callbacks_figure_component
+    from depictio.dash.modules.interactive_component.frontend import \
+        register_callbacks_interactive_component
+    from depictio.dash.modules.jbrowse_component.frontend import \
+        register_callbacks_jbrowse_component
+    from depictio.dash.modules.table_component.frontend import \
+        register_callbacks_table_component
 
     # Register component callbacks
     register_callbacks_card_component(app)
@@ -122,17 +126,17 @@ def register_feature_callbacks(app):
         app (dash.Dash): The Dash application instance
     """
     from depictio.dash.layouts.admin_management import register_admin_callbacks
-    from depictio.dash.layouts.dashboards_management import register_callbacks_dashboards_management
+    from depictio.dash.layouts.dashboards_management import \
+        register_callbacks_dashboards_management
     from depictio.dash.layouts.profile import register_profile_callbacks
-    from depictio.dash.layouts.projects import (
-        register_projects_callbacks,
-        register_workflows_callbacks,
-    )
-    from depictio.dash.layouts.projectwise_user_management import (
-        register_projectwise_user_management_callbacks,
-    )
-    from depictio.dash.layouts.tokens_management import register_tokens_management_callbacks
-    from depictio.dash.layouts.users_management import register_callbacks_users_management
+    from depictio.dash.layouts.projects import (register_projects_callbacks,
+                                                register_workflows_callbacks)
+    from depictio.dash.layouts.projectwise_user_management import \
+        register_projectwise_user_management_callbacks
+    from depictio.dash.layouts.tokens_management import \
+        register_tokens_management_callbacks
+    from depictio.dash.layouts.users_management import \
+        register_callbacks_users_management
 
     # Register feature callbacks
     register_callbacks_dashboards_management(app)

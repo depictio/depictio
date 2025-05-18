@@ -12,14 +12,12 @@ from dash_iconify import DashIconify
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.custom_logging import format_pydantic
 from depictio.api.v1.configs.logging_init import logger
-
 # from depictio.api.v1.endpoints.dashboards_endpoints.models import DashboardData
 # from depictio.api.v1.endpoints.user_endpoints.models import UserBase
-from depictio.dash.api_calls import api_call_fetch_user_from_token, api_get_project_from_id
+from depictio.dash.api_calls import (api_call_fetch_user_from_token,
+                                     api_get_project_from_id)
 from depictio.dash.layouts.layouts_toolbox import (
-    create_dashboard_modal,
-    create_delete_confirmation_modal,
-)
+    create_dashboard_modal, create_delete_confirmation_modal)
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.dashboards import DashboardData
 from depictio.models.models.users import Permission

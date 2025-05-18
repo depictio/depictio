@@ -1,3 +1,8 @@
+###############################################################################
+# Pre-commit configuration file
+###############################################################################
+
+# Basic checks
 repos:
 -   repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
@@ -11,6 +16,16 @@ repos:
     -   id: check-added-large-files
         exclude: ^dev/
 
+
+# Isort
+-   repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+    -   id: isort
+        name: isort (python)
+
+
+# Ruff lint & format 
 -   repo: https://github.com/charliermarsh/ruff-pre-commit
     rev: v0.11.8
     hooks:
@@ -20,6 +35,7 @@ repos:
     -   id: ruff-format
         exclude: ^dev/
 
+# Lint helm chart
 -   repo: local
     hooks:
       - id: helm-lint
@@ -29,3 +45,24 @@ repos:
         language: system
         files: ^helm-charts/depictio/
         pass_filenames: false
+
+# Clean jupyter notebooks
+-   repo: https://github.com/kynan/nbstripout
+    rev: 0.6.1
+    hooks:
+    -   id: nbstripout
+        description: Strip output from Jupyter notebooks
+        files: \.ipynb$
+
+# Docker linting
+# -   repo: https://github.com/hadolint/hadolint
+#     rev: v2.12.0
+#     hooks:
+#     -   id: hadolint
+#         args: [--ignore, DL3008, --ignore, DL3013, --ignore, DL3003]
+
+# Shell script linting
+-   repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.9.0.6
+    hooks:
+    -   id: shellcheck

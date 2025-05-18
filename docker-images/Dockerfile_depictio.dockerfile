@@ -1,7 +1,7 @@
 # -----------------------------
 # Base Image
 # -----------------------------
-FROM mambaorg/micromamba:latest
+FROM mambaorg/micromamba:2.1.1
 
 # -----------------------------
 # Metadata Labels

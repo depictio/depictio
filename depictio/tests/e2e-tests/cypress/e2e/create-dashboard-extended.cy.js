@@ -69,7 +69,7 @@ describe('Create and manage dashboard', () => {
                         // Toggle privacy settings
                         // togglePrivacyAndVerify(uniqueTitle, duplicateDashboardId).then(() => {
                         // Delete both dashboards
-                        deleteAndVerify(uniqueTitle, duplicateDashboardId);
+                        deleteAndVerify(duplicateTitle, duplicateDashboardId);
                         deleteAndVerify(uniqueTitle, dashboardId);
                         // });
                         // });

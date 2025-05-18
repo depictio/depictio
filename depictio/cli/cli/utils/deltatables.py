@@ -5,7 +5,8 @@ import deltalake
 import polars as pl
 from pydantic import validate_call
 
-from depictio.cli.cli.utils.api_calls import api_get_files_by_dc_id, api_upsert_deltatable
+from depictio.cli.cli.utils.api_calls import (api_get_files_by_dc_id,
+                                              api_upsert_deltatable)
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
 from depictio.cli.cli_logging import logger
 from depictio.models.models.base import convert_objectid_to_str

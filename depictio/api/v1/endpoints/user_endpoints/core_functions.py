@@ -7,7 +7,8 @@ from pydantic import EmailStr, validate_call
 
 from depictio.api.v1.configs.logging_init import format_pydantic, logger
 from depictio.api.v1.endpoints.user_endpoints.utils import create_access_token
-from depictio.models.models.users import TokenBase, TokenBeanie, TokenData, UserBeanie
+from depictio.models.models.users import (TokenBase, TokenBeanie, TokenData,
+                                          UserBeanie)
 
 
 @validate_call(validate_return=True)

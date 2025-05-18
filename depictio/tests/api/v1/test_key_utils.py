@@ -7,22 +7,18 @@ from unittest import mock
 import pytest
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
+from cryptography.hazmat.primitives.asymmetric.rsa import (RSAPrivateKey,
+                                                           RSAPublicKey)
 
 # Import the module assuming it's named crypto_utils.py
-from depictio.api.v1.key_utils import (
-    KeyGenerationError,
-    _ensure_directory_exists,
-    _generate_rsa_private_key,
-    _resolve_key_paths,
-    _save_private_key,
-    _save_public_key,
-    check_and_generate_keys,
-    generate_keys,
-    import_keys,
-    load_private_key,
-    load_public_key,
-)
+from depictio.api.v1.key_utils import (KeyGenerationError,
+                                       _ensure_directory_exists,
+                                       _generate_rsa_private_key,
+                                       _resolve_key_paths, _save_private_key,
+                                       _save_public_key,
+                                       check_and_generate_keys, generate_keys,
+                                       import_keys, load_private_key,
+                                       load_public_key)
 
 
 class TestCryptoUtils:

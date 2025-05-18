@@ -6,7 +6,8 @@ from bson import ObjectId
 from mongomock_motor import AsyncMongoMockClient
 
 from depictio import BASE_PATH
-from depictio.api.v1.endpoints.user_endpoints.core_functions import _hash_password
+from depictio.api.v1.endpoints.user_endpoints.core_functions import \
+    _hash_password
 from depictio.models.models.users import GroupBeanie, TokenBeanie, UserBeanie
 from depictio.models.utils import get_config
 
@@ -22,7 +23,8 @@ def setup_test_database():
     This cleans the database and initializes it with test data.
     """
     # Import the database modules
-    from depictio.api.v1.db import clean_test_database, groups_collection, users_collection
+    from depictio.api.v1.db import (clean_test_database, groups_collection,
+                                    users_collection)
 
     # Clean the test database
     clean_test_database()

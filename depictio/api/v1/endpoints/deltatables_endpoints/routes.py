@@ -10,17 +10,17 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import format_pydantic, logger
-from depictio.api.v1.db import deltatables_collection, projects_collection, users_collection
-from depictio.api.v1.endpoints.deltatables_endpoints.utils import precompute_columns_specs
+from depictio.api.v1.db import (deltatables_collection, projects_collection,
+                                users_collection)
+from depictio.api.v1.endpoints.deltatables_endpoints.utils import \
+    precompute_columns_specs
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.api.v1.s3 import polars_s3_config
 from depictio.api.v1.utils import agg_functions
 from depictio.models.models.base import convert_objectid_to_str
-from depictio.models.models.deltatables import (
-    Aggregation,
-    DeltaTableAggregated,
-    UpsertDeltaTableAggregated,
-)
+from depictio.models.models.deltatables import (Aggregation,
+                                                DeltaTableAggregated,
+                                                UpsertDeltaTableAggregated)
 from depictio.models.models.users import User
 
 deltatables_endpoint_router = APIRouter()

@@ -2,14 +2,14 @@ from typing import Annotated
 
 import typer
 
-from depictio.cli.cli.utils.api_calls import api_get_project_from_id, api_get_project_from_name
-from depictio.cli.cli.utils.config import validate_project_config_and_check_S3_storage
+from depictio.cli.cli.utils.api_calls import (api_get_project_from_id,
+                                              api_get_project_from_name)
+from depictio.cli.cli.utils.config import \
+    validate_project_config_and_check_S3_storage
 from depictio.cli.cli.utils.helpers import process_project_helper
-from depictio.cli.cli.utils.rich_utils import (
-    rich_print_checked_statement,
-    rich_print_command_usage,
-    rich_print_section_separator,
-)
+from depictio.cli.cli.utils.rich_utils import (rich_print_checked_statement,
+                                               rich_print_command_usage,
+                                               rich_print_section_separator)
 from depictio.cli.cli_logging import logger
 
 app = typer.Typer()

@@ -2,15 +2,10 @@ import os
 from contextlib import contextmanager
 from pathlib import Path
 
-from depictio.api.v1.configs.settings_models import (
-    Auth,
-    Collections,
-    DashConfig,
-    FastAPIConfig,
-    JbrowseConfig,
-    MongoConfig,
-    Settings,
-)
+from depictio.api.v1.configs.settings_models import (Auth, Collections,
+                                                     DashConfig, FastAPIConfig,
+                                                     JbrowseConfig,
+                                                     MongoConfig, Settings)
 from depictio.models.models.s3 import S3DepictioCLIConfig
 
 

@@ -5,7 +5,6 @@ from typing import Any
 
 from beanie import PydanticObjectId, init_beanie
 from bson import ObjectId
-
 # from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.encoders import jsonable_encoder
@@ -15,7 +14,8 @@ from motor.motor_asyncio import AsyncIOMotorClient
 
 from depictio.api.v1.configs.config import MONGODB_URL, settings
 from depictio.api.v1.endpoints.routers import router
-from depictio.api.v1.endpoints.utils_endpoints.process_data_collections import process_collections
+from depictio.api.v1.endpoints.utils_endpoints.process_data_collections import \
+    process_collections
 from depictio.api.v1.initialization import run_initialization
 from depictio.api.v1.utils import clean_screenshots
 from depictio.models.models.base import PyObjectId

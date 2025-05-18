@@ -3,18 +3,26 @@ from fastapi import APIRouter
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.endpoints.cli_endpoints.routes import cli_endpoint_router
-from depictio.api.v1.endpoints.dashboards_endpoints.routes import dashboards_endpoint_router
-from depictio.api.v1.endpoints.datacollections_endpoints.routes import (
-    datacollections_endpoint_router,
-)
-from depictio.api.v1.endpoints.deltatables_endpoints.routes import deltatables_endpoint_router
-from depictio.api.v1.endpoints.files_endpoints.routes import files_endpoint_router
-from depictio.api.v1.endpoints.jbrowse_endpoints.routes import jbrowse_endpoints_router
-from depictio.api.v1.endpoints.projects_endpoints.routes import projects_endpoint_router
-from depictio.api.v1.endpoints.runs_endpoints.routes import runs_endpoint_router
-from depictio.api.v1.endpoints.user_endpoints.routes import auth_endpoint_router
-from depictio.api.v1.endpoints.utils_endpoints.routes import utils_endpoint_router
-from depictio.api.v1.endpoints.workflow_endpoints.routes import workflows_endpoint_router
+from depictio.api.v1.endpoints.dashboards_endpoints.routes import \
+    dashboards_endpoint_router
+from depictio.api.v1.endpoints.datacollections_endpoints.routes import \
+    datacollections_endpoint_router
+from depictio.api.v1.endpoints.deltatables_endpoints.routes import \
+    deltatables_endpoint_router
+from depictio.api.v1.endpoints.files_endpoints.routes import \
+    files_endpoint_router
+from depictio.api.v1.endpoints.jbrowse_endpoints.routes import \
+    jbrowse_endpoints_router
+from depictio.api.v1.endpoints.projects_endpoints.routes import \
+    projects_endpoint_router
+from depictio.api.v1.endpoints.runs_endpoints.routes import \
+    runs_endpoint_router
+from depictio.api.v1.endpoints.user_endpoints.routes import \
+    auth_endpoint_router
+from depictio.api.v1.endpoints.utils_endpoints.routes import \
+    utils_endpoint_router
+from depictio.api.v1.endpoints.workflow_endpoints.routes import \
+    workflows_endpoint_router
 
 router = APIRouter()
 

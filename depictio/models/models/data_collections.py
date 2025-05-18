@@ -6,7 +6,8 @@ from pydantic import BaseModel, field_validator, model_validator
 from depictio.models.config import DEPICTIO_CONTEXT
 from depictio.models.logging import logger
 from depictio.models.models.base import MongoModel
-from depictio.models.models.data_collections_types.jbrowse import DCJBrowse2Config
+from depictio.models.models.data_collections_types.jbrowse import \
+    DCJBrowse2Config
 from depictio.models.models.data_collections_types.table import DCTableConfig
 
 

@@ -5,7 +5,6 @@ import sys
 import pymongo
 
 from depictio.api.v1.configs.config import MONGODB_URL, settings
-
 # from depictio.api.v1.db_init import initialize_db
 from depictio.api.v1.configs.logging_init import logger
 

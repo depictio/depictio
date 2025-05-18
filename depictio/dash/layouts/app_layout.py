@@ -5,23 +5,25 @@ from dash import dcc, html
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.logging_init import logger
-from depictio.dash.api_calls import api_call_fetch_user_from_token, purge_expired_tokens
-from depictio.dash.layouts.dashboards_management import layout as dashboards_management_layout
-
+from depictio.dash.api_calls import (api_call_fetch_user_from_token,
+                                     purge_expired_tokens)
+from depictio.dash.layouts.dashboards_management import \
+    layout as dashboards_management_layout
 # from depictio.dash.layouts.draggable_scenarios.add_component import register_callbacks_add_component
 from depictio.dash.layouts.draggable import design_draggable
-
 # Depictio utils imports
-from depictio.dash.layouts.draggable_scenarios.restore_dashboard import load_depictio_data
+from depictio.dash.layouts.draggable_scenarios.restore_dashboard import \
+    load_depictio_data
 from depictio.dash.layouts.header import design_header
 from depictio.dash.layouts.layouts_toolbox import create_add_with_input_modal
 from depictio.dash.layouts.palette import create_color_palette_page
 from depictio.dash.layouts.profile import layout as profile_layout
-from depictio.dash.layouts.projectwise_user_management import (
-    layout as projectwise_user_management_layout,
-)
-from depictio.dash.layouts.tokens_management import layout as tokens_management_layout
-from depictio.dash.layouts.users_management import layout as users_management_layout
+from depictio.dash.layouts.projectwise_user_management import \
+    layout as projectwise_user_management_layout
+from depictio.dash.layouts.tokens_management import \
+    layout as tokens_management_layout
+from depictio.dash.layouts.users_management import \
+    layout as users_management_layout
 
 
 def return_create_dashboard_button(email):

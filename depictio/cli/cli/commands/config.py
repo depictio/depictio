@@ -3,16 +3,13 @@ from typing import Annotated
 import typer
 
 from depictio.cli.cli.utils.api_calls import (
-    api_get_project_from_name,
-    api_sync_project_config_to_server,
-)
+    api_get_project_from_name, api_sync_project_config_to_server)
 from depictio.cli.cli.utils.common import load_depictio_config
-from depictio.cli.cli.utils.config import validate_project_config_and_check_S3_storage
-from depictio.cli.cli.utils.rich_utils import (
-    rich_print_checked_statement,
-    rich_print_command_usage,
-    rich_print_json,
-)
+from depictio.cli.cli.utils.config import \
+    validate_project_config_and_check_S3_storage
+from depictio.cli.cli.utils.rich_utils import (rich_print_checked_statement,
+                                               rich_print_command_usage,
+                                               rich_print_json)
 from depictio.models.s3_utils import S3_storage_checks
 from depictio.models.utils import convert_model_to_dict
 

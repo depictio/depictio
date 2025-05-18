@@ -9,7 +9,8 @@ from pydantic import validate_call
 from depictio.api.v1.configs.config import ALGORITHM, PRIVATE_KEY
 from depictio.api.v1.configs.logging_init import logger
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
-from depictio.models.models.users import Group, GroupBeanie, TokenData, UserBase, UserBeanie
+from depictio.models.models.users import (Group, GroupBeanie, TokenData,
+                                          UserBase, UserBeanie)
 
 
 def _dummy_mongodb_connection():

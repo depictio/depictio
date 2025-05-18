@@ -7,11 +7,9 @@ from beanie import init_beanie
 from mongomock_motor import AsyncMongoMockClient
 
 from depictio.api.v1.endpoints.user_endpoints.core_functions import (
-    _create_user_in_db,
-    _hash_password,
-    _verify_password,
-)
-from depictio.api.v1.endpoints.user_endpoints.utils import _ensure_mongodb_connection
+    _create_user_in_db, _hash_password, _verify_password)
+from depictio.api.v1.endpoints.user_endpoints.utils import \
+    _ensure_mongodb_connection
 from depictio.models.models.users import UserBeanie
 
 # # Patch pymongo.MongoClient before any module using it is imported.
@@ -181,7 +179,8 @@ class TestCheckPassword:
     @classmethod
     def setup_class(cls):
         # Import the function once and store it as a class attribute
-        from depictio.api.v1.endpoints.user_endpoints.core_functions import _check_password
+        from depictio.api.v1.endpoints.user_endpoints.core_functions import \
+            _check_password
 
         cls.check_password = staticmethod(_check_password)
 

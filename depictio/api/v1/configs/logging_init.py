@@ -8,7 +8,8 @@ import logging
 from typing import Optional
 
 # Import the logging setup functions
-from depictio.api.v1.configs.custom_logging import format_pydantic, setup_logging
+from depictio.api.v1.configs.custom_logging import (format_pydantic,
+                                                    setup_logging)
 from depictio.api.v1.configs.settings_models import Settings
 from depictio.cli.cli_logging import setup_logging as setup_cli_logging
 from depictio.models.logging import setup_logging as setup_models_logging

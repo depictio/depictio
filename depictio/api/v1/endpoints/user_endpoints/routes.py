@@ -10,39 +10,21 @@ from pydantic import EmailStr
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import format_pydantic, logger
 from depictio.api.v1.db import users_collection
-from depictio.api.v1.endpoints.user_endpoints.agent_config_utils import _generate_agent_config
+from depictio.api.v1.endpoints.user_endpoints.agent_config_utils import \
+    _generate_agent_config
 from depictio.api.v1.endpoints.user_endpoints.core_functions import (
-    _add_token,
-    _async_fetch_user_from_email,
-    _async_fetch_user_from_id,
-    _async_fetch_user_from_token,
-    _check_if_token_is_valid,
-    _check_password,
-    _create_user_in_db,
-    _delete_token,
-    _edit_password,
-    _hash_password,
-    _list_tokens,
-    _purge_expired_tokens,
-)
+    _add_token, _async_fetch_user_from_email, _async_fetch_user_from_id,
+    _async_fetch_user_from_token, _check_if_token_is_valid, _check_password,
+    _create_user_in_db, _delete_token, _edit_password, _hash_password,
+    _list_tokens, _purge_expired_tokens)
 from depictio.api.v1.endpoints.user_endpoints.utils import (
-    delete_group_helper,
-    update_group_in_users_helper,
-)
+    delete_group_helper, update_group_in_users_helper)
 from depictio.models.models.base import convert_objectid_to_str
-from depictio.models.models.users import (
-    CLIConfig,
-    GroupBeanie,
-    RequestEditPassword,
-    RequestUserRegistration,
-    TokenBase,
-    TokenBeanie,
-    TokenData,
-    User,
-    UserBase,
-    UserBaseUI,
-    UserBeanie,
-)
+from depictio.models.models.users import (CLIConfig, GroupBeanie,
+                                          RequestEditPassword,
+                                          RequestUserRegistration, TokenBase,
+                                          TokenBeanie, TokenData, User,
+                                          UserBase, UserBaseUI, UserBeanie)
 from depictio.models.utils import convert_model_to_dict
 
 auth_endpoint_router = APIRouter()

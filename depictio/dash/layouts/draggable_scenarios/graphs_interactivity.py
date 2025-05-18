@@ -3,9 +3,8 @@ import uuid
 import dash
 
 from depictio.api.v1.configs.logging_init import logger
-from depictio.dash.layouts.draggable_scenarios.interactive_component_update import (
-    update_interactive_component,
-)
+from depictio.dash.layouts.draggable_scenarios.interactive_component_update import \
+    update_interactive_component
 from depictio.dash.utils import get_columns_from_data_collection
 
 

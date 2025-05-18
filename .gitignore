@@ -180,7 +180,7 @@ depictio/.depictio/default_admin_agent.yaml
 # Development Environment
 ## Dev directories
 bak/
-dev/
+# dev/
 dev/jbrowse_dev/assets/multiqc/
 dev/jbrowse_dev/assets/
 dev/flask-login/.env
@@ -191,6 +191,7 @@ dev/celery/jobs.json
 dev/dev_design_visu/data/
 dev/dev_delta/
 dev/dev_minio/
+!dev/multiqc_parser
 
 ## Screenshots
 screenshot_*.png

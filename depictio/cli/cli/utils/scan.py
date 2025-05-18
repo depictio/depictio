@@ -9,27 +9,20 @@ from bson import ObjectId
 from pydantic import validate_call
 from typeguard import typechecked
 
-from depictio.cli.cli.utils.api_calls import (
-    api_create_files,
-    api_delete_file,
-    api_delete_run,
-    api_get_files_by_dc_id,
-    api_get_runs_by_wf_id,
-    api_upsert_runs_batch,
-)
+from depictio.cli.cli.utils.api_calls import (api_create_files,
+                                              api_delete_file, api_delete_run,
+                                              api_get_files_by_dc_id,
+                                              api_get_runs_by_wf_id,
+                                              api_upsert_runs_batch)
 from depictio.cli.cli.utils.common import format_timestamp
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
 from depictio.cli.cli_logging import logger
 from depictio.models.models.data_collections import DataCollection, Regex
 from depictio.models.models.files import File, FileScanResult
 from depictio.models.models.users import CLIConfig, Permission, UserBase
-from depictio.models.models.workflows import (
-    Workflow,
-    WorkflowConfig,
-    WorkflowDataLocation,
-    WorkflowRun,
-    WorkflowRunScan,
-)
+from depictio.models.models.workflows import (Workflow, WorkflowConfig,
+                                              WorkflowDataLocation,
+                                              WorkflowRun, WorkflowRunScan)
 
 
 def regex_match(file: File, full_regex: str):

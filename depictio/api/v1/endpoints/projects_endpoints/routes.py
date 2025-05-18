@@ -5,13 +5,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import dashboards_collection, projects_collection
 from depictio.api.v1.endpoints.projects_endpoints.utils import (
-    _async_get_all_projects,
-    _async_get_project_from_id,
-    _async_get_project_from_name,
-)
+    _async_get_all_projects, _async_get_project_from_id,
+    _async_get_project_from_name)
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.models.models.base import PyObjectId
-
 ## depictio-models imports
 from depictio.models.models.projects import Project, ProjectPermissionRequest
 from depictio.models.models.users import User

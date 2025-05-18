@@ -6,7 +6,6 @@ from typing import Any
 import yaml
 from beanie import PydanticObjectId
 from bson import ObjectId
-
 # from dotenv import load_dotenv
 from pydantic import BaseModel, ValidationError, validate_call
 

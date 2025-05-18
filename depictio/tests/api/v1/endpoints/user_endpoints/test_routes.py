@@ -6,7 +6,8 @@ from fastapi import HTTPException, status
 # Import the function to test
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.models.models.users import TokenBeanie, UserBeanie
-from depictio.tests.api.v1.endpoints.user_endpoints.conftest import beanie_setup
+from depictio.tests.api.v1.endpoints.user_endpoints.conftest import \
+    beanie_setup
 
 # ------------------------------------------------------
 # Test get_current_user function
