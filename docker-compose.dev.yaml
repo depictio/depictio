@@ -7,18 +7,18 @@ services:
     ports:
       - 27018:27018
     volumes:
-      - ../depictioDB:/data/depictioDB
+      - ./depictioDB:/data/depictioDB
 
   depictio-frontend:
     image: depictio:dev
     container_name: depictio-frontend
     build:
       dockerfile: docker-images/Dockerfile_depictio.dockerfile
-      context: ..
+      context: .
     ports:
       - 5080:5080
     volumes:
-      - ../depictio:/app/depictio
+      - ./depictio:/app/depictio
     env_file:
       - .env
     environment:
@@ -35,11 +35,11 @@ services:
     image: depictio:dev
     build:
       dockerfile: docker-images/Dockerfile_depictio.dockerfile
-      context: ..
+      context: .
     ports:
       - 8058:8058
     volumes:
-      - ../depictio:/app/depictio
+      - ./depictio:/app/depictio
     env_file:
       - .env
     environment:
@@ -47,6 +47,6 @@ services:
         DEPICTIO_LOGGING_VERBOSITY_LEVEL: "DEBUG"
     command: ["/app/run_fastapi.sh"]
     user: "${UID:-1000}:${GID:-1000}"
-    tty: true
+    # tty: true
     depends_on:
       - mongo
