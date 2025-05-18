@@ -1,0 +1,39 @@
+# Serve specific ingress values (values-serve.yaml)
+ingress:
+  enabled: true
+  ingressClassName: "nginx"
+  
+  # Serve specific annotations
+  annotations:
+    nginx.ingress.kubernetes.io/auth-url: # {{ .Values.global.protocol }}://{{ .Values.global.auth_domain }}:8080/auth/?release={{ .Values.release }}
+    nginx.ingress.kubernetes.io/auth-signin: # "https://{{ .Values.global.domain }}/accounts/login/?next=$scheme%3A%2F%2F$host"
+    nginx.ingress.kubernetes.io/custom-http-errors: "503"
+    nginx.ingress.kubernetes.io/default-backend: nginx-errors
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+  
+  # Host configuration for unified service setup
+  hosts:
+    - host: # studio.127.0.0.1.nip.io
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+          service:
+            name: depictio-frontend
+            port: 80
+        - path: /api
+          pathType: ImplementationSpecific
+          service:
+            name: depictio-backend
+            port: 80
+  
+  # TLS configuration
+  tls:
+    - secretName: "serve-tls-secret"
+      hosts:
+        - # studio.127.0.0.1.nip.io
+
+
+global:
+#   protocol: TCP
+  domain: studio.127.0.0.1.nip.io
+#   auth_domain: studio.127.0.0.1.nip.io

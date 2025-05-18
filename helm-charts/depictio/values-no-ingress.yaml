@@ -1,0 +1,69 @@
+# Minikube-specific values overlay (values-minikube.yaml)
+
+# Storage class for Minikube
+storageClass: "standard"
+
+# Ingress configuration for Minikube
+ingress:
+  enabled: false
+  ingressClassName: null
+  annotations: {}
+
+global:
+  domain: null
+
+  
+  # # Host configuration for local access with minikube tunnel
+  # hosts:
+  #   - host: "depictio.local"
+  #     paths:
+  #       - path: /
+  #         pathType: Prefix
+  #         service:
+  #           name: depictio-frontend
+  #           port: 80
+  #       - path: /api
+  #         pathType: Prefix
+  #         service:
+  #           name: depictio-backend
+  #           port: 80
+  
+  # No TLS for local development
+  # tls: []
+
+# Resource adjustments for local development
+mongo:
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "0.1"
+    limits:
+      memory: "512Mi" 
+      cpu: "0.5"
+
+minio:
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "0.1"
+    limits:
+      memory: "512Mi"
+      cpu: "0.5"
+
+backend:
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "0.1"
+    limits:
+      memory: "512Mi"
+      cpu: "0.5"
+      
+frontend:
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "0.1"
+    limits:
+      memory: "512Mi"
+      cpu: "0.5"

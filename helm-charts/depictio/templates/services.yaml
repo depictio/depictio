@@ -3,8 +3,8 @@ kind: Service
 metadata:
   name: mongo
   namespace: {{ .Release.Namespace }}
-  labels:
-    {{- include "depictio.labels" . | nindent 4 }}
+  # labels:
+  #   app: mongo
 spec:
   type: {{ .Values.mongo.service.type }}
   ports:
@@ -12,7 +12,7 @@ spec:
       port: {{ .Values.mongo.service.port }}
       targetPort: {{ .Values.mongo.service.port }}
   selector:
-    {{- include "depictio.mongo.selectorLabels" . | nindent 4 }}
+    app: mongo
 ---
 {{- if .Values.minio.enabled }}
 apiVersion: v1
@@ -20,8 +20,8 @@ kind: Service
 metadata:
   name: minio
   namespace: {{ .Release.Namespace }}
-  labels:
-    {{- include "depictio.labels" . | nindent 4 }}
+  # labels:
+  #   app: minio
 spec:
   type: {{ .Values.minio.service.type }}
   ports:
@@ -32,7 +32,7 @@ spec:
       name: console
       targetPort: {{ .Values.minio.service.consolePort }}
   selector:
-    {{- include "depictio.minio.selectorLabels" . | nindent 4 }}
+    app: minio
 {{- end }}
 ---
 apiVersion: v1
@@ -40,8 +40,8 @@ kind: Service
 metadata:
   name: depictio-backend
   namespace: {{ .Release.Namespace }}
-  labels:
-    {{- include "depictio.labels" . | nindent 4 }}
+  # labels:
+  #   app: depictio-backend
 spec:
   type: {{ .Values.backend.service.type }}
   ports:
@@ -54,15 +54,15 @@ spec:
       protocol: TCP
       name: https
   selector:
-    {{- include "depictio.backend.selectorLabels" . | nindent 4 }}
+    app: depictio-backend
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: depictio-frontend
   namespace: {{ .Release.Namespace }}
-  labels:
-    {{- include "depictio.labels" . | nindent 4 }}
+  # labels:
+  #   app: depictio-frontend
 spec:
   type: {{ .Values.frontend.service.type }}
   ports:
@@ -75,4 +75,4 @@ spec:
       protocol: TCP
       name: https
   selector:
-    {{- include "depictio.frontend.selectorLabels" . | nindent 4 }}
+    app: depictio-frontend

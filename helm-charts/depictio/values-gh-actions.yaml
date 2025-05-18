@@ -1,0 +1,52 @@
+# Disable ingress for testing
+ingress:
+  enabled: false
+
+# Use standard storage class for Minikube
+storageClass: "standard"
+
+# Test environment resource settings
+mongo:
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "0.1"
+    limits:
+      memory: "512Mi"
+      cpu: "0.5"
+
+minio:
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "0.1"
+    limits:
+      memory: "512Mi"
+      cpu: "0.5"
+
+backend:
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "0.1"
+    limits:
+      memory: "512Mi"
+      cpu: "0.5"
+
+frontend:
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "0.1"
+    limits:
+      memory: "512Mi"
+      cpu: "0.5"
+
+# Use small PVC sizes for testing
+persistence:
+  mongo:
+    size: 1Gi
+  minio:
+    size: 1Gi
+  screenshots:
+    size: 1Gi

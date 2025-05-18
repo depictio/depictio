@@ -1,33 +1,23 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: depictio-frontend-config
+  name: backend-config
   namespace: {{ .Release.Namespace }}
-  labels: 
-    {{- include "depictio.labels" . | nindent 4 }}
 data:
-  config_backend_k8s_embl_frontend.yaml: |
-    # Frontend configuration
-    fastapi:
-      port: {{ .Values.configMaps.frontend.data.fastapi.port }}
-      service_name: "{{ .Values.configMaps.frontend.data.fastapi.service_name }}"
-    dash:
-      port: {{ .Values.configMaps.frontend.data.dash.port }}
-      service_name: "{{ .Values.configMaps.frontend.data.dash.service_name }}"
+  DEPICTIO_CONTEXT: {{ .Values.backend.env.DEPICTIO_CONTEXT | quote }}
+  DEV_MODE: {{ .Values.backend.env.DEV_MODE | quote }}
+  DEPICTIO_LOGGING_VERBOSITY_LEVEL: {{ .Values.backend.env.DEPICTIO_LOGGING_VERBOSITY_LEVEL | quote }}
+  DEPICTIO_FASTAPI_PORT: {{ .Values.backend.env.DEPICTIO_FASTAPI_PORT | quote }}
+  DEPICTIO_DASH_PORT: {{ .Values.backend.env.DEPICTIO_DASH_PORT | quote }}
+  DEPICTIO_DASH_SERVICE_NAME: {{ .Values.backend.env.DEPICTIO_DASH_SERVICE_NAME | quote }}
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: depictio-backend-config
+  name: frontend-config
   namespace: {{ .Release.Namespace }}
-  labels: 
-    {{- include "depictio.labels" . | nindent 4 }}
 data:
-  config_backend_k8s_embl_backend.yaml: |
-    # Backend configuration
-    fastapi:
-      port: {{ .Values.configMaps.backend.data.fastapi.port }}
-      service_name: "{{ .Values.configMaps.backend.data.fastapi.service_name }}"
-    dash:
-      port: {{ .Values.configMaps.backend.data.dash.port }}
-      service_name: "{{ .Values.configMaps.backend.data.dash.service_name }}"
+  DEV_MODE: {{ .Values.frontend.env.DEV_MODE | quote }}
+  DEPICTIO_FASTAPI_SERVICE_NAME: {{ .Values.frontend.env.DEPICTIO_FASTAPI_SERVICE_NAME | quote }}
+  DEPICTIO_FASTAPI_PORT: {{ .Values.frontend.env.DEPICTIO_FASTAPI_PORT | quote }}
+  DEPICTIO_DASH_PORT: {{ .Values.frontend.env.DEPICTIO_DASH_PORT | quote }}

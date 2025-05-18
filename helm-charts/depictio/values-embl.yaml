@@ -1,0 +1,31 @@
+# EMBL specific ingress values (values-embl.yaml)
+ingress:
+  enabled: true
+  ingressClassName: "internal-users"
+  
+  # EMBL specific annotations
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls.certresolver: sectigo
+  
+  # Host configuration for split frontend/backend setup
+  hosts:
+    - host: "demo.depictio.embl.org"
+      paths:
+        - path: /
+          pathType: Prefix
+          service:
+            name: depictio-frontend
+            portName: http
+    - host: "api.demo.depictio.embl.org"
+      paths:
+        - path: /
+          pathType: Prefix
+          service:
+            name: depictio-backend
+            portName: http
+  
+  # TLS configuration
+  tls:
+    - hosts:
+        - "demo.depictio.embl.org"
+        - "api.demo.depictio.embl.org"

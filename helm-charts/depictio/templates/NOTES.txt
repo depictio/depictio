@@ -1,41 +1,78 @@
+{{- $frontendSvc := printf "%s-frontend" .Release.Name -}}
+{{- $backendSvc := printf "%s-backend" .Release.Name -}}
+{{- $mongoSvc := printf "%s-mongo" .Release.Name -}}
+{{- $minioSvc := printf "%s-minio" .Release.Name -}}
+
 Thank you for installing {{ .Chart.Name }}.
 
-Your release is named {{ .Release.Name }}.
+Your release is named {{ .Release.Name }} in namespace {{ .Release.Namespace }}.
 
-To learn more about the release, try:
-
-  $ helm status {{ .Release.Name }}
-  $ helm get all {{ .Release.Name }}
-
-{{- if contains "ClusterIP" .Values.frontend.service.type }}
-To access the Depictio application from inside the cluster:
-
-  Export the service port:
-  $ kubectl port-forward -n {{ .Release.Namespace }} service/depictio-frontend 8080:{{ .Values.frontend.service.httpPort }}
-
-  Then visit: http://localhost:8080
-{{- else if contains "LoadBalancer" .Values.frontend.service.type }}
-To access the Depictio application:
-
-  NOTE: It may take a few minutes for the LoadBalancer IP to be available.
-        You can watch the status by running:
-        $ kubectl get svc -n {{ .Release.Namespace }} -w depictio-frontend
-
-  Once the external IP is available, the Depictio application will be accessible at:
-  http://EXTERNAL-IP
+{{- if .Values.ingress.enabled }}
+{{- $host := "" }}
+{{- range $index, $host := .Values.ingress.hosts }}
+  {{- if eq $index 0 }}
+    {{- $host = .host }}
+  {{- end }}
 {{- end }}
 
-{{- if contains "ClusterIP" .Values.minio.service.type }}
-To access the MinIO console from inside the cluster:
-
-  Export the console port:
-  $ kubectl port-forward -n {{ .Release.Namespace }} service/minio 9001:{{ .Values.minio.service.consolePort }}
-
-  Then visit: http://localhost:9001
-
-  Login with:
-    Username: {{ .Values.secrets.minioRootUser }}
-    Password: {{ .Values.secrets.minioRootPassword }}
+{{- if $host }}
+You can access the application at:
+  http://{{ $host }}
+{{- else }}
+The ingress is enabled but no host is specified. Please add a host to your ingress configuration.
 {{- end }}
 
-For more information and troubleshooting, please refer to the documentation.
+{{- else }}
+The application can be accessed using port forwarding:
+
+  kubectl port-forward svc/{{ $frontendSvc }} 8080:80
+  kubectl port-forward svc/{{ $backendSvc }} 8081:80
+
+Then visit:
+  - Frontend: http://localhost:8080
+  - Backend API: http://localhost:8081
+{{- end }}
+
+{{- if .Values.minio.enabled }}
+The MinIO service is deployed and can be accessed at:
+  kubectl port-forward svc/{{ $minioSvc }} 9000:{{ .Values.minio.service.httpPort }}
+  kubectl port-forward svc/{{ $minioSvc }} 9001:{{ .Values.minio.service.consolePort }}
+
+MinIO credentials:
+  Username: {{ .Values.secrets.minioRootUser }}
+  Password: {{ .Values.secrets.minioRootPassword }}
+{{- end }}
+
+MongoDB is available at:
+  kubectl port-forward svc/{{ $mongoSvc }} 27018:{{ .Values.mongo.service.port }}
+
+{{- if contains "Never" .Values.backend.image.pullPolicy }}
+NOTE: The backend image is set to 'Never' pull policy. This is typically used for local development
+with images built and loaded directly into the cluster.
+{{- end }}
+
+{{- if contains "Never" .Values.frontend.image.pullPolicy }}
+NOTE: The frontend image is set to 'Never' pull policy. This is typically used for local development
+with images built and loaded directly into the cluster.
+{{- end }}
+
+{{- if eq .Values.persistence.screenshots.accessMode "ReadWriteOnce" }}
+NOTE: The screenshots PVC uses ReadWriteOnce access mode. If frontend and backend pods are scheduled
+on different nodes, they won't be able to share the volume. In multi-node clusters, consider using
+ReadWriteMany if your storage class supports it.
+{{- end }}
+
+To check the status of your pods:
+  kubectl get pods -l release={{ .Release.Name }}
+
+For more information about Depictio, visit:
+  https://github.com/depictio/depictio
+
+{{ if .Release.IsUpgrade -}}
+This was an upgrade of an existing deployment.
+{{- else -}}
+This was a fresh installation.
+{{- end }}
+
+Chart version: {{ .Chart.Version }}
+App version: {{ .Chart.AppVersion }}

@@ -4,7 +4,7 @@ metadata:
   name: mongo-pvc
   namespace: {{ .Release.Namespace }}
   labels: 
-    {{- include "depictio.labels" . | nindent 4 }}
+    app: mongo
 spec:
   storageClassName: {{ .Values.storageClass }}
   accessModes:
@@ -13,13 +13,14 @@ spec:
     requests:
       storage: {{ .Values.persistence.mongo.size }}
 ---
+{{- if .Values.minio.enabled }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: minio-pvc
   namespace: {{ .Release.Namespace }}
   labels: 
-    {{- include "depictio.labels" . | nindent 4 }}
+    app: minio
 spec:
   storageClassName: {{ .Values.storageClass }}
   accessModes:
@@ -27,6 +28,7 @@ spec:
   resources:
     requests:
       storage: {{ .Values.persistence.minio.size }}
+{{- end }}
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -34,7 +36,9 @@ metadata:
   name: depictio-screenshots-pvc
   namespace: {{ .Release.Namespace }}
   labels: 
-    {{- include "depictio.labels" . | nindent 4 }}
+    app: depictio
+    # component: storage
+    # storage-type: screenshots
 spec:
   storageClassName: {{ .Values.storageClass }}
   accessModes:

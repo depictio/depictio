@@ -4,27 +4,33 @@ metadata:
   name: mongo
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "depictio.labels" . | nindent 4 }}
+    app: mongo
 spec:
   replicas: 1
   selector:
     matchLabels:
-      {{- include "depictio.mongo.selectorLabels" . | nindent 6 }}
+      app: mongo
   strategy:
     type: Recreate
   template:
     metadata:
       labels:
-        {{- include "depictio.mongo.selectorLabels" . | nindent 8 }}
+        app: mongo
     spec:
       containers:
         - name: mongo
           image: "{{ .Values.mongo.image.repository }}:{{ .Values.mongo.image.tag }}"
           imagePullPolicy: {{ .Values.mongo.image.pullPolicy }}
-          args: {{ toYaml .Values.mongo.args | nindent 12 }}
+          args:
+            - "mongod"
+            - "--dbpath"
+            - "/data/depictioDB"
+            - "--port"
+            - "27018"
           ports:
             - containerPort: {{ .Values.mongo.service.port }}
-          resources: {{ toYaml .Values.mongo.resources | nindent 12 }}
+          resources:
+            {{- toYaml .Values.mongo.resources | nindent 12 }}
           volumeMounts:
             - name: mongo-storage
               mountPath: /data/depictioDB
@@ -40,18 +46,18 @@ metadata:
   name: minio
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "depictio.labels" . | nindent 4 }}
+    app: minio
 spec:
   strategy:
     type: Recreate
   replicas: 1
   selector:
     matchLabels:
-      {{- include "depictio.minio.selectorLabels" . | nindent 6 }}
+      app: minio
   template:
     metadata:
       labels:
-        {{- include "depictio.minio.selectorLabels" . | nindent 8 }}
+        app: minio
     spec:
       containers:
         - name: minio
@@ -68,11 +74,16 @@ spec:
                 secretKeyRef:
                   name: depictio-secrets
                   key: MINIO_ROOT_PASSWORD
-          args: {{ toYaml .Values.minio.args | nindent 12 }}
+          args:
+            - "server"
+            - "/data"
+            - "--console-address"
+            - ":9001"
           ports:
             - containerPort: {{ .Values.minio.service.httpPort }}
             - containerPort: {{ .Values.minio.service.consolePort }}
-          resources: {{ toYaml .Values.minio.resources | nindent 12 }}
+          resources:
+            {{- toYaml .Values.minio.resources | nindent 12 }}
           volumeMounts:
             - name: minio-storage
               mountPath: /data
@@ -88,18 +99,18 @@ metadata:
   name: depictio-backend
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "depictio.labels" . | nindent 4 }}
+    app: depictio-backend
 spec:
   strategy:
     type: Recreate
   replicas: 1
   selector:
     matchLabels:
-      {{- include "depictio.backend.selectorLabels" . | nindent 6 }}
+      app: depictio-backend
   template:
     metadata:
       labels:
-        {{- include "depictio.backend.selectorLabels" . | nindent 8 }}
+        app: depictio-backend
     spec:
       securityContext:
         fsGroup: {{ .Values.backend.securityContext.fsGroup }}
@@ -107,18 +118,20 @@ spec:
         - name: depictio-backend
           image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
           imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
-          env:
-            {{- range $key, $value := .Values.backend.env }}
-            - name: {{ $key }}
-              value: {{ $value | quote }}
-            {{- end }}
-          command: {{ toYaml .Values.backend.command | nindent 12 }}
+          # Use the ConfigMap
+          envFrom:
+            - configMapRef:
+                name: backend-config
+          command:
+            - "/app/run_fastapi.sh"
           ports:
             - containerPort: {{ .Values.backend.service.targetPort }}
-          resources: {{ toYaml .Values.backend.resources | nindent 12 }}
-
+          resources:
+            {{- toYaml .Values.backend.resources | nindent 12 }}
+          volumeMounts:
+            - name: depictio-screenshots
+              mountPath: /app/depictio/dash/static/screenshots
       volumes:
-
         - name: depictio-screenshots
           persistentVolumeClaim:
             claimName: depictio-screenshots-pvc
@@ -129,37 +142,37 @@ metadata:
   name: depictio-frontend
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "depictio.labels" . | nindent 4 }}
+    app: depictio-frontend
 spec:
   replicas: 1
   strategy:
     type: Recreate
   selector:
     matchLabels:
-      {{- include "depictio.frontend.selectorLabels" . | nindent 6 }}
+      app: depictio-frontend
   template:
     metadata:
       labels:
-        {{- include "depictio.frontend.selectorLabels" . | nindent 8 }}
+        app: depictio-frontend
     spec:
       containers:
         - name: depictio-frontend
           image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
           imagePullPolicy: {{ .Values.frontend.image.pullPolicy }}
-          env:
-            {{- range $key, $value := .Values.frontend.env }}
-            - name: {{ $key }}
-              value: {{ $value | quote }}
-            {{- end }}
-          command: {{ toYaml .Values.frontend.command | nindent 12 }}
+          # Use the ConfigMap
+          envFrom:
+            - configMapRef:
+                name: frontend-config
+          command:
+            - "/app/run_dash.sh"
           ports:
             - containerPort: {{ .Values.frontend.service.targetPort }}
-          resources: {{ toYaml .Values.frontend.resources | nindent 12 }}
-      #     volumeMounts:
-      #       - name: depictio-screenshots
-      #         mountPath: /app/depictio/dash/static/screenshots
+          resources:
+            {{- toYaml .Values.frontend.resources | nindent 12 }}
+          volumeMounts:
+            - name: depictio-screenshots
+              mountPath: /app/depictio/dash/static/screenshots
       volumes:
-
         - name: depictio-screenshots
           persistentVolumeClaim:
             claimName: depictio-screenshots-pvc
