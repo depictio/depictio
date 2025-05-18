@@ -19,3 +19,13 @@ repos:
         exclude: ^dev/
     -   id: ruff-format
         exclude: ^dev/
+
+-   repo: local
+    hooks:
+      - id: helm-lint
+        name: Helm Lint
+        description: 'Run helm lint on the Depictio Helm chart'
+        entry: bash -c 'helm lint helm-charts/depictio'
+        language: system
+        files: ^helm-charts/depictio/
+        pass_filenames: false
