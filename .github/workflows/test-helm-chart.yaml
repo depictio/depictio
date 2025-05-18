@@ -23,7 +23,7 @@ jobs:
       - name: Set up Minikube
         uses: medyagh/setup-minikube@master
         with:
-          minikube-version: 'v1.35.0' 
+          minikube-version: '1.35.0' 
           kubernetes-version: 'v1.32.0' 
           driver: docker
           start-args: '--memory=4096 --cpus=2'
