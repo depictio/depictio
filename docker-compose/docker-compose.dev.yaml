@@ -14,7 +14,7 @@ services:
     container_name: depictio-frontend
     build:
       dockerfile: ../docker-images/Dockerfile_depictio.dockerfile
-      context: .
+      context: ..
     ports:
       - 5080:5080
     volumes:
@@ -35,7 +35,7 @@ services:
     image: depictio:dev
     build:
       dockerfile: ../docker-images/Dockerfile_depictio.dockerfile
-      context: .
+      context: ..
     ports:
       - 8058:8058
     volumes:
