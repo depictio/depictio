@@ -4,7 +4,7 @@ services:
     image: minio/minio:latest
     user: "${UID:-1000}:${GID:-1000}"
     volumes:
-      - ../minio_data:/data
+      - ./minio_data:/data
     environment:
       MINIO_ROOT_USER: ${DEPICTIO_MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${DEPICTIO_MINIO_ROOT_PASSWORD}
