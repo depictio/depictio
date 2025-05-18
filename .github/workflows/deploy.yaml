@@ -223,9 +223,9 @@ jobs:
       - name: Log Containers
         run: docker compose logs depictio-backend
 
-      - name: Verify Permissions Inside Container
-        run: |
-          docker compose exec -T depictio-backend bash -c "ls -la /app/depictio/keys"
+      # - name: Verify Permissions Inside Container
+      #   run: |
+      #     docker compose exec -T depictio-backend bash -c "ls -la /app/depictio/keys"
 
 
       # Verify All Containers Are Running
