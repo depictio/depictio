@@ -3,11 +3,10 @@ name: Create Release
 on:
   push:
     tags:
-      - 'v*.*.*'
-      - 'v*.*.*-beta*'
-    branches:
-      - main
+      - 'v[0-9]*.[0-9]*.[0-9]*'        # Stable releases (v0.0.4) 
+      - 'v[0-9]*.[0-9]*.[0-9]*-beta*'  # Beta releases (v0.0.4-beta1)
 
+  workflow_dispatch:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
@@ -92,7 +91,8 @@ jobs:
           echo "changelog=$FORMATTED_CHANGELOG" >> $GITHUB_OUTPUT
           
           # Save unescaped changelog for CHANGELOG.md
-          echo "$FORMATTED_CHANGELOG" > /tmp/changelog.md
+          mkdir -p /tmp
+          echo -e "$FORMATTED_CHANGELOG" > /tmp/changelog.md
 
   create-release:
     runs-on: ubuntu-latest
@@ -102,7 +102,11 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        
+      
+      - name: Download changelog file
+        run: |
+          mkdir -p /tmp
+          
       - name: Create Release
         uses: actions/create-release@v1
         env:
@@ -130,6 +134,9 @@ jobs:
         if: ${{ needs.changelog.outputs.is_beta != 'true' }}
         run: |
           # Only update for stable releases
+          # Get the generated changelog from outputs
+          echo -e "${{ needs.changelog.outputs.changelog }}" | sed 's/%0A/\n/g; s/%25/%/g; s/%0D/\r/g' > /tmp/changelog_clean.md
+          
           # Read existing changelog
           if [ -f CHANGELOG.md ]; then
             EXISTING_CHANGELOG=$(cat CHANGELOG.md)
@@ -138,7 +145,7 @@ jobs:
           fi
           
           # Get the generated changelog
-          NEW_CHANGELOG=$(cat /tmp/changelog.md)
+          NEW_CHANGELOG=$(cat /tmp/changelog_clean.md)
           
           # Create new changelog with the latest changes at the top
           echo -e "# Changelog\n\n${NEW_CHANGELOG}\n\n${EXISTING_CHANGELOG#*#*\n\n}" > CHANGELOG.md
