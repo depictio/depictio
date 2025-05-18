@@ -13,7 +13,7 @@ services:
     image: depictio:dev
     container_name: depictio-frontend
     build:
-      dockerfile: ../docker-images/Dockerfile_depictio.dockerfile
+      dockerfile: docker-images/Dockerfile_depictio.dockerfile
       context: ..
     ports:
       - 5080:5080
@@ -34,7 +34,7 @@ services:
     container_name: depictio-backend
     image: depictio:dev
     build:
-      dockerfile: ../docker-images/Dockerfile_depictio.dockerfile
+      dockerfile: docker-images/Dockerfile_depictio.dockerfile
       context: ..
     ports:
       - 8058:8058
