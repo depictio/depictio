@@ -167,7 +167,9 @@ jobs:
           docker compose \
             -f docker-compose/docker-compose.dev.yaml \
             -f docker-compose/docker-compose.minio.yaml \
-            up --build
+            up --build -d
+
+
 
       - name: Check Docker Compose Services
         run: |

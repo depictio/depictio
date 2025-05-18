@@ -281,8 +281,8 @@ def read_delta_table(
             "data": df,
         }
     except Exception as e:
-        error_msg = f"Error reading Delta table: {e}"
-        logger.error(error_msg)
+        error_msg = f"Issue when reading Delta table: {e}"
+        logger.warning(error_msg)
         return {"result": "error", "message": error_msg}
 
 
@@ -346,9 +346,9 @@ def client_aggregate_data(
             assert type(existing_df) is pl.DataFrame
             logger.debug(f"Existing Delta table head: {existing_df.head(5)}")
         else:
-            logger.debug("Error reading Delta table or no data returned")
+            logger.debug("No data returned from read_delta_table, will create it during processing")
             destination_exists = False
-            print("Error reading Delta table or no data returned, will create it during processing")
+            print("No data returned, will create it during processing")
     except deltalake.exceptions.TableNotFoundError:
         logger.debug("Destination prefix does not exist yet, will create it during processing")
         destination_exists = False
