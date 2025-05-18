@@ -7,7 +7,7 @@ services:
     ports:
       - 27018:27018
     volumes:
-      - ./depictioDB:/data/depictioDB
+      - ../depictioDB:/data/depictioDB
 
   depictio-frontend:
     image: depictio:dev
@@ -18,7 +18,7 @@ services:
     ports:
       - 5080:5080
     volumes:
-      - ./depictio:/app/depictio
+      - ../depictio:/app/depictio
       # - ./keys:/app/depictio/keys
     env_file:
       - .env
@@ -42,7 +42,7 @@ services:
     ports:
       - 8058:8058
     volumes:
-      - ./depictio:/app/depictio
+      - ../depictio:/app/depictio
       # - ./keys:/app/depictio/keys
     env_file:
       - .env

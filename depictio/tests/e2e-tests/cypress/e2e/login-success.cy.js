@@ -1,5 +1,6 @@
-describe('Login Success', () => {
+describe('Login Success TOTO', () => {
   let testUser;
+  console.log('Running login success test');
 
   before(() => {
     cy.fixture('test-credentials.json').then((credentials) => {

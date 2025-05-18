@@ -67,7 +67,7 @@
 
 //     function createDashboard(prefix) {
 //         // Click on New Dashboard button using its ID (similar to how we handle other IDs)
-//         cy.get('[id=\'{"index":"admin@embl.de","type":"create-dashboard-button"}\']')
+//         cy.get('[id=\'{"index":"admin@example.com","type":"create-dashboard-button"}\']')
 //             .should('exist')
 //             .should('be.visible')
 //             .click({ force: true })

@@ -170,6 +170,9 @@ dashboards.json
 .env
 .env.*
 !.env.example
+!docker-compose/
+!docker-compose/.env
+
 *_token.yaml
 depictio/.depictio/
 depictio/.depictio/default_admin_agent.yaml
