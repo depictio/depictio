@@ -3,9 +3,9 @@ name: Create Release
 on:
   push:
     tags:
-      - 'v[0-9]*.[0-9]*.[0-9]*'        # Stable releases (v0.0.4) 
-      - 'v[0-9]*.[0-9]*.[0-9]*-beta*'  # Beta releases (v0.0.4-beta1)
-
+      - 'v*.*.*'
+      - 'v*.*.*-beta*'
+      
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
