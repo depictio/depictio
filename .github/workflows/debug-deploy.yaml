@@ -13,54 +13,54 @@ jobs:
       - name: Create debug script
         run: |
           cat > debug-github-actions.sh << 'EOF'
-#!/bin/bash
-set -e
+          #!/bin/bash
+          set -e
 
-echo "===== ENVIRONMENT INFO ====="
-echo "Working directory: $(pwd)"
-echo "User: $(whoami) (UID: $(id -u), GID: $(id -g))"
-echo "Docker version: $(docker --version)"
-echo "Docker Compose version: $(docker compose version)"
+          echo "===== ENVIRONMENT INFO ====="
+          echo "Working directory: $(pwd)"
+          echo "User: $(whoami) (UID: $(id -u), GID: $(id -g))"
+          echo "Docker version: $(docker --version)"
+          echo "Docker Compose version: $(docker compose version)"
 
-echo "===== DIRECTORY STRUCTURE ====="
-echo "Root directory:"
-ls -la
+          echo "===== DIRECTORY STRUCTURE ====="
+          echo "Root directory:"
+          ls -la
 
-echo "Docker images directory:"
-ls -la docker-images
+          echo "Docker images directory:"
+          ls -la docker-images
 
-echo "Docker Compose directory:"
-ls -la docker-compose
+          echo "Docker Compose directory:"
+          ls -la docker-compose
 
-echo "Depictio directory:"
-ls -la depictio
+          echo "Depictio directory:"
+          ls -la depictio
 
-echo "===== DOCKER BUILD DEBUGGING ====="
-echo "Checking if Dockerfile exists:"
-if [ -f "docker-images/Dockerfile_depictio.dockerfile" ]; then
-  echo "✅ Dockerfile found"
-  head -n 10 docker-images/Dockerfile_depictio.dockerfile
-else
-  echo "❌ Dockerfile not found"
-fi
+          echo "===== DOCKER BUILD DEBUGGING ====="
+          echo "Checking if Dockerfile exists:"
+          if [ -f "docker-images/Dockerfile_depictio.dockerfile" ]; then
+            echo "✅ Dockerfile found"
+            head -n 10 docker-images/Dockerfile_depictio.dockerfile
+          else
+            echo "❌ Dockerfile not found"
+          fi
 
-echo "Checking if run scripts exist:"
-if [ -f "docker-images/run_dash.sh" ] && [ -f "docker-images/run_fastapi.sh" ]; then
-  echo "✅ Run scripts found"
-else
-  echo "❌ Run scripts not found"
-fi
+          echo "Checking if run scripts exist:"
+          if [ -f "docker-images/run_dash.sh" ] && [ -f "docker-images/run_fastapi.sh" ]; then
+            echo "✅ Run scripts found"
+          else
+            echo "❌ Run scripts not found"
+          fi
 
-echo "===== DOCKER COMPOSE CONFIG ====="
-cd docker-compose
-docker compose -f docker-compose.dev.yaml config
+          echo "===== DOCKER COMPOSE CONFIG ====="
+          cd docker-compose
+          docker compose -f docker-compose.dev.yaml config
 
-echo "===== ATTEMPTING DOCKER BUILD ====="
-cd ..
-docker build -f docker-images/Dockerfile_depictio.dockerfile -t depictio:test .
+          echo "===== ATTEMPTING DOCKER BUILD ====="
+          cd ..
+          docker build -f docker-images/Dockerfile_depictio.dockerfile -t depictio:test .
 
-echo "===== DEBUGGING COMPLETE ====="
-EOF
+          echo "===== DEBUGGING COMPLETE ====="
+          EOF
           chmod +x debug-github-actions.sh
       
       - name: Run debug script
