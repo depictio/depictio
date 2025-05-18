@@ -90,9 +90,6 @@ jobs:
           chown -R "$(id -u):$(id -g)" minio_data/
           chmod -R 775 minio_data/
           
-          mkdir -p depictio/.depictio/
-          chmod -R 775 depictio/.depictio/
-          
       - name: Build Docker image directly
         run: |
           docker build -f docker-images/Dockerfile_depictio.dockerfile -t depictio:dev .
@@ -104,6 +101,25 @@ jobs:
           docker compose -f docker-compose.dev.yaml up -d
           
       - name: Check container logs immediately
+        run: |
+          echo "===== CONTAINER STATUS ====="
+          docker ps -a
+          
+          echo "===== BACKEND LOGS ====="
+          docker logs depictio-backend
+          
+          echo "===== FRONTEND LOGS ====="
+          docker logs depictio-frontend
+          
+          echo "===== MONGO LOGS ====="
+          docker logs mongo
+      
+      - name: Wait for services to be healthy
+        run: |
+          echo "Waiting for services to be healthy..."
+          sleep 30  # Adjust the sleep time as needed
+
+      - name: Check container logs after waiting
         run: |
           echo "===== CONTAINER STATUS ====="
           docker ps -a
