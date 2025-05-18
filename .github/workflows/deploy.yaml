@@ -167,7 +167,18 @@ jobs:
           docker compose \
             -f docker-compose/docker-compose.dev.yaml \
             -f docker-compose/docker-compose.minio.yaml \
-            up -d --build
+            up --build
+
+      - name: Check Docker Compose Services
+        run: |
+          # Check if the services are running
+          docker compose ps
+
+      - name: Logs all containers
+        run: docker compose logs
+
+      - name: Logs depictio-backend
+        run: docker logs depictio-backend
 
       # - name: Start Docker Compose Services with Caching
       #   run: |
@@ -204,6 +215,8 @@ jobs:
 
       - name: Wait for Services to Start
         run: sleep 10 # Adjust the wait time if necessary
+
+
 
       - name: Log Containers
         run: docker compose logs depictio-backend
