@@ -163,7 +163,11 @@ jobs:
       - name: Start Docker Compose Services
         run: |
           # Ensure we have docker permissions by using the updated socket permissions
-          docker compose -f docker-compose.yaml -f docker-compose/docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d --build
+          export DEPICTIO_LOGGING_VERBOSITY_LEVEL=DEBUG
+          docker compose \
+            -f docker-compose/docker-compose.dev.yaml \
+            -f docker-compose/docker-compose.minio.yaml \
+            up -d --build
 
       # - name: Start Docker Compose Services with Caching
       #   run: |
