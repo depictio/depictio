@@ -76,6 +76,13 @@ jobs:
           # Only update for stable releases
           echo "${{ needs.changelog.outputs.changelog }}" > /tmp/changelog_clean.md
           
+          # Pull latest changes from main branch to avoid conflicts
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+          git fetch origin main
+          git checkout main
+          git pull origin main
+          
           # Read existing changelog
           if [ -f CHANGELOG.md ]; then
             EXISTING_CHANGELOG=$(cat CHANGELOG.md)
@@ -87,8 +94,6 @@ jobs:
           echo -e "# Changelog\n\n$(cat /tmp/changelog_clean.md)\n\n${EXISTING_CHANGELOG#*#*\n\n}" > CHANGELOG.md
           
           # Commit and push the updated changelog
-          git config user.name "GitHub Actions Bot"
-          git config user.email "actions@github.com"
           git add CHANGELOG.md
           git commit -m "Update CHANGELOG.md for v${{ needs.changelog.outputs.version }}"
-          git push origin HEAD:main
+          git push origin main
