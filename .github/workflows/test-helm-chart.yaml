@@ -1,10 +1,10 @@
 name: Test Helm Chart with Minikube
 
 on:
-  push:
-    branches: [ main ]
-    paths:
-      - 'helm-charts/depictio/**'  # Only trigger when chart directory changes
+  # push:
+  #   branches: [ main ]
+  #   paths:
+  #     - 'helm-charts/depictio/**'  # Only trigger when chart directory changes
   pull_request:
     branches: [ main ]
     paths:
