@@ -10,7 +10,7 @@
 
 [![License](https://img.shields.io/github/license/depictio/depictio?style=flat-square&logo=opensourceinitiative)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/depictio/depictio?style=flat-square&logo=github)](https://github.com/depictio/depictio/releases)
-[![Python](https://img.shields.io/badge/python->=3.12-blue?style=flat-square&logo=python)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python->=3.11-blue?style=flat-square&logo=python)](https://www.python.org/)
 
 ## We rely on
 
@@ -35,7 +35,7 @@
 
 ## Documentation
 
-[![Documentation](https://img.shields.io/badge/docs-latest-blue?style=flat-square&logo=gitbook)](https://depictio.github.io/depictio-docs/)
+[![Documentation](https://img.shields.io/badge/docs-latest-blue?style=flat-square&logo=gitbook)](https://depictio.github.io/depictio-docs/latest/)
 
 </div>
 
