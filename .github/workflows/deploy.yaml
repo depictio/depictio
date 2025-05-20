@@ -14,8 +14,8 @@ name: Deploy and Test Depictio
 #   pull_request:
 #     branches: [main]
 on:
-  # push:
-  #   branches: [main]
+  push:
+    branches: [main]
   workflow_dispatch:
 
 
