@@ -1,9 +1,10 @@
-
+<!-- markdownlint-disable MD033 MD041 -->
 <p align="center">
   <img src="https://depictio.github.io/depictio-docs/images/logo/logo_hd.png" alt="Depictio logo" width=300>
 </p>
 
 <div align="center">
+<!-- markdownlint-enable MD033 -->
 
 ## Project Information
 
@@ -13,13 +14,12 @@
 
 ## We rely on
 
-[![FastAPI](https://img.shields.io/badge/FastAPI-latest?style=flat-square&logo=fastapi)](https://fastapi.tiangolo.com/)
-[![Dash](https://img.shields.io/badge/Dash-latest?style=flat-square&logo=plotly)](https://dash.plotly.com/)
-[![MongoDB](https://img.shields.io/badge/MongoDB-latest?style=flat-square&logo=mongodb)](https://www.mongodb.com/)
-[![MinIO](https://img.shields.io/badge/MinIO-latest?style=flat-square&logo=minio)](https://min.io/)
-[![Pydantic](https://img.shields.io/badge/Pydantic-latest?style=flat-square&logo=pydantic)](https://pydantic-docs.helpmanual.io/)
-[![Polars](https://img.shields.io/badge/Polars-latest?style=flat-square&logo=polars)](https://pola-rs.github.io/polars-book/)
-
+[![FastAPI](https://img.shields.io/badge/FastAPI-latest?style=flat-square&logo=fastapi&color=66C2B2)](https://fastapi.tiangolo.com/)
+[![Dash](https://img.shields.io/badge/Dash-latest?style=flat-square&logo=plotly&color=7DBEFF)](https://dash.plotly.com/)
+[![MongoDB](https://img.shields.io/badge/MongoDB-latest?style=flat-square&logo=mongodb&color=8FCA82)](https://www.mongodb.com/)
+[![MinIO](https://img.shields.io/badge/MinIO-latest?style=flat-square&logo=minio&color=E88A97)](https://min.io/)
+[![Pydantic](https://img.shields.io/badge/Pydantic-latest?style=flat-square&logo=pydantic&color=F18AAF)](https://pydantic-docs.helpmanual.io/)
+[![Polars](https://img.shields.io/badge/Polars-latest?style=flat-square&logo=polars&color=EDBB85)](https://pola-rs.github.io/polars-book/)
 
 ## Container
 
@@ -39,10 +39,15 @@
 
 </div>
 
-![](./docs/images/Demo.gif)
+<!-- markdownlint-disable MD033 MD041 -->
+<p align="center">
+  <img src="https://depictio.github.io/depictio-docs/images/Demo.gif" alt="Demo" width=800>
+</p>
 
-Depictio is an innovative web-based platform currently under development, aimed at facilitating downstream analysis in bioinformatics. It provides a dynamic and interactive dashboard experience for quality control (QC) metrics monitoring and result exploration in omics. The platform is tailored towards large-scale studies and research facilities, offering support for various data formats and interactive data visualization tools.
+<!-- markdownlint-enable MD033 -->
 
-Homepage: [depictio.github.io](https://depictio.github.io/depictio-docs/)
+Depictio is a modern, interactive platform that enables dashboards creation from bioinformatics workflows outputs. The system is designed to be running through helm/kubernetes or docker-compose, and is built on top of FastAPI and Dash.
+
+**Homepage**: [depictio.github.io](https://depictio.github.io/depictio-docs/)
 
 Copyright(c) 2023-2025 Thomas Weber <thomas.weber@embl.de> (see LICENSE)
