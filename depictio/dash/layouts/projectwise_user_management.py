@@ -75,41 +75,46 @@ def fetch_project_permissions(project_id, token):
     Returns:
         list: List of user permission objects with formatted data.
     """
-    try:
-        response = requests.get(
-            f"{API_BASE_URL}/depictio/api/v1/projects/get/from_id",
-            params={"project_id": project_id},
-            headers={"Authorization": f"Bearer {token}"},
+    logger.info(f"Fetching permissions for project ID: {project_id}")
+    # try:
+    response = requests.get(
+        f"{API_BASE_URL}/depictio/api/v1/projects/get/from_id",
+        params={"project_id": project_id},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    logger.info(f"Response status code: {response.status_code}")
+    logger.info(f"Response text: {response.text}")
+    logger.info(f"Response JSON: {response.json()}")
+
+    project_data = response.json()
+    permissions_data = []
+    if "permissions" in project_data:
+        # Process owners, editors, and viewers
+        permissions_data.extend(
+            _process_permission_users(
+                project_data["permissions"].get("owners", []),
+                token,
+                permission_type="Owner",
+            )
         )
-        project_data = response.json()
-        permissions_data = []
-        if "permissions" in project_data:
-            # Process owners, editors, and viewers
-            permissions_data.extend(
-                _process_permission_users(
-                    project_data["permissions"].get("owners", []),
-                    token,
-                    permission_type="Owner",
-                )
+        permissions_data.extend(
+            _process_permission_users(
+                project_data["permissions"].get("editors", []),
+                token,
+                permission_type="Editor",
             )
-            permissions_data.extend(
-                _process_permission_users(
-                    project_data["permissions"].get("editors", []),
-                    token,
-                    permission_type="Editor",
-                )
+        )
+        permissions_data.extend(
+            _process_permission_users(
+                project_data["permissions"].get("viewers", []),
+                token,
+                permission_type="Viewer",
             )
-            permissions_data.extend(
-                _process_permission_users(
-                    project_data["permissions"].get("viewers", []),
-                    token,
-                    permission_type="Viewer",
-                )
-            )
-        return permissions_data
-    except Exception as e:
-        logger.info(f"Error fetching project permissions: {e}")
-        return []
+        )
+    return permissions_data
+    # except Exception as e:
+    #     logger.info(f"Error fetching project permissions: {e}")
+    #     return []
 
 
 def _process_permission_users(users, token, permission_type):
@@ -126,8 +131,10 @@ def _process_permission_users(users, token, permission_type):
     """
     processed_users = []
     for user in users:
+        logger.info(f"Processing user: {user} with ID {user['id']}")
         user_api = httpx.get(
-            f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_id/{str(user['_id'])}",
+            f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_id",
+            params={"user_id": user["id"]},
             headers={"Authorization": f"Bearer {token}"},
         )
         if user_api.status_code != 200:
@@ -149,7 +156,7 @@ def _process_permission_users(users, token, permission_type):
         }
         processed_users.append(
             {
-                "id": user["_id"],
+                "id": user["id"],
                 "email": user["email"],
                 "groups": group_name,
                 **permission_flags,
@@ -899,7 +906,8 @@ def register_projectwise_user_management_callbacks(app):
             # Add all users in the selected group
             for user in GROUPS_DATA[group_id]["users"]:
                 retrieve_user_resp = httpx.get(
-                    f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_id/{str(user['id'])}",
+                    f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_id",
+                    params={"user_id": user["id"]},
                     headers={"Authorization": f"Bearer {local_store_data['access_token']}"},
                 )
                 if retrieve_user_resp.status_code != 200:
