@@ -48,6 +48,6 @@
 
 Depictio is a modern, interactive platform that enables dashboards creation from bioinformatics workflows outputs. The system is designed to be running through helm/kubernetes or docker-compose, and is built on top of FastAPI and Dash.
 
-**Homepage**: [depictio.github.io](https://depictio.github.io/depictio-docs/)
+**Homepage**: [[depictio.github.io](https://depictio.github.io/depictio-docs/)](https://depictio.github.io/depictio-docs/latest/)
 
 Copyright(c) 2023-2025 Thomas Weber <thomas.weber@embl.de> (see LICENSE)
