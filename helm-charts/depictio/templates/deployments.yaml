@@ -131,10 +131,15 @@ spec:
           volumeMounts:
             - name: depictio-screenshots
               mountPath: /app/depictio/dash/static/screenshots
+            - name: depictio-keys
+              mountPath: /app/depictio/keys
       volumes:
         - name: depictio-screenshots
           persistentVolumeClaim:
             claimName: depictio-screenshots-pvc
+        - name: depictio-keys
+          persistentVolumeClaim:
+            claimName: depictio-keys-pvc
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -176,3 +181,8 @@ spec:
         - name: depictio-screenshots
           persistentVolumeClaim:
             claimName: depictio-screenshots-pvc
+            - name: depictio-keys
+              mountPath: /app/depictio/keys
+        - name: depictio-keys
+          persistentVolumeClaim:
+            claimName: depictio-keys-pvc

@@ -14,6 +14,9 @@ persistence:
   screenshots:
     size: 5Gi
     accessMode: ReadWriteOnce
+  keys:
+    size: 1Gi
+    accessMode: ReadWriteOnce
 
 # Secrets
 secrets:
