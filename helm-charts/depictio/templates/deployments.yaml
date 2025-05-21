@@ -181,8 +181,6 @@ spec:
         - name: depictio-screenshots
           persistentVolumeClaim:
             claimName: depictio-screenshots-pvc
-            - name: depictio-keys
-              mountPath: /app/depictio/keys
         - name: depictio-keys
           persistentVolumeClaim:
             claimName: depictio-keys-pvc
