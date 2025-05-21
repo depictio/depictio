@@ -177,6 +177,8 @@ spec:
           volumeMounts:
             - name: depictio-screenshots
               mountPath: /app/depictio/dash/static/screenshots
+            - name: depictio-keys
+              mountPath: /app/depictio/keys
       volumes:
         - name: depictio-screenshots
           persistentVolumeClaim:
