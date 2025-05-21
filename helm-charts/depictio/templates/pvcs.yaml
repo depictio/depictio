@@ -37,8 +37,6 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels: 
     app: depictio
-    # component: storage
-    # storage-type: screenshots
 spec:
   storageClassName: {{ .Values.storageClass }}
   accessModes:
@@ -46,3 +44,18 @@ spec:
   resources:
     requests:
       storage: {{ .Values.persistence.screenshots.size }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: depictio-keys-pvc
+  namespace: {{ .Release.Namespace }}
+  labels: 
+    app: depictio
+spec:
+  storageClassName: {{ .Values.storageClass }}
+  accessModes:
+    - {{ .Values.persistence.keys.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.keys.size }}
