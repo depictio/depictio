@@ -13,6 +13,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
+  CHART_NAME: depictio-helm
 
 jobs:
   test-build-push:
@@ -133,9 +134,11 @@ jobs:
       
       - name: Test install from package
         run: |
-          # Clean up existing installation
+          # Clean up existing installation and all resources
           helm uninstall depictio || true
-          sleep 10
+          kubectl delete pvc --all || true
+          kubectl delete configmap --all || true
+          sleep 15
           
           # Install from packaged chart
           helm install depictio-pkg ./depictio-${{ steps.chart-info.outputs.chart_version }}.tgz \
@@ -152,7 +155,7 @@ jobs:
           kubectl get pods
       
       - name: Log in to Container Registry
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -160,10 +163,10 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Push chart to GHCR
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
         run: |
-          helm push depictio-${{ steps.chart-info.outputs.chart_version }}.tgz oci://${{ env.REGISTRY }}/${{ github.repository_owner }}
-          echo "Chart pushed to: oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/depictio:${{ steps.chart-info.outputs.chart_version }}"
+          helm push depictio-${{ steps.chart-info.outputs.chart_version }}.tgz oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.CHART_NAME }}
+          echo "Chart pushed to: oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.CHART_NAME }}:${{ steps.chart-info.outputs.chart_version }}"
       
       - name: Cleanup
         if: always()
