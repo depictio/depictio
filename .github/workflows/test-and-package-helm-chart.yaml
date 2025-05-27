@@ -133,9 +133,11 @@ jobs:
       
       - name: Test install from package
         run: |
-          # Clean up existing installation
+          # Clean up existing installation and all resources
           helm uninstall depictio || true
-          sleep 10
+          kubectl delete pvc --all || true
+          kubectl delete configmap --all || true
+          sleep 15
           
           # Install from packaged chart
           helm install depictio-pkg ./depictio-${{ steps.chart-info.outputs.chart_version }}.tgz \
