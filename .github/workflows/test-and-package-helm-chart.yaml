@@ -1,0 +1,173 @@
+name: Test, Build and Push Helm Chart
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'helm-charts/depictio/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'helm-charts/depictio/**'
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  test-build-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'v3.14.0'
+      
+      - name: Extract chart metadata
+        id: chart-info
+        run: |
+          CHART_VERSION=$(helm show chart ./helm-charts/depictio | grep '^version:' | awk '{print $2}')
+          APP_VERSION=$(helm show chart ./helm-charts/depictio | grep '^appVersion:' | awk '{print $2}' | tr -d '"')
+          echo "chart_version=${CHART_VERSION}" >> $GITHUB_OUTPUT
+          echo "app_version=${APP_VERSION}" >> $GITHUB_OUTPUT
+          echo "Chart version: ${CHART_VERSION}"
+          echo "App version: ${APP_VERSION}"
+      
+      - name: Set up Minikube
+        uses: medyagh/setup-minikube@master
+        with:
+          minikube-version: '1.35.0' 
+          kubernetes-version: 'v1.32.0' 
+          driver: docker
+          start-args: '--memory=4096 --cpus=2'
+      
+      - name: Build Docker image
+        run: |
+          eval $(minikube docker-env)
+          docker build -t depictio:${{ steps.chart-info.outputs.app_version }} -f docker-images/Dockerfile_depictio.dockerfile .
+          docker images | grep depictio
+      
+      - name: Get Kubernetes cluster info
+        run: |
+          kubectl cluster-info
+          kubectl get nodes
+          kubectl version
+      
+      - name: Lint Helm chart
+        run: |
+          helm lint ./helm-charts/depictio
+      
+      - name: Test chart packaging
+        run: |
+          # Package the chart
+          helm package ./helm-charts/depictio --version ${{ steps.chart-info.outputs.chart_version }}
+          
+          # Verify package was created
+          ls -la depictio-*.tgz
+          
+          # Test chart from package
+          helm template test-release ./depictio-${{ steps.chart-info.outputs.chart_version }}.tgz > /tmp/rendered-manifests.yaml
+          echo "Successfully rendered chart from package"
+      
+      - name: Install Helm chart (from local directory)
+        run: |
+          helm upgrade --install depictio ./helm-charts/depictio \
+            -f ./helm-charts/depictio/values.yaml \
+            -f ./helm-charts/depictio/values-gh-actions.yaml \
+            --set backend.image.repository=depictio \
+            --set backend.image.tag=${{ steps.chart-info.outputs.app_version }} \
+            --set backend.image.pullPolicy=Never \
+            --set frontend.image.repository=depictio \
+            --set frontend.image.tag=${{ steps.chart-info.outputs.app_version }} \
+            --set frontend.image.pullPolicy=Never \
+            --wait --timeout 5m
+      
+      - name: Verify Deployment
+        run: |
+          echo "Checking all resources..."
+          kubectl get all
+          
+          echo "Checking PVCs..."
+          kubectl get pvc
+          
+          echo "Checking ConfigMaps..."
+          kubectl get configmaps
+          
+          echo "Checking Secrets..."
+          kubectl get secrets
+          
+          echo "Checking Pod logs..."
+          kubectl logs -l app=depictio-backend --tail=50 || true
+          kubectl logs -l app=depictio-frontend --tail=50 || true
+      
+      - name: Test Service Connectivity
+        run: |
+          echo "Setting up port forwarding to frontend service..."
+          kubectl port-forward svc/depictio-frontend 8080:80 &
+          PID_FRONTEND=$!
+          sleep 5
+          
+          echo "Testing frontend service..."
+          FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080 || echo "000")
+          echo "Frontend status: $FRONTEND_STATUS"
+          
+          echo "Setting up port forwarding to backend service..."
+          kubectl port-forward svc/depictio-backend 8081:80 &
+          PID_BACKEND=$!
+          sleep 5
+          
+          echo "Testing backend service..."
+          BACKEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081 || echo "000")
+          echo "Backend status: $BACKEND_STATUS"
+          
+          kill $PID_FRONTEND $PID_BACKEND || true
+      
+      - name: Test install from package
+        run: |
+          # Clean up existing installation
+          helm uninstall depictio || true
+          sleep 10
+          
+          # Install from packaged chart
+          helm install depictio-pkg ./depictio-${{ steps.chart-info.outputs.chart_version }}.tgz \
+            -f ./helm-charts/depictio/values-gh-actions.yaml \
+            --set backend.image.repository=depictio \
+            --set backend.image.tag=${{ steps.chart-info.outputs.app_version }} \
+            --set backend.image.pullPolicy=Never \
+            --set frontend.image.repository=depictio \
+            --set frontend.image.tag=${{ steps.chart-info.outputs.app_version }} \
+            --set frontend.image.pullPolicy=Never \
+            --wait --timeout 5m
+          
+          echo "Successfully installed from packaged chart"
+          kubectl get pods
+      
+      - name: Log in to Container Registry
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Push chart to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          helm push depictio-${{ steps.chart-info.outputs.chart_version }}.tgz oci://${{ env.REGISTRY }}/${{ github.repository_owner }}
+          echo "Chart pushed to: oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/depictio:${{ steps.chart-info.outputs.chart_version }}"
+      
+      - name: Cleanup
+        if: always()
+        run: |
+          helm uninstall depictio || true
+          helm uninstall depictio-pkg || true
+          minikube delete || true
