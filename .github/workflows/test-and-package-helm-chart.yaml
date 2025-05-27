@@ -13,6 +13,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
+  CHART_NAME: depictio-helm
 
 jobs:
   test-build-push:
@@ -164,8 +165,8 @@ jobs:
       - name: Push chart to GHCR
         if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
         run: |
-          helm push depictio-${{ steps.chart-info.outputs.chart_version }}.tgz oci://${{ env.REGISTRY }}/${{ github.repository_owner }}
-          echo "Chart pushed to: oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/depictio:${{ steps.chart-info.outputs.chart_version }}"
+          helm push depictio-${{ steps.chart-info.outputs.chart_version }}.tgz oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.CHART_NAME }}
+          echo "Chart pushed to: oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.CHART_NAME }}:${{ steps.chart-info.outputs.chart_version }}"
       
       - name: Cleanup
         if: always()
