@@ -455,6 +455,9 @@ jobs:
       - name: Scan Iris Dataset Files
         # continue-on-error: true
         run: |
+          cd depictio/cli
+
+          # Activate the virtual environment first
           source venv/bin/activate
           depictio-cli data scan \
                               --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
@@ -470,6 +473,9 @@ jobs:
       - name: Process Iris Dataset
         # continue-on-error: true
         run: |
+          cd depictio/cli
+
+          # Activate the virtual environment first
           source venv/bin/activate
           depictio-cli data process \
                               --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
