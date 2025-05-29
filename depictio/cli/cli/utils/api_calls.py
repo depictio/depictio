@@ -2,8 +2,7 @@ import httpx
 import typer
 from pydantic import validate_call
 
-from depictio.cli.cli.utils.common import (generate_api_headers,
-                                           load_depictio_config)
+from depictio.cli.cli.utils.common import generate_api_headers, load_depictio_config
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
 from depictio.cli.cli_logging import logger
 from depictio.models.models.base import BaseModel, convert_objectid_to_str
@@ -21,6 +20,7 @@ def api_login(yaml_config_path: str = "~/.depictio/agent.yaml") -> dict:
     depictio_CLI_config = load_depictio_config(yaml_config_path=yaml_config_path)
     depictio_CLI_config = convert_objectid_to_str(depictio_CLI_config.model_dump())
     logger.info(f"Depictio CLI configuration loaded: {depictio_CLI_config}")
+    rich_print_checked_statement("Checking server accessibility...", "info")
 
     # Connect to depictio API
     response = httpx.post(
