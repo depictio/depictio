@@ -1,7 +1,7 @@
 import os
 from datetime import datetime
 
-from pydantic import BaseModel, FilePath, field_validator
+from pydantic import BaseModel, field_validator
 
 from depictio.models.config import DEPICTIO_CONTEXT
 from depictio.models.models.base import MongoModel, PyObjectId
