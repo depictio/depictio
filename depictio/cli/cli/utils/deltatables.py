@@ -5,8 +5,7 @@ import deltalake
 import polars as pl
 from pydantic import validate_call
 
-from depictio.cli.cli.utils.api_calls import (api_get_files_by_dc_id,
-                                              api_upsert_deltatable)
+from depictio.cli.cli.utils.api_calls import api_get_files_by_dc_id, api_upsert_deltatable
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
 from depictio.cli.cli_logging import logger
 from depictio.models.models.base import convert_objectid_to_str
@@ -233,29 +232,29 @@ def write_delta_table(
     Raises:
         Exception: If writing the Delta table fails.
     """
-    try:
-        logger.debug(f"Writing aggregated DataFrame to Delta table at {destination_file}.")
-        logger.debug(f"Aggregated DataFrame schema: {aggregated_df.schema}")
-        logger.debug(f"Aggregated DataFrame head: {aggregated_df.head(5)}")
-        logger.debug(f"Storage options: {storage_options}")
-        aggregated_df.write_delta(
-            destination_file,
-            storage_options=storage_options.model_dump(),
-            delta_write_options={"schema_mode": "overwrite"},
-            mode="overwrite",
-        )
+    # try:
+    logger.debug(f"Writing aggregated DataFrame to Delta table at {destination_file}.")
+    logger.debug(f"Aggregated DataFrame schema: {aggregated_df.schema}")
+    logger.debug(f"Aggregated DataFrame head: {aggregated_df.head(5)}")
+    logger.debug(f"Storage options: {storage_options}")
+    aggregated_df.write_delta(
+        destination_file,
+        storage_options=storage_options.model_dump(),
+        delta_write_options={"schema_mode": "overwrite"},
+        mode="overwrite",
+    )
 
-        logger.info(f"Aggregated Delta table written to {destination_file}.")
+    logger.info(f"Aggregated Delta table written to {destination_file}.")
 
-        return {
-            "result": "success",
-            "message": f"Aggregated Delta table written to {destination_file}.",
-        }
-    except Exception as e:
-        error_msg = f"Error writing aggregated Delta table: {e}"
-        logger.error(error_msg)
+    return {
+        "result": "success",
+        "message": f"Aggregated Delta table written to {destination_file}.",
+    }
+    # except Exception as e:
+    #     error_msg = f"Error writing aggregated Delta table: {e}"
+    #     logger.error(error_msg)
 
-        return {"result": "error", "message": error_msg}
+    #     return {"result": "error", "message": error_msg}
 
 
 def read_delta_table(

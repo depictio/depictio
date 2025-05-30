@@ -14,7 +14,7 @@ class WildcardRegex(WildcardRegexBase):
 
 
 class File(MongoModel):
-    file_location: FilePath
+    file_location: str
     filename: str
     creation_time: str
     modification_time: str

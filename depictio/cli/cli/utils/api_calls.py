@@ -5,7 +5,7 @@ from pydantic import validate_call
 from depictio.cli.cli.utils.common import generate_api_headers, load_depictio_config
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
 from depictio.cli.cli_logging import logger
-from depictio.models.models.base import BaseModel, convert_objectid_to_str
+from depictio.models.models.base import BaseModel, PyObjectId, convert_objectid_to_str
 from depictio.models.models.files import File
 from depictio.models.models.users import CLIConfig
 from depictio.models.models.workflows import WorkflowRun
@@ -40,7 +40,7 @@ def api_login(yaml_config_path: str = "~/.depictio/agent.yaml") -> dict:
 
 
 @validate_call
-def api_get_project_from_id(project_id: str, CLI_config: CLIConfig):
+def api_get_project_from_id(project_id: PyObjectId, CLI_config: CLIConfig):
     """
     Get a project from the server using the project ID.
     """
@@ -188,6 +188,9 @@ def api_create_files(
     files = [convert_model_to_dict(f) for f in files]
 
     payload = {"files": files, "update": update}
+    logger.debug(f"Files: {files[:2]}")  # Log only the first two files for brevity
+    light_payload = {"files": files[:2], "update": update}
+    logger.debug(f"Light Payload: {light_payload}")  # Log only the first two files for brevity
     url = f"{CLI_config.base_url}/depictio/api/v1/files/upsert_batch"
 
     logger.debug(f"Payload: {payload}")

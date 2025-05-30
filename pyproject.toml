@@ -55,6 +55,9 @@ classifiers = [
   "Operating System :: OS Independent"
 ]
 
+[project.optional-dependencies]
+dev = ["black", "ruff", "pytest", "pytest-asyncio", "pytest", "pytest-xdist", "mongomock", "mongomock-motor"]
+
 [project.scripts]
 depictio-api = "depictio.api.run:main"
 depictio-dash = "depictio.dash.app:main"

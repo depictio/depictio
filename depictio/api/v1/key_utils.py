@@ -7,8 +7,7 @@ from typing import Literal, TypeVar, cast
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
-from cryptography.hazmat.primitives.asymmetric.rsa import (RSAPrivateKey,
-                                                           RSAPublicKey)
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
 from pydantic import validate_call
 
 from depictio.api.v1.configs.logging_init import logger

@@ -9,20 +9,27 @@ from bson import ObjectId
 from pydantic import validate_call
 from typeguard import typechecked
 
-from depictio.cli.cli.utils.api_calls import (api_create_files,
-                                              api_delete_file, api_delete_run,
-                                              api_get_files_by_dc_id,
-                                              api_get_runs_by_wf_id,
-                                              api_upsert_runs_batch)
+from depictio.cli.cli.utils.api_calls import (
+    api_create_files,
+    api_delete_file,
+    api_delete_run,
+    api_get_files_by_dc_id,
+    api_get_runs_by_wf_id,
+    api_upsert_runs_batch,
+)
 from depictio.cli.cli.utils.common import format_timestamp
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
 from depictio.cli.cli_logging import logger
 from depictio.models.models.data_collections import DataCollection, Regex
 from depictio.models.models.files import File, FileScanResult
 from depictio.models.models.users import CLIConfig, Permission, UserBase
-from depictio.models.models.workflows import (Workflow, WorkflowConfig,
-                                              WorkflowDataLocation,
-                                              WorkflowRun, WorkflowRunScan)
+from depictio.models.models.workflows import (
+    Workflow,
+    WorkflowConfig,
+    WorkflowDataLocation,
+    WorkflowRun,
+    WorkflowRunScan,
+)
 
 
 def regex_match(file: File, full_regex: str):
@@ -221,6 +228,8 @@ def scan_single_file(
 
     scan_result = None
     file_id = None
+
+    logger.debug(f"Existing Files: {existing_files}")
 
     # Check if the file already exists in the database.
     if existing_files:
@@ -776,7 +785,8 @@ def scan_files_for_data_collection(
     print(f"Response json: {response.json()}")
     if response.status_code == 200:
         existing_files = response.json()
-        existing_files = [File.from_mongo(f) for f in existing_files]
+        # existing_files = [f for f in existing_files]
+        # existing_files = [File.from_mongo(f) for f in existing_files]
         logger.debug(f"Existing Files: {existing_files}")
         print(f"Existing Files: {existing_files}")
     else:
@@ -792,7 +802,7 @@ def scan_files_for_data_collection(
 
     # Convert existing_files from a dict to a list of file dictionaries if needed.
     existing_files_reformated = (
-        {existing_file.file_location: existing_file for existing_file in existing_files}
+        {existing_file["file_location"]: existing_file for existing_file in existing_files}
         if existing_files
         else {}
     )
