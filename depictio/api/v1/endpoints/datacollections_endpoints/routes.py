@@ -17,7 +17,7 @@ from depictio.api.v1.endpoints.workflow_endpoints.routes import (
     get_workflow_from_id,
 )
 from depictio.dash.utils import return_dc_tag_from_id, return_mongoid
-from depictio.models.models.base import convert_objectid_to_str
+from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 
 datacollections_endpoint_router = APIRouter()
 
@@ -31,7 +31,7 @@ users_collection = db["users"]
 
 @datacollections_endpoint_router.get("/specs/{data_collection_id}")
 async def specs(
-    data_collection_id: str,
+    data_collection_id: PyObjectId,
     current_user: str = Depends(get_current_user),
 ):
     try:

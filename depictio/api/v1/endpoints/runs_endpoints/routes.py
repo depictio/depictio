@@ -7,7 +7,7 @@ from pymongo.errors import BulkWriteError
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import projects_collection, runs_collection
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
-from depictio.models.models.base import convert_objectid_to_str
+from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.workflows import WorkflowRun
 
 # Define the router
@@ -42,20 +42,12 @@ async def list_runs(workflow_id: str, current_user: str = Depends(get_current_us
     return convert_objectid_to_str(runs)
 
 
-@runs_endpoint_router.get("/get/{run_id}")
-async def get_run(run_id: str, current_user: str = Depends(get_current_user)):
-    if not current_user:
-        raise HTTPException(status_code=401, detail="User not found.")
-    if not run_id:
-        raise HTTPException(status_code=400, detail="Run ID is required to get a run.")
-    run_oid = ObjectId(run_id)
-
-    user_oid = ObjectId(current_user.id)
-
+@runs_endpoint_router.get("/get/{run_id}", response_model=WorkflowRun)
+async def get_run(run_id: PyObjectId, current_user: str = Depends(get_current_user)):
     query = {
-        "_id": run_oid,
+        "_id": run_id,
         "$or": [
-            {"permissions.owners._id": user_oid},  # User is an owner
+            {"permissions.owners._id": current_user.id},  # User is an owner
             {"permissions.owners.is_admin": True},  # User is an admin
         ],
     }
@@ -66,7 +58,7 @@ async def get_run(run_id: str, current_user: str = Depends(get_current_user)):
     if not run:
         raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found.")
 
-    return convert_objectid_to_str(run)
+    return WorkflowRun.from_mongo(run)
 
 
 @runs_endpoint_router.delete("/delete/{run_id}")

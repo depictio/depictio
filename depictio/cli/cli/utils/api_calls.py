@@ -298,6 +298,25 @@ def api_delete_run(run_id: str, CLI_config: CLIConfig) -> httpx.Response:
 
 
 @validate_call
+def api_get_run(run_id: str, CLI_config: CLIConfig) -> httpx.Response:
+    """
+    Get a run from the server using the run ID.
+
+    Args:
+        run_id (str): Run ID to retrieve.
+        CLI_config (CLIConfig): Configuration object containing API base URL and credentials.
+
+    Returns:
+        httpx.Response: The response from the server.
+    """
+    logger.info(f"Getting run with ID: {run_id}")
+
+    url = f"{CLI_config.base_url}/depictio/api/v1/runs/get/{run_id}"
+    response = httpx.get(url, headers=generate_api_headers(CLI_config))
+    return response
+
+
+@validate_call
 def api_delete_file(file_id: str, CLI_config: CLIConfig) -> httpx.Response:
     """
     Delete a file from the server using the file ID.

@@ -19,6 +19,7 @@ class File(MongoModel):
     creation_time: str
     modification_time: str
     run_id: PyObjectId | str | None = None
+    run_tag: str | None = None
     data_collection_id: PyObjectId
     registration_time: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     file_hash: str

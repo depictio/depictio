@@ -5,7 +5,10 @@ import deltalake
 import polars as pl
 from pydantic import validate_call
 
-from depictio.cli.cli.utils.api_calls import api_get_files_by_dc_id, api_upsert_deltatable
+from depictio.cli.cli.utils.api_calls import (
+    api_get_files_by_dc_id,
+    api_upsert_deltatable,
+)
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
 from depictio.cli.cli_logging import logger
 from depictio.models.models.base import convert_objectid_to_str
@@ -113,7 +116,7 @@ def read_single_file_lazy(file_info: File, file_format: str, polars_kwargs: dict
 
         # Optionally, add a column from file_info if available (e.g., run_id)
         if hasattr(file_info, "run_id"):
-            lf = lf.with_columns(pl.lit(str(file_info.run_id)).alias("depictio_run_id"))
+            lf = lf.with_columns(pl.lit(str(file_info.run_tag)).alias("depictio_run_id"))
         return lf
 
     except Exception as e:
