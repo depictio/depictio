@@ -53,11 +53,31 @@ jobs:
           chmod 777 depictioDB minio_data
           docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d
           
-      - name: Health check
+      # Extract the token and perform a health check with the token
+      - name: Extract Token and Check Depictio Backend Health
         run: |
-          sleep 30
-          docker ps
-          curl -f http://localhost:8058/health || exit 1
+          # Extract the access token from the YAML file
+          token=$(docker compose exec depictio-backend bash -c "cat /app/depictio/.depictio/admin_config.yaml" | grep 'access_token' | awk '{print $2}')
+
+          # Remove quotes from the token if any
+          token=$(echo $token | tr -d "'\"")
+
+          # Hash the token using SHA256 for safe logging
+          token_hash=$(echo -n "$token" | sha256sum)
+          echo "Extracted token hash: $token_hash"
+
+          # Wait for the backend to be ready
+          sleep 10
+
+          # Perform the health check using the extracted token
+          health_check=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $token" http://localhost:8058/depictio/api/v1/utils/status)
+
+          if [ "$health_check" != "200" ]; then
+            echo "Backend API is not healthy. Status code: $health_check"
+            exit 1
+          else
+            echo "Backend API is healthy."
+          fi
 
   cli-tests:
     needs: docker-build
