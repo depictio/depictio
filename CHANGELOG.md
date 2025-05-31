@@ -19,5 +19,3 @@
 * fix: update tag patterns for Docker workflows in release and build configurations
 
 # Changelog
-
-
