@@ -47,10 +47,6 @@ jobs:
           echo "UID=$(id -u)" >> $GITHUB_ENV
           echo "GID=$(id -g)" >> $GITHUB_ENV
 
-      - name: Generate .env
-        run: |
-          cp .env.example .env
-
       - name: Create and Set Permissions for depictioDB
         run: |
           mkdir -p depictioDB/
@@ -233,6 +229,44 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GHCR_PAT }}
 
+
+      # ↓ NEW: Add user to docker group for permissions
+      - name: Configure Docker Permissions
+        run: |
+          # Add current user to docker group (ignore if already exists)
+          sudo usermod -aG docker $USER || true
+          # Change docker socket permissions
+          sudo chmod 666 /var/run/docker.sock
+          # Verify permissions
+          ls -la /var/run/docker.sock
+          groups
+
+      - name: Check os version
+        run: |
+          echo "OS Version: $(cat /etc/os-release)"
+          echo "Kernel Version: $(uname -r)"
+          echo "Architecture: $(uname -m)"
+          docker --version
+          docker compose version
+
+      # Export UID and GID
+      - name: Export UID and GID
+        run: |
+          echo "UID=$(id -u)" >> $GITHUB_ENV
+          echo "GID=$(id -g)" >> $GITHUB_ENV
+
+      - name: Create and Set Permissions for depictioDB
+        run: |
+          mkdir -p depictioDB/
+          chown -R "$(id -u):$(id -g)" depictioDB/
+          chmod -R 777 depictioDB/
+
+      - name: Create and Set Permissions for minio_data
+        run: |
+          mkdir -p minio_data/
+          chown -R "$(id -u):$(id -g)" minio_data/
+          chmod -R 775 minio_data/
+
       - name: Use cached image and start services
         run: |
           # Use the exact image from docker-build job
@@ -315,6 +349,43 @@ jobs:
           cache: 'npm'
           cache-dependency-path: depictio/tests/e2e-tests/package-lock.json
 
+      # ↓ NEW: Add user to docker group for permissions
+      - name: Configure Docker Permissions
+        run: |
+          # Add current user to docker group (ignore if already exists)
+          sudo usermod -aG docker $USER || true
+          # Change docker socket permissions
+          sudo chmod 666 /var/run/docker.sock
+          # Verify permissions
+          ls -la /var/run/docker.sock
+          groups
+
+      - name: Check os version
+        run: |
+          echo "OS Version: $(cat /etc/os-release)"
+          echo "Kernel Version: $(uname -r)"
+          echo "Architecture: $(uname -m)"
+          docker --version
+          docker compose version
+
+      # Export UID and GID
+      - name: Export UID and GID
+        run: |
+          echo "UID=$(id -u)" >> $GITHUB_ENV
+          echo "GID=$(id -g)" >> $GITHUB_ENV
+
+      - name: Create and Set Permissions for depictioDB
+        run: |
+          mkdir -p depictioDB/
+          chown -R "$(id -u):$(id -g)" depictioDB/
+          chmod -R 777 depictioDB/
+
+      - name: Create and Set Permissions for minio_data
+        run: |
+          mkdir -p minio_data/
+          chown -R "$(id -u):$(id -g)" minio_data/
+          chmod -R 775 minio_data/
+
       - name: Use cached image and start services
         run: |
           # Use the exact image from docker-build job
@@ -330,13 +401,42 @@ jobs:
           chmod 777 depictioDB minio_data
           docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "16"
 
-      - name: Run E2E tests
+      - name: Install Cypress dependencies
         run: |
-          cd tests/e2e-tests
-          npm ci
+          cd depictio/tests/e2e-tests
+          if [ ! -f "package.json" ]; then
+            echo "Creating package.json..."
+            npm init -y
+            npm install cypress --save-dev
+          elif [ ! -f "package-lock.json" ]; then
+            echo "No package-lock.json found, using npm install..."
+            npm install
+          else
+            npm ci
+          fi
 
-          # Wait for services to be ready
-          sleep 10
+      - name: Run Cypress tests
+        run: |
+          cd depictio/tests/e2e-tests
+          npx cypress run --config screenshotsFolder=cypress/screenshots,videosFolder=cypress/videos,trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true
 
-          npx cypress run
+      - name: Upload screenshots
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cypress-screenshots
+          path: depictio/tests/e2e-tests/cypress/screenshots
+          retention-days: 30
+
+      - name: Upload videos (only on failure)
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: cypress-videos
+          path: depictio/tests/e2e-tests/cypress/videos
+          retention-days: 7
