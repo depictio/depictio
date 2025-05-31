@@ -47,6 +47,10 @@ jobs:
           echo "UID=$(id -u)" >> $GITHUB_ENV
           echo "GID=$(id -g)" >> $GITHUB_ENV
 
+      - name: Generate .env
+        run: |
+          cp .env.example .env
+
       - name: Create and Set Permissions for depictioDB
         run: |
           mkdir -p depictioDB/
