@@ -38,46 +38,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure Docker Permissions
-        run: |
-          # Add current user to docker group (ignore if already exists)
-          sudo usermod -aG docker $USER || true
-          # Change docker socket permissions
-          sudo chmod 666 /var/run/docker.sock
-          # Verify permissions
-          ls -la /var/run/docker.sock
-          groups
-
-      - name: Check os version
-        run: |
-          echo "OS Version: $(cat /etc/os-release)"
-          echo "Kernel Version: $(uname -r)"
-          echo "Architecture: $(uname -m)"
-          docker --version
-          docker compose version
-
-      # Export UID and GID
-      - name: Export UID and GID
-        run: |
-          echo "UID=$(id -u)" >> $GITHUB_ENV
-          echo "GID=$(id -g)" >> $GITHUB_ENV
-
-      - name: Generate .env
-        run: |
-          cp .env.example .env
-
-      - name: Create and Set Permissions for depictioDB
-        run: |
-          mkdir -p depictioDB/
-          chown -R "$(id -u):$(id -g)" depictioDB/
-          chmod -R 777 depictioDB/
-
-      - name: Create and Set Permissions for minio_data
-        run: |
-          mkdir -p minio_data/
-          chown -R "$(id -u):$(id -g)" minio_data/
-          chmod -R 775 minio_data/
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -92,7 +52,10 @@ jobs:
         id: image-info
         run: |
           # Create hash from Docker-related files
-          DOCKER_HASH=$(cat docker-images/Dockerfile_depictio.dockerfile requirements.txt pyproject.toml | sha256sum | cut -d' ' -f1 | cut -c1-12)
+          DOCKER_HASH=$(cat docker-images/Dockerfile_depictio.dockerfile conda_envs/depictio.yaml pyproject.toml | sha256sum | cut -d' ' -f1 | cut -c1-12)
+
+          # Use lowercase repo name for GHCR compatibility
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
 
           # Use PR number for PRs, commit hash for main
           if [ "${{ github.event_name }}" = "pull_request" ]; then
@@ -103,20 +66,22 @@ jobs:
 
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
           echo "hash=${DOCKER_HASH}" >> $GITHUB_OUTPUT
+          echo "repo=${REPO_LOWER}" >> $GITHUB_OUTPUT
           echo "Generated tag: ${TAG}"
 
       - name: Check if rebuild needed
         id: check-rebuild
         run: |
           IMAGE_TAG="${{ steps.image-info.outputs.tag }}"
+          REPO="${{ steps.image-info.outputs.repo }}"
 
           # Check if image already exists in registry
-          if docker manifest inspect ghcr.io/${{ github.repository_owner }}/depictio:${IMAGE_TAG} > /dev/null 2>&1; then
+          if docker manifest inspect ghcr.io/${REPO}:${IMAGE_TAG} > /dev/null 2>&1; then
             echo "rebuild=false" >> $GITHUB_OUTPUT
-            echo "✅ Image ghcr.io/${{ github.repository_owner }}/depictio:${IMAGE_TAG} already exists, skipping build"
+            echo "✅ Image ghcr.io/${REPO}:${IMAGE_TAG} already exists, skipping build"
           else
             echo "rebuild=true" >> $GITHUB_OUTPUT
-            echo "🔨 Image doesn't exist, will build ghcr.io/${{ github.repository_owner }}/depictio:${IMAGE_TAG}"
+            echo "🔨 Image doesn't exist, will build ghcr.io/${REPO}:${IMAGE_TAG}"
           fi
 
       - name: Build and push new image
@@ -128,7 +93,7 @@ jobs:
           push: true
           load: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/depictio:${{ steps.image-info.outputs.tag }}
+            ghcr.io/${{ steps.image-info.outputs.repo }}:${{ steps.image-info.outputs.tag }}
             depictio:latest
           cache-from: type=gha,scope=depictio
           cache-to: type=gha,mode=max,scope=depictio
@@ -137,20 +102,18 @@ jobs:
         if: steps.check-rebuild.outputs.rebuild == 'false'
         run: |
           IMAGE_TAG="${{ steps.image-info.outputs.tag }}"
+          REPO="${{ steps.image-info.outputs.repo }}"
           echo "📥 Pulling existing image..."
-          docker pull ghcr.io/${{ github.repository_owner }}/depictio:${IMAGE_TAG}
-          docker tag ghcr.io/${{ github.repository_owner }}/depictio:${IMAGE_TAG} depictio:latest
-          echo "✅ Using cached image: ghcr.io/${{ github.repository_owner }}/depictio:${IMAGE_TAG}"
+          docker pull ghcr.io/${REPO}:${IMAGE_TAG}
+          docker tag ghcr.io/${REPO}:${IMAGE_TAG} depictio:latest
+          echo "✅ Using cached image: ghcr.io/${REPO}:${IMAGE_TAG}"
 
       - name: Start services
         run: |
+          cp .env.example .env
+          mkdir -p depictioDB minio_data
+          chmod 777 depictioDB minio_data
           docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d
-
-      - name: Wait for services to be healthy
-        run: |
-          echo "Waiting for depictio-backend to be healthy..."
-          # Wait for the depictio-backend service to be healthy
-          sleep 10  # Initial wait to allow services to start
 
       # Extract the token and perform a health check with the token
       - name: Extract Token and Check Depictio Backend Health
@@ -165,7 +128,8 @@ jobs:
           token_hash=$(echo -n "$token" | sha256sum)
           echo "Extracted token hash: $token_hash"
 
-
+          # Wait for the backend to be ready
+          sleep 10
 
           # Perform the health check using the extracted token
           health_check=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $token" http://localhost:8058/depictio/api/v1/utils/status)
@@ -180,6 +144,9 @@ jobs:
   cli-tests:
     needs: docker-build
     runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@v4
 
@@ -194,10 +161,11 @@ jobs:
         run: |
           # Pull the exact image built/used in docker-build job
           IMAGE_TAG="${{ needs.docker-build.outputs.image-tag }}"
-          echo "🔄 Using image: ghcr.io/${{ github.repository_owner }}/depictio:${IMAGE_TAG}"
+          REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "🔄 Using image: ghcr.io/${REPO}:${IMAGE_TAG}"
 
-          docker pull ghcr.io/${{ github.repository_owner }}/depictio:${IMAGE_TAG}
-          docker tag ghcr.io/${{ github.repository_owner }}/depictio:${IMAGE_TAG} depictio:latest
+          docker pull ghcr.io/${REPO}:${IMAGE_TAG}
+          docker tag ghcr.io/${REPO}:${IMAGE_TAG} depictio:latest
 
           cp .env.example .env
           mkdir -p depictioDB minio_data
@@ -223,6 +191,9 @@ jobs:
   e2e-tests:
     needs: docker-build
     runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@v4
 
@@ -237,10 +208,11 @@ jobs:
         run: |
           # Pull the exact image built/used in docker-build job
           IMAGE_TAG="${{ needs.docker-build.outputs.image-tag }}"
-          echo "🔄 Using image: ghcr.io/${{ github.repository_owner }}/depictio:${IMAGE_TAG}"
+          REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "🔄 Using image: ghcr.io/${REPO}:${IMAGE_TAG}"
 
-          docker pull ghcr.io/${{ github.repository_owner }}/depictio:${IMAGE_TAG}
-          docker tag ghcr.io/${{ github.repository_owner }}/depictio:${IMAGE_TAG} depictio:latest
+          docker pull ghcr.io/${REPO}:${IMAGE_TAG}
+          docker tag ghcr.io/${REPO}:${IMAGE_TAG} depictio:latest
 
           cp .env.example .env
           mkdir -p depictioDB minio_data
