@@ -2,11 +2,11 @@ name: Test, Build and Push Helm Chart
 
 on:
   push:
-    branches: [ main ]
+    # branches: [ main ]
     paths:
       - 'helm-charts/depictio/**'
   pull_request:
-    branches: [ main ]
+    # branches: [ main ]
     paths:
       - 'helm-charts/depictio/**'
   workflow_dispatch:

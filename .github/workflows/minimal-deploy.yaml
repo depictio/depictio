@@ -249,6 +249,21 @@ jobs:
           docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d
 
 
+      - name: Wait for services to be ready
+        run: |
+          echo "⏳ Waiting for services to start..."
+          sleep 10
+
+          # Check if containers are running
+          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml ps
+
+      - name: Logs
+        run: |
+          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml logs
+
+      # List content of depictio
+      - name: List Depictio Directory
+        run: ls -lal depictio/.depictio
 
 
 
@@ -263,9 +278,6 @@ jobs:
         run: |
           cd depictio/cli
           source venv/bin/activate
-
-          # Wait for backend to be ready
-          sleep 10
 
           # Copy config from container
           docker cp depictio-backend:/app/.depictio/admin_config.yaml .
@@ -300,7 +312,7 @@ jobs:
         with:
           node-version: "18"  # Updated to newer LTS version
           cache: 'npm'
-          cache-dependency-path: tests/e2e-tests/package-lock.json
+          cache-dependency-path: depictio/tests/e2e-tests/package-lock.json
 
       - name: Use cached image and start services
         run: |
