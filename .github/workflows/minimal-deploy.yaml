@@ -21,6 +21,48 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+
+      # ↓ NEW: Add user to docker group for permissions
+      - name: Configure Docker Permissions
+        run: |
+          # Add current user to docker group (ignore if already exists)
+          sudo usermod -aG docker $USER || true
+          # Change docker socket permissions
+          sudo chmod 666 /var/run/docker.sock
+          # Verify permissions
+          ls -la /var/run/docker.sock
+          groups
+
+      - name: Check os version
+        run: |
+          echo "OS Version: $(cat /etc/os-release)"
+          echo "Kernel Version: $(uname -r)"
+          echo "Architecture: $(uname -m)"
+          docker --version
+          docker compose version
+
+      # Export UID and GID
+      - name: Export UID and GID
+        run: |
+          echo "UID=$(id -u)" >> $GITHUB_ENV
+          echo "GID=$(id -g)" >> $GITHUB_ENV
+
+      - name: Generate .env
+        run: |
+          cp .env.example .env
+
+      - name: Create and Set Permissions for depictioDB
+        run: |
+          mkdir -p depictioDB/
+          chown -R "$(id -u):$(id -g)" depictioDB/
+          chmod -R 777 depictioDB/
+
+      - name: Create and Set Permissions for minio_data
+        run: |
+          mkdir -p minio_data/
+          chown -R "$(id -u):$(id -g)" minio_data/
+          chmod -R 775 minio_data/
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -125,6 +167,15 @@ jobs:
 
           # Check if containers are running
           docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml ps
+
+      - name: Logs
+        run: |
+          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml logs
+
+      # List content of depictio
+      - name: List Depictio Directory
+        run: ls -lal depictio/.depictio
+
 
       - name: Extract Token and Check Depictio Backend Health
         run: |
