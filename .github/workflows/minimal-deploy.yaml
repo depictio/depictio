@@ -322,7 +322,7 @@ jobs:
           source venv/bin/activate
 
           # Copy config from container
-          docker cp depictio-backend:/app/.depictio/admin_config.yaml .
+          docker cp depictio-backend:/app/depictio/.depictio/admin_config.yaml .
 
           # Run CLI commands - show CLI config
           depictio-cli config show-cli-config --CLI-config-path admin_config.yaml
