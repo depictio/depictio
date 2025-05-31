@@ -20,9 +20,7 @@ from depictio.models.models.users import GroupBeanie, Permission, TokenBeanie, U
 from depictio.models.utils import get_config
 
 
-async def create_initial_project(
-    admin_user: UserBeanie, token_payload: TokenBeanie
-) -> None:
+async def create_initial_project(admin_user: UserBeanie, token_payload: TokenBeanie) -> None:
     # from depictio.models.models.projects import Project,
 
     project_yaml_path = os.path.join(
@@ -54,9 +52,7 @@ async def create_initial_project(
 
         logger.debug(f"Project creation payload: {payload}")
         if payload["success"]:
-            logger.info(
-                f"Project created successfully: {format_pydantic(payload['project'])}"
-            )
+            logger.info(f"Project created successfully: {format_pydantic(payload['project'])}")
             return {
                 "success": True,
                 "project": payload["project"],
@@ -84,9 +80,7 @@ async def create_initial_dashboard(admin_user: UserBeanie) -> None:
     # Load the dashboard configuration from the JSON file
     from bson import json_util
 
-    dashboard_data = json.load(
-        open(dashboard_json_path, "r"), object_hook=json_util.object_hook
-    )
+    dashboard_data = json.load(open(dashboard_json_path, "r"), object_hook=json_util.object_hook)
     logger.debug(f"Dashboard data: {dashboard_data}")
     _check = dashboards_collection.find_one({"_id": ObjectId(dashboard_data["_id"])})
     if _check:
@@ -136,9 +130,7 @@ async def initialize_db(wipe: bool = False) -> UserBeanie | None:
         logger.info("Database deleted successfully.")
 
     # Load and validate configuration for initial users and groups
-    config_path = os.path.join(
-        os.path.dirname(__file__), "configs", "initial_users.yaml"
-    )
+    config_path = os.path.join(os.path.dirname(__file__), "configs", "initial_users.yaml")
     initial_config = get_config(config_path)
 
     logger.info("Running initial database setup...")
@@ -185,19 +177,13 @@ async def initialize_db(wipe: bool = False) -> UserBeanie | None:
                     "new_token_created": False,
                 }
                 logger.info(f"Token payload: {format_pydantic(token_payload)}")
-                logger.info(
-                    f"Default token already exists for {user_payload['user'].email}"
-                )
+                logger.info(f"Default token already exists for {user_payload['user'].email}")
             else:
-                logger.warning(
-                    f"Failed to create default token for {user_payload['user'].email}"
-                )
+                logger.warning(f"Failed to create default token for {user_payload['user'].email}")
 
     # If no admin user was created through the loop, try to find one
     if admin_user is None:
-        logger.debug(
-            "No admin user created during initialization, checking if one exists..."
-        )
+        logger.debug("No admin user created during initialization, checking if one exists...")
         admin_user = await UserBeanie.find_one({"is_admin": True})
         if admin_user:
             logger.info(f"Found existing admin user: {admin_user.email}")

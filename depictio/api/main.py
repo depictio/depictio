@@ -182,9 +182,7 @@ api_version = get_api_version()
 api_prefix = f"/depictio/api/{api_version}"
 app.include_router(router, prefix=api_prefix)
 
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request, exc):
-    return JSONResponse(
-        status_code=422,
-        content={"detail": [str(error) for error in exc.errors()]}
-    )
+    return JSONResponse(status_code=422, content={"detail": [str(error) for error in exc.errors()]})
