@@ -82,12 +82,11 @@ packages = ["depictio"]
 # files = ["depictio/tests/", "depictio/models/", "depictio/cli/"]
 
 [tool.ruff]
-# Other settings...
 line-length = 100
-# Enable the formatter
 
 [tool.ruff.lint]
 select = ["E", "F", "I"] # Enable import sorting (I rules)
+ignore = ["E501"]  # Ignore all line length errors
 
 [tool.ruff.lint.isort]
 known-first-party = ["depictio"]
