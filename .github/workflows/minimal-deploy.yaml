@@ -76,21 +76,17 @@ jobs:
       - name: Generate image info
         id: image-info
         run: |
-          # Create hash from Docker-related files
-          DOCKER_HASH=$(cat docker-images/Dockerfile_depictio.dockerfile conda_envs/depictio.yaml pyproject.toml | sha256sum | cut -d' ' -f1 | cut -c1-12)
-
           # Use lowercase repo name for GHCR compatibility
           REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
 
-          # Use PR number for PRs, commit hash for main
+          # Use git commit hash instead of content hash
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            TAG="pr-${{ github.event.number }}-${DOCKER_HASH}"
+            TAG="pr-${{ github.event.number }}-${{ github.sha }}"
           else
-            TAG="main-${DOCKER_HASH}"
+            TAG="main-${{ github.sha }}"
           fi
 
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
-          echo "hash=${DOCKER_HASH}" >> $GITHUB_OUTPUT
           echo "repo=${REPO_LOWER}" >> $GITHUB_OUTPUT
           echo "full-image=ghcr.io/${REPO_LOWER}:${TAG}" >> $GITHUB_OUTPUT
           echo "Generated tag: ${TAG}"
@@ -179,8 +175,6 @@ jobs:
 
       - name: Extract Token and Check Depictio Backend Health
         run: |
-          # Wait a bit more for initialization
-          sleep 10
 
           # Extract the access token from the YAML file
           if ! token=$(docker compose exec depictio-backend bash -c "cat /app/depictio/.depictio/admin_config.yaml" 2>/dev/null | grep 'access_token' | awk '{print $2}'); then
@@ -224,6 +218,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
       - name: Log in to Container Registry
         uses: docker/login-action@v3
         with:
@@ -246,13 +248,9 @@ jobs:
           chmod 777 depictioDB minio_data
           docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+
+
 
       - name: Setup CLI
         run: |
@@ -296,6 +294,14 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GHCR_PAT }}
 
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4  # Updated to v4
+        with:
+          node-version: "18"  # Updated to newer LTS version
+          cache: 'npm'
+          cache-dependency-path: tests/e2e-tests/package-lock.json
+
       - name: Use cached image and start services
         run: |
           # Use the exact image from docker-build job
@@ -311,12 +317,6 @@ jobs:
           chmod 777 depictioDB minio_data
           docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4  # Updated to v4
-        with:
-          node-version: "18"  # Updated to newer LTS version
-          cache: 'npm'
-          cache-dependency-path: tests/e2e-tests/package-lock.json
 
       - name: Run E2E tests
         run: |
