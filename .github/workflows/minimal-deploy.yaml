@@ -1,0 +1,113 @@
+name: Minimal Depictio CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # quality:
+  #   runs-on: ubuntu-22.04
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Install uv
+  #       uses: astral-sh/setup-uv@v5
+  #     - name: Setup Python
+  #       uses: actions/setup-python@v5
+  #       with:
+  #         python-version: "3.11"
+  #     - name: Install and test
+  #       run: |
+  #         uv venv venv
+  #         source venv/bin/activate
+  #         uv pip install -e .
+  #         uv pip install pytest ruff
+  #         ruff check .
+  #         pytest tests/ -xvs
+
+  docker-build:
+    # needs: quality
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        
+      - name: Build and cache images
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker-images/Dockerfile_depictio.dockerfile
+          push: false
+          load: true
+          tags: depictio:latest
+          cache-from: type=gha,scope=depictio
+          cache-to: type=gha,mode=max,scope=depictio
+          
+      - name: Start services
+        run: |
+          cp .env.example .env
+          mkdir -p depictioDB minio_data
+          chmod 777 depictioDB minio_data
+          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d
+          
+      - name: Health check
+        run: |
+          sleep 30
+          docker ps
+          curl -f http://localhost:8058/health || exit 1
+
+  cli-tests:
+    needs: docker-build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Use cached image and start services
+        run: |
+          cp .env.example .env
+          mkdir -p depictioDB minio_data
+          chmod 777 depictioDB minio_data
+          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d
+          
+      - name: Setup CLI
+        run: |
+          cd depictio/cli
+          uv venv venv
+          source venv/bin/activate
+          uv pip install -e .
+          
+      - name: Run CLI tests
+        run: |
+          cd depictio/cli
+          source venv/bin/activate
+          # Copy config from container
+          docker cp depictio-backend:/app/.depictio/admin_config.yaml .
+          # Run CLI commands
+          depictio-cli config show-cli-config --CLI-config-path admin_config.yaml
+
+  e2e-tests:
+    needs: docker-build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Use cached image and start services
+        run: |
+          cp .env.example .env
+          mkdir -p depictioDB minio_data
+          chmod 777 depictioDB minio_data
+          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d
+          
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "16"
+          
+      - name: Run E2E tests
+        run: |
+          cd tests/e2e-tests
+          npm ci
+          npx cypress run
