@@ -9,7 +9,7 @@ user_metadata = {
     "Username": "snehil_vijay",
     "Email": "snehil.vijay@example.com",
     "Login Time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-    "Role": "Admin"
+    "Role": "Admin",
 }
 
 # Design layout for the profile page
@@ -17,7 +17,7 @@ avatar = html.A(
     dmc.Tooltip(
         dmc.Avatar(
             src="https://e7.pngegg.com/pngimages/799/987/png-clipart-computer-icons-avatar-icon-design-avatar-heroes"
-                "-computer-wallpaper-thumbnail.png",
+            "-computer-wallpaper-thumbnail.png",
             size="lg",
             radius="xl",
         ),
@@ -29,9 +29,7 @@ avatar = html.A(
 )
 
 # Metadata display
-metadata_items = [
-    dbc.ListGroupItem(f"{key}: {value}") for key, value in user_metadata.items()
-]
+metadata_items = [dbc.ListGroupItem(f"{key}: {value}") for key, value in user_metadata.items()]
 
 metadata_list = dbc.ListGroup(metadata_items, flush=True)
 
@@ -50,15 +48,15 @@ layout = dbc.Container(
                             id="logout-button",
                             variant="outline",
                             color="red",
-                            style={"marginTop": "20px"}
-                        )
+                            style={"marginTop": "20px"},
+                        ),
                     ],
-                    width=True
-                )
+                    width=True,
+                ),
             ],
             align="center",
             justify="center",
-            className="mt-4"
+            className="mt-4",
         )
     ],
     fluid=True,

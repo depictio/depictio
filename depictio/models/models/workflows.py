@@ -248,19 +248,25 @@ class Workflow(MongoModel):
             raise ValueError("version must be a string")
         return value
 
-    # @model_validator(mode="before")
-    # @classmethod
-    # def generate_workflow_tag(cls, values):
-    #     engine = values.get("engine")
-    #     name = values.get("name")
-    #     catalog = values.get("catalog")
-    #     logger.debug(f"Engine: {engine}, Name: {name}, Catalog: {catalog}")
-    #     values["workflow_tag"] = f"{engine.get('name')}/{name}"
-    #     if catalog:
-    #         catalog_name = catalog.get("name")
-    #         if catalog_name == "nf-core":
-    #             values["workflow_tag"] = f"{catalog_name}/{name}"
-    #     return values
+    @model_validator(mode="before")
+    @classmethod
+    def generate_workflow_tag(cls, values):
+        engine = values.get("engine", {})
+        name = values.get("name")
+
+        if not isinstance(engine, WorkflowEngine):
+            values["workflow_tag"] = values.get("name", "")
+            return values
+        catalog = values.get("catalog")
+        if not isinstance(catalog, WorkflowCatalog):
+            catalog = None
+        logger.debug(f"Engine: {engine}, Name: {name}, Catalog: {catalog}")
+        values["workflow_tag"] = f"{engine.name}/{name}"
+        if catalog:
+            catalog_name = catalog.name
+            if catalog_name == "nf-core":
+                values["workflow_tag"] = f"{catalog_name}/{name}"
+        return values
 
     def __eq__(self, other):
         if isinstance(other, Workflow):

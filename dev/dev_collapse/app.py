@@ -57,7 +57,10 @@ sidebar_content_expanded = [
     html.P("A simple sidebar layout with navigation links", className="lead"),
 ]
 
-sidebar_content_collapsed = [collapse_button, html.P("Col", style={"position": "absolute", "right": "0", "top": "75px"})]
+sidebar_content_collapsed = [
+    collapse_button,
+    html.P("Col", style={"position": "absolute", "right": "0", "top": "75px"}),
+]
 
 sidebar = html.Div(
     id="sidebar-content",
@@ -67,9 +70,13 @@ sidebar = html.Div(
 
 content = html.Div(id="page-content", style=CONTENT_STYLE)
 
-collapse_button_store = dcc.Store(id="collapse-button-store", data={"state": "expanded", "n_clicks": 0})
+collapse_button_store = dcc.Store(
+    id="collapse-button-store", data={"state": "expanded", "n_clicks": 0}
+)
 
-app.layout = html.Div([dcc.Location(id="url"), sidebar, content, collapse_button, collapse_button_store])
+app.layout = html.Div(
+    [dcc.Location(id="url"), sidebar, content, collapse_button, collapse_button_store]
+)
 
 
 @app.callback(
@@ -84,7 +91,9 @@ app.layout = html.Div([dcc.Location(id="url"), sidebar, content, collapse_button
     State("sidebar-content", "children"),
     State("collapse-button-store", "data"),
 )
-def toggle_sidebar(n_clicks, sidebar_style, content_style, sidebar_content_raw, collapse_button_store):
+def toggle_sidebar(
+    n_clicks, sidebar_style, content_style, sidebar_content_raw, collapse_button_store
+):
     print(f"sidebar_style: {sidebar_style}")
     print(f"content_style: {content_style}")
     print(f"sidebar_content_raw: {sidebar_content_raw}")
@@ -130,7 +139,10 @@ def toggle_sidebar(n_clicks, sidebar_style, content_style, sidebar_content_raw, 
         sidebar_content = [
             collapse_button,
             dbc.NavLink(
-                [DashIconify(icon="mdi:home", width=24), html.Span("Home", className="ms-2", style={"font-size": "1.25rem"})],
+                [
+                    DashIconify(icon="mdi:home", width=24),
+                    html.Span("Home", className="ms-2", style={"font-size": "1.25rem"}),
+                ],
                 href="/",
                 active="exact",
             ),
@@ -145,7 +157,13 @@ def toggle_sidebar(n_clicks, sidebar_style, content_style, sidebar_content_raw, 
     collapse_button_store["n_clicks"] += 1
     print(f"collapse_button_store: {collapse_button_store}")
 
-    return sidebar_style, content_style, sidebar_content, collapse_button_style, collapse_button_store
+    return (
+        sidebar_style,
+        content_style,
+        sidebar_content,
+        collapse_button_style,
+        collapse_button_store,
+    )
 
 
 if __name__ == "__main__":

@@ -10,13 +10,18 @@ from mongomock_motor import AsyncMongoMockClient
 
 from depictio.api.v1.configs.custom_logging import format_pydantic
 from depictio.api.v1.endpoints.user_endpoints.core_functions import (
-    _add_token, _async_fetch_user_from_email, _async_fetch_user_from_id,
-    _async_fetch_user_from_token, _check_if_token_is_valid, _delete_token,
-    _edit_password, _list_tokens, _purge_expired_tokens)
-from depictio.models.models.users import (TokenBeanie, TokenData, UserBase,
-                                          UserBeanie)
-from depictio.tests.api.v1.endpoints.user_endpoints.conftest import \
-    beanie_setup
+    _add_token,
+    _async_fetch_user_from_email,
+    _async_fetch_user_from_id,
+    _async_fetch_user_from_token,
+    _check_if_token_is_valid,
+    _delete_token,
+    _edit_password,
+    _list_tokens,
+    _purge_expired_tokens,
+)
+from depictio.models.models.users import TokenBeanie, TokenData, UserBase, UserBeanie
+from depictio.tests.api.v1.endpoints.user_endpoints.conftest import beanie_setup
 
 # ------------------------------------------------------
 # Test _async_fetch_user_from_token function

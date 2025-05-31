@@ -12,7 +12,9 @@ def load_depictio_data():
         "stored_children_data": [
             html.Div(
                 [
-                    dbc.Button("Remove", id={"type": "remove-box-button", "index": "1"}, color="danger"),
+                    dbc.Button(
+                        "Remove", id={"type": "remove-box-button", "index": "1"}, color="danger"
+                    ),
                     dbc.Card(
                         [
                             dbc.CardHeader("count on sample"),
@@ -29,6 +31,7 @@ def load_depictio_data():
 
 app = dash.Dash(__name__)
 
+
 def create_app_layout():
     depictio_dash_data = load_depictio_data()
     if depictio_dash_data:
@@ -37,22 +40,33 @@ def create_app_layout():
         init_children = []
 
     # Wrap the ResponsiveGridLayout in a Loading component
-    layout = html.Div([
-        dbc.Container([
-            dcc.Loading(id="loading", children=[
-                dash_draggable.ResponsiveGridLayout(children=init_children, id="draggable-container")
-            ]),
-            html.Div(id="dummy-output", style={"display": "none"}),
-        ])
-    ])
+    layout = html.Div(
+        [
+            dbc.Container(
+                [
+                    dcc.Loading(
+                        id="loading",
+                        children=[
+                            dash_draggable.ResponsiveGridLayout(
+                                children=init_children, id="draggable-container"
+                            )
+                        ],
+                    ),
+                    html.Div(id="dummy-output", style={"display": "none"}),
+                ]
+            )
+        ]
+    )
     return layout
 
+
 app.layout = create_app_layout
+
 
 @app.callback(
     Output("draggable-container", "children"),
     [Input("loading", "children")],  # Use the Loading component as a trigger
-    [State("draggable-container", "children")]
+    [State("draggable-container", "children")],
 )
 def check_contents(loaded_children, existing_children):
     print("Existing Children: ", existing_children)
@@ -66,7 +80,10 @@ def check_contents(loaded_children, existing_children):
                 print("Existing children props keys: ", existing_children[0]["props"].keys())
                 print("ID: ", existing_children[0]["props"]["id"])
                 if "children" in existing_children[0]["props"]:
-                    print("Existing children props children: ", existing_children[0]["props"]["children"])
+                    print(
+                        "Existing children props children: ",
+                        existing_children[0]["props"]["children"],
+                    )
 
                     new_children = existing_children[0]["props"]["children"]
                     print("Unwrapped children:", new_children)

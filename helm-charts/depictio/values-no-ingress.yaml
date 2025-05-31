@@ -12,7 +12,7 @@ ingress:
 global:
   domain: null
 
-  
+
   # # Host configuration for local access with minikube tunnel
   # hosts:
   #   - host: "depictio.local"
@@ -27,7 +27,7 @@ global:
   #         service:
   #           name: depictio-backend
   #           port: 80
-  
+
   # No TLS for local development
   # tls: []
 
@@ -38,7 +38,7 @@ mongo:
       memory: "256Mi"
       cpu: "0.1"
     limits:
-      memory: "512Mi" 
+      memory: "512Mi"
       cpu: "0.5"
 
 minio:
@@ -58,7 +58,7 @@ backend:
     limits:
       memory: "512Mi"
       cpu: "0.5"
-      
+
 frontend:
   resources:
     requests:

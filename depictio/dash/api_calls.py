@@ -7,8 +7,7 @@ from pydantic import EmailStr, validate_call
 
 from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.logging_init import format_pydantic, logger
-from depictio.api.v1.endpoints.user_endpoints.core_functions import \
-    _hash_password
+from depictio.api.v1.endpoints.user_endpoints.core_functions import _hash_password
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.users import TokenBase, TokenData, User
 from depictio.models.utils import convert_model_to_dict

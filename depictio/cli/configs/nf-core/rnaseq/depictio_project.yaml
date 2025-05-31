@@ -1,0 +1,199 @@
+# Depictio Configuration for nf-core/rnaseq Project
+# Required: Name of the project
+name: "RNA-seq Expression Analysis"
+
+# Optional: External project management system reference
+data_management_platform_project_url: "https://github.com/your-org/rnaseq-project"
+
+# Required: Workflows that are available in the system
+workflows:
+  # Required: The name of the workflow
+  - name: "nf-core-rnaseq"
+
+    # Required: Engine that is used to run the workflow
+    engine:
+      # Required: The name of the engine
+      name: "nextflow"
+      # Optional: The version of the engine
+      version: "24.10.3"
+
+    # Optional: External workflow catalog reference
+    catalog:
+      # Required: The name of the catalog
+      name: "nf-core"
+      # Required: The URL of the catalog
+      url: "https://nf-co.re/rnaseq"
+
+    # Optional: The description of the workflow
+    description: "RNA sequencing analysis pipeline using STAR, RSEM, HISAT2 or Salmon with gene/isoform counts and extensive quality control"
+
+    # Optional: The URL of the repository that contains the workflow
+    repository_url: "https://github.com/nf-core/rnaseq"
+
+    # Optional: Version of the workflow
+    version: "3.18.0"
+
+    # Required: The configuration to retrieve workflow data
+    config:
+      # Required: List of locations containing the workflow runs
+      parent_runs_location:
+        # Path to your nf-core/rnaseq results directory
+        - "{DATA_LOCATION}/rnaseq-results"
+        # Alternative: absolute path
+        # - "/path/to/your/rnaseq/results"
+
+      # Required: Regular expression to search the runs
+      runs_regex: ".*"
+
+      # Required: Data collections that are associated with the workflow
+      data_collections:
+
+        # Gene Expression Counts Matrix
+        - data_collection_tag: "gene_counts"
+          description: "Raw gene expression counts from Salmon quantification"
+          config:
+            type: "Table"
+            metatype: "Metadata"
+            scan:
+              mode: "single"
+              scan_parameters:
+                filename: "star_salmon/salmon.merged.gene_counts.tsv"
+            dc_specific_properties:
+              format: "TSV"
+              polars_kwargs:
+                separator: "\t"
+                has_header: true
+                first_row_as_names: true
+            columns_description:
+              gene_id: "Ensembl Gene ID"
+              gene_name: "Gene Symbol"
+
+        # Gene Expression TPM Matrix
+        - data_collection_tag: "gene_tpm"
+          description: "TPM normalized gene expression values from Salmon"
+          config:
+            type: "Table"
+            metatype: "Metadata"
+            scan:
+              mode: "single"
+              scan_parameters:
+                filename: "star_salmon/salmon.merged.gene_tpm.tsv"
+            dc_specific_properties:
+              format: "TSV"
+              polars_kwargs:
+                separator: "\t"
+                has_header: true
+                first_row_as_names: true
+            columns_description:
+              gene_id: "Ensembl Gene ID"
+              gene_name: "Gene Symbol"
+
+          join:
+            # Join gene expression data with sample metadata
+              on_columns:
+                - "sample"
+              how: "inner"
+              with_dc:
+              - sample_metadata
+
+
+
+        # Transcript Expression TPM
+        - data_collection_tag: "transcript_tpm"
+          description: "TPM normalized transcript expression values"
+          config:
+            type: "Table"
+            metatype: "Metadata"
+            scan:
+              mode: "single"
+              scan_parameters:
+                filename: "star_salmon/salmon.merged.transcript_tpm.tsv"
+            dc_specific_properties:
+              format: "TSV"
+              polars_kwargs:
+                separator: "\t"
+                has_header: true
+                first_row_as_names: true
+            columns_description:
+              transcript_id: "Ensembl Transcript ID"
+              gene_id: "Ensembl Gene ID"
+
+        # Individual Sample Quantifications
+        - data_collection_tag: "sample_quant"
+          description: "Per-sample Salmon quantification files"
+          config:
+            type: "Table"
+            metatype: "Aggregate"
+            scan:
+              mode: "recursive"
+              scan_parameters:
+                regex_config:
+                  pattern: "star_salmon/.*/quant.sf"
+            dc_specific_properties:
+              format: "TSV"
+              polars_kwargs:
+                separator: "\t"
+                has_header: true
+                first_row_as_names: true
+            keep_columns:
+              - "Name"
+              - "Length"
+              - "EffectiveLength"
+              - "TPM"
+              - "NumReads"
+            columns_description:
+              Name: "Transcript ID"
+              Length: "Transcript Length"
+              EffectiveLength: "Effective Length"
+              TPM: "Transcripts Per Million"
+              NumReads: "Estimated Number of Reads"
+
+        # STAR Alignment Stats
+        - data_collection_tag: "star_stats"
+          description: "STAR alignment statistics"
+          config:
+            type: "Table"
+            metatype: "Aggregate"
+            scan:
+              mode: "recursive"
+              scan_parameters:
+                regex_config:
+                  pattern: "star_salmon/log/.*Log.final.out"
+            dc_specific_properties:
+              format: "Custom"  # STAR log format
+
+        # Sample Metadata (if available)
+        - data_collection_tag: "sample_metadata"
+          description: "Sample experimental design and metadata"
+          config:
+            type: "Table"
+            metatype: "Metadata"
+            scan:
+              mode: "single"
+              scan_parameters:
+                # This would be your input samplesheet or a derived metadata file
+                filename: "samplesheet.csv"
+            dc_specific_properties:
+              format: "CSV"
+              polars_kwargs:
+                separator: ","
+                has_header: true
+                first_row_as_names: true
+            columns_description:
+              sample: "Sample ID"
+              fastq_1: "Forward reads FASTQ file"
+              fastq_2: "Reverse reads FASTQ file"
+              strandedness: "Library strandedness"
+
+        # Pipeline Information
+        - data_collection_tag: "pipeline_info"
+          description: "Pipeline execution and software version information"
+          config:
+            type: "Table"
+            metatype: "Metadata"
+            scan:
+              mode: "single"
+              scan_parameters:
+                filename: "pipeline_info/software_versions.yml"
+            dc_specific_properties:
+              format: "Custom"  # YAML format

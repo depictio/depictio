@@ -14,7 +14,7 @@ for i in range(5):
             dbc.CardHeader(
                 html.H5(
                     dbc.Button(
-                        f"Accordion {i+1}",
+                        f"Accordion {i + 1}",
                         id=f"group-{i}-toggle",
                         className="text-left",
                     ),
@@ -25,9 +25,7 @@ for i in range(5):
             dbc.Collapse(
                 dbc.CardBody(
                     [
-                        dbc.Input(
-                            id=f"input-{i}", type="text", placeholder="Type something"
-                        ),
+                        dbc.Input(id=f"input-{i}", type="text", placeholder="Type something"),
                     ]
                 ),
                 id=f"collapse-{i}",

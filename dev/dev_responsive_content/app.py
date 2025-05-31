@@ -53,10 +53,7 @@ app.layout = html.Div(
     [
         sidebar,
         html.Div(
-            [
-                dash.page_container,
-                html.Div("HELLO!")
-            ],
+            [dash.page_container, html.Div("HELLO!")],
             className="content",
         ),
     ]

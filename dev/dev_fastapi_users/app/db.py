@@ -8,13 +8,13 @@ from datetime import datetime
 from pydantic import Field
 
 DATABASE_URL = "mongodb://localhost:27018"
-client = motor.motor_asyncio.AsyncIOMotorClient(
-    DATABASE_URL, uuidRepresentation="standard"
-)
+client = motor.motor_asyncio.AsyncIOMotorClient(DATABASE_URL, uuidRepresentation="standard")
 db = client["fastapi_users_db"]
+
 
 class OAuthAccount(BaseOAuthAccount):
     pass
+
 
 class Group(Document):
     name: str
@@ -37,7 +37,6 @@ class User(BeanieBaseUser, Document):
     class Settings:
         name = "users"
         email_collation = None  # Or set to the appropriate MongoDB collation
-
 
 
 async def get_user_db():

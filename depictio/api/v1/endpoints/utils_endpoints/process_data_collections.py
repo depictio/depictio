@@ -30,8 +30,9 @@ def process_collections():
             logger.info("API is ready. Processing initial data collections...")
 
             # Call the synchronous version of process_initial_data_collections
-            from depictio.api.v1.endpoints.utils_endpoints.process_data_collections import \
-                sync_process_initial_data_collections
+            from depictio.api.v1.endpoints.utils_endpoints.process_data_collections import (
+                sync_process_initial_data_collections,
+            )
 
             result = sync_process_initial_data_collections()
 

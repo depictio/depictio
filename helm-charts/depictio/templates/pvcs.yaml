@@ -3,7 +3,7 @@ kind: PersistentVolumeClaim
 metadata:
   name: mongo-pvc
   namespace: {{ .Release.Namespace }}
-  labels: 
+  labels:
     app: mongo
 spec:
   storageClassName: {{ .Values.storageClass }}
@@ -19,7 +19,7 @@ kind: PersistentVolumeClaim
 metadata:
   name: minio-pvc
   namespace: {{ .Release.Namespace }}
-  labels: 
+  labels:
     app: minio
 spec:
   storageClassName: {{ .Values.storageClass }}
@@ -35,7 +35,7 @@ kind: PersistentVolumeClaim
 metadata:
   name: depictio-screenshots-pvc
   namespace: {{ .Release.Namespace }}
-  labels: 
+  labels:
     app: depictio
 spec:
   storageClassName: {{ .Values.storageClass }}
@@ -50,7 +50,7 @@ kind: PersistentVolumeClaim
 metadata:
   name: depictio-keys-pvc
   namespace: {{ .Release.Namespace }}
-  labels: 
+  labels:
     app: depictio
 spec:
   storageClassName: {{ .Values.storageClass }}

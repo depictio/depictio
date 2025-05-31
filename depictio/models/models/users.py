@@ -1,8 +1,7 @@
 from datetime import datetime
 
 from beanie import Document, Link, PydanticObjectId
-from pydantic import (BaseModel, EmailStr, Field, field_serializer,
-                      field_validator, model_validator)
+from pydantic import BaseModel, EmailStr, Field, field_serializer, field_validator, model_validator
 
 from depictio.models.logging import logger
 from depictio.models.models.base import MongoModel, PyObjectId

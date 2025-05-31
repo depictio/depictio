@@ -3,13 +3,17 @@ from typing import Annotated
 import typer
 
 from depictio.cli.cli.utils.api_calls import (
-    api_get_project_from_name, api_sync_project_config_to_server)
+    api_get_project_from_name,
+    api_login,
+    api_sync_project_config_to_server,
+)
 from depictio.cli.cli.utils.common import load_depictio_config
-from depictio.cli.cli.utils.config import \
-    validate_project_config_and_check_S3_storage
-from depictio.cli.cli.utils.rich_utils import (rich_print_checked_statement,
-                                               rich_print_command_usage,
-                                               rich_print_json)
+from depictio.cli.cli.utils.config import validate_project_config_and_check_S3_storage
+from depictio.cli.cli.utils.rich_utils import (
+    rich_print_checked_statement,
+    rich_print_command_usage,
+    rich_print_json,
+)
 from depictio.models.s3_utils import S3_storage_checks
 from depictio.models.utils import convert_model_to_dict
 
@@ -37,6 +41,25 @@ def show_cli_config(
         rich_print_json("Current Depictio CLI Configuration: ", depictio_CLI_config.model_dump())
     except Exception as e:
         rich_print_checked_statement(f"Unable to load configuration - {e}", "error")
+
+
+@app.command()
+def check_server_accessibility(
+    CLI_config_path: Annotated[
+        str, typer.Option("--CLI-config-path", help="Path to the configuration file")
+    ] = "~/.depictio/CLI.yaml",
+):
+    """
+    Check the server accessibility.
+
+    Args:
+        CLI_config_path (Annotated[str, typer.Option, optional): _description_. Defaults to "Path to the configuration file")]="~/.depictio/CLI.yaml".
+    """
+    rich_print_command_usage("check_server_accessibility")
+    try:
+        api_login(CLI_config_path)
+    except Exception as e:
+        rich_print_checked_statement(f"Unable to access server - {e}", "error")
 
 
 @app.command()

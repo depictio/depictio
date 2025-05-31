@@ -15,7 +15,9 @@ app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
 
 server = app.server
 
-df = pd.read_csv("https://raw.githubusercontent.com/plotly/datasets/master/gapminderDataFiveYear.csv")
+df = pd.read_csv(
+    "https://raw.githubusercontent.com/plotly/datasets/master/gapminderDataFiveYear.csv"
+)
 
 app.layout = html.Div(
     [
@@ -25,7 +27,11 @@ app.layout = html.Div(
             children=[
                 html.Div(
                     children=[
-                        dcc.Graph(id="graph-with-slider", responsive=True, style={"min-height": "0", "flex-grow": "1"}),
+                        dcc.Graph(
+                            id="graph-with-slider",
+                            responsive=True,
+                            style={"min-height": "0", "flex-grow": "1"},
+                        ),
                         dcc.Slider(
                             id="year-slider",
                             min=df["year"].min(),
@@ -35,11 +41,21 @@ app.layout = html.Div(
                             step=None,
                         ),
                     ],
-                    style={"height": "100%", "width": "100%", "display": "flex", "flex-direction": "column", "flex-grow": "0"},
+                    style={
+                        "height": "100%",
+                        "width": "100%",
+                        "display": "flex",
+                        "flex-direction": "column",
+                        "flex-grow": "0",
+                    },
                 ),
                 html.Div(
                     children=[
-                        dcc.Graph(id="graph-with-slider", responsive=True, style={"min-height": "0", "flex-grow": "1"}),
+                        dcc.Graph(
+                            id="graph-with-slider",
+                            responsive=True,
+                            style={"min-height": "0", "flex-grow": "1"},
+                        ),
                         dcc.Slider(
                             id="year-slider",
                             min=df["year"].min(),
@@ -49,7 +65,13 @@ app.layout = html.Div(
                             step=None,
                         ),
                     ],
-                    style={"height": "100%", "width": "100%", "display": "flex", "flex-direction": "column", "flex-grow": "0"},
+                    style={
+                        "height": "100%",
+                        "width": "100%",
+                        "display": "flex",
+                        "flex-direction": "column",
+                        "flex-grow": "0",
+                    },
                 ),
             ],
         ),
@@ -61,7 +83,16 @@ app.layout = html.Div(
 def update_figure(selected_year):
     filtered_df = df[df.year == selected_year]
 
-    fig = px.scatter(filtered_df, x="gdpPercap", y="lifeExp", size="pop", color="continent", hover_name="country", log_x=True, size_max=55)
+    fig = px.scatter(
+        filtered_df,
+        x="gdpPercap",
+        y="lifeExp",
+        size="pop",
+        color="continent",
+        hover_name="country",
+        log_x=True,
+        size_max=55,
+    )
 
     fig.update_layout(transition_duration=500)
 

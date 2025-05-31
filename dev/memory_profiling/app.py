@@ -73,7 +73,7 @@ def infinite_scroll(request):
     if request is None:
         return no_update
     # partial = df.iloc[request["startRow"]: request["endRow"]]
-    partial = df[request["startRow"]: request["endRow"]]
+    partial = df[request["startRow"] : request["endRow"]]
     return {"rowData": partial.to_dicts(), "rowCount": df.shape[0]}
 
 

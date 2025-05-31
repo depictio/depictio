@@ -26,14 +26,18 @@ dashboards = []
 workflows = []
 
 app = dash.Dash(__name__)
-depictio_logo = html.Img(src=dash.get_asset_url("logo.png"), height=40, style={"margin-left": "0px"})
+depictio_logo = html.Img(
+    src=dash.get_asset_url("logo.png"), height=40, style={"margin-left": "0px"}
+)
 
 app.layout = html.Div(
     [
         dcc.Location(id="url", refresh=False),
         dcc.Location(id="redirect-url", refresh=True),  # Add this component for redirection
         dcc.Store(id="modal-store", storage_type="session", data={"email": "", "submitted": False}),
-        dcc.Store(id="dashboard-modal-store", storage_type="memory", data={"title": ""}),  # Store for new dashboard data
+        dcc.Store(
+            id="dashboard-modal-store", storage_type="memory", data={"title": ""}
+        ),  # Store for new dashboard data
         dmc.Modal(
             opened=False,
             id="email-modal",
@@ -45,11 +49,24 @@ app.layout = html.Div(
                 dmc.Center(dmc.Space(h=20)),
                 dmc.Center(
                     dmc.TextInput(
-                        label="Your Email", style={"width": 300}, placeholder="Please enter your email", icon=DashIconify(icon="ic:round-alternate-email"), id="email-input"
+                        label="Your Email",
+                        style={"width": 300},
+                        placeholder="Please enter your email",
+                        icon=DashIconify(icon="ic:round-alternate-email"),
+                        id="email-input",
                     )
                 ),
                 dmc.Center(dmc.Space(h=20)),
-                dmc.Center(dmc.Button("Login", id="submit-button", variant="filled", disabled=True, size="lg", color="black")),
+                dmc.Center(
+                    dmc.Button(
+                        "Login",
+                        id="submit-button",
+                        variant="filled",
+                        disabled=True,
+                        size="lg",
+                        color="black",
+                    )
+                ),
             ],
             # Prevent closing the modal by clicking outside or pressing ESC
             closeOnClickOutside=False,
@@ -63,9 +80,24 @@ app.layout = html.Div(
             children=[
                 dmc.Center(dmc.Title("Create New Dashboard", order=2)),
                 dmc.Center(dmc.Space(h=20)),
-                dmc.Center(dmc.TextInput(label="Dashboard Title", style={"width": 300}, placeholder="Enter dashboard title", id="dashboard-title-input")),
+                dmc.Center(
+                    dmc.TextInput(
+                        label="Dashboard Title",
+                        style={"width": 300},
+                        placeholder="Enter dashboard title",
+                        id="dashboard-title-input",
+                    )
+                ),
                 dmc.Center(dmc.Space(h=20)),
-                dmc.Center(dmc.Button("Create Dashboard", id="create-dashboard-submit", variant="filled", size="lg", color="black")),
+                dmc.Center(
+                    dmc.Button(
+                        "Create Dashboard",
+                        id="create-dashboard-submit",
+                        variant="filled",
+                        size="lg",
+                        color="black",
+                    )
+                ),
             ],
             closeOnClickOutside=False,
             closeOnEscape=False,
@@ -74,6 +106,7 @@ app.layout = html.Div(
         html.Div(id="landing-page", style={"display": "none"}),  # Initially hidden
     ]
 )
+
 
 def convert_objectid_to_str(data):
     for item in data:
@@ -84,7 +117,7 @@ def convert_objectid_to_str(data):
 
 def load_dashboards_from_db():
     logging.info("Loading dashboards from MongoDB")
-    projection = {"_id": 1, "dashboard_id": 1,"version": 1, "title": 1, "owner": 1}
+    projection = {"_id": 1, "dashboard_id": 1, "version": 1, "title": 1, "owner": 1}
 
     dashboards = list(dashboards_collection.find({}, projection))
 
@@ -123,7 +156,10 @@ def save_dashboards_to_file(data, filepath):
         json.dump(data, file, indent=4)
 
 
-@app.callback([Output("submit-button", "disabled"), Output("email-input", "error")], [Input("email-input", "value")])
+@app.callback(
+    [Output("submit-button", "disabled"), Output("email-input", "error")],
+    [Input("email-input", "value")],
+)
 def update_submit_button(email):
     if email:
         valid = re.match(r"^[a-zA-Z0-9_.+-]+@embl\.de$", email)
@@ -131,7 +167,11 @@ def update_submit_button(email):
     return True, False  # Initially disabled with no error
 
 
-@app.callback(Output("modal-store", "data"), [Input("submit-button", "n_clicks")], [State("email-input", "value"), State("modal-store", "data")])
+@app.callback(
+    Output("modal-store", "data"),
+    [Input("submit-button", "n_clicks")],
+    [State("email-input", "value"), State("modal-store", "data")],
+)
 def store_email(submit_clicks, email, data):
     # logging.info(submit_clicks, email, data)
     if submit_clicks:
@@ -183,11 +223,19 @@ def create_dashboards_view(dashboards):
                     ),
                     dmc.Modal(
                         opened=False,
-                        id={"type": "delete-confirmation-modal", "index": dashboard["dashboard_id"]},
+                        id={
+                            "type": "delete-confirmation-modal",
+                            "index": dashboard["dashboard_id"],
+                        },
                         centered=True,
                         # title="Confirm Deletion",
                         children=[
-                            dmc.Title(f"Are you sure you want to delete this dashboard? {dashboard['dashboard_id']}", order=3, color="black", style={"marginBottom": 20}),
+                            dmc.Title(
+                                f"Are you sure you want to delete this dashboard? {dashboard['dashboard_id']}",
+                                order=3,
+                                color="black",
+                                style={"marginBottom": 20},
+                            ),
                             dmc.Button(
                                 "Delete",
                                 id={
@@ -226,7 +274,10 @@ def create_dashboards_view(dashboards):
 
 
 @app.callback(
-    [Output({"type": "dashboard-list", "index": ALL}, "children"), Output({"type": "dashboard-index-store", "index": ALL}, "data")],
+    [
+        Output({"type": "dashboard-list", "index": ALL}, "children"),
+        Output({"type": "dashboard-index-store", "index": ALL}, "data"),
+    ],
     [
         # Input({"type": "create-dashboard-button", "index": ALL}, "n_clicks"),
         # Input("create-dashboard-submit", "n_clicks"),
@@ -275,8 +326,12 @@ def update_dashboards(
         logging.info(f"dashboards_view: {dashboards_view}")
         logging.info(f"next_index: {next_index}")
         logging.info(f"{[dashboards_view] * len(store_data_list)}")
-        logging.info(f'{[{"next_index": next_index, "dashboards": dashboards}] * len(store_data_list)}')
-        return [dashboards_view] * len(store_data_list), [{"next_index": next_index, "dashboards": dashboards}] * len(store_data_list)
+        logging.info(
+            f"{[{'next_index': next_index, 'dashboards': dashboards}] * len(store_data_list)}"
+        )
+        return [dashboards_view] * len(store_data_list), [
+            {"next_index": next_index, "dashboards": dashboards}
+        ] * len(store_data_list)
 
     if "type" not in ctx.triggered_id:
         if ctx.triggered_id == "dashboard-modal-store":
@@ -294,13 +349,19 @@ def update_dashboards(
             insert_dashboard(new_dashboard)
             next_index += 1
     else:
-
         if ctx.triggered_id["type"] == "confirm-delete":
             ctx_triggered_dict = ctx.triggered[0]
             import ast
-            index_confirm_delete = ast.literal_eval(ctx_triggered_dict["prop_id"].split(".")[0])["index"]
+
+            index_confirm_delete = ast.literal_eval(ctx_triggered_dict["prop_id"].split(".")[0])[
+                "index"
+            ]
             delete_dashboard(index_confirm_delete)
-            dashboards = [dashboard for dashboard in dashboards if dashboard["dashboard_id"] != index_confirm_delete]
+            dashboards = [
+                dashboard
+                for dashboard in dashboards
+                if dashboard["dashboard_id"] != index_confirm_delete
+            ]
 
     logging.info(f"TEST")
     logging.info(f"dashboards: {dashboards}")
@@ -334,7 +395,10 @@ def handle_create_dashboard(n_clicks, title):
 # New callback to open the create dashboard modal
 @app.callback(
     Output("dashboard-modal", "opened"),
-    [Input({"type": "create-dashboard-button", "index": ALL}, "n_clicks"), Input("create-dashboard-submit", "n_clicks")],
+    [
+        Input({"type": "create-dashboard-button", "index": ALL}, "n_clicks"),
+        Input("create-dashboard-submit", "n_clicks"),
+    ],
     [State("dashboard-modal", "opened")],
     prevent_initial_call=True,
 )
@@ -375,7 +439,11 @@ def render_welcome_section(email):
                     size="xl",
                 )
             ),
-            dcc.Store(id={"type": "dashboard-index-store", "index": email}, storage_type="session", data={"next_index": 1}),  # Store for dashboard index management
+            dcc.Store(
+                id={"type": "dashboard-index-store", "index": email},
+                storage_type="session",
+                data={"next_index": 1},
+            ),  # Store for dashboard index management
             # dcc.Store(id={"type": "dashboards-store", "index": email}, storage_type="session", data={"dashboards": []}),  # Store to cache workflows
             dmc.Divider(style={"margin": "20px 0"}),
         ]
@@ -416,7 +484,12 @@ def update_landing_page(
             if pathname.startswith("/dashboard/"):
                 dashboard_id = pathname.split("/")[-1]
                 # Fetch dashboard data based on dashboard_id and return the appropriate layout
-                return html.Div([f"Displaying Dashboard {dashboard_id}", dbc.Button("Go back", href="/", color="black", external_link=True)])
+                return html.Div(
+                    [
+                        f"Displaying Dashboard {dashboard_id}",
+                        dbc.Button("Go back", href="/", color="black", external_link=True),
+                    ]
+                )
             # Add more conditions for other routes
             # return html.Div("This is the home page")
             return dash.no_update

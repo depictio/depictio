@@ -8,11 +8,13 @@ from dash_extensions.enrich import Input, Output, State, html
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.logging_init import format_pydantic, logger
-from depictio.dash.api_calls import (api_call_create_token,
-                                     api_call_delete_token,
-                                     api_call_fetch_user_from_token,
-                                     api_call_generate_agent_config,
-                                     api_call_list_tokens)
+from depictio.dash.api_calls import (
+    api_call_create_token,
+    api_call_delete_token,
+    api_call_fetch_user_from_token,
+    api_call_generate_agent_config,
+    api_call_list_tokens,
+)
 from depictio.dash.colors import colors
 from depictio.models.models.users import TokenBase, TokenData
 

@@ -7,8 +7,6 @@ from fastapi_users.authentication import (
     AuthenticationBackend,
     BearerTransport,
     JWTStrategy,
-
-    
 )
 from httpx_oauth.clients.google import GoogleOAuth2
 
@@ -22,6 +20,7 @@ google_oauth_client = GoogleOAuth2(
     "64285070862-0u422mp1n2b0h5n6209u81jgin1ohtjo.apps.googleusercontent.com",
     "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",
 )
+
 
 class UserManager(ObjectIDIDMixin, BaseUserManager[User, PydanticObjectId]):
     reset_password_token_secret = SECRET
@@ -50,15 +49,17 @@ bearer_transport = BearerTransport(tokenUrl="auth/jwt/login")
 
 def get_jwt_strategy() -> JWTStrategy[models.UP, models.ID]:
     strategy = JWTStrategy(secret=SECRET, lifetime_seconds=3600)
-    
+
     # Monkey patch the generate method to add token logging
     original_generate = strategy.generate
+
     def logged_generate(*args, **kwargs):
         token = original_generate(*args, **kwargs)
         print(f"Generated JWT Token: {token}")
         return token
+
     strategy.generate = logged_generate
-    
+
     return strategy
 
 

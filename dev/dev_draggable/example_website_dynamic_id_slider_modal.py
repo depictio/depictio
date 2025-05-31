@@ -210,25 +210,17 @@ app.layout = html.Div(
                                                 html.Td(
                                                     html.I(
                                                         className="material-icons",
-                                                        children=AVAILABLE_PLOT_TYPES[
-                                                            plot_type
-                                                        ]["material-icons"],
+                                                        children=AVAILABLE_PLOT_TYPES[plot_type][
+                                                            "material-icons"
+                                                        ],
                                                     )
                                                 ),
+                                                html.Td(AVAILABLE_PLOT_TYPES[plot_type]["type"]),
                                                 html.Td(
-                                                    AVAILABLE_PLOT_TYPES[plot_type][
-                                                        "type"
-                                                    ]
+                                                    AVAILABLE_PLOT_TYPES[plot_type]["description"]
                                                 ),
                                                 html.Td(
-                                                    AVAILABLE_PLOT_TYPES[plot_type][
-                                                        "description"
-                                                    ]
-                                                ),
-                                                html.Td(
-                                                    AVAILABLE_PLOT_TYPES[plot_type][
-                                                        "property"
-                                                    ]
+                                                    AVAILABLE_PLOT_TYPES[plot_type]["property"]
                                                 ),
                                                 html.Td(
                                                     dbc.Button(
@@ -260,9 +252,7 @@ app.layout = html.Div(
                         ),
                     ]
                 ),
-                dbc.ModalFooter(
-                    dbc.Button("Close", id="modal-close-button", color="secondary")
-                ),
+                dbc.ModalFooter(dbc.Button("Close", id="modal-close-button", color="secondary")),
             ],
             id="modal",
             centered=True,
@@ -487,8 +477,7 @@ def update_draggable_children(
             # selected_year,
         )
     elif (
-        triggered_input == "stored-layout"
-        or triggered_input == "stored-children"
+        triggered_input == "stored-layout" or triggered_input == "stored-children"
         # or triggered_input == "stored-year"
     ):
         if stored_layout_data and stored_children_data:

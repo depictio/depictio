@@ -2,8 +2,7 @@ import os
 
 from depictio.api.v1.configs.logging_init import initialize_loggers, logger
 from depictio.api.v1.configs.settings_models import Settings
-from depictio.api.v1.key_utils import (generate_keys, load_private_key,
-                                       load_public_key)
+from depictio.api.v1.key_utils import generate_keys, load_private_key, load_public_key
 
 # Explicitly load environment variables
 # load_dotenv(BASE_PATH.parent / ".env", override=False)

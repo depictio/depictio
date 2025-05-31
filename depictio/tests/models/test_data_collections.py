@@ -4,14 +4,17 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from depictio.models.models.data_collections import (DataCollection,
-                                                     DataCollectionConfig,
-                                                     Regex, Scan,
-                                                     ScanRecursive, ScanSingle,
-                                                     TableJoinConfig,
-                                                     WildcardRegexBase)
-from depictio.models.models.data_collections_types.jbrowse import \
-    DCJBrowse2Config
+from depictio.models.models.data_collections import (
+    DataCollection,
+    DataCollectionConfig,
+    Regex,
+    Scan,
+    ScanRecursive,
+    ScanSingle,
+    TableJoinConfig,
+    WildcardRegexBase,
+)
+from depictio.models.models.data_collections_types.jbrowse import DCJBrowse2Config
 from depictio.models.models.data_collections_types.table import DCTableConfig
 
 

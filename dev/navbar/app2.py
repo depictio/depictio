@@ -78,8 +78,13 @@ def update_page_content(pathname):
             [
                 # margin left, top and bottom
                 # dark grey color #333333
-                dmc.Text("Dashboards recently viewed", size=20, weight=600, color="#333333", 
-                         style={"margin": "10px 10px 10px 10px"}),
+                dmc.Text(
+                    "Dashboards recently viewed",
+                    size=20,
+                    weight=600,
+                    color="#333333",
+                    style={"margin": "10px 10px 10px 10px"},
+                ),
                 dmc.Divider(style={"margin": "10px 10px"}),
                 dmc.SimpleGrid(
                     # Dashboards recently viewed
@@ -138,7 +143,6 @@ def update_page_content(pathname):
         return html.Div("Homepage")
 
 
-
 def design_header(data):
     """
     Design the header of the dashboard
@@ -174,7 +178,12 @@ def design_header(data):
             dbc.Row(
                 [
                     dbc.Col(button_menu, width=1, align="center", style={"textAlign": "center"}),
-                    dbc.Col(dmc.Title("Homepage", order=2, color="black"), width=11, align="center", style={"textAlign": "left"}),
+                    dbc.Col(
+                        dmc.Title("Homepage", order=2, color="black"),
+                        width=11,
+                        align="center",
+                        style={"textAlign": "left"},
+                    ),
                 ],
                 style={"height": "100%"},
             ),
@@ -287,20 +296,29 @@ navbar = dmc.Navbar(
             children=[
                 dmc.NavLink(
                     id={"type": "sidebar-link", "index": "dashboards"},
-                    label=dmc.Text("Dashboards", size="lg", style={"fontSize": "16px"}),  # Using dmc.Text to set the font size
+                    label=dmc.Text(
+                        "Dashboards", size="lg", style={"fontSize": "16px"}
+                    ),  # Using dmc.Text to set the font size
                     icon=DashIconify(icon="material-symbols:dashboard", height=25),
                     href="/dashboards",
                     style={"padding": "20px"},
                 ),
                 dmc.NavLink(
                     id={"type": "sidebar-link", "index": "datasets"},
-                    label=dmc.Text("Datasets", size="lg", style={"fontSize": "16px"}),  # Using dmc.Text to set the font size
+                    label=dmc.Text(
+                        "Datasets", size="lg", style={"fontSize": "16px"}
+                    ),  # Using dmc.Text to set the font size
                     icon=DashIconify(icon="material-symbols:dataset", height=25),
                     href="/datasets",
                     style={"padding": "20px"},
                 ),
             ],
-            style={"white-space": "nowrap", "margin-top": "20px", "flexGrow": "1", "overflowY": "auto"},
+            style={
+                "white-space": "nowrap",
+                "margin-top": "20px",
+                "flexGrow": "1",
+                "overflowY": "auto",
+            },
         ),
         html.Div(
             id="sidebar-footer",
@@ -314,7 +332,9 @@ navbar = dmc.Navbar(
                             size="md",
                             radius="xl",
                         ),
-                        dmc.Text("John Doe", size="lg", style={"fontSize": "16px", "marginLeft": "10px"}),
+                        dmc.Text(
+                            "John Doe", size="lg", style={"fontSize": "16px", "marginLeft": "10px"}
+                        ),
                     ],
                     style={
                         "textAlign": "center",
@@ -369,7 +389,14 @@ app.layout = dmc.Container(
             size="100%",
             p=0,
             m=0,
-            style={"display": "flex", "maxWidth": "100vw", "overflow": "hidden", "flexGrow": "1", "maxHeight": "100%", "flexDirection": "column"},
+            style={
+                "display": "flex",
+                "maxWidth": "100vw",
+                "overflow": "hidden",
+                "flexGrow": "1",
+                "maxHeight": "100%",
+                "flexDirection": "column",
+            },
             id="content-container",
         ),
     ],
@@ -377,7 +404,16 @@ app.layout = dmc.Container(
     fluid=True,
     p=0,
     m=0,
-    style={"display": "flex", "maxWidth": "100vw", "overflow": "hidden", "maxHeight": "100vh", "position": "absolute", "top": 0, "left": 0, "width": "100vw"},
+    style={
+        "display": "flex",
+        "maxWidth": "100vw",
+        "overflow": "hidden",
+        "maxHeight": "100vh",
+        "position": "absolute",
+        "top": 0,
+        "left": 0,
+        "width": "100vw",
+    },
     id="overall-container",
 )
 

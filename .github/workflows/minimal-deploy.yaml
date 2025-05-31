@@ -1,0 +1,447 @@
+name: Minimal Depictio CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  docker-build:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: write
+      id-token: write  # Added for enhanced security
+    outputs:
+      image-tag: ${{ steps.image-info.outputs.tag }}
+      image-digest: ${{ steps.build.outputs.digest }}
+      rebuild-needed: ${{ steps.check-rebuild.outputs.rebuild }}
+      full-image: ${{ steps.image-info.outputs.full-image }}  # Added this output
+    steps:
+      - uses: actions/checkout@v4
+
+
+      # ↓ NEW: Add user to docker group for permissions
+      - name: Configure Docker Permissions
+        run: |
+          # Add current user to docker group (ignore if already exists)
+          sudo usermod -aG docker $USER || true
+          # Change docker socket permissions
+          sudo chmod 666 /var/run/docker.sock
+          # Verify permissions
+          ls -la /var/run/docker.sock
+          groups
+
+      - name: Check os version
+        run: |
+          echo "OS Version: $(cat /etc/os-release)"
+          echo "Kernel Version: $(uname -r)"
+          echo "Architecture: $(uname -m)"
+          docker --version
+          docker compose version
+
+      # Export UID and GID
+      - name: Export UID and GID
+        run: |
+          echo "UID=$(id -u)" >> $GITHUB_ENV
+          echo "GID=$(id -g)" >> $GITHUB_ENV
+
+      - name: Generate .env
+        run: |
+          cp .env.example .env
+
+      - name: Create and Set Permissions for depictioDB
+        run: |
+          mkdir -p depictioDB/
+          chown -R "$(id -u):$(id -g)" depictioDB/
+          chmod -R 777 depictioDB/
+
+      - name: Create and Set Permissions for minio_data
+        run: |
+          mkdir -p minio_data/
+          chown -R "$(id -u):$(id -g)" minio_data/
+          chmod -R 775 minio_data/
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      - name: Generate image info
+        id: image-info
+        run: |
+          # Use lowercase repo name for GHCR compatibility
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+
+          # Use git commit hash instead of content hash
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            TAG="pr-${{ github.event.number }}-${{ github.sha }}"
+          else
+            TAG="main-${{ github.sha }}"
+          fi
+
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "repo=${REPO_LOWER}" >> $GITHUB_OUTPUT
+          echo "full-image=ghcr.io/${REPO_LOWER}:${TAG}" >> $GITHUB_OUTPUT
+          echo "Generated tag: ${TAG}"
+
+      - name: Check if rebuild needed
+        id: check-rebuild
+        run: |
+          IMAGE_TAG="${{ steps.image-info.outputs.tag }}"
+          REPO="${{ steps.image-info.outputs.repo }}"
+          FULL_IMAGE="ghcr.io/${REPO}:${IMAGE_TAG}"
+
+          # Check if image already exists in registry
+          if docker manifest inspect "${FULL_IMAGE}" > /dev/null 2>&1; then
+            echo "rebuild=false" >> $GITHUB_OUTPUT
+            echo "✅ Image ${FULL_IMAGE} already exists, skipping build"
+          else
+            echo "rebuild=true" >> $GITHUB_OUTPUT
+            echo "🔨 Image doesn't exist, will build ${FULL_IMAGE}"
+          fi
+
+      - name: Build and push Docker image
+        id: build
+        if: steps.check-rebuild.outputs.rebuild == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker-images/Dockerfile_depictio.dockerfile
+          platforms: linux/amd64  # Specify platform for consistency
+          push: true
+          load: false  # Don't load locally when pushing
+          tags: |
+            ${{ steps.image-info.outputs.full-image }}
+          labels: |
+            org.opencontainers.image.title=Depictio
+            org.opencontainers.image.description=Depictio application
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ steps.image-info.outputs.timestamp }}
+          cache-from: |
+            type=gha,scope=${{ github.ref_name }}
+            type=gha,scope=refs/heads/main
+          cache-to: type=gha,mode=max,scope=${{ github.ref_name }}
+          outputs: type=registry,push=true
+
+      - name: Pull existing image
+        if: steps.check-rebuild.outputs.rebuild == 'false'
+        run: |
+          FULL_IMAGE="${{ steps.image-info.outputs.full-image }}"
+          echo "📥 Pulling existing image: ${FULL_IMAGE}"
+          docker pull "${FULL_IMAGE}"
+          echo "✅ Using cached image: ${FULL_IMAGE}"
+
+      - name: Pull newly built image
+        if: steps.check-rebuild.outputs.rebuild == 'true'
+        run: |
+          FULL_IMAGE="${{ steps.image-info.outputs.full-image }}"
+          echo "📥 Pulling newly built image: ${FULL_IMAGE}"
+          docker pull "${FULL_IMAGE}"
+
+      - name: Start services
+        run: |
+          mkdir -p depictioDB minio_data
+          chmod 777 depictioDB minio_data
+
+          # Set the DEPICTIO_VERSION environment variable for docker-compose
+          export DEPICTIO_VERSION="${{ steps.image-info.outputs.full-image }}"
+
+          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d
+
+      - name: Wait for services to be ready
+        run: |
+          echo "⏳ Waiting for services to start..."
+          sleep 10
+
+          # Check if containers are running
+          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml ps
+
+      - name: Logs
+        run: |
+          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml logs
+
+      # List content of depictio
+      - name: List Depictio Directory
+        run: ls -lal depictio/.depictio
+
+
+      - name: Extract Token and Check Depictio Backend Health
+        run: |
+
+          # Extract the access token from the YAML file
+          if ! token=$(docker compose exec depictio-backend bash -c "cat /app/depictio/.depictio/admin_config.yaml" 2>/dev/null | grep 'access_token' | awk '{print $2}'); then
+            echo "❌ Failed to extract token, checking container logs..."
+            docker compose logs depictio-backend
+            exit 1
+          fi
+
+          # Remove quotes from the token if any
+          token=$(echo $token | tr -d "'\"")
+
+          # Hash the token using SHA256 for safe logging
+          token_hash=$(echo -n "$token" | sha256sum)
+          echo "Extracted token hash: $token_hash"
+
+          # Perform the health check using the extracted token
+          echo "🔍 Checking backend health..."
+          for i in {1..5}; do
+            health_check=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $token" http://localhost:8058/depictio/api/v1/utils/status)
+
+            if [ "$health_check" = "200" ]; then
+              echo "✅ Backend API is healthy (attempt $i/5)"
+              break
+            else
+              echo "⚠️ Backend API not ready yet. Status code: $health_check (attempt $i/5)"
+              if [ $i -eq 5 ]; then
+                echo "❌ Backend API failed health check after 5 attempts"
+                docker compose logs depictio-backend
+                exit 1
+              fi
+              sleep 10
+            fi
+          done
+
+  cli-tests:
+    needs: docker-build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GHCR_PAT }}
+
+
+      # ↓ NEW: Add user to docker group for permissions
+      - name: Configure Docker Permissions
+        run: |
+          # Add current user to docker group (ignore if already exists)
+          sudo usermod -aG docker $USER || true
+          # Change docker socket permissions
+          sudo chmod 666 /var/run/docker.sock
+          # Verify permissions
+          ls -la /var/run/docker.sock
+          groups
+
+      - name: Check os version
+        run: |
+          echo "OS Version: $(cat /etc/os-release)"
+          echo "Kernel Version: $(uname -r)"
+          echo "Architecture: $(uname -m)"
+          docker --version
+          docker compose version
+
+      # Export UID and GID
+      - name: Export UID and GID
+        run: |
+          echo "UID=$(id -u)" >> $GITHUB_ENV
+          echo "GID=$(id -g)" >> $GITHUB_ENV
+
+      - name: Create and Set Permissions for depictioDB
+        run: |
+          mkdir -p depictioDB/
+          chown -R "$(id -u):$(id -g)" depictioDB/
+          chmod -R 777 depictioDB/
+
+      - name: Create and Set Permissions for minio_data
+        run: |
+          mkdir -p minio_data/
+          chown -R "$(id -u):$(id -g)" minio_data/
+          chmod -R 775 minio_data/
+
+      - name: Copy .env.example to .env
+        run: |
+          cp .env.example .env
+
+      - name: Use cached image and start services
+        run: |
+          # Use the exact image from docker-build job
+          FULL_IMAGE="${{ needs.docker-build.outputs.full-image }}"
+
+          echo "🔄 Using image: ${FULL_IMAGE}"
+          docker pull "${FULL_IMAGE}"
+
+          # Set environment variables for docker-compose
+          export DEPICTIO_VERSION="${FULL_IMAGE}"
+
+          mkdir -p depictioDB minio_data
+          chmod 777 depictioDB minio_data
+          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d
+
+
+      - name: Wait for services to be ready
+        run: |
+          echo "⏳ Waiting for services to start..."
+          sleep 10
+
+          # Check if containers are running
+          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml ps
+
+      - name: Logs
+        run: |
+          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml logs
+
+      # List content of depictio
+      - name: List Depictio Directory
+        run: ls -lal depictio/.depictio
+
+
+
+      - name: Setup CLI
+        run: |
+          cd depictio/cli
+          uv venv venv
+          source venv/bin/activate
+          uv pip install -e .
+
+      - name: Run CLI tests
+        run: |
+          cd depictio/cli
+          source venv/bin/activate
+
+          # Copy config from container
+          docker cp depictio-backend:/app/depictio/.depictio/admin_config.yaml .
+
+          # Run CLI commands - show CLI config
+          depictio-cli config show-cli-config --CLI-config-path admin_config.yaml
+
+          # Run CLI commands - validate project config
+          depictio-cli config validate-project-config \
+            --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
+            --CLI-config-path admin_config.yaml
+
+
+  e2e-tests:
+    needs: docker-build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GHCR_PAT }}
+
+
+      # ↓ NEW: Add user to docker group for permissions
+      - name: Configure Docker Permissions
+        run: |
+          # Add current user to docker group (ignore if already exists)
+          sudo usermod -aG docker $USER || true
+          # Change docker socket permissions
+          sudo chmod 666 /var/run/docker.sock
+          # Verify permissions
+          ls -la /var/run/docker.sock
+          groups
+
+      - name: Check os version
+        run: |
+          echo "OS Version: $(cat /etc/os-release)"
+          echo "Kernel Version: $(uname -r)"
+          echo "Architecture: $(uname -m)"
+          docker --version
+          docker compose version
+
+      # Export UID and GID
+      - name: Export UID and GID
+        run: |
+          echo "UID=$(id -u)" >> $GITHUB_ENV
+          echo "GID=$(id -g)" >> $GITHUB_ENV
+
+      - name: Create and Set Permissions for depictioDB
+        run: |
+          mkdir -p depictioDB/
+          chown -R "$(id -u):$(id -g)" depictioDB/
+          chmod -R 777 depictioDB/
+
+      - name: Create and Set Permissions for minio_data
+        run: |
+          mkdir -p minio_data/
+          chown -R "$(id -u):$(id -g)" minio_data/
+          chmod -R 775 minio_data/
+
+      - name: Copy .env.example to .env
+        run: |
+          cp .env.example .env
+
+      - name: Use cached image and start services
+        run: |
+          # Use the exact image from docker-build job
+          FULL_IMAGE="${{ needs.docker-build.outputs.full-image }}"
+
+          echo "🔄 Using image: ${FULL_IMAGE}"
+          docker pull "${FULL_IMAGE}"
+
+          # Set environment variables for docker-compose
+          export DEPICTIO_VERSION="${FULL_IMAGE}"
+
+          mkdir -p depictioDB minio_data
+          chmod 777 depictioDB minio_data
+          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "16"
+
+      - name: Install Cypress dependencies
+        run: |
+          cd depictio/tests/e2e-tests
+          if [ ! -f "package.json" ]; then
+            echo "Creating package.json..."
+            npm init -y
+            npm install cypress --save-dev
+          elif [ ! -f "package-lock.json" ]; then
+            echo "No package-lock.json found, using npm install..."
+            npm install
+          else
+            npm ci
+          fi
+
+      - name: Run Cypress tests
+        run: |
+          cd depictio/tests/e2e-tests
+          npx cypress run --config screenshotsFolder=cypress/screenshots,videosFolder=cypress/videos,trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true
+
+      - name: Upload screenshots
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cypress-screenshots
+          path: depictio/tests/e2e-tests/cypress/screenshots
+          retention-days: 30
+
+      - name: Upload videos (only on failure)
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: cypress-videos
+          path: depictio/tests/e2e-tests/cypress/videos
+          retention-days: 7

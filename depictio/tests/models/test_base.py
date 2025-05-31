@@ -8,8 +8,7 @@ from bson import ObjectId
 from pydantic import BaseModel, Field, ValidationError
 
 from depictio.api.v1.configs.custom_logging import format_pydantic
-from depictio.models.models.base import (MongoModel, PyObjectId,
-                                         convert_objectid_to_str)
+from depictio.models.models.base import MongoModel, PyObjectId, convert_objectid_to_str
 
 # --------------------------------------------------------
 # Tests for the convert_objectid_to_str function

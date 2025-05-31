@@ -14,20 +14,14 @@ app.layout = html.Div(
                 dbc.Col(
                     [
                         dbc.Input(id="title-input", placeholder="Enter title..."),
-                        dbc.Input(
-                            id="x-axis-label", placeholder="Enter x-axis label..."
-                        ),
-                        dbc.Input(
-                            id="y-axis-label", placeholder="Enter y-axis label..."
-                        ),
+                        dbc.Input(id="x-axis-label", placeholder="Enter x-axis label..."),
+                        dbc.Input(id="y-axis-label", placeholder="Enter y-axis label..."),
                         html.Button("Save", id="save-button"),
                     ]
                 ),
             ]
         ),
-        dbc.Row(
-            [dbc.Col([dcc.Graph(id="scatter-plot", config={"displayModeBar": False})])]
-        ),
+        dbc.Row([dbc.Col([dcc.Graph(id="scatter-plot", config={"displayModeBar": False})])]),
         dcc.Store(id="local-storage", storage_type="local"),
     ]
 )

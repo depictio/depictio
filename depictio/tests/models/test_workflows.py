@@ -9,12 +9,17 @@ from pydantic import ValidationError
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.data_collections import DataCollection
 from depictio.models.models.users import Permission, UserBase
+
 # Import all workflow models we need to test
-from depictio.models.models.workflows import (Workflow, WorkflowCatalog,
-                                              WorkflowConfig,
-                                              WorkflowDataLocation,
-                                              WorkflowEngine, WorkflowRun,
-                                              WorkflowRunScan)
+from depictio.models.models.workflows import (
+    Workflow,
+    WorkflowCatalog,
+    WorkflowConfig,
+    WorkflowDataLocation,
+    WorkflowEngine,
+    WorkflowRun,
+    WorkflowRunScan,
+)
 
 
 class TestWorkflowDataLocation:
@@ -399,7 +404,7 @@ class TestWorkflow:
         assert workflow.engine == engine
         assert workflow.version is None
         assert workflow.catalog is None
-        assert workflow.workflow_tag is None
+        assert workflow.workflow_tag == f"{engine.name}/test-workflow"
         assert workflow.repository_url is None
         assert workflow.data_collections == data_collections
         assert workflow.runs == {}
@@ -445,7 +450,9 @@ class TestWorkflow:
         assert workflow.engine == engine
         assert workflow.version == "1.0.0"
         assert workflow.catalog == catalog
-        assert workflow.workflow_tag == "custom-tag"
+        # Special case for nf-core workflows
+        assert workflow.workflow_tag == f"{catalog.name}/test-workflow"
+        # assert workflow.workflow_tag == f"{engine.name}/test-workflow"
         assert workflow.repository_url == "https://github.com/test/repo"
         assert workflow.data_collections == data_collections
         assert workflow.runs == runs

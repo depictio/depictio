@@ -10,6 +10,7 @@ from pydantic import validate_call
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
 # from depictio.api.v1.endpoints.user_endpoints.models import UserBase
 from depictio.dash.api_calls import api_call_fetch_user_from_token
 from depictio.models.models.data_collections import DataCollection

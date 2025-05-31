@@ -15,6 +15,7 @@ class RegisterView(generics.CreateAPIView):
     API endpoint for user registration
     Dash UI will send registration form data to this endpoint
     """
+
     queryset = User.objects.all()
     permission_classes = (permissions.AllowAny,)
     serializer_class = RegisterSerializer
@@ -25,6 +26,7 @@ class UserDetailView(generics.RetrieveAPIView):
     API endpoint to get current user details
     Used by Dash to display user information after authentication
     """
+
     queryset = User.objects.all()
     serializer_class = UserSerializer
     permission_classes = (permissions.IsAuthenticated,)
@@ -39,15 +41,13 @@ class LogoutView(APIView):
     Since we're not using token blacklisting, this endpoint simply returns a success response.
     The actual logout happens client-side by removing the stored tokens.
     """
+
     permission_classes = (permissions.IsAuthenticated,)
 
     def post(self, request):
         # We don't actually invalidate the token server-side
         # The client is responsible for removing the token from storage
-        return Response(
-            {"detail": "Logout successful"},
-            status=status.HTTP_200_OK
-        )
+        return Response({"detail": "Logout successful"}, status=status.HTTP_200_OK)
 
 
 def get_tokens_for_user(user):
@@ -56,8 +56,8 @@ def get_tokens_for_user(user):
     """
     refresh = RefreshToken.for_user(user)
     return {
-        'refresh': str(refresh),
-        'access': str(refresh.access_token),
+        "refresh": str(refresh),
+        "access": str(refresh.access_token),
     }
 
 
@@ -66,6 +66,7 @@ class SocialLoginSuccessView(APIView):
     View that handles the redirect after successful social authentication.
     Generates JWT tokens for the authenticated user and redirects to the frontend.
     """
+
     permission_classes = (permissions.AllowAny,)
 
     def get(self, request):
@@ -73,21 +74,17 @@ class SocialLoginSuccessView(APIView):
             # The user should be authenticated by django-allauth at this point
             if request.user.is_authenticated:
                 user = request.user
-                
+
                 # Generate JWT tokens
                 tokens = get_tokens_for_user(user)
-                
+
                 # Redirect to the frontend with tokens as URL parameters
-                frontend_url = 'http://localhost:8050'  # Dash frontend URL
+                frontend_url = "http://localhost:8050"  # Dash frontend URL
                 redirect_url = f"{frontend_url}/?access_token={tokens['access']}&refresh_token={tokens['refresh']}&username={user.username}"
                 return redirect(redirect_url)
             else:
                 return Response(
-                    {"error": "Authentication failed"},
-                    status=status.HTTP_401_UNAUTHORIZED
+                    {"error": "Authentication failed"}, status=status.HTTP_401_UNAUTHORIZED
                 )
         except Exception as e:
-            return Response(
-                {"error": str(e)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

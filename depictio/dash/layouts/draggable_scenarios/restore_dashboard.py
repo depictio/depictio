@@ -5,8 +5,9 @@ import httpx
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import api_call_fetch_user_from_token
-from depictio.dash.layouts.draggable_scenarios.interactive_component_update import \
-    update_interactive_component
+from depictio.dash.layouts.draggable_scenarios.interactive_component_update import (
+    update_interactive_component,
+)
 from depictio.dash.layouts.edit import enable_box_edit_mode
 from depictio.dash.modules.card_component.utils import build_card
 from depictio.dash.modules.figure_component.utils import build_figure

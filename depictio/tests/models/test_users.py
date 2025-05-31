@@ -5,12 +5,20 @@ from beanie import PydanticObjectId, init_beanie
 from mongomock_motor import AsyncMongoMockClient
 from pydantic import ValidationError
 
-from depictio.models.models.users import (Group,  # UserBaseGroupLess,
-                                          GroupBeanie, Permission,
-                                          RequestEditPassword, Token,
-                                          TokenBase, TokenBeanie, TokenData,
-                                          User, UserBase, UserBaseCLIConfig,
-                                          UserBeanie)
+from depictio.models.models.users import (  # UserBaseGroupLess,
+    Group,
+    GroupBeanie,
+    Permission,
+    RequestEditPassword,
+    Token,
+    TokenBase,
+    TokenBeanie,
+    TokenData,
+    User,
+    UserBase,
+    UserBaseCLIConfig,
+    UserBeanie,
+)
 
 # ---------------------------------
 # Tests for TokenData

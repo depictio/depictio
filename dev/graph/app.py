@@ -125,15 +125,14 @@ def update_info(node_data, elements):
         node_id = node_data["id"]
         edges_data = [
             {
-                "Property": f"Property {str(random.randint(1,3))}",
+                "Property": f"Property {str(random.randint(1, 3))}",
                 "Intensity": round(edge["data"]["intensity"], 4),
                 "Target": edge["data"]["target"]
                 if edge["data"]["source"] == node_id
                 else edge["data"]["source"],
             }
             for edge in elements
-            if edge["data"].get("source") == node_id
-            or edge["data"].get("target") == node_id
+            if edge["data"].get("source") == node_id or edge["data"].get("target") == node_id
         ]
         table = dash_table.DataTable(
             data=edges_data,
@@ -194,9 +193,7 @@ def update_info(node_data, elements):
             href=node_data["href"],
             target="_blank",
         )
-        num_edges = len(
-            edges_data
-        )  # Count the number of edges connected to the current node
+        num_edges = len(edges_data)  # Count the number of edges connected to the current node
         return html.Div(
             [
                 html.H5(
@@ -263,8 +260,7 @@ def update_node_color(elements):
         edge_count = sum(
             1
             for edge in elements_dict["edges"]
-            if edge["data"].get("source") == node_id
-            or edge["data"].get("target") == node_id
+            if edge["data"].get("source") == node_id or edge["data"].get("target") == node_id
         )
         hue = 240 - (edge_count / max_edge_count) * 120
         lightness = 50
@@ -286,9 +282,7 @@ def update_node_color(elements):
 
     for edge in elements_dict["edges"]:
         edge_id = edge["data"]["id"]
-        intensity = edge["data"].get(
-            "intensity", 1
-        )  # Default intensity to 1 if not provided
+        intensity = edge["data"].get("intensity", 1)  # Default intensity to 1 if not provided
         edge_style = {
             "selector": f'edge[id="{edge_id}"]',
             "style": {

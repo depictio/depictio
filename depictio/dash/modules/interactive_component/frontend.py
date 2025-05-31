@@ -7,12 +7,18 @@ from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
+
 # Depictio imports
 from depictio.dash.modules.interactive_component.utils import (
-    agg_functions, build_interactive, build_interactive_frame)
-from depictio.dash.utils import (UNSELECTED_STYLE,
-                                 get_columns_from_data_collection,
-                                 get_component_data)
+    agg_functions,
+    build_interactive,
+    build_interactive_frame,
+)
+from depictio.dash.utils import (
+    UNSELECTED_STYLE,
+    get_columns_from_data_collection,
+    get_component_data,
+)
 
 
 def register_callbacks_interactive_component(app):

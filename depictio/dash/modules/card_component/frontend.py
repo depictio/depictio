@@ -7,13 +7,15 @@ from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
-from depictio.dash.modules.card_component.utils import (agg_functions,
-                                                        build_card,
-                                                        build_card_frame)
+from depictio.dash.modules.card_component.utils import agg_functions, build_card, build_card_frame
+
 # Depictio imports
-from depictio.dash.utils import (UNSELECTED_STYLE,
-                                 get_columns_from_data_collection,
-                                 get_component_data, load_depictio_data_mongo)
+from depictio.dash.utils import (
+    UNSELECTED_STYLE,
+    get_columns_from_data_collection,
+    get_component_data,
+    load_depictio_data_mongo,
+)
 
 
 def register_callbacks_card_component(app):

@@ -7,8 +7,6 @@ logger = logging.getLogger(__name__)
 
 
 async def capture_screenshots(url):
-
-    
     # Folder where screenshots will be saved
     output_folder = "./depictio/dash/assets/screenshots"
 
@@ -25,7 +23,6 @@ async def capture_screenshots(url):
     dashboard_id = "1"
 
     try:
-
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
             context = await browser.new_context()
@@ -84,11 +81,10 @@ async def capture_screenshots(url):
 
             # Close the browser
             # await browser.close()
-    
+
     except Exception as e:
         logger.error(f"Failed to capture screenshot for dashboard URL: {url} - {e}")
         raise e
-
 
 
 url = "http://localhost:5080"
@@ -96,4 +92,5 @@ output_folder = "dash/assets/screenshots"
 
 # Run the async function
 import asyncio
+
 asyncio.get_event_loop().run_until_complete(capture_screenshots(url))

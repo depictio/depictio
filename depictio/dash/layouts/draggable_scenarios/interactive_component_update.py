@@ -4,15 +4,19 @@ from typing import Any
 import pandas as pd
 
 from depictio.api.v1.configs.logging_init import logger
-from depictio.api.v1.deltatables_utils import (iterative_join,
-                                               join_deltatables_dev,
-                                               return_joins_dict)
+from depictio.api.v1.deltatables_utils import (
+    iterative_join,
+    join_deltatables_dev,
+    return_joins_dict,
+)
 from depictio.dash.layouts.edit import enable_box_edit_mode
 from depictio.dash.modules.card_component.utils import build_card
 from depictio.dash.modules.figure_component.utils import build_figure
 from depictio.dash.modules.interactive_component.utils import build_interactive
 from depictio.dash.modules.jbrowse_component.utils import (
-    build_jbrowse, build_jbrowse_df_mapping_dict)
+    build_jbrowse,
+    build_jbrowse_df_mapping_dict,
+)
 from depictio.dash.modules.table_component.utils import build_table
 
 

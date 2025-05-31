@@ -32,7 +32,9 @@ annotation_types = [
 DEFAULT_ATYPE = annotation_types[0]
 
 # prepare bijective type<->color mapping
-typ_col_pairs = [(t, annotation_colormap[n % len(annotation_colormap)]) for n, t in enumerate(annotation_types)]
+typ_col_pairs = [
+    (t, annotation_colormap[n % len(annotation_colormap)]) for n, t in enumerate(annotation_types)
+]
 # types to colors
 color_dict = {}
 # colors to types
@@ -142,7 +144,9 @@ def annotations_table_shape_resize(annotations_table_data, fig_data):
         # this should correspond to the same row in the data table
         # we have to format the float here because this is exactly the entry in
         # the table
-        annotations_table_data[int(shape_nb)][coord_to_tab_column(coord)] = format_float(fig_data[key])
+        annotations_table_data[int(shape_nb)][coord_to_tab_column(coord)] = format_float(
+            fig_data[key]
+        )
         # (no need to compute a time stamp, that is done for any change in the
         # table values, so will be done later)
     return annotations_table_data
@@ -275,7 +279,9 @@ annotated_data_card = dbc.Card(
                                 },
                                 dropdown={
                                     "Type": {
-                                        "options": [{"label": o, "value": o} for o in annotation_types],
+                                        "options": [
+                                            {"label": o, "value": o} for o in annotation_types
+                                        ],
                                         "clearable": False,
                                     }
                                 },
@@ -290,7 +296,10 @@ annotated_data_card = dbc.Card(
                             dcc.Store(id="graph-copy", data=fig),
                             dcc.Store(
                                 id="annotations-store",
-                                data=dict(**{filename: {"shapes": []} for filename in filelist}, **{"starttime": time_passed()}),
+                                data=dict(
+                                    **{filename: {"shapes": []} for filename in filelist},
+                                    **{"starttime": time_passed()},
+                                ),
                             ),
                             dcc.Store(
                                 id="image_files",
@@ -441,7 +450,9 @@ def modify_table_entries(
         elif re.match("shapes\[[0-9]+\].x0", list(graph_relayoutData.keys())[0]):
             # this means a shape was updated (e.g., by clicking and dragging its
             # vertices), so we just update the specific shape
-            annotations_table_data = annotations_table_shape_resize(annotations_table_data, graph_relayoutData)
+            annotations_table_data = annotations_table_shape_resize(
+                annotations_table_data, graph_relayoutData
+            )
         if annotations_table_data is None:
             return dash.no_update
         else:
@@ -474,7 +485,9 @@ def modify_table_entries(
     [Input("annotations-table", "data"), Input("annotation-type-dropdown", "value")],
     [State("image_files", "data"), State("annotations-store", "data")],
 )
-def send_figure_to_graph(annotations_table_data, annotation_type, image_files_data, annotations_store):
+def send_figure_to_graph(
+    annotations_table_data, annotation_type, image_files_data, annotations_store
+):
     if annotations_table_data is not None:
         filename = image_files_data["files"][image_files_data["current"]]
         # convert table rows to those understood by fig.update_layout
@@ -498,7 +511,9 @@ def send_figure_to_graph(annotations_table_data, annotation_type, image_files_da
         # find the old shapes and look up their timestamps
         for i in old_shapes_i:
             old_shape_i = index_of_shape(annotations_store[filename]["shapes"], fig_shapes[i])
-            fig_shapes[i]["timestamp"] = annotations_store[filename]["shapes"][old_shape_i]["timestamp"]
+            fig_shapes[i]["timestamp"] = annotations_store[filename]["shapes"][old_shape_i][
+                "timestamp"
+            ]
         shapes = fig_shapes
         debug_print("shapes:", shapes)
         fig = px.imshow(io.imread(filename), binary_backend="jpg")

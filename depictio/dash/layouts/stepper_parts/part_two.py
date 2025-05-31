@@ -4,17 +4,13 @@ from dash import ALL, MATCH, Input, Output, State, ctx, dcc, html
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.logging_init import logger
-from depictio.dash.modules.card_component.frontend import \
-    create_stepper_card_button
+from depictio.dash.modules.card_component.frontend import create_stepper_card_button
+
 # Depictio components imports - button step
-from depictio.dash.modules.figure_component.frontend import \
-    create_stepper_figure_button
-from depictio.dash.modules.interactive_component.frontend import \
-    create_stepper_interactive_button
-from depictio.dash.modules.jbrowse_component.frontend import \
-    create_stepper_jbrowse_button
-from depictio.dash.modules.table_component.frontend import \
-    create_stepper_table_button
+from depictio.dash.modules.figure_component.frontend import create_stepper_figure_button
+from depictio.dash.modules.interactive_component.frontend import create_stepper_interactive_button
+from depictio.dash.modules.jbrowse_component.frontend import create_stepper_jbrowse_button
+from depictio.dash.modules.table_component.frontend import create_stepper_table_button
 from depictio.dash.utils import UNSELECTED_STYLE
 
 

@@ -187,9 +187,7 @@ app.layout = html.Div(
                                 drc.NamedRadioItems(
                                     name="Expand",
                                     id="radio-expand",
-                                    options=drc.DropdownOptionsList(
-                                        "followers", "following"
-                                    ),
+                                    options=drc.DropdownOptionsList("followers", "following"),
                                     value="followers",
                                 ),
                             ],
@@ -223,16 +221,12 @@ app.layout = html.Div(
 
 
 # ############################## CALLBACKS ####################################
-@app.callback(
-    Output("tap-node-json-output", "children"), [Input("cytoscape", "tapNode")]
-)
+@app.callback(Output("tap-node-json-output", "children"), [Input("cytoscape", "tapNode")])
 def display_tap_node(data):
     return json.dumps(data, indent=2)
 
 
-@app.callback(
-    Output("tap-edge-json-output", "children"), [Input("cytoscape", "tapEdge")]
-)
+@app.callback(Output("tap-edge-json-output", "children"), [Input("cytoscape", "tapEdge")])
 def display_tap_edge(data):
     return json.dumps(data, indent=2)
 

@@ -1,6 +1,5 @@
-from dash_iconify import DashIconify
-from dash import Dash, html,  Output, Input, callback
 import dash_mantine_components as dmc
+from dash import Dash, Input, Output, callback, html
 from dash_iconify import DashIconify
 
 app = Dash(__name__)
@@ -11,7 +10,10 @@ sc = html.Div(
             id="segmented",
             value="ng",
             data=[
-                {"value": "react", "label": "react", "icon":},
+                {
+                    "value": "react",
+                    "label": "react",
+                },
                 {"value": "ng", "label": "Angular"},
                 {"value": "svelte", "label": "Svelte"},
                 {"value": "vue", "label": "Vue"},

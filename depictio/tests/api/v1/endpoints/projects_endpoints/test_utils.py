@@ -9,8 +9,11 @@ from mongomock import MongoClient
 
 from depictio.api.v1.configs.custom_logging import format_pydantic
 from depictio.api.v1.endpoints.projects_endpoints.utils import (
-    _async_get_all_projects, _async_get_project_from_id,
-    _async_get_project_from_name, _helper_create_project_beanie)
+    _async_get_all_projects,
+    _async_get_project_from_id,
+    _async_get_project_from_name,
+    _helper_create_project_beanie,
+)
 from depictio.models.models.projects import Project
 from depictio.models.models.users import Permission, UserBase
 

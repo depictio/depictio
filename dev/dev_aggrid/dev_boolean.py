@@ -87,7 +87,7 @@ app.layout = html.Div(
             "You picked a Depictio template for the workflow X",
             radius="xl",
             size="xl",
-            className="animated-badge"
+            className="animated-badge",
         ),
     ]
 )

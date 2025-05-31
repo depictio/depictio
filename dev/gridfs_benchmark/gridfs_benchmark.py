@@ -88,9 +88,7 @@ for num_columns in columns_list:
     for rows_fixed in rows_list:
         df = pd.DataFrame({f"col_{i}": range(rows_fixed) for i in range(num_columns)})
         for name, (serializer, deserializer, ext) in serializers.items():
-            serialize_time, deserialize_time = benchmark_format(
-                df, serializer, deserializer, ext
-            )
+            serialize_time, deserialize_time = benchmark_format(df, serializer, deserializer, ext)
             print(
                 f"{name} with {num_columns} columns and {rows_fixed} rows: Serialize & Store: {serialize_time:.2f}s, Retrieve & Deserialize: {deserialize_time:.2f}s"
             )

@@ -644,10 +644,13 @@ def iterative_join(
                 f"Joining {dc_id1} and {dc_id2} on columns: {join_details['on_columns']} with method: {join_details['how']}"
             )
 
+            if "depictio_run_id" in merged_df.columns and "depictio_run_id" in right_df.columns:
+                join_columns = join_details["on_columns"] + ["depictio_run_id"]
+            else:
+                join_columns = join_details["on_columns"]
+
             # Perform the join
-            merged_df = merged_df.join(
-                right_df, on=join_details["on_columns"], how=join_details["how"]
-            )
+            merged_df = merged_df.join(right_df, on=join_columns, how=join_details["how"])
 
             logger.info(f"Merged dataframe shape after join: {merged_df.shape}")
             logger.info(f"Merged dataframe columns after join: {merged_df.columns}")

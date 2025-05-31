@@ -9,54 +9,54 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        
-        
+
+
       - name: Configure Docker Permissions
         run: |
           sudo usermod -aG docker $USER || true
           sudo chmod 666 /var/run/docker.sock
-          
+
       - name: Export UID and GID
         run: |
           echo "UID=$(id -u)" >> $GITHUB_ENV
           echo "GID=$(id -g)" >> $GITHUB_ENV
-          
+
       - name: Generate .env
         run: |
           cp .env.example .env
-          
+
       - name: Create and Set Permissions for Directories
         run: |
           mkdir -p depictioDB/
           chown -R "$(id -u):$(id -g)" depictioDB/
           chmod -R 777 depictioDB/
-          
+
           mkdir -p minio_data/
           chown -R "$(id -u):$(id -g)" minio_data/
           chmod -R 775 minio_data/
-          
+
       - name: Start Docker Compose Services with debug
         run: |
           export DEPICTIO_LOGGING_VERBOSITY_LEVEL=DEBUG
           cp docker-compose.dev.yaml docker-compose/
           docker compose -f docker-compose/docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d --build --force-recreate --remove-orphans
-          
+
       - name: Check container logs immediately
         run: |
           echo "===== CONTAINER STATUS ====="
           docker ps -a
-          
+
           echo "===== BACKEND LOGS ====="
           docker logs depictio-backend
-          
+
           echo "===== FRONTEND LOGS ====="
           docker logs depictio-frontend
-          
+
           echo "===== MONGO LOGS ====="
           docker logs mongo
 
           docker compose logs -n 1000
-      
+
       - name: Wait for services to be healthy
         run: |
           echo "Waiting for services to be healthy..."
@@ -66,13 +66,13 @@ jobs:
         run: |
           echo "===== CONTAINER STATUS ====="
           docker ps -a
-          
+
           echo "===== BACKEND LOGS ====="
           docker logs depictio-backend
-          
+
           echo "===== FRONTEND LOGS ====="
           docker logs depictio-frontend
-          
+
           echo "===== MONGO LOGS ====="
           docker logs mongo
 

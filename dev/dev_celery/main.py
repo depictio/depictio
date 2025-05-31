@@ -5,12 +5,14 @@ import os
 app = FastAPI()
 
 # Define Celery app
-celery_app = Celery('tasks', broker='pyamqp://guest@localhost//')
+celery_app = Celery("tasks", broker="pyamqp://guest@localhost//")
+
 
 # Define Celery task to launch watcher
 @celery_app.task
 def launch_watcher():
     os.system("python watcher.py")
+
 
 # Define FastAPI endpoint to launch watcher task
 @app.post("/watcher")

@@ -140,6 +140,7 @@ tracks_session = []
 
 from dash import State
 
+
 @dash.callback(
     Output("dev-log", "children"),
     Input("interval-component", "n_intervals"),
@@ -150,8 +151,6 @@ def update_output(n, param):
     print(n)
     print(param)
     return f"{param}."
-
-
 
 
 # @dash.callback(
@@ -246,12 +245,8 @@ my_aggregate_text_search_adapters = [
     {
         "type": "TrixTextSearchAdapter",
         "textSearchAdapterId": "hg38-index",
-        "ixFilePath": {
-            "uri": "https://s3.amazonaws.com/jbrowse.org/genomes/GRCh38/trix/hg38.ix"
-        },
-        "ixxFilePath": {
-            "uri": "https://s3.amazonaws.com/jbrowse.org/genomes/GRCh38/trix/hg38.ixx"
-        },
+        "ixFilePath": {"uri": "https://s3.amazonaws.com/jbrowse.org/genomes/GRCh38/trix/hg38.ix"},
+        "ixxFilePath": {"uri": "https://s3.amazonaws.com/jbrowse.org/genomes/GRCh38/trix/hg38.ixx"},
         "metaFilePath": {
             "uri": "https://s3.amazonaws.com/jbrowse.org/genomes/GRCh38/trix/meta.json"
         },
@@ -319,9 +314,7 @@ my_default_session = {
 # app.layout = html.Div(
 app.layout = dbc.Container(
     [
-        html.H2(
-            "JBrowse2 genome viewer", style={"margin-top": 5}, className="display-4"
-        ),
+        html.H2("JBrowse2 genome viewer", style={"margin-top": 5}, className="display-4"),
         html.Hr(),
         # dbc.Row(
         #     [
