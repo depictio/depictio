@@ -53,7 +53,6 @@ app.layout = html.Div(
 )
 
 
-
 @app.callback(
     Output("dummy-output", "children"),
     State("draggagle", "layouts"),
@@ -61,11 +60,10 @@ app.layout = html.Div(
     Input("interval", "n_intervals"),
     prevent_initial_call=True,
 )
-def update_layouts(layout,children, n_intervals):
+def update_layouts(layout, children, n_intervals):
     print(layout)
     print(children)
     return None
-
 
 
 if __name__ == "__main__":

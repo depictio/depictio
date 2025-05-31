@@ -151,9 +151,7 @@ app.layout = html.Div(
                 dmc.StepperStep(
                     label="Final step",
                     description="Get full access",
-                    children=dmc.Text(
-                        "Step 3 content: Get full access", align="center"
-                    ),
+                    children=dmc.Text("Step 3 content: Get full access", align="center"),
                     id="stepper-step-3",
                 ),
                 dmc.StepperCompleted(

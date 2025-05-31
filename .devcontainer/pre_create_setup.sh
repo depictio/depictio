@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/bash
 
 # This script is run before the container is created.
 git submodule update --init --recursive
@@ -15,7 +15,7 @@ rm -rdf depictio/.depictio/ && mkdir -p depictio/.depictio/ && chmod -R 775 depi
 # Set environment variables
 # echo 'MINIO_ROOT_USER=minio' >> ~/.bashrc
 # echo 'MINIO_ROOT_PASSWORD=minio123' >> ~/.bashrc
-if [ $(grep DEPICTIO_BACKEND_EXAMPLE_DATA_VOLUME_HOST .env) ]; then
+if grep -q DEPICTIO_BACKEND_EXAMPLE_DATA_VOLUME_HOST .env; then
     echo "Reusing existing variable for backend data volume...";
 else
     echo DEPICTIO_BACKEND_EXAMPLE_DATA_VOLUME_HOST='/app/depictio-example-data' >> .env

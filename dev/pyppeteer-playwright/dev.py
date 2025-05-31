@@ -17,7 +17,6 @@ async def capture_screenshots(url, output_folder):
     # Navigate to a blank page
     await page.goto(f"{url}/auth", {"waitUntil": "networkidle0"})
 
-
     # Set data in the local storage
     await page.evaluate("""() => {
         localStorage.setItem('local-store', '{"access_token":"eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbkBlbWJsLmRlIiwibmFtZSI6ImFkbWluQGVtYmwuZGVfMjAyNDA4MTMxNTExMDQiLCJ0b2tlbl9saWZldGltZSI6InNob3J0LWxpdmVkIiwiZXhwIjoxNzIzNjA1MDY0fQ.ZUPaHfeTSO2skpRFOEEyQsxYq5oOQs15R31X2nRDgqIBUfJlF_6tNiVzcIhIkR6Xx3A1OEybzvH1E-B9I401GWJnb5_bI_DGw4stDUl0wbk-7KINjMzq5S9_scu072FqUypOqJt6vM6lIUTIu1cpdip149WUrZcD0kij5A0MhjmHsOyMnSpDS-RsP4CFIbFkOCmWpfCgWL8U3RmiIPXLNy4xgYpD5f2tzhlc-Do3HWUxh8LDg8LtoCo2byYV_RckeGmqwoJvzU-Q1DDoGQSfMrbGez9K8qoBTlwbDhOvrfEoHK06ydjPgYEg1I5s6f50_pJiGG-xYu3Fwn7uFXlm3w", "logged_in": true}');

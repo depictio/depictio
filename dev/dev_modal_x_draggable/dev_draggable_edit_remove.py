@@ -182,9 +182,7 @@ app.layout = html.Div(
                         ),
                     ]
                 ),
-                dbc.ModalFooter(
-                    dbc.Button("Close", id="modal-close-button", color="secondary")
-                ),
+                dbc.ModalFooter(dbc.Button("Close", id="modal-close-button", color="secondary")),
             ],
             id="modal",
             centered=True,

@@ -5,7 +5,6 @@ import pandas as pd
 import dash_bootstrap_components as dbc
 
 
-
 data = {
     "ticker": ["AAPL", "MSFT", "AMZN", "GOOGL"],
     "company": ["Apple", "Microsoft", "Amazon", "Alphabet"],
@@ -31,7 +30,12 @@ columnDefs = [
         "cellRenderer": "Button",
         "cellRendererParams": {
             "className": "btn btn-danger fw-bold",
-            "style": {"fontSize": "14px", "padding": "6px 12px", "margin": "4px", "boxShadow": "0 2px 5px rgba(0,0,0,0.2)"}
+            "style": {
+                "fontSize": "14px",
+                "padding": "6px 12px",
+                "margin": "4px",
+                "boxShadow": "0 2px 5px rgba(0,0,0,0.2)",
+            },
         },
     },
 ]

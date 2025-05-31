@@ -6,6 +6,8 @@ from flask_login import login_user, LoginManager, UserMixin, logout_user, curren
 
 dash.register_page(__name__, path="/home")
 
-layout = html.Div([
-        html.H1('Home page'),
-])
+layout = html.Div(
+    [
+        html.H1("Home page"),
+    ]
+)

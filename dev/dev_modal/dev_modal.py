@@ -104,9 +104,7 @@ app.layout = html.Div(
                         ),
                     ]
                 ),
-                dbc.ModalFooter(
-                    dbc.Button("Close", id="modal-close-button", color="secondary")
-                ),
+                dbc.ModalFooter(dbc.Button("Close", id="modal-close-button", color="secondary")),
             ],
             id="modal",
             centered=True,
@@ -176,16 +174,12 @@ def create_new_plot(button_id, index):
         Input("line-plot-option", "n_clicks"),
         Input("bar-plot-option", "n_clicks"),
         Input("scatter-plot-option", "n_clicks"),
-        Input(
-            {"type": "plot-close-button", "index": dash.dependencies.ALL}, "n_clicks"
-        ),
+        Input({"type": "plot-close-button", "index": dash.dependencies.ALL}, "n_clicks"),
     ],
     [State("plot-container", "children")],
     prevent_initial_call=True,
 )
-def update_plots(
-    line_n_clicks, bar_n_clicks, scatter_n_clicks, close_clicks, existing_children
-):
+def update_plots(line_n_clicks, bar_n_clicks, scatter_n_clicks, close_clicks, existing_children):
     if not existing_children:
         existing_children = list()
     ctx = dash.callback_context

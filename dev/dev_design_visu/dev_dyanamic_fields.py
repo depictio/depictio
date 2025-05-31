@@ -23,14 +23,10 @@ for vizu_func in plotly_vizu_list:
     param_names = list(func_params.keys())
 
     common_params_tmp = (
-        common_params.intersection(func_params.keys())
-        if common_params
-        else set(func_params.keys())
+        common_params.intersection(func_params.keys()) if common_params else set(func_params.keys())
     )
 
-    specific_params[vizu_func.__name__] = [
-        p for p in param_names if p not in common_params_tmp
-    ]
+    specific_params[vizu_func.__name__] = [p for p in param_names if p not in common_params_tmp]
 
 print(specific_params)
 
@@ -40,10 +36,7 @@ app.layout = html.Div(
     [
         dcc.Dropdown(
             id="visualization-type",
-            options=[
-                {"label": func.__name__, "value": func.__name__}
-                for func in plotly_vizu_list
-            ],
+            options=[{"label": func.__name__, "value": func.__name__} for func in plotly_vizu_list],
             value=plotly_vizu_list[0].__name__,
         ),
         html.Div(id="specific-params-container"),
@@ -59,8 +52,7 @@ app.layout = html.Div(
 def update_specific_params(value):
     if value is not None:
         specific_params_options = [
-            {"label": param_name, "value": param_name}
-            for param_name in specific_params[value]
+            {"label": param_name, "value": param_name} for param_name in specific_params[value]
         ]
         specific_params_dropdowns = [
             html.Div(

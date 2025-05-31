@@ -37,9 +37,7 @@ def get_specific_params(plotly_vizu_list, common_params):
             if common_params
             else set(func_params.keys())
         )
-        specific_params[vizu_func.__name__] = [
-            p for p in param_names if p not in common_params_tmp
-        ]
+        specific_params[vizu_func.__name__] = [p for p in param_names if p not in common_params_tmp]
     return specific_params
 
 
@@ -110,9 +108,7 @@ def get_param_info(plotly_vizu_list):
     param_info = {}
     for func in plotly_vizu_list:
         param_info[func.__name__] = extract_info_from_docstring(func.__doc__)
-        param_info[func.__name__] = process_json_from_docstring(
-            param_info[func.__name__]
-        )
+        param_info[func.__name__] = process_json_from_docstring(param_info[func.__name__])
     return param_info
 
 

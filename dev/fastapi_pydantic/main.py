@@ -32,7 +32,7 @@ class UserResponse(UserCreate):
     # username: str
     # email: str
     # age: Optional[int] = None
-    
+
     model_config = ConfigDict(
         populate_by_name=True,
         json_schema_extra={
@@ -40,9 +40,9 @@ class UserResponse(UserCreate):
                 "_id": "67ec063aac2b04ea10e1f604",
                 "username": "testuser",
                 "email": "test@example.com",
-                "age": 30
+                "age": 30,
             }
-        }
+        },
     )
 
 
@@ -78,22 +78,23 @@ async def create_user(user: UserCreate):
 
     return created_user
 
+
 @app.get("/users/{user_id}", response_model=UserResponse)
 async def get_user(user_id: str = Path(..., description="The ID of the user to retrieve")):
     try:
         object_id = ObjectId(user_id)
     except:
         raise HTTPException(status_code=400, detail="Invalid user ID format")
-    
+
     user = users_collection.find_one({"_id": object_id})
-    
+
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
 
     # Convert to Pydantic model explicitly
     user_model = UserResponse(**user)
     print(f"Retrieved user: {user_model}")
-    
+
     return user_model  # Return the Pydantic model instead of the dict
 
 
@@ -101,9 +102,9 @@ async def get_user(user_id: str = Path(..., description="The ID of the user to r
 async def list_users():
     # Retrieve all users
     users = list(users_collection.find())
-    
+
     # Convert ObjectId to string in each user document
     for user in users:
         user["_id"] = str(user["_id"])
-    
+
     return users

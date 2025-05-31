@@ -108,9 +108,7 @@ plotly_bootstrap_mapping = {
 }
 
 # Identify the parameters not in the dropdown elements
-secondary_common_params = [
-    e for e in common_params_names[1:] if e not in dropdown_elements
-]
+secondary_common_params = [e for e in common_params_names[1:] if e not in dropdown_elements]
 
 
 app.layout = dbc.Container(
@@ -137,10 +135,7 @@ app.layout = dbc.Container(
                 dbc.Col(
                     dcc.Dropdown(
                         id="workflow-selector",
-                        options=[
-                            {"label": workflow, "value": workflow}
-                            for workflow in workflows
-                        ],
+                        options=[{"label": workflow, "value": workflow} for workflow in workflows],
                         value=workflows[0],
                     ),
                     width=4,
@@ -300,9 +295,7 @@ app.layout = dbc.Container(
 
 
 # Define a callback to update the options when the workflow selection changes
-@app.callback(
-    Output("wf-option-selector", "options"), Input("workflow-selector", "value")
-)
+@app.callback(Output("wf-option-selector", "options"), Input("workflow-selector", "value"))
 def update_options(workflow):
     options = workflow_options[workflow]
     return [{"label": option, "value": option} for option in options]
@@ -474,8 +467,7 @@ save_value_callback, update_value_callback = generate_callback("visualization-ty
 def update_specific_params(value, n_intervals, offcanvas_states):
     if value is not None:
         specific_params_options = [
-            {"label": param_name, "value": param_name}
-            for param_name in specific_params[value]
+            {"label": param_name, "value": param_name} for param_name in specific_params[value]
         ]
 
         specific_params_dropdowns = list()
@@ -567,9 +559,7 @@ def update_specific_params(value, n_intervals, offcanvas_states):
                 id="accordion-sec-common",
             ),
         ]
-        dynamic_specific_params_layout = [
-            html.H5(f"{value.capitalize()} specific parameters")
-        ] + [
+        dynamic_specific_params_layout = [html.H5(f"{value.capitalize()} specific parameters")] + [
             dbc.Accordion(
                 specific_params_dropdowns,
                 flush=True,
@@ -618,9 +608,7 @@ def save_data(
 
 
 def generate_dropdown_ids(value):
-    specific_param_ids = [
-        f"{value}-{param_name}" for param_name in specific_params[value]
-    ]
+    specific_param_ids = [f"{value}-{param_name}" for param_name in specific_params[value]]
     secondary_param_ids = [f"{value}-{e}" for e in secondary_common_params]
 
     return secondary_param_ids + specific_param_ids
@@ -638,9 +626,7 @@ def generate_dropdown_ids(value):
         Input("specific-params-container", "children"),
     ],
 )
-def update_graph(
-    wf_option, df_data, visualization_type, x_axis, y_axis, color, *children_values
-):
+def update_graph(wf_option, df_data, visualization_type, x_axis, y_axis, color, *children_values):
     d = dict()
     for child in children_values[0][1]["props"]["children"]:
         # print(child)

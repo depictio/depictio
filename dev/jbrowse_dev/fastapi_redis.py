@@ -5,7 +5,6 @@ import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
 
 
-
 app = FastAPI()
 
 origins = [
@@ -48,12 +47,11 @@ redis_client = redis.Redis(host="localhost", port=6379, db=0)
 #         return Response(content=content, media_type="application/octet-stream")
 
 
-
 @app.get("/assets/{filename:path}")
 async def get_asset(filename: str, request: Request):
     # Check for Range header
     range_header = request.headers.get("Range")
-    
+
     if range_header:
         start, end = range_header.replace("bytes=", "").split("-")
         start, end = int(start), int(end)
@@ -64,9 +62,13 @@ async def get_asset(filename: str, request: Request):
 
         if cached_content:
             print("CACHED")
-            return Response(content=cached_content, status_code=206, headers={
-                "Content-Range": f"bytes {start}-{end}/{os.path.getsize(f'assets/{filename}')}"
-            })
+            return Response(
+                content=cached_content,
+                status_code=206,
+                headers={
+                    "Content-Range": f"bytes {start}-{end}/{os.path.getsize(f'assets/{filename}')}"
+                },
+            )
 
         # If not in cache, load the specified range from the file
         with open(f"assets/{filename}", "rb") as file:
@@ -74,9 +76,13 @@ async def get_asset(filename: str, request: Request):
             content = file.read(end - start + 1)
             # Store in Redis
             redis_client.set(cache_key, content)
-            return Response(content=content, status_code=206, headers={
-                "Content-Range": f"bytes {start}-{end}/{os.path.getsize(f'assets/{filename}')}"
-            })
+            return Response(
+                content=content,
+                status_code=206,
+                headers={
+                    "Content-Range": f"bytes {start}-{end}/{os.path.getsize(f'assets/{filename}')}"
+                },
+            )
 
     # If no Range header, check the cache for the entire file content
     cached_content = redis_client.get(filename)
@@ -89,7 +95,7 @@ async def get_asset(filename: str, request: Request):
         # Store in Redis
         redis_client.set(filename, content)
         return Response(content=content, media_type="application/octet-stream")
-    
+
 
 # redis_host: localhost
 # redis_port: 6379

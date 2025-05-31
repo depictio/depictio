@@ -182,9 +182,7 @@ app.layout = html.Div(
                         ),
                     ]
                 ),
-                dbc.ModalFooter(
-                    dbc.Button("Close", id="modal-close-button", color="secondary")
-                ),
+                dbc.ModalFooter(dbc.Button("Close", id="modal-close-button", color="secondary")),
             ],
             id="modal",
             centered=True,
@@ -287,10 +285,7 @@ def add_plot(
 
     print(input_args)
     print(
-        [
-            "Len : {}".format(len(e)) if type(e) is list or type(e) is dict else e
-            for e in input_args
-        ]
+        ["Len : {}".format(len(e)) if type(e) is list or type(e) is dict else e for e in input_args]
     )
 
     print(type(existing_children), len(existing_children))

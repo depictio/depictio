@@ -16,9 +16,7 @@ GROUP_COMPOSITION = {
 }
 
 # Flatten email options from group composition
-EMAIL_OPTIONS = [
-    email for group_emails in GROUP_COMPOSITION.values() for email in group_emails
-]
+EMAIL_OPTIONS = [email for group_emails in GROUP_COMPOSITION.values() for email in group_emails]
 GROUP_OPTIONS = list(GROUP_COMPOSITION.keys())
 
 # Initial row data
@@ -216,16 +214,16 @@ def update_email_options(selected_group):
 def toggle_add_buttons(email, group, permissions):
     if not permissions:
         permissions = []
-    
+
     # Add User button is enabled when email and permissions are selected
     add_user_disabled = not (email and len(permissions) > 0)
-    
+
     # Add Group button is enabled when group and permissions are selected
     add_group_disabled = not (group and not email and len(permissions) > 0)
-    
+
     print(f"Email: {email}, Group: {group}, Permissions: {permissions}")
     print(f"Add User disabled: {add_user_disabled}, Add Group disabled: {add_group_disabled}")
-    
+
     return add_user_disabled, add_group_disabled
 
 
@@ -243,9 +241,7 @@ def toggle_add_buttons(email, group, permissions):
     State("permission-grid", "rowData"),
     prevent_initial_call=True,
 )
-def add_user_or_group(
-    user_clicks, group_clicks, email, group, permissions, current_rows
-):
+def add_user_or_group(user_clicks, group_clicks, email, group, permissions, current_rows):
     # Determine which button was clicked
     triggered_id = ctx.triggered_id
 
@@ -319,22 +315,22 @@ def handle_cell_click_and_delete(cell_data, current_rows):
     if column in role_columns:
         print("Processing role selection")
         updated_rows = current_rows.copy()
-        
+
         # Find the row that was clicked
         for row in updated_rows:
             if str(row["id"]) == str(row_id):
                 print(f"Found row: {row}")
-                
+
                 # Set all role columns to False first
                 for role in role_columns:
                     print(f"Setting {role} to False")
                     row[role] = False
-                
+
                 # Then set the clicked column to True
                 print(f"Setting {column} to True")
                 row[column] = True
                 break
-                
+
         return updated_rows
 
     # Handle delete button
