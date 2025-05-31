@@ -29,6 +29,9 @@ jobs:
   docker-build:
     # needs: quality
     runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: write
     outputs:
       image-tag: ${{ steps.image-info.outputs.tag }}
       rebuild-needed: ${{ steps.check-rebuild.outputs.rebuild }}
