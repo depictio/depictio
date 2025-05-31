@@ -31,10 +31,10 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        
+
       - name: Build and cache images
         uses: docker/build-push-action@v6
         with:
@@ -45,14 +45,14 @@ jobs:
           tags: depictio:latest
           cache-from: type=gha,scope=depictio
           cache-to: type=gha,mode=max,scope=depictio
-          
+
       - name: Start services
         run: |
           cp .env.example .env
           mkdir -p depictioDB minio_data
           chmod 777 depictioDB minio_data
           docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d
-          
+
       # Extract the token and perform a health check with the token
       - name: Extract Token and Check Depictio Backend Health
         run: |
@@ -84,21 +84,21 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Use cached image and start services
         run: |
           cp .env.example .env
           mkdir -p depictioDB minio_data
           chmod 777 depictioDB minio_data
           docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d
-          
+
       - name: Setup CLI
         run: |
           cd depictio/cli
           uv venv venv
           source venv/bin/activate
           uv pip install -e .
-          
+
       - name: Run CLI tests
         run: |
           cd depictio/cli
@@ -113,19 +113,19 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Use cached image and start services
         run: |
           cp .env.example .env
           mkdir -p depictioDB minio_data
           chmod 777 depictioDB minio_data
           docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d
-          
+
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: "16"
-          
+
       - name: Run E2E tests
         run: |
           cd tests/e2e-tests

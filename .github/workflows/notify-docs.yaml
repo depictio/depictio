@@ -11,7 +11,7 @@ jobs:
       - name: Trigger docs repo version deploy
         uses: peter-evans/repository-dispatch@v3
         with:
-          token: ${{ secrets.GHCR_PAT }} 
+          token: ${{ secrets.GHCR_PAT }}
           repository: depictio/depictio-docs
           event-type: new-release
           client-payload: '{"version": "${{ github.event.release.tag_name }}"}'

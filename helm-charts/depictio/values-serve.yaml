@@ -2,7 +2,7 @@
 ingress:
   enabled: true
   ingressClassName: "nginx"
-  
+
   # Serve specific annotations
   annotations:
     nginx.ingress.kubernetes.io/auth-url: # {{ .Values.global.protocol }}://{{ .Values.global.auth_domain }}:8080/auth/?release={{ .Values.release }}
@@ -10,7 +10,7 @@ ingress:
     nginx.ingress.kubernetes.io/custom-http-errors: "503"
     nginx.ingress.kubernetes.io/default-backend: nginx-errors
     nginx.ingress.kubernetes.io/proxy-body-size: "100m"
-  
+
   # Host configuration for unified service setup
   hosts:
     - host: # studio.127.0.0.1.nip.io
@@ -25,7 +25,7 @@ ingress:
           service:
             name: depictio-backend
             port: 80
-  
+
   # TLS configuration
   tls:
     - secretName: "serve-tls-secret"
