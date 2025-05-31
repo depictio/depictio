@@ -6,20 +6,17 @@ from fastapi import HTTPException
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import format_pydantic, logger
-from depictio.api.v1.endpoints.dashboards_endpoints.routes import \
-    save_dashboard
-from depictio.api.v1.endpoints.projects_endpoints.utils import \
-    _helper_create_project_beanie
-from depictio.api.v1.endpoints.user_endpoints.core_functions import \
-    _create_user_in_db
-from depictio.api.v1.endpoints.user_endpoints.token_utils import \
-    create_default_token
+from depictio.api.v1.endpoints.dashboards_endpoints.routes import save_dashboard
+from depictio.api.v1.endpoints.projects_endpoints.utils import _helper_create_project_beanie
+from depictio.api.v1.endpoints.user_endpoints.core_functions import _create_user_in_db
+from depictio.api.v1.endpoints.user_endpoints.token_utils import create_default_token
 from depictio.api.v1.endpoints.user_endpoints.utils import (
-    _ensure_mongodb_connection, create_group_helper_beanie)
+    _ensure_mongodb_connection,
+    create_group_helper_beanie,
+)
 from depictio.models.models.dashboards import DashboardData
 from depictio.models.models.projects import ProjectBeanie
-from depictio.models.models.users import (GroupBeanie, Permission, TokenBeanie,
-                                          UserBase, UserBeanie)
+from depictio.models.models.users import GroupBeanie, Permission, TokenBeanie, UserBase, UserBeanie
 from depictio.models.utils import get_config
 
 

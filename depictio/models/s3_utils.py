@@ -1,8 +1,7 @@
 from abc import ABC
 
 import boto3
-from botocore.exceptions import (ClientError, NoCredentialsError,
-                                 PartialCredentialsError)
+from botocore.exceptions import ClientError, NoCredentialsError, PartialCredentialsError
 from pydantic import validate_call
 
 from depictio.models.config import DEPICTIO_CONTEXT

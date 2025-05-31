@@ -7,12 +7,15 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import db, projects_collection
 from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
-    generate_join_dict, normalize_join_details)
+    generate_join_dict,
+    normalize_join_details,
+)
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
-from depictio.api.v1.endpoints.validators import \
-    validate_workflow_and_collection
+from depictio.api.v1.endpoints.validators import validate_workflow_and_collection
 from depictio.api.v1.endpoints.workflow_endpoints.routes import (
-    get_all_workflows, get_workflow_from_id)
+    get_all_workflows,
+    get_workflow_from_id,
+)
 from depictio.dash.utils import return_dc_tag_from_id, return_mongoid
 from depictio.models.models.base import convert_objectid_to_str
 

@@ -1,7 +1,6 @@
 from pydantic import ConfigDict, field_serializer
 
-from depictio.models.models.base import (MongoModel, PyObjectId,
-                                         convert_objectid_to_str)
+from depictio.models.models.base import MongoModel, PyObjectId, convert_objectid_to_str
 from depictio.models.models.users import Permission
 
 

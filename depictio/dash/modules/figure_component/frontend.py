@@ -10,14 +10,23 @@ from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
+
 # Depictio imports
 from depictio.dash.modules.figure_component.utils import (
-    base_elements, build_figure, build_figure_frame, param_info,
-    plotly_bootstrap_mapping, plotly_vizu_dict, secondary_common_params,
-    specific_params)
-from depictio.dash.utils import (UNSELECTED_STYLE,
-                                 get_columns_from_data_collection,
-                                 get_component_data)
+    base_elements,
+    build_figure,
+    build_figure_frame,
+    param_info,
+    plotly_bootstrap_mapping,
+    plotly_vizu_dict,
+    secondary_common_params,
+    specific_params,
+)
+from depictio.dash.utils import (
+    UNSELECTED_STYLE,
+    get_columns_from_data_collection,
+    get_component_data,
+)
 
 
 def register_callbacks_figure_component(app):

@@ -6,6 +6,7 @@ from typing import Any
 
 import pydantic
 from colorlog import ColoredFormatter
+
 # Import Rich components
 from rich.console import Console
 from rich.highlighter import ReprHighlighter
