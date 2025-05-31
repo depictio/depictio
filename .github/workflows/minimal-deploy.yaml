@@ -17,49 +17,9 @@ jobs:
       image-tag: ${{ steps.image-info.outputs.tag }}
       image-digest: ${{ steps.build.outputs.digest }}
       rebuild-needed: ${{ steps.check-rebuild.outputs.rebuild }}
+      full-image: ${{ steps.image-info.outputs.full-image }}  # Added this output
     steps:
       - uses: actions/checkout@v4
-
-
-      - name: Configure Docker Permissions
-        run: |
-          # Add current user to docker group (ignore if already exists)
-          sudo usermod -aG docker $USER || true
-          # Change docker socket permissions
-          sudo chmod 666 /var/run/docker.sock
-          # Verify permissions
-          ls -la /var/run/docker.sock
-          groups
-
-      - name: Check os version
-        run: |
-          echo "OS Version: $(cat /etc/os-release)"
-          echo "Kernel Version: $(uname -r)"
-          echo "Architecture: $(uname -m)"
-          docker --version
-          docker compose version
-
-      # Export UID and GID
-      - name: Export UID and GID
-        run: |
-          echo "UID=$(id -u)" >> $GITHUB_ENV
-          echo "GID=$(id -g)" >> $GITHUB_ENV
-
-      - name: Generate .env
-        run: |
-          cp .env.example .env
-
-      - name: Create and Set Permissions for depictioDB
-        run: |
-          mkdir -p depictioDB/
-          chown -R "$(id -u):$(id -g)" depictioDB/
-          chmod -R 777 depictioDB/
-
-      - name: Create and Set Permissions for minio_data
-        run: |
-          mkdir -p minio_data/
-          chown -R "$(id -u):$(id -g)" minio_data/
-          chmod -R 775 minio_data/
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -68,8 +28,8 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GHCR_PAT }}
 
       - name: Generate image info
         id: image-info
@@ -128,9 +88,9 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.created=${{ steps.image-info.outputs.timestamp }}
           cache-from: |
-            type=gha,scope=depictio-${{ github.ref_name }}
-            type=gha,scope=depictio-main
-          cache-to: type=gha,mode=max,scope=depictio-${{ github.ref_name }}
+            type=gha,scope=${{ github.ref_name }}
+            type=gha,scope=refs/heads/main
+          cache-to: type=gha,mode=max,scope=${{ github.ref_name }}
           outputs: type=registry,push=true
 
       - name: Pull existing image
@@ -150,9 +110,12 @@ jobs:
 
       - name: Start services
         run: |
-          cp .env.example .env
           mkdir -p depictioDB minio_data
           chmod 777 depictioDB minio_data
+
+          # Set the DEPICTIO_VERSION environment variable for docker-compose
+          export DEPICTIO_VERSION="${{ steps.image-info.outputs.full-image }}"
+
           docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d
 
       - name: Wait for services to be ready
@@ -214,20 +177,20 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GHCR_PAT }}
 
       - name: Use cached image and start services
         run: |
           # Use the exact image from docker-build job
-          FULL_IMAGE="${{ needs.docker-build.outputs.image-tag }}"
-          REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          FULL_IMAGE_PATH="ghcr.io/${REPO}:${FULL_IMAGE}"
+          FULL_IMAGE="${{ needs.docker-build.outputs.full-image }}"
 
-          echo "🔄 Using image: ${FULL_IMAGE_PATH}"
-          docker pull "${FULL_IMAGE_PATH}"
+          echo "🔄 Using image: ${FULL_IMAGE}"
+          docker pull "${FULL_IMAGE}"
 
-          cp .env.example .env
+          # Set environment variables for docker-compose
+          export DEPICTIO_VERSION="${FULL_IMAGE}"
+
           mkdir -p depictioDB minio_data
           chmod 777 depictioDB minio_data
           docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d
@@ -253,13 +216,18 @@ jobs:
           source venv/bin/activate
 
           # Wait for backend to be ready
-          sleep 30
+          sleep 10
 
           # Copy config from container
           docker cp depictio-backend:/app/.depictio/admin_config.yaml .
 
-          # Run CLI commands
+          # Run CLI commands - show CLI config
           depictio-cli config show-cli-config --CLI-config-path admin_config.yaml
+
+          # Run CLI commands - validate project config
+          depictio-cli config validate-project-config \
+            --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
+            --CLI-config-path admin_config.yaml
 
   e2e-tests:
     needs: docker-build
@@ -274,21 +242,20 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GHCR_PAT }}
 
       - name: Use cached image and start services
         run: |
           # Use the exact image from docker-build job
-          FULL_IMAGE="${{ needs.docker-build.outputs.image-tag }}"
-          REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          FULL_IMAGE_PATH="ghcr.io/${REPO}:${FULL_IMAGE}"
+          FULL_IMAGE="${{ needs.docker-build.outputs.full-image }}"
 
-          echo "🔄 Using image: ${FULL_IMAGE_PATH}"
-          docker pull "${FULL_IMAGE_PATH}"
-          docker tag "${FULL_IMAGE_PATH}" depictio:latest
+          echo "🔄 Using image: ${FULL_IMAGE}"
+          docker pull "${FULL_IMAGE}"
 
-          cp .env.example .env
+          # Set environment variables for docker-compose
+          export DEPICTIO_VERSION="${FULL_IMAGE}"
+
           mkdir -p depictioDB minio_data
           chmod 777 depictioDB minio_data
           docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d
@@ -306,6 +273,6 @@ jobs:
           npm ci
 
           # Wait for services to be ready
-          sleep 30
+          sleep 10
 
           npx cypress run
