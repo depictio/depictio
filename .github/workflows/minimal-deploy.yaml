@@ -271,6 +271,10 @@ jobs:
           chown -R "$(id -u):$(id -g)" minio_data/
           chmod -R 775 minio_data/
 
+      - name: Copy .env.example to .env
+        run: |
+          cp .env.example .env
+
       - name: Use cached image and start services
         run: |
           # Use the exact image from docker-build job
@@ -346,13 +350,6 @@ jobs:
           password: ${{ secrets.GHCR_PAT }}
 
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4  # Updated to v4
-        with:
-          node-version: "18"  # Updated to newer LTS version
-          cache: 'npm'
-          cache-dependency-path: depictio/tests/e2e-tests/package-lock.json
-
       # ↓ NEW: Add user to docker group for permissions
       - name: Configure Docker Permissions
         run: |
@@ -389,6 +386,10 @@ jobs:
           mkdir -p minio_data/
           chown -R "$(id -u):$(id -g)" minio_data/
           chmod -R 775 minio_data/
+
+      - name: Copy .env.example to .env
+        run: |
+          cp .env.example .env
 
       - name: Use cached image and start services
         run: |
