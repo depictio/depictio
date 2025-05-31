@@ -7,33 +7,15 @@ on:
     branches: [main]
 
 jobs:
-  # quality:
-  #   runs-on: ubuntu-22.04
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - name: Install uv
-  #       uses: astral-sh/setup-uv@v5
-  #     - name: Setup Python
-  #       uses: actions/setup-python@v5
-  #       with:
-  #         python-version: "3.11"
-  #     - name: Install and test
-  #       run: |
-  #         uv venv venv
-  #         source venv/bin/activate
-  #         uv pip install -e .
-  #         uv pip install pytest ruff
-  #         ruff check .
-  #         pytest tests/ -xvs
-
   docker-build:
-    # needs: quality
     runs-on: ubuntu-22.04
     permissions:
       contents: read
       packages: write
+      id-token: write  # Added for enhanced security
     outputs:
       image-tag: ${{ steps.image-info.outputs.tag }}
+      image-digest: ${{ steps.build.outputs.digest }}
       rebuild-needed: ${{ steps.check-rebuild.outputs.rebuild }}
     steps:
       - uses: actions/checkout@v4
@@ -67,6 +49,7 @@ jobs:
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
           echo "hash=${DOCKER_HASH}" >> $GITHUB_OUTPUT
           echo "repo=${REPO_LOWER}" >> $GITHUB_OUTPUT
+          echo "full-image=ghcr.io/${REPO_LOWER}:${TAG}" >> $GITHUB_OUTPUT
           echo "Generated tag: ${TAG}"
 
       - name: Check if rebuild needed
@@ -74,39 +57,57 @@ jobs:
         run: |
           IMAGE_TAG="${{ steps.image-info.outputs.tag }}"
           REPO="${{ steps.image-info.outputs.repo }}"
+          FULL_IMAGE="ghcr.io/${REPO}:${IMAGE_TAG}"
 
           # Check if image already exists in registry
-          if docker manifest inspect ghcr.io/${REPO}:${IMAGE_TAG} > /dev/null 2>&1; then
+          if docker manifest inspect "${FULL_IMAGE}" > /dev/null 2>&1; then
             echo "rebuild=false" >> $GITHUB_OUTPUT
-            echo "✅ Image ghcr.io/${REPO}:${IMAGE_TAG} already exists, skipping build"
+            echo "✅ Image ${FULL_IMAGE} already exists, skipping build"
           else
             echo "rebuild=true" >> $GITHUB_OUTPUT
-            echo "🔨 Image doesn't exist, will build ghcr.io/${REPO}:${IMAGE_TAG}"
+            echo "🔨 Image doesn't exist, will build ${FULL_IMAGE}"
           fi
 
-      - name: Build and push new image
+      - name: Build and push Docker image
+        id: build
         if: steps.check-rebuild.outputs.rebuild == 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
           file: docker-images/Dockerfile_depictio.dockerfile
+          platforms: linux/amd64  # Specify platform for consistency
           push: true
-          load: true
+          load: false  # Don't load locally when pushing
           tags: |
-            ghcr.io/${{ steps.image-info.outputs.repo }}:${{ steps.image-info.outputs.tag }}
-            depictio:latest
-          cache-from: type=gha,scope=depictio
-          cache-to: type=gha,mode=max,scope=depictio
+            ${{ steps.image-info.outputs.full-image }}
+          labels: |
+            org.opencontainers.image.title=Depictio
+            org.opencontainers.image.description=Depictio application
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ steps.image-info.outputs.timestamp }}
+          cache-from: |
+            type=gha,scope=depictio-${{ github.ref_name }}
+            type=gha,scope=depictio-main
+          cache-to: type=gha,mode=max,scope=depictio-${{ github.ref_name }}
+          outputs: type=registry,push=true
 
-      - name: Pull existing image
+      - name: Pull and tag existing image
         if: steps.check-rebuild.outputs.rebuild == 'false'
         run: |
-          IMAGE_TAG="${{ steps.image-info.outputs.tag }}"
-          REPO="${{ steps.image-info.outputs.repo }}"
-          echo "📥 Pulling existing image..."
-          docker pull ghcr.io/${REPO}:${IMAGE_TAG}
-          docker tag ghcr.io/${REPO}:${IMAGE_TAG} depictio:latest
-          echo "✅ Using cached image: ghcr.io/${REPO}:${IMAGE_TAG}"
+          FULL_IMAGE="${{ steps.image-info.outputs.full-image }}"
+          echo "📥 Pulling existing image: ${FULL_IMAGE}"
+          docker pull "${FULL_IMAGE}"
+          docker tag "${FULL_IMAGE}" depictio:latest
+          echo "✅ Using cached image: ${FULL_IMAGE}"
+
+      - name: Pull and tag for local use
+        if: steps.check-rebuild.outputs.rebuild == 'true'
+        run: |
+          FULL_IMAGE="${{ steps.image-info.outputs.full-image }}"
+          echo "📥 Pulling newly built image for local use: ${FULL_IMAGE}"
+          docker pull "${FULL_IMAGE}"
+          docker tag "${FULL_IMAGE}" depictio:latest
 
       - name: Start services
         run: |
@@ -115,11 +116,25 @@ jobs:
           chmod 777 depictioDB minio_data
           docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d
 
-      # Extract the token and perform a health check with the token
+      - name: Wait for services to be ready
+        run: |
+          echo "⏳ Waiting for services to start..."
+          sleep 30
+
+          # Check if containers are running
+          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml ps
+
       - name: Extract Token and Check Depictio Backend Health
         run: |
+          # Wait a bit more for initialization
+          sleep 10
+
           # Extract the access token from the YAML file
-          token=$(docker compose exec depictio-backend bash -c "cat /app/depictio/.depictio/admin_config.yaml" | grep 'access_token' | awk '{print $2}')
+          if ! token=$(docker compose exec depictio-backend bash -c "cat /app/depictio/.depictio/admin_config.yaml" 2>/dev/null | grep 'access_token' | awk '{print $2}'); then
+            echo "❌ Failed to extract token, checking container logs..."
+            docker compose logs depictio-backend
+            exit 1
+          fi
 
           # Remove quotes from the token if any
           token=$(echo $token | tr -d "'\"")
@@ -128,18 +143,24 @@ jobs:
           token_hash=$(echo -n "$token" | sha256sum)
           echo "Extracted token hash: $token_hash"
 
-          # Wait for the backend to be ready
-          sleep 10
-
           # Perform the health check using the extracted token
-          health_check=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $token" http://localhost:8058/depictio/api/v1/utils/status)
+          echo "🔍 Checking backend health..."
+          for i in {1..5}; do
+            health_check=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $token" http://localhost:8058/depictio/api/v1/utils/status)
 
-          if [ "$health_check" != "200" ]; then
-            echo "Backend API is not healthy. Status code: $health_check"
-            exit 1
-          else
-            echo "Backend API is healthy."
-          fi
+            if [ "$health_check" = "200" ]; then
+              echo "✅ Backend API is healthy (attempt $i/5)"
+              break
+            else
+              echo "⚠️ Backend API not ready yet. Status code: $health_check (attempt $i/5)"
+              if [ $i -eq 5 ]; then
+                echo "❌ Backend API failed health check after 5 attempts"
+                docker compose logs depictio-backend
+                exit 1
+              fi
+              sleep 10
+            fi
+          done
 
   cli-tests:
     needs: docker-build
@@ -159,18 +180,27 @@ jobs:
 
       - name: Use cached image and start services
         run: |
-          # Pull the exact image built/used in docker-build job
-          IMAGE_TAG="${{ needs.docker-build.outputs.image-tag }}"
+          # Use the exact image from docker-build job
+          FULL_IMAGE="${{ needs.docker-build.outputs.image-tag }}"
           REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          echo "🔄 Using image: ghcr.io/${REPO}:${IMAGE_TAG}"
+          FULL_IMAGE_PATH="ghcr.io/${REPO}:${FULL_IMAGE}"
 
-          docker pull ghcr.io/${REPO}:${IMAGE_TAG}
-          docker tag ghcr.io/${REPO}:${IMAGE_TAG} depictio:latest
+          echo "🔄 Using image: ${FULL_IMAGE_PATH}"
+          docker pull "${FULL_IMAGE_PATH}"
+          docker tag "${FULL_IMAGE_PATH}" depictio:latest
 
           cp .env.example .env
           mkdir -p depictioDB minio_data
           chmod 777 depictioDB minio_data
           docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
       - name: Setup CLI
         run: |
@@ -183,8 +213,13 @@ jobs:
         run: |
           cd depictio/cli
           source venv/bin/activate
+
+          # Wait for backend to be ready
+          sleep 30
+
           # Copy config from container
           docker cp depictio-backend:/app/.depictio/admin_config.yaml .
+
           # Run CLI commands
           depictio-cli config show-cli-config --CLI-config-path admin_config.yaml
 
@@ -206,13 +241,14 @@ jobs:
 
       - name: Use cached image and start services
         run: |
-          # Pull the exact image built/used in docker-build job
-          IMAGE_TAG="${{ needs.docker-build.outputs.image-tag }}"
+          # Use the exact image from docker-build job
+          FULL_IMAGE="${{ needs.docker-build.outputs.image-tag }}"
           REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          echo "🔄 Using image: ghcr.io/${REPO}:${IMAGE_TAG}"
+          FULL_IMAGE_PATH="ghcr.io/${REPO}:${FULL_IMAGE}"
 
-          docker pull ghcr.io/${REPO}:${IMAGE_TAG}
-          docker tag ghcr.io/${REPO}:${IMAGE_TAG} depictio:latest
+          echo "🔄 Using image: ${FULL_IMAGE_PATH}"
+          docker pull "${FULL_IMAGE_PATH}"
+          docker tag "${FULL_IMAGE_PATH}" depictio:latest
 
           cp .env.example .env
           mkdir -p depictioDB minio_data
@@ -220,12 +256,18 @@ jobs:
           docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4  # Updated to v4
         with:
-          node-version: "16"
+          node-version: "18"  # Updated to newer LTS version
+          cache: 'npm'
+          cache-dependency-path: tests/e2e-tests/package-lock.json
 
       - name: Run E2E tests
         run: |
           cd tests/e2e-tests
           npm ci
+
+          # Wait for services to be ready
+          sleep 30
+
           npx cypress run
