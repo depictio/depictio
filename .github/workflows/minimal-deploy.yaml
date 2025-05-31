@@ -20,6 +20,47 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+
+      - name: Configure Docker Permissions
+        run: |
+          # Add current user to docker group (ignore if already exists)
+          sudo usermod -aG docker $USER || true
+          # Change docker socket permissions
+          sudo chmod 666 /var/run/docker.sock
+          # Verify permissions
+          ls -la /var/run/docker.sock
+          groups
+
+      - name: Check os version
+        run: |
+          echo "OS Version: $(cat /etc/os-release)"
+          echo "Kernel Version: $(uname -r)"
+          echo "Architecture: $(uname -m)"
+          docker --version
+          docker compose version
+
+      # Export UID and GID
+      - name: Export UID and GID
+        run: |
+          echo "UID=$(id -u)" >> $GITHUB_ENV
+          echo "GID=$(id -g)" >> $GITHUB_ENV
+
+      - name: Generate .env
+        run: |
+          cp .env.example .env
+
+      - name: Create and Set Permissions for depictioDB
+        run: |
+          mkdir -p depictioDB/
+          chown -R "$(id -u):$(id -g)" depictioDB/
+          chmod -R 777 depictioDB/
+
+      - name: Create and Set Permissions for minio_data
+        run: |
+          mkdir -p minio_data/
+          chown -R "$(id -u):$(id -g)" minio_data/
+          chmod -R 775 minio_data/
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -92,22 +133,20 @@ jobs:
           cache-to: type=gha,mode=max,scope=depictio-${{ github.ref_name }}
           outputs: type=registry,push=true
 
-      - name: Pull and tag existing image
+      - name: Pull existing image
         if: steps.check-rebuild.outputs.rebuild == 'false'
         run: |
           FULL_IMAGE="${{ steps.image-info.outputs.full-image }}"
           echo "📥 Pulling existing image: ${FULL_IMAGE}"
           docker pull "${FULL_IMAGE}"
-          docker tag "${FULL_IMAGE}" depictio:latest
           echo "✅ Using cached image: ${FULL_IMAGE}"
 
-      - name: Pull and tag for local use
+      - name: Pull newly built image
         if: steps.check-rebuild.outputs.rebuild == 'true'
         run: |
           FULL_IMAGE="${{ steps.image-info.outputs.full-image }}"
-          echo "📥 Pulling newly built image for local use: ${FULL_IMAGE}"
+          echo "📥 Pulling newly built image: ${FULL_IMAGE}"
           docker pull "${FULL_IMAGE}"
-          docker tag "${FULL_IMAGE}" depictio:latest
 
       - name: Start services
         run: |
@@ -119,7 +158,7 @@ jobs:
       - name: Wait for services to be ready
         run: |
           echo "⏳ Waiting for services to start..."
-          sleep 30
+          sleep 10
 
           # Check if containers are running
           docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml ps
@@ -187,7 +226,6 @@ jobs:
 
           echo "🔄 Using image: ${FULL_IMAGE_PATH}"
           docker pull "${FULL_IMAGE_PATH}"
-          docker tag "${FULL_IMAGE_PATH}" depictio:latest
 
           cp .env.example .env
           mkdir -p depictioDB minio_data
