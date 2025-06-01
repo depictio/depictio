@@ -7,16 +7,16 @@ storageClass: "standard"
 persistence:
   mongo:
     size: 5Gi
-    accessMode: ReadWriteOnce
+    accessMode: ReadWriteMany
   minio:
     size: 10Gi
-    accessMode: ReadWriteOnce
+    accessMode: ReadWriteMany
   screenshots:
     size: 5Gi
-    accessMode: ReadWriteOnce
+    accessMode: ReadWriteMany
   keys:
     size: 1Gi
-    accessMode: ReadWriteOnce
+    accessMode: ReadWriteMany
 
 # Secrets
 secrets:
