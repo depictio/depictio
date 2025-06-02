@@ -2,11 +2,10 @@ import httpx
 import typer
 from pydantic import validate_call
 
-from depictio.cli.cli.utils.common import (generate_api_headers,
-                                           load_depictio_config)
+from depictio.cli.cli.utils.common import generate_api_headers, load_depictio_config
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
 from depictio.cli.cli_logging import logger
-from depictio.models.models.base import BaseModel, convert_objectid_to_str
+from depictio.models.models.base import BaseModel, PyObjectId, convert_objectid_to_str
 from depictio.models.models.files import File
 from depictio.models.models.users import CLIConfig
 from depictio.models.models.workflows import WorkflowRun
@@ -21,6 +20,7 @@ def api_login(yaml_config_path: str = "~/.depictio/agent.yaml") -> dict:
     depictio_CLI_config = load_depictio_config(yaml_config_path=yaml_config_path)
     depictio_CLI_config = convert_objectid_to_str(depictio_CLI_config.model_dump())
     logger.info(f"Depictio CLI configuration loaded: {depictio_CLI_config}")
+    rich_print_checked_statement("Checking server accessibility...", "info")
 
     # Connect to depictio API
     response = httpx.post(
@@ -40,7 +40,7 @@ def api_login(yaml_config_path: str = "~/.depictio/agent.yaml") -> dict:
 
 
 @validate_call
-def api_get_project_from_id(project_id: str, CLI_config: CLIConfig):
+def api_get_project_from_id(project_id: PyObjectId, CLI_config: CLIConfig):
     """
     Get a project from the server using the project ID.
     """
@@ -188,6 +188,9 @@ def api_create_files(
     files = [convert_model_to_dict(f) for f in files]
 
     payload = {"files": files, "update": update}
+    logger.debug(f"Files: {files[:2]}")  # Log only the first two files for brevity
+    light_payload = {"files": files[:2], "update": update}
+    logger.debug(f"Light Payload: {light_payload}")  # Log only the first two files for brevity
     url = f"{CLI_config.base_url}/depictio/api/v1/files/upsert_batch"
 
     logger.debug(f"Payload: {payload}")
@@ -291,6 +294,25 @@ def api_delete_run(run_id: str, CLI_config: CLIConfig) -> httpx.Response:
 
     url = f"{CLI_config.base_url}/depictio/api/v1/runs/delete/{run_id}"
     response = httpx.delete(url, headers=generate_api_headers(CLI_config))
+    return response
+
+
+@validate_call
+def api_get_run(run_id: str, CLI_config: CLIConfig) -> httpx.Response:
+    """
+    Get a run from the server using the run ID.
+
+    Args:
+        run_id (str): Run ID to retrieve.
+        CLI_config (CLIConfig): Configuration object containing API base URL and credentials.
+
+    Returns:
+        httpx.Response: The response from the server.
+    """
+    logger.info(f"Getting run with ID: {run_id}")
+
+    url = f"{CLI_config.base_url}/depictio/api/v1/runs/get/{run_id}"
+    response = httpx.get(url, headers=generate_api_headers(CLI_config))
     return response
 
 

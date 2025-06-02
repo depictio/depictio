@@ -3,7 +3,7 @@ name: Create Release
 on:
   push:
     tags:
-      - 'v[0-9]*.[0-9]*.[0-9]*'        # Stable releases (v0.0.4) 
+      - 'v[0-9]*.[0-9]*.[0-9]*'        # Stable releases (v0.0.4)
       - 'v[0-9]*.[0-9]*.[0-9]*-beta*'  # Beta releases (v0.0.4-beta1)
   workflow_dispatch:
 
@@ -23,27 +23,27 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Important for changelog generation
-          
+
       - name: Extract version info
         id: version
         run: |
           # Extract version from tag (remove 'v' prefix)
           TAG=${GITHUB_REF#refs/tags/v}
           echo "version=$TAG" >> $GITHUB_OUTPUT
-          
+
           # Determine if it's a beta
           if [[ $TAG == *"-beta"* ]]; then
             echo "is_beta=true" >> $GITHUB_OUTPUT
           else
             echo "is_beta=false" >> $GITHUB_OUTPUT
           fi
-          
+
       - name: Generate changelog
         id: changelog
         run: |
           PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
           .github/scripts/changelog_generator.sh $PREVIOUS_TAG ${{ github.ref_name }} > CHANGELOG.md
-          
+
           # Convert to GitHub Actions output
           CHANGELOG=$(cat CHANGELOG.md)
           echo "changelog<<EOF" >> $GITHUB_OUTPUT
@@ -69,30 +69,30 @@ jobs:
           body: ${{ needs.changelog.outputs.changelog }}
           draft: false
           prerelease: ${{ needs.changelog.outputs.is_beta == 'true' }}
-          
+
       - name: Update CHANGELOG.md
         if: ${{ needs.changelog.outputs.is_beta != 'true' }}
         run: |
           # Only update for stable releases
           echo "${{ needs.changelog.outputs.changelog }}" > /tmp/changelog_clean.md
-          
+
           # Pull latest changes from main branch to avoid conflicts
           git config user.name "GitHub Actions Bot"
           git config user.email "actions@github.com"
           git fetch origin main
           git checkout main
           git pull origin main
-          
+
           # Read existing changelog
           if [ -f CHANGELOG.md ]; then
             EXISTING_CHANGELOG=$(cat CHANGELOG.md)
           else
             EXISTING_CHANGELOG="# Changelog\n\n"
           fi
-          
+
           # Create new changelog with the latest changes at the top
           echo -e "# Changelog\n\n$(cat /tmp/changelog_clean.md)\n\n${EXISTING_CHANGELOG#*#*\n\n}" > CHANGELOG.md
-          
+
           # Commit and push the updated changelog
           git add CHANGELOG.md
           git commit -m "Update CHANGELOG.md for v${{ needs.changelog.outputs.version }}"

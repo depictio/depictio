@@ -332,25 +332,17 @@ app.layout = dbc.Container(
                                                 html.Td(
                                                     html.I(
                                                         className="material-icons",
-                                                        children=AVAILABLE_PLOT_TYPES[
-                                                            plot_type
-                                                        ]["material-icons"],
+                                                        children=AVAILABLE_PLOT_TYPES[plot_type][
+                                                            "material-icons"
+                                                        ],
                                                     )
                                                 ),
+                                                html.Td(AVAILABLE_PLOT_TYPES[plot_type]["type"]),
                                                 html.Td(
-                                                    AVAILABLE_PLOT_TYPES[plot_type][
-                                                        "type"
-                                                    ]
+                                                    AVAILABLE_PLOT_TYPES[plot_type]["description"]
                                                 ),
                                                 html.Td(
-                                                    AVAILABLE_PLOT_TYPES[plot_type][
-                                                        "description"
-                                                    ]
-                                                ),
-                                                html.Td(
-                                                    AVAILABLE_PLOT_TYPES[plot_type][
-                                                        "property"
-                                                    ]
+                                                    AVAILABLE_PLOT_TYPES[plot_type]["property"]
                                                 ),
                                                 html.Td(
                                                     dbc.Button(
@@ -382,9 +374,7 @@ app.layout = dbc.Container(
                         ),
                     ]
                 ),
-                dbc.ModalFooter(
-                    dbc.Button("Close", id="modal-close-button", color="secondary")
-                ),
+                dbc.ModalFooter(dbc.Button("Close", id="modal-close-button", color="secondary")),
             ],
             id="modal",
             centered=True,

@@ -7,22 +7,28 @@ from typing import Any, DefaultDict, cast
 
 from bson import ObjectId
 from pydantic import validate_call
-from typeguard import typechecked
 
-from depictio.cli.cli.utils.api_calls import (api_create_files,
-                                              api_delete_file, api_delete_run,
-                                              api_get_files_by_dc_id,
-                                              api_get_runs_by_wf_id,
-                                              api_upsert_runs_batch)
+from depictio.cli.cli.utils.api_calls import (
+    api_create_files,
+    api_delete_file,
+    api_delete_run,
+    api_get_files_by_dc_id,
+    api_get_runs_by_wf_id,
+    api_upsert_runs_batch,
+)
 from depictio.cli.cli.utils.common import format_timestamp
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
 from depictio.cli.cli_logging import logger
 from depictio.models.models.data_collections import DataCollection, Regex
 from depictio.models.models.files import File, FileScanResult
 from depictio.models.models.users import CLIConfig, Permission, UserBase
-from depictio.models.models.workflows import (Workflow, WorkflowConfig,
-                                              WorkflowDataLocation,
-                                              WorkflowRun, WorkflowRunScan)
+from depictio.models.models.workflows import (
+    Workflow,
+    WorkflowConfig,
+    WorkflowDataLocation,
+    WorkflowRun,
+    WorkflowRunScan,
+)
 
 
 def regex_match(file: File, full_regex: str):
@@ -172,7 +178,7 @@ def check_run_differences(
 
 def scan_single_file(
     file_location: str,
-    run_id: str,
+    run: WorkflowRun,
     data_collection: "DataCollection",
     permissions: Permission,
     existing_files: dict[str, dict],
@@ -189,7 +195,7 @@ def scan_single_file(
 
     Args:
         file_location (str): The full path to the file.
-        run_id (str): The ID of the run.
+        run (WorkflowRun): The run instance to associate with the file.
         data_collection (DataCollection): The data collection configuration.
         permissions (Permission): The permissions for the file.
         existing_files (List[dict]): Existing files from the database.
@@ -221,6 +227,8 @@ def scan_single_file(
 
     scan_result = None
     file_id = None
+
+    logger.debug(f"Existing Files: {existing_files}")
 
     # Check if the file already exists in the database.
     if existing_files:
@@ -254,7 +262,8 @@ def scan_single_file(
         file_hash=file_hash,
         filesize=filesize,
         data_collection_id=data_collection.id,
-        run_id=run_id,
+        run_id=run.id,
+        run_tag=run.run_tag,
         permissions=permissions,
     )
 
@@ -275,7 +284,7 @@ def scan_single_file(
 
 def process_files(
     path: str,
-    run_id: str,
+    run: WorkflowRun,
     data_collection: "DataCollection",
     permissions: Permission,
     existing_files: dict[str, dict],
@@ -290,7 +299,7 @@ def process_files(
 
     Args:
         path (str): The directory or file path to scan.
-        run_id (str): The ID of the run.
+        run (WorkflowRun): The run instance to associate with the files.
         data_collection (DataCollection): The data collection configuration.
         existing_files (List[dict]): The list of files already in the database.
         update_files (bool): Whether to update files that already exist.
@@ -324,7 +333,7 @@ def process_files(
                 file_location = os.path.join(root, file)
                 file_instance = scan_single_file(
                     file_location=file_location,
-                    run_id=run_id,
+                    run=run,
                     data_collection=data_collection,
                     permissions=permissions,
                     existing_files=existing_files,
@@ -338,7 +347,7 @@ def process_files(
         logger.debug(f"Scanning single file: {path}")
         file_instance = scan_single_file(
             file_location=path,
-            run_id=run_id,
+            run=run,
             data_collection=data_collection,
             permissions=permissions,
             existing_files=existing_files,
@@ -355,7 +364,7 @@ def process_files(
     return file_list
 
 
-@typechecked
+# @typechecked
 def scan_run(
     run_location: str,
     run_tag: str,
@@ -419,7 +428,7 @@ def scan_run(
     # Scan files in this run folder
     file_scan_results = process_files(
         path=run_location,
-        run_id=workflow_run.id,
+        run=workflow_run,
         data_collection=data_collection,
         permissions=permissions,
         existing_files=existing_files_reformated,
@@ -542,7 +551,7 @@ def scan_run(
     return workflow_run
 
 
-@typechecked
+# @typechecked
 def scan_parent_folder(
     parent_runs_location: str,
     workflow_config: WorkflowConfig,
@@ -590,7 +599,10 @@ def scan_parent_folder(
         existing_runs = existing_runs_response.json()
         logger.debug(f"Existing Runs: {existing_runs}")
         if existing_runs:
-            existing_runs_reformated = {e["run_tag"]: e for e in existing_runs}
+            # existing_runs_reformated = {e["run_tag"]: e for e in existing_runs}
+            existing_runs_reformated = {
+                e["run_tag"]: WorkflowRun.from_mongo(e) for e in existing_runs
+            }
             logger.debug(f"Existing Runs Reformated: {existing_runs_reformated}")
 
     if structure == "direct-folder":
@@ -656,7 +668,7 @@ def scan_parent_folder(
         missing_runs_tag = set(existing_runs_reformated.keys()) - set(
             [run.run_tag for run in runs if run]
         )
-        missing_runs = [existing_runs_reformated[run_tag]["_id"] for run_tag in missing_runs_tag]
+        missing_runs = [existing_runs_reformated[run_tag].id for run_tag in missing_runs_tag]
 
         if rescan_folders:
             if missing_runs:
@@ -776,7 +788,8 @@ def scan_files_for_data_collection(
     print(f"Response json: {response.json()}")
     if response.status_code == 200:
         existing_files = response.json()
-        existing_files = [File.from_mongo(f) for f in existing_files]
+        # existing_files = [f for f in existing_files]
+        # existing_files = [File.from_mongo(f) for f in existing_files]
         logger.debug(f"Existing Files: {existing_files}")
         print(f"Existing Files: {existing_files}")
     else:
@@ -792,7 +805,7 @@ def scan_files_for_data_collection(
 
     # Convert existing_files from a dict to a list of file dictionaries if needed.
     existing_files_reformated = (
-        {existing_file.file_location: existing_file for existing_file in existing_files}
+        {existing_file["file_location"]: existing_file for existing_file in existing_files}
         if existing_files
         else {}
     )
@@ -811,13 +824,23 @@ def scan_files_for_data_collection(
             f"Multiple files found for data collection {data_collection.data_collection_tag} with file location {file_path}"
         )
 
-        # Use a fixed default run_id (or generate one as needed)
-        run_id: str = "fixed-run-id"
+        # Create a WorkflowRun instance for the single file scan.
+        workflow_run = WorkflowRun(
+            workflow_id=workflow_id,
+            run_tag=f"{data_collection.data_collection_tag}-single-file-scan",
+            files_id=[],
+            workflow_config_id=workflow.config.id,
+            run_location=os.path.dirname(file_path),
+            creation_time=format_timestamp(os.path.getctime(file_path)),
+            last_modification_time=format_timestamp(os.path.getmtime(file_path)),
+            run_hash="",
+            permissions=permissions,
+        )
 
         # For single file mode, bypass regex matching.
         scan_file_result = process_files(
             path=file_path,
-            run_id=run_id,
+            run=workflow_run,
             data_collection=data_collection,
             existing_files=existing_files_reformated,
             permissions=permissions,

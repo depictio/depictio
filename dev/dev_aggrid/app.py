@@ -15,7 +15,6 @@ columnDefs = [
         "cellEditor": "agSelectCellEditor",
         "cellEditorParams": {"function": "dynamicOptions(params)"},
     },
-
 ]
 
 rowData = [

@@ -2,11 +2,11 @@
 ingress:
   enabled: true
   ingressClassName: "internal-users"
-  
+
   # EMBL specific annotations
   annotations:
     traefik.ingress.kubernetes.io/router.tls.certresolver: sectigo
-  
+
   # Host configuration for split frontend/backend setup
   hosts:
     - host: "demo.depictio.embl.org"
@@ -23,7 +23,7 @@ ingress:
           service:
             name: depictio-backend
             portName: http
-  
+
   # TLS configuration
   tls:
     - hosts:

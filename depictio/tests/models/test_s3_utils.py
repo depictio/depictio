@@ -6,8 +6,7 @@ from pydantic import ValidationError
 
 # from depictio.models.config import DEPICTIO_CONTEXT
 from depictio.models.models.s3 import PolarsStorageOptions, S3DepictioCLIConfig
-from depictio.models.s3_utils import (
-    S3_storage_checks, turn_S3_config_into_polars_storage_options)
+from depictio.models.s3_utils import S3_storage_checks, turn_S3_config_into_polars_storage_options
 
 
 class TestS3DepictioCLIConfig:

@@ -21,9 +21,7 @@ from pydantic_core import core_schema
 from pydantic.json_schema import JsonSchemaValue
 
 # Configure logger to use RichHandler
-logging.basicConfig(
-    level="INFO", format="%(message)s", datefmt="[%X]", handlers=[RichHandler()]
-)
+logging.basicConfig(level="INFO", format="%(message)s", datefmt="[%X]", handlers=[RichHandler()])
 logging.getLogger("passlib").setLevel(logging.ERROR)
 logger = logging.getLogger("rich")
 
@@ -59,7 +57,6 @@ class CustomJSONResponse(JSONResponse):
         )
 
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: initialize database, etc.
@@ -79,6 +76,7 @@ app = FastAPI(
 # OAuth2 scheme
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
+
 class Test(Document):
     name: str
     test_field: Optional[str] = None
@@ -89,9 +87,10 @@ class Test(Document):
 
 class Group(Document):
     name: str
- 
+
     class Settings:
         name = "groups"
+
 
 # Document models
 class User(Document):
@@ -149,9 +148,7 @@ class Token(Document):
             "user_id": self.user_id,
             "access_token": self.access_token,
             "token_type": self.token_type,
-            "expires_in": int(
-                (self.expire_datetime - datetime.utcnow()).total_seconds()
-            ),
+            "expires_in": int((self.expire_datetime - datetime.utcnow()).total_seconds()),
             "expires_at": self.expire_datetime,
             "created_at": self.created_at,
         }
@@ -176,23 +173,22 @@ async def init_db():
     # client.drop_database(DB_NAME)
     await init_beanie(database=client[DB_NAME], document_models=[User, Token, Test, Group])
 
+
 async def shutdown_db(wipe: bool = False):
     # Close the database connection
     client = AsyncIOMotorClient(MONGODB_URL)
-    
+
     # Only wipe the database if explicitly requested
     if wipe:
         client.drop_database(DB_NAME)
         logger.info(f"Database {DB_NAME} dropped.")
-    
+
     client.close()
     logger.info("Database connection closed.")
 
 
 # User authentication utilities
-def create_jwt_token(
-    user_id: PydanticObjectId, expires_delta: timedelta = timedelta(minutes=30)
-):
+def create_jwt_token(user_id: PydanticObjectId, expires_delta: timedelta = timedelta(minutes=30)):
     expire = datetime.utcnow() + expires_delta
     to_encode = {"sub": str(user_id), "exp": expire}
     encoded_jwt = jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
@@ -268,9 +264,6 @@ async def create_user(user_data: UserCreate):
     test = Test(name="test")
     await test.insert()
     logger.info(f"Test document created: {test}")
-
-
-
 
     # Return the user directly (hashed_password will be excluded via Config)
     return new_user
@@ -371,15 +364,11 @@ async def refresh_token(current_user: User = Depends(get_current_user)):
 
 # Revoke specific token by ID
 @app.delete("/tokens/{token_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def revoke_token(
-    token_id: PydanticObjectId, current_user: User = Depends(get_current_user)
-):
+async def revoke_token(token_id: PydanticObjectId, current_user: User = Depends(get_current_user)):
     # Ensure token belongs to current user
     token = await Token.find_one({"_id": token_id, "user_id": current_user.id})
     if not token:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Token not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token not found")
 
     await token.delete()
     return None

@@ -39,7 +39,6 @@ class User:
         return self.series["username"]
 
 
-
 warnings.filterwarnings("ignore")
 
 server = Flask(__name__)
@@ -173,9 +172,7 @@ def display_page(pathname):
         session.pop("logged_in", None)  # Remove session key
         return logout
     else:
-        return (
-            create  # this will be displayed when no path is provided, i.e., at startup
-        )
+        return create  # this will be displayed when no path is provided, i.e., at startup
 
 
 @app.callback(
@@ -187,18 +184,12 @@ def insert_users(n_clicks, un, pw, em):
     global users
     if un is not None and pw is not None and em is not None:
         if un in users["username"].values:  # Check if username already exists
-            return [
-                html.Div("This username already exists, please choose another one.")
-            ]
+            return [html.Div("This username already exists, please choose another one.")]
 
         # hashed_password = generate_password_hash(pw, method="sha256")
-        new_user = pd.DataFrame(
-            [[un, pw, em]], columns=["username", "password", "email"]
-        )
+        new_user = pd.DataFrame([[un, pw, em]], columns=["username", "password", "email"])
         users = pd.concat([users, new_user])
-        users.to_csv(
-            "dev/flask-login/users.csv", index=False
-        )  # Save back to the CSV file
+        users.to_csv("dev/flask-login/users.csv", index=False)  # Save back to the CSV file
         return [login]
     else:
         return [
@@ -274,9 +265,7 @@ def update_output(n_clicks, input1, input2):
         return ""
 
 
-@app.callback(
-    Output("url_login_success", "pathname"), [Input("back-button", "n_clicks")]
-)
+@app.callback(Output("url_login_success", "pathname"), [Input("back-button", "n_clicks")])
 def logout_dashboard(n_clicks):
     if n_clicks > 0:
         return "/"

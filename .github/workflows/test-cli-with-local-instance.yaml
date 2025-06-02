@@ -1,0 +1,99 @@
+name: Python CI
+
+on:
+  workflow_dispatch:
+  # push:
+  #   branches: [main, develop]
+
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@v4
+    - uses: astral-sh/setup-uv@v5
+      with:
+        enable-cache: true
+    - uses: actions/setup-python@v5
+      with:
+        python-version-file: "depictio/cli/pyproject.toml"
+        cache-dependency-path: "uv.lock"
+    - name: Cache venv
+      uses: actions/cache@v3
+      with:
+        path: depictio/cli/venv
+        key: venv-${{ hashFiles('uv.lock') }}
+    - name: Install with LTS fallback
+      run: |
+        cd depictio/cli
+        uv venv --python 3.11 venv
+        source venv/bin/activate
+        if uv pip install -e . && python -c "import polars" 2>/dev/null; then
+          echo "✅ Standard polars successful"
+        else
+          echo "⚠️ Fallback to LTS polars"
+          uv pip uninstall polars || true
+          uv pip install "polars-lts-cpu==1.22.0"
+        fi
+        python -c "import polars; print(f'Polars {polars.__version__}')"
+    - name: Test CLI
+      run: |
+        cd depictio/cli
+        source venv/bin/activate
+        depictio-cli --help
+
+    - name: Validate & Show Depictio CLI Config
+      continue-on-error: true
+      run: |
+        cd depictio/cli
+        source venv/bin/activate
+        depictio-cli --verbose -vl DEBUG config show-cli-config --CLI-config-path ../.depictio/admin_config.yaml
+
+    - name: Validate & Show Project Config
+      run: |
+        cd depictio/cli
+        source venv/bin/activate
+        depictio-cli --verbose -vl DEBUG config validate-project-config \
+                            --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
+                            --CLI-config-path ../.depictio/admin_config.yaml
+
+    - name: Check S3 Storage
+      run: |
+        cd depictio/cli
+        source venv/bin/activate
+        depictio-cli --verbose -vl DEBUG config check-s3-storage \
+                            --CLI-config-path ../.depictio/admin_config.yaml
+
+    - name: Show Project on server
+      run: |
+        cd depictio/cli
+        source venv/bin/activate
+        depictio-cli --verbose -vl DEBUG config show-depictio-project-metadata-on-server \
+                            --project-name "Iris Dataset Project Data Analysis" \
+                            --CLI-config-path ../.depictio/admin_config.yaml
+
+    - name: Sync Project to Server
+      run: |
+        cd depictio/cli
+        source venv/bin/activate
+        depictio-cli --verbose -vl DEBUG config sync-project-config-to-server \
+                            --update \
+                            --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
+                            --CLI-config-path ../.depictio/admin_config.yaml
+
+    - name: Scan Iris Dataset Files
+      run: |
+        cd depictio/cli
+        source venv/bin/activate
+        depictio-cli --verbose -vl DEBUG data scan \
+                            --sync-files --rescan-folders \
+                            --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
+                            --CLI-config-path ../.depictio/admin_config.yaml
+
+    - name: Process Iris Dataset
+      run: |
+        cd depictio/cli
+        source venv/bin/activate
+        depictio-cli --verbose -vl DEBUG data process \
+                            --overwrite \
+                            --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
+                            --CLI-config-path ../.depictio/admin_config.yaml

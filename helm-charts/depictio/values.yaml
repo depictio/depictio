@@ -7,16 +7,16 @@ storageClass: "standard"
 persistence:
   mongo:
     size: 5Gi
-    accessMode: ReadWriteOnce
+    accessMode: ReadWriteMany
   minio:
     size: 10Gi
-    accessMode: ReadWriteOnce
+    accessMode: ReadWriteMany
   screenshots:
     size: 5Gi
-    accessMode: ReadWriteOnce
+    accessMode: ReadWriteMany
   keys:
     size: 1Gi
-    accessMode: ReadWriteOnce
+    accessMode: ReadWriteMany
 
 # Secrets
 secrets:
@@ -115,14 +115,14 @@ frontend:
 ingress:
   enabled: true
   ingressClassName: "nginx"  # Default ingress class
-  
+
   # You can leave hosts empty here since environment-specific values will override
   hosts: []
-  
+
   # Default empty annotations and labels
   annotations: {}
   labels: {}
-  
+
   # Empty TLS configuration by default
   tls: []
 

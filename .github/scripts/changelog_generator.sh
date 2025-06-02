@@ -20,10 +20,10 @@ echo ""
 
 if [ -z "$PREVIOUS_TAG" ]; then
   # If there's no previous tag, use all commits
-  COMMITS=$(git log --pretty=format:"* %s [%h]" $CURRENT_REF | grep -v "Merge" | sed '/^$/d')
+  COMMITS=$(git log --pretty=format:"* %s [%h]" "$CURRENT_REF" | grep -v "Merge" | sed '/^$/d')
 else
   # Use changes between previous tag and current reference
-  COMMITS=$(git log --pretty=format:"* %s [%h]" $PREVIOUS_TAG..$CURRENT_REF | grep -v "Merge" | sed '/^$/d')
+  COMMITS=$(git log --pretty=format:"* %s [%h]" "$PREVIOUS_TAG".."$CURRENT_REF" | grep -v "Merge" | sed '/^$/d')
 fi
 
 # Extract PR numbers and add links
@@ -34,7 +34,7 @@ echo ""
 
 # Features
 FEATURES=$(echo "$CHANGELOG" | grep -i "feat\|feature\|add" || echo "")
-if [ ! -z "$FEATURES" ]; then
+if [ -n "$FEATURES" ]; then
   echo "### New Features"
   echo ""
   echo "$FEATURES"
@@ -43,7 +43,7 @@ fi
 
 # Bug fixes
 FIXES=$(echo "$CHANGELOG" | grep -i "fix\|bug\|issue" || echo "")
-if [ ! -z "$FIXES" ]; then
+if [ -n "$FIXES" ]; then
   echo "### Bug Fixes"
   echo ""
   echo "$FIXES"
@@ -52,7 +52,7 @@ fi
 
 # Improvements
 IMPROVEMENTS=$(echo "$CHANGELOG" | grep -i "improve\|update\|enhance\|refactor" || echo "")
-if [ ! -z "$IMPROVEMENTS" ]; then
+if [ -n "$IMPROVEMENTS" ]; then
   echo "### Improvements"
   echo ""
   echo "$IMPROVEMENTS"
@@ -60,8 +60,8 @@ if [ ! -z "$IMPROVEMENTS" ]; then
 fi
 
 # Breaking changes - look in commit bodies
-BREAKING=$(git log --pretty=format:"%b" $PREVIOUS_TAG..$CURRENT_REF | grep -i "BREAKING CHANGE:" || echo "")
-if [ ! -z "$BREAKING" ]; then
+BREAKING=$(git log --pretty=format:"%b" "$PREVIOUS_TAG".."$CURRENT_REF" | grep -i "BREAKING CHANGE:" || echo "")
+if [ -n "$BREAKING" ]; then
   echo "### Breaking Changes"
   echo ""
   echo "$BREAKING"
@@ -70,7 +70,7 @@ fi
 
 # Other changes
 OTHER=$(echo "$CHANGELOG" | grep -v -i "feat\|feature\|add\|fix\|bug\|issue\|improve\|update\|enhance\|refactor" || echo "")
-if [ ! -z "$OTHER" ]; then
+if [ -n "$OTHER" ]; then
   echo "### Other Changes"
   echo ""
   echo "$OTHER"

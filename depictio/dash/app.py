@@ -9,6 +9,7 @@ and sets up the application layout.
 
 # Depictio core imports
 from depictio.api.v1.configs.config import settings
+
 # Depictio dash core imports
 from depictio.dash.core.app_factory import create_dash_app
 from depictio.dash.core.callbacks import register_all_callbacks

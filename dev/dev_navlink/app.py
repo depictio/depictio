@@ -30,7 +30,6 @@ app.clientside_callback(
 )
 app.layout = html.Div(
     [
-
         dmc.Grid(
             [
                 dmc.NavLink(
@@ -38,8 +37,12 @@ app.layout = html.Div(
                     id="main-nav-link",
                     href="www.google.com",
                     children=[
-                        dmc.NavLink(label="Nested Link 1", id="nested-link-1", href="www.google.com"),
-                        dmc.NavLink(label="Nested Link 2", id="nested-link-2", href="www.google.com"),
+                        dmc.NavLink(
+                            label="Nested Link 1", id="nested-link-1", href="www.google.com"
+                        ),
+                        dmc.NavLink(
+                            label="Nested Link 2", id="nested-link-2", href="www.google.com"
+                        ),
                     ],
                 ),
                 html.Div(id="dummy-output"),  # This is just to trigger the client-side callback

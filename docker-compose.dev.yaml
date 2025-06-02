@@ -10,8 +10,9 @@ services:
       - ./depictioDB:/data/depictioDB
 
   depictio-frontend:
-    image: depictio:dev
     container_name: depictio-frontend
+    #  Use prebuilt image if DEPICTIO_VERSION is set, otherwise build locally
+    image: ${DEPICTIO_VERSION:-depictio:dev}
     build:
       dockerfile: docker-images/Dockerfile_depictio.dockerfile
       context: .
@@ -20,7 +21,7 @@ services:
     volumes:
       - ./depictio:/app/depictio
     env_file:
-      - .env
+      - docker-compose/.env
     environment:
         DEV_MODE: "${DEV_MODE:-false}"
         DEPICTIO_LOGGING_VERBOSITY_LEVEL: "DEBUG"
@@ -32,7 +33,8 @@ services:
 
   depictio-backend:
     container_name: depictio-backend
-    image: depictio:dev
+    #  Use prebuilt image if DEPICTIO_VERSION is set, otherwise build locally
+    image: ${DEPICTIO_VERSION:-depictio:dev}
     build:
       dockerfile: docker-images/Dockerfile_depictio.dockerfile
       context: .
@@ -41,12 +43,11 @@ services:
     volumes:
       - ./depictio:/app/depictio
     env_file:
-      - .env
+      - docker-compose/.env
     environment:
         DEV_MODE: "${DEV_MODE:-false}"
         DEPICTIO_LOGGING_VERBOSITY_LEVEL: "DEBUG"
     command: ["/app/run_fastapi.sh"]
     user: "${UID:-1000}:${GID:-1000}"
-    # tty: true
     depends_on:
       - mongo

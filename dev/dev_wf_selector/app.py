@@ -20,9 +20,7 @@ app.layout = html.Div(
         dcc.Store(id="selections-store", storage_type="session", data={}),
         dcc.Dropdown(
             id="dataframe-dropdown",
-            options=[
-                {"label": df_name, "value": df_name} for df_name in dataframes.keys()
-            ],
+            options=[{"label": df_name, "value": df_name} for df_name in dataframes.keys()],
             value="Iris",
         ),
         dcc.Dropdown(id="x-dropdown"),
