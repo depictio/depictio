@@ -11,7 +11,7 @@ services:
 
   depictio-frontend:
     container_name: depictio-frontend
-    # Use prebuilt image if DEPICTIO_VERSION is set, otherwise build locally
+    #  Use prebuilt image if DEPICTIO_VERSION is set, otherwise build locally
     image: ${DEPICTIO_VERSION:-depictio:dev}
     build:
       dockerfile: docker-images/Dockerfile_depictio.dockerfile
@@ -33,7 +33,7 @@ services:
 
   depictio-backend:
     container_name: depictio-backend
-    # Use prebuilt image if DEPICTIO_VERSION is set, otherwise build locally
+    #  Use prebuilt image if DEPICTIO_VERSION is set, otherwise build locally
     image: ${DEPICTIO_VERSION:-depictio:dev}
     build:
       dockerfile: docker-images/Dockerfile_depictio.dockerfile
