@@ -824,13 +824,23 @@ def scan_files_for_data_collection(
             f"Multiple files found for data collection {data_collection.data_collection_tag} with file location {file_path}"
         )
 
-        # Use a fixed default run_id (or generate one as needed)
-        run_id: str = "fixed-run-id"
+        # Create a WorkflowRun instance for the single file scan.
+        workflow_run = WorkflowRun(
+            workflow_id=workflow_id,
+            run_tag=f"{data_collection.data_collection_tag}-single-file-scan",
+            files_id=[],
+            workflow_config_id=workflow.config.id,
+            run_location=os.path.dirname(file_path),
+            creation_time=format_timestamp(os.path.getctime(file_path)),
+            last_modification_time=format_timestamp(os.path.getmtime(file_path)),
+            run_hash="",
+            permissions=permissions,
+        )
 
         # For single file mode, bypass regex matching.
         scan_file_result = process_files(
             path=file_path,
-            run_id=run_id,
+            run=workflow_run,
             data_collection=data_collection,
             existing_files=existing_files_reformated,
             permissions=permissions,
