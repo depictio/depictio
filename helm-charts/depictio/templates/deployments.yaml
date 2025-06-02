@@ -4,18 +4,27 @@ metadata:
   name: mongo
   namespace: {{ .Release.Namespace }}
   labels:
-    app: mongo
+    app: {{ .Values.appname }}
+    component: mongo
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: mongo
+      release: {{ .Release.Name }}
+      app: {{ .Values.appname }}
+      component: mongo
+      project: {{ .Values.project.slug }}
+      type: app
   strategy:
     type: Recreate
   template:
     metadata:
       labels:
-        app: mongo
+        release: {{ .Release.Name }}
+        app: {{ .Values.appname }}
+        component: mongo
+        project: {{ .Values.project.slug }}
+        type: app
     spec:
       containers:
         - name: mongo
@@ -46,18 +55,27 @@ metadata:
   name: minio
   namespace: {{ .Release.Namespace }}
   labels:
-    app: minio
+    app: {{ .Values.appname }}
+    component: minio
 spec:
   strategy:
     type: Recreate
   replicas: 1
   selector:
     matchLabels:
-      app: minio
+      release: {{ .Release.Name }}
+      app: {{ .Values.appname }}
+      component: minio
+      project: {{ .Values.project.slug }}
+      type: app
   template:
     metadata:
       labels:
-        app: minio
+        release: {{ .Release.Name }}
+        app: {{ .Values.appname }}
+        component: minio
+        project: {{ .Values.project.slug }}
+        type: app
     spec:
       containers:
         - name: minio
@@ -99,18 +117,27 @@ metadata:
   name: depictio-backend
   namespace: {{ .Release.Namespace }}
   labels:
-    app: depictio-backend
+    app: {{ .Values.appname }}
+    component: depictio-backend
 spec:
   strategy:
     type: Recreate
   replicas: 1
   selector:
     matchLabels:
-      app: depictio-backend
+      release: {{ .Release.Name }}
+      app: {{ .Values.appname }}
+      component: depictio-backend
+      project: {{ .Values.project.slug }}
+      type: app
   template:
     metadata:
       labels:
-        app: depictio-backend
+        release: {{ .Release.Name }}
+        app: {{ .Values.appname }}
+        component: depictio-backend
+        project: {{ .Values.project.slug }}
+        type: app
     spec:
       securityContext:
         fsGroup: {{ .Values.backend.securityContext.fsGroup }}
@@ -147,18 +174,27 @@ metadata:
   name: depictio-frontend
   namespace: {{ .Release.Namespace }}
   labels:
-    app: depictio-frontend
+    app: {{ .Values.appname }}
+    component: depictio-frontend
 spec:
   replicas: 1
   strategy:
     type: Recreate
   selector:
     matchLabels:
-      app: depictio-frontend
+      release: {{ .Release.Name }}
+      app: {{ .Values.appname }}
+      component: depictio-frontend
+      project: {{ .Values.project.slug }}
+      type: app
   template:
     metadata:
       labels:
-        app: depictio-frontend
+        release: {{ .Release.Name }}
+        app: {{ .Values.appname }}
+        component: depictio-frontend
+        project: {{ .Values.project.slug }}
+        type: app
     spec:
       containers:
         - name: depictio-frontend
