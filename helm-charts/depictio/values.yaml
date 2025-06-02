@@ -2,6 +2,13 @@
 nameOverride: ""
 fullnameOverride: ""
 
+# Application name (used in labels)
+appname: "depictio"
+
+# Project configuration (required for matchLabels)
+project:
+  slug: "depictio" # Add your project slug here
+
 # Storage settings
 storageClass: "standard"
 persistence:
@@ -26,7 +33,7 @@ secrets:
 # MongoDB settings
 mongo:
   image:
-    repository: mongo  # Added repository for MongoDB
+    repository: mongo # Added repository for MongoDB
     tag: latest
     pullPolicy: IfNotPresent
   resources:
@@ -62,7 +69,7 @@ minio:
 # Backend settings
 backend:
   image:
-    repository: ghcr.io/depictio/depictio  # Corrected repository path with .io
+    repository: ghcr.io/depictio/depictio # Corrected repository path with .io
     tag: v0.0.4
     pullPolicy: Always
   resources:
@@ -90,7 +97,7 @@ backend:
 # Frontend settings
 frontend:
   image:
-    repository: ghcr.io/depictio/depictio  # Corrected repository path with .io
+    repository: ghcr.io/depictio/depictio # Corrected repository path with .io
     tag: v0.0.4
     pullPolicy: Always
   resources:
@@ -114,7 +121,7 @@ frontend:
 # Generic base ingress values
 ingress:
   enabled: true
-  ingressClassName: "nginx"  # Default ingress class
+  ingressClassName: "nginx" # Default ingress class
 
   # You can leave hosts empty here since environment-specific values will override
   hosts: []
@@ -127,4 +134,4 @@ ingress:
   tls: []
 
 global:
-  domain: "example.com"  # Default domain, can be overridden in environment-specific values
+  domain: "example.com" # Default domain, can be overridden in environment-specific values
