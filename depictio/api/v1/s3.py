@@ -2,10 +2,7 @@ import boto3
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
-from depictio.models.models.s3 import is_minio_running_in_docker
 from depictio.models.s3_utils import turn_S3_config_into_polars_storage_options
-
-logger.info(f"Is MinIO running in Docker? {is_minio_running_in_docker()}")
 
 polars_s3_config = turn_S3_config_into_polars_storage_options(settings.minio).model_dump(
     exclude_none=True

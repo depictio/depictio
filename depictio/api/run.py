@@ -10,7 +10,7 @@ def main():
     uvicorn.run(
         "depictio.api.main:app",
         host=settings.fastapi.host,
-        port=settings.fastapi.port,
+        port=settings.fastapi.external_port,
         reload=True,
         workers=settings.fastapi.workers,
         # reload_dirs=["/app/depictio/api", "/app/depictio/dash"],
