@@ -1,13 +1,13 @@
 import os
-import re
 from unittest.mock import MagicMock, patch
 
 import pytest
 from pydantic import ValidationError
 
+from depictio.api.v1.configs.settings_models import S3DepictioCLIConfig
+
 # from depictio.models.config import DEPICTIO_CONTEXT
 from depictio.models.models.s3 import PolarsStorageOptions
-from depictio.api.v1.configs.settings_models import S3DepictioCLIConfig
 from depictio.models.s3_utils import S3_storage_checks, turn_S3_config_into_polars_storage_options
 
 
