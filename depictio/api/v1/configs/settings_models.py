@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -34,6 +35,14 @@ class ServiceConfig(BaseSettings):
         context = os.getenv("DEPICTIO_CONTEXT", "client")
         return self.internal_url if context == "server" else self.external_url
 
+    @property
+    def host(self) -> str:
+        return self.external_host
+
+    @property
+    def port(self) -> int:
+        return self.external_port
+
 
 class S3DepictioCLIConfig(ServiceConfig):
     """S3 configuration inheriting service URL management."""
@@ -50,18 +59,24 @@ class S3DepictioCLIConfig(ServiceConfig):
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_MINIO_")
 
     # Backwards compatibility aliases
+    def __init__(self, **data: object) -> None:
+        endpoint_url = data.pop("endpoint_url", None)
+        if endpoint_url:
+            parsed = urlparse(endpoint_url)
+            if parsed.scheme:
+                data.setdefault("external_protocol", parsed.scheme)
+            if parsed.hostname:
+                data.setdefault("external_host", parsed.hostname)
+            if parsed.port:
+                data.setdefault("external_port", parsed.port)
+            data.setdefault("public_url", endpoint_url)
+        super().__init__(**data)
+
+    # Backwards compatibility aliases
     @property
     def endpoint_url(self) -> str:
         """Returns URL for Polars and other S3 clients."""
         return self.url
-
-    @property
-    def host(self) -> str:
-        return self.external_host
-
-    @property
-    def port(self) -> int:
-        return self.external_port
 
     # Additional aliases for S3 compatibility
     @property
