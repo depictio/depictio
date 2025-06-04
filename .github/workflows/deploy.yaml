@@ -359,43 +359,8 @@ jobs:
           # Depictio CLI command to show the CLI config
           depictio-cli config show-cli-config --CLI-config-path admin_config.yaml
 
-      # - name: Thorough file check
-      #   run: |
-      #     cd depictio/cli
-      #     echo "=== Current directory ==="
-      #     pwd
-      #     echo "=== List parent directory ==="
-      #     ls -la ../
-      #     echo "=== List api directory ==="
-      #     ls -la ../api/
-      #     echo "=== List v1 directory ==="
-      #     ls -la ../api/v1/
-      #     echo "=== List configs directory ==="
-      #     ls -la ../api/v1/configs/
-      #     echo "=== List iris_dataset directory ==="
-      #     ls -la ../api/v1/configs/iris_dataset/
-      #     echo "=== Try to read the file ==="
-      #     cat ../api/v1/configs/iris_dataset/iris.csv | head -5 || echo "Cannot read file"
 
-      # - name: Debug paths before validation
-      #   run: |
-      #     echo "File exists: $(if [ -f "depictio/api/v1/configs/iris_dataset/iris.csv" ]; then echo "YES"; else echo "NO"; fi)"
-      #     cd depictio/cli
-      #     echo "Current working directory: $(pwd)"
-      #     echo "File exists: $(if [ -f "../api/v1/configs/iris_dataset/iris.csv" ]; then echo "YES"; else echo "NO"; fi)"
-      #     echo "Absolute path: $(realpath "../api/v1/configs/iris_dataset/iris.csv")"
-      #     echo "Environment variables:"
-      #     env | grep -E "(GITHUB_WORKSPACE|PWD)"
-
-      # - name: Check mount points
-      #   run: |
-      #     echo "=== Mount points ==="
-      #     mount | grep -E "(depictio|workspace)"
-      #     echo "=== Docker volume mounts ==="
-      #     docker inspect $(hostname) | grep -A5 Mounts
-
-      - name: Validate & Show Project Config
-        continue-on-error: true
+      - name: Iris CLI - Validate & Show Project Config
         run: |
           cd depictio/cli
 
@@ -407,8 +372,7 @@ jobs:
                               --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
                               --CLI-config-path admin_config.yaml
 
-      - name: Check S3 Storage
-        continue-on-error: true
+      - name: Iris CLI - Check S3 Storage
         run: |
           cd depictio/cli
 
@@ -419,8 +383,7 @@ jobs:
           depictio-cli config check-s3-storage \
                               --CLI-config-path admin_config.yaml
 
-      - name: Show Project on server
-        continue-on-error: true
+      - name: Iris CLI - Show Project on server
         run: |
           cd depictio/cli
 
@@ -432,48 +395,179 @@ jobs:
                               --project-name "Iris Dataset Project Data Analysis" \
                               --CLI-config-path admin_config.yaml
 
-      - name: Sync Project to Server
-        continue-on-error: true
+      - name: Iris CLI - Sync Project to Server
         run: |
           cd depictio/cli
 
           # Activate the virtual environment first
           source venv/bin/activate
+          depictio-cli --verbose -vl DEBUG config sync-project-config-to-server \
+                              --update \
+                              --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
+                              --CLI-config-path ../.depictio/admin_config.yaml
 
-          # Depictio CLI command to show the CLI config
-          depictio-cli config sync-project-config-to-server \
+      - name: Iris CLI - Scan Iris Dataset Files
+        run: |
+          cd depictio/cli
+          source venv/bin/activate
+          depictio-cli --verbose -vl DEBUG data scan \
+                              --sync-files --rescan-folders \
                               --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
                               --CLI-config-path admin_config.yaml
 
-      - name: Sync Project to Server - debug
-        continue-on-error: true
+      - name: Iris CLI - Process Iris Dataset
         run: |
-          docker compose logs depictio-backend
+          cd depictio/cli
+          source venv/bin/activate
+          depictio-cli --verbose -vl DEBUG data process \
+                              --overwrite \
+                              --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
+                              --CLI-config-path ../.depictio/admin_config.yaml
 
-      # # Sync the iris project configuration to the server
-      # # - name: Sync Iris Project Configuration
-      # #   continue-on-error: false
-      # #   run: |
-      # #     source venv/bin/activate
-      # #     export POLARS_SKIP_CPU_CHECK=1
-      # #     depictio-cli config show-cli-config --CLI-config-path ~/.depictio/admin_config.yaml
-      # # # # Scan the iris dataset files
-      # # - name: Scan Iris Dataset Files
-      # #   continue-on-error: true
-      # #   run: |
-      # #     source venv/bin/activate
-      # #     depictio-cli data scan \
-      # #       --agent-config-path depictio/.depictio/admin_config.yaml \
-      # #       --project-config-path depictio/api/v1/configs/iris_dataset/initial_project.yaml
 
-      # # # Process the iris dataset
-      # # - name: Process Iris Dataset
-      # #   continue-on-error: true
-      # #   run: |
-      # #     source venv/bin/activate
-      # #     depictio-cli data process \
-      # #       --agent-config-path depictio/.depictio/admin_config.yaml \
-      # #       --project-config-path depictio/api/v1/configs/iris_dataset/initial_project.yaml
+
+      - name: Penguin - Validate & Show Project Config
+        run: |
+          cd depictio/cli
+          source venv/bin/activate
+          depictio-cli --verbose -vl DEBUG config validate-project-config \
+                              --project-config-path ../api/v1/configs/penguins_dataset/penguins_project.yaml \
+                              --CLI-config-path ../.depictio/admin_config.yaml
+
+      - name: Penguin - Check S3 Storage
+        run: |
+          cd depictio/cli
+          source venv/bin/activate
+          depictio-cli --verbose -vl DEBUG config check-s3-storage \
+                              --CLI-config-path ../.depictio/admin_config.yaml
+
+      - name: Penguin - Show Project on server
+        run: |
+          cd depictio/cli
+          source venv/bin/activate
+          depictio-cli --verbose -vl DEBUG config show-depictio-project-metadata-on-server \
+                              --project-name "Palmer Penguins Species Comparison" \
+                              --CLI-config-path ../.depictio/admin_config.yaml
+
+      - name: Penguin - Sync Project to Server
+        run: |
+          cd depictio/cli
+          source venv/bin/activate
+          depictio-cli --verbose -vl DEBUG config sync-project-config-to-server \
+                              --update \
+                              --project-config-path ../api/v1/configs/penguins_dataset/penguins_project.yaml \
+                              --CLI-config-path ../.depictio/admin_config.yaml
+
+      - name: Penguin - Scan Iris Dataset Files
+        run: |
+          cd depictio/cli
+          source venv/bin/activate
+          depictio-cli --verbose -vl DEBUG data scan \
+                              --sync-files --rescan-folders \
+                              --project-config-path ../api/v1/configs/penguins_dataset/penguins_project.yaml \
+                              --CLI-config-path ../.depictio/admin_config.yaml
+
+      - name: Penguin - Process Iris Dataset
+        run: |
+          cd depictio/cli
+          source venv/bin/activate
+          depictio-cli --verbose -vl DEBUG data process \
+                              --overwrite \
+                              --project-config-path ../api/v1/configs/penguins_dataset/penguins_project.yaml \
+                              --CLI-config-path ../.depictio/admin_config.yaml
+
+      # - name: Validate & Show Project Config
+      #   # continue-on-error: true
+      #   run: |
+      #     cd depictio/cli
+
+      #     # Activate the virtual environment first
+      #     source venv/bin/activate
+
+      #     # Depictio CLI command to show the CLI config
+      #     depictio-cli config validate-project-config \
+      #                         --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
+      #                         --CLI-config-path admin_config.yaml
+
+      # - name: Check S3 Storage
+      #   # continue-on-error: true
+      #   run: |
+      #     cd depictio/cli
+
+      #     # Activate the virtual environment first
+      #     source venv/bin/activate
+
+      #     # Depictio CLI command to show the CLI config
+      #     depictio-cli config check-s3-storage \
+      #                         --CLI-config-path admin_config.yaml
+
+      # - name: Show Project on server
+      #   # continue-on-error: true
+      #   run: |
+      #     cd depictio/cli
+
+      #     # Activate the virtual environment first
+      #     source venv/bin/activate
+
+      #     # Depictio CLI command to show the CLI config
+      #     depictio-cli config show-depictio-project-metadata-on-server \
+      #                         --project-name "Iris Dataset Project Data Analysis" \
+      #                         --CLI-config-path admin_config.yaml
+
+      # - name: Sync Project to Server
+      #   # continue-on-error: true
+      #   run: |
+      #     cd depictio/cli
+
+      #     # Activate the virtual environment first
+      #     source venv/bin/activate
+
+      #     # Depictio CLI command to show the CLI config
+      #     depictio-cli config sync-project-config-to-server \
+      #                         --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
+      #                         --CLI-config-path admin_config.yaml
+
+      # - name: Sync Project to Server - debug
+      #   # continue-on-error: true
+      #   run: |
+      #     docker compose logs depictio-backend
+
+
+      # # Scan the file (single file - metadata)
+      # - name: Scan Iris Dataset Files
+      #   # continue-on-error: true
+      #   run: |
+      #     cd depictio/cli
+
+      #     # Activate the virtual environment first
+      #     source venv/bin/activate
+      #     depictio-cli data scan \
+      #                         --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
+      #                         --CLI-config-path admin_config.yaml
+
+      # - name: Sync Project to Server - debug
+      #   # continue-on-error: true
+      #   run: |
+      #     docker compose logs depictio-backend
+
+
+      # # Process the iris dataset
+      # - name: Process Iris Dataset
+      #   # continue-on-error: true
+      #   run: |
+      #     cd depictio/cli
+
+      #     # Activate the virtual environment first
+      #     source venv/bin/activate
+      #     depictio-cli data process \
+      #                         --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
+      #                         --CLI-config-path admin_config.yaml
+
+      # - name: Sync Project to Server - debug
+      #   # continue-on-error: true
+      #   run: |
+      #     docker compose logs depictio-backend
+
 
       # # # Fetch backend logs regardless of CLI step outcome
       # # - name: Fetch Depictio Backend Logs After CLI Run
