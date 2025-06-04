@@ -78,7 +78,6 @@ class PolarsStorageOptions(BaseModel):
 #             raise ValueError("AWS_ALLOW_HTTP must be 'true' or 'false'")
 #         return v
 
-
 #     @field_validator("AWS_S3_ALLOW_UNSAFE_RENAME")
 #     def validate_AWS_S3_ALLOW_UNSAFE_RENAME(cls, v):
 #         if not isinstance(v, str):
