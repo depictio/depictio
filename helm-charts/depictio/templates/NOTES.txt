@@ -1,5 +1,5 @@
-{{- $frontendSvc := printf "%s-frontend" .Release.Name -}}
-{{- $backendSvc := printf "%s-backend" .Release.Name -}}
+{{- $frontendSvc := printf "%s-depictio-frontend" .Release.Name -}}
+{{- $backendSvc := printf "%s-depictio-backend" .Release.Name -}}
 {{- $mongoSvc := printf "%s-mongo" .Release.Name -}}
 {{- $minioSvc := printf "%s-minio" .Release.Name -}}
 
@@ -39,8 +39,8 @@ The MinIO service is deployed and can be accessed at:
   kubectl port-forward svc/{{ $minioSvc }} 9001:{{ .Values.minio.service.consolePort }}
 
 MinIO credentials:
-  Username: {{ .Values.secrets.minioRootUser }}
-  Password: {{ .Values.secrets.minioRootPassword }}
+  Username: {{ default .Release.Name .Values.secrets.minioRootUser }}
+  Password: {{ default "(random)" .Values.secrets.minioRootPassword }}
 {{- end }}
 
 MongoDB is available at:

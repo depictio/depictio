@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: mongo-pvc
+  name: {{ .Release.Name }}-mongo-pvc
   namespace: {{ .Release.Namespace }}
   labels:
     app: mongo
@@ -17,7 +17,7 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: minio-pvc
+  name: {{ .Release.Name }}-minio-pvc
   namespace: {{ .Release.Namespace }}
   labels:
     app: minio
@@ -33,7 +33,7 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: depictio-screenshots-pvc
+  name: {{ .Release.Name }}-depictio-screenshots-pvc
   namespace: {{ .Release.Namespace }}
   labels:
     app: depictio
@@ -48,7 +48,7 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: depictio-keys-pvc
+  name: {{ .Release.Name }}-depictio-keys-pvc
   namespace: {{ .Release.Namespace }}
   labels:
     app: depictio
