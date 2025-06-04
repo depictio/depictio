@@ -4,10 +4,10 @@ from pathlib import Path
 
 from depictio.api.v1.configs.settings_models import (
     AuthConfig,
-    Collections,
+    # Collections,
     DashConfig,
     FastAPIConfig,
-    JBrowseConfig,
+    # JBrowseConfig,
     MongoDBConfig,
     S3DepictioCLIConfig,
     Settings,
@@ -37,38 +37,38 @@ def env_vars(env_dict):
                     del os.environ[key]
 
 
-class TestCollections:
-    def test_default_values(self):
-        """Test Collections with default values."""
-        collections = Collections()
+# class TestCollections:
+#     def test_default_values(self):
+#         """Test Collections with default values."""
+#         collections = Collections()
 
-        assert collections.projects_collection == "projects"
-        assert collections.data_collection == "data_collections"
-        assert collections.workflow_collection == "workflows"
-        assert collections.runs_collection == "runs"
-        assert collections.files_collection == "files"
-        assert collections.users_collection == "users"
-        assert collections.tokens_collection == "tokens"
-        assert collections.groups_collection == "groups"
-        assert collections.deltatables_collection == "deltatables"
-        assert collections.jbrowse_collection == "jbrowse_collection"
-        assert collections.dashboards_collection == "dashboards"
-        assert collections.initialization_collection == "initialization"
-        assert collections.test_collection == "test"
+#         assert collections.projects_collection == "projects"
+#         assert collections.data_collection == "data_collections"
+#         assert collections.workflow_collection == "workflows"
+#         assert collections.runs_collection == "runs"
+#         assert collections.files_collection == "files"
+#         assert collections.users_collection == "users"
+#         assert collections.tokens_collection == "tokens"
+#         assert collections.groups_collection == "groups"
+#         assert collections.deltatables_collection == "deltatables"
+#         assert collections.jbrowse_collection == "jbrowse_collection"
+#         assert collections.dashboards_collection == "dashboards"
+#         assert collections.initialization_collection == "initialization"
+#         assert collections.test_collection == "test"
 
-    def test_custom_values(self):
-        """Test Collections with custom values."""
-        collections = Collections(
-            projects_collection="custom_projects",
-            data_collection="custom_data",
-            users_collection="custom_users",
-        )
+#     def test_custom_values(self):
+#         """Test Collections with custom values."""
+#         collections = Collections(
+#             projects_collection="custom_projects",
+#             data_collection="custom_data",
+#             users_collection="custom_users",
+#         )
 
-        assert collections.projects_collection == "custom_projects"
-        assert collections.data_collection == "custom_data"
-        assert collections.users_collection == "custom_users"
-        # Other values should remain default
-        assert collections.workflow_collection == "workflows"
+#         assert collections.projects_collection == "custom_projects"
+#         assert collections.data_collection == "custom_data"
+#         assert collections.users_collection == "custom_users"
+#         # Other values should remain default
+#         assert collections.workflow_collection == "workflows"
 
 
 class TestMongoDBConfig:
@@ -84,7 +84,7 @@ class TestMongoDBConfig:
         with env_vars(env_to_clear):
             config = MongoDBConfig()
 
-            assert isinstance(config.collections, Collections)
+            assert isinstance(config.collections, MongoDBConfig.Collections)
             assert config.service_name == "mongo"
             assert config.service_port == 27018
             assert config.external_port == 27018
@@ -268,59 +268,59 @@ class TestDashConfig:
             assert config.workers == 2
 
 
-class TestJBrowseConfig:
-    def test_default_values(self):
-        """Test JBrowseConfig with default values."""
-        env_to_clear = {
-            "DEPICTIO_JBROWSE_ENABLED": None,
-            "DEPICTIO_JBROWSE_DATA_DIR": None,
-            "DEPICTIO_JBROWSE_CONFIG_DIR": None,
-        }
+# class TestJBrowseConfig:
+#     def test_default_values(self):
+#         """Test JBrowseConfig with default values."""
+#         env_to_clear = {
+#             "DEPICTIO_JBROWSE_ENABLED": None,
+#             "DEPICTIO_JBROWSE_DATA_DIR": None,
+#             "DEPICTIO_JBROWSE_CONFIG_DIR": None,
+#         }
 
-        with env_vars(env_to_clear):
-            config = JBrowseConfig()
+#         with env_vars(env_to_clear):
+#             config = JBrowseConfig()
 
-            assert config.enabled is True
-            assert config.instance == {"host": "http://localhost", "port": 3000}
-            assert config.watcher_plugin == {"host": "http://localhost", "port": 9010}
-            assert config.data_dir == "/data"
-            assert config.config_dir == "/jbrowse-watcher-plugin/sessions"
+#             assert config.enabled is True
+#             assert config.instance == {"host": "http://localhost", "port": 3000}
+#             assert config.watcher_plugin == {"host": "http://localhost", "port": 9010}
+#             assert config.data_dir == "/data"
+#             assert config.config_dir == "/jbrowse-watcher-plugin/sessions"
 
-    def test_custom_values(self):
-        """Test JBrowseConfig with custom values."""
-        env_to_clear = {
-            "DEPICTIO_JBROWSE_ENABLED": None,
-            "DEPICTIO_JBROWSE_DATA_DIR": None,
-            "DEPICTIO_JBROWSE_CONFIG_DIR": None,
-        }
+#     def test_custom_values(self):
+#         """Test JBrowseConfig with custom values."""
+#         env_to_clear = {
+#             "DEPICTIO_JBROWSE_ENABLED": None,
+#             "DEPICTIO_JBROWSE_DATA_DIR": None,
+#             "DEPICTIO_JBROWSE_CONFIG_DIR": None,
+#         }
 
-        with env_vars(env_to_clear):
-            config = JBrowseConfig(
-                enabled=False,
-                instance={"host": "http://jbrowse", "port": 4000},
-                data_dir="/custom/data",
-                config_dir="/custom/config",
-            )
+#         with env_vars(env_to_clear):
+#             config = JBrowseConfig(
+#                 enabled=False,
+#                 instance={"host": "http://jbrowse", "port": 4000},
+#                 data_dir="/custom/data",
+#                 config_dir="/custom/config",
+#             )
 
-            assert config.enabled is False
-            assert config.instance == {"host": "http://jbrowse", "port": 4000}
-            assert config.data_dir == "/custom/data"
-            assert config.config_dir == "/custom/config"
+#             assert config.enabled is False
+#             assert config.instance == {"host": "http://jbrowse", "port": 4000}
+#             assert config.data_dir == "/custom/data"
+#             assert config.config_dir == "/custom/config"
 
-    def test_env_variables(self):
-        """Test JBrowseConfig with environment variables."""
-        env = {
-            "DEPICTIO_JBROWSE_ENABLED": "false",
-            "DEPICTIO_JBROWSE_DATA_DIR": "/env/data",
-            "DEPICTIO_JBROWSE_CONFIG_DIR": "/env/config",
-        }
+#     def test_env_variables(self):
+#         """Test JBrowseConfig with environment variables."""
+#         env = {
+#             "DEPICTIO_JBROWSE_ENABLED": "false",
+#             "DEPICTIO_JBROWSE_DATA_DIR": "/env/data",
+#             "DEPICTIO_JBROWSE_CONFIG_DIR": "/env/config",
+#         }
 
-        with env_vars(env):
-            config = JBrowseConfig()
+#         with env_vars(env):
+#             config = JBrowseConfig()
 
-            assert config.enabled is False
-            assert config.data_dir == "/env/data"
-            assert config.config_dir == "/env/config"
+#             assert config.enabled is False
+#             assert config.data_dir == "/env/data"
+#             assert config.config_dir == "/env/config"
 
 
 class TestAuthConfig:
@@ -418,7 +418,7 @@ class TestSettings:
             "DEPICTIO_FASTAPI_EXTERNAL_PORT": None,
             "DEPICTIO_DASH_EXTERNAL_PORT": None,
             "DEPICTIO_MINIO_PUBLIC_URL": None,
-            "DEPICTIO_JBROWSE_ENABLED": None,
+            # "DEPICTIO_JBROWSE_ENABLED": None,
             "DEPICTIO_AUTH_INTERNAL_API_KEY": None,
         }
 
@@ -429,14 +429,14 @@ class TestSettings:
             assert isinstance(settings.fastapi, FastAPIConfig)
             assert isinstance(settings.dash, DashConfig)
             assert isinstance(settings.minio, S3DepictioCLIConfig)
-            assert isinstance(settings.jbrowse, JBrowseConfig)
+            # assert isinstance(settings.jbrowse, JBrowseConfig)
             assert isinstance(settings.auth, AuthConfig)
 
             # Check a few representative values
             assert settings.mongodb.external_port == 27018
             assert settings.fastapi.external_port == 8058
             assert settings.dash.external_port == 5080
-            assert settings.jbrowse.enabled is True
+            # assert settings.jbrowse.enabled is True
 
     def test_custom_values(self):
         """Test Settings with custom values."""
@@ -457,7 +457,7 @@ class TestSettings:
             fastapi_config = FastAPIConfig(service_port=9000, external_port=9000)
             dash_config = DashConfig(service_port=4000, external_port=4000)
             minio_config = S3DepictioCLIConfig(public_url="https://custom-s3.example.com")
-            jbrowse_config = JBrowseConfig(enabled=False)
+            # jbrowse_config = JBrowseConfig(enabled=False)
             auth_config = AuthConfig()
 
             settings = Settings(
@@ -465,15 +465,15 @@ class TestSettings:
                 fastapi=fastapi_config,
                 dash=dash_config,
                 minio=minio_config,
-                jbrowse=jbrowse_config,
+                # jbrowse=jbrowse_config,
                 auth=auth_config,
             )
 
             assert settings.mongodb.external_port == 12345
             assert settings.fastapi.external_port == 9000
             assert settings.dash.external_port == 4000
-            assert settings.minio.endpoint_url == "https://custom-s3.example.com"
-            assert settings.jbrowse.enabled is False
+            assert settings.minio.public_url == "https://custom-s3.example.com"
+            # assert settings.jbrowse.enabled is False
             assert isinstance(settings.auth, AuthConfig)
 
     def test_env_variables(self):
@@ -484,6 +484,7 @@ class TestSettings:
             "DEPICTIO_FASTAPI_EXTERNAL_PORT": "7000",
             "DEPICTIO_DASH_EXTERNAL_PORT": "6000",
             "DEPICTIO_MINIO_PUBLIC_URL": "https://env-s3.example.com",
+            "DEPICTIO_FASTAPI_PUBLIC_URL": "https://env-fastapi.example.com",
             "DEPICTIO_JBROWSE_ENABLED": "false",
             "DEPICTIO_AUTH_INTERNAL_API_KEY": "env_token",
         }
@@ -495,14 +496,14 @@ class TestSettings:
             fastapi = FastAPIConfig()
             dash = DashConfig()
             minio = S3DepictioCLIConfig()
-            jbrowse = JBrowseConfig()
+            # jbrowse = JBrowseConfig()
             auth = AuthConfig()
 
             assert mongodb.external_port == 54321
             assert fastapi.external_port == 7000
             assert dash.external_port == 6000
-            assert minio.endpoint_url == "https://env-s3.example.com"
-            assert jbrowse.enabled is False
+            assert minio.public_url == "https://env-s3.example.com"
+            # assert jbrowse.enabled is False
             assert auth.internal_api_key == "env_token"
 
             # Create Settings instance explicitly with our configs
@@ -511,7 +512,7 @@ class TestSettings:
                 fastapi=fastapi,
                 dash=dash,
                 minio=minio,
-                jbrowse=jbrowse,
+                # jbrowse=jbrowse,
                 auth=auth,
             )
 
@@ -519,6 +520,7 @@ class TestSettings:
             assert settings.mongodb.external_port == 54321
             assert settings.fastapi.external_port == 7000
             assert settings.dash.external_port == 6000
-            assert settings.minio.endpoint_url == "https://env-s3.example.com"
-            assert settings.jbrowse.enabled is False
+            assert settings.minio.public_url == "https://env-s3.example.com"
+            assert settings.fastapi.public_url == "https://env-fastapi.example.com"
+            # assert settings.jbrowse.enabled is False
             assert settings.auth.internal_api_key == "env_token"

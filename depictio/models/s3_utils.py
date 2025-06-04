@@ -145,7 +145,7 @@ def turn_S3_config_into_polars_storage_options(
     Convert S3 configuration into storage options for the client.
     """
     return PolarsStorageOptions(
-        endpoint_url=s3_config.url,
+        endpoint_url=s3_config.external_url,
         aws_access_key_id=s3_config.root_user,
         aws_secret_access_key=s3_config.root_password,
     )
