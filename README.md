@@ -39,7 +39,6 @@
 
 </div>
 
-
 <!-- markdownlint-disable MD033 MD041 -->
 <p align="center">
   <img src="https://depictio.github.io/depictio-docs/images/Demo.gif" alt="Demo" width=800>
