@@ -364,6 +364,9 @@ jobs:
           depictio-cli config show-cli-config --CLI-config-path admin_config.yaml
 
 
+      - name: Depictio backend logs
+        run: docker compose logs depictio-backend
+
       - name: Iris CLI - Validate & Show Project Config
         run: |
           cd depictio/cli
@@ -372,12 +375,18 @@ jobs:
                               --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
                               --CLI-config-path ../.depictio/admin_config.yaml
 
+      - name: Depictio backend logs
+        run: docker compose logs depictio-backend
+
       - name: Iris CLI - Check S3 Storage
         run: |
           cd depictio/cli
           source venv/bin/activate
           depictio-cli --verbose -vl DEBUG config check-s3-storage \
                               --CLI-config-path ../.depictio/admin_config.yaml
+
+      - name: Depictio backend logs
+        run: docker compose logs depictio-backend
 
       - name: Iris CLI - Show Project on server
         run: |
@@ -386,6 +395,9 @@ jobs:
           depictio-cli --verbose -vl DEBUG config show-depictio-project-metadata-on-server \
                               --project-name "Iris Dataset Project Data Analysis" \
                               --CLI-config-path ../.depictio/admin_config.yaml
+
+      - name: Depictio backend logs
+        run: docker compose logs depictio-backend
 
       - name: Iris CLI - Sync Project to Server
         run: |
@@ -405,6 +417,9 @@ jobs:
                               --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
                               --CLI-config-path ../.depictio/admin_config.yaml
 
+      - name: Depictio backend logs
+        run: docker compose logs depictio-backend
+
       - name: Iris CLI - Scan Iris Dataset Files
         run: |
           cd depictio/cli
@@ -413,6 +428,9 @@ jobs:
                               --sync-files --rescan-folders \
                               --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
                               --CLI-config-path ../.depictio/admin_config.yaml
+
+      - name: Depictio backend logs
+        run: docker compose logs depictio-backend
 
       - name: Iris CLI - Process Iris Dataset
         run: |
