@@ -39,20 +39,6 @@
 
 </div>
 
-## Versioning
-
-Use `bump2version` to update the project version and automatically create a Git tag.
-For example, to bump the patch number:
-
-```bash
-bump2version patch
-```
-
-To bump the minor version while staying in the beta channel, specify the new version explicitly:
-
-```bash
-bump2version --new-version 0.1.0-beta1 minor
-```
 
 <!-- markdownlint-disable MD033 MD041 -->
 <p align="center">
