@@ -37,6 +37,6 @@ if __name__ == "__main__":
     # It's here for potential direct execution
     app.run_server(
         host=settings.dash.host,
-        port=settings.dash.port,
+        port=settings.dash.external_port,
         debug=dev_mode,
     )

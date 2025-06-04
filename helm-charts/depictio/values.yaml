@@ -27,8 +27,10 @@ persistence:
 
 # Secrets
 secrets:
-  minioRootUser: "minio"
-  minioRootPassword: "minio123"
+  # Optionally override the generated MinIO access key
+  minioRootUser: ""
+  # Optionally override the generated MinIO secret key
+  minioRootPassword: ""
 
 # MongoDB settings
 mongo:

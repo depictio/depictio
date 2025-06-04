@@ -30,7 +30,7 @@ spec:
             pathType: {{ .pathType | default "Prefix" }}
             backend:
               service:
-                name: {{ .service.name }}
+                name: {{ printf "%s-%s" $.Release.Name .service.name }}
                 port:
                   {{- if .service.portName }}
                   name: {{ .service.portName }}
@@ -48,14 +48,14 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: depictio-frontend
+                name: {{ .Release.Name }}-depictio-frontend
                 port:
                   number: {{ .Values.frontend.service.httpPort }}
           - path: /api
             pathType: Prefix
             backend:
               service:
-                name: depictio-backend
+                name: {{ .Release.Name }}-depictio-backend
                 port:
                   number: {{ .Values.backend.service.httpPort }}
   {{- end }}

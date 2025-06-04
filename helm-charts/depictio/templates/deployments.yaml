@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: mongo
+  name: {{ .Release.Name }}-mongo
   namespace: {{ .Release.Namespace }}
   labels:
     app: mongo
@@ -43,13 +43,13 @@ spec:
       volumes:
         - name: mongo-storage
           persistentVolumeClaim:
-            claimName: mongo-pvc
+            claimName: {{ .Release.Name }}-mongo-pvc
 ---
 {{- if .Values.minio.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: minio
+  name: {{ .Release.Name }}-minio
   namespace: {{ .Release.Namespace }}
   labels:
     app: minio
@@ -79,18 +79,16 @@ spec:
             - name: MINIO_ROOT_USER
               valueFrom:
                 secretKeyRef:
-                  name: depictio-secrets
+                  name: {{ .Release.Name }}-depictio-secrets
                   key: MINIO_ROOT_USER
             - name: MINIO_ROOT_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: depictio-secrets
+                  name: {{ .Release.Name }}-depictio-secrets
                   key: MINIO_ROOT_PASSWORD
           args:
             - "server"
             - "/data"
-            - "--console-address"
-            - ":9001"
           ports:
             - containerPort: {{ .Values.minio.service.httpPort }}
             - containerPort: {{ .Values.minio.service.consolePort }}
@@ -102,13 +100,13 @@ spec:
       volumes:
         - name: minio-storage
           persistentVolumeClaim:
-            claimName: minio-pvc
+            claimName: {{ .Release.Name }}-minio-pvc
 {{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: depictio-backend
+  name: {{ .Release.Name }}-depictio-backend
   namespace: {{ .Release.Namespace }}
   labels:
     app: depictio-backend
@@ -139,7 +137,7 @@ spec:
           # Use the ConfigMap
           envFrom:
             - configMapRef:
-                name: backend-config
+                name: {{ .Release.Name }}-backend-config
           command:
             - "/app/run_fastapi.sh"
           ports:
@@ -154,15 +152,15 @@ spec:
       volumes:
         - name: depictio-screenshots
           persistentVolumeClaim:
-            claimName: depictio-screenshots-pvc
+            claimName: {{ .Release.Name }}-depictio-screenshots-pvc
         - name: depictio-keys
           persistentVolumeClaim:
-            claimName: depictio-keys-pvc
+            claimName: {{ .Release.Name }}-depictio-keys-pvc
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: depictio-frontend
+  name: {{ .Release.Name }}-depictio-frontend
   namespace: {{ .Release.Namespace }}
   labels:
     app: depictio-frontend
@@ -191,7 +189,7 @@ spec:
           # Use the ConfigMap
           envFrom:
             - configMapRef:
-                name: frontend-config
+                name: {{ .Release.Name }}-frontend-config
           command:
             - "/app/run_dash.sh"
           ports:
@@ -206,7 +204,7 @@ spec:
       volumes:
         - name: depictio-screenshots
           persistentVolumeClaim:
-            claimName: depictio-screenshots-pvc
+            claimName: {{ .Release.Name }}-depictio-screenshots-pvc
         - name: depictio-keys
           persistentVolumeClaim:
-            claimName: depictio-keys-pvc
+            claimName: {{ .Release.Name }}-depictio-keys-pvc

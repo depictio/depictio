@@ -36,7 +36,7 @@ class TestCommon:
             },
             "base_url": "https://api.depictio.dev",
             "s3": {
-                "endpoint_url": "http://localhost:9000",
+                "public_url": "http://localhost:9000",
                 "root_user": "minio",
                 "root_password": "minio123",
                 "bucket": "depictio-bucket",
@@ -129,7 +129,7 @@ class TestCommon:
                 },
                 "base_url": "https://api.depictio.dev",
                 "s3": {
-                    "endpoint_url": "http://localhost:9000",
+                    "public_url": "http://localhost:9000",
                     "root_user": "minio",
                     "root_password": "minio123",
                     "bucket": "depictio-bucket",

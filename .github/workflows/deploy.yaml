@@ -162,6 +162,10 @@ jobs:
 
       # - name: Set up Environment Variables
       #   run: echo "DEPICTIO_BACKEND_EXAMPLE_DATA_VOLUME_HOST=/home/runner/work/depictio/depictio/depictio-example-data" >> .env
+      
+      # Ensure docker image is properly pulled
+      - name: Pre-pull base image
+        run: docker pull mambaorg/micromamba:2.1.1
 
       - name: Start Docker Compose Services
         run: |
