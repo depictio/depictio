@@ -1,5 +1,5 @@
-{{- $frontendSvc := printf "%s-frontend" .Release.Name -}}
-{{- $backendSvc := printf "%s-backend" .Release.Name -}}
+{{- $frontendSvc := printf "%s-depictio-frontend" .Release.Name -}}
+{{- $backendSvc := printf "%s-depictio-backend" .Release.Name -}}
 {{- $mongoSvc := printf "%s-mongo" .Release.Name -}}
 {{- $minioSvc := printf "%s-minio" .Release.Name -}}
 
