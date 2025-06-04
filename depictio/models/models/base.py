@@ -9,9 +9,16 @@ from typing import Any
 
 import bleach
 from bson import ObjectId
-from pydantic import (BaseModel, ConfigDict, Field, GetCoreSchemaHandler,
-                      GetJsonSchemaHandler, field_serializer, field_validator,
-                      model_validator)
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    GetCoreSchemaHandler,
+    GetJsonSchemaHandler,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 from pydantic_core import CoreSchema, core_schema
 
 from depictio.models.logging import logger

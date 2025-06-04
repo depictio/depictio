@@ -1,125 +1,159 @@
+import os
 from pathlib import Path
+from typing import Optional
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from depictio.api.v1.key_utils_base import _load_or_generate_api_internal_key
-from depictio.models.models.s3 import S3DepictioCLIConfig
+
+class ServiceConfig(BaseSettings):
+    """Base class for service configurations with internal/external URL handling."""
+
+    service_name: str
+    service_port: int
+    external_host: str = Field(default="localhost")
+    external_port: int
+    external_protocol: str = Field(default="http")
+    public_url: Optional[str] = Field(default=None)
+
+    @property
+    def internal_url(self) -> str:
+        """URL for internal service-to-service communication."""
+        return f"http://{self.service_name}:{self.service_port}"
+
+    @property
+    def external_url(self) -> str:
+        """URL for external access."""
+        if self.public_url:
+            return self.public_url
+        return f"{self.external_protocol}://{self.external_host}:{self.external_port}"
+
+    @property
+    def url(self) -> str:
+        """Returns appropriate URL based on DEPICTIO_CONTEXT."""
+        context = os.getenv("DEPICTIO_CONTEXT", "client")
+        return self.internal_url if context == "server" else self.external_url
 
 
-class Collections(BaseSettings):
-    """Collections names in MongoDB."""
+class S3DepictioCLIConfig(ServiceConfig):
+    """S3 configuration inheriting service URL management."""
 
-    projects_collection: str = "projects"
-    data_collection: str = "data_collections"
-    workflow_collection: str = "workflows"
-    runs_collection: str = "runs"
-    files_collection: str = "files"
-    users_collection: str = "users"
-    tokens_collection: str = "tokens"
-    groups_collection: str = "groups"
-    deltatables_collection: str = "deltatables"
-    jbrowse_collection: str = "jbrowse_collection"
-    dashboards_collection: str = "dashboards"
-    initialization_collection: str = "initialization"
-    test_collection: str = "test"
+    service_name: str = Field(default="minio")
+    service_port: int = Field(default=9000)
+    external_port: int = Field(default=9000)
+
+    # S3-specific fields
+    root_user: str = Field(default="minio")
+    root_password: str = Field(default="minio123")
+    bucket: str = Field(default="depictio-bucket")
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_MINIO_")
+
+    # Backwards compatibility aliases
+    @property
+    def endpoint_url(self) -> str:
+        """Returns URL for Polars and other S3 clients."""
+        return self.url
+
+    @property
+    def host(self) -> str:
+        return self.external_host
+
+    @property
+    def port(self) -> int:
+        return self.external_port
+
+    # Additional aliases for S3 compatibility
+    @property
+    def aws_access_key_id(self) -> str:
+        return self.root_user
+
+    @property
+    def aws_secret_access_key(self) -> str:
+        return self.root_password
 
 
-class MongoConfig(BaseSettings):
-    """MongoDB configuration."""
-
-    collections: Collections = Collections()
-    service_name: str = "mongo"
-    port: int = Field(default=27018)
-    db_name: str = Field(default="depictioDB")
-    wipe: bool = Field(
-        default=False,
-    )
-    model_config = SettingsConfigDict(env_prefix="DEPICTIO_MONGODB_")
-
-
-class FastAPIConfig(BaseSettings):
-    """Backend configuration."""
-
-    host: str = "0.0.0.0"
-    service_name: str = "depictio-backend"
-    port: int = Field(default=8058)
-    logging_level: str = "INFO"
-    model_config = SettingsConfigDict(env_prefix="DEPICTIO_FASTAPI_")
+class FastAPIConfig(ServiceConfig):
+    service_name: str = Field(default="depictio-backend")
+    service_port: int = Field(default=8058)
+    external_port: int = Field(default=8058)
+    host: str = Field(default="0.0.0.0")
     workers: int = Field(default=1)
     ssl: bool = Field(default=False)
-    # playwright_dev_mode: bool = Field(default=False)
+    logging_level: str = Field(default="INFO")
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_FASTAPI_")
 
 
-class DashConfig(BaseSettings):
-    """Frontend configuration."""
-
-    debug: bool = True
-    host: str = "0.0.0.0"
-    service_name: str = "depictio-frontend"
+class DashConfig(ServiceConfig):
+    service_name: str = Field(default="depictio-frontend")
+    service_port: int = Field(default=5080)
+    external_port: int = Field(default=5080)
+    host: str = Field(default="0.0.0.0")
     workers: int = Field(default=1)
-    port: int = Field(default=5080)
+    debug: bool = Field(default=True)
+
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_DASH_")
 
 
-class JbrowseConfig(BaseSettings):
-    """Jbrowse configuration."""
+class MongoDBConfig(ServiceConfig):
+    service_name: str = Field(default="mongo")
+    service_port: int = Field(default=27018)
+    external_port: int = Field(default=27018)
+    db_name: str = Field(default="depictioDB")
+    wipe: bool = Field(default=False)
 
-    enabled: bool = True
-    instance: dict[str, str | int] = {"host": "http://localhost", "port": 3000}
-    watcher_plugin: dict[str, str | int] = {
-        "host": "http://localhost",
-        "port": 9010,
-    }
-    data_dir: str = "/data"
-    config_dir: str = "/jbrowse-watcher-plugin/sessions"
-    model_config = SettingsConfigDict(env_prefix="DEPICTIO_JBROWSE_")
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_MONGODB_")
+
+    # Collections
+    class Collections(BaseSettings):
+        data_collection: str = Field(default="data_collections")
+        workflow_collection: str = Field(default="workflows")
+        runs_collection: str = Field(default="runs")
+        files_collection: str = Field(default="files")
+        users_collection: str = Field(default="users")
+        tokens_collection: str = Field(default="tokens")
+        groups_collection: str = Field(default="groups")
+        deltatables_collection: str = Field(default="deltatables")
+        jbrowse_collection: str = Field(default="jbrowse")
+        dashboards_collection: str = Field(default="dashboards")
+        initialization_collection: str = Field(default="initialization")
+        projects_collection: str = Field(default="projects")
+        test_collection: str = Field(default="test")
+
+    collections: Collections = Field(default_factory=Collections)
 
 
-class Auth(BaseSettings):
-    """Authentication configuration."""
+class AuthConfig(BaseSettings):
+    keys_dir: Path = Field(default=Path("./depictio/keys"))
+    keys_algorithm: str = Field(default="RS256")
+    cli_config_dir: Path = Field(default=Path("./depictio/.depictio"))
+    internal_api_key: str = Field(default="default-internal-key")
 
-    tmp_token: str = Field(default="eyJhb...")
-    keys_dir: Path = Field(
-        default=Path("depictio/keys"),
-    )
-    keys_algorithm: str = "RS256"
-    cli_config_dir: Path = Field(
-        default="depictio/.depictio",
-    )
-    internal_api_key: str = ""
-
-    model_config = SettingsConfigDict(arbitrary_types_allowed=True, env_prefix="DEPICTIO_AUTH_")
-
-    def model_post_init(self, __context):
-        """Initialize values after the model is created."""
-        # Only generate a key if one wasn't provided
-        if not self.internal_api_key:
-            try:
-                key = _load_or_generate_api_internal_key(
-                    keys_dir=self.keys_dir,
-                    algorithm=self.keys_algorithm,
-                )
-                if key:
-                    self.internal_api_key = key
-            except Exception as e:
-                print(f"Error generating API key: {e}")
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_AUTH_")
 
 
 class LoggingConfig(BaseSettings):
-    """Logging configuration."""
-
     verbosity_level: str = Field(default="INFO")
+
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_LOGGING_")
 
 
-class Settings(BaseSettings):
-    """Joint settings."""
+class JBrowseConfig(BaseSettings):
+    enabled: bool = Field(default=False)
 
-    mongodb: MongoConfig = MongoConfig()
-    fastapi: FastAPIConfig = FastAPIConfig()
-    dash: DashConfig = DashConfig()
-    minio: S3DepictioCLIConfig = S3DepictioCLIConfig()
-    jbrowse: JbrowseConfig = JbrowseConfig()
-    auth: Auth = Auth()
-    logging: LoggingConfig = LoggingConfig()
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_JBROWSE_")
+
+
+class Settings(BaseSettings):
+    context: str = Field(default="server")
+
+    fastapi: FastAPIConfig = Field(default_factory=FastAPIConfig)
+    dash: DashConfig = Field(default_factory=DashConfig)
+    mongodb: MongoDBConfig = Field(default_factory=MongoDBConfig)
+    minio: S3DepictioCLIConfig = Field(default_factory=S3DepictioCLIConfig)
+    auth: AuthConfig = Field(default_factory=AuthConfig)
+    logging: LoggingConfig = Field(default_factory=LoggingConfig)
+    jbrowse: JBrowseConfig = Field(default_factory=JBrowseConfig)
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_")

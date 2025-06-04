@@ -7,7 +7,7 @@ on:
       # Beta releases are commented out as requested
       # - "v[0-9]*.[0-9]*.[0-9]*-beta*"
   workflow_dispatch:
-    
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
@@ -28,7 +28,7 @@ jobs:
         run: |
           # Extract the git tag (v0.0.4, etc.)
           GIT_TAG=${GITHUB_REF#refs/tags/}
-          
+
           # Clean version number (without v prefix)
           CLEAN_VERSION=${GIT_TAG#v}
           echo "VERSION=$CLEAN_VERSION" >> $GITHUB_OUTPUT
@@ -57,13 +57,13 @@ jobs:
           tags: |
             # Version tag
             type=raw,value=${{ steps.build-type.outputs.VERSION }}
-            
+
             # Tag as stable
             type=raw,value=stable
-            
+
             # Tag as latest
             type=raw,value=latest
-            
+
             # Always tag as dev and edge
             type=raw,value=dev
             type=raw,value=edge

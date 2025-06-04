@@ -7,9 +7,11 @@ from bson import ObjectId
 
 from depictio.api.v1.configs.config import MONGODB_URL, settings
 from depictio.api.v1.configs.logging_init import format_pydantic, logger
+from depictio.api.v1.configs.settings_models import S3DepictioCLIConfig
 from depictio.cli.cli.utils.helpers import process_data_collection_helper
 from depictio.models.models.projects import Project
-from depictio.models.models.s3 import S3DepictioCLIConfig
+
+# from depictio.models.models.s3 import S3DepictioCLIConfig
 from depictio.models.models.users import CLIConfig, UserBaseCLIConfig
 from depictio.models.utils import get_config
 
@@ -30,8 +32,9 @@ def process_collections():
             logger.info("API is ready. Processing initial data collections...")
 
             # Call the synchronous version of process_initial_data_collections
-            from depictio.api.v1.endpoints.utils_endpoints.process_data_collections import \
-                sync_process_initial_data_collections
+            from depictio.api.v1.endpoints.utils_endpoints.process_data_collections import (
+                sync_process_initial_data_collections,
+            )
 
             result = sync_process_initial_data_collections()
 

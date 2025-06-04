@@ -26,100 +26,98 @@ admin_sessions = {}
 
 async def get_admin_user(request: Request):
     session_id = request.cookies.get("admin_session")
-    
+
     if not session_id or session_id not in admin_sessions:
         print(f"Session not found: {session_id}")
         raise HTTPException(
-            status_code=status.HTTP_307_TEMPORARY_REDIRECT,
-            headers={"Location": "/admin/login"}
+            status_code=status.HTTP_307_TEMPORARY_REDIRECT, headers={"Location": "/admin/login"}
         )
-    
+
     user_id = admin_sessions[session_id]
     user = await User.get(user_id)
-    
+
     if not user or not user.is_active or not user.is_superuser:
         # Clear invalid session
         admin_sessions.pop(session_id, None)
         print("User not found or not active/superuser")
         raise HTTPException(
-            status_code=status.HTTP_307_TEMPORARY_REDIRECT,
-            headers={"Location": "/admin/login"}
+            status_code=status.HTTP_307_TEMPORARY_REDIRECT, headers={"Location": "/admin/login"}
         )
-    
+
     return user
+
 
 @admin_router.get("/login", response_class=HTMLResponse)
 async def admin_login_get(request: Request):
     return templates.TemplateResponse("admin/login.html", {"request": request})
+
 
 @admin_router.post("/login")
 async def admin_login_post(request: Request):
     form = await request.form()
     email = form.get("username")  # The form field is named "username" for OAuth compatibility
     password = form.get("password")
-    
+
     try:
         # Find user by email
         user = await User.find_one(User.email == email)
-        
+
         if not user:
             return templates.TemplateResponse(
-                "admin/login.html", 
-                {"request": request, "error": "Invalid email or password"}
+                "admin/login.html", {"request": request, "error": "Invalid email or password"}
             )
-        
+
         # Verify password using the same helper used by FastAPIUsers
         from fastapi_users.password import PasswordHelper
+
         password_helper = PasswordHelper()
         verified = password_helper.verify_and_update(password, user.hashed_password)
-        
+
         if not verified:
             return templates.TemplateResponse(
-                "admin/login.html", 
-                {"request": request, "error": "Invalid email or password"}
+                "admin/login.html", {"request": request, "error": "Invalid email or password"}
             )
-        
+
         # Check if user is a superuser
         if not user.is_superuser:
             return templates.TemplateResponse(
-                "admin/login.html", 
-                {"request": request, "error": "Only superusers can access the admin panel"}
+                "admin/login.html",
+                {"request": request, "error": "Only superusers can access the admin panel"},
             )
-        
+
         # Generate a simple session key
         import secrets
+
         session_id = secrets.token_hex(16)
-        
+
         # Store session in a cookie
         response = RedirectResponse(url="/admin", status_code=303)  # HTTP 303 for POST redirects
-        response.set_cookie(
-            key="admin_session", 
-            value=session_id,
-            httponly=True
-        )
-        
+        response.set_cookie(key="admin_session", value=session_id, httponly=True)
+
         # Store the session key and user ID in memory (or Redis in production)
         # For simplicity, we'll use a global dictionary
         from app.admin import admin_sessions
+
         admin_sessions[session_id] = str(user.id)
-        
+
         return response
-        
+
     except Exception as e:
         print(f"Login error: {str(e)}")
         import traceback
+
         traceback.print_exc()
         return templates.TemplateResponse(
-            "admin/login.html", 
-            {"request": request, "error": "An error occurred during login"}
+            "admin/login.html", {"request": request, "error": "An error occurred during login"}
         )
+
 
 @admin_router.get("/logout")
 async def admin_logout(request: Request):
     session_id = request.cookies.get("admin_session")
     if session_id and session_id in admin_sessions:
         admin_sessions.pop(session_id, None)
-    
+
     response = RedirectResponse(url="/admin/login", status_code=303)
     response.delete_cookie("admin_session")
     return response
@@ -174,6 +172,7 @@ async def create_user_form(request: Request, user: User = Depends(get_admin_user
         },
     )
 
+
 @admin_router.post("/users/create", response_class=HTMLResponse)
 async def create_user(request: Request, user: User = Depends(get_admin_user)):
     try:
@@ -186,7 +185,7 @@ async def create_user(request: Request, user: User = Depends(get_admin_user)):
         is_active = "is_active" in form
         is_verified = "is_verified" in form
         is_superuser = "is_superuser" in form
-        
+
         # Get groups from form
         group_ids = []
         if "groups" in form:
@@ -195,34 +194,35 @@ async def create_user(request: Request, user: User = Depends(get_admin_user)):
                 group_ids = group_value
             else:
                 group_ids = [group_value]
-        
+
         # Import necessary components
         from app.schemas import UserCreate
         from app.users import get_user_manager
         from app.db import get_user_db
-        
+
         # Get the actual user_db and user_manager instances
         user_db = await anext(get_user_db())
         user_manager = await anext(get_user_manager(user_db))
-        
+
         # Create a proper UserCreate instance
         user_create = UserCreate(
-            email=email,
-            password=password,
-            first_name=first_name,
-            last_name=last_name
+            email=email, password=password, first_name=first_name, last_name=last_name
         )
-        
+
         # Create the user
         new_user = await user_manager.create(user_create)
-        
+
         # Update additional fields if needed
-        if new_user.is_active != is_active or new_user.is_verified != is_verified or new_user.is_superuser != is_superuser:
+        if (
+            new_user.is_active != is_active
+            or new_user.is_verified != is_verified
+            or new_user.is_superuser != is_superuser
+        ):
             new_user.is_active = is_active
             new_user.is_verified = is_verified
             new_user.is_superuser = is_superuser
             await new_user.save()
-        
+
         # Add groups to the user
         if group_ids:
             group_objs = []
@@ -230,31 +230,33 @@ async def create_user(request: Request, user: User = Depends(get_admin_user)):
                 group = await Group.get(group_id)
                 if group:
                     group_objs.append(group)
-            
+
             # Update the user with groups
             new_user.groups = group_objs
             await new_user.save()
-        
+
         return RedirectResponse(url="/admin/users", status_code=303)
     except Exception as e:
         print(f"User creation error: {str(e)}")
         import traceback
+
         traceback.print_exc()
-        
+
         # Fetch groups for the form
         groups = await Group.find().to_list()
-        
+
         return templates.TemplateResponse(
-            "admin/user_edit.html", 
+            "admin/user_edit.html",
             {
-                "request": request, 
+                "request": request,
                 "current_user": user,
-                "user": None, 
+                "user": None,
                 "groups": groups,
                 "user_group_ids": [],
-                "error": f"Error creating user: {str(e)}"
-            }
+                "error": f"Error creating user: {str(e)}",
+            },
         )
+
 
 @admin_router.get("/users/{user_id}", response_class=HTMLResponse)
 async def edit_user_form(
@@ -265,7 +267,7 @@ async def edit_user_form(
         raise HTTPException(status_code=404, detail="User not found")
 
     groups = await Group.find().to_list()
-    
+
     await user_to_edit.fetch_link(User.groups)
     user_group_ids = [str(group.id) for group in user_to_edit.groups]
     return templates.TemplateResponse(
@@ -322,9 +324,7 @@ async def update_user(
 
 
 @admin_router.post("/users/{user_id}/toggle-active")
-async def toggle_user_active(
-    user_id: str, current_user: User = Depends(get_admin_user)
-):
+async def toggle_user_active(user_id: str, current_user: User = Depends(get_admin_user)):
     user_to_update = await User.get(user_id)
     if not user_to_update:
         raise HTTPException(status_code=404, detail="User not found")
@@ -372,9 +372,7 @@ async def create_group(
 
 
 @admin_router.get("/groups/{group_id}", response_class=HTMLResponse)
-async def edit_group_form(
-    request: Request, group_id: str, user: User = Depends(get_admin_user)
-):
+async def edit_group_form(request: Request, group_id: str, user: User = Depends(get_admin_user)):
     group = await Group.get(group_id)
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")

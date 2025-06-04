@@ -1,7 +1,7 @@
 import os
 from datetime import datetime
 
-from pydantic import BaseModel, FilePath, field_validator
+from pydantic import BaseModel, field_validator
 
 from depictio.models.config import DEPICTIO_CONTEXT
 from depictio.models.models.base import MongoModel, PyObjectId
@@ -14,11 +14,12 @@ class WildcardRegex(WildcardRegexBase):
 
 
 class File(MongoModel):
-    file_location: FilePath
+    file_location: str
     filename: str
     creation_time: str
     modification_time: str
     run_id: PyObjectId | str | None = None
+    run_tag: str | None = None
     data_collection_id: PyObjectId
     registration_time: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     file_hash: str

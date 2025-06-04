@@ -1,12 +1,12 @@
 from datetime import datetime
 
 from beanie import Document, Link, PydanticObjectId
-from pydantic import (BaseModel, EmailStr, Field, field_serializer,
-                      field_validator, model_validator)
+from pydantic import BaseModel, EmailStr, Field, field_serializer, field_validator, model_validator
 
+# from depictio.models.models.s3 import S3DepictioCLIConfig
+from depictio.api.v1.configs.settings_models import S3DepictioCLIConfig
 from depictio.models.logging import logger
 from depictio.models.models.base import MongoModel, PyObjectId
-from depictio.models.models.s3 import S3DepictioCLIConfig
 
 
 class TokenData(BaseModel):

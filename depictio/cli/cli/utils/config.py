@@ -4,8 +4,7 @@ from typing import Any, cast
 import typer
 from pydantic import validate_call
 
-from depictio.cli.cli.utils.api_calls import (api_get_project_from_name,
-                                              api_login)
+from depictio.cli.cli.utils.api_calls import api_get_project_from_name, api_login
 from depictio.cli.cli_logging import logger
 from depictio.models.models.base import convert_objectid_to_str
 from depictio.models.models.projects import Project
@@ -168,9 +167,10 @@ def local_validate_project_config(CLI_config: CLIConfig, project_yaml_config_pat
         if response.status_code == 200:
             remote_project = response.json()
             logger.info(f"Remote project : {remote_project}")
-
+            logger.info(f"Validated config : {validated_config}")
+            logger.info(f"Validated config : {validated_config}")
             validated_config = merge_existing_ids(
-                remote_project, convert_objectid_to_str(validated_config.to_json())
+                remote_project, convert_objectid_to_str(validated_config.model_dump())
             )
             validated_config = Project.from_mongo(validated_config)
 

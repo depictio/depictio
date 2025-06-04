@@ -9,6 +9,7 @@ and sets up the application layout.
 
 # Depictio core imports
 from depictio.api.v1.configs.config import settings
+
 # Depictio dash core imports
 from depictio.dash.core.app_factory import create_dash_app
 from depictio.dash.core.callbacks import register_all_callbacks
@@ -36,6 +37,6 @@ if __name__ == "__main__":
     # It's here for potential direct execution
     app.run_server(
         host=settings.dash.host,
-        port=settings.dash.port,
+        port=settings.dash.external_port,
         debug=dev_mode,
     )

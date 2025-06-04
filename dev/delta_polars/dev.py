@@ -3,7 +3,6 @@ import polars as pl
 data_frames = []
 
 
-
 for file_info in files:
     file_path = file_info["file_location"]
 
@@ -22,5 +21,7 @@ for file_info in files:
 aggregated_df = pl.concat(data_frames)
 
 # Write aggregated dataframe to Delta Lake
-delta_table_path = f"delta_table_path/{data_collection.workflow_id}/{data_collection.data_collection_id}"
+delta_table_path = (
+    f"delta_table_path/{data_collection.workflow_id}/{data_collection.data_collection_id}"
+)
 aggregated_df.write_delta(delta_table_path)

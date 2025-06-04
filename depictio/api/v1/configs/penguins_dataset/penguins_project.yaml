@@ -1,0 +1,63 @@
+# Palmer Penguins Multi-Species Analysis for Depictio
+name: "Palmer Penguins Species Comparison"
+workflows:
+  - name: "penguin_species_analysis"
+    engine:
+      name: "python"
+      version: "3.11"
+    description: "Comparative analysis of Palmer Archipelago penguin species"
+    data_location:
+      structure: "sequencing-runs"
+      runs_regex: "run_*"
+      locations:
+        - ../api/v1/configs/penguins_dataset
+    data_collections:
+      # Physical features only
+      - data_collection_tag: "physical_features"
+        description: "Physical characteristics measurements"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "physical_features.csv"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","
+            columns_description:
+              individual_id: "Unique individual penguin ID within species"
+              bill_length_mm: "Bill length in millimeters"
+              bill_depth_mm: "Bill depth in millimeters"
+              flipper_length_mm: "Flipper length in millimeters"
+              body_mass_g: "Body mass in grams"
+          join:
+            on_columns:
+              - individual_id
+            how: "inner"
+            with_dc:
+              - "demographic_data"
+
+      # Demographic data
+      - data_collection_tag: "demographic_data"
+        description: "Location and demographic information"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "demographic_data.csv"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","
+            columns_description:
+              individual_id: "Unique individual penguin ID within species"
+              island: "Island location"
+              sex: "Penguin sex"
+              year: "Observation year"
+              species: "Species name"

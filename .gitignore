@@ -247,7 +247,6 @@ ldap_db/
 # Cypress
 depictio/tests/e2e-tests/node_modules/
 depictio/tests/e2e-tests/cypress/screenshots/
-depictio/tests/e2e-tests/package-lock.json
+# depictio/tests/e2e-tests/package-lock.json
 
 depictio/depictio/keys/internal_api_key.pem
-depictio/tests/e2e-tests/package.json

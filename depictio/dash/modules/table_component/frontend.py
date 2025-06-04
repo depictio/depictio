@@ -6,11 +6,10 @@ from dash import MATCH, Input, Output, State, dcc, html
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL
+
 # Depictio imports
-from depictio.dash.modules.table_component.utils import (build_table,
-                                                         build_table_frame)
-from depictio.dash.utils import (UNSELECTED_STYLE,
-                                 get_columns_from_data_collection)
+from depictio.dash.modules.table_component.utils import build_table, build_table_frame
+from depictio.dash.utils import UNSELECTED_STYLE, get_columns_from_data_collection
 
 # TODO: interactivity when selecting table rows
 

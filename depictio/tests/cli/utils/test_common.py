@@ -6,10 +6,12 @@ from pydantic import ValidationError
 from typer import Exit
 
 # Remove this line as we already import datetime later
-from depictio.cli.cli.utils.common import (format_timestamp,
-                                           generate_api_headers,
-                                           load_depictio_config,
-                                           validate_depictio_cli_config)
+from depictio.cli.cli.utils.common import (
+    format_timestamp,
+    generate_api_headers,
+    load_depictio_config,
+    validate_depictio_cli_config,
+)
 from depictio.models.models.users import CLIConfig
 
 
@@ -34,7 +36,7 @@ class TestCommon:
             },
             "base_url": "https://api.depictio.dev",
             "s3": {
-                "endpoint_url": "http://localhost:9000",
+                "public_url": "http://localhost:9000",
                 "root_user": "minio",
                 "root_password": "minio123",
                 "bucket": "depictio-bucket",
@@ -127,7 +129,7 @@ class TestCommon:
                 },
                 "base_url": "https://api.depictio.dev",
                 "s3": {
-                    "endpoint_url": "http://localhost:9000",
+                    "public_url": "http://localhost:9000",
                     "root_user": "minio",
                     "root_password": "minio123",
                     "bucket": "depictio-bucket",

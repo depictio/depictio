@@ -2,8 +2,7 @@ import os
 
 from depictio.api.v1.configs.logging_init import initialize_loggers, logger
 from depictio.api.v1.configs.settings_models import Settings
-from depictio.api.v1.key_utils import (generate_keys, load_private_key,
-                                       load_public_key)
+from depictio.api.v1.key_utils import generate_keys, load_private_key, load_public_key
 
 # Explicitly load environment variables
 # load_dotenv(BASE_PATH.parent / ".env", override=False)
@@ -16,9 +15,9 @@ settings = Settings()
 initialize_loggers(verbose_level=settings.logging.verbosity_level)
 
 logger.info(f"Settings: {settings}")
-API_BASE_URL = f"http://{settings.fastapi.service_name}:{settings.fastapi.port}"
-DASH_BASE_URL = f"http://{settings.dash.service_name}:{settings.dash.port}"
-MONGODB_URL = f"mongodb://{settings.mongodb.service_name}:{settings.mongodb.port}/"
+API_BASE_URL = settings.fastapi.internal_url
+DASH_BASE_URL = settings.dash.internal_url
+MONGODB_URL = f"mongodb://{settings.mongodb.service_name}:{settings.mongodb.service_port}"
 _KEYS_DIR = settings.auth.keys_dir
 # Use the shared internal API key from settings
 settings.auth.internal_api_key = os.getenv(

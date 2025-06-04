@@ -1,9 +1,9 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: mongo-pvc
+  name: {{ .Release.Name }}-mongo-pvc
   namespace: {{ .Release.Namespace }}
-  labels: 
+  labels:
     app: mongo
 spec:
   storageClassName: {{ .Values.storageClass }}
@@ -17,9 +17,9 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: minio-pvc
+  name: {{ .Release.Name }}-minio-pvc
   namespace: {{ .Release.Namespace }}
-  labels: 
+  labels:
     app: minio
 spec:
   storageClassName: {{ .Values.storageClass }}
@@ -33,12 +33,10 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: depictio-screenshots-pvc
+  name: {{ .Release.Name }}-depictio-screenshots-pvc
   namespace: {{ .Release.Namespace }}
-  labels: 
+  labels:
     app: depictio
-    # component: storage
-    # storage-type: screenshots
 spec:
   storageClassName: {{ .Values.storageClass }}
   accessModes:
@@ -46,3 +44,18 @@ spec:
   resources:
     requests:
       storage: {{ .Values.persistence.screenshots.size }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-depictio-keys-pvc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: depictio
+spec:
+  storageClassName: {{ .Values.storageClass }}
+  accessModes:
+    - {{ .Values.persistence.keys.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.keys.size }}

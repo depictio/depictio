@@ -1,10 +1,10 @@
 [project]
 name = "depictio"
-version = "0.0.4"
+version = "0.0.5-beta2"
 description = "Depictio API & Frontend"
 readme = "README.md"
 requires-python = ">=3.11"
-license = {text = "MIT"}
+license = { text = "MIT" }
 dependencies = [
   "bcrypt==4.2.1",
   "bleach",
@@ -44,15 +44,26 @@ dependencies = [
   "uvicorn==0.34.0",
   "dash-draggable==0.1.2",
   "dash-ag-grid==31.3.0",
-  "tomli"
+  "tomli",
 ]
-authors = [
-  { name = "Thomas Weber", email = "thomas.weber@embl.de" }
-]
+authors = [{ name = "Thomas Weber", email = "thomas.weber@embl.de" }]
 urls = { Homepage = "http://github.com/depictio/depictio" }
 classifiers = [
   "Programming Language :: Python :: 3",
-  "Operating System :: OS Independent"
+  "Operating System :: OS Independent",
+]
+
+[project.optional-dependencies]
+dev = [
+  "black",
+  "ruff",
+  "pytest",
+  "pytest-asyncio",
+  "pytest",
+  "pytest-xdist",
+  "mongomock",
+  "mongomock-motor",
+  "bump2version",
 ]
 
 [project.scripts]
@@ -72,13 +83,19 @@ packages = ["depictio"]
 # files = ["depictio/tests/", "depictio/models/", "depictio/cli/"]
 
 [tool.ruff]
-# Other settings...
 line-length = 100
-# Enable the formatter
+
+[tool.ruff.lint]
+select = ["E", "F", "I"] # Enable import sorting (I rules)
+ignore = ["E501"]  # Ignore all line length errors
+
+[tool.ruff.lint.isort]
+known-first-party = ["depictio"]
+
 
 [tool.mypy]
 # Basic settings
-python_version = "3.9"  # Adjust to your Python version
+python_version = "3.9"              # Adjust to your Python version
 warn_return_any = false
 warn_unused_ignores = false
 disallow_untyped_defs = false
@@ -111,19 +128,19 @@ check_untyped_defs = true
 pythonpath = "."
 python_files = "test_*.py"
 testpaths = [
-    "depictio/tests/api",
-    "depictio/tests/models",
-    "depictio/tests/cli",
+  "depictio/tests/api",
+  "depictio/tests/models",
+  "depictio/tests/cli",
 ]
 addopts = "-s"
 markers = [
-    "integration: mark test as an integration test.",
-    "playwright: mark test as a playwright test.",
-    "docker: mark test as requiring docker.",
+  "integration: mark test as an integration test.",
+  "playwright: mark test as a playwright test.",
+  "docker: mark test as requiring docker.",
 ]
 filterwarnings = [
-    "ignore::pydantic.warnings.PydanticDeprecatedSince20",
-    "ignore::DeprecationWarning:pydantic.*"
+  "ignore::pydantic.warnings.PydanticDeprecatedSince20",
+  "ignore::DeprecationWarning:pydantic.*",
 ]
 asyncio_mode = "strict"
 asyncio_default_fixture_loop_scope = "function"

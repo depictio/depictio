@@ -1,13 +1,13 @@
 [project]
 name = "depictio-cli"
-version = "0.0.4"
+version = "0.0.5-beta2"
 description = "Depictio CLI to interact with the Depictio API"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
   "boto3",
   "colorlog",
-  "httpx",
+  "httpx==0.28.1",
   "devtools",
   # "numpy",
   # "pandas",
@@ -16,7 +16,8 @@ dependencies = [
   # "deltalake",
   # "openpyxl",
   # Include standard polars by default
-  "polars[numpy,pandas,pyarrow,excel,deltalake]",
+  "polars[numpy,pandas,pyarrow,excel,deltalake]==1.22.0",
+  "deltalake==0.24.0",
   "python-jose",
   "pyyaml",
   "typer",
@@ -29,6 +30,7 @@ dependencies = [
   "beanie",
   "python-dotenv",
   "bleach",
+  "packaging"
 ]
 
 authors = [{ name = "Thomas Weber", email = "thomas.weber@embl.de" }]
@@ -62,4 +64,7 @@ packages = [
   "depictio.models",
   "depictio.models.models",
   "depictio.models.models.data_collections_types",
+  "depictio.api",                  # add
+  "depictio.api.v1",              # add
+  "depictio.api.v1.configs",      # add
 ]

@@ -3,6 +3,7 @@ import random
 import hashlib
 from datetime import datetime, timedelta
 
+
 def generate_metadata(locations):
     metadata = {}
     for location in locations:
@@ -26,6 +27,7 @@ def generate_metadata(locations):
         }
     return metadata
 
+
 class Graph:
     def __init__(self, num_nodes, location):
         self.num_nodes = num_nodes
@@ -38,7 +40,7 @@ class Graph:
     def set_seed(self):
         # Generate a hash of the location string
         hasher = hashlib.sha1()
-        hasher.update(self.location.encode('utf-8'))
+        hasher.update(self.location.encode("utf-8"))
         hash_val = int(hasher.hexdigest(), 16)
 
         # Reduce the hash value modulo 2^32 to create a valid seed
@@ -54,23 +56,35 @@ class Graph:
             node_label = f"Species {i + 1}"
             node_href = f"https://via.placeholder.com/150/{np.base_repr(np.random.randint(0, 16777215), base=16).zfill(6)}/FFFFFF?text=Species{i + 1}"
             num_edges = random.randint(1, 3) if i < self.num_nodes - 2 else random.randint(8, 12)
-            self.nodes.append({"data": {"id": node_id, "label": node_label, "href": node_href, "num_edges": num_edges}})
-        
+            self.nodes.append(
+                {
+                    "data": {
+                        "id": node_id,
+                        "label": node_label,
+                        "href": node_href,
+                        "num_edges": num_edges,
+                    }
+                }
+            )
+
         # Sort nodes by num_edges in descending order
         self.nodes.sort(key=lambda x: x["data"]["num_edges"], reverse=True)
-        
+
         # Create a set for holding existing edges (to prevent duplicate edges)
         existing_edges = set()
-        
+
         for source_node in self.nodes:
             source_node_id = source_node["data"]["id"]
             num_source_edges = source_node["data"]["num_edges"]
 
             while num_source_edges > 0:
-                available_targets = [node for node in self.nodes 
-                                    if node["data"]["id"] != source_node_id 
-                                    and node["data"]["num_edges"] > 0 
-                                    and (source_node_id, node["data"]["id"]) not in existing_edges]
+                available_targets = [
+                    node
+                    for node in self.nodes
+                    if node["data"]["id"] != source_node_id
+                    and node["data"]["num_edges"] > 0
+                    and (source_node_id, node["data"]["id"]) not in existing_edges
+                ]
                 if not available_targets:
                     break
 
@@ -79,12 +93,22 @@ class Graph:
                 edge_id = f"{self.location}_edge{len(self.edges) + 1}"
                 intensity = random.uniform(0.1, 1.0)
                 edge_image = f"https://via.placeholder.com/150/{np.base_repr(np.random.randint(0, 16777215), base=16).zfill(6)}/FFFFFF?text={source_node_id}-{target_node_id}"
-                self.edges.append({"data": {"id": edge_id, "source": source_node_id, "target": target_node_id, "image": edge_image, "intensity": intensity}})
-                
+                self.edges.append(
+                    {
+                        "data": {
+                            "id": edge_id,
+                            "source": source_node_id,
+                            "target": target_node_id,
+                            "image": edge_image,
+                            "intensity": intensity,
+                        }
+                    }
+                )
+
                 # Decrease num_edges of both source and target nodes
                 source_node["data"]["num_edges"] -= 1
                 target_node["data"]["num_edges"] -= 1
-                
+
                 # Add this edge to the existing_edges set
                 existing_edges.add((source_node_id, target_node_id))
 

@@ -10,17 +10,17 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import format_pydantic, logger
-from depictio.api.v1.db import (deltatables_collection, projects_collection,
-                                users_collection)
-from depictio.api.v1.endpoints.deltatables_endpoints.utils import \
-    precompute_columns_specs
+from depictio.api.v1.db import deltatables_collection, projects_collection, users_collection
+from depictio.api.v1.endpoints.deltatables_endpoints.utils import precompute_columns_specs
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.api.v1.s3 import polars_s3_config
 from depictio.api.v1.utils import agg_functions
-from depictio.models.models.base import convert_objectid_to_str
-from depictio.models.models.deltatables import (Aggregation,
-                                                DeltaTableAggregated,
-                                                UpsertDeltaTableAggregated)
+from depictio.models.models.base import PyObjectId, convert_objectid_to_str
+from depictio.models.models.deltatables import (
+    Aggregation,
+    DeltaTableAggregated,
+    UpsertDeltaTableAggregated,
+)
 from depictio.models.models.users import User
 
 deltatables_endpoint_router = APIRouter()
@@ -48,33 +48,13 @@ async def upsert_deltatable(
     """
     Upsert a DeltaTableAggregated object.
     """
-    if not current_user:
-        raise HTTPException(
-            status_code=401,
-            detail="Not authenticated",
-        )
 
-    if not payload:
-        raise HTTPException(
-            status_code=400,
-            detail="Payload is required",
-        )
-    if not payload.data_collection_id:
-        raise HTTPException(
-            status_code=400,
-            detail="Data Collection ID is required",
-        )
-    if not payload.delta_table_location:
-        raise HTTPException(
-            status_code=400,
-            detail="DeltaTableAggregated is required",
-        )
-    data_collection_oid = ObjectId(payload.data_collection_id)
-    assert isinstance(data_collection_oid, ObjectId)
+    data_collection_oid = payload.data_collection_id
+    logger.info(f"Data Collection ID: {data_collection_oid}")
     # Construct the query to look into the projects_collection if the user is an admin or has permissions over the project by looking at the data_collection id
     query = {
         "$or": [
-            {"permissions.owners._id": ObjectId(current_user.id)},
+            {"permissions.owners._id": current_user.id},
             {"permissions.is_admin": True},
         ],
         "workflows.data_collections._id": data_collection_oid,
@@ -193,7 +173,7 @@ async def upsert_deltatable(
 
         logger.info("Inserting new DeltaTableAggregated")
         # logger.debug(serialize_for_mongo(deltatable))
-        deltatables_collection.insert_one(deltatable.model_dump())
+        deltatables_collection.insert_one(deltatable.mongo())
     return {
         "message": "DeltaTableAggregated upserted successfully",
         "result": "success",
@@ -202,36 +182,22 @@ async def upsert_deltatable(
 
 @deltatables_endpoint_router.get("/get/{data_collection_id}")
 async def list_registered_files(
-    data_collection_id: str,
+    data_collection_id: PyObjectId,
     current_user: str = Depends(get_current_user),
 ):
     """
     Fetch all files registered from a Data Collection registered into a workflow.
     """
 
-    if not current_user:
-        raise HTTPException(
-            status_code=401,
-            detail="Not authenticated",
-        )
-    if not data_collection_id:
-        raise HTTPException(
-            status_code=400,
-            detail="Data Collection ID is required",
-        )
-    logger.info(f"Data Collection ID: {data_collection_id}")
-    data_collection_oid = ObjectId(data_collection_id)
-    logger.info(f"Data Collection OID: {data_collection_oid}")
-
     # Query to find deltatable associated with the data collection
-    query = {"data_collection_id": data_collection_oid}
+    query = {"data_collection_id": data_collection_id}
     logger.info(f"Query: {query}")
     deltatable_cursor = list(deltatables_collection.find(query))
     logger.info(f"Deltatable Cursor: {deltatable_cursor}")
     if len(list(deltatable_cursor)) == 0:
         raise HTTPException(
             status_code=404,
-            detail=f"No DeltaTableAggregated found for Data Collection ID {data_collection_oid}.",
+            detail=f"No DeltaTableAggregated found for Data Collection ID {data_collection_id}.",
         )
     deltatables = list(deltatable_cursor)[0]
     logger.info(f"Deltatables: {deltatables}")
@@ -245,7 +211,7 @@ async def list_registered_files(
 
 @deltatables_endpoint_router.get("/specs/{data_collection_id}")
 async def specs(
-    data_collection_id: str,
+    data_collection_id: PyObjectId,
     current_user: str = Depends(get_current_user),
 ):
     """
@@ -253,19 +219,8 @@ async def specs(
     # TODO: currently returns the last aggregation, need to fix with versioning
     """
 
-    if not current_user:
-        raise HTTPException(
-            status_code=401,
-            detail="Not authenticated",
-        )
-    if not data_collection_id:
-        raise HTTPException(
-            status_code=400,
-            detail="Data Collection ID is required",
-        )
-    data_collection_oid = ObjectId(data_collection_id)
     # Query to find deltatable associated with the data collection
-    query = {"data_collection_id": data_collection_oid}
+    query = {"data_collection_id": data_collection_id}
     deltatable_cursor = deltatables_collection.find(query)
     deltatables = list(deltatable_cursor)[0]
 
@@ -273,7 +228,11 @@ async def specs(
     logger.info(f"Deltatables sanitized: {deltatables}")
 
     # TODO - fix with versioning
-    column_specs = deltatables["aggregation"][-1]["aggregation_columns_specs"]
+    column_specs = convert_objectid_to_str(
+        deltatables["aggregation"][-1]["aggregation_columns_specs"]
+    )
+
+    logger.info(f"Column specs: {column_specs}")
 
     return column_specs
 

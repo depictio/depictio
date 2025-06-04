@@ -42,9 +42,7 @@ app.layout = html.Div(
                 html.Li(
                     "The first chart is a line plot and it's not draggable or resizeable (with the value 'static' set to True in 'layout')."
                 ),
-                html.Li(
-                    "The second chart is a bar plot and it's draggable and resizeable."
-                ),
+                html.Li("The second chart is a bar plot and it's draggable and resizeable."),
             ]
         ),
         dash_draggable.ResponsiveGridLayout(
@@ -59,9 +57,7 @@ app.layout = html.Div(
 )
 
 
-@app.callback(
-    Output("scatter-plot", "figure"), Input("interval-component", "n_intervals")
-)
+@app.callback(Output("scatter-plot", "figure"), Input("interval-component", "n_intervals"))
 def update_figure(interval):
     x = np.random.rand(100)
     y = np.random.rand(100)

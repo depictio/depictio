@@ -20,7 +20,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/3.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = '@fqo7++z57_ew(7&jx0^z&c8&5!&syg$g&2um2%)lt17a1)*+#'
+SECRET_KEY = "@fqo7++z57_ew(7&jx0^z&c8&5!&syg$g&2um2%)lt17a1)*+#"
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -31,80 +31,77 @@ ALLOWED_HOSTS = []
 # Application definition
 
 # Default primary key field type
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 INSTALLED_APPS = [
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
-    'django.contrib.sites',  # Required for django-allauth
-    
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+    "django.contrib.sites",  # Required for django-allauth
     # Local apps
-    'authentication',
-    
+    "authentication",
     # Third-party apps
-    'rest_framework',
-    'corsheaders',
-    'drf_yasg',
-    'rest_framework_simplejwt',
-    
+    "rest_framework",
+    "corsheaders",
+    "drf_yasg",
+    "rest_framework_simplejwt",
     # django-allauth
-    'allauth',
-    'allauth.account',
-    'allauth.socialaccount',
-    'allauth.socialaccount.providers.google',
+    "allauth",
+    "allauth.account",
+    "allauth.socialaccount",
+    "allauth.socialaccount.providers.google",
 ]
 
 # Site ID for django-allauth
 SITE_ID = 1
 
 MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'allauth.account.middleware.AccountMiddleware',  # Required for django-allauth
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "allauth.account.middleware.AccountMiddleware",  # Required for django-allauth
 ]
 
-ROOT_URLCONF = 'auth_service.urls'
+ROOT_URLCONF = "auth_service.urls"
 
 TEMPLATES = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.debug',
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.debug",
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
             ],
         },
     },
 ]
 
-WSGI_APPLICATION = 'auth_service.wsgi.application'
+WSGI_APPLICATION = "auth_service.wsgi.application"
 
 
 # Database
 # https://docs.djangoproject.com/en/3.1/ref/settings/#databases
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'djongo',
-        'NAME': 'djongoDB',
-        'CLIENT': {
-            'host': 'localhost',
-            'port': 27018,
-        }
+    "default": {
+        "ENGINE": "djongo",
+        "NAME": "djongoDB",
+        "CLIENT": {
+            "host": "localhost",
+            "port": 27018,
+        },
     }
 }
 
@@ -115,10 +112,10 @@ DATABASES = {
 # Simplified password validation for development
 AUTH_PASSWORD_VALIDATORS = [
     {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-        'OPTIONS': {
-            'min_length': 6,
-        }
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        "OPTIONS": {
+            "min_length": 6,
+        },
     },
 ]
 
@@ -126,9 +123,9 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/3.1/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = "en-us"
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = "UTC"
 
 USE_I18N = True
 
@@ -140,25 +137,26 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/3.1/howto/static-files/
 
-STATIC_URL = '/static/'
+STATIC_URL = "/static/"
 
 # REST Framework settings
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
-    ]
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
 }
 
 # JWT settings
 from datetime import timedelta
+
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
-    'ROTATE_REFRESH_TOKENS': False,
-    'BLACKLIST_AFTER_ROTATION': False,
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+    "ROTATE_REFRESH_TOKENS": False,
+    "BLACKLIST_AFTER_ROTATION": False,
 }
 
 # CORS settings
@@ -168,17 +166,17 @@ CORS_ALLOW_CREDENTIALS = True
 # Authentication backends
 AUTHENTICATION_BACKENDS = [
     # Django default
-    'django.contrib.auth.backends.ModelBackend',
+    "django.contrib.auth.backends.ModelBackend",
     # django-allauth
-    'allauth.account.auth_backends.AuthenticationBackend',
+    "allauth.account.auth_backends.AuthenticationBackend",
 ]
 
 # django-allauth settings
 ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_UNIQUE_EMAIL = True
 ACCOUNT_USERNAME_REQUIRED = True
-ACCOUNT_AUTHENTICATION_METHOD = 'username_email'
-ACCOUNT_EMAIL_VERIFICATION = 'none'  # Set to 'mandatory' in production
+ACCOUNT_AUTHENTICATION_METHOD = "username_email"
+ACCOUNT_EMAIL_VERIFICATION = "none"  # Set to 'mandatory' in production
 
 # Skip the confirmation page for social logins
 SOCIALACCOUNT_LOGIN_ON_GET = True
@@ -191,19 +189,19 @@ SOCIALACCOUNT_LOGIN_ON_GET = True
 # You need to create a Google OAuth2 app and get credentials from Google Cloud Console
 # https://console.cloud.google.com/apis/credentials
 SOCIALACCOUNT_PROVIDERS = {
-    'google': {
-        'APP': {
-            'client_id': '64285070862-0u422mp1n2b0h5n6209u81jgin1ohtjo.apps.googleusercontent.com',  # Replace with your client ID
-            'secret': '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',  # Replace with your client secret
-            'key': ''
+    "google": {
+        "APP": {
+            "client_id": "64285070862-0u422mp1n2b0h5n6209u81jgin1ohtjo.apps.googleusercontent.com",  # Replace with your client ID
+            "secret": "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",  # Replace with your client secret
+            "key": "",
         },
-        'SCOPE': [
-            'profile',
-            'email',
+        "SCOPE": [
+            "profile",
+            "email",
         ],
-        'AUTH_PARAMS': {
-            'access_type': 'online',
-        }
+        "AUTH_PARAMS": {
+            "access_type": "online",
+        },
     }
 }
 
@@ -212,5 +210,5 @@ SOCIALACCOUNT_PROVIDERS = {
 # SOCIALACCOUNT_ADAPTER = 'allauth.socialaccount.adapter.DefaultSocialAccountAdapter'
 
 # Redirect URLs after login/logout
-LOGIN_REDIRECT_URL = '/social-login-success/'  # Redirect to our success view after login
-LOGOUT_REDIRECT_URL = '/'
+LOGIN_REDIRECT_URL = "/social-login-success/"  # Redirect to our success view after login
+LOGOUT_REDIRECT_URL = "/"

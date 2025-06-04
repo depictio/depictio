@@ -7,6 +7,7 @@ from dash_iconify import DashIconify
 def get_icon(icon):
     return DashIconify(icon=icon, height=16, color="#c2c7d0")
 
+
 app = dash.Dash(__name__, suppress_callback_exceptions=True)
 
 
@@ -40,7 +41,6 @@ app.layout = dmc.MantineProvider(
                                     icon=get_icon(icon="tabler:gauge"),
                                     rightSection=get_icon(icon="tabler-chevron-right"),
                                     href="www.google.com",
-
                                 ),
                                 dmc.NavLink(
                                     label="Disabled",
@@ -50,7 +50,15 @@ app.layout = dmc.MantineProvider(
                                 dmc.NavLink(
                                     label="With description",
                                     description="Additional information",
-                                    icon=dmc.Badge("3", size="xs", variant="filled", color="red", w=16, h=16, p=0),
+                                    icon=dmc.Badge(
+                                        "3",
+                                        size="xs",
+                                        variant="filled",
+                                        color="red",
+                                        w=16,
+                                        h=16,
+                                        p=0,
+                                    ),
                                 ),
                                 dmc.NavLink(
                                     label="Active subtle",
@@ -63,7 +71,11 @@ app.layout = dmc.MantineProvider(
                             style={"white-space": "nowrap"},
                         )
                     ],
-                    style={"overflow": "hidden", "transition": "width 0.3s ease-in-out", "background-color": "#343a40"},
+                    style={
+                        "overflow": "hidden",
+                        "transition": "width 0.3s ease-in-out",
+                        "background-color": "#343a40",
+                    },
                 ),
                 dmc.Drawer(
                     title="Company Name",
@@ -93,7 +105,15 @@ app.layout = dmc.MantineProvider(
                                 dmc.NavLink(
                                     label="With description",
                                     description="Additional information",
-                                    icon=dmc.Badge("3", size="xs", variant="filled", color="red", w=16, h=16, p=0),
+                                    icon=dmc.Badge(
+                                        "3",
+                                        size="xs",
+                                        variant="filled",
+                                        color="red",
+                                        w=16,
+                                        h=16,
+                                        p=0,
+                                    ),
                                     style={"body": {"overflow": "hidden"}},
                                 ),
                                 dmc.NavLink(
@@ -119,7 +139,17 @@ app.layout = dmc.MantineProvider(
                                     [
                                         dmc.MediaQuery(
                                             [
-                                                dmc.Button(DashIconify(icon="ci:hamburger-lg", width=24, height=24, color="#c2c7d0"), variant="subtle", p=1, id="sidebar-button"),
+                                                dmc.Button(
+                                                    DashIconify(
+                                                        icon="ci:hamburger-lg",
+                                                        width=24,
+                                                        height=24,
+                                                        color="#c2c7d0",
+                                                    ),
+                                                    variant="subtle",
+                                                    p=1,
+                                                    id="sidebar-button",
+                                                ),
                                             ],
                                             smallerThan="md",
                                             styles={"display": "none"},
@@ -127,7 +157,15 @@ app.layout = dmc.MantineProvider(
                                         dmc.MediaQuery(
                                             [
                                                 dmc.Button(
-                                                    DashIconify(icon="ci:hamburger-lg", width=24, height=24, color="#c2c7d0"), variant="subtle", p=1, id="drawer-demo-button"
+                                                    DashIconify(
+                                                        icon="ci:hamburger-lg",
+                                                        width=24,
+                                                        height=24,
+                                                        color="#c2c7d0",
+                                                    ),
+                                                    variant="subtle",
+                                                    p=1,
+                                                    id="drawer-demo-button",
                                                 ),
                                             ],
                                             largerThan="md",
@@ -155,7 +193,6 @@ app.layout = dmc.MantineProvider(
         )
     ],
 )
-
 
 
 @app.callback(
