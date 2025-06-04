@@ -1,3 +1,5 @@
+{{- $access := default .Release.Name .Values.secrets.minioRootUser }}
+{{- $secret := default (randAlphaNum 32) .Values.secrets.minioRootPassword }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -10,6 +12,8 @@ data:
   DEPICTIO_FASTAPI_PORT: {{ .Values.backend.env.DEPICTIO_FASTAPI_PORT | quote }}
   DEPICTIO_DASH_PORT: {{ .Values.backend.env.DEPICTIO_DASH_PORT | quote }}
   DEPICTIO_DASH_SERVICE_NAME: {{ printf "%s-depictio-frontend" .Release.Name | quote }}
+  DEPICTIO_MINIO_ROOT_USER: {{ $access | quote }}
+  DEPICTIO_MINIO_ROOT_PASSWORD: {{ $secret | quote }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -21,3 +25,5 @@ data:
   DEPICTIO_FASTAPI_SERVICE_NAME: {{ printf "%s-depictio-backend" .Release.Name | quote }}
   DEPICTIO_FASTAPI_PORT: {{ .Values.frontend.env.DEPICTIO_FASTAPI_PORT | quote }}
   DEPICTIO_DASH_PORT: {{ .Values.frontend.env.DEPICTIO_DASH_PORT | quote }}
+  DEPICTIO_MINIO_ROOT_USER: {{ $access | quote }}
+  DEPICTIO_MINIO_ROOT_PASSWORD: {{ $secret | quote }}
