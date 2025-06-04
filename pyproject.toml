@@ -63,6 +63,7 @@ dev = [
   "pytest-xdist",
   "mongomock",
   "mongomock-motor",
+  "bump2version",
 ]
 
 [project.scripts]
