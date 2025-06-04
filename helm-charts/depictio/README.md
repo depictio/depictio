@@ -82,6 +82,8 @@ helm uninstall depictio
 | `secrets.minioRootUser` | MinIO root username | `"minio"` |
 | `secrets.minioRootPassword` | MinIO root password | `"minio123"` |
 
+These credentials are also stored in the Kubernetes Secret named `<release-name>-depictio-secrets`. Override them only if custom values are required.
+
 ### MongoDB parameters
 
 | Parameter | Description | Default |
