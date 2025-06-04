@@ -15,9 +15,9 @@ settings = Settings()
 initialize_loggers(verbose_level=settings.logging.verbosity_level)
 
 logger.info(f"Settings: {settings}")
-API_BASE_URL = f"http://{settings.fastapi.service_name}:{settings.fastapi.port}"
-DASH_BASE_URL = f"http://{settings.dash.service_name}:{settings.dash.port}"
-MONGODB_URL = f"mongodb://{settings.mongodb.service_name}:{settings.mongodb.port}/"
+API_BASE_URL = settings.fastapi.internal_url
+DASH_BASE_URL = settings.dash.internal_url
+MONGODB_URL = f"mongodb://{settings.mongodb.service_name}:{settings.mongodb.service_port}"
 _KEYS_DIR = settings.auth.keys_dir
 # Use the shared internal API key from settings
 settings.auth.internal_api_key = os.getenv(

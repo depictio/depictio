@@ -4,9 +4,10 @@ import boto3
 from botocore.exceptions import ClientError, NoCredentialsError, PartialCredentialsError
 from pydantic import validate_call
 
+from depictio.api.v1.configs.settings_models import S3DepictioCLIConfig
 from depictio.models.config import DEPICTIO_CONTEXT
 from depictio.models.logging import logger
-from depictio.models.models.s3 import PolarsStorageOptions, S3DepictioCLIConfig
+from depictio.models.models.s3 import PolarsStorageOptions
 
 
 class S3ProviderBase(ABC):
@@ -144,7 +145,7 @@ def turn_S3_config_into_polars_storage_options(
     Convert S3 configuration into storage options for the client.
     """
     return PolarsStorageOptions(
-        endpoint_url=s3_config.endpoint_url,
+        endpoint_url=s3_config.external_url,
         aws_access_key_id=s3_config.root_user,
         aws_secret_access_key=s3_config.root_password,
     )

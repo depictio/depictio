@@ -20,6 +20,7 @@ services:
       - 5080:5080
     volumes:
       - ./depictio:/app/depictio
+      - ./pyproject.toml:/app/pyproject.toml
     env_file:
       - docker-compose/.env
     environment:
@@ -42,6 +43,7 @@ services:
       - 8058:8058
     volumes:
       - ./depictio:/app/depictio
+      - ./pyproject.toml:/app/pyproject.toml
     env_file:
       - docker-compose/.env
     environment:
