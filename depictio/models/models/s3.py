@@ -100,6 +100,16 @@ class S3DepictioCLIConfig(BaseSettings):
     host: str = Field(default="localhost")
     endpoint_url: str = Field(default="http://localhost:9000")
     port: Optional[int] = Field(default=0)
+    @field_validator("port", mode="before")
+    def parse_port(cls, v):
+        if isinstance(v, str):
+            match = re.search(r"(\d+)$", v)
+            if match:
+                return int(match.group(1))
+            if v.isdigit():
+                return int(v)
+            raise ValueError("Port must be an integer")
+        return v
     root_user: str = Field(default="minio")
     root_password: str = Field(default="minio123")
     bucket: str = Field(default="depictio-bucket")

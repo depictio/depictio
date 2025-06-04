@@ -39,8 +39,8 @@ The MinIO service is deployed and can be accessed at:
   kubectl port-forward svc/{{ $minioSvc }} 9001:{{ .Values.minio.service.consolePort }}
 
 MinIO credentials:
-  Username: {{ .Values.secrets.minioRootUser }}
-  Password: {{ .Values.secrets.minioRootPassword }}
+  Username: {{ default .Release.Name .Values.secrets.minioRootUser }}
+  Password: {{ default "(random)" .Values.secrets.minioRootPassword }}
 {{- end }}
 
 MongoDB is available at:
