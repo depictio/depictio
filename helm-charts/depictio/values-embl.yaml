@@ -21,7 +21,14 @@ ingress:
         - path: /
           pathType: Prefix
           service:
-            name: depictio-backend
+            name: api
+            portName: http
+    - host: "minio.demo.depictio.embl.org"
+      paths:
+        - path: /
+          pathType: Prefix
+          service:
+            name: minio
             portName: http
 
   # TLS configuration

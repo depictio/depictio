@@ -20,8 +20,13 @@ ingress:
         - path: /api
           pathType: Prefix
           service:
-            name: depictio-backend
+            name: api
             port: 80
+        - path: /minio
+          pathType: Prefix
+          service:
+            name: minio
+            port: 9000
 
   # No TLS for local development
   tls: []
