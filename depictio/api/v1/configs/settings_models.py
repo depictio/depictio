@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -30,9 +31,25 @@ class ServiceConfig(BaseSettings):
 
     @property
     def url(self) -> str:
-        """Returns appropriate URL based on DEPICTIO_CONTEXT."""
+        # """Returns appropriate URL based on DEPICTIO_CONTEXT."""
         context = os.getenv("DEPICTIO_CONTEXT", "client")
-        return self.internal_url if context == "server" else self.external_url
+        # print(f"SETTINGS DEPICTIO_CONTEXT: {context}")
+        # return self.internal_url if context == "server" else self.external_url
+
+        # If running inside the server context we normally want to use the
+        # internal service URL for inter-service communication.  However when a
+        # ``public_url`` pointing to a remote MinIO/S3 instance is provided we
+        # must use that instead.  This allows the same configuration object to
+        # be used both from inside microservices and when connecting to an
+        # external S3 installation.
+        if context == "server":
+            if self.public_url:
+                host = urlparse(self.public_url).hostname or ""
+                if host not in {self.service_name, "localhost", "127.0.0.1"}:
+                    return self.public_url
+            return self.internal_url
+
+        return self.external_url
 
     @property
     def port(self) -> int:

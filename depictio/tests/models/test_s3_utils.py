@@ -215,22 +215,41 @@ class TestS3Utils:
                 assert result.aws_access_key_id == "minio"
                 assert result.aws_secret_access_key == "minio123"
 
-        def test_different_credentials(self, sample_s3_config):
+        def test_different_credentials_client(self, sample_s3_config):
             """Test with different access credentials"""
 
-            # Modify the sample config
-            sample_s3_config.root_user = "custom-user"
-            sample_s3_config.root_password = "custom-password"
+            with patch.dict(os.environ, {"DEPICTIO_CONTEXT": "client"}):
+                # Modify the sample config
+                sample_s3_config.root_user = "custom-user"
+                sample_s3_config.root_password = "custom-password"
 
-            # Call the function
-            result = turn_S3_config_into_polars_storage_options(sample_s3_config)
+                # Call the function
+                result = turn_S3_config_into_polars_storage_options(sample_s3_config)
 
-            # Verify the credentials were correctly transferred
-            assert result.aws_access_key_id == "custom-user"
-            assert result.aws_secret_access_key == "custom-password"
+                # Verify the credentials were correctly transferred
+                assert result.aws_access_key_id == "custom-user"
+                assert result.aws_secret_access_key == "custom-password"
 
-            # Verify endpoint
-            assert result.endpoint_url == "http://localhost:9000"
+                # Verify endpoint
+                assert result.endpoint_url == "http://localhost:9000"
+
+        def test_different_credentials_server(self, sample_s3_config):
+            """Test with different access credentials"""
+
+            with patch.dict(os.environ, {"DEPICTIO_CONTEXT": "server"}):
+                # Modify the sample config
+                sample_s3_config.root_user = "custom-user"
+                sample_s3_config.root_password = "custom-password"
+
+                # Call the function
+                result = turn_S3_config_into_polars_storage_options(sample_s3_config)
+
+                # Verify the credentials were correctly transferred
+                assert result.aws_access_key_id == "custom-user"
+                assert result.aws_secret_access_key == "custom-password"
+
+                # Verify endpoint
+                assert result.endpoint_url == "http://minio:9000"
 
         def test_validation(self):
             """Test that validation is applied to the input"""
