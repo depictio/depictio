@@ -243,6 +243,8 @@ ldap_db/
 # CI/CD
 ## GitHub Actions
 !iris.csv
+!demographic_data.csv
+!physical_features.csv
 
 # Cypress
 depictio/tests/e2e-tests/node_modules/

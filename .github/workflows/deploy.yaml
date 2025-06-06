@@ -20,7 +20,6 @@ on:
   pull_request:
     branches: [main]
 
-
 jobs:
   quality:
     runs-on: ubuntu-22.04
@@ -176,8 +175,6 @@ jobs:
             -f docker-compose/docker-compose.minio.yaml \
             up --build -d
 
-
-
       - name: Check Docker Compose Services
         run: |
           # Check if the services are running
@@ -221,11 +218,8 @@ jobs:
       #       exit 1
       #     fi
 
-
       - name: Wait for Services to Start
         run: sleep 10 # Adjust the wait time if necessary
-
-
 
       - name: Log Containers
         run: docker compose logs depictio-backend
@@ -233,7 +227,6 @@ jobs:
       # - name: Verify Permissions Inside Container
       #   run: |
       #     docker compose exec -T depictio-backend bash -c "ls -la /app/depictio/keys"
-
 
       # Verify All Containers Are Running
       - name: Check if all containers are running
@@ -363,7 +356,6 @@ jobs:
           # Depictio CLI command to show the CLI config
           depictio-cli config show-cli-config --CLI-config-path admin_config.yaml
 
-
       - name: Depictio backend logs
         run: docker compose logs depictio-backend
 
@@ -432,8 +424,6 @@ jobs:
                               --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
                               --CLI-config-path ../.depictio/admin_config.yaml
 
-
-
       - name: Penguin - Validate & Show Project Config
         run: |
           cd depictio/cli
@@ -466,7 +456,7 @@ jobs:
                               --project-config-path ../api/v1/configs/penguins_dataset/penguins_project.yaml \
                               --CLI-config-path ../.depictio/admin_config.yaml
 
-      - name: Penguin - Scan Iris Dataset Files
+      - name: Penguin - Scan Penguin Dataset Files
         run: |
           cd depictio/cli
           source venv/bin/activate
@@ -475,7 +465,7 @@ jobs:
                               --project-config-path ../api/v1/configs/penguins_dataset/penguins_project.yaml \
                               --CLI-config-path ../.depictio/admin_config.yaml
 
-      - name: Penguin - Process Iris Dataset
+      - name: Penguin - Process Penguin Dataset
         run: |
           cd depictio/cli
           source venv/bin/activate
@@ -540,7 +530,6 @@ jobs:
       #   run: |
       #     docker compose logs depictio-backend
 
-
       # # Scan the file (single file - metadata)
       # - name: Scan Iris Dataset Files
       #   # continue-on-error: true
@@ -558,7 +547,6 @@ jobs:
       #   run: |
       #     docker compose logs depictio-backend
 
-
       # # Process the iris dataset
       # - name: Process Iris Dataset
       #   # continue-on-error: true
@@ -575,7 +563,6 @@ jobs:
       #   # continue-on-error: true
       #   run: |
       #     docker compose logs depictio-backend
-
 
       # # # Fetch backend logs regardless of CLI step outcome
       # # - name: Fetch Depictio Backend Logs After CLI Run
