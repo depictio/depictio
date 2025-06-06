@@ -149,8 +149,9 @@ def turn_S3_config_into_polars_storage_options(
     logger.info("Using endpoint URL: %s", s3_config.endpoint_url)
     logger.info("Using public URL: %s", s3_config.public_url)
 
-    return PolarsStorageOptions(
-        endpoint_url=s3_config.endpoint_url,
-        aws_access_key_id=s3_config.root_user,
-        aws_secret_access_key=s3_config.root_password,
-    )
+    # return PolarsStorageOptions(
+    #     endpoint_url=s3_config.endpoint_url,
+    #     aws_access_key_id=s3_config.root_user,
+    #     aws_secret_access_key=s3_config.root_password,
+    # )
+    return PolarsStorageOptions.from_s3_config(s3_config)

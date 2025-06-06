@@ -145,39 +145,75 @@ class TestS3Utils:
     class TestTurnS3ConfigIntoPolarsStorageOptions:
         """Tests for turn_S3_config_into_polars_storage_options function"""
 
-        def test_conversion(self, sample_s3_config):
-            """Test conversion of S3 config to Polars storage options"""
+        def test_conversion_client(self, sample_s3_config):
+            """Test conversion of S3 config to Polars storage options for client context"""
 
-            # Call the function
-            result = turn_S3_config_into_polars_storage_options(sample_s3_config)
+            with patch.dict(os.environ, {"DEPICTIO_CONTEXT": "client"}):
+                # Call the function
+                result = turn_S3_config_into_polars_storage_options(sample_s3_config)
 
-            # Verify the result is a PolarsStorageOptions object
-            assert isinstance(result, PolarsStorageOptions)
+                # Verify the result is a PolarsStorageOptions object
+                assert isinstance(result, PolarsStorageOptions)
 
-            # Verify the values were correctly transferred
-            assert result.endpoint_url == "http://localhost:9000"
-            assert result.aws_access_key_id == "minio"
-            assert result.aws_secret_access_key == "minio123"
+                # Verify the values were correctly transferred
+                assert result.endpoint_url == "http://localhost:9000"
+                assert result.aws_access_key_id == "minio"
+                assert result.aws_secret_access_key == "minio123"
 
-        def test_different_endpoint(self, sample_s3_config):
+        def test_conversion_server(self, sample_s3_config):
+            """Test conversion of S3 config to Polars storage options for server context"""
+
+            with patch.dict(os.environ, {"DEPICTIO_CONTEXT": "server"}):
+                # Call the function
+                result = turn_S3_config_into_polars_storage_options(sample_s3_config)
+
+                # Verify the result is a PolarsStorageOptions object
+                assert isinstance(result, PolarsStorageOptions)
+
+                # Verify the values were correctly transferred
+                assert result.endpoint_url == "http://minio:9000"
+                assert result.aws_access_key_id == "minio"
+                assert result.aws_secret_access_key == "minio123"
+
+        def test_different_endpoint_client(self, sample_s3_config):
             """Test with a different endpoint URL"""
+            with patch.dict(os.environ, {"DEPICTIO_CONTEXT": "client"}):
+                # Modify the sample config
+                sample_s3_config.public_url = "https://custom-s3.example.com"
 
-            # Modify the sample config
-            sample_s3_config.public_url = "https://custom-s3.example.com"
+                print(sample_s3_config.endpoint_url)
+                print(f"Sample config: {sample_s3_config}")
 
-            print(sample_s3_config.endpoint_url)
-            print(f"Sample config: {sample_s3_config}")
+                # Call the function
+                result = turn_S3_config_into_polars_storage_options(sample_s3_config)
+                print(f"Result: {result}")
 
-            # Call the function
-            result = turn_S3_config_into_polars_storage_options(sample_s3_config)
-            print(f"Result: {result}")
+                # Verify the endpoint was correctly transferred
+                assert result.endpoint_url == "https://custom-s3.example.com"
 
-            # Verify the endpoint was correctly transferred
-            assert result.endpoint_url == "https://custom-s3.example.com"
+                # Verify other fields
+                assert result.aws_access_key_id == "minio"
+                assert result.aws_secret_access_key == "minio123"
 
-            # Verify other fields
-            assert result.aws_access_key_id == "minio"
-            assert result.aws_secret_access_key == "minio123"
+        def test_different_endpoint_server(self, sample_s3_config):
+            """Test with a different endpoint URL"""
+            with patch.dict(os.environ, {"DEPICTIO_CONTEXT": "server"}):
+                # Modify the sample config
+                sample_s3_config.public_url = "https://custom-s3.example.com"
+
+                print(sample_s3_config.endpoint_url)
+                print(f"Sample config: {sample_s3_config}")
+
+                # Call the function
+                result = turn_S3_config_into_polars_storage_options(sample_s3_config)
+                print(f"Result: {result}")
+
+                # Verify the endpoint was correctly transferred
+                assert result.endpoint_url == "https://custom-s3.example.com"
+
+                # Verify other fields
+                assert result.aws_access_key_id == "minio"
+                assert result.aws_secret_access_key == "minio123"
 
         def test_different_credentials(self, sample_s3_config):
             """Test with different access credentials"""

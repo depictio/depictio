@@ -1,5 +1,7 @@
 from pydantic import BaseModel, field_validator
 
+from depictio.api.v1.configs.settings_models import S3DepictioCLIConfig
+
 
 class PolarsStorageOptions(BaseModel):
     endpoint_url: str
@@ -16,6 +18,23 @@ class PolarsStorageOptions(BaseModel):
         if not v:
             raise ValueError("Endpoint URL cannot be empty")
         return v
+
+    @classmethod
+    def from_s3_config(cls, s3_config: S3DepictioCLIConfig) -> "PolarsStorageOptions":
+        """Create storage options using a :class:`S3DepictioCLIConfig` instance.
+
+        The ``url`` property of ``S3DepictioCLIConfig`` automatically resolves
+        to either the internal service URL or the external URL depending on the
+        current ``DEPICTIO_CONTEXT`` environment variable. This makes the
+        resulting ``PolarsStorageOptions`` usable from within microservices as
+        well as when the package is used externally (e.g. via ``depictio-cli``).
+        """
+
+        return cls(
+            endpoint_url=s3_config.url,
+            aws_access_key_id=s3_config.root_user,
+            aws_secret_access_key=s3_config.root_password,
+        )
 
 
 # class PolarsStorageOptions(BaseModel):
