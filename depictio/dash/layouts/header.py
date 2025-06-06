@@ -632,10 +632,11 @@ def design_header(data, local_store):
                     # ),
                     dmc.Col(
                         [
-                            dmc.Group([button_menu, card_section]),
+                            dmc.Group([button_menu, card_section], noWrap=True),
                         ],
                         style={"justify": "start"},
-                        span=3,
+                        span=12,
+                        md=3,
                     ),
                     dmc.Col(
                         [
@@ -652,7 +653,8 @@ def design_header(data, local_store):
                                 )
                             ),
                         ],
-                        span=7,
+                        span=12,
+                        md=7,
                     ),
                     dmc.Col(
                         [
@@ -674,7 +676,8 @@ def design_header(data, local_store):
                                 ],
                             ),
                         ],
-                        span=2,
+                        span=12,
+                        md=2,
                         # offset=1
                     ),
                 ],
