@@ -782,16 +782,16 @@ def scan_files_for_data_collection(
 
     # Check for the file's existence in the DB
     response = api_get_files_by_dc_id(dc_id=str(data_collection.id), CLI_config=CLI_config)
-    print(f"Response: {response}")
-    print(f"Response Status Code: {response.status_code}")
-    print(f"Response Content: {response.content}")
-    print(f"Response json: {response.json()}")
+    # print(f"Response: {response}")
+    # print(f"Response Status Code: {response.status_code}")
+    # print(f"Response Content: {response.content}")
+    # print(f"Response json: {response.json()}")
     if response.status_code == 200:
         existing_files = response.json()
         # existing_files = [f for f in existing_files]
         # existing_files = [File.from_mongo(f) for f in existing_files]
         logger.debug(f"Existing Files: {existing_files}")
-        print(f"Existing Files: {existing_files}")
+        # print(f"Existing Files: {existing_files}")
     else:
         existing_files = None
         logger.warning(

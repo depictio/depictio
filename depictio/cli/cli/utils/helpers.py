@@ -26,16 +26,17 @@ def process_data_collection_helper(
         rescan_folders (bool, optional): _description_. Defaults to False.
         update_files (bool, optional): _description_. Defaults to False.
     """
+    task = "Scanning" if mode == "scan" else "Processing"
     dc = next((dc for dc in wf.data_collections if str(dc.id) == dc_id), None)
     if dc is None:
         raise ValueError(f"Data collection with id {dc_id} not found.")
 
-    print("\n")
     rich_print_checked_statement(
-        f"Processing Data Collection: {dc.data_collection_tag} - type {dc.config.type} - metatype {dc.config.metatype}",
+        f"  ↪ {task} Data Collection: [bold]{dc.data_collection_tag}[/bold] - type {dc.config.type} - metatype {dc.config.metatype}",
+        # f"\t\t↪ Processing Data Collection: {dc.data_collection_tag} - type {dc.config.type} - metatype {dc.config.metatype}",
         "info",
     )
-    logger.info(f"Processing Data collection: {dc.data_collection_tag}")
+    logger.info(f"{task} Data collection: {dc.data_collection_tag}")
     logger.info(f"Mode: {mode}")
 
     if mode == "scan":
@@ -47,8 +48,7 @@ def process_data_collection_helper(
         )
         return result
     elif mode == "process":
-        logger.info("Processing data collection...")
-        print("Processing data collection...")
+        logger.info("{task} data collection...")
         result = client_aggregate_data(
             data_collection=dc,
             CLI_config=CLI_config,
@@ -84,8 +84,11 @@ def process_workflow_helper(
         rescan_folders (bool, optional): Reprocess the runs for the data collections.
         update_files (bool, optional): Update the files for the data collections.
     """
-    logger.info(f"Processing Workflow: {workflow.name}")
-    rich_print_checked_statement(f"Processing Workflow: {workflow.workflow_tag}", "info")
+    task = "Scanning" if mode == "scan" else "Processing"
+    logger.info(f"{task} Workflow: {workflow.name}")
+    rich_print_checked_statement(
+        f" ↪ {task} Workflow: [bold]{workflow.workflow_tag}[/bold]", "info"
+    )
 
     for data_collection in workflow.data_collections:
         # Skip if a specific tag is provided and it doesn't match
@@ -97,7 +100,7 @@ def process_workflow_helper(
             continue
 
         # Process the matching data collection
-        logger.info(f"Processing data collection: {data_collection.data_collection_tag}")
+        logger.info(f"{task} data collection: {data_collection.data_collection_tag}")
         dc_id = str(data_collection.id)
         process_data_collection_helper(
             CLI_config=CLI_config,
@@ -128,8 +131,10 @@ def process_project_helper(
         data_collection_tag (str, optional): Specific data collection tag to process.
                                              If None, all data collections are processed.
     """
+
+    task = "Scanning" if mode == "scan" else "Processing"
     logger.info(f"Processing project: {project_config.name}")
-    rich_print_checked_statement(f"Processing Project: {project_config.name}", "info")
+    rich_print_checked_statement(f"{task} Project: [bold]{project_config.name}[/bold]", "info")
 
     # Determine which workflows to process
     workflows = project_config.workflows
@@ -145,8 +150,7 @@ def process_project_helper(
 
     # Process selected workflows
     for workflow in workflows:
-        print("\n")
-        logger.info(f"Processing workflow: {workflow.workflow_tag}")
+        logger.info(f"{task} workflow: {workflow.workflow_tag}")
         process_workflow_helper(
             CLI_config=CLI_config,
             workflow=workflow,

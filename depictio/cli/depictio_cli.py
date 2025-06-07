@@ -7,10 +7,18 @@ from typer.main import get_command
 
 from depictio.cli.cli.commands.config import app as config
 from depictio.cli.cli.commands.data import app as data
+from depictio.cli.cli.commands.run import register_run_command
+from depictio.cli.cli.commands.standalone import register_standalone_commands
 from depictio.cli.cli_logging import setup_logging as setup_cli_logging
 from depictio.models.logging import setup_logging as setup_models_logging
 
 app = typer.Typer()
+
+# Register standalone commands (version, status, etc.)
+register_standalone_commands(app)
+
+# Register the run command
+register_run_command(app)
 
 
 @app.callback()

@@ -72,6 +72,6 @@ def rich_print_checked_statement(statement: str, mode: str, exit: bool = False):
     elif mode == "error":
         print(f"• [bold red]:x: {statement}[/bold red]")
     elif mode == "info":
-        print(f"• [bold blue]:information_source: {statement}[/bold blue]")
+        print(f"• [bold blue]:blue_book: {statement}[/bold blue]")
     elif mode == "warning":
         print(f"• [bold orange1]:warning: {statement}[/bold orange1]")
