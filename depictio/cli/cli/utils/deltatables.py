@@ -241,6 +241,7 @@ def write_delta_table(
     logger.debug(f"Aggregated DataFrame schema: {aggregated_df.schema}")
     logger.debug(f"Aggregated DataFrame head: {aggregated_df.head(5)}")
     logger.debug(f"Storage options: {storage_options}")
+
     aggregated_df.write_delta(
         destination_file,
         storage_options=storage_options.model_dump(),
@@ -319,6 +320,7 @@ def client_aggregate_data(
 
     if command_parameters:
         overwrite = command_parameters.get("overwrite", False)
+        rich_tables = command_parameters.get("rich_tables", False)
     else:
         overwrite = False
     # Generate destination prefix using the data collection id - should be a S3 path
@@ -402,15 +404,29 @@ def client_aggregate_data(
         logger.info("Overwriting existing Delta table")
     else:
         rich_print_checked_statement(
-            "Destination does not exist, will create it during processing", "info"
+            "S3 Destination does not exist, will create it during processing", "info"
         )
-        logger.info("Destination does not exist, will create it during processing")
+        logger.info("S3 Destination does not exist, will create it during processing")
 
     result = write_delta_table(
         aggregated_df=aggregated_df,
         destination_file=destination_prefix,
         storage_options=storage_options,
     )
+
+    extended = True if rich_tables else False
+
+    if rich_tables:
+        aggregated_df.rich(
+            title="Aggregated DataFrame - {data_collection.data_collection_tag}",
+            max_rows=10,
+            max_cols=10,
+            show_dtypes=True,
+        )
+
+        aggregated_df.rich_describe()
+
+    aggregated_df.rich_info(extended)
 
     # 6. Upsert object in the remote DB
     api_upsert_result = api_upsert_deltatable(
@@ -431,5 +447,5 @@ def client_aggregate_data(
 
     return {
         "result": "success",
-        "message": f"Aggregated data successfully written to {destination_prefix}.",
+        "message": f"Aggregated data written to {destination_prefix}.",
     }

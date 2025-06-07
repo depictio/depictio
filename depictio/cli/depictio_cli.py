@@ -9,6 +9,7 @@ from depictio.cli.cli.commands.config import app as config
 from depictio.cli.cli.commands.data import app as data
 from depictio.cli.cli.commands.run import register_run_command
 from depictio.cli.cli.commands.standalone import register_standalone_commands
+from depictio.cli.cli.utils.rich_utils import add_rich_display_to_polars
 from depictio.cli.cli_logging import setup_logging as setup_cli_logging
 from depictio.models.logging import setup_logging as setup_models_logging
 
@@ -50,6 +51,9 @@ def main():
     from rich import print
     from rich.panel import Panel
     from rich.text import Text
+
+    # Add rich display support for Polars DataFrames
+    add_rich_display_to_polars()
 
     # Define text with colors inspired by the logo
     welcome_text = Text()

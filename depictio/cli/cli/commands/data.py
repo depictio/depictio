@@ -39,6 +39,9 @@ def scan(
     sync_files: bool = typer.Option(
         False, "--sync-files", help="Update files for the data collection"
     ),
+    rich_tables: bool = typer.Option(
+        False, "--rich-tables", help="Display rich tables in the output"
+    ),
 ):
     """
     Scan files.
@@ -100,6 +103,7 @@ def scan(
                 command_parameters = {
                     "rescan_folders": rescan_folders,
                     "sync_files": sync_files,
+                    "rich_tables": rich_tables,
                 }
 
                 # Process project
@@ -146,6 +150,9 @@ def process(
         False, "--overwrite", help="Overwrite the workflow if it already exists"
     ),
     # data_collection_tag: Optional[str] = typer.Option(None, "--data-collection-tag", help="Data collection tag to be processed"),
+    rich_tables: bool = typer.Option(
+        False, "--rich-tables", help="Display rich tables in the output"
+    ),
 ):
     """
     Process data collections for a specific tag.
@@ -187,6 +194,7 @@ def process(
 
                 command_parameters = {
                     "overwrite": overwrite,
+                    "rich_tables": rich_tables,
                 }
 
                 rich_print_section_separator("Processing files")

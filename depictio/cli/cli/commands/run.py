@@ -15,6 +15,7 @@ from depictio.cli.cli.utils.rich_utils import (
     rich_print_command_usage,
     rich_print_section_separator,
 )
+from depictio.cli.cli.utils.scan import scan_project_files
 from depictio.cli.cli_logging import logger
 from depictio.models.s3_utils import S3_storage_checks
 from depictio.models.utils import convert_model_to_dict
@@ -61,6 +62,11 @@ def register_run_command(app: typer.Typer):
         sync_files: bool = typer.Option(
             False, "--sync-files", help="Update files for the data collection"
         ),
+        rich_tables: bool = typer.Option(
+            False,
+            "--rich-tables",
+            help="Show detailed summary of the workflow execution",
+        ),
         # Process options
         overwrite: bool = typer.Option(
             False, "--overwrite", help="Overwrite the workflow if it already exists"
@@ -79,15 +85,10 @@ def register_run_command(app: typer.Typer):
         This command executes the full depictio-cli pipeline:
 
         1. Check server accessibility
-
         2. Check S3 storage configuration
-
         3. Validate project configuration
-
         4. Sync project configuration to server
-
         5. Scan data files
-
         6. Process data collections
         """
         rich_print_command_usage("run")
@@ -194,16 +195,21 @@ def register_run_command(app: typer.Typer):
                             command_parameters = {
                                 "rescan_folders": rescan_folders,
                                 "sync_files": sync_files,
+                                "rich_tables": rich_tables,
                             }
 
-                            process_project_helper(
-                                CLI_config=CLI_config,
+                            # Use the unified scanning function
+                            result = scan_project_files(
                                 project_config=project_config,
+                                CLI_config=CLI_config,
                                 workflow_name=workflow_name,
                                 data_collection_tag=data_collection_tag,
                                 command_parameters=command_parameters,
-                                mode="scan",
                             )
+
+                            if result["result"] != "success":
+                                raise Exception("Data scanning failed")
+
                         else:
                             raise Exception("Local and remote project configurations do not match")
                     else:
@@ -237,6 +243,7 @@ def register_run_command(app: typer.Typer):
                         if local_hash == remote_hash:
                             command_parameters = {
                                 "overwrite": overwrite,
+                                "rich_tables": rich_tables,
                             }
 
                             process_project_helper(
@@ -261,13 +268,14 @@ def register_run_command(app: typer.Typer):
             success_count += 1
 
         # Final summary
-        rich_print_section_separator("Workflow Summary")
+        rich_print_section_separator("Depictio-CLI Run Summary")
         if success_count == total_steps:
             rich_print_checked_statement(
-                f"Workflow completed successfully! ({success_count}/{total_steps} steps)", "success"
+                f"Depictio-CLI run completed successfully! ({success_count}/{total_steps} steps)",
+                "success",
             )
         else:
             rich_print_checked_statement(
-                f"Workflow completed with some issues ({success_count}/{total_steps} steps)",
+                f"Depictio-CLI run completed with some issues ({success_count}/{total_steps} steps)",
                 "warning",
             )
