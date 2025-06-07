@@ -186,6 +186,9 @@ jobs:
       - name: Logs depictio-backend
         run: docker logs depictio-backend
 
+      - name: Logs depictio-frontend
+        run: docker logs depictio-frontend
+
       # - name: Start Docker Compose Services with Caching
       #   run: |
       #     # Use BuildKit
