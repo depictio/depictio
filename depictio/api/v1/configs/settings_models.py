@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -30,9 +31,29 @@ class ServiceConfig(BaseSettings):
 
     @property
     def url(self) -> str:
-        """Returns appropriate URL based on DEPICTIO_CONTEXT."""
+        # """Returns appropriate URL based on DEPICTIO_CONTEXT."""
         context = os.getenv("DEPICTIO_CONTEXT", "client")
-        return self.internal_url if context == "server" else self.external_url
+        # print(f"SETTINGS DEPICTIO_CONTEXT: {context}")
+        # return self.internal_url if context == "server" else self.external_url
+
+        # If running inside the server context we normally want to use the
+        # internal service URL for inter-service communication.  However when a
+        # ``public_url`` pointing to a remote MinIO/S3 instance is provided we
+        # must use that instead.  This allows the same configuration object to
+        # be used both from inside microservices and when connecting to an
+        # external S3 installation.
+        if context == "server":
+            if self.public_url:
+                host = urlparse(self.public_url).hostname or ""
+                if host not in {self.service_name, "localhost", "127.0.0.1"}:
+                    return self.public_url
+            return self.internal_url
+
+        return self.external_url
+
+    @property
+    def port(self) -> int:
+        return self.external_port
 
 
 class S3DepictioCLIConfig(ServiceConfig):
@@ -50,6 +71,23 @@ class S3DepictioCLIConfig(ServiceConfig):
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_MINIO_")
 
     # Backwards compatibility aliases
+    # def __init__(self, **data: object) -> None:
+    #     print(f"Data received in S3DepictioCLIConfig: {data}")
+    #     data.setdefault("public_url", f"{data['external_protocol']}://{data['external_host']}:{data['external_port']}")
+    #     data.setdefault("endpoint_url", data.get("public_url"))
+    #     super().__init__(**data)
+    # if endpoint_url:
+    # parsed = urlparse(endpoint_url)
+    # if parsed.scheme:
+    #     data.setdefault("external_protocol", parsed.scheme)
+    # if parsed.hostname:
+    #     data.setdefault("external_host", parsed.hostname)
+    # if parsed.port:
+    #     data.setdefault("external_port", parsed.port)
+
+    # super().__init__(**data)
+
+    # Backwards compatibility aliases
     @property
     def endpoint_url(self) -> str:
         """Returns URL for Polars and other S3 clients."""
@@ -58,10 +96,6 @@ class S3DepictioCLIConfig(ServiceConfig):
     @property
     def host(self) -> str:
         return self.external_host
-
-    @property
-    def port(self) -> int:
-        return self.external_port
 
     # Additional aliases for S3 compatibility
     @property
