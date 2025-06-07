@@ -7,6 +7,7 @@ from depictio.cli.cli.utils.scan import scan_files_for_data_collection
 from depictio.cli.cli_logging import logger
 from depictio.models.models.projects import Project, Workflow
 from depictio.models.models.users import CLIConfig
+from depictio.models.models.workflows import WorkflowRun
 
 
 @validate_call
@@ -16,7 +17,7 @@ def process_data_collection_helper(
     dc_id: str,
     command_parameters: dict = {},
     mode: str = "scan",
-) -> None:
+) -> list[WorkflowRun] | None:
     """_summary_
 
     Args:
@@ -90,6 +91,8 @@ def process_workflow_helper(
         f" ↪ {task} Workflow: [bold]{workflow.workflow_tag}[/bold]", "info"
     )
 
+    all_runs: list[WorkflowRun] = []
+
     for data_collection in workflow.data_collections:
         # Skip if a specific tag is provided and it doesn't match
         if (
@@ -102,13 +105,19 @@ def process_workflow_helper(
         # Process the matching data collection
         logger.info(f"{task} data collection: {data_collection.data_collection_tag}")
         dc_id = str(data_collection.id)
-        process_data_collection_helper(
+        runs = process_data_collection_helper(
             CLI_config=CLI_config,
             wf=workflow,
             dc_id=dc_id,
             command_parameters=command_parameters,
             mode=mode,
         )
+
+        if mode == "scan" and runs:
+            all_runs.extend(runs)
+
+    if mode == "scan" and all_runs:
+        rich_print_summary_scan_table(all_runs)
 
 
 @typechecked

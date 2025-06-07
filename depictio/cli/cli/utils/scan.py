@@ -405,13 +405,9 @@ def scan_run(
     if existing_run:
         logger.debug(f"Run {run_tag} already exists in the database.")
         logger.debug(f"Existing Run: {existing_run}")
+        workflow_run = existing_run
         if rescan_folders:
             logger.info(f"Reprocessing run {run_tag}...")
-            workflow_run = existing_run
-
-        else:
-            logger.info(f"Skipping existing run {run_tag}.")
-            return None
     else:
         workflow_run = WorkflowRun(
             workflow_id=workflow_id,
@@ -608,11 +604,9 @@ def scan_parent_folder(
     if structure == "direct-folder":
         # Treat the provided directory as a single run
         run_tag = os.path.basename(os.path.normpath(parent_runs_location))
-        if run_tag in existing_runs_reformated:
+        existing_run = existing_runs_reformated.get(run_tag)
+        if existing_run:
             logger.debug(f"Run {run_tag} already exists in the database.")
-            if not rescan_folders:
-                logger.debug(f"Skipping existing run {run_tag}.")
-                return []
         workflow_run = scan_run(
             run_location=parent_runs_location,
             run_tag=run_tag,
@@ -624,22 +618,19 @@ def scan_parent_folder(
             rescan_folders=rescan_folders,
             update_files=update_files,
             existing_files_reformated=existing_files_reformated_run,
-            existing_run=existing_runs_reformated.get(run_tag, None),
+            existing_run=existing_run,
         )
         runs.append(workflow_run)
     elif structure == "sequencing-runs":
         # Each subdirectory that matches the regex is a run
         for run in sorted(os.listdir(parent_runs_location)):
             logger.debug(f"Scanning run: {run} - Existing Runs: {existing_runs_reformated}")
-            if run in existing_runs_reformated:
+            existing_run = existing_runs_reformated.get(run)
+            if existing_run is not None:
                 logger.debug(f"Run {run} already exists in the database.")
-                logger.debug(f"Existing Run: {existing_runs_reformated[run]}")
-                if not rescan_folders:
-                    logger.debug(f"Skipping existing run {run}.")
-                    continue
+                logger.debug(f"Existing Run: {existing_run}")
             run_path = os.path.join(parent_runs_location, run)
             if os.path.isdir(run_path) and re.match(data_location.runs_regex, run):
-                existing_run = existing_runs_reformated.get(run, None)
                 if existing_run is not None:
                     # Optionally cast to WorkflowRun if needed:
                     non_null_run = cast(WorkflowRun, existing_run)
@@ -739,9 +730,10 @@ def scan_files_for_data_collection(
     data_collection_id: str,
     CLI_config: CLIConfig,
     command_parameters: dict,
-) -> None:
+) -> list[WorkflowRun]:
     """
-    Scan files for a given data collection of a workflow and track progress in the local TinyDB.
+    Scan files for a given data collection of a workflow and return the scanned
+    runs.
 
     Args:
         workflow (Workflow): The workflow configuration object.
@@ -905,11 +897,9 @@ def scan_files_for_data_collection(
             if runs_and_content:
                 api_upsert_runs_batch(runs_and_content, CLI_config, rescan_folders)
                 runs_stats.extend(runs_and_content)
-            rich_print_summary_scan_table(runs_stats)
             rich_print_checked_statement(
                 f"Scanned {len(runs_and_content)} runs in location {location}",
                 "success",
             )
-            return {
-                "result": "success",
-            }
+
+        return runs_stats
