@@ -180,6 +180,7 @@ class TestS3Utils:
             with patch.dict(os.environ, {"DEPICTIO_CONTEXT": "client"}):
                 # Modify the sample config
                 sample_s3_config.public_url = "https://custom-s3.example.com"
+                sample_s3_config.external_service = True
 
                 print(sample_s3_config.endpoint_url)
                 print(f"Sample config: {sample_s3_config}")
@@ -200,6 +201,7 @@ class TestS3Utils:
             with patch.dict(os.environ, {"DEPICTIO_CONTEXT": "server"}):
                 # Modify the sample config
                 sample_s3_config.public_url = "https://custom-s3.example.com"
+                sample_s3_config.external_service = True
 
                 print(sample_s3_config.endpoint_url)
                 print(f"Sample config: {sample_s3_config}")

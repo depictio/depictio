@@ -1,0 +1,64 @@
+image:
+  file: .gitpod.Dockerfile
+
+tasks:
+  - name: Setup shell
+    init: |
+      # Install zsh and starship
+      sudo apt-get update && sudo apt-get install -y zsh
+      curl -sS https://starship.rs/install.sh | sh -s -- -y
+      sudo chsh -s $(which zsh) $(whoami)
+      echo 'eval "$(starship init zsh)"' >> ~/.zshrc
+    command: zsh
+
+  - name: Configure Docker Permissions
+    init: |
+      # Create docker group if it doesn't exist
+      sudo groupadd docker || true
+      # Add user to docker group
+      sudo usermod -aG docker $USER || true
+      # Change docker socket permissions
+      sudo chmod 666 /var/run/docker.sock
+      # Export UID and GID for containers
+      echo "export UID=$(id -u)" >> ~/.zshrc
+      echo "export GID=$(id -g)" >> ~/.zshrc
+      # Create and set permissions for keys directory
+      mkdir -p depictio/keys && chmod -R 777 depictio/keys
+
+  - name: Start Depictio server
+    init: |
+      bash update-gitpod-env.sh
+      mkdir -p depictioDB minio_data && chmod -R 777 depictioDB minio_data
+      # Source environment for UID/GID
+      export UID=$(id -u)
+      export GID=$(id -g)
+      docker compose -f docker-compose.yaml -f docker-compose/docker-compose.minio.yaml up -d
+    command: docker compose logs -f depictio-backend depictio-frontend
+
+  - name: Setup Depictio CLI
+    init: |
+      cd depictio/cli
+      uv venv --python 3.11 venv
+      source venv/bin/activate
+      uv pip install -e .
+      depictio-cli --help
+    command: zsh
+
+ports:
+  - port: 5080
+    onOpen: open-preview
+    description: Depictio Frontend
+  - port: 8058
+    onOpen: open-preview
+    visibility: public
+    description: Depictio Backend
+  - port: 9000
+    onOpen: open-preview
+    visibility: public
+    description: MinIO
+  - port: 9001
+    onOpen: open-preview
+    description: MinIO Console
+  - port: 27018
+    onOpen: ignore
+    description: MongoDB
