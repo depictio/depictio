@@ -47,7 +47,4 @@ def update_cli_pyproject_version(version):
 if __name__ == "__main__":
     version = get_version_from_main_pyproject()
     update_cli_pyproject_version(version)
-    # If UPDATE_ONLY is set, skip building the package so the version can be
-    # synced for Poetry without running setuptools.
-    if os.environ.get("UPDATE_ONLY") != "1":
-        setup()
+    setup()
