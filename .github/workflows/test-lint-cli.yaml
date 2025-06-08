@@ -38,8 +38,6 @@ jobs:
       - name: Install CLI package
         run: |
           uv pip install -e .
-          cd depictio/cli
-          uv pip install -e .
 
       - name: Install quality check dependencies
         run: uv pip install ruff pytest pytest-xdist pytest-asyncio mongomock mongomock-motor build twine
