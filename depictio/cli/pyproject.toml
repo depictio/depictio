@@ -47,7 +47,14 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["../.."]
 include = [
-  "depictio.cli*",
-  "depictio.models*",
-  "depictio.api.*"
+  "depictio.cli",
+  "depictio.cli.cli",
+  "depictio.cli.cli.commands",
+  "depictio.cli.cli.utils",
+  "depictio.models",
+  "depictio.models.models",
+  "depictio.models.models.data_collections_types",
+  "depictio.api",                  # add
+  "depictio.api.v1",              # add
+  "depictio.api.v1.configs",      # add
 ]
