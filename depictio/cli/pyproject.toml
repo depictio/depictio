@@ -4,7 +4,7 @@ version = "0.0.5"
 description = "Depictio CLI to interact with the Depictio API"
 readme = "README.md"
 requires-python = ">=3.11"
-license = {text = "MIT"}
+license = "MIT"
 dependencies = [
   "boto3",
   "colorlog",
@@ -44,9 +44,8 @@ depictio-cli = "depictio.cli.depictio_cli:main"
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools.packages.find]
-where = ["../.."]
-include = [
+[tool.setuptools]
+packages = [
   "depictio.cli",
   "depictio.cli.cli",
   "depictio.cli.cli.commands",
@@ -54,7 +53,10 @@ include = [
   "depictio.models",
   "depictio.models.models",
   "depictio.models.models.data_collections_types",
-  "depictio.api",                  # add
-  "depictio.api.v1",              # add
-  "depictio.api.v1.configs",      # add
+  "depictio.api.v1.configs",
 ]
+
+[tool.setuptools.package-dir]
+"depictio.cli" = "."
+"depictio.models" = "../models"
+"depictio.api.v1.configs" = "../api/v1/configs"

@@ -53,11 +53,7 @@ jobs:
         run: pytest depictio/tests/cli depictio/tests/models -xvs -n auto
 
       - name: Build package
-        run: |
-          cd depictio/cli
-          python -m build
+        run: python -m build --wheel --outdir depictio/cli/dist depictio/cli/
 
       - name: Verify package
-        run: |
-          cd depictio/cli
-          twine check dist/*
+        run: twine check depictio/cli/dist/*
