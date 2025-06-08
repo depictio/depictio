@@ -46,6 +46,12 @@
 
 <!-- markdownlint-enable MD033 -->
 
+## Gitpod quickstart
+
+Start a ready-to-use workspace in your browser:
+
+[![Open in Gitpod](https://gitpod.io/button/open-in-gitpod.svg)](https://gitpod.io/#https://github.com/depictio/depictio)
+
 Depictio is a modern, interactive platform that enables dashboards creation from bioinformatics workflows outputs. The system is designed to be running through helm/kubernetes or docker-compose, and is built on top of FastAPI and Dash.
 
 **Homepage**: [depictio.github.io](https://depictio.github.io/depictio-docs/latest/)
