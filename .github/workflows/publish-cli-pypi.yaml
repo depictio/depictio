@@ -3,8 +3,8 @@ name: Publish depictio-cli to PyPI
 on:
   push:
     tags:
-      - 'cli-v*.*.*'
-      - 'cli-v*.*.*-beta*'
+      - 'v*.*.*'
+      - 'v*.*.*-beta*'
   workflow_dispatch:
 
 jobs:
@@ -12,6 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      id-token: write  # For trusted publishing
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -21,22 +23,25 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install Poetry
+      - name: Install build dependencies
         run: |
-          python -m pip install --upgrade poetry
+          python -m pip install --upgrade pip
+          python -m pip install build twine
 
-      - name: Sync version to CLI pyproject
-        run: |
-          UPDATE_ONLY=1 python depictio/cli/setup.py
-
-      - name: Build depictio-cli package
+      - name: Build package
         run: |
           cd depictio/cli
-          poetry build
+          python -m build
+
+      - name: Verify build
+        run: |
+          cd depictio/cli
+          python -m twine check dist/*
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           password: ${{ secrets.PYPI_API_TOKEN }}
-          packages_dir: depictio/cli/dist
-          skip_existing: true
+          packages-dir: depictio/cli/dist/
+          skip-existing: true
+          verify-metadata: true
