@@ -23,13 +23,8 @@ ingress:
         - path: /api
           pathType: ImplementationSpecific
           service:
-            name: api
+            name: depictio-backend
             port: 80
-        - path: /minio
-          pathType: ImplementationSpecific
-          service:
-            name: minio
-            port: 9000
 
   # TLS configuration
   tls:
