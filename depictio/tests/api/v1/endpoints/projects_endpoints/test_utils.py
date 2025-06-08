@@ -144,7 +144,7 @@ class TestProjectCreation:
         assert retrieved_project_dict["name"] == sample_project.name
         assert "_id" in retrieved_project_dict
         assert len(retrieved_project_dict["workflows"]) == len(sample_project.workflows)
-        assert retrieved_project_dict["is_public"] is False
+        assert retrieved_project_dict["is_public"] is True
         assert len(retrieved_project_dict["permissions"]["owners"]) == 1
         assert retrieved_project_dict["permissions"]["owners"][0]["email"] == "test@example.com"
 
