@@ -165,7 +165,7 @@ def align_lazy_schemas(lazy_frames: list) -> list:
     unified_schema = {}
     for lf in lazy_frames:
         # Use the known schema from the LazyFrame (a dict: {col: dtype})
-        schema = lf.schema
+        schema = lf.collect_schema()
         for col, dtype in schema.items():
             if col not in unified_schema:
                 unified_schema[col] = dtype
@@ -179,7 +179,8 @@ def align_lazy_schemas(lazy_frames: list) -> list:
     for lf in lazy_frames:
         exprs = []
         for col, dtype in unified_schema.items():
-            if col in lf.columns:
+            column_names = lf.collect_schema().names()
+            if col in column_names:
                 exprs.append(pl.col(col).cast(dtype).alias(col))
             else:
                 # Create a null literal for the missing column.
@@ -240,6 +241,7 @@ def write_delta_table(
     logger.debug(f"Aggregated DataFrame schema: {aggregated_df.schema}")
     logger.debug(f"Aggregated DataFrame head: {aggregated_df.head(5)}")
     logger.debug(f"Storage options: {storage_options}")
+
     aggregated_df.write_delta(
         destination_file,
         storage_options=storage_options.model_dump(),
@@ -318,29 +320,30 @@ def client_aggregate_data(
 
     if command_parameters:
         overwrite = command_parameters.get("overwrite", False)
+        rich_tables = command_parameters.get("rich_tables", False)
     else:
         overwrite = False
     # Generate destination prefix using the data collection id - should be a S3 path
     destination_prefix = f"s3://{CLI_config.s3.bucket}/{str(data_collection.id)}"
     logger.debug(f"Destination prefix: {destination_prefix}")
-    print(f"Destination prefix: {destination_prefix}")
+    # logger.info(f"Destination prefix: {destination_prefix}")
 
     # Check if existing Delta table exists and is accessible
     storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3)
     logger.debug(f"Storage options: {storage_options}")
-    print(f"Storage options: {storage_options}")
+    # logger.info(f"Storage options: {storage_options}")
 
     # if destination_prefix is not a valid S3 path, raise an error
     if not destination_prefix.startswith("s3://"):
         raise ValueError("Invalid destination prefix. It should be an S3 path.")
 
     destination_exists = False
-    print("Checking if destination Delta table exists.")
-    print(f"Destination prefix: {destination_prefix}")
-    print(f"Storage options: {storage_options}")
+    logger.info("Checking if destination Delta table exists.")
+    # logger.info(f"Destination prefix: {destination_prefix}")
+    # logger.info(f"Storage options: {storage_options}")
     try:
         response_read_table = read_delta_table(destination_prefix, storage_options=storage_options)
-        print(f"Response read table: {response_read_table}")
+        # logger.info(f"Response read table: {response_read_table}")
 
         if response_read_table["result"] == "success" and "data" in response_read_table:
             existing_df = response_read_table["data"]
@@ -351,12 +354,11 @@ def client_aggregate_data(
         else:
             logger.debug("No data returned from read_delta_table, will create it during processing")
             destination_exists = False
-            print("No data returned, will create it during processing")
+            logger.warning("No data returned, will create it during processing")
     except deltalake.exceptions.TableNotFoundError:
-        logger.debug("Destination prefix does not exist yet, will create it during processing")
         destination_exists = False
-        print("Destination prefix does not exist yet, will create it during processing")
-    print(f"Destination exists: {destination_exists}")
+        logger.warning("Destination prefix does not exist yet, will create it during processing")
+    # logger.info(f"Destination exists: {destination_exists}")
 
     # if destination_exists:
 
@@ -372,18 +374,18 @@ def client_aggregate_data(
 
     dc_id = data_collection.id
     data_collection_config = data_collection.config
-    print(f"Data Collection ID: {dc_id}")
+    # logger.info(f"Data Collection ID: {dc_id}")
     logger.debug(f"Aggregating data for Data Collection {dc_id}.")
     logger.debug(f"Data Collection config: {data_collection_config}")
 
     # 1. Fetch file data from the server
     files = fetch_file_data(str(dc_id), CLI_config)
     logger.debug(f"Files data: {files}")
-    print(f"Files data: {files}")
+    # logger.info(f"Files data: {files}")
 
     # 3. Read files using Polars
     data_collection_config = convert_objectid_to_str(data_collection_config.model_dump())
-    print(f"Data Collection config: {data_collection_config}")
+    # logger.info(f"Data Collection config: {data_collection_config}")
     logger.debug(f"Data Collection config: {data_collection_config}")
     dc_props = data_collection_config.get("dc_specific_properties", {})
     file_format = dc_props.get("format", "csv").lower()
@@ -402,15 +404,29 @@ def client_aggregate_data(
         logger.info("Overwriting existing Delta table")
     else:
         rich_print_checked_statement(
-            "Destination does not exist, will create it during processing", "info"
+            "S3 Destination does not exist, will create it during processing", "info"
         )
-        logger.info("Destination does not exist, will create it during processing")
+        logger.info("S3 Destination does not exist, will create it during processing")
 
     result = write_delta_table(
         aggregated_df=aggregated_df,
         destination_file=destination_prefix,
         storage_options=storage_options,
     )
+
+    extended = True if rich_tables else False
+
+    if rich_tables:
+        aggregated_df.rich(
+            title="Aggregated DataFrame - {data_collection.data_collection_tag}",
+            max_rows=10,
+            max_cols=10,
+            show_dtypes=True,
+        )
+
+        aggregated_df.rich_describe()
+
+    aggregated_df.rich_info(extended)
 
     # 6. Upsert object in the remote DB
     api_upsert_result = api_upsert_deltatable(
@@ -431,5 +447,5 @@ def client_aggregate_data(
 
     return {
         "result": "success",
-        "message": f"Aggregated data successfully written to {destination_prefix}.",
+        "message": f"Aggregated data written to {destination_prefix}.",
     }

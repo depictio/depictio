@@ -2,6 +2,7 @@ import os
 import re
 from datetime import datetime
 from pathlib import Path
+from typing import Dict, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -75,6 +76,7 @@ class WorkflowRunScan(BaseModel):
     stats: dict[str, int]
     files_id: dict[str, list[PyObjectId]]
     scan_time: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    dc_stats: Optional[Dict[str, Dict[str, int]]] = None  # Per-data-collection stats
 
 
 class WorkflowRun(MongoModel):
@@ -89,6 +91,7 @@ class WorkflowRun(MongoModel):
     run_hash: str = ""
     scan_results: list[WorkflowRunScan] | None = []
     permissions: Permission
+    _dc_stats_for_display: Optional[Dict[str, Dict[str, int]]] = None  # Per-data-collection stats
 
     @field_validator("run_location", mode="after")
     def validate_and_recast_parent_runs_location(cls, value):
