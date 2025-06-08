@@ -1,0 +1,41 @@
+image:
+  file: .gitpod.Dockerfile
+
+tasks:
+  - name: Start Depictio server
+    init: |
+      cp .env.example .env
+      mkdir -p depictioDB minio_data
+      docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up --build -d
+    command: docker compose logs -f depictio-backend depictio-frontend
+  - name: Setup Depictio CLI
+    init: |
+      cd depictio/cli
+      uv venv --python 3.11 venv
+      source venv/bin/activate
+      uv pip install -e .
+      depictio-cli --help
+    command: bash
+
+ports:
+  - port: 5080
+    onOpen: open-preview
+    description: Depictio Frontend
+  - port: 8058
+    onOpen: open-preview
+    description: Depictio Backend
+  - port: 9000
+    onOpen: open-preview
+    description: MinIO
+  - port: 9001
+    onOpen: open-preview
+    description: MinIO Console
+  - port: 27018
+    onOpen: ignore
+    description: MongoDB
+  - port: 3000
+    onOpen: ignore
+    description: JBrowse Client
+  - port: 9010
+    onOpen: ignore
+    description: JBrowse Plugin
