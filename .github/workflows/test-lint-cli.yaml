@@ -1,0 +1,71 @@
+name: Test, Lint and Build depictio-cli
+
+on:
+  push:
+    paths:
+      - 'depictio/cli/**'
+      - 'depictio/models/**'
+      - 'depictio/api/v1/configs/**'
+  pull_request:
+    paths:
+      - 'depictio/cli/**'
+      - 'depictio/models/**'
+      - 'depictio/api/v1/configs/**'
+  workflow_dispatch:
+
+jobs:
+  test-lint-build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pre-commit pytest build twine
+
+      - name: Cache pre-commit environments
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      - name: Run pre-commit hooks
+        run: |
+          pre-commit run --files depictio/cli/** depictio/models/** depictio/api/v1/configs/**
+
+      - name: Install CLI package in development mode
+        run: |
+          cd depictio/cli
+          python -m pip install -e .
+
+      - name: Run pytest
+        run: |
+          cd depictio/cli
+          python -m pytest tests/ -v --tb=short
+
+      - name: Build package
+        run: |
+          cd depictio/cli
+          python -m build
+
+      - name: Verify package
+        run: |
+          cd depictio/cli
+          python -m twine check dist/*
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: depictio-cli-dist
+          path: depictio/cli/dist/
+          retention-days: 7
