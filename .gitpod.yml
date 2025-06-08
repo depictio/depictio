@@ -44,16 +44,17 @@ tasks:
       depictio-cli --help
     command: zsh
 
-
 ports:
   - port: 5080
     onOpen: open-preview
     description: Depictio Frontend
   - port: 8058
     onOpen: open-preview
+    visibility: public
     description: Depictio Backend
   - port: 9000
     onOpen: open-preview
+    visibility: public
     description: MinIO
   - port: 9001
     onOpen: open-preview
