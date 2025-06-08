@@ -31,12 +31,14 @@ class ServiceConfig(BaseSettings):
 
     @property
     def url(self) -> str:
-        context = os.getenv("DEPICTIO_CONTEXT", "client")
+        context = os.getenv("DEPICTIO_CONTEXT", "server")
 
         if context == "server":
             # Use public_url only for truly external services
             if self.public_url and self.external_service:
                 return self.public_url
+
+            print(f"Using internal URL for service {self.service_name}: {self.internal_url}")
             return self.internal_url
 
         return self.external_url
