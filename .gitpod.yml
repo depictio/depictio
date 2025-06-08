@@ -2,12 +2,29 @@ image:
   file: .gitpod.Dockerfile
 
 tasks:
+  - name: Setup shell
+    init: |
+      # Install zsh and starship
+      sudo apt-get update && sudo apt-get install -y zsh
+      curl -sS https://starship.rs/install.sh | sh -s -- -y
+
+      # Set zsh as default
+      sudo chsh -s $(which zsh) $(whoami)
+
+      # Setup starship
+      echo 'eval "$(starship init zsh)"' >> ~/.zshrc
+
+      # Copy your config if you have one
+      curl -o ~/.config/starship.toml https://raw.githubusercontent.com/yourusername/dotfiles/main/starship.toml
+    command: zsh
+
   - name: Start Depictio server
     init: |
       cp .env.example .env
       mkdir -p depictioDB minio_data
       docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up --build -d
     command: docker compose logs -f depictio-backend depictio-frontend
+
   - name: Setup Depictio CLI
     init: |
       cd depictio/cli
@@ -15,7 +32,7 @@ tasks:
       source venv/bin/activate
       uv pip install -e .
       depictio-cli --help
-    command: bash
+    command: zsh
 
 ports:
   - port: 5080
@@ -33,9 +50,3 @@ ports:
   - port: 27018
     onOpen: ignore
     description: MongoDB
-  - port: 3000
-    onOpen: ignore
-    description: JBrowse Client
-  - port: 9010
-    onOpen: ignore
-    description: JBrowse Plugin
