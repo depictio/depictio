@@ -51,6 +51,11 @@ jobs:
           driver: docker
           start-args: '--memory=4096 --cpus=2'
 
+      - name: Enable ingress addon
+        run: |
+          minikube addons enable ingress
+          kubectl rollout status deployment/ingress-nginx-controller -n ingress-nginx --timeout=120s
+
       - name: Build Docker image
         run: |
           eval $(minikube docker-env)
@@ -84,6 +89,8 @@ jobs:
           helm upgrade --install depictio ./helm-charts/depictio \
             -f ./helm-charts/depictio/values.yaml \
             -f ./helm-charts/depictio/values-gh-actions.yaml \
+            --set ingress.enabled=true \
+            --set global.domain=example.test \
             --set backend.image.repository=depictio \
             --set backend.image.tag=${{ steps.chart-info.outputs.app_version }} \
             --set backend.image.pullPolicy=Never \
@@ -110,27 +117,18 @@ jobs:
           kubectl logs -l app=depictio-backend --tail=50 || true
           kubectl logs -l app=depictio-frontend --tail=50 || true
 
-      - name: Test Service Connectivity
+      - name: Test Ingress Connectivity
         run: |
-          echo "Setting up port forwarding to frontend service..."
-          kubectl port-forward svc/depictio-frontend 8080:80 &
-          PID_FRONTEND=$!
-          sleep 5
+          kubectl port-forward -n ingress-nginx svc/ingress-nginx-controller 8080:80 &
+          PID=$!
+          sleep 10
 
-          echo "Testing frontend service..."
-          FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080 || echo "000")
-          echo "Frontend status: $FRONTEND_STATUS"
+          for host in "depictio.example.test" "depictio-api.example.test" "depictio-minio.example.test"; do
+            status=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: $host" http://localhost:8080/ || echo "000")
+            echo "$host status: $status"
+          done
 
-          echo "Setting up port forwarding to backend service..."
-          kubectl port-forward svc/depictio-backend 8081:80 &
-          PID_BACKEND=$!
-          sleep 5
-
-          echo "Testing backend service..."
-          BACKEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081 || echo "000")
-          echo "Backend status: $BACKEND_STATUS"
-
-          kill $PID_FRONTEND $PID_BACKEND || true
+          kill $PID || true
 
       - name: Test install from package
         run: |
@@ -143,6 +141,8 @@ jobs:
           # Install from packaged chart
           helm install depictio-pkg ./depictio-${{ steps.chart-info.outputs.chart_version }}.tgz \
             -f ./helm-charts/depictio/values-gh-actions.yaml \
+            --set ingress.enabled=true \
+            --set global.domain=example.test \
             --set backend.image.repository=depictio \
             --set backend.image.tag=${{ steps.chart-info.outputs.app_version }} \
             --set backend.image.pullPolicy=Never \
