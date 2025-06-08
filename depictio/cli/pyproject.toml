@@ -49,5 +49,5 @@ where = ["../.."]
 include = [
   "depictio.cli*",
   "depictio.models*",
-  "depictio.api.v1.configs*"
+  "depictio.api.*"
 ]
