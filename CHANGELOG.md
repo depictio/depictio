@@ -1,5 +1,17 @@
 # Changelog
 
+Generating changelog from v0.0.5-beta2 to v0.0.5
+## Docker Images
+
+
+## Changes
+
+
+## Documentation
+Full documentation: https://depictio.github.io/depictio-docs/
+
+# Changelog
+
 Generating changelog from v0.0.4 to v0.0.5-beta2
 ## Docker Images
 
