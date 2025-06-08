@@ -219,7 +219,25 @@ jobs:
 
           echo "✅ Users verified: $ADMIN_USER, $TEST_USER"
 
-  iris-integration:
+      - name: Verify Iris integration from system initialization
+        run: |
+          # Verify project
+          IRIS_PROJECT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find().toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.name == "Iris Dataset Project Data Analysis CLI") | .name')
+          [ -z "$IRIS_PROJECT" ] && echo "❌ Iris project not found" && exit 1
+
+          # Verify deltatable
+          IRIS_DC_ID=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find().toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.name == "Iris Dataset Project Data Analysis CLI") | .workflows[0].data_collections[0]._id')
+          IRIS_DT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.deltatables.find({\"data_collection_id\": ObjectId(\"$IRIS_DC_ID\")}).toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[]._id // empty')
+          [ -z "$IRIS_DT" ] && echo "❌ Iris deltatable not found" && exit 1
+
+          # Verify dashboard
+          IRIS_PID=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find().toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.name == "Iris Dataset Project Data Analysis CLI") | ._id')
+          IRIS_DASH=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.dashboards.find({\"project_id\": ObjectId(\"$IRIS_PID\")}).toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[]._id // empty')
+          [ -z "$IRIS_DASH" ] && echo "❌ Iris dashboard not found" && exit 1
+
+          echo "✅ Iris integration verified: Project=$IRIS_PROJECT, DT=$IRIS_DT, Dashboard=$IRIS_DASH"
+
+  cli-iris-single-file-test:
     needs: [docker-build]
     runs-on: ubuntu-22.04
     permissions:
@@ -283,7 +301,7 @@ jobs:
             --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
             --CLI-config-path admin_config.yaml
 
-      - name: Verify Iris integration
+      - name: Verify Iris integration from CLI
         run: |
           # Verify project
           IRIS_PROJECT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find().toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.name == "Iris Dataset Project Data Analysis CLI") | .name')
@@ -294,12 +312,8 @@ jobs:
           IRIS_DT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.deltatables.find({\"data_collection_id\": ObjectId(\"$IRIS_DC_ID\")}).toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[]._id // empty')
           [ -z "$IRIS_DT" ] && echo "❌ Iris deltatable not found" && exit 1
 
-          # Verify dashboard
-          IRIS_PID=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find().toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.name == "Iris Dataset Project Data Analysis CLI") | ._id')
-          IRIS_DASH=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.dashboards.find({\"project_id\": ObjectId(\"$IRIS_PID\")}).toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[]._id // empty')
-          [ -z "$IRIS_DASH" ] && echo "❌ Iris dashboard not found" && exit 1
 
-          echo "✅ Iris integration verified: Project=$IRIS_PROJECT, DT=$IRIS_DT, Dashboard=$IRIS_DASH"
+          echo "✅ Iris integration verified: Project=$IRIS_PROJECT, DT=$IRIS_DT"
 
       - name: Upload logs on failure
         if: failure()
@@ -315,7 +329,7 @@ jobs:
           path: iris-logs.txt
           retention-days: 7
 
-  penguin-integration:
+  cli-penguin-multi-file-test:
     needs: [docker-build]
     runs-on: ubuntu-22.04
     permissions:
@@ -379,7 +393,7 @@ jobs:
             --CLI-config-path admin_config.yaml
 
           # Test full pipeline run
-          sed -i "s/^project_name: .*/project_name: 'Palmer Penguins Species Comparison - RUN'/" ../api/v1/configs/penguins_dataset/penguins_project.yaml
+          sed -i 's/name: "Palmer Penguins Species Comparison"/name: "Palmer Penguins Species Comparison - RUN"/g' ../api/v1/configs/penguins_dataset/penguins_project.yaml
           depictio-cli run \
             --CLI-config-path admin_config.yaml \
             --project-config-path ../api/v1/configs/penguins_dataset/penguins_project.yaml
@@ -416,8 +430,7 @@ jobs:
           retention-days: 7
 
   e2e-tests:
-    needs:
-      [docker-build]
+    needs: [docker-build]
     runs-on: ubuntu-22.04
     permissions:
       contents: read
