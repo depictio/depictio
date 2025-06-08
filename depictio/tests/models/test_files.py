@@ -9,6 +9,13 @@ from depictio.models.models.files import File
 from depictio.models.models.users import Permission, UserBase
 
 
+@pytest.fixture(autouse=True)
+def set_depictio_context(monkeypatch):
+    """Set DEPICTIO_CONTEXT for all tests in the module."""
+    monkeypatch.setattr("depictio.models.config.DEPICTIO_CONTEXT", "server")
+    monkeypatch.setattr("depictio.models.models.files.DEPICTIO_CONTEXT", "server")
+
+
 class TestFileModel:
     """Test suite for File model validation."""
 
@@ -92,7 +99,6 @@ class TestFileModel:
         with pytest.raises(ValidationError, match="Invalid datetime format"):
             File(**valid_file_data)
 
-    @patch("depictio.models.models.files.DEPICTIO_CONTEXT", "cli")
     @patch("os.path.exists")
     @patch("os.path.isfile")
     @patch("os.access")
@@ -116,7 +122,6 @@ class TestFileModel:
         with pytest.raises(ValidationError, match="does not exist"):
             File(**valid_file_data)
 
-    @patch("depictio.models.config.DEPICTIO_CONTEXT", "server")
     def test_file_location_validation_server_context(self, valid_file_data):
         """Test file location validation in server context."""
         # In server context, file existence is not checked

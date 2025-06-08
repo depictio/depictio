@@ -19,6 +19,13 @@ from depictio.models.models.users import Permission, UserBase
 from depictio.models.models.workflows import WorkflowRun
 
 
+@pytest.fixture(autouse=True)
+def set_depictio_context(monkeypatch):
+    """Set DEPICTIO_CONTEXT for all tests in the module."""
+    monkeypatch.setattr("depictio.models.config.DEPICTIO_CONTEXT", "server")
+    monkeypatch.setattr("depictio.models.models.files.DEPICTIO_CONTEXT", "server")
+
+
 class TestRegexMatch:
     """Test suite for regex_match function."""
 
@@ -47,11 +54,11 @@ class TestRegexMatch:
             permissions=permissions,
         )
 
-    @pytest.fixture(autouse=True)
-    def set_depictio_context(self, monkeypatch):
-        """Set DEPICTIO_CONTEXT for all tests."""
-        monkeypatch.setattr("depictio.models.config.DEPICTIO_CONTEXT", "server")
-        monkeypatch.setattr("depictio.models.models.files.DEPICTIO_CONTEXT", "server")
+    # @pytest.fixture(autouse=True)
+    # def set_depictio_context(self, monkeypatch):
+    #     """Set DEPICTIO_CONTEXT for all tests."""
+    #     monkeypatch.setattr("depictio.models.config.DEPICTIO_CONTEXT", "server")
+    #     monkeypatch.setattr("depictio.models.models.files.DEPICTIO_CONTEXT", "server")
 
     def test_simple_match_success(self, sample_file):
         """Test successful regex match with simple pattern."""

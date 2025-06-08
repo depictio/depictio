@@ -417,7 +417,7 @@ jobs:
 
   e2e-tests:
     needs:
-      [docker-build, docker-system-init, iris-integration, penguin-integration]
+      [docker-build, docker-system-init]
     runs-on: ubuntu-22.04
     permissions:
       contents: read
