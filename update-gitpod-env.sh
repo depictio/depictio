@@ -1,12 +1,10 @@
 #!/bin/bash
 
-GITPOD_WORKSPACE_URL="https://depictio-depictio-o9nvs480r0x.ws-eu120.gitpod.io"
-
 WORKSPACE_URL=${GITPOD_WORKSPACE_URL#https://}
-WORKSPACE_ID=$(echo $GITPOD_WORKSPACE_URL | cut -d'-' -f2- | cut -d'.' -f1)
+WORKSPACE_ID=$(echo "$GITPOD_WORKSPACE_URL" | cut -d'-' -f2- | cut -d'.' -f1)
 MINIO_PASSWORD=$(openssl rand -base64 32)
 
-cat > .env << EOF
+cat >.env <<EOF
 # GitPod Dynamic Configuration
 
 ## MinIO Configuration
