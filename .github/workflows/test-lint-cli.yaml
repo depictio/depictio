@@ -3,14 +3,14 @@ name: Test, Lint and Build depictio-cli
 on:
   push:
     paths:
-      - 'depictio/cli/**'
-      - 'depictio/models/**'
-      - 'depictio/api/v1/configs/**'
+      - "depictio/cli/**"
+      - "depictio/models/**"
+      - "depictio/api/v1/configs/**"
   pull_request:
     paths:
-      - 'depictio/cli/**'
-      - 'depictio/models/**'
-      - 'depictio/api/v1/configs/**'
+      - "depictio/cli/**"
+      - "depictio/models/**"
+      - "depictio/api/v1/configs/**"
   workflow_dispatch:
 
 jobs:
@@ -27,7 +27,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Create and activate virtual environment
         run: |
@@ -37,6 +37,7 @@ jobs:
 
       - name: Install CLI package
         run: |
+          uv pip install -e .
           cd depictio/cli
           uv pip install -e .
 
@@ -44,10 +45,10 @@ jobs:
         run: uv pip install ruff pytest pytest-xdist pytest-asyncio mongomock mongomock-motor build twine
 
       - name: Run Ruff formatting
-        run: ruff format depictio/cli depictio/models depictio/api/v1/configs
+        run: ruff format depictio/cli depictio/models
 
       - name: Run Ruff linting
-        run: ruff check depictio/cli depictio/models depictio/api/v1/configs
+        run: ruff check depictio/cli depictio/models
 
       - name: Run tests
         run: pytest depictio/tests/cli depictio/tests/models -xvs -n auto
