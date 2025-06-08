@@ -7,21 +7,29 @@ tasks:
       # Install zsh and starship
       sudo apt-get update && sudo apt-get install -y zsh
       curl -sS https://starship.rs/install.sh | sh -s -- -y
-
-      # Set zsh as default
       sudo chsh -s $(which zsh) $(whoami)
-
-      # Setup starship
       echo 'eval "$(starship init zsh)"' >> ~/.zshrc
-
-      # Copy your config if you have one
-      curl -o ~/.config/starship.toml https://raw.githubusercontent.com/yourusername/dotfiles/main/starship.toml
     command: zsh
+
+  - name: Configure Docker Permissions
+    init: |
+      # Add user to docker group
+      sudo usermod -aG docker $USER || true
+      # Change docker socket permissions
+      sudo chmod 666 /var/run/docker.sock
+      # Export UID and GID for containers
+      echo "export UID=$(id -u)" >> ~/.zshrc
+      echo "export GID=$(id -g)" >> ~/.zshrc
+      # Create and set permissions for keys directory
+      mkdir -p depictio/keys && chmod -R 777 depictio/keys
 
   - name: Start Depictio server
     init: |
       cp .env.example .env
-      mkdir -p depictioDB minio_data
+      mkdir -p depictioDB minio_data && chmod -R 777 depictioDB minio_data
+      # Source environment for UID/GID
+      export UID=$(id -u)
+      export GID=$(id -g)
       docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up --build -d
     command: docker compose logs -f depictio-backend depictio-frontend
 
@@ -33,6 +41,7 @@ tasks:
       uv pip install -e .
       depictio-cli --help
     command: zsh
+
 
 ports:
   - port: 5080
