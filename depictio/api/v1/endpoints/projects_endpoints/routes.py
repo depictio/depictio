@@ -81,6 +81,7 @@ async def get_project_from_dashboard_id(
             {"permissions.owners._id": current_user.id},
             {"permissions.viewers._id": current_user.id},
             {"permissions.viewers": "*"},  # This makes projects with "*" publicly accessible
+            {"is_public": True},  # Allow public access if the project is public
         ],
     }
     response = dashboards_collection.find_one(query)

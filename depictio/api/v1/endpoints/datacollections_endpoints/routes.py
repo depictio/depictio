@@ -49,6 +49,7 @@ async def specs(
                     {"permissions.owners._id": current_user.id},
                     {"permissions.viewers._id": current_user.id},
                     {"permissions.viewers": "*"},
+                    {"is_public": True},  # Public projects^
                 ],
             }
         },
@@ -193,6 +194,7 @@ async def get_tag_from_id(
                     {"permissions.owners._id": current_user.id},
                     {"permissions.viewers._id": current_user.id},
                     {"permissions.viewers": "*"},
+                    {"is_public": True},  # Allow public access if the data collection is public
                 ],
             }
         },

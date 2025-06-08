@@ -40,6 +40,7 @@ async def get_all_workflows(current_user: str = Depends(get_current_user)):
             {"permissions.owners._id": user_id},
             {"permissions.viewers._id": user_id},
             {"permissions.viewers": "*"},  # This makes workflows with "*" publicly accessible
+            {"is_public": True},  # This makes workflows with is_public: True publicly accessible
         ]
     }
 
@@ -106,6 +107,7 @@ async def get_workflow_from_args(
             {"permissions.owners._id": user_id},
             {"permissions.viewers._id": user_id},
             {"permissions.viewers": "*"},  # This makes workflows with "*" publicly accessible
+            {"is_public": True},  # This makes workflows with is_public: True publicly accessible
         ]
     }
 
@@ -180,6 +182,9 @@ async def get_workflow_from_id(workflow_id: str, current_user: str = Depends(get
                     {"permissions.owners._id": current_user.id},
                     {"permissions.viewers._id": current_user.id},
                     {"permissions.viewers": "*"},
+                    {
+                        "is_public": True
+                    },  # This makes workflows with is_public: True publicly accessible
                 ],
             }
         },
@@ -227,6 +232,9 @@ async def get_workflow_tag_from_id(workflow_id: str, current_user: str = Depends
                     {"permissions.owners._id": current_user.id},
                     {"permissions.viewers._id": current_user.id},
                     {"permissions.viewers": "*"},
+                    {
+                        "is_public": True
+                    },  # This makes workflows with is_public: True publicly accessible
                 ],
             }
         },

@@ -30,6 +30,7 @@ def return_project_object(user_id: str, project_id: str, permissions: dict | Non
                 {"permissions.owners._id": user_id},
                 {"permissions.viewers._id": user_id},
                 {"permissions.viewers": "*"},  # This makes projects with "*" publicly accessible
+                {"is_public": True},  # Public projects
             ],
         }
 
@@ -77,6 +78,7 @@ def validate_workflow_and_collection(
                 {"permissions.owners._id": user_id},
                 {"permissions.viewers._id": user_id},
                 {"permissions.viewers": "*"},  # This makes workflows with "*" publicly accessible
+                {"is_public": True},  # Public workflows
             ],
         }
 

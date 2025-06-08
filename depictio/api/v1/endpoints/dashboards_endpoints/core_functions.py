@@ -38,6 +38,7 @@ def load_dashboards_from_db(owner, admin_mode=False):
                     "$or": [
                         {"permissions.owners._id": ObjectId(owner)},
                         {"permissions.viewers._id": ObjectId(owner)},
+                        {"is_public": True},
                     ]
                 },
                 projection,

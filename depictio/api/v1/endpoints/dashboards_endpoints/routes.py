@@ -36,6 +36,7 @@ async def get_dashboard(
             {"permissions.owners._id": user_id},
             {"permissions.viewers._id": user_id},
             {"permissions.viewers": {"$in": ["*"]}},
+            {"is_public": True},  # Allow public dashboards to be fetched
         ],
     }
 
@@ -409,6 +410,7 @@ async def get_component_data_endpoint(
             {"permissions.owners._id": user_id},
             {"permissions.viewers._id": user_id},
             {"permissions.viewers": "*"},
+            {"is_public": True},  # Allow public dashboards to be fetched
         ],
     }
 

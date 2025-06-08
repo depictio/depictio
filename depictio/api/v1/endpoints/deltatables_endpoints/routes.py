@@ -56,6 +56,7 @@ async def upsert_deltatable(
         "$or": [
             {"permissions.owners._id": current_user.id},
             {"permissions.is_admin": True},
+            {"is_public": True},  # Public projects
         ],
         "workflows.data_collections._id": data_collection_oid,
     }
@@ -298,7 +299,11 @@ async def delete_deltatable(
 
     # Check if the user is an admin or has permissions over the project by looking at the data_collection id by looking at the projects_collection
     query = {
-        "$or": [{"permissions.owners._id": user_oid}, {"permissions.is_admin": True}],
+        "$or": [
+            {"permissions.owners._id": user_oid},
+            {"permissions.is_admin": True},
+            {"is_public": True},
+        ],
         "data_collections._id": data_collection_oid,
     }
     logger.info(query)
