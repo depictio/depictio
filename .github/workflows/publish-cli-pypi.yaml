@@ -1,0 +1,42 @@
+name: Publish depictio-cli to PyPI
+
+on:
+  push:
+    tags:
+      - 'cli-v*.*.*'
+      - 'cli-v*.*.*-beta*'
+  workflow_dispatch:
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Poetry
+        run: |
+          python -m pip install --upgrade poetry
+
+      - name: Sync version to CLI pyproject
+        run: |
+          UPDATE_ONLY=1 python depictio/cli/setup.py
+
+      - name: Build depictio-cli package
+        run: |
+          cd depictio/cli
+          poetry build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          packages_dir: depictio/cli/dist
+          skip_existing: true

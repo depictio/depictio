@@ -50,9 +50,49 @@ lts-cpu = ["polars-lts-cpu"]
 [project.scripts]
 depictio-cli = "depictio.cli.depictio_cli:main"
 
+
+[tool.poetry]
+name = "depictio-cli"
+version = "0.0.5-beta2"
+description = "Depictio CLI to interact with the Depictio API"
+authors = ["Thomas Weber <thomas.weber@embl.de>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.11"
+boto3 = "*"
+colorlog = "*"
+httpx = "0.28.1"
+devtools = "*"
+polars = { extras = ["numpy", "pandas", "pyarrow", "excel", "deltalake"], version = "1.22.0" }
+deltalake = "0.24.0"
+python-jose = "*"
+pyyaml = "*"
+typer = "*"
+click = ">=8.0.0,<8.2.0"
+typeguard = "*"
+tomli = "*"
+rich = "*"
+"pydantic[email]" = ">=2.0.0"
+"pydantic-settings" = ">=2.0.0"
+beanie = "*"
+python-dotenv = "*"
+bleach = "*"
+packaging = "*"
+polars-lts-cpu = { version = "*", optional = true }
+
+[tool.poetry.extras]
+lts-cpu = ["polars-lts-cpu"]
+
+[tool.poetry.scripts]
+depictio-cli = "depictio.cli.depictio_cli:main"
+
+[tool.poetry.packages]
+include = "depictio"
+
 [build-system]
-requires = ["setuptools>=61", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["poetry-core>=1.5.0"]
+build-backend = "poetry.core.masonry.api"
 
 [tool.setuptools]
 package-dir = { "" = "../.." }

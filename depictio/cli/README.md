@@ -18,6 +18,29 @@ cd depictio/cli
 pip install -e .
 ```
 
+### From PyPI
+
+Install the latest published version with:
+
+```bash
+pip install depictio-cli
+```
+
+For systems that require the LTS polars build:
+
+```bash
+pip install "depictio-cli[lts-cpu]"
+```
+
+### Building with Poetry
+
+For development or to publish your own build, use Poetry:
+
+```bash
+cd depictio/cli
+poetry build
+```
+
 ## Usage
 
 The Depictio CLI provides commands for managing projects, scanning data, and processing datasets.
