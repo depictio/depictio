@@ -89,7 +89,7 @@ jobs:
 
       - name: Setup directories
         run: |
-          cp .env.example .env
+          # cp .env.example .env
           mkdir -p depictioDB minio_data
           chmod 777 depictioDB minio_data
 
@@ -171,7 +171,7 @@ jobs:
           sudo chmod 666 /var/run/docker.sock
           echo "UID=$(id -u)" >> $GITHUB_ENV
           echo "GID=$(id -g)" >> $GITHUB_ENV
-          cp .env.example .env
+          # cp .env.example .env
           mkdir -p depictioDB minio_data
           chmod 777 depictioDB minio_data
 
@@ -181,6 +181,9 @@ jobs:
           docker pull "${FULL_IMAGE}"
           export DEPICTIO_VERSION="${FULL_IMAGE}"
           docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d
+
+      - name: Logs
+        run: sleep 3 && docker compose logs
 
       - name: Wait and verify services
         id: health
@@ -252,7 +255,7 @@ jobs:
           sudo chmod 666 /var/run/docker.sock
           echo "UID=$(id -u)" >> $GITHUB_ENV
           echo "GID=$(id -g)" >> $GITHUB_ENV
-          cp .env.example .env
+          # cp .env.example .env
           mkdir -p depictioDB minio_data
           chmod 777 depictioDB minio_data
 
@@ -343,7 +346,7 @@ jobs:
           sudo chmod 666 /var/run/docker.sock
           echo "UID=$(id -u)" >> $GITHUB_ENV
           echo "GID=$(id -g)" >> $GITHUB_ENV
-          cp .env.example .env
+          # cp .env.example .env
           mkdir -p depictioDB minio_data
           chmod 777 depictioDB minio_data
 
@@ -443,7 +446,7 @@ jobs:
           sudo chmod 666 /var/run/docker.sock
           echo "UID=$(id -u)" >> $GITHUB_ENV
           echo "GID=$(id -g)" >> $GITHUB_ENV
-          cp .env.example .env
+          # cp .env.example .env
           mkdir -p depictioDB minio_data
           chmod 777 depictioDB minio_data
 
