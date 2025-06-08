@@ -169,7 +169,7 @@ jobs:
           PID=$!
           sleep 10
 
-          for host in "depictio-pkg.example.test" "depictio-pkg-api.example.test" "depictio-pkg-minio.example.test"; do
+          for host in "depictio-pkg.example.test" "depictio-pkg-api.example.test/docs" "depictio-pkg-minio.example.test"; do
             echo "Testing $host"
             curl -sv -H "Host: $host" http://localhost:8080/ || true
             status=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: $host" http://localhost:8080/ || echo "000")
