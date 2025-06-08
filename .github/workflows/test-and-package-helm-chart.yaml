@@ -104,6 +104,9 @@ jobs:
           echo "Checking all resources..."
           kubectl get all
 
+          echo "Checking pod status in detail..."
+          kubectl get pods -o wide
+
           echo "Checking PVCs..."
           kubectl get pvc
 
@@ -119,11 +122,17 @@ jobs:
 
       - name: Test Ingress Connectivity
         run: |
+          echo "Fetching ingress resources..."
+          kubectl get ingress
+          kubectl describe ingress || true
+
           kubectl port-forward -n ingress-nginx svc/ingress-nginx-controller 8080:80 &
           PID=$!
           sleep 10
 
           for host in "depictio.example.test" "depictio-api.example.test" "depictio-minio.example.test"; do
+            echo "Testing $host"
+            curl -sv -H "Host: $host" http://localhost:8080/ || true
             status=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: $host" http://localhost:8080/ || echo "000")
             echo "$host status: $status"
           done
@@ -153,6 +162,21 @@ jobs:
 
           echo "Successfully installed from packaged chart"
           kubectl get pods
+
+      - name: Test Ingress Connectivity (package)
+        run: |
+          kubectl port-forward -n ingress-nginx svc/ingress-nginx-controller 8080:80 &
+          PID=$!
+          sleep 10
+
+          for host in "depictio-pkg.example.test" "depictio-pkg-api.example.test" "depictio-pkg-minio.example.test"; do
+            echo "Testing $host"
+            curl -sv -H "Host: $host" http://localhost:8080/ || true
+            status=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: $host" http://localhost:8080/ || echo "000")
+            echo "$host status: $status"
+          done
+
+          kill $PID || true
 
       - name: Log in to Container Registry
         if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
