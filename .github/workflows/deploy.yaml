@@ -416,7 +416,8 @@ jobs:
           retention-days: 7
 
   e2e-tests:
-    needs: [docker-build, iris-integration, penguin-integration]
+    needs:
+      [docker-build, docker-system-init, iris-integration, penguin-integration]
     runs-on: ubuntu-22.04
     permissions:
       contents: read

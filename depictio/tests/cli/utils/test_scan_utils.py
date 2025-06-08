@@ -47,10 +47,11 @@ class TestRegexMatch:
             permissions=permissions,
         )
 
-    @pytest.fixture
-    def set_DEPICTIO_CONTEXT(self, monkeypatch):
-        """Fixture to set DEPICTIO_CONTEXT environment variable."""
-        monkeypatch.setenv("DEPICTIO_CONTEXT", "server")
+    @pytest.fixture(autouse=True)
+    def set_depictio_context(self, monkeypatch):
+        """Set DEPICTIO_CONTEXT for all tests."""
+        monkeypatch.setattr("depictio.models.config.DEPICTIO_CONTEXT", "server")
+        monkeypatch.setattr("depictio.models.models.files.DEPICTIO_CONTEXT", "server")
 
     def test_simple_match_success(self, sample_file):
         """Test successful regex match with simple pattern."""
