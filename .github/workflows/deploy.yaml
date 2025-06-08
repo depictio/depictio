@@ -147,7 +147,7 @@ jobs:
       - name: Pull image
         run: docker pull "${{ steps.image-info.outputs.full-image }}"
 
-  docker-setup:
+  docker-system-init:
     needs: docker-build
     runs-on: ubuntu-22.04
     permissions:
@@ -220,7 +220,7 @@ jobs:
           echo "✅ Users verified: $ADMIN_USER, $TEST_USER"
 
   iris-integration:
-    needs: [docker-build, docker-setup]
+    needs: [docker-build]
     runs-on: ubuntu-22.04
     permissions:
       contents: read
@@ -230,7 +230,7 @@ jobs:
 
       - name: Setup environment
         run: |
-          # Reuse setup from docker-setup
+          # Reuse setup from docker-system-init
           sudo chmod 666 /var/run/docker.sock
           echo "UID=$(id -u)" >> $GITHUB_ENV
           echo "GID=$(id -g)" >> $GITHUB_ENV
@@ -316,7 +316,7 @@ jobs:
           retention-days: 7
 
   penguin-integration:
-    needs: [docker-build, docker-setup]
+    needs: [docker-build]
     runs-on: ubuntu-22.04
     permissions:
       contents: read

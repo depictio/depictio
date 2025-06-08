@@ -47,6 +47,11 @@ class TestRegexMatch:
             permissions=permissions,
         )
 
+    @pytest.fixture
+    def set_DEPICTIO_CONTEXT(self, monkeypatch):
+        """Fixture to set DEPICTIO_CONTEXT environment variable."""
+        monkeypatch.setenv("DEPICTIO_CONTEXT", "server")
+
     def test_simple_match_success(self, sample_file):
         """Test successful regex match with simple pattern."""
         regex_pattern = r"test_file\.txt"
