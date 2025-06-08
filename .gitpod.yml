@@ -32,7 +32,7 @@ tasks:
       # Source environment for UID/GID
       export UID=$(id -u)
       export GID=$(id -g)
-      docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up --build -d
+      docker compose -f docker-compose.yaml -f docker-compose/docker-compose.minio.yaml up -d
     command: docker compose logs -f depictio-backend depictio-frontend
 
   - name: Setup Depictio CLI
