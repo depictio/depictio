@@ -12,8 +12,3 @@ def register_standalone_commands(app: typer.Typer):
             typer.echo(f"Depictio CLI version: {package_version}")
         except PackageNotFoundError:
             typer.echo("Depictio CLI version: unknown (not installed)")
-
-    @app.command("status")
-    def status():
-        """Show status information"""
-        typer.echo("Depictio is running!")

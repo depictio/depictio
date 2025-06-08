@@ -85,10 +85,15 @@ def register_run_command(app: typer.Typer):
         This command executes the full depictio-cli pipeline:
 
         1. Check server accessibility
+
         2. Check S3 storage configuration
+
         3. Validate project configuration
+
         4. Sync project configuration to server
+
         5. Scan data files
+
         6. Process data collections
         """
         rich_print_command_usage("run")
