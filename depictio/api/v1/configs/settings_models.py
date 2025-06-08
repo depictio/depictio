@@ -168,7 +168,7 @@ class AuthConfig(BaseSettings):
 
 
 class LoggingConfig(BaseSettings):
-    verbosity_level: str = Field(default="INFO")
+    verbosity_level: str = Field(default="ERROR")
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_LOGGING_")
 

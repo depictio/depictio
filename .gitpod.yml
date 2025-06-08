@@ -13,6 +13,8 @@ tasks:
 
   - name: Configure Docker Permissions
     init: |
+      # Create docker group if it doesn't exist
+      sudo groupadd docker || true
       # Add user to docker group
       sudo usermod -aG docker $USER || true
       # Change docker socket permissions
@@ -25,7 +27,7 @@ tasks:
 
   - name: Start Depictio server
     init: |
-      cp .env.example .env
+      bash update-gitpod-env.sh
       mkdir -p depictioDB minio_data && chmod -R 777 depictioDB minio_data
       # Source environment for UID/GID
       export UID=$(id -u)
