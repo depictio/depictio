@@ -222,16 +222,16 @@ jobs:
       - name: Verify Iris integration from system initialization
         run: |
           # Verify project
-          IRIS_PROJECT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find().toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.name == "Iris Dataset Project Data Analysis CLI") | .name')
+          IRIS_PROJECT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find().toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.name == "Iris Dataset Project Data Analysis") | .name')
           [ -z "$IRIS_PROJECT" ] && echo "❌ Iris project not found" && exit 1
 
           # Verify deltatable
-          IRIS_DC_ID=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find().toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.name == "Iris Dataset Project Data Analysis CLI") | .workflows[0].data_collections[0]._id')
+          IRIS_DC_ID=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find().toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.name == "Iris Dataset Project Data Analysis") | .workflows[0].data_collections[0]._id')
           IRIS_DT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.deltatables.find({\"data_collection_id\": ObjectId(\"$IRIS_DC_ID\")}).toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[]._id // empty')
           [ -z "$IRIS_DT" ] && echo "❌ Iris deltatable not found" && exit 1
 
           # Verify dashboard
-          IRIS_PID=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find().toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.name == "Iris Dataset Project Data Analysis CLI") | ._id')
+          IRIS_PID=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find().toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.name == "Iris Dataset Project Data Analysis") | ._id')
           IRIS_DASH=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.dashboards.find({\"project_id\": ObjectId(\"$IRIS_PID\")}).toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[]._id // empty')
           [ -z "$IRIS_DASH" ] && echo "❌ Iris dashboard not found" && exit 1
 
