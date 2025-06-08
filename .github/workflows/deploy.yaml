@@ -185,6 +185,9 @@ jobs:
       - name: Logs
         run: sleep 3 && docker compose logs
 
+      - name: Logs depictio-backend
+        run: sleep 3 && docker compose logs depictio-backend
+
       - name: Wait and verify services
         id: health
         run: |
