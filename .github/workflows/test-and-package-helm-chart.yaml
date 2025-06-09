@@ -54,17 +54,17 @@ jobs:
           minikube addons enable ingress
           kubectl rollout status deployment/ingress-nginx-controller -n ingress-nginx --timeout=120s
 
-      # - name: Build Docker image
-      #   run: |
-      #     eval $(minikube docker-env)
-      #     docker build -t depictio:${{ steps.chart-info.outputs.app_version }} -f docker-images/Dockerfile_depictio.dockerfile .
-      #     docker images | grep depictio
-
-      - name: Pull Depictio image
+      - name: Build Docker image
         run: |
           eval $(minikube docker-env)
-          docker pull ghcr.io/depictio/depictio:${{ steps.chart-info.outputs.app_version }}
+          docker build -t depictio:${{ steps.chart-info.outputs.app_version }} -f docker-images/Dockerfile_depictio.dockerfile .
           docker images | grep depictio
+
+      # - name: Pull Depictio image
+      #   run: |
+      #     eval $(minikube docker-env)
+      #     docker pull ghcr.io/depictio/depictio:${{ steps.chart-info.outputs.app_version }}
+      #     docker images | grep depictio
 
       - name: Get Kubernetes cluster info
         run: |
