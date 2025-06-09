@@ -53,7 +53,7 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ .Release.Name }}-depictio-frontend
+                name: {{ .Release.Name }}
                 port:
                   number: {{ .Values.frontend.service.httpPort }}
     - host: {{ printf "%s-api.%s" .Release.Name .Values.global.domain | quote }}
@@ -63,7 +63,7 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ .Release.Name }}-depictio-backend
+                name: {{ .Release.Name }}-api
                 port:
                   number: {{ .Values.backend.service.httpPort }}
     {{- if .Values.minio.enabled }}
