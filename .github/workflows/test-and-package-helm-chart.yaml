@@ -60,6 +60,12 @@ jobs:
       #     docker build -t depictio:${{ steps.chart-info.outputs.app_version }} -f docker-images/Dockerfile_depictio.dockerfile .
       #     docker images | grep depictio
 
+      - name: Pull Depictio image
+        run: |
+          eval $(minikube docker-env)
+          docker pull ghcr.io/depictio/depictio:${{ steps.chart-info.outputs.app_version }}
+          docker images | grep depictio
+
       - name: Get Kubernetes cluster info
         run: |
           kubectl cluster-info
