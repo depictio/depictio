@@ -1,5 +1,4 @@
 import os
-import socket
 import sys
 
 import pymongo
@@ -20,23 +19,25 @@ logger.info(f"Is testing: {is_testing}")
 
 # Check if running in Docker or locally
 # If we can't resolve 'mongo', we're running locally
-is_running_locally = True
-try:
-    socket.gethostbyname("mongo")
-    is_running_locally = False
-except socket.gaierror:
-    is_running_locally = True
+# is_running_locally = True
+# try:
+#     socket.gethostbyname(settings.mongodb.service_name)
+#     is_running_locally = False
+# except socket.gaierror:
+#     is_running_locally = True
 
-# Determine the MongoDB URL based on whether we're running locally or in Docker
-if is_running_locally:
-    # When running locally, use localhost instead of 'mongo'
-    MONGODB_LOCAL_URL = "mongodb://localhost:27018/"
-    client = pymongo.MongoClient(MONGODB_LOCAL_URL)
-    logger.info(f"Running locally, MongoDB client created with URL: {MONGODB_LOCAL_URL}")
-else:
-    # When running in Docker, use the original URL
-    client = pymongo.MongoClient(MONGODB_URL)
-    logger.info(f"Running in Docker, MongoDB client created with URL: {MONGODB_URL}")
+# # Determine the MongoDB URL based on whether we're running locally or in Docker
+# if is_running_locally:
+#     # When running locally, use localhost instead of 'mongo'
+#     MONGODB_LOCAL_URL = "mongodb://{settings.mongodb.service_name}:{settings.mongodb.port}"
+#     logger.info(f"Running locally, MongoDB client created with URL: {MONGODB_LOCAL_URL}")
+#     client = pymongo.MongoClient(MONGODB_LOCAL_URL)
+# else:
+#     # When running in Docker, use the original URL
+# logger.info(f"Running in Docker, MongoDB client created with URL: {MONGODB_URL}")
+
+logger.info(f"Using MongoDB URL: {MONGODB_URL}")
+client = pymongo.MongoClient(MONGODB_URL)
 
 # Use a test-specific database name if in test mode
 # if is_testing:

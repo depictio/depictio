@@ -138,6 +138,18 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ .Release.Name }}-backend-config
+
+          env:
+            - name: DEPICTIO_MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-depictio-secrets
+                  key: MINIO_ROOT_USER
+            - name: DEPICTIO_MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-depictio-secrets
+                  key: MINIO_ROOT_PASSWORD
           command:
             - "/app/run_fastapi.sh"
           ports:
@@ -190,6 +202,17 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ .Release.Name }}-frontend-config
+          env:
+            - name: DEPICTIO_MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-depictio-secrets
+                  key: MINIO_ROOT_USER
+            - name: DEPICTIO_MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-depictio-secrets
+                  key: MINIO_ROOT_PASSWORD
           command:
             - "/app/run_dash.sh"
           ports:
