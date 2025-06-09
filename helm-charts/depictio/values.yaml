@@ -13,16 +13,16 @@ project:
 storageClass: "standard"
 persistence:
   mongo:
-    size: 5Gi
+    size: 1Gi
     accessMode: ReadWriteMany
   minio:
-    size: 10Gi
+    size: 1Gi
     accessMode: ReadWriteMany
   screenshots:
-    size: 5Gi
+    size: 100Mi
     accessMode: ReadWriteMany
   keys:
-    size: 1Gi
+    size: 1Mi
     accessMode: ReadWriteMany
 
 # Secrets
