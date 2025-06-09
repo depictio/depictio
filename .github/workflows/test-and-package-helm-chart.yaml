@@ -126,23 +126,20 @@ jobs:
           kubectl get ingress
           kubectl describe ingress || true
 
-          kubectl port-forward -n ingress-nginx svc/ingress-nginx-controller 8080:80 &
-          PID=$!
-          sleep 10
+          MINIKUBE_IP=$(minikube ip)
+          echo "Using Minikube IP: $MINIKUBE_IP"
 
           for host in "depictio.example.test" "depictio-api.example.test" "depictio-minio.example.test"; do
             echo "Testing $host"
             if [[ "$host" == "depictio-api.example.test" ]]; then
-              curl -sv -H "Host: $host" http://localhost:8080/docs || true
-              status=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: $host" http://localhost:8080/docs || echo "000")
+              curl -sv -H "Host: $host" "http://$MINIKUBE_IP/docs" || true
+              status=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: $host" "http://$MINIKUBE_IP/docs" || echo "000")
             else
-              curl -sv -H "Host: $host" http://localhost:8080/ || true
-              status=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: $host" http://localhost:8080/ || echo "000")
+              curl -sv -H "Host: $host" "http://$MINIKUBE_IP/" || true
+              status=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: $host" "http://$MINIKUBE_IP/" || echo "000")
             fi
             echo "$host status: $status"
           done
-
-          kill $PID || true
 
       - name: Test install from package
         run: |
@@ -170,19 +167,16 @@ jobs:
 
       - name: Test Ingress Connectivity (package)
         run: |
-          kubectl port-forward -n ingress-nginx svc/ingress-nginx-controller 8080:80 &
-          PID=$!
-          sleep 10
+          MINIKUBE_IP=$(minikube ip)
+          echo "Using Minikube IP: $MINIKUBE_IP"
 
             if [[ "$host" == "depictio-pkg-api.example.test" ]]; then
-              curl -sv -H "Host: $host" http://localhost:8080/docs || true
-              status=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: $host" http://localhost:8080/docs || echo "000")
+              curl -sv -H "Host: $host" "http://$MINIKUBE_IP/docs" || true
+              status=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: $host" "http://$MINIKUBE_IP/docs" || echo "000")
             else
-              curl -sv -H "Host: $host" http://localhost:8080/ || true
-              status=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: $host" http://localhost:8080/ || echo "000")
+              curl -sv -H "Host: $host" "http://$MINIKUBE_IP/" || true
+              status=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: $host" "http://$MINIKUBE_IP/" || echo "000")
             fi
-            curl -sv -H "Host: $host" http://localhost:8080/ || true
-            status=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: $host" http://localhost:8080/ || echo "000")
             echo "$host status: $status"
           done
 
