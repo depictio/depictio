@@ -32,7 +32,7 @@
   "description": null,
   "flexible_metadata": null,
   "hash": null,
-  "is_public": false,
+  "is_public": true,
   "last_saved_ts": "2025-05-19 17:03:44.306412",
   "project_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8c9a"
