@@ -174,25 +174,7 @@ def local_validate_project_config(CLI_config: CLIConfig, project_yaml_config_pat
             )
             validated_config = Project.from_mongo(validated_config)
 
-        # else:
-        #     validated_config = Project.from_mongo(validated_config)
-
         logger.info(f"Pipeline configuration validated: {validated_config}")
-
-        # Create metadata entry and update metadata
-        # metadata_entry = create_metadata_entry(validated_config, KEYS_TO_SAVE)
-        # update_metadata(metadata_entry)
-        # logger.info(f"Metadata updated with new entry: {metadata_entry}")
-
-        # # add computed hash to the validated config
-        # # validated_config.hash = metadata_entry["hash"]
-        # logger.info(f"Pipeline configuration with hash: {validated_config}")
-
-        # tmp_validated_config = validated_config.mongo()
-        # logger.info(f"mongo -Pipeline configuration with hash: {tmp_validated_config}")
-
-        # tmp_validated_config = Project.from_mongo(tmp_validated_config)
-        # logger.info(f"from_mongo - Pipeline configuration with hash: {tmp_validated_config}")
 
         return {
             "success": True,

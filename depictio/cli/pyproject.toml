@@ -1,21 +1,15 @@
 [project]
 name = "depictio-cli"
-version = "0.0.5-beta1"
+version = "0.0.5"
 description = "Depictio CLI to interact with the Depictio API"
 readme = "README.md"
 requires-python = ">=3.11"
+license = {text = "MIT"}
 dependencies = [
   "boto3",
   "colorlog",
   "httpx==0.28.1",
   "devtools",
-  # "numpy",
-  # "pandas",
-  # "pyarrow",
-  # "fastparquet",
-  # "deltalake",
-  # "openpyxl",
-  # Include standard polars by default
   "polars[numpy,pandas,pyarrow,excel,deltalake]==1.22.0",
   "deltalake==0.24.0",
   "python-jose",
@@ -30,33 +24,29 @@ dependencies = [
   "beanie",
   "python-dotenv",
   "bleach",
-  "packaging"
+  "packaging",
 ]
 
 authors = [{ name = "Thomas Weber", email = "thomas.weber@embl.de" }]
 urls = { Homepage = "http://github.com/depictio/depictio" }
 classifiers = [
   "Programming Language :: Python :: 3",
-  "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent",
 ]
+
 [project.optional-dependencies]
-# Alternative for systems that can't run standard polars
 lts-cpu = ["polars-lts-cpu"]
-# Installation commands:
-# Default: pip install -e .
-# LTS alternative: pip install -e .[lts-cpu]
 
 [project.scripts]
 depictio-cli = "depictio.cli.depictio_cli:main"
 
 [build-system]
-requires = ["setuptools>=61", "wheel"]
+requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools]
-package-dir = { "" = "../.." }
-packages = [
+[tool.setuptools.packages.find]
+where = ["../.."]
+include = [
   "depictio.cli",
   "depictio.cli.cli",
   "depictio.cli.cli.commands",

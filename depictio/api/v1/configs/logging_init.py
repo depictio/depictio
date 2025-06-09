@@ -10,6 +10,7 @@ from typing import Optional
 # Import the logging setup functions
 from depictio.api.v1.configs.custom_logging import format_pydantic, setup_logging
 from depictio.api.v1.configs.settings_models import Settings
+from depictio.cli.cli.utils.rich_utils import add_rich_display_to_polars
 from depictio.cli.cli_logging import setup_logging as setup_cli_logging
 from depictio.models.logging import setup_logging as setup_models_logging
 
@@ -44,6 +45,9 @@ def initialize_loggers(
     # Initialize loggers with the same settings
     setup_cli_logging(verbose=verbose, verbose_level=verbose_level)
     setup_models_logging(verbose=verbose, verbose_level=verbose_level)
+
+    # Add rich display support for Polars DataFrames
+    add_rich_display_to_polars()
 
     # Update this module's logger with the new level
     global logger

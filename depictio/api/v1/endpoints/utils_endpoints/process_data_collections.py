@@ -7,7 +7,6 @@ from bson import ObjectId
 
 from depictio.api.v1.configs.config import MONGODB_URL, settings
 from depictio.api.v1.configs.logging_init import format_pydantic, logger
-from depictio.api.v1.configs.settings_models import S3DepictioCLIConfig
 from depictio.cli.cli.utils.helpers import process_data_collection_helper
 from depictio.models.models.projects import Project
 
@@ -129,12 +128,7 @@ def sync_process_initial_data_collections() -> dict[str, Any]:
             token=token,
         ),
         base_url=f"http://localhost:{settings.fastapi.port}",
-        s3=S3DepictioCLIConfig(
-            bucket=settings.minio.bucket,
-            endpoint_url=settings.minio.endpoint_url,
-            root_user=settings.minio.root_user,
-            root_password=settings.minio.root_password,
-        ),
+        s3=settings.minio,
     )
 
     logger.debug(f"CLI config: {format_pydantic(cli_config)}")

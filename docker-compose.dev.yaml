@@ -20,11 +20,12 @@ services:
       - 5080:5080
     volumes:
       - ./depictio:/app/depictio
+      - ./docker-images/run_dash.sh:/app/run_dash.sh
       - ./pyproject.toml:/app/pyproject.toml
     env_file:
       - docker-compose/.env
     environment:
-        DEV_MODE: "${DEV_MODE:-false}"
+        # DEV_MODE: "${DEV_MODE:-true}"
         DEPICTIO_LOGGING_VERBOSITY_LEVEL: "DEBUG"
     command: ["/app/run_dash.sh"]
     user: "${UID:-1000}:${GID:-1000}"
@@ -44,10 +45,11 @@ services:
     volumes:
       - ./depictio:/app/depictio
       - ./pyproject.toml:/app/pyproject.toml
+      - ./docker-images/run_fastapi.sh:/app/run_fastapi.sh
     env_file:
       - docker-compose/.env
     environment:
-        DEV_MODE: "${DEV_MODE:-false}"
+        # DEV_MODE: "${DEV_MODE:-true}"
         DEPICTIO_LOGGING_VERBOSITY_LEVEL: "DEBUG"
     command: ["/app/run_fastapi.sh"]
     user: "${UID:-1000}:${GID:-1000}"

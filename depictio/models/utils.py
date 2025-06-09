@@ -16,7 +16,7 @@ from depictio.models.models.base import convert_objectid_to_str
 
 def get_depictio_context():
     # Ensure environment variables are loaded before accessing
-    context = os.getenv("DEPICTIO_CONTEXT")
+    context = os.getenv("DEPICTIO_CONTEXT", "server")
     return context
 
 
