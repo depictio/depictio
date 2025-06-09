@@ -71,7 +71,7 @@ jobs:
           prerelease: ${{ needs.changelog.outputs.is_beta == 'true' }}
 
       - name: Update CHANGELOG.md
-        if: ${{ needs.changelog.outputs.is_beta != 'true' }}
+        # if: ${{ needs.changelog.outputs.is_beta != 'true' }}
         run: |
           # Only update for stable releases
           echo "${{ needs.changelog.outputs.changelog }}" > /tmp/changelog_clean.md
