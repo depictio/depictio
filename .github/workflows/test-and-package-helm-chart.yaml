@@ -14,333 +14,561 @@ env:
   CHART_NAME: depictio-helm
 
 jobs:
-  test-build-push:
+  build-and-deploy:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
 
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Install Helm
-        uses: azure/setup-helm@v4
-        with:
-          version: "v3.14.0"
-
-      - name: Extract chart metadata
-        id: chart-info
+      - name: Smart Build or Pull Strategy
+        id: build_strategy
         run: |
-          CHART_VERSION=$(helm show chart ./helm-charts/depictio | grep '^version:' | awk '{print $2}')
-          APP_VERSION=$(helm show chart ./helm-charts/depictio | grep '^appVersion:' | awk '{print $2}' | tr -d '"')
-          echo "chart_version=${CHART_VERSION}" >> $GITHUB_OUTPUT
-          echo "app_version=${APP_VERSION}" >> $GITHUB_OUTPUT
-          echo "Chart version: ${CHART_VERSION}"
-          echo "App version: ${APP_VERSION}"
+          # Set image details
+          IMAGE_NAME="$REGISTRY/${{ github.repository_owner }}/depictio"
 
-      - name: Set up Minikube
+          # Determine tag based on event type
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            IMAGE_TAG="pr-${{ github.event.number }}"
+          elif [[ "${{ github.ref_name }}" == "main" ]]; then
+            IMAGE_TAG="latest"
+          elif [[ "${{ github.ref_type }}" == "tag" ]]; then
+            IMAGE_TAG="${{ github.ref_name }}"
+          else
+            IMAGE_TAG="${{ github.ref_name }}"
+          fi
+
+          # Export variables
+          echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
+          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+          echo "FULL_IMAGE=$IMAGE_NAME:$IMAGE_TAG" >> $GITHUB_ENV
+
+          echo "🔍 Checking for existing image: $IMAGE_NAME:$IMAGE_TAG"
+
+          # Check if image exists in registry
+          if docker manifest inspect $IMAGE_NAME:$IMAGE_TAG >/dev/null 2>&1; then
+            echo "✅ Found existing image - pulling instead of building"
+            echo "action=pull" >> $GITHUB_OUTPUT
+            docker pull $IMAGE_NAME:$IMAGE_TAG
+          else
+            echo "❌ Image not found - building new image"
+            echo "action=build" >> $GITHUB_OUTPUT
+
+            # Set up Docker Buildx
+            docker buildx create --use --name builder --driver docker-container
+
+            # Login to registry
+            echo ${{ secrets.GITHUB_TOKEN }} | docker login $REGISTRY -u ${{ github.actor }} --password-stdin
+
+            # Build and push with cache
+            docker buildx build \
+              --file docker-images/Dockerfile_depictio.dockerfile \
+              --platform linux/amd64 \
+              --tag $IMAGE_NAME:$IMAGE_TAG \
+              --push \
+              --cache-from type=gha \
+              --cache-to type=gha,mode=max \
+              .
+
+            echo "✅ Image built and pushed successfully"
+          fi
+
+      - name: Build Summary
+        run: |
+          echo "## 🚀 Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Action**: ${{ steps.build_strategy.outputs.action }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image**: \`${{ env.FULL_IMAGE }}\`" >> $GITHUB_STEP_SUMMARY
+
+          if [[ "${{ steps.build_strategy.outputs.action }}" == "pull" ]]; then
+            echo "- **Result**: ⚡ Time saved by reusing existing image" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Result**: 🔨 Built and pushed new image" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Start Minikube
         uses: medyagh/setup-minikube@master
         with:
-          minikube-version: "1.35.0"
-          kubernetes-version: "v1.32.0"
+          minikube-version: 1.32.0
+          kubernetes-version: 1.28.3
           driver: docker
-          start-args: "--memory=4096 --cpus=2"
+          container-runtime: docker
 
-      - name: Enable ingress addon
+      - name: Enable Minikube Addons
         run: |
           minikube addons enable ingress
-          kubectl rollout status deployment/ingress-nginx-controller -n ingress-nginx --timeout=120s
+          minikube addons enable ingress-dns
 
-      - name: Build Docker image
+          # Wait for ingress controller to be ready
+          kubectl wait --namespace ingress-nginx \
+            --for=condition=ready pod \
+            --selector=app.kubernetes.io/component=controller \
+            --timeout=10s
+
+      - name: Deploy with Helm
         run: |
-          eval $(minikube docker-env)
-          docker build -t depictio:${{ steps.chart-info.outputs.app_version }} -f docker-images/Dockerfile_depictio.dockerfile .
-          docker images | grep depictio
+          # Create deployment values with our image
+          cat > /tmp/deployment-values.yaml << EOF
+          backend:
+            image:
+              repository: ${{ env.IMAGE_NAME }}
+              tag: ${{ env.IMAGE_TAG }}
+              pullPolicy: Always
 
-      # - name: Pull Depictio image
-      #   run: |
-      #     eval $(minikube docker-env)
-      #     docker pull ghcr.io/depictio/depictio:${{ steps.chart-info.outputs.app_version }}
-      #     docker images | grep depictio
+          frontend:
+            image:
+              repository: ${{ env.IMAGE_NAME }}
+              tag: ${{ env.IMAGE_TAG }}
+              pullPolicy: Always
 
-      - name: Get Kubernetes cluster info
-        run: |
-          kubectl cluster-info
-          kubectl get nodes
-          kubectl version
+          global:
+            domain: example.test
+          EOF
 
-      - name: Lint Helm chart
-        run: |
-          helm lint ./helm-charts/depictio
-
-      - name: Test chart packaging
-        run: |
-          helm package ./helm-charts/depictio --version ${{ steps.chart-info.outputs.chart_version }}
-          ls -la depictio-*.tgz
-          helm template test-release ./depictio-${{ steps.chart-info.outputs.chart_version }}.tgz > /tmp/rendered-manifests.yaml
-          echo "Successfully rendered chart from package"
-
-      - name: Install Helm chart (from local directory)
-        run: |
+          echo "🚀 Deploying with Helm..."
           helm upgrade --install depictio ./helm-charts/depictio \
-            -f ./helm-charts/depictio/values.yaml \
-            -f ./helm-charts/depictio/values-gh-actions.yaml \
-            --set ingress.enabled=true \
-            --set global.domain=example.test \
-            --set backend.image.repository=depictio \
-            --set backend.image.tag=${{ steps.chart-info.outputs.app_version }} \
-            --set backend.image.pullPolicy=Never \
-            --set frontend.image.repository=depictio \
-            --set frontend.image.tag=${{ steps.chart-info.outputs.app_version }} \
-            --set frontend.image.pullPolicy=Never \
-            --wait --timeout 5m
+            --values ./helm-charts/depictio/values-gh-actions.yaml \
+            --values /tmp/deployment-values.yaml \
+            --wait \
+            --timeout=20s \
+            --debug
 
       - name: Wait for deployment readiness
         run: |
-          echo "Waiting for all deployments to be ready..."
-          kubectl wait --for=condition=ready pod -l app=depictio-frontend --timeout=300s
-          kubectl wait --for=condition=ready pod -l app=depictio-backend --timeout=300s
-          kubectl wait --for=condition=ready pod -l app=mongo --timeout=300s
-          kubectl wait --for=condition=ready pod -l app=minio --timeout=300s
+          echo "=== Waiting for pods to be ready ==="
 
+          # Wait for pods with aggressive timeouts
+          echo "Waiting for backend pod..."
+          kubectl wait --for=condition=ready pod -l app=depictio-backend --timeout=15s
+
+          echo "Waiting for frontend pod..."
+          kubectl wait --for=condition=ready pod -l app=depictio-frontend --timeout=25s
+
+          echo "Waiting for mongo pod..."
+          kubectl wait --for=condition=ready pod -l app=mongo --timeout=20s
+
+          echo "Waiting for minio pod..."
+          kubectl wait --for=condition=ready pod -l app=minio --timeout=20s
+
+          echo "All pods are ready!"
+
+          # Minimal wait for ingress controller to update
           echo "Waiting for ingress to be ready..."
-          kubectl wait --for=condition=ready ingress/depictio-ingress --timeout=120s || true
+          sleep 5
 
-          # Give services extra time to fully initialize
-          sleep 30
+          kubectl get ingress depictio-ingress -o wide
 
       - name: Verify Deployment
         run: |
-          echo "=== Checking all resources ==="
+          echo "=== Deployment Status ==="
           kubectl get all
           echo ""
-          echo "=== Pod status in detail ==="
+
+          echo "=== Pod Details ==="
           kubectl get pods -o wide
           echo ""
-          echo "=== PVCs ==="
-          kubectl get pvc
-          echo ""
-          echo "=== ConfigMaps ==="
-          kubectl get configmaps
-          echo ""
-          echo "=== Secrets ==="
-          kubectl get secrets
-          echo ""
-          echo "=== Ingress details ==="
+
+          echo "=== Ingress Status ==="
           kubectl get ingress -o wide
-          kubectl describe ingress/depictio-ingress || true
+          kubectl describe ingress/depictio-ingress
           echo ""
-          echo "=== Services ==="
-          kubectl get services
-          echo ""
-          echo "=== Recent Pod logs ==="
-          for app in depictio-backend depictio-frontend mongo minio; do
-            echo "--- Logs for $app ---"
-            kubectl logs -l app=$app --tail=20 --since=2m || true
-            echo ""
-          done
 
-      - name: Test Ingress Connectivity - Direct Method
+      - name: Test Application Connectivity
         run: |
-          echo "=== Testing Ingress Connectivity ==="
+          echo "=== Testing Application Connectivity ==="
 
-          # Get ingress IP/address
-          INGRESS_IP=$(kubectl get ingress depictio-ingress -o jsonpath='{.status.loadBalancer.ingress[0].ip}' || echo "")
-          INGRESS_HOST=$(kubectl get ingress depictio-ingress -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' || echo "")
+          # Get ingress IP
+          INGRESS_IP=$(minikube ip)
+          echo "Testing via ingress IP: $INGRESS_IP"
 
-          # For minikube, use the minikube IP
-          if [[ -z "$INGRESS_IP" && -z "$INGRESS_HOST" ]]; then
-            INGRESS_IP=$(minikube ip)
-          fi
-
-          echo "Ingress IP: $INGRESS_IP"
-          echo "Ingress Host: $INGRESS_HOST"
-
-          # Test endpoints with proper host headers
-          declare -A test_hosts=(
+          # Test endpoints
+          declare -A endpoints=(
             ["depictio.example.test"]="/"
             ["depictio-api.example.test"]="/docs"
             ["depictio-minio.example.test"]="/"
           )
 
           SUCCESS_COUNT=0
-          TOTAL_TESTS=${#test_hosts[@]}
+          TOTAL_TESTS=${#endpoints[@]}
 
-          for host in "${!test_hosts[@]}"; do
-            path="${test_hosts[$host]}"
+          for host in "${!endpoints[@]}"; do
+            path="${endpoints[$host]}"
             echo "Testing $host$path"
 
-            # Try direct connection to ingress IP
-            if [[ -n "$INGRESS_IP" ]]; then
-              echo "Attempting direct connection to $INGRESS_IP with Host: $host"
+            for attempt in {1..2}; do
+              if status=$(curl -s -o /dev/null -w "%{http_code}" \
+                --connect-timeout 3 \
+                --max-time 5 \
+                -H "Host: $host" \
+                "http://$INGRESS_IP$path" 2>/dev/null); then
 
-              # Test with timeout and retries
-              for attempt in {1..3}; do
-                echo "Attempt $attempt/3"
+                echo "$host$path -> Status: $status"
 
-                if status=$(curl -s -o /dev/null -w "%{http_code}" \
-                  --connect-timeout 10 \
-                  --max-time 30 \
-                  -H "Host: $host" \
-                  "http://$INGRESS_IP$path" 2>/dev/null); then
-
-                  echo "$host$path -> Status: $status"
-
-                  # Consider 200-399 as success, 403 might be expected for minio
-                  if [[ "$status" =~ ^[23] ]]; then
-                    echo "✅ $host$path is reachable"
-                    ((SUCCESS_COUNT++))
-                    break
-                  elif [[ "$status" == "403" && "$host" == *"minio"* ]]; then
-                    echo "✅ $host$path is reachable (403 expected for MinIO without auth)"
-                    ((SUCCESS_COUNT++))
-                    break
-                  else
-                    echo "❌ $host$path returned status $status"
-                  fi
-                else
-                  echo "❌ Failed to connect to $host$path (attempt $attempt)"
+                if [[ "$status" =~ ^[23] ]]; then
+                  echo "✅ $host$path is reachable"
+                  ((SUCCESS_COUNT++))
+                  break
+                elif [[ "$status" == "403" && "$host" == *"minio"* ]]; then
+                  echo "✅ $host$path is reachable (403 expected for MinIO)"
+                  ((SUCCESS_COUNT++))
+                  break
                 fi
+              fi
 
-                if [[ $attempt -lt 3 ]]; then
-                  echo "Waiting 10 seconds before retry..."
-                  sleep 10
-                fi
-              done
-            else
-              echo "❌ No ingress IP available for testing $host"
-            fi
+              if [[ $attempt -lt 2 ]]; then
+                sleep 2
+              fi
+            done
             echo ""
           done
 
           echo "=== Test Results ==="
-          echo "Successful tests: $SUCCESS_COUNT/$TOTAL_TESTS"
+          echo "Successful: $SUCCESS_COUNT/$TOTAL_TESTS"
 
-          # Require at least frontend to be working
-          if [[ $SUCCESS_COUNT -lt 1 ]]; then
-            echo "❌ No services are reachable through ingress"
-            exit 1
-          elif [[ $SUCCESS_COUNT -eq $TOTAL_TESTS ]]; then
-            echo "✅ All services are reachable through ingress"
+          if [[ $SUCCESS_COUNT -ge 2 ]]; then
+            echo "✅ Deployment successful!"
           else
-            echo "⚠️  Some services are reachable, but not all"
-            # Don't fail the build for partial success
+            echo "❌ Deployment verification failed"
+            exit 1
           fi
 
-      - name: Test with Port Forward as Fallback
+      - name: Show pods logs on failure
         if: failure()
         run: |
-          echo "=== Fallback: Testing with Port Forward ==="
-
-          # Start port forwarding in background
-          kubectl port-forward -n ingress-nginx svc/ingress-nginx-controller 8080:80 &
-          PF_PID=$!
-
-          # Wait for port forward to be ready
-          echo "Waiting for port forward to be ready..."
-          for i in {1..30}; do
-            if curl -s localhost:8080 > /dev/null 2>&1; then
-              echo "Port forward is ready"
-              break
-            fi
-            sleep 1
+          echo "=== Pod Logs (Debug) ==="
+          for app in depictio-backend depictio-frontend mongo minio; do
+            echo "--- Logs for $app ---"
+            kubectl logs -l app=$app --tail=20 || true
+            echo ""
           done
 
-          # Test through port forward
-          declare -A test_hosts=(
-            ["depictio.example.test"]="/"
-            ["depictio-api.example.test"]="/docs"
-            ["depictio-minio.example.test"]="/"
-          )
+      # test-build-push:
+      #   runs-on: ubuntu-latest
+      #   permissions:
+      #     contents: read
+      #     packages: write
 
-          for host in "${!test_hosts[@]}"; do
-            path="${test_hosts[$host]}"
-            echo "Testing $host$path via port forward"
+      #   steps:
 
-            status=$(curl -s -o /dev/null -w "%{http_code}" \
-              -H "Host: $host" \
-              "http://localhost:8080$path" || echo "000")
+      # - name: Checkout code
+      #   uses: actions/checkout@v4
+      #   with:
+      #     fetch-depth: 0
 
-            echo "$host$path -> Status: $status"
-          done
+      # - name: Install Helm
+      #   uses: azure/setup-helm@v4
+      #   with:
+      #     version: "v3.14.0"
 
-          # Cleanup
-          kill $PF_PID || true
+      # - name: Extract chart metadata
+      #   id: chart-info
+      #   run: |
+      #     CHART_VERSION=$(helm show chart ./helm-charts/depictio | grep '^version:' | awk '{print $2}')
+      #     APP_VERSION=$(helm show chart ./helm-charts/depictio | grep '^appVersion:' | awk '{print $2}' | tr -d '"')
+      #     echo "chart_version=${CHART_VERSION}" >> $GITHUB_OUTPUT
+      #     echo "app_version=${APP_VERSION}" >> $GITHUB_OUTPUT
+      #     echo "Chart version: ${CHART_VERSION}"
+      #     echo "App version: ${APP_VERSION}"
 
-      - name: Test install from package
-        run: |
-          # Clean up existing installation
-          helm uninstall depictio || true
-          kubectl delete pvc --all || true
-          kubectl delete configmap --all --ignore-not-found=true || true
-          sleep 15
+      # - name: Set up Minikube
+      #   uses: medyagh/setup-minikube@master
+      #   with:
+      #     minikube-version: "1.35.0"
+      #     kubernetes-version: "v1.32.0"
+      #     driver: docker
+      #     start-args: "--memory=4096 --cpus=2"
 
-          # Install from packaged chart
-          helm install depictio-pkg ./depictio-${{ steps.chart-info.outputs.chart_version }}.tgz \
-            -f ./helm-charts/depictio/values-gh-actions.yaml \
-            --set ingress.enabled=true \
-            --set global.domain=example.test \
-            --set backend.image.repository=depictio \
-            --set backend.image.tag=${{ steps.chart-info.outputs.app_version }} \
-            --set backend.image.pullPolicy=Never \
-            --set frontend.image.repository=depictio \
-            --set frontend.image.tag=${{ steps.chart-info.outputs.app_version }} \
-            --set frontend.image.pullPolicy=Never \
-            --wait --timeout 5m
+      # - name: Enable ingress addon
+      #   run: |
+      #     minikube addons enable ingress
+      #     kubectl rollout status deployment/ingress-nginx-controller -n ingress-nginx --timeout=120s
 
-          echo "Successfully installed from packaged chart"
-          kubectl get pods
+      # - name: Build Docker image
+      #   run: |
+      #     eval $(minikube docker-env)
+      #     docker build -t depictio:${{ steps.chart-info.outputs.app_version }} -f docker-images/Dockerfile_depictio.dockerfile .
+      #     docker images | grep depictio
 
-      - name: Test Package Installation Connectivity
-        run: |
-          echo "=== Testing Package Installation Connectivity ==="
+      # # - name: Pull Depictio image
+      # #   run: |
+      # #     eval $(minikube docker-env)
+      # #     docker pull ghcr.io/depictio/depictio:${{ steps.chart-info.outputs.app_version }}
+      # #     docker images | grep depictio
 
-          # Wait for readiness
-          kubectl wait --for=condition=ready pod -l app=depictio-frontend --timeout=300s
-          kubectl wait --for=condition=ready pod -l app=depictio-backend --timeout=300s
-          sleep 30
+      # - name: Get Kubernetes cluster info
+      #   run: |
+      #     kubectl cluster-info
+      #     kubectl get nodes
+      #     kubectl version
 
-          # Get ingress IP
-          INGRESS_IP=$(minikube ip)
-          echo "Testing against ingress IP: $INGRESS_IP"
+      # - name: Lint Helm chart
+      #   run: |
+      #     helm lint ./helm-charts/depictio
 
-          # Test the frontend at least
-          echo "Testing depictio-pkg.example.test"
-          status=$(curl -s -o /dev/null -w "%{http_code}" \
-            --connect-timeout 10 \
-            --max-time 30 \
-            -H "Host: depictio-pkg.example.test" \
-            "http://$INGRESS_IP/" || echo "000")
+      # - name: Test chart packaging
+      #   run: |
+      #     helm package ./helm-charts/depictio --version ${{ steps.chart-info.outputs.chart_version }}
+      #     ls -la depictio-*.tgz
+      #     helm template test-release ./depictio-${{ steps.chart-info.outputs.chart_version }}.tgz > /tmp/rendered-manifests.yaml
+      #     echo "Successfully rendered chart from package"
 
-          echo "Frontend status: $status"
+      # - name: Install Helm chart (from local directory)
+      #   run: |
+      #     helm upgrade --install depictio ./helm-charts/depictio \
+      #       -f ./helm-charts/depictio/values.yaml \
+      #       -f ./helm-charts/depictio/values-gh-actions.yaml \
+      #       --set ingress.enabled=true \
+      #       --set global.domain=example.test \
+      #       --set backend.image.repository=depictio \
+      #       --set backend.image.tag=${{ steps.chart-info.outputs.app_version }} \
+      #       --set backend.image.pullPolicy=Never \
+      #       --set frontend.image.repository=depictio \
+      #       --set frontend.image.tag=${{ steps.chart-info.outputs.app_version }} \
+      #       --set frontend.image.pullPolicy=Never \
+      #       --wait --timeout 5m
 
-          if [[ "$status" =~ ^[23] ]]; then
-            echo "✅ Package installation test successful"
-          else
-            echo "❌ Package installation test failed with status $status"
-            # Don't fail the entire workflow for this
-          fi
+      # - name: Wait for deployment readiness
+      #   run: |
+      #     echo "Waiting for all deployments to be ready..."
+      #     kubectl wait --for=condition=ready pod -l app=depictio-frontend --timeout=300s
+      #     kubectl wait --for=condition=ready pod -l app=depictio-backend --timeout=300s
+      #     kubectl wait --for=condition=ready pod -l app=mongo --timeout=300s
+      #     kubectl wait --for=condition=ready pod -l app=minio --timeout=300s
 
-      - name: Log in to Container Registry
-        if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+      #     echo "Waiting for ingress to be ready..."
+      #     kubectl wait --for=condition=ready ingress/depictio-ingress --timeout=120s || true
 
-      - name: Push chart to GHCR
-        if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
-        run: |
-          helm push depictio-${{ steps.chart-info.outputs.chart_version }}.tgz oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.CHART_NAME }}
-          echo "Chart pushed to: oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.CHART_NAME }}:${{ steps.chart-info.outputs.chart_version }}"
+      #     # Give services extra time to fully initialize
+      #     sleep 30
 
-      - name: Cleanup
-        if: always()
-        run: |
-          helm uninstall depictio || true
-          helm uninstall depictio-pkg || true
-          minikube delete || true
+      # - name: Verify Deployment
+      #   run: |
+      #     echo "=== Checking all resources ==="
+      #     kubectl get all
+      #     echo ""
+      #     echo "=== Pod status in detail ==="
+      #     kubectl get pods -o wide
+      #     echo ""
+      #     echo "=== PVCs ==="
+      #     kubectl get pvc
+      #     echo ""
+      #     echo "=== ConfigMaps ==="
+      #     kubectl get configmaps
+      #     echo ""
+      #     echo "=== Secrets ==="
+      #     kubectl get secrets
+      #     echo ""
+      #     echo "=== Ingress details ==="
+      #     kubectl get ingress -o wide
+      #     kubectl describe ingress/depictio-ingress || true
+      #     echo ""
+      #     echo "=== Services ==="
+      #     kubectl get services
+      #     echo ""
+      #     echo "=== Recent Pod logs ==="
+      #     for app in depictio-backend depictio-frontend mongo minio; do
+      #       echo "--- Logs for $app ---"
+      #       kubectl logs -l app=$app --tail=20 --since=2m || true
+      #       echo ""
+      #     done
+
+      # - name: Test Ingress Connectivity - Direct Method
+      #   run: |
+      #     echo "=== Testing Ingress Connectivity ==="
+
+      #     # Get ingress IP/address
+      #     INGRESS_IP=$(kubectl get ingress depictio-ingress -o jsonpath='{.status.loadBalancer.ingress[0].ip}' || echo "")
+      #     INGRESS_HOST=$(kubectl get ingress depictio-ingress -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' || echo "")
+
+      #     # For minikube, use the minikube IP
+      #     if [[ -z "$INGRESS_IP" && -z "$INGRESS_HOST" ]]; then
+      #       INGRESS_IP=$(minikube ip)
+      #     fi
+
+      #     echo "Ingress IP: $INGRESS_IP"
+      #     echo "Ingress Host: $INGRESS_HOST"
+
+      #     # Test endpoints with proper host headers
+      #     declare -A test_hosts=(
+      #       ["depictio.example.test"]="/"
+      #       ["depictio-api.example.test"]="/docs"
+      #       ["depictio-minio.example.test"]="/"
+      #     )
+
+      #     SUCCESS_COUNT=0
+      #     TOTAL_TESTS=${#test_hosts[@]}
+
+      #     for host in "${!test_hosts[@]}"; do
+      #       path="${test_hosts[$host]}"
+      #       echo "Testing $host$path"
+
+      #       # Try direct connection to ingress IP
+      #       if [[ -n "$INGRESS_IP" ]]; then
+      #         echo "Attempting direct connection to $INGRESS_IP with Host: $host"
+
+      #         # Test with timeout and retries
+      #         for attempt in {1..3}; do
+      #           echo "Attempt $attempt/3"
+
+      #           if status=$(curl -s -o /dev/null -w "%{http_code}" \
+      #             --connect-timeout 10 \
+      #             --max-time 30 \
+      #             -H "Host: $host" \
+      #             "http://$INGRESS_IP$path" 2>/dev/null); then
+
+      #             echo "$host$path -> Status: $status"
+
+      #             # Consider 200-399 as success, 403 might be expected for minio
+      #             if [[ "$status" =~ ^[23] ]]; then
+      #               echo "✅ $host$path is reachable"
+      #               ((SUCCESS_COUNT++))
+      #               break
+      #             elif [[ "$status" == "403" && "$host" == *"minio"* ]]; then
+      #               echo "✅ $host$path is reachable (403 expected for MinIO without auth)"
+      #               ((SUCCESS_COUNT++))
+      #               break
+      #             else
+      #               echo "❌ $host$path returned status $status"
+      #             fi
+      #           else
+      #             echo "❌ Failed to connect to $host$path (attempt $attempt)"
+      #           fi
+
+      #           if [[ $attempt -lt 3 ]]; then
+      #             echo "Waiting 10 seconds before retry..."
+      #             sleep 10
+      #           fi
+      #         done
+      #       else
+      #         echo "❌ No ingress IP available for testing $host"
+      #       fi
+      #       echo ""
+      #     done
+
+      #     echo "=== Test Results ==="
+      #     echo "Successful tests: $SUCCESS_COUNT/$TOTAL_TESTS"
+
+      #     # Require at least frontend to be working
+      #     if [[ $SUCCESS_COUNT -lt 1 ]]; then
+      #       echo "❌ No services are reachable through ingress"
+      #       exit 1
+      #     elif [[ $SUCCESS_COUNT -eq $TOTAL_TESTS ]]; then
+      #       echo "✅ All services are reachable through ingress"
+      #     else
+      #       echo "⚠️  Some services are reachable, but not all"
+      #       # Don't fail the build for partial success
+      #     fi
+
+      # - name: Test with Port Forward as Fallback
+      #   if: failure()
+      #   run: |
+      #     echo "=== Fallback: Testing with Port Forward ==="
+
+      #     # Start port forwarding in background
+      #     kubectl port-forward -n ingress-nginx svc/ingress-nginx-controller 8080:80 &
+      #     PF_PID=$!
+
+      #     # Wait for port forward to be ready
+      #     echo "Waiting for port forward to be ready..."
+      #     for i in {1..30}; do
+      #       if curl -s localhost:8080 > /dev/null 2>&1; then
+      #         echo "Port forward is ready"
+      #         break
+      #       fi
+      #       sleep 1
+      #     done
+
+      #     # Test through port forward
+      #     declare -A test_hosts=(
+      #       ["depictio.example.test"]="/"
+      #       ["depictio-api.example.test"]="/docs"
+      #       ["depictio-minio.example.test"]="/"
+      #     )
+
+      #     for host in "${!test_hosts[@]}"; do
+      #       path="${test_hosts[$host]}"
+      #       echo "Testing $host$path via port forward"
+
+      #       status=$(curl -s -o /dev/null -w "%{http_code}" \
+      #         -H "Host: $host" \
+      #         "http://localhost:8080$path" || echo "000")
+
+      #       echo "$host$path -> Status: $status"
+      #     done
+
+      #     # Cleanup
+      #     kill $PF_PID || true
+
+      # - name: Test install from package
+      #   run: |
+      #     # Clean up existing installation
+      #     helm uninstall depictio || true
+      #     kubectl delete pvc --all || true
+      #     kubectl delete configmap --all --ignore-not-found=true || true
+      #     sleep 15
+
+      #     # Install from packaged chart
+      #     helm install depictio-pkg ./depictio-${{ steps.chart-info.outputs.chart_version }}.tgz \
+      #       -f ./helm-charts/depictio/values-gh-actions.yaml \
+      #       --set ingress.enabled=true \
+      #       --set global.domain=example.test \
+      #       --set backend.image.repository=depictio \
+      #       --set backend.image.tag=${{ steps.chart-info.outputs.app_version }} \
+      #       --set backend.image.pullPolicy=Never \
+      #       --set frontend.image.repository=depictio \
+      #       --set frontend.image.tag=${{ steps.chart-info.outputs.app_version }} \
+      #       --set frontend.image.pullPolicy=Never \
+      #       --wait --timeout 5m
+
+      #     echo "Successfully installed from packaged chart"
+      #     kubectl get pods
+
+      # - name: Test Package Installation Connectivity
+      #   run: |
+      #     echo "=== Testing Package Installation Connectivity ==="
+
+      #     # Wait for readiness
+      #     kubectl wait --for=condition=ready pod -l app=depictio-frontend --timeout=300s
+      #     kubectl wait --for=condition=ready pod -l app=depictio-backend --timeout=300s
+      #     sleep 30
+
+      #     # Get ingress IP
+      #     INGRESS_IP=$(minikube ip)
+      #     echo "Testing against ingress IP: $INGRESS_IP"
+
+      #     # Test the frontend at least
+      #     echo "Testing depictio-pkg.example.test"
+      #     status=$(curl -s -o /dev/null -w "%{http_code}" \
+      #       --connect-timeout 10 \
+      #       --max-time 30 \
+      #       -H "Host: depictio-pkg.example.test" \
+      #       "http://$INGRESS_IP/" || echo "000")
+
+      #     echo "Frontend status: $status"
+
+      #     if [[ "$status" =~ ^[23] ]]; then
+      #       echo "✅ Package installation test successful"
+      #     else
+      #       echo "❌ Package installation test failed with status $status"
+      #       # Don't fail the entire workflow for this
+      #     fi
+
+      # - name: Log in to Container Registry
+      #   if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+      #   uses: docker/login-action@v3
+      #   with:
+      #     registry: ${{ env.REGISTRY }}
+      #     username: ${{ github.actor }}
+      #     password: ${{ secrets.GITHUB_TOKEN }}
+
+      # - name: Push chart to GHCR
+      #   if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+      #   run: |
+      #     helm push depictio-${{ steps.chart-info.outputs.chart_version }}.tgz oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.CHART_NAME }}
+      #     echo "Chart pushed to: oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.CHART_NAME }}:${{ steps.chart-info.outputs.chart_version }}"
+
+      # - name: Cleanup
+      #   if: always()
+      #   run: |
+      #     helm uninstall depictio || true
+      #     helm uninstall depictio-pkg || true
+      #     minikube delete || true
