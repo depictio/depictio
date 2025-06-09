@@ -11,11 +11,7 @@ metadata:
     {{- toYaml .Values.ingress.labels | nindent 4 }}
     {{- end }}
   annotations:
-    # Default annotations for better functionality
-    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
-    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60s"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "60s"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "60s"
+
     {{- if .Values.ingress.annotations }}
     {{- toYaml .Values.ingress.annotations | nindent 4 }}
     {{- end }}
