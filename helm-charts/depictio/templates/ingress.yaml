@@ -11,6 +11,11 @@ metadata:
     {{- toYaml .Values.ingress.labels | nindent 4 }}
     {{- end }}
   annotations:
+    # Default annotations for better functionality
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60s"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60s"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60s"
     {{- if .Values.ingress.annotations }}
     {{- toYaml .Values.ingress.annotations | nindent 4 }}
     {{- end }}
@@ -20,7 +25,7 @@ spec:
   {{- end }}
   rules:
   {{- if .Values.ingress.hosts }}
-  {{- /* If hosts are defined in values, use them */}}
+  {{- /* If hosts are explicitly defined in values, use them */}}
   {{- range .Values.ingress.hosts }}
     - host: {{ .host | quote }}
       http:
@@ -40,8 +45,8 @@ spec:
         {{- end }}
   {{- end }}
   {{- else }}
-  {{- /* If no hosts defined, create default host-based configuration */}}
-    - host: {{ .Values.ingress.host | default (printf "%s.%s" .Release.Name .Values.global.domain) | quote }}
+  {{- /* Generate default host configurations */}}
+    - host: {{ printf "%s.%s" .Release.Name .Values.global.domain | quote }}
       http:
         paths:
           - path: /
@@ -61,6 +66,7 @@ spec:
                 name: {{ .Release.Name }}-depictio-backend
                 port:
                   number: {{ .Values.backend.service.httpPort }}
+    {{- if .Values.minio.enabled }}
     - host: {{ printf "%s-minio.%s" .Release.Name .Values.global.domain | quote }}
       http:
         paths:
@@ -71,6 +77,7 @@ spec:
                 name: {{ .Release.Name }}-minio
                 port:
                   number: {{ .Values.minio.service.httpPort }}
+    {{- end }}
   {{- end }}
   {{- if .Values.ingress.tls }}
   tls:

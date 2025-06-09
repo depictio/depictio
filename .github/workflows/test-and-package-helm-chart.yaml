@@ -2,13 +2,11 @@ name: Test, Build and Push Helm Chart
 
 on:
   push:
-    # branches: [ main ]
     paths:
-      - 'helm-charts/depictio/**'
+      - "helm-charts/depictio/**"
   pull_request:
-    # branches: [ main ]
     paths:
-      - 'helm-charts/depictio/**'
+      - "helm-charts/depictio/**"
   workflow_dispatch:
 
 env:
@@ -31,7 +29,7 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@v4
         with:
-          version: 'v3.14.0'
+          version: "v3.14.0"
 
       - name: Extract chart metadata
         id: chart-info
@@ -46,10 +44,10 @@ jobs:
       - name: Set up Minikube
         uses: medyagh/setup-minikube@master
         with:
-          minikube-version: '1.35.0'
-          kubernetes-version: 'v1.32.0'
+          minikube-version: "1.35.0"
+          kubernetes-version: "v1.32.0"
           driver: docker
-          start-args: '--memory=4096 --cpus=2'
+          start-args: "--memory=4096 --cpus=2"
 
       - name: Enable ingress addon
         run: |
@@ -74,13 +72,8 @@ jobs:
 
       - name: Test chart packaging
         run: |
-          # Package the chart
           helm package ./helm-charts/depictio --version ${{ steps.chart-info.outputs.chart_version }}
-
-          # Verify package was created
           ls -la depictio-*.tgz
-
-          # Test chart from package
           helm template test-release ./depictio-${{ steps.chart-info.outputs.chart_version }}.tgz > /tmp/rendered-manifests.yaml
           echo "Successfully rendered chart from package"
 
@@ -99,54 +92,184 @@ jobs:
             --set frontend.image.pullPolicy=Never \
             --wait --timeout 5m
 
+      - name: Wait for deployment readiness
+        run: |
+          echo "Waiting for all deployments to be ready..."
+          kubectl wait --for=condition=ready pod -l app=depictio-frontend --timeout=300s
+          kubectl wait --for=condition=ready pod -l app=depictio-backend --timeout=300s
+          kubectl wait --for=condition=ready pod -l app=mongo --timeout=300s
+          kubectl wait --for=condition=ready pod -l app=minio --timeout=300s
+
+          echo "Waiting for ingress to be ready..."
+          kubectl wait --for=condition=ready ingress/depictio-ingress --timeout=120s || true
+
+          # Give services extra time to fully initialize
+          sleep 30
+
       - name: Verify Deployment
         run: |
-          echo "Checking all resources..."
+          echo "=== Checking all resources ==="
           kubectl get all
-
-          echo "Checking pod status in detail..."
+          echo ""
+          echo "=== Pod status in detail ==="
           kubectl get pods -o wide
-
-          echo "Checking PVCs..."
+          echo ""
+          echo "=== PVCs ==="
           kubectl get pvc
-
-          echo "Checking ConfigMaps..."
+          echo ""
+          echo "=== ConfigMaps ==="
           kubectl get configmaps
-
-          echo "Checking Secrets..."
+          echo ""
+          echo "=== Secrets ==="
           kubectl get secrets
-
-          echo "Checking Pod logs..."
-          kubectl logs -l app=depictio-backend --tail=50 || true
-          kubectl logs -l app=depictio-frontend --tail=50 || true
-
-      - name: Test Ingress Connectivity
-        run: |
-          echo "Fetching ingress resources..."
-          kubectl get ingress
-          kubectl describe ingress || true
-
-          MINIKUBE_IP=$(minikube ip)
-          echo "Using Minikube IP: $MINIKUBE_IP"
-
-          for host in "depictio.example.test" "depictio-api.example.test" "depictio-minio.example.test"; do
-            echo "Testing $host"
-            if [[ "$host" == "depictio-api.example.test" ]]; then
-              curl -sv -H "Host: $host" "http://$MINIKUBE_IP/docs" || true
-              status=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: $host" "http://$MINIKUBE_IP/docs" || echo "000")
-            else
-              curl -sv -H "Host: $host" "http://$MINIKUBE_IP/" || true
-              status=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: $host" "http://$MINIKUBE_IP/" || echo "000")
-            fi
-            echo "$host status: $status"
+          echo ""
+          echo "=== Ingress details ==="
+          kubectl get ingress -o wide
+          kubectl describe ingress/depictio-ingress || true
+          echo ""
+          echo "=== Services ==="
+          kubectl get services
+          echo ""
+          echo "=== Recent Pod logs ==="
+          for app in depictio-backend depictio-frontend mongo minio; do
+            echo "--- Logs for $app ---"
+            kubectl logs -l app=$app --tail=20 --since=2m || true
+            echo ""
           done
+
+      - name: Test Ingress Connectivity - Direct Method
+        run: |
+          echo "=== Testing Ingress Connectivity ==="
+
+          # Get ingress IP/address
+          INGRESS_IP=$(kubectl get ingress depictio-ingress -o jsonpath='{.status.loadBalancer.ingress[0].ip}' || echo "")
+          INGRESS_HOST=$(kubectl get ingress depictio-ingress -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' || echo "")
+
+          # For minikube, use the minikube IP
+          if [[ -z "$INGRESS_IP" && -z "$INGRESS_HOST" ]]; then
+            INGRESS_IP=$(minikube ip)
+          fi
+
+          echo "Ingress IP: $INGRESS_IP"
+          echo "Ingress Host: $INGRESS_HOST"
+
+          # Test endpoints with proper host headers
+          declare -A test_hosts=(
+            ["depictio.example.test"]="/"
+            ["depictio-api.example.test"]="/docs"
+            ["depictio-minio.example.test"]="/"
+          )
+
+          SUCCESS_COUNT=0
+          TOTAL_TESTS=${#test_hosts[@]}
+
+          for host in "${!test_hosts[@]}"; do
+            path="${test_hosts[$host]}"
+            echo "Testing $host$path"
+
+            # Try direct connection to ingress IP
+            if [[ -n "$INGRESS_IP" ]]; then
+              echo "Attempting direct connection to $INGRESS_IP with Host: $host"
+
+              # Test with timeout and retries
+              for attempt in {1..3}; do
+                echo "Attempt $attempt/3"
+
+                if status=$(curl -s -o /dev/null -w "%{http_code}" \
+                  --connect-timeout 10 \
+                  --max-time 30 \
+                  -H "Host: $host" \
+                  "http://$INGRESS_IP$path" 2>/dev/null); then
+
+                  echo "$host$path -> Status: $status"
+
+                  # Consider 200-399 as success, 403 might be expected for minio
+                  if [[ "$status" =~ ^[23] ]]; then
+                    echo "✅ $host$path is reachable"
+                    ((SUCCESS_COUNT++))
+                    break
+                  elif [[ "$status" == "403" && "$host" == *"minio"* ]]; then
+                    echo "✅ $host$path is reachable (403 expected for MinIO without auth)"
+                    ((SUCCESS_COUNT++))
+                    break
+                  else
+                    echo "❌ $host$path returned status $status"
+                  fi
+                else
+                  echo "❌ Failed to connect to $host$path (attempt $attempt)"
+                fi
+
+                if [[ $attempt -lt 3 ]]; then
+                  echo "Waiting 10 seconds before retry..."
+                  sleep 10
+                fi
+              done
+            else
+              echo "❌ No ingress IP available for testing $host"
+            fi
+            echo ""
+          done
+
+          echo "=== Test Results ==="
+          echo "Successful tests: $SUCCESS_COUNT/$TOTAL_TESTS"
+
+          # Require at least frontend to be working
+          if [[ $SUCCESS_COUNT -lt 1 ]]; then
+            echo "❌ No services are reachable through ingress"
+            exit 1
+          elif [[ $SUCCESS_COUNT -eq $TOTAL_TESTS ]]; then
+            echo "✅ All services are reachable through ingress"
+          else
+            echo "⚠️  Some services are reachable, but not all"
+            # Don't fail the build for partial success
+          fi
+
+      - name: Test with Port Forward as Fallback
+        if: failure()
+        run: |
+          echo "=== Fallback: Testing with Port Forward ==="
+
+          # Start port forwarding in background
+          kubectl port-forward -n ingress-nginx svc/ingress-nginx-controller 8080:80 &
+          PF_PID=$!
+
+          # Wait for port forward to be ready
+          echo "Waiting for port forward to be ready..."
+          for i in {1..30}; do
+            if curl -s localhost:8080 > /dev/null 2>&1; then
+              echo "Port forward is ready"
+              break
+            fi
+            sleep 1
+          done
+
+          # Test through port forward
+          declare -A test_hosts=(
+            ["depictio.example.test"]="/"
+            ["depictio-api.example.test"]="/docs"
+            ["depictio-minio.example.test"]="/"
+          )
+
+          for host in "${!test_hosts[@]}"; do
+            path="${test_hosts[$host]}"
+            echo "Testing $host$path via port forward"
+
+            status=$(curl -s -o /dev/null -w "%{http_code}" \
+              -H "Host: $host" \
+              "http://localhost:8080$path" || echo "000")
+
+            echo "$host$path -> Status: $status"
+          done
+
+          # Cleanup
+          kill $PF_PID || true
 
       - name: Test install from package
         run: |
-          # Clean up existing installation and all resources
+          # Clean up existing installation
           helm uninstall depictio || true
           kubectl delete pvc --all || true
-          kubectl delete configmap --all || true
+          kubectl delete configmap --all --ignore-not-found=true || true
           sleep 15
 
           # Install from packaged chart
@@ -165,22 +288,35 @@ jobs:
           echo "Successfully installed from packaged chart"
           kubectl get pods
 
-      - name: Test Ingress Connectivity (package)
+      - name: Test Package Installation Connectivity
         run: |
-          MINIKUBE_IP=$(minikube ip)
-          echo "Using Minikube IP: $MINIKUBE_IP"
+          echo "=== Testing Package Installation Connectivity ==="
 
-            if [[ "$host" == "depictio-pkg-api.example.test" ]]; then
-              curl -sv -H "Host: $host" "http://$MINIKUBE_IP/docs" || true
-              status=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: $host" "http://$MINIKUBE_IP/docs" || echo "000")
-            else
-              curl -sv -H "Host: $host" "http://$MINIKUBE_IP/" || true
-              status=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: $host" "http://$MINIKUBE_IP/" || echo "000")
-            fi
-            echo "$host status: $status"
-          done
+          # Wait for readiness
+          kubectl wait --for=condition=ready pod -l app=depictio-frontend --timeout=300s
+          kubectl wait --for=condition=ready pod -l app=depictio-backend --timeout=300s
+          sleep 30
 
-          kill $PID || true
+          # Get ingress IP
+          INGRESS_IP=$(minikube ip)
+          echo "Testing against ingress IP: $INGRESS_IP"
+
+          # Test the frontend at least
+          echo "Testing depictio-pkg.example.test"
+          status=$(curl -s -o /dev/null -w "%{http_code}" \
+            --connect-timeout 10 \
+            --max-time 30 \
+            -H "Host: depictio-pkg.example.test" \
+            "http://$INGRESS_IP/" || echo "000")
+
+          echo "Frontend status: $status"
+
+          if [[ "$status" =~ ^[23] ]]; then
+            echo "✅ Package installation test successful"
+          else
+            echo "❌ Package installation test failed with status $status"
+            # Don't fail the entire workflow for this
+          fi
 
       - name: Log in to Container Registry
         if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
