@@ -10,6 +10,8 @@ data:
   DEV_MODE: {{ .Values.backend.env.DEV_MODE | quote }}
   DEPICTIO_LOGGING_VERBOSITY_LEVEL: {{ .Values.backend.env.DEPICTIO_LOGGING_VERBOSITY_LEVEL | quote }}
   DEPICTIO_FASTAPI_PORT: {{ .Values.backend.env.DEPICTIO_FASTAPI_PORT | quote }}
+  DEPICTIO_FASTAPI_PUBLIC_URL: https://{{ printf "%s-api.%s" .Release.Name .Values.global.domain | quote }}
+  DEPICTIO_MINIO_PUBLIC_URL: https://{{ printf "%s-minio.%s" .Release.Name .Values.global.domain | quote }}
   DEPICTIO_DASH_PORT: {{ .Values.backend.env.DEPICTIO_DASH_PORT | quote }}
   DEPICTIO_DASH_SERVICE_NAME: {{ printf "%s-depictio-frontend" .Release.Name | quote }}
   DEPICTIO_MINIO_ROOT_USER: {{ $access | quote }}
@@ -24,6 +26,8 @@ data:
   DEV_MODE: {{ .Values.frontend.env.DEV_MODE | quote }}
   DEPICTIO_FASTAPI_SERVICE_NAME: {{ printf "%s-depictio-backend" .Release.Name | quote }}
   DEPICTIO_FASTAPI_PORT: {{ .Values.frontend.env.DEPICTIO_FASTAPI_PORT | quote }}
+  DEPICTIO_FASTAPI_PUBLIC_URL: https://{{ printf "%s-api.%s" .Release.Name .Values.global.domain | quote }}
+  DEPICTIO_MINIO_PUBLIC_URL: https://{{ printf "%s-minio.%s" .Release.Name .Values.global.domain | quote }}
   DEPICTIO_DASH_PORT: {{ .Values.frontend.env.DEPICTIO_DASH_PORT | quote }}
   DEPICTIO_MINIO_ROOT_USER: {{ $access | quote }}
   DEPICTIO_MINIO_ROOT_PASSWORD: {{ $secret | quote }}
