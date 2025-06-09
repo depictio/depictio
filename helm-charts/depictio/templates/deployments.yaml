@@ -71,6 +71,15 @@ spec:
         project: {{ .Values.project.slug }}
         type: app
     spec:
+      # initContainers:
+      #   - name: wait-for-mongo
+      #     image: busybox
+      #     command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-mongo 27018; do sleep 1; done']
+      #   - name: wait-for-minio
+      #     image: busybox
+      #     command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-minio 9000; do sleep 1; done']
+
+
       containers:
         - name: minio
           image: "{{ .Values.minio.image.repository }}:{{ .Values.minio.image.tag }}"
@@ -130,6 +139,10 @@ spec:
     spec:
       securityContext:
         fsGroup: {{ .Values.backend.securityContext.fsGroup }}
+      # initContainers:
+      #   - name: wait-for-backend
+      #     image: busybox
+      #     command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-depictio-backend 8058; do sleep 1; done']
       containers:
         - name: depictio-backend
           image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
