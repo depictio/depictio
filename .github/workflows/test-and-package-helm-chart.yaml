@@ -132,8 +132,13 @@ jobs:
 
           for host in "depictio.example.test" "depictio-api.example.test" "depictio-minio.example.test"; do
             echo "Testing $host"
-            curl -sv -H "Host: $host" http://localhost:8080/ || true
-            status=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: $host" http://localhost:8080/ || echo "000")
+            if [[ "$host" == "depictio-api.example.test" ]]; then
+              curl -sv -H "Host: $host" http://localhost:8080/docs || true
+              status=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: $host" http://localhost:8080/docs || echo "000")
+            else
+              curl -sv -H "Host: $host" http://localhost:8080/ || true
+              status=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: $host" http://localhost:8080/ || echo "000")
+            fi
             echo "$host status: $status"
           done
 
@@ -169,8 +174,13 @@ jobs:
           PID=$!
           sleep 10
 
-          for host in "depictio-pkg.example.test" "depictio-pkg-api.example.test/docs" "depictio-pkg-minio.example.test"; do
-            echo "Testing $host"
+            if [[ "$host" == "depictio-pkg-api.example.test" ]]; then
+              curl -sv -H "Host: $host" http://localhost:8080/docs || true
+              status=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: $host" http://localhost:8080/docs || echo "000")
+            else
+              curl -sv -H "Host: $host" http://localhost:8080/ || true
+              status=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: $host" http://localhost:8080/ || echo "000")
+            fi
             curl -sv -H "Host: $host" http://localhost:8080/ || true
             status=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: $host" http://localhost:8080/ || echo "000")
             echo "$host status: $status"
