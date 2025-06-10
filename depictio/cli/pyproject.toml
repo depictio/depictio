@@ -4,7 +4,8 @@ version = "0.0.6-beta1"
 description = "Depictio CLI to interact with the Depictio API"
 readme = "README.md"
 requires-python = ">=3.11"
-license = {text = "MIT"}
+# Fix license format to avoid deprecation warnings
+license = "MIT"
 dependencies = [
   "boto3",
   "colorlog",
@@ -26,7 +27,6 @@ dependencies = [
   "bleach",
   "packaging",
 ]
-
 authors = [{ name = "Thomas Weber", email = "thomas.weber@embl.de" }]
 urls = { Homepage = "http://github.com/depictio/depictio" }
 classifiers = [
@@ -44,9 +44,10 @@ depictio-cli = "depictio.cli.depictio_cli:main"
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools.packages.find]
-where = ["../.."]
-include = [
+[tool.setuptools]
+# Fix the package directory mapping
+package-dir = {"" = "../.."}
+packages = [
   "depictio.cli",
   "depictio.cli.cli",
   "depictio.cli.cli.commands",
@@ -54,7 +55,11 @@ include = [
   "depictio.models",
   "depictio.models.models",
   "depictio.models.models.data_collections_types",
-  "depictio.api",                  # add
-  "depictio.api.v1",              # add
-  "depictio.api.v1.configs",      # add
+  "depictio.api",
+  "depictio.api.v1",
+  "depictio.api.v1.configs",
 ]
+
+# Add explicit package data if needed
+[tool.setuptools.package-data]
+"depictio.cli" = ["*.yaml", "*.yml", "*.json"]
