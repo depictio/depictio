@@ -13,7 +13,7 @@ from depictio.models.utils import convert_model_to_dict
 
 
 @validate_call
-def api_login(yaml_config_path: str = "~/.depictio/agent.yaml") -> dict:
+def api_login(yaml_config_path: str = "~/.depictio/CLI.yaml") -> dict:
     """
     Login to the Depictio API using the CLI configuration.
     """
