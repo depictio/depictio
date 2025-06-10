@@ -11,7 +11,7 @@ data:
   DEPICTIO_FASTAPI_PUBLIC_URL: {{ printf "https://%s-api.%s" .Release.Name .Values.global.domain | quote }}
   DEPICTIO_MINIO_PUBLIC_URL: {{ printf "https://%s-minio.%s" .Release.Name .Values.global.domain | quote }}
   DEPICTIO_DASH_SERVICE_PORT: {{ .Values.backend.env.DEPICTIO_DASH_SERVICE_PORT | quote }}
-  # DEPICTIO_DASH_SERVICE_NAME: {{ printf "%s-depictio-frontend" .Release.Name | quote }}
+  DEPICTIO_DASH_SERVICE_NAME: {{ printf "%s-depictio-frontend" .Release.Name | quote }}
   DEPICTIO_MONGODB_SERVICE_NAME: {{ printf "%s-mongo" .Release.Name | quote }}
   DEPICTIO_MINIO_SERVICE_NAME: {{ printf "%s-minio" .Release.Name | quote }}
 ---
