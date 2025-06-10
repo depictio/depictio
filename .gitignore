@@ -175,7 +175,7 @@ dashboards.json
 
 *_token.yaml
 depictio/.depictio/
-depictio/.depictio/default_admin_agent.yaml
+depictio/.depictio/*.yaml
 
 # Development Environment
 ## Dev directories

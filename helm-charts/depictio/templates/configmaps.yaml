@@ -1,5 +1,3 @@
-{{- $access := default .Release.Name .Values.secrets.minioRootUser }}
-{{- $secret := default (randAlphaNum 32) .Values.secrets.minioRootPassword }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -9,11 +7,13 @@ data:
   DEPICTIO_CONTEXT: {{ .Values.backend.env.DEPICTIO_CONTEXT | quote }}
   DEV_MODE: {{ .Values.backend.env.DEV_MODE | quote }}
   DEPICTIO_LOGGING_VERBOSITY_LEVEL: {{ .Values.backend.env.DEPICTIO_LOGGING_VERBOSITY_LEVEL | quote }}
-  DEPICTIO_FASTAPI_PORT: {{ .Values.backend.env.DEPICTIO_FASTAPI_PORT | quote }}
-  DEPICTIO_DASH_PORT: {{ .Values.backend.env.DEPICTIO_DASH_PORT | quote }}
-  DEPICTIO_DASH_SERVICE_NAME: {{ printf "%s-depictio-frontend" .Release.Name | quote }}
-  DEPICTIO_MINIO_ROOT_USER: {{ $access | quote }}
-  DEPICTIO_MINIO_ROOT_PASSWORD: {{ $secret | quote }}
+  # DEPICTIO_FASTAPI_SERVICE_PORT: {{ .Values.backend.env.DEPICTIO_FASTAPI_SERVICE_PORT | quote }}
+  DEPICTIO_FASTAPI_PUBLIC_URL: {{ printf "https://%s-api.%s" .Release.Name .Values.global.domain | quote }}
+  DEPICTIO_MINIO_PUBLIC_URL: {{ printf "https://%s-minio.%s" .Release.Name .Values.global.domain | quote }}
+  DEPICTIO_DASH_SERVICE_PORT: {{ .Values.backend.env.DEPICTIO_DASH_SERVICE_PORT | quote }}
+  # DEPICTIO_DASH_SERVICE_NAME: {{ printf "%s-depictio-frontend" .Release.Name | quote }}
+  DEPICTIO_MONGODB_SERVICE_NAME: {{ printf "%s-mongo" .Release.Name | quote }}
+  DEPICTIO_MINIO_SERVICE_NAME: {{ printf "%s-minio" .Release.Name | quote }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -22,8 +22,10 @@ metadata:
   namespace: {{ .Release.Namespace }}
 data:
   DEV_MODE: {{ .Values.frontend.env.DEV_MODE | quote }}
+  DEPICTIO_LOGGING_VERBOSITY_LEVEL: {{ .Values.backend.env.DEPICTIO_LOGGING_VERBOSITY_LEVEL | quote }}
   DEPICTIO_FASTAPI_SERVICE_NAME: {{ printf "%s-depictio-backend" .Release.Name | quote }}
-  DEPICTIO_FASTAPI_PORT: {{ .Values.frontend.env.DEPICTIO_FASTAPI_PORT | quote }}
-  DEPICTIO_DASH_PORT: {{ .Values.frontend.env.DEPICTIO_DASH_PORT | quote }}
-  DEPICTIO_MINIO_ROOT_USER: {{ $access | quote }}
-  DEPICTIO_MINIO_ROOT_PASSWORD: {{ $secret | quote }}
+  DEPICTIO_FASTAPI_SERVICE_PORT: {{ .Values.frontend.env.DEPICTIO_FASTAPI_SERVICE_PORT | quote }}
+  DEPICTIO_FASTAPI_PUBLIC_URL: {{ printf "https://%s-api.%s" .Release.Name .Values.global.domain | quote }}
+  DEPICTIO_MINIO_PUBLIC_URL: {{ printf "https://%s-minio.%s" .Release.Name .Values.global.domain | quote }}
+  DEPICTIO_DASH_SERVICE_PORT: {{ .Values.frontend.env.DEPICTIO_DASH_SERVICE_PORT | quote }}
+  DEPICTIO_MINIO_SERVICE_NAME: {{ printf "%s-minio" .Release.Name | quote }}

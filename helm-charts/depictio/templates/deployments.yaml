@@ -130,14 +130,33 @@ spec:
     spec:
       securityContext:
         fsGroup: {{ .Values.backend.securityContext.fsGroup }}
+      initContainers:
+        - name: wait-for-mongo
+          image: busybox:1.35
+          command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-mongo {{ .Values.mongo.service.port }}; do echo "Waiting for mongo..."; sleep 2; done']
+        {{- if .Values.minio.enabled }}
+        - name: wait-for-minio
+          image: busybox:1.35
+          command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-minio {{ .Values.minio.service.httpPort }}; do echo "Waiting for minio..."; sleep 2; done']
+        {{- end }}
       containers:
         - name: depictio-backend
           image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
           imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
-          # Use the ConfigMap
           envFrom:
             - configMapRef:
                 name: {{ .Release.Name }}-backend-config
+          env:
+            - name: DEPICTIO_MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-depictio-secrets
+                  key: MINIO_ROOT_USER
+            - name: DEPICTIO_MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-depictio-secrets
+                  key: MINIO_ROOT_PASSWORD
           command:
             - "/app/run_fastapi.sh"
           ports:
@@ -182,14 +201,28 @@ spec:
         project: {{ .Values.project.slug }}
         type: app
     spec:
+      initContainers:
+        - name: wait-for-backend
+          image: busybox:1.35
+          command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-depictio-backend {{ .Values.backend.service.httpPort }}; do echo "Waiting for backend..."; sleep 2; done']
       containers:
         - name: depictio-frontend
           image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
           imagePullPolicy: {{ .Values.frontend.image.pullPolicy }}
-          # Use the ConfigMap
           envFrom:
             - configMapRef:
                 name: {{ .Release.Name }}-frontend-config
+          env:
+            - name: DEPICTIO_MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-depictio-secrets
+                  key: MINIO_ROOT_USER
+            - name: DEPICTIO_MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-depictio-secrets
+                  key: MINIO_ROOT_PASSWORD
           command:
             - "/app/run_dash.sh"
           ports:

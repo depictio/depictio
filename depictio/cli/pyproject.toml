@@ -31,7 +31,6 @@ authors = [{ name = "Thomas Weber", email = "thomas.weber@embl.de" }]
 urls = { Homepage = "http://github.com/depictio/depictio" }
 classifiers = [
   "Programming Language :: Python :: 3",
-  "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent",
 ]
 
@@ -45,9 +44,9 @@ depictio-cli = "depictio.cli.depictio_cli:main"
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools]
-package-dir = {"" = "../.."}
-packages = [
+[tool.setuptools.packages.find]
+where = ["../.."]
+include = [
   "depictio.cli",
   "depictio.cli.cli",
   "depictio.cli.cli.commands",
@@ -55,5 +54,7 @@ packages = [
   "depictio.models",
   "depictio.models.models",
   "depictio.models.models.data_collections_types",
-  "depictio.api.v1.configs",
+  "depictio.api",                  # add
+  "depictio.api.v1",              # add
+  "depictio.api.v1.configs",      # add
 ]

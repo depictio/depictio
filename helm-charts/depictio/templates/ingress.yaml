@@ -11,6 +11,7 @@ metadata:
     {{- toYaml .Values.ingress.labels | nindent 4 }}
     {{- end }}
   annotations:
+
     {{- if .Values.ingress.annotations }}
     {{- toYaml .Values.ingress.annotations | nindent 4 }}
     {{- end }}
@@ -20,7 +21,7 @@ spec:
   {{- end }}
   rules:
   {{- if .Values.ingress.hosts }}
-  {{- /* If hosts are defined in values, use them */}}
+  {{- /* If hosts are explicitly defined in values, use them */}}
   {{- range .Values.ingress.hosts }}
     - host: {{ .host | quote }}
       http:
@@ -40,8 +41,8 @@ spec:
         {{- end }}
   {{- end }}
   {{- else }}
-  {{- /* If no hosts defined, create default configuration */}}
-    - host: {{ .Values.ingress.host | default (printf "%s.%s" .Release.Name .Values.global.domain) | quote }}
+  {{- /* Generate default host configurations with CORRECT service names */}}
+    - host: {{ printf "%s.%s" .Release.Name .Values.global.domain | quote }}
       http:
         paths:
           - path: /
@@ -51,13 +52,28 @@ spec:
                 name: {{ .Release.Name }}-depictio-frontend
                 port:
                   number: {{ .Values.frontend.service.httpPort }}
-          - path: /api
+    - host: {{ printf "%s-api.%s" .Release.Name .Values.global.domain | quote }}
+      http:
+        paths:
+          - path: /
             pathType: Prefix
             backend:
               service:
                 name: {{ .Release.Name }}-depictio-backend
                 port:
                   number: {{ .Values.backend.service.httpPort }}
+    {{- if .Values.minio.enabled }}
+    - host: {{ printf "%s-minio.%s" .Release.Name .Values.global.domain | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-minio
+                port:
+                  number: {{ .Values.minio.service.httpPort }}
+    {{- end }}
   {{- end }}
   {{- if .Values.ingress.tls }}
   tls:

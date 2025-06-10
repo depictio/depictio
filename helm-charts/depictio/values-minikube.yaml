@@ -3,28 +3,39 @@
 # Storage class for Minikube
 storageClass: "standard"
 
-# Ingress configuration for Minikube
 ingress:
   enabled: true
   ingressClassName: "nginx"
-
-  # Host configuration for local access with minikube tunnel
-  hosts:
-    - host: "depictio.local"
-      paths:
-        - path: /
-          pathType: Prefix
-          service:
-            name: depictio-frontend
-            port: 80
-        - path: /api
-          pathType: Prefix
-          service:
-            name: depictio-backend
-            port: 80
-
-  # No TLS for local development
+  hosts: []  # Keep empty to use auto-generated
+  annotations: {}
+  labels: {}
   tls: []
+
+global:
+  domain: "local"  # Will create: {release}.local, {release}-api.local, {release}-minio.local
+
+# Ingress configuration for Minikube
+# ingress:
+#   enabled: true
+#   ingressClassName: "nginx"
+
+#   # Host configuration for local access with minikube tunnel
+#   hosts:
+#     - host: "depictio.local"
+#       paths:
+#         - path: /
+#           pathType: Prefix
+#           service:
+#             name: depictio-frontend
+#             port: 80
+#         - path: /api
+#           pathType: Prefix
+#           service:
+#             name: depictio-backend
+#             port: 80
+
+#   # No TLS for local development
+#   tls: []
 
 # Resource adjustments for local development
 mongo:
