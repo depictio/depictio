@@ -66,5 +66,5 @@ jobs:
 
       - name: Verify package
         run: |
-          cd depictio/cli
+          # cd depictio/cli
           twine check dist/*
