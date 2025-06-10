@@ -72,7 +72,7 @@ minio:
 backend:
   image:
     repository: ghcr.io/depictio/depictio # Corrected repository path with .io
-    tag: 0.0.4
+    tag: 0.0.5
     pullPolicy: Always
   resources:
     requests:
@@ -88,11 +88,13 @@ backend:
     targetPort: 8058
   env:
     DEPICTIO_CONTEXT: "server"
-    DEV_MODE: "true"
+    DEV_MODE: "false"
     DEPICTIO_LOGGING_VERBOSITY_LEVEL: "DEBUG"
-    DEPICTIO_FASTAPI_PORT: "8058"
-    DEPICTIO_DASH_PORT: "80"
-    DEPICTIO_DASH_SERVICE_NAME: "depictio-frontend"
+    DEPICTIO_FASTAPI_SERVICE_PORT: "8058"
+    DEPICTIO_DASH_SERVICE_PORT: "80"
+    # DEPICTIO_DASH_SERVICE_NAME: "depictio-frontend"
+    # DEPICTIO_FASTAPI_PUBLIC_URL: "https://{{ .Release.Name }}-api.{{ .Values.global.domain }}"
+    # DEPICTIO_MINIO_PUBLIC_URL: "https://{{ .Release.Name }}-minio.{{ .Values.global.domain }}"
   securityContext:
     fsGroup: 2000
 
@@ -100,7 +102,7 @@ backend:
 frontend:
   image:
     repository: ghcr.io/depictio/depictio # Corrected repository path with .io
-    tag: 0.0.4
+    tag: 0.0.5
     pullPolicy: Always
   resources:
     requests:
@@ -115,10 +117,12 @@ frontend:
     httpsPort: 443
     targetPort: 5080
   env:
-    DEV_MODE: "true"
-    DEPICTIO_FASTAPI_SERVICE_NAME: "depictio-backend"
-    DEPICTIO_FASTAPI_PORT: "80"
-    DEPICTIO_DASH_PORT: "5080"
+    DEV_MODE: "false"
+    # DEPICTIO_FASTAPI_SERVICE_NAME: "depictio-backend"
+    DEPICTIO_FASTAPI_SERVICE_PORT: "80"
+    DEPICTIO_DASH_SERVICE_PORT: "5080"
+    # DEPICTIO_FASTAPI_PUBLIC_URL: "https://{{ .Release.Name }}-api.{{ .Values.global.domain }}"
+    # DEPICTIO_MINIO_PUBLIC_URL: "https://{{ .Release.Name }}-minio.{{ .Values.global.domain }}"
 
 # Generic base ingress values
 ingress:
