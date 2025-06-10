@@ -4,11 +4,7 @@ import sys
 import pymongo
 
 from depictio.api.v1.configs.config import MONGODB_URL, settings
-
-# from depictio.api.v1.db_init import initialize_db
 from depictio.api.v1.configs.logging_init import logger
-
-# from depictio.api.v1.endpoints.user_endpoints.utils import _ensure_mongodb_connection
 
 # Check if running in a test environment
 # First check environment variable, then check for pytest in sys.argv
@@ -17,33 +13,11 @@ is_testing = os.environ.get("DEV_MODE", "false").lower() == "true" or any(
 )
 logger.info(f"Is testing: {is_testing}")
 
-# Check if running in Docker or locally
-# If we can't resolve 'mongo', we're running locally
-# is_running_locally = True
-# try:
-#     socket.gethostbyname(settings.mongodb.service_name)
-#     is_running_locally = False
-# except socket.gaierror:
-#     is_running_locally = True
-
-# # Determine the MongoDB URL based on whether we're running locally or in Docker
-# if is_running_locally:
-#     # When running locally, use localhost instead of 'mongo'
-#     MONGODB_LOCAL_URL = "mongodb://{settings.mongodb.service_name}:{settings.mongodb.port}"
-#     logger.info(f"Running locally, MongoDB client created with URL: {MONGODB_LOCAL_URL}")
-#     client = pymongo.MongoClient(MONGODB_LOCAL_URL)
-# else:
-#     # When running in Docker, use the original URL
-# logger.info(f"Running in Docker, MongoDB client created with URL: {MONGODB_URL}")
-
+# Initialize MongoDB client
 logger.info(f"Using MongoDB URL: {MONGODB_URL}")
 client = pymongo.MongoClient(MONGODB_URL)
 
-# Use a test-specific database name if in test mode
-# if is_testing:
-#     db_name = os.environ.get("DEPICTIO_MONGODB_DB_NAME", "depictioDB_test")
-#     logger.info(f"Using test database: {db_name}")
-# else:
+# Get the database name from settings
 db_name = settings.mongodb.db_name
 
 
@@ -95,9 +69,3 @@ dashboards_collection = db[settings.mongodb.collections.dashboards_collection]
 initialization_collection = db[settings.mongodb.collections.initialization_collection]
 projects_collection = db[settings.mongodb.collections.projects_collection]
 test_collection = db[settings.mongodb.collections.test_collection]
-
-# # Ensure MongoDB connection
-# _ensure_mongodb_connection()
-
-# # Initialize admin user and token
-# initialize_db()
