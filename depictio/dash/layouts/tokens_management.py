@@ -604,7 +604,7 @@ def register_tokens_management_callbacks(app):
                                     html.Span(
                                         "Please copy the configuration and store it in a safe place, such as "
                                     ),
-                                    dmc.Code("~/.depictio/depictio-cli.yaml"),
+                                    dmc.Code("~/.depictio/CLI.yaml"),
                                     html.Span(
                                         ". You will not be able to access this configuration again once you close this dialog."
                                     ),
