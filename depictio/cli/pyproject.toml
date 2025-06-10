@@ -55,6 +55,8 @@ packages = [
   "depictio.models",
   "depictio.models.models",
   "depictio.models.models.data_collections_types",
+  "depictio.api",
+  "depictio.api.v1",
   "depictio.api.v1.configs",
 ]
 
