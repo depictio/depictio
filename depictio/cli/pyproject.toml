@@ -1,6 +1,6 @@
 [project]
 name = "depictio-cli"
-version = "0.0.6-beta2"
+version = "0.0.6b2"
 description = "Depictio CLI to interact with the Depictio API"
 readme = "README.md"
 requires-python = ">=3.11"
