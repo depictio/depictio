@@ -52,10 +52,17 @@ jobs:
       - name: Run tests
         run: pytest depictio/tests/cli depictio/tests/models -xvs -n auto
 
+      # - name: Build package
+      #   run: |
+      #     cd depictio/cli
+      #     python -m build
+
       - name: Build package
         run: |
-          cd depictio/cli
-          python -m build
+          # Copy CLI config to root and modify it
+          cp depictio/cli/pyproject.toml ./pyproject-cli.toml
+          sed -i 's|package-dir = {"" = "../.."}||' ./pyproject-cli.toml
+          python -m build --config-setting="--config-file=./pyproject-cli.toml"
 
       - name: Verify package
         run: |
