@@ -1,4 +1,4 @@
-from flask import send_from_directory
+from flask import abort, request, send_from_directory
 
 
 def register_static_routes(server):
@@ -16,3 +16,19 @@ def register_static_routes(server):
     @server.route("/static/<path:path>")
     def serve_static(path):
         return send_from_directory(static_directory, path)
+
+    # Block debug endpoints
+    @server.before_request
+    def block_debug_endpoints():
+        debug_paths = [
+            "/console",
+            "/__debugger__",
+            "/debugger",
+            "/debug",
+            "/_debug_toolbar",
+            "/werkzeug",
+            "/debug-console",
+        ]
+
+        if request.path in debug_paths:
+            abort(404)  # Return 404 instead of exposing debug interface

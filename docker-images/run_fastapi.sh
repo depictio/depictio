@@ -3,7 +3,7 @@
 # Set default values if environment variables are not set
 FASTAPI_HOST=${DEPICTIO_FASTAPI_HOST:-0.0.0.0}
 FASTAPI_PORT=${DEPICTIO_FASTAPI_PORT:-8058}
-FASTAPI_WORKERS=${DEPICTIO_FASTAPI_WORKERS:-1}
+FASTAPI_WORKERS=${DEPICTIO_FASTAPI_WORKERS:-4}
 
 if [ "$DEV_MODE" = "true" ]; then
     # Development mode with reload
