@@ -5,6 +5,8 @@ DASH_HOST=${DEPICTIO_DASH_HOST:-0.0.0.0}
 DASH_PORT=${DEPICTIO_DASH_PORT:-5080}
 DASH_WORKERS=${DEPICTIO_DASH_WORKERS:-4}
 
+sleep 5  # Allow time for other services to start
+
 if [ "$DEV_MODE" = "true" ]; then
     # Development mode with reload
     # Debug mode is passed to Dash in app.py
