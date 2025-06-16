@@ -256,114 +256,117 @@ async def screenshot_dashboard(
 
     playwright_dev_mode = not os.getenv("DEPICTIO_PLAYWRIGHT_DEV_MODE", "False").lower() == "true"
 
-    try:
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=playwright_dev_mode)
-            # browser = await p.chromium.launch(headless=True, executable_path="/home/mambauser/.cache/ms-playwright/chromium-1140/chrome-linux/chrome")
+    # try:
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=playwright_dev_mode)
+        # browser = await p.chromium.launch(headless=True, executable_path="/home/mambauser/.cache/ms-playwright/chromium-1140/chrome-linux/chrome")
 
-            # Define the viewport size (browser window size)
-            viewport_width = 1920
-            viewport_height = 1080
+        # Define the viewport size (browser window size)
+        viewport_width = 1920
+        viewport_height = 1080
 
-            # Create a new context with the specified viewport size
-            context = await browser.new_context(
-                viewport={"width": viewport_width, "height": viewport_height}
-            )
+        # Create a new context with the specified viewport size
+        context = await browser.new_context(
+            viewport={"width": viewport_width, "height": viewport_height}
+        )
 
-            page = await context.new_page()
-            logger.info(f"Browser: {browser}")
+        page = await context.new_page()
+        logger.info(f"Browser: {browser}")
 
-            # Navigate to the URL
-            await page.goto(f"{url}/auth", wait_until="networkidle")
-            logger.info(f"Page URL: {url}/auth")
+        # Navigate to the URL
+        await page.goto(f"{url}/auth", wait_until="domcontentloaded")
+        # await page.goto(f"{url}/auth", wait_until="networkidle")
+        logger.info(f"Page URL: {url}/auth with wait_until='domcontentloaded'")
 
-            # get the current user a functional token
-            token = await TokenBeanie.find_one(
-                {
-                    "user_id": current_user.id,
-                    "token_lifetime": "short-lived",
-                    "expire_datetime": {"$gt": datetime.now()},
-                }
-            )
-            logger.info(f"Token: {token}")
+        # get the current user a functional token
+        token = await TokenBeanie.find_one(
+            {
+                "user_id": current_user.id,
+                "token_lifetime": "short-lived",
+                "expire_datetime": {"$gt": datetime.now()},
+            }
+        )
+        logger.info(f"Token: {token}")
 
-            token_data = token.model_dump(exclude_none=True)
-            token_data["_id"] = token_data.pop("id", None)
-            token_data["logged_in"] = True
-            logger.info(f"Token: {token}")
+        token_data = token.model_dump(exclude_none=True)
+        token_data["_id"] = token_data.pop("id", None)
+        token_data["logged_in"] = True
+        logger.info(f"Token: {token}")
 
-            token_data_json = json.dumps(token_data)
-            logger.info(f"Token data: {token_data_json}")
+        token_data_json = json.dumps(token_data)
+        logger.info(f"Token data: {token_data_json}")
 
-            # Set data in the local storage
-            await page.evaluate(
-                f"""() => {{
-                localStorage.setItem('local-store', '{token_data_json}');
-            }}"""
-            )
-            # await asyncio.sleep(3600)  # Keeps the browser open for 1 hour
+        # Set data in the local storage
+        await page.evaluate(
+            f"""() => {{
+            localStorage.setItem('local-store', '{token_data_json}');
+        }}"""
+        )
+        # await asyncio.sleep(3600)  # Keeps the browser open for 1 hour
 
-            await page.reload()
+        await page.reload()
 
-            # Navigate to the target dashboard page
-            await page.goto(f"{url}/dashboard/{str(dashboard_id)}", wait_until="networkidle")
-            logger.info(f"Page URL: {url}/dashboard/{str(dashboard_id)}")
+        # Navigate to the target dashboard page
+        await page.goto(f"{url}/dashboard/{str(dashboard_id)}", wait_until="domcontentloaded")
 
-            # Wait for the page content to load
-            await page.wait_for_selector("div#page-content")
-            logger.info("Wait for selector: div#page-content")
+        # await page.goto(f"{url}/dashboard/{str(dashboard_id)}", wait_until="networkidle")
+        logger.info(f"Page URL: {url}/dashboard/{str(dashboard_id)}")
 
-            # # Check if the iframe is present
-            # iframe_element = await page.query_selector('iframe[src*="jbrowse"]')  # Adjust the selector to match the iframe's source or other attributes
+        # Wait for the page content to load
+        await page.wait_for_selector("div#page-content")
+        logger.info("Wait for selector: div#page-content")
 
-            # if iframe_element:
-            #     # If the iframe is present, wait for its content to load
-            #     iframe = await iframe_element.content_frame()
-            #     await iframe.wait_for_selector("")  # Replace with a specific element inside the iframe
-            #     logger.info(f"Iframe loaded with element 'your-element-inside-iframe'")
-            # else:
-            #     logger.info("Iframe not found, proceeding without waiting for iframe content")
+        # # Check if the iframe is present
+        # iframe_element = await page.query_selector('iframe[src*="jbrowse"]')  # Adjust the selector to match the iframe's source or other attributes
 
-            # Remove the debug menu if it exists
-            await page.evaluate(
-                """() => {
-                const debugMenuOuter = document.querySelector('.dash-debug-menu__outer');
-                if (debugMenuOuter) {
-                    debugMenuOuter.remove();
-                }
-                const debugMenu = document.querySelector('.dash-debug-menu');
-                if (debugMenu) {
-                    debugMenu.remove();
-                }
-            }"""
-            )
-            logger.info("Removed debug menu")
+        # if iframe_element:
+        #     # If the iframe is present, wait for its content to load
+        #     iframe = await iframe_element.content_frame()
+        #     await iframe.wait_for_selector("")  # Replace with a specific element inside the iframe
+        #     logger.info(f"Iframe loaded with element 'your-element-inside-iframe'")
+        # else:
+        #     logger.info("Iframe not found, proceeding without waiting for iframe content")
 
-            # Capture a screenshot of the content below the 'div#page-content'
-            element = await page.query_selector("div#page-content")
+        # Remove the debug menu if it exists
+        await page.evaluate(
+            """() => {
+            const debugMenuOuter = document.querySelector('.dash-debug-menu__outer');
+            if (debugMenuOuter) {
+                debugMenuOuter.remove();
+            }
+            const debugMenu = document.querySelector('.dash-debug-menu');
+            if (debugMenu) {
+                debugMenu.remove();
+            }
+        }"""
+        )
+        logger.info("Removed debug menu")
 
-            if element:
-                # await page.wait_for_timeout(3000)
-                # logger.info(f"Wait for timeout: 3000")
+        # Capture a screenshot of the content below the 'div#page-content'
+        element = await page.query_selector("div#page-content")
 
-                # user = current_user.email.split("_")[0]
-                # user_id = current_user.id
+        if element:
+            # await page.wait_for_timeout(3000)
+            # logger.info(f"Wait for timeout: 3000")
 
-                # find corresponding mongoid for the dashboard
+            # user = current_user.email.split("_")[0]
+            # user_id = current_user.id
 
-                output_file = f"{output_folder}/{str(dashboard_id)}.png"
-                logger.info(f"Output file: {output_file}")
-                await element.screenshot(path=output_file)
-                logger.info(f"Screenshot captured for dashboard ID: {str(dashboard_id)}")
-            else:
-                logger.error("Could not find 'div#page-content' element")
+            # find corresponding mongoid for the dashboard
 
-            # Close the browser
-            await browser.close()
+            output_file = f"{output_folder}/{str(dashboard_id)}.png"
+            logger.info(f"Output file: {output_file}")
+            await element.screenshot(path=output_file)
+            logger.info(f"Screenshot captured for dashboard ID: {str(dashboard_id)}")
+        else:
+            logger.error("Could not find 'div#page-content' element")
 
-    except Exception as e:
-        logger.error(f"Failed to capture screenshot for dashboard URL: {url} - {e}")
-        raise e
+        # Close the browser
+        await browser.close()
+
+    # except Exception as e:
+    #     logger.error(f"Failed to capture screenshot for dashboard URL: {url} - {e}")
+    #     raise e
 
 
 @dashboards_endpoint_router.delete("/delete/{dashboard_id}")
