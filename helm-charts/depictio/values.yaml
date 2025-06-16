@@ -72,7 +72,7 @@ minio:
 backend:
   image:
     repository: ghcr.io/depictio/depictio # Corrected repository path with .io
-    tag: "0.0.6-beta2"
+    tag: "0.0.6-beta3"
     pullPolicy: Always
   resources:
     requests:
@@ -102,7 +102,7 @@ backend:
 frontend:
   image:
     repository: ghcr.io/depictio/depictio # Corrected repository path with .io
-    tag: "0.0.6-beta2"
+    tag: "0.0.6-beta3"
     pullPolicy: Always
   resources:
     requests:
