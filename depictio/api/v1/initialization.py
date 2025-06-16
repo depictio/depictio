@@ -1,8 +1,12 @@
-from depictio.api.v1.configs.config import settings
-from depictio.api.v1.configs.logging_init import logger
 from pymongo.errors import DuplicateKeyError
 
+from depictio.api.v1.configs.config import settings
+from depictio.api.v1.configs.logging_init import logger
+from depictio.api.v1.configs.settings_models import S3DepictioCLIConfig
 from depictio.api.v1.db import initialization_collection
+from depictio.api.v1.db_init import initialize_db
+from depictio.api.v1.endpoints.utils_endpoints.core_functions import create_bucket
+from depictio.models.s3_utils import S3_storage_checks
 
 
 def acquire_initialization_lock() -> bool:
@@ -28,13 +32,6 @@ def mark_initialization_complete(init_data: dict) -> None:
         {"$set": init_data},
         upsert=True,
     )
-
-
-# from depictio.models.models.s3 import S3DepictioCLIConfig
-from depictio.api.v1.configs.settings_models import S3DepictioCLIConfig
-from depictio.api.v1.db_init import initialize_db
-from depictio.api.v1.endpoints.utils_endpoints.core_functions import create_bucket
-from depictio.models.s3_utils import S3_storage_checks
 
 
 async def run_initialization(
