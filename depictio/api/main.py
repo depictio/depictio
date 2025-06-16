@@ -17,7 +17,11 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from depictio.api.v1.configs.config import MONGODB_URL, settings
 from depictio.api.v1.endpoints.routers import router
 from depictio.api.v1.endpoints.utils_endpoints.process_data_collections import process_collections
-from depictio.api.v1.initialization import run_initialization
+from depictio.api.v1.initialization import (
+    acquire_initialization_lock,
+    mark_initialization_complete,
+    run_initialization,
+)
 from depictio.api.v1.utils import clean_screenshots
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.projects import ProjectBeanie
@@ -38,14 +42,15 @@ async def init_motor_beanie():
     )
 
 
-async def check_initialization():
+async def check_initialization() -> bool:
+    """Check whether system initialization has completed."""
+
     from depictio.api.v1.db import initialization_collection
 
-    result = initialization_collection.find_one({"initialization_complete": True})
-    if result:
-        return True
-    else:
-        return False
+    result = initialization_collection.find_one(
+        {"_id": "init_lock", "initialization_complete": True}
+    )
+    return bool(result)
 
 
 @asynccontextmanager
@@ -55,8 +60,15 @@ async def lifespan(app: FastAPI):
 
     # Initialize system before creating the app if not already initialized
     if not await check_initialization() or settings.mongodb.wipe:
-        print("Initialization not complete. Running initialization...")
-        await run_initialization()
+        if acquire_initialization_lock():
+            print("Initialization not complete. Running initialization...")
+            init_data = await run_initialization()
+            mark_initialization_complete(init_data)
+        else:
+            # Another worker is handling initialization. Wait until it's done.
+            print("Waiting for initialization to complete...")
+            while not await check_initialization():
+                await asyncio.sleep(1)
     else:
         print("Initialization already complete. Skipping...")
 

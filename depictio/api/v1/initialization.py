@@ -1,5 +1,34 @@
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
+from pymongo.errors import DuplicateKeyError
+
+from depictio.api.v1.db import initialization_collection
+
+
+def acquire_initialization_lock() -> bool:
+    """Attempt to acquire an initialization lock.
+
+    Returns ``True`` if the lock was acquired successfully, ``False`` otherwise.
+    This relies on the uniqueness of the ``_id`` field in MongoDB.
+    """
+
+    try:
+        initialization_collection.insert_one({"_id": "init_lock", "initialization_complete": False})
+        return True
+    except DuplicateKeyError:
+        # Lock already acquired by another worker
+        return False
+
+
+def mark_initialization_complete(init_data: dict) -> None:
+    """Mark initialization as complete in the database."""
+
+    initialization_collection.update_one(
+        {"_id": "init_lock"},
+        {"$set": init_data},
+        upsert=True,
+    )
+
 
 # from depictio.models.models.s3 import S3DepictioCLIConfig
 from depictio.api.v1.configs.settings_models import S3DepictioCLIConfig
@@ -52,9 +81,6 @@ async def run_initialization(
     else:
         logger.warning("No admin user available, skipping bucket creation")
 
-    # Register initialization complete in the database
-    from depictio.api.v1.db import initialization_collection
-
     init_data = {
         "initialization_complete": True,
         "admin_user_id": admin_user.id if admin_user else None,
@@ -62,10 +88,6 @@ async def run_initialization(
         "s3_config": s3_config_input.model_dump_json(),
     }
 
-    # Save initialization data to the database
-    initialization_collection.insert_one(init_data)
-    logger.info("Initialization data saved to the database.")
-    logger.debug(f"Initialization data: {init_data}")
     logger.info("System initialization complete.")
 
     return init_data
