@@ -51,8 +51,19 @@ RUN sed -i 's|http://deb.debian.org|http://ftp.us.debian.org|g' /etc/apt/sources
 RUN apt-get update && apt-get install --fix-missing -y \
     xvfb xauth sudo git git-lfs curl \
     xvfb x11vnc fluxbox \
+    wget unzip nodejs npm \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Chrome/Chromium (let package manager handle architecture)
+RUN apt-get update && apt-get install -y chromium chromium-driver && \
+    ln -s /usr/bin/chromium /usr/bin/google-chrome
+
+# Install Cypress
+RUN npm install -g cypress
+
+# Install selenium & webdriver-manager using micromamba env
+RUN /opt/conda/envs/depictio/bin/pip install selenium webdriver-manager psutil
 
 # Create a shared directory for Playwright browsers with appropriate permissions
 RUN mkdir -p /usr/local/share/playwright-browsers && \

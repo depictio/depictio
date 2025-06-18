@@ -13,7 +13,12 @@ def main():
         port=settings.fastapi.external_port,
         reload=True,
         workers=settings.fastapi.workers,
-        # reload_dirs=["/app/depictio/api", "/app/depictio/dash"],
+        reload_dirs=[
+            "/app/depictio/api",
+            "/app/depictio/dash",
+            "/app/depictio/cli",
+            "/app/depictio/models",
+        ],
     )
 
 

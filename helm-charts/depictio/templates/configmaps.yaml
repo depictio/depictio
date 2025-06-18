@@ -13,6 +13,7 @@ data:
   DEPICTIO_DASH_SERVICE_PORT: {{ .Values.backend.env.DEPICTIO_DASH_SERVICE_PORT | quote }}
   DEPICTIO_DASH_SERVICE_NAME: {{ printf "%s-depictio-frontend" .Release.Name | quote }}
   DEPICTIO_MONGODB_SERVICE_NAME: {{ printf "%s-mongo" .Release.Name | quote }}
+  DEPICTIO_MONGODB_WIPE: {{ .Values.backend.env.DEPICTIO_MONGODB_WIPE | quote }}
   DEPICTIO_MINIO_SERVICE_NAME: {{ printf "%s-minio" .Release.Name | quote }}
 ---
 apiVersion: v1

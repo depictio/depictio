@@ -189,11 +189,13 @@ def register_callbacks_save(app):
             try:
                 # Screenshot the dashboard
                 screenshot_response = httpx.get(
+                    # f"{API_BASE_URL}/depictio/api/v1/utils/screenshot-minimal/{dashboard_id}",
+                    # f"{API_BASE_URL}/depictio/api/v1/utils/screenshot-dash-fixed/{dashboard_id}",
                     f"{API_BASE_URL}/depictio/api/v1/dashboards/screenshot/{dashboard_id}",
-                    headers={
-                        "Authorization": f"Bearer {TOKEN}",
-                    },
-                    timeout=60.0,  # Timeout set to 60 seconds
+                    # headers={
+                    #     "Authorization": f"Bearer {TOKEN}",
+                    # },
+                    timeout=90.0,  # Timeout set to 60 seconds
                 )
                 if screenshot_response.status_code == 200:
                     logger.info("Dashboard screenshot saved successfully.")
@@ -201,8 +203,8 @@ def register_callbacks_save(app):
                     logger.warning(
                         f"Failed to save dashboard screenshot: {screenshot_response.json()}"
                     )
-            except httpx.HTTPStatusError as e:
-                logger.error(f"Failed to save dashboard screenshot: {e}")
+            except Exception as e:
+                logger.error(f"Failed to save dashboard screenshot: {str(e)}")
 
         return dash.no_update
 
