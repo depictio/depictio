@@ -1,5 +1,6 @@
 id: "646b0f3c1e4a2d7f8e5b8c9a"
 name: "Iris Dataset Project Data Analysis"
+is_public: true
 workflows:
   - id: "646b0f3c1e4a2d7f8e5b8c9b"
     name: "iris_workflow"
