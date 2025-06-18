@@ -295,7 +295,11 @@ def _hash_password(password: str) -> str:
 
 @validate_call(validate_return=True)
 async def _create_user_in_db(
-    id: PyObjectId, email: EmailStr, password: str, is_admin: bool = False
+    email: EmailStr,
+    password: str,
+    is_admin: bool = False,
+    id: PyObjectId = None,
+    group: str | None = None,
 ) -> dict[str, bool | str | UserBeanie | None] | None:
     """
     Helper function to create a user in the database using Beanie.
@@ -312,7 +316,10 @@ async def _create_user_in_db(
     logger.info(f"Creating user with email: {email}")
 
     # Check if the user already exists
-    existing_user = await UserBeanie.find_one({"email": email, "_id": id})
+    search_query = {"email": email}
+    if id:
+        search_query["_id"] = id
+    existing_user = await UserBeanie.find_one(search_query)
 
     if existing_user:
         logger.warning(f"User {email} already exists in the database")
@@ -330,7 +337,7 @@ async def _create_user_in_db(
 
     # Create new UserBeanie
     user_beanie = UserBeanie(
-        id=id,
+        id=id if id else PyObjectId(),
         email=email,
         password=hashed_password,
         is_admin=is_admin,
