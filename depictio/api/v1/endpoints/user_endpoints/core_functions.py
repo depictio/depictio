@@ -113,12 +113,14 @@ async def _check_if_token_is_valid(token: TokenBase) -> bool:
             "user_id": token.user_id,
         }
     )
-    logger.debug(f"Checking token: {token.access_token} : {check}")
+    logger.debug(f"Checking token: {token.access_token}")
     if check:
         # Token exists and is not expired
+        logger.debug(f"Token is valid: {format_pydantic(check)}")
         return True
     else:
         # Token does not exist or is expired
+        logger.debug(f"Token is invalid or expired: {token.access_token}")
         return False
 
 
