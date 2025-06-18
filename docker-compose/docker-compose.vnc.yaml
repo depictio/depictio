@@ -17,15 +17,13 @@ services:
       - 5080:5080
     volumes:
       - ./depictio:/app/depictio
-      - ./data:/app/data
-      - ./.env:/app/.env
+      - ./docker-images/run_dash.sh:/app/run_dash.sh
+      - ./pyproject.toml:/app/pyproject.toml
     environment:
-        DEPICTIO_CONTAINER: "True"
-        DEPICTIO_TEST_MODE: "${DEPICTIO_TEST_MODE:-false}"
-        DEPICTIO_MONGODB_DB_NAME: "${DEPICTIO_MONGODB_DB_NAME:-depictioDB}"
         DEV_MODE: "${DEV_MODE:-false}"
+        DEPICTIO_LOGGING_VERBOSITY_LEVEL: "DEBUG"
         DISPLAY: ":99"
-    command: ["python", "depictio/dash/app.py"]
+    command: ["python", "/app/depictio/dash/app.py"]
     user: "${UID:-1000}:${GID:-1000}"
     depends_on:
       - mongo
@@ -40,20 +38,17 @@ services:
       - 8058:8058
       - 5900:5900  # VNC port
     volumes:
-      - $PWD/depictio-example-data:/app/depictio-example-data
       - ./depictio:/app/depictio
-      - ./data:/app/data
-      - ./.env:/app/.env
+      - ./pyproject.toml:/app/pyproject.toml
+      - ./docker-images/run_fastapi.sh:/app/run_fastapi.sh
       - ./docker-images/start_with_display.sh:/app/start_with_display.sh
     environment:
-        DEPICTIO_CONTAINER: "True"
-        DEPICTIO_TEST_MODE: "${DEPICTIO_TEST_MODE:-false}"
-        DEPICTIO_MONGODB_DB_NAME: "${DEPICTIO_MONGODB_DB_NAME:-depictioDB}"
+        DEV_MODE: "${DEV_MODE:-false}"
+        DEPICTIO_LOGGING_VERBOSITY_LEVEL: "DEBUG"
         FORCE_COLOR: "1"
         TERM: "xterm-256color"
         PYTHONIOENCODING: "UTF-8"
         DISPLAY: ":99"
-        DEV_MODE: "${DEV_MODE:-false}"
     command: ["/app/start_with_display.sh"]
     user: "${UID:-1000}:${GID:-1000}"
     tty: true

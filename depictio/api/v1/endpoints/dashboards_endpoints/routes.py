@@ -1,18 +1,17 @@
+import asyncio
 import json
-import os
-from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from depictio.api.v1.configs.config import DASH_BASE_URL
+from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import dashboards_collection
 from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import load_dashboards_from_db
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.dashboards import DashboardData
-from depictio.models.models.users import TokenBeanie, User
+from depictio.models.models.users import TokenBeanie, User, UserBeanie
 
 dashboards_endpoint_router = APIRouter()
 
@@ -236,53 +235,42 @@ async def save_dashboard(
 @dashboards_endpoint_router.get("/screenshot/{dashboard_id}")
 async def screenshot_dashboard(
     dashboard_id: PyObjectId,
-    current_user: User = Depends(get_current_user),
+    # current_user: User = Depends(get_current_user),
 ):
     from playwright.async_api import async_playwright
 
-    # Folder where screenshots will be saved
-    # output_folder = "/app/depictio/dash/assets/screenshots"
-    # Define the shared static directory
     output_folder = "/app/depictio/dash/static/screenshots"  # Directly set to the desired path
     logger.info(f"Output folder: {output_folder}")
-
-    # Ensure the directory exists
-    os.makedirs(output_folder, exist_ok=True)
-
-    # DASH_BASE_URL = "http://localhost:5080"
-    url = f"{DASH_BASE_URL}"
-    # url = f"{DASH_BASE_URL}/{dashboard_id}"
-    logger.info(f"Dashboard URL: {url}")
-
-    playwright_dev_mode = not os.getenv("DEPICTIO_PLAYWRIGHT_DEV_MODE", "False").lower() == "true"
-
     try:
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=playwright_dev_mode)
-            # browser = await p.chromium.launch(headless=True, executable_path="/home/mambauser/.cache/ms-playwright/chromium-1140/chrome-linux/chrome")
-
-            # Define the viewport size (browser window size)
+            # Launch browser
+            browser = await p.chromium.launch(headless=True)
+            # Set viewport size
             viewport_width = 1920
             viewport_height = 1080
-
-            # Create a new context with the specified viewport size
             context = await browser.new_context(
                 viewport={"width": viewport_width, "height": viewport_height}
             )
-
             page = await context.new_page()
-            logger.info(f"Browser: {browser}")
 
-            # Navigate to the URL
-            await page.goto(f"{url}/auth", wait_until="networkidle")
-            logger.info(f"Page URL: {url}/auth")
+            # Navigate to Dash service
+            logger.info(f"Navigating to Dash service at {settings.dash.internal_url}")
+            await page.goto(settings.dash.internal_url, timeout=90000)
+
+            # Wait for page to load
+            await page.wait_for_load_state("networkidle")
+
+            current_user = await UserBeanie.find_one({"email": "admin@example.com"})
+
+            # current_user = await UserBeanie.find_one({"email": "admin@example.com"})
+            logger.info(f"Current user: {current_user}")
 
             # get the current user a functional token
             token = await TokenBeanie.find_one(
                 {
                     "user_id": current_user.id,
-                    "token_lifetime": "short-lived",
-                    "expire_datetime": {"$gt": datetime.now()},
+                    # "token_lifetime": "short-lived",
+                    # "expire_datetime": {"$gt": datetime.now()},
                 }
             )
             logger.info(f"Token: {token}")
@@ -305,26 +293,13 @@ async def screenshot_dashboard(
 
             await page.reload()
 
-            # Navigate to the target dashboard page
-            await page.goto(f"{url}/dashboard/{str(dashboard_id)}", wait_until="networkidle")
-            logger.info(f"Page URL: {url}/dashboard/{str(dashboard_id)}")
+            await asyncio.sleep(3)  # Wait for the page to stabilize
+            # dashboard_id = "6824cb3b89d2b72169309737"
+            await page.goto(f"{settings.dash.internal_url}/dashboard/{dashboard_id}", timeout=90000)
+            await page.wait_for_load_state("networkidle")
+            await page.reload()
+            await asyncio.sleep(3)
 
-            # Wait for the page content to load
-            await page.wait_for_selector("div#page-content")
-            logger.info("Wait for selector: div#page-content")
-
-            # # Check if the iframe is present
-            # iframe_element = await page.query_selector('iframe[src*="jbrowse"]')  # Adjust the selector to match the iframe's source or other attributes
-
-            # if iframe_element:
-            #     # If the iframe is present, wait for its content to load
-            #     iframe = await iframe_element.content_frame()
-            #     await iframe.wait_for_selector("")  # Replace with a specific element inside the iframe
-            #     logger.info(f"Iframe loaded with element 'your-element-inside-iframe'")
-            # else:
-            #     logger.info("Iframe not found, proceeding without waiting for iframe content")
-
-            # Remove the debug menu if it exists
             await page.evaluate(
                 """() => {
                 const debugMenuOuter = document.querySelector('.dash-debug-menu__outer');
@@ -337,33 +312,32 @@ async def screenshot_dashboard(
                 }
             }"""
             )
-            logger.info("Removed debug menu")
 
-            # Capture a screenshot of the content below the 'div#page-content'
             element = await page.query_selector("div#page-content")
 
-            if element:
-                # await page.wait_for_timeout(3000)
-                # logger.info(f"Wait for timeout: 3000")
+            # await page.screenshot(path=f"{output_folder}/dash_screenshot.png", full_page=True)
+            output_file = f"{output_folder}/{str(dashboard_id)}.png"
+            await element.screenshot(path=output_file)
 
-                # user = current_user.email.split("_")[0]
-                # user_id = current_user.id
-
-                # find corresponding mongoid for the dashboard
-
-                output_file = f"{output_folder}/{str(dashboard_id)}.png"
-                logger.info(f"Output file: {output_file}")
-                await element.screenshot(path=output_file)
-                logger.info(f"Screenshot captured for dashboard ID: {str(dashboard_id)}")
-            else:
-                logger.error("Could not find 'div#page-content' element")
-
-            # Close the browser
             await browser.close()
+            logger.info(f"Screenshot saved to {output_file}")
+
+            return {
+                "success": True,
+                "url": settings.dash.internal_url,
+                "message": "Screenshot taken successfully",
+                "screenshot_path": f"{output_folder}/dash_screenshot.png",
+                "token": convert_objectid_to_str(token_data),
+                "user": current_user.model_dump(exclude_none=True),
+            }
 
     except Exception as e:
-        logger.error(f"Failed to capture screenshot for dashboard URL: {url} - {e}")
-        raise e
+        return {
+            "success": False,
+            "url": settings.dash.internal_url,
+            "error": str(e),
+            "message": "Failed to take screenshot",
+        }
 
 
 @dashboards_endpoint_router.delete("/delete/{dashboard_id}")

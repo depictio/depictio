@@ -1,7 +1,24 @@
 # Minikube-specific values overlay (values-minikube.yaml)
 
 # Storage class for Minikube
-storageClass: "standard"
+# storageClass: "standard"
+# Storage class for Rancher Desktop
+storageClass: "local-path"
+persistence:
+  mongo:
+    size: 1Gi
+    accessMode: ReadWriteOnce
+  minio:
+    size: 1Gi
+    accessMode: ReadWriteOnce
+  screenshots:
+    size: 100Mi
+    accessMode: ReadWriteOnce
+  keys:
+    size: 1Mi
+    accessMode: ReadWriteOnce
+
+
 
 # Ingress configuration for Minikube
 ingress:
@@ -11,6 +28,13 @@ ingress:
 
 global:
   domain: null
+
+backend:
+  env:
+    DEPICTIO_MONGODB_WIPE: "true"
+
+local_development:
+  false # Set to true for local development
 
 
   # # Host configuration for local access with minikube tunnel
@@ -30,40 +54,39 @@ global:
 
   # No TLS for local development
   # tls: []
-
 # Resource adjustments for local development
-mongo:
-  resources:
-    requests:
-      memory: "256Mi"
-      cpu: "0.1"
-    limits:
-      memory: "512Mi"
-      cpu: "0.5"
+# mongo:
+#   resources:
+#     requests:
+#       memory: "256Mi"
+#       cpu: "0.1"
+#     limits:
+#       memory: "512Mi"
+#       cpu: "0.5"
 
-minio:
-  resources:
-    requests:
-      memory: "256Mi"
-      cpu: "0.1"
-    limits:
-      memory: "512Mi"
-      cpu: "0.5"
+# minio:
+#   resources:
+#     requests:
+#       memory: "256Mi"
+#       cpu: "0.1"
+#     limits:
+#       memory: "512Mi"
+#       cpu: "0.5"
 
-backend:
-  resources:
-    requests:
-      memory: "256Mi"
-      cpu: "0.1"
-    limits:
-      memory: "512Mi"
-      cpu: "0.5"
+# backend:
+#   resources:
+#     requests:
+#       memory: "256Mi"
+#       cpu: "0.1"
+#     limits:
+#       memory: "512Mi"
+#       cpu: "0.5"
 
-frontend:
-  resources:
-    requests:
-      memory: "256Mi"
-      cpu: "0.1"
-    limits:
-      memory: "512Mi"
-      cpu: "0.5"
+# frontend:
+#   resources:
+#     requests:
+#       memory: "256Mi"
+#       cpu: "0.1"
+#     limits:
+#       memory: "512Mi"
+#       cpu: "0.5"

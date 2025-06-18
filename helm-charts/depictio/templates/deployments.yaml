@@ -131,6 +131,28 @@ spec:
       securityContext:
         fsGroup: {{ .Values.backend.securityContext.fsGroup }}
       initContainers:
+        {{- if .Values.local_development }}
+        - name: fix-permissions
+          image: busybox:1.35
+          command: ["/bin/sh"]
+          args:
+          - -c
+          - |
+            echo "Fixing permissions..."
+            # Create directories with correct permissions
+            mkdir -p /app/depictio/.depictio
+            mkdir -p /app/logs
+            mkdir -p /app/depictio/dash/static/screenshots
+
+            # Set ownership and permissions
+            chown -R 1000:1000 /app
+            chmod -R 755 /app
+            chmod -R 777 /app/depictio/.depictio
+            chmod -R 777 /app/logs
+            chmod -R 777 /app/depictio/dash/static/screenshots
+
+            echo "Permissions fixed!"
+        {{- end }}
         - name: wait-for-mongo
           image: busybox:1.35
           command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-mongo {{ .Values.mongo.service.port }}; do echo "Waiting for mongo..."; sleep 2; done']
@@ -157,6 +179,10 @@ spec:
                 secretKeyRef:
                   name: {{ .Release.Name }}-depictio-secrets
                   key: MINIO_ROOT_PASSWORD
+            - name: WATCHFILES_FORCE_POLLING
+              value: "true"
+            - name: PYTHONUNBUFFERED
+              value: "1"
           command:
             - "/app/run_fastapi.sh"
           ports:
@@ -168,6 +194,12 @@ spec:
               mountPath: /app/depictio/dash/static/screenshots
             - name: depictio-keys
               mountPath: /app/depictio/keys
+            {{- if .Values.local_development }}
+            # DEV ONLY: mount the depictio source code for development
+            ## Use minikube mount or similar to mount the local source code
+            - name: depictio-source
+              mountPath: /app/depictio
+            {{- end }}
       volumes:
         - name: depictio-screenshots
           persistentVolumeClaim:
@@ -175,6 +207,14 @@ spec:
         - name: depictio-keys
           persistentVolumeClaim:
             claimName: {{ .Release.Name }}-depictio-keys-pvc
+        {{- if .Values.local_development }}
+        # DEV ONLY: mount the depictio source code for development
+        ## Use minikube mount or similar to mount the local source code
+        - name: depictio-source
+          hostPath:
+            path: /app/depictio
+            type: Directory
+        {{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -234,6 +274,13 @@ spec:
               mountPath: /app/depictio/dash/static/screenshots
             - name: depictio-keys
               mountPath: /app/depictio/keys
+            {{- if .Values.local_development }}
+            # DEV ONLY: mount the depictio source code for development
+            ## Use minikube mount or similar to mount the local source code
+            - name: depictio-source
+              mountPath: /app/depictio
+            {{- end }}
+
       volumes:
         - name: depictio-screenshots
           persistentVolumeClaim:
@@ -241,3 +288,11 @@ spec:
         - name: depictio-keys
           persistentVolumeClaim:
             claimName: {{ .Release.Name }}-depictio-keys-pvc
+        {{- if .Values.local_development }}
+        # DEV ONLY: mount the depictio source code for development
+        ## Use minikube mount or similar to mount the local source code
+        - name: depictio-source
+          hostPath:
+            path: /app/depictio
+            type: Directory
+        {{- end }}
