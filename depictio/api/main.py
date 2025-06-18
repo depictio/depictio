@@ -1,8 +1,10 @@
 import asyncio
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime
 from typing import Any
 
+import pymongo
 from beanie import PydanticObjectId, init_beanie
 from bson import ObjectId
 
@@ -38,14 +40,85 @@ async def init_motor_beanie():
     )
 
 
-async def check_initialization():
+async def check_and_set_initialization():
+    """
+    Atomically check if initialization is needed and mark it as in-progress.
+    Returns True if this worker should perform initialization.
+    """
     from depictio.api.v1.db import initialization_collection
 
-    result = initialization_collection.find_one({"initialization_complete": True})
-    if result:
-        return True
-    else:
+    try:
+        # First check if initialization is already complete
+        existing = initialization_collection.find_one({"initialization_complete": True})
+        if existing:
+            return False
+
+        # Try to insert an initialization document atomically
+        # This will only succeed for the first worker that tries
+        initialization_collection.insert_one(
+            {
+                "_id": "init_lock",  # Use fixed _id for uniqueness
+                "initialization_complete": False,
+                "initialization_in_progress": True,
+                "worker_id": os.getpid(),  # Track which worker is doing init
+                "started_at": datetime.utcnow(),
+            }
+        )
+        print(f"Worker {os.getpid()}: Acquired initialization lock")
+        return True  # This worker should do initialization
+    except pymongo.errors.DuplicateKeyError:
+        # Another worker already started initialization
+        print(f"Worker {os.getpid()}: Another worker is handling initialization")
         return False
+    except Exception as e:
+        print(f"Worker {os.getpid()}: Error checking initialization: {e}")
+        # Check if initialization was already completed
+        existing = initialization_collection.find_one({"initialization_complete": True})
+        return existing is None
+
+
+async def mark_initialization_complete():
+    """Mark initialization as complete atomically."""
+    from depictio.api.v1.db import initialization_collection
+
+    result = initialization_collection.update_one(
+        {"_id": "init_lock", "initialization_in_progress": True},
+        {
+            "$set": {
+                "initialization_complete": True,
+                "initialization_in_progress": False,
+                "completed_at": datetime.utcnow(),
+            }
+        },
+    )
+    print(f"Worker {os.getpid()}: Marked initialization as complete")
+    return result.modified_count > 0
+
+
+async def cleanup_failed_initialization():
+    """Clean up initialization lock if initialization fails."""
+    from depictio.api.v1.db import initialization_collection
+
+    initialization_collection.delete_one({"_id": "init_lock", "initialization_in_progress": True})
+    print(f"Worker {os.getpid()}: Cleaned up failed initialization lock")
+
+
+async def wait_for_initialization_complete(timeout=300):
+    """Wait for another worker to complete initialization."""
+    import time
+
+    from depictio.api.v1.db import initialization_collection
+
+    print(f"Worker {os.getpid()}: Waiting for initialization to complete...")
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        result = initialization_collection.find_one({"initialization_complete": True})
+        if result:
+            print(f"Worker {os.getpid()}: Initialization completed by another worker")
+            return True
+        await asyncio.sleep(1)  # Wait 1 second before checking again
+
+    raise TimeoutError("Initialization did not complete within timeout period")
 
 
 @asynccontextmanager
@@ -53,29 +126,54 @@ async def lifespan(app: FastAPI):
     # Startup: initialize database, etc.
     await init_motor_beanie()
 
-    # Initialize system before creating the app if not already initialized
-    if not await check_initialization() or settings.mongodb.wipe:
-        print("Initialization not complete. Running initialization...")
-        await run_initialization()
-    else:
-        print("Initialization already complete. Skipping...")
+    # Determine if this worker should perform initialization
+    should_initialize = False
 
-    # Clean up screenshots directory
+    if settings.mongodb.wipe:
+        print(f"Worker {os.getpid()}: Database wipe requested")
+        # If wiping, we need to clear any existing initialization markers
+        from depictio.api.v1.db import initialization_collection
+
+        initialization_collection.delete_many({})
+        should_initialize = await check_and_set_initialization()
+    else:
+        # Normal startup - check if initialization is needed
+        should_initialize = await check_and_set_initialization()
+
+    if should_initialize:
+        print(f"Worker {os.getpid()}: Running initialization...")
+        try:
+            await run_initialization()
+            await mark_initialization_complete()
+            print(f"Worker {os.getpid()}: Initialization completed successfully")
+        except Exception as e:
+            print(f"Worker {os.getpid()}: Initialization failed: {e}")
+            await cleanup_failed_initialization()
+            raise
+    else:
+        # Wait for another worker to complete initialization
+        try:
+            await wait_for_initialization_complete()
+        except TimeoutError as e:
+            print(f"Worker {os.getpid()}: {e}")
+            raise
+
+    # Clean up screenshots directory (each worker can do this safely)
     await clean_screenshots()
 
-    # Create a background task to process data collections after the API is fully started
-    background_task = delayed_process_data_collections()
+    # Only start background task on the worker that did initialization
+    background_task = None
+    if should_initialize:
+        print(f"Worker {os.getpid()}: Starting background data collection processing")
+        background_task = delayed_process_data_collections()
 
     # Start the app
     yield
 
     # Shutdown: add cleanup tasks if needed
-    # await shutdown_db()
-
-    # Cancel the background task if it's still running
-    if background_task:
-        if not background_task.done():
-            background_task.cancel()
+    if background_task and not background_task.done():
+        print(f"Worker {os.getpid()}: Cancelling background task")
+        background_task.cancel()
 
 
 def delayed_process_data_collections():
@@ -92,19 +190,23 @@ def delayed_process_data_collections():
     dc_id = projects_collection.find_one(
         {"workflows.data_collections.data_collection_tag": "iris_table"}
     )
-    dc_id = dc_id.get("workflows", [{}])[0].get("data_collections", [{}])[0].get("_id")
 
     if dc_id:
-        _check_deltatables = deltatables_collection.find_one(
-            {"data_collection_id": dc_id}, {"_id": 1}
-        )
-        if _check_deltatables:
-            return
+        dc_id = dc_id.get("workflows", [{}])[0].get("data_collections", [{}])[0].get("_id")
+        if dc_id:
+            _check_deltatables = deltatables_collection.find_one(
+                {"data_collection_id": dc_id}, {"_id": 1}
+            )
+            if _check_deltatables:
+                print(f"Worker {os.getpid()}: Data collections already processed, skipping")
+                return
 
     # Wait longer to ensure the API has fully started
+    print(f"Worker {os.getpid()}: Waiting 5 seconds before processing data collections")
     time.sleep(5)
 
     # Run the processing in a separate thread to avoid blocking
+    print(f"Worker {os.getpid()}: Starting data collection processing thread")
     thread = threading.Thread(target=process_collections)
     thread.daemon = True
     thread.start()
