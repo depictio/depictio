@@ -3,14 +3,14 @@ name: Test, Lint and Build depictio-cli
 on:
   push:
     paths:
-      - 'depictio/cli/**'
-      - 'depictio/models/**'
-      - 'depictio/api/v1/configs/**'
+      - "depictio/cli/**"
+      - "depictio/models/**"
+      - "depictio/api/v1/configs/**"
   pull_request:
     paths:
-      - 'depictio/cli/**'
-      - 'depictio/models/**'
-      - 'depictio/api/v1/configs/**'
+      - "depictio/cli/**"
+      - "depictio/models/**"
+      - "depictio/api/v1/configs/**"
   workflow_dispatch:
 
 jobs:
@@ -27,7 +27,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Create and activate virtual environment
         run: |
@@ -54,10 +54,23 @@ jobs:
 
       - name: Build package
         run: |
-          cd depictio/cli
+          # cd depictio/cli
+          cp depictio/cli/pyproject.toml .
           python -m build
 
       - name: Verify package
         run: |
-          cd depictio/cli
           twine check dist/*
+
+      - name: Install package
+        run: |
+          uv pip install dist/*.whl
+
+      - name: Import package
+        run: |
+          # if the import fails, it will raise an error
+          python -c "import depictio.cli; print('✅ CLI package imports work')"
+
+      - name: Run CLI help command
+        run: |
+          depictio-cli --help
