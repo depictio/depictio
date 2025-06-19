@@ -6,11 +6,13 @@ on:
       - "depictio/cli/**"
       - "depictio/models/**"
       - "depictio/api/v1/configs/**"
+      - "depictio/cli/pyproject.toml"
   pull_request:
     paths:
       - "depictio/cli/**"
       - "depictio/models/**"
       - "depictio/api/v1/configs/**"
+      - "depictio/cli/pyproject.toml"
   workflow_dispatch:
 
 jobs:
@@ -56,6 +58,9 @@ jobs:
         run: |
           # cd depictio/cli
           cp depictio/cli/pyproject.toml .
+
+          sed -i 's|^package-dir = {"" = "../.."}|# package-dir = {"" = "../.."}|' pyproject.toml
+
           python -m build
 
       - name: Verify package
