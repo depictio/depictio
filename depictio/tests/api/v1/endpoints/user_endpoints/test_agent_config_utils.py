@@ -29,6 +29,8 @@ class TestGenerateAgentConfig:
             name="test_token",
             access_token="test_access_token",
             expire_datetime=datetime.datetime.now() + datetime.timedelta(days=1),
+            refresh_token="test_refresh_token",
+            refresh_expire_datetime=datetime.datetime.now() + datetime.timedelta(days=1),
             token_type="bearer",
             user_id=user.id,
             logged_in=True,
@@ -54,7 +56,9 @@ class TestGenerateAgentConfig:
         token = TokenBeanie(
             name="test_token",
             access_token="test_access_token",
+            refresh_token="test_refresh_token",
             expire_datetime=datetime.datetime.now() + datetime.timedelta(days=1),
+            refresh_expire_datetime=datetime.datetime.now() + datetime.timedelta(days=1),
             token_type="bearer",
             user_id=PydanticObjectId(),
             logged_in=True,

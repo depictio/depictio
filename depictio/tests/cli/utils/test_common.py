@@ -26,9 +26,11 @@ class TestCommon:
                 "token": {
                     "user_id": "507f1f77bcf86cd799439011",
                     "access_token": "test_token_123",
+                    "refresh_token": "test_refresh_token_456",
                     "token_type": "bearer",
                     "token_lifetime": "short-lived",
                     "expire_datetime": datetime(2023, 12, 31, 23, 59, 59),
+                    "refresh_expire_datetime": datetime(2024, 1, 31, 23, 59, 59),
                     "created_at": datetime(2023, 1, 1, 0, 0, 0),
                     "logged_in": True,
                 },
@@ -119,9 +121,11 @@ class TestCommon:
                     "token": {
                         "user_id": "507f1f77bcf86cd799439011",
                         "access_token": "test_token_123",
+                        "refresh_token": "test_refresh_token_456",
                         "token_type": "bearer",
                         "token_lifetime": "short-lived",
                         "expire_datetime": datetime(2023, 12, 31, 23, 59, 59),
+                        "refresh_expire_datetime": datetime(2024, 1, 31, 23, 59, 59),
                         "created_at": datetime(2023, 1, 1, 0, 0, 0),
                         "logged_in": True,
                     },
