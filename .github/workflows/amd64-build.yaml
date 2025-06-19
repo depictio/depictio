@@ -3,7 +3,7 @@ name: Docker Image Build (AMD64) - Beta only
 on:
   push:
     tags:
-      - "v[0-9]*.[0-9]*.[0-9]*-beta*"  # Beta releases only (v0.0.4-beta)
+      - "v[0-9]*.[0-9]*.[0-9]*-b*"  # Beta releases only (v0.0.4-b2)
   workflow_dispatch:
 
 env:
