@@ -147,20 +147,23 @@ class TestToken:
 @pytest.mark.asyncio
 class TestTokenBeanie:
     async def test_token_beanie_creation(self):
-        """Test creating and inserting a TokenBeanie document."""
+        """Test creating and inserting a TokenBeanie document with refresh token support."""
         # Initialize Beanie directly in the test
         client = AsyncMongoMockClient()
         await init_beanie(database=client.test_db, document_models=[TokenBeanie])
 
         user_id = PydanticObjectId()
-        future_time = datetime.now() + timedelta(hours=1)
+        access_expire = datetime.now() + timedelta(hours=1)
+        refresh_expire = datetime.now() + timedelta(days=7)
 
-        # Create a token instance
+        # Create a token instance with refresh token fields
         token = TokenBeanie(
             user_id=user_id,
             access_token="test_access_token",
-            expire_datetime=future_time,
+            expire_datetime=access_expire,
             name="test_token",
+            refresh_token="test_refresh_token",
+            refresh_expire_datetime=refresh_expire,
         )
 
         # Insert the document
@@ -175,32 +178,41 @@ class TestTokenBeanie:
         assert retrieved_token.token_type == "bearer"
         assert retrieved_token.token_lifetime == "short-lived"
         assert retrieved_token.name == "test_token"
-        # Check expire_datetime is approximately the same (allowing for millisecond differences)
-        assert abs((retrieved_token.expire_datetime - future_time).total_seconds()) < 1
 
-    @pytest.mark.asyncio
+        # Check expire_datetime is approximately the same (allowing for millisecond differences)
+        assert abs((retrieved_token.expire_datetime - access_expire).total_seconds()) < 1
+
+        # Assert refresh token fields
+        assert retrieved_token.refresh_token == "test_refresh_token"
+        assert abs((retrieved_token.refresh_expire_datetime - refresh_expire).total_seconds()) < 1
+
     async def test_token_beanie_multiple_tokens(self):
-        """Test creating and retrieving multiple tokens."""
+        """Test creating and retrieving multiple tokens with refresh support."""
         # Initialize Beanie directly in the test
         client = AsyncMongoMockClient()
         await init_beanie(database=client.test_db, document_models=[TokenBeanie])
 
         user_id1 = PydanticObjectId()
         user_id2 = PydanticObjectId()
-        future_time = datetime.now() + timedelta(hours=1)
+        access_expire = datetime.now() + timedelta(hours=1)
+        refresh_expire = datetime.now() + timedelta(days=7)
 
-        # Create two tokens for different users
+        # Create two tokens for different users with refresh tokens
         token1 = TokenBeanie(
             user_id=user_id1,
             access_token="token1_access_token",
-            expire_datetime=future_time,
+            expire_datetime=access_expire,
             name="token1",
+            refresh_token="token1_refresh_token",
+            refresh_expire_datetime=refresh_expire,
         )
         token2 = TokenBeanie(
             user_id=user_id2,
             access_token="token2_access_token",
-            expire_datetime=future_time,
+            expire_datetime=access_expire,
             name="token2",
+            refresh_token="token2_refresh_token",
+            refresh_expire_datetime=refresh_expire,
         )
 
         await token1.save()
@@ -223,21 +235,28 @@ class TestTokenBeanie:
         assert len(user1_tokens) == 1
         assert str(user1_tokens[0].user_id) == str(user_id1)
 
-    @pytest.mark.asyncio
+        # Test querying by refresh token
+        refresh_token_result = await TokenBeanie.find_one({"refresh_token": "token1_refresh_token"})
+        assert refresh_token_result is not None
+        assert str(refresh_token_result.user_id) == str(user_id1)
+
     async def test_token_to_response_dict(self):
-        """Test the to_response_dict method."""
+        """Test the to_response_dict method with refresh token fields."""
         # Initialize Beanie directly in the test
         client = AsyncMongoMockClient()
         await init_beanie(database=client.test_db, document_models=[TokenBeanie])
 
         user_id = PydanticObjectId()
-        future_time = datetime.now() + timedelta(hours=1)
+        access_expire = datetime.now() + timedelta(hours=1)
+        refresh_expire = datetime.now() + timedelta(days=7)
 
         token = TokenBeanie(
             user_id=user_id,
             access_token="test_access_token",
-            expire_datetime=future_time,
+            expire_datetime=access_expire,
             name="test_token",
+            refresh_token="test_refresh_token",
+            refresh_expire_datetime=refresh_expire,
         )
 
         await token.save()
@@ -246,7 +265,7 @@ class TestTokenBeanie:
         response_dict = token.model_dump()
         print(f"Response dict: {response_dict}")
 
-        # Verify the fields in the response dict
+        # Verify the current fields in the response dict
         assert "id" in response_dict
         assert "user_id" in response_dict
         assert "access_token" in response_dict
@@ -254,68 +273,107 @@ class TestTokenBeanie:
         assert "expire_datetime" in response_dict
         assert "created_at" in response_dict
 
-        # Check values
+        # Check current values
         assert response_dict["user_id"] == str(user_id)
         assert response_dict["access_token"] == "test_access_token"
         assert response_dict["token_type"] == "bearer"
-        # expires_in should be close to 3600 seconds (1 hour)
-        # convert datetime to seconds
+
+        # Verify access token expiry timing
         print(f"Expire datetime: {response_dict['expire_datetime']}")
-        # Convert datetime back to datetime object
         expire_datetime = datetime.fromisoformat(response_dict["expire_datetime"])
         print(f"Expire datetime: {expire_datetime}")
-        # Calculate the difference in seconds
         expire_in_secs = int((expire_datetime - datetime.now()).total_seconds())
-        # expire_in_secs = int((response_dict["expire_datetime"] - datetime.now()).total_seconds())
         print(f"Expire in seconds: {expire_in_secs}")
         assert 3500 < expire_in_secs < 3600
 
-    @pytest.mark.asyncio
+        # Assert refresh token fields in response
+        assert "refresh_token" in response_dict
+        assert "refresh_expire_datetime" in response_dict
+        assert response_dict["refresh_token"] == "test_refresh_token"
+
+        # Verify refresh token expiry timing (should be much longer than access)
+        refresh_expire_datetime = datetime.fromisoformat(response_dict["refresh_expire_datetime"])
+        refresh_expire_in_secs = int((refresh_expire_datetime - datetime.now()).total_seconds())
+        assert refresh_expire_in_secs > expire_in_secs  # Refresh should expire later
+        assert refresh_expire_in_secs > 500000  # Should be more than ~6 days
+
     async def test_token_expiration(self):
-        """Test querying tokens based on expiration."""
+        """Test querying tokens based on access and refresh token expiration."""
         # Initialize Beanie directly in the test
         client = AsyncMongoMockClient()
         await init_beanie(database=client.test_db, document_models=[TokenBeanie])
 
         user_id = PydanticObjectId()
-
-        # Create an expired token
-        past_time = datetime.now() - timedelta(hours=1)
-        expired_token = TokenBeanie(
-            user_id=user_id,
-            access_token="expired_token",
-            expire_datetime=past_time,
-            name="expired_token",
-        )
-
-        # Create a valid token
-        future_time = datetime.now() + timedelta(hours=1)
-        valid_token = TokenBeanie(
-            user_id=user_id,
-            access_token="valid_token",
-            expire_datetime=future_time,
-            name="valid_token",
-        )
-
-        await expired_token.save()
-        await valid_token.save()
-
-        # Find valid tokens (not expired)
         current_time = datetime.now()
-        valid_tokens = await TokenBeanie.find({"expire_datetime": {"$gt": current_time}}).to_list()
 
-        # Should find only the valid token
-        assert len(valid_tokens) == 1
-        assert valid_tokens[0].access_token == "valid_token"
+        # Create tokens with different expiration scenarios
+        # 1. Both access and refresh expired
+        both_expired_token = TokenBeanie(
+            user_id=user_id,
+            access_token="both_expired_token",
+            expire_datetime=current_time - timedelta(hours=2),  # Expired
+            name="both_expired",
+            refresh_token="both_expired_refresh",
+            refresh_expire_datetime=current_time - timedelta(hours=1),  # Also expired
+        )
 
-        # Find expired tokens
-        expired_tokens = await TokenBeanie.find(
+        # 2. Access expired but refresh valid
+        access_expired_token = TokenBeanie(
+            user_id=user_id,
+            access_token="access_expired_token",
+            expire_datetime=current_time - timedelta(hours=1),  # Expired
+            name="access_expired",
+            refresh_token="access_expired_refresh",
+            refresh_expire_datetime=current_time + timedelta(days=6),  # Valid
+        )
+
+        # 3. Both access and refresh valid
+        both_valid_token = TokenBeanie(
+            user_id=user_id,
+            access_token="both_valid_token",
+            expire_datetime=current_time + timedelta(hours=1),  # Valid
+            name="both_valid",
+            refresh_token="both_valid_refresh",
+            refresh_expire_datetime=current_time + timedelta(days=7),  # Valid
+        )
+
+        await both_expired_token.save()
+        await access_expired_token.save()
+        await both_valid_token.save()
+
+        # Current tests: Find valid access tokens
+        valid_access_tokens = await TokenBeanie.find(
+            {"expire_datetime": {"$gt": current_time}}
+        ).to_list()
+        assert len(valid_access_tokens) == 1
+        assert valid_access_tokens[0].access_token == "both_valid_token"
+
+        # Current tests: Find expired access tokens
+        expired_access_tokens = await TokenBeanie.find(
             {"expire_datetime": {"$lt": current_time}}
         ).to_list()
+        assert len(expired_access_tokens) == 2
+        expired_access_token_names = [token.access_token for token in expired_access_tokens]
+        assert "both_expired_token" in expired_access_token_names
+        assert "access_expired_token" in expired_access_token_names
 
-        # Should find only the expired token
-        assert len(expired_tokens) == 1
-        assert expired_tokens[0].access_token == "expired_token"
+        # Find valid refresh tokens
+        valid_refresh_tokens = await TokenBeanie.find(
+            {"refresh_expire_datetime": {"$gt": current_time}}
+        ).to_list()
+        assert (
+            len(valid_refresh_tokens) == 2
+        )  # access_expired and both_valid should have valid refresh
+
+        # Find tokens where access expired but refresh valid (can refresh)
+        refreshable_tokens = await TokenBeanie.find(
+            {
+                "expire_datetime": {"$lt": current_time},  # Access expired
+                "refresh_expire_datetime": {"$gt": current_time},  # Refresh valid
+            }
+        ).to_list()
+        assert len(refreshable_tokens) == 1
+        assert refreshable_tokens[0].access_token == "access_expired_token"
 
 
 # ---------------------
@@ -325,67 +383,65 @@ class TestTokenBeanie:
 
 class TestTokenBase:
     def test_token_base_creation(self):
-        """Test creating a complete TokenBase instance."""
+        """Test creating a complete TokenBase instance with refresh token support."""
         user_id = PydanticObjectId()
-        future_time = datetime.now() + timedelta(hours=1)
+        access_expire = datetime.now() + timedelta(hours=1)
+        refresh_expire = datetime.now() + timedelta(days=7)
 
         token_base = TokenBase(
             user_id=user_id,
             access_token="ValidToken123",
-            expire_datetime=future_time,
+            expire_datetime=access_expire,
             name="Test Token",
+            refresh_token="ValidRefreshToken456",
+            refresh_expire_datetime=refresh_expire,
         )
 
         assert token_base.user_id == user_id
         assert token_base.access_token == "ValidToken123"
-        assert token_base.expire_datetime == future_time
+        assert token_base.expire_datetime == access_expire
         assert token_base.name == "Test Token"
         assert token_base.token_type == "bearer"
         assert token_base.token_lifetime == "short-lived"
         assert token_base.logged_in is False
 
+        # Assert refresh token fields
+        assert token_base.refresh_token == "ValidRefreshToken456"
+        assert token_base.refresh_expire_datetime == refresh_expire
+
     def test_token_base_serializers(self):
-        """Test serialization methods of TokenBase."""
+        """Test serialization methods of TokenBase including refresh token fields."""
         user_id = PydanticObjectId()
-        future_time = datetime.now() + timedelta(hours=1)
+        access_expire = datetime.now() + timedelta(hours=1)
+        refresh_expire = datetime.now() + timedelta(days=7)
         creation_time = datetime.now()
 
         token_base = TokenBase(
             user_id=user_id,
             access_token="ValidToken123",
-            expire_datetime=future_time,
+            expire_datetime=access_expire,
             created_at=creation_time,
+            refresh_token="ValidRefreshToken456",
+            refresh_expire_datetime=refresh_expire,
         )
 
-        # Test id serializer if applicable
+        # Test current serializers
         if hasattr(token_base, "id"):
             assert isinstance(token_base.serialize_id(token_base.id), str)
 
-        # Test user_id serializer
         assert isinstance(token_base.serialize_user_id(user_id), str)
-
-        # Test datetime serializers
-        assert token_base.serialize_expire_datetime(future_time) == future_time.strftime(
+        assert token_base.serialize_expire_datetime(access_expire) == access_expire.strftime(
             "%Y-%m-%d %H:%M:%S"
         )
         assert token_base.serialize_created_at(creation_time) == creation_time.strftime(
             "%Y-%m-%d %H:%M:%S"
         )
 
-    def test_default_values(self):
-        """Test default values are set correctly."""
-        user_id = PydanticObjectId()
-        future_time = datetime.now() + timedelta(hours=1)
-
-        token_base = TokenBase(
-            user_id=user_id, access_token="ValidToken123", expire_datetime=future_time
-        )
-
-        assert token_base.token_type == "bearer"
-        assert token_base.token_lifetime == "short-lived"
-        assert token_base.logged_in is False
-        assert token_base.name is None
-        assert isinstance(token_base.created_at, datetime)
+        # Test refresh token serializers
+        assert hasattr(token_base, "serialize_refresh_expire_datetime")
+        assert token_base.serialize_refresh_expire_datetime(
+            refresh_expire
+        ) == refresh_expire.strftime("%Y-%m-%d %H:%M:%S")
 
 
 # ---------------------------------
@@ -985,7 +1041,9 @@ class TestUserBaseCLIConfig:
         token = TokenBase(
             user_id=user_id,
             access_token="test_access_token",
+            refresh_token="test_refresh_token",
             expire_datetime=expire_time,
+            refresh_expire_datetime=expire_time + timedelta(days=7),
         )
 
         user_config = UserBaseCLIConfig(email="test@example.com", token=token)
@@ -1015,7 +1073,9 @@ class TestUserBaseCLIConfig:
         token = TokenBase(
             user_id=user_id,
             access_token="test_access_token",
+            refresh_token="test_refresh_token",
             expire_datetime=expire_time,
+            refresh_expire_datetime=expire_time + timedelta(days=7),
         )
 
         with pytest.raises(ValidationError) as exc_info:

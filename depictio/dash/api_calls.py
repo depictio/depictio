@@ -201,28 +201,80 @@ def purge_expired_tokens(token: str) -> dict[str, Any] | None:
         return None
 
 
+# Helper function for refresh token API call
+def refresh_access_token(refresh_token: str) -> dict | None:
+    """
+    Use refresh token to get new access token.
+
+    Args:
+        refresh_token: The refresh token
+
+    Returns:
+        dict: Updated token data or None if failed
+    """
+    try:
+        response = httpx.post(
+            f"{API_BASE_URL}/depictio/api/v1/auth/refresh_token",
+            json={"refresh_token": refresh_token},
+            timeout=10,
+        )
+
+        if response.status_code == 200:
+            data = response.json()
+            logger.info("Access token refreshed successfully")
+            return {
+                "access_token": data["access_token"],
+                "expire_datetime": data["expire_datetime"],
+                # Note: refresh_token stays the same
+            }
+        else:
+            logger.error(f"Token refresh failed with status {response.status_code}")
+            return None
+
+    except Exception as e:
+        logger.error(f"Error during token refresh: {e}")
+        return None
+
+
 @validate_call(validate_return=True)
-def check_token_validity(token: TokenBase):
-    logger.info("Checking token validity.")
-    logger.info(f"Token: {token}")
-    # logger.info(f"Token : {format_pydantic(TokenBase(**token))}")
+def check_token_validity(token: TokenBase) -> dict:
+    """
+    Enhanced token validity check that returns detailed status.
 
+    Returns:
+        dict: {
+            "valid": bool,
+            "can_refresh": bool,
+            "action": str  # "valid", "refresh", "logout"
+        }
+    """
+    logger.info("Checking token validity (enhanced).")
     logger.info(f"Token: {format_pydantic(token)}")
-    # logger.info(f"Token model dump: {token.mongo()}")
-    logger.info(f"Token model dump: {convert_model_to_dict(token)}")
 
-    response = httpx.post(
-        f"{API_BASE_URL}/depictio/api/v1/auth/check_token_validity",
-        json=convert_model_to_dict(token),  # Sending the token in the body
-    )
-    if response.status_code == 200:
-        logger.debug("Token validity check successful.")
-        validity = response.json()["success"]
-        logger.debug(f"Token validity: {validity}")
-        return validity
-    else:
-        logger.error(f"Error checking token validity: {response.text}")
-        return False
+    try:
+        response = httpx.post(
+            f"{API_BASE_URL}/depictio/api/v1/auth/check_token_validity",
+            json=convert_model_to_dict(token),
+            timeout=10,
+        )
+
+        if response.status_code == 200:
+            data = response.json()
+            result = {
+                "valid": data.get("success", False),
+                "can_refresh": data.get("can_refresh", False),
+                "action": data.get("action", "logout"),
+            }
+
+            logger.info(f"Token validation result: {result}")
+            return result
+        else:
+            logger.error(f"Token validation failed with status {response.status_code}")
+            return {"valid": False, "can_refresh": False, "action": "logout"}
+
+    except Exception as e:
+        logger.error(f"Error during token validation: {e}")
+        return {"valid": False, "can_refresh": False, "action": "logout"}
 
 
 def api_create_group(group_dict: dict, current_token: str):

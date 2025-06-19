@@ -1,34 +1,104 @@
+from datetime import datetime, timedelta
 from unittest.mock import MagicMock, call, patch
 
 import bcrypt
 import mongomock
 import pytest
-from beanie import init_beanie
+from beanie import PydanticObjectId, init_beanie
 from bson import ObjectId
 from mongomock_motor import AsyncMongoMockClient
+from pydantic_core import ValidationError
 
 from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     _create_user_in_db,
     _hash_password,
     _verify_password,
 )
-from depictio.api.v1.endpoints.user_endpoints.utils import _ensure_mongodb_connection
-from depictio.models.models.users import UserBeanie
+from depictio.api.v1.endpoints.user_endpoints.utils import (
+    _ensure_mongodb_connection,
+    create_access_token,
+)
+from depictio.models.models.users import TokenData, UserBeanie
 
-# # Patch pymongo.MongoClient before any module using it is imported.
-# @patch("pymongo.MongoClient", new=mongomock.MongoClient)
-# def test_dummy_connection():
-#     # Now import the modules after the patch is in place.
-#     from depictio.api.v1.db import client  # This will be a mongomock client
-#     from depictio.api.v1.endpoints.user_endpoints.utils import _ensure_mongodb_connection
 
-#     # Update _dummy_mongodb_connection to call server_info() for example
-#     result = _ensure_mongodb_connection()  # Ensure this calls client.server_info()
+# -------------------------------
+# Test for create_access_token
+# -------------------------------
+class TestCreateAccessToken:
+    @pytest.mark.asyncio
+    async def test_create_access_token_short_lived(self):
+        """Test creating a short-lived access token."""
+        # Arrange
+        user_id = PydanticObjectId()
+        token_data = TokenData(sub=user_id, name="test_token", token_lifetime="short-lived")
 
-#     # Since mongomock doesn't really block, the test should complete immediately.
-#     # You can assert on the expected behavior.
-#     # For instance, if _dummy_mongodb_connection() returns server_info(), you can assert:
-#     assert result == client.server_info()
+        # Act
+        with patch("depictio.api.v1.endpoints.user_endpoints.utils.jwt.encode") as mock_encode:
+            mock_encode.return_value = "encoded_jwt_token"
+
+            token_string, expire_datetime = await create_access_token(token_data)
+
+        # Assert
+        assert token_string == "encoded_jwt_token"
+        assert isinstance(expire_datetime, datetime)
+        assert expire_datetime > datetime.now()
+
+        # Verify JWT encoding was called with correct parameters
+        mock_encode.assert_called_once()
+        call_args = mock_encode.call_args[0]
+        encoded_data = call_args[0]
+
+        assert encoded_data["sub"] == str(user_id)
+        assert encoded_data["name"] == "test_token"
+        assert encoded_data["token_lifetime"] == "short-lived"
+        assert "exp" in encoded_data
+
+    @pytest.mark.asyncio
+    async def test_create_access_token_long_lived(self):
+        """Test creating a long-lived access token."""
+        # Arrange
+        user_id = PydanticObjectId()
+        token_data = TokenData(sub=user_id, name="long_token", token_lifetime="long-lived")
+
+        # Act
+        with patch("depictio.api.v1.endpoints.user_endpoints.utils.jwt.encode") as mock_encode:
+            mock_encode.return_value = "long_lived_jwt_token"
+
+            token_string, expire_datetime = await create_access_token(token_data)
+
+        # Assert
+        assert token_string == "long_lived_jwt_token"
+        assert isinstance(expire_datetime, datetime)
+
+        # Long-lived tokens should expire later than short-lived ones
+        expected_min_expiry = datetime.now() + timedelta(days=29)  # Should be ~30 days
+        assert expire_datetime > expected_min_expiry
+
+    @pytest.mark.asyncio
+    async def test_create_access_token_invalid_lifetime(self):
+        """Test creating token with invalid lifetime raises exception."""
+        # Arrange
+        user_id = PydanticObjectId()
+
+        # Act & Assert
+        with pytest.raises(ValidationError):
+            TokenData(sub=user_id, name="invalid_token", token_lifetime="invalid-lifetime")
+
+    @pytest.mark.asyncio
+    async def test_create_access_token_expiry_hours(self):
+        """Test creating a token with expiry in hours."""
+        # Arrange
+        user_id = PydanticObjectId()
+        token_data = TokenData(sub=user_id, name="hourly_token")
+
+        token_string, expire_datetime = await create_access_token(token_data, expiry_hours=3)
+
+        # Assert
+        assert token_string is not None
+        assert isinstance(expire_datetime, datetime)
+        assert expire_datetime > datetime.now() + timedelta(
+            hours=2, minutes=59
+        )  # Should be ~3 hours
 
 
 # -------------------------------

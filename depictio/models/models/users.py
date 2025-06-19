@@ -100,9 +100,11 @@ class TokenBase(MongoModel):
     # id: PydanticObjectId = Field(default_factory=PydanticObjectId, alias="_id")
     user_id: PydanticObjectId  # Reference to User's ObjectId
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
     token_lifetime: str = "short-lived"
     expire_datetime: datetime
+    refresh_expire_datetime: datetime
     name: str | None = None
     created_at: datetime = Field(default_factory=datetime.now)
     model_config = {"arbitrary_types_allowed": True}
@@ -120,6 +122,10 @@ class TokenBase(MongoModel):
     @field_serializer("expire_datetime")
     def serialize_expire_datetime(self, expire_datetime: datetime) -> str:
         return expire_datetime.strftime("%Y-%m-%d %H:%M:%S")
+
+    @field_serializer("refresh_expire_datetime")
+    def serialize_refresh_expire_datetime(self, refresh_expire_datetime: datetime) -> str:
+        return refresh_expire_datetime.strftime("%Y-%m-%d %H:%M:%S")
 
     @field_serializer("created_at")
     def serialize_created_at(self, created_at: datetime) -> str:

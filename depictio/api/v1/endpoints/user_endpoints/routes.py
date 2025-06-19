@@ -26,6 +26,7 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     _purge_expired_tokens,
 )
 from depictio.api.v1.endpoints.user_endpoints.utils import (
+    create_access_token,
     delete_group_helper,
     update_group_in_users_helper,
 )
@@ -154,6 +155,37 @@ async def create_token(
         )
 
     return token
+
+
+@auth_endpoint_router.post("/refresh_token")
+async def refresh_token_endpoint(request: dict):
+    refresh_token = request.get("refresh_token")
+
+    # Find token by refresh_token and check if not expired
+    token_doc = await TokenBeanie.find_one(
+        {"refresh_token": refresh_token, "refresh_expire_datetime": {"$gt": datetime.now()}}
+    )
+
+    if not token_doc:
+        raise HTTPException(401, "Invalid refresh token")
+
+    # Create new access_token (keep same refresh_token)
+    user = await UserBeanie.find_one({"_id": token_doc.user_id})
+    token_data = TokenData(
+        name=token_doc.name,
+        sub=user.id,
+    )
+    new_access_token, expire_datetime = await create_access_token(
+        token_data,
+        expiry_hours=1,
+    )
+
+    # Update the token document
+    token_doc.access_token = new_access_token
+    token_doc.expire_datetime = expire_datetime
+    await token_doc.save()
+
+    return {"access_token": new_access_token, "expire_datetime": token_doc.expire_datetime}
 
 
 @auth_endpoint_router.get("/fetch_user/from_token")
@@ -424,12 +456,17 @@ async def purge_expired_tokens_endpoint(
         raise HTTPException(status_code=500, detail="Failed to purge expired tokens")
 
 
+# Updated backend endpoint
 @auth_endpoint_router.post("/check_token_validity")
 async def check_token_validity_endpoint(token: TokenBase):
-    is_valid = await _check_if_token_is_valid(token)
-    logger.info(f"Token validity check for {token.name}: {is_valid}")
+    validation_result = await _check_if_token_is_valid(token)
+    logger.info(f"Token validity check for {token.name}: {validation_result}")
 
-    return {"success": is_valid}
+    return {
+        "success": validation_result["access_valid"],
+        "can_refresh": validation_result["can_refresh"],
+        "action": validation_result["action"],
+    }
 
 
 @auth_endpoint_router.post("/generate_agent_config", response_model=CLIConfig)

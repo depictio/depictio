@@ -180,15 +180,21 @@ def delete_group_helper(group_id: PyObjectId) -> dict[str, bool | str]:
 
 
 @validate_call(validate_return=True)
-async def create_access_token(token_data: TokenData) -> tuple[str, datetime]:
+async def create_access_token(
+    token_data: TokenData,
+    expiry_hours: int = None,
+) -> tuple[str, datetime]:
     token_lifetime = token_data.token_lifetime
 
-    if token_lifetime == "short-lived":
-        expires_delta = timedelta(hours=12)
-    elif token_lifetime == "long-lived":
-        expires_delta = timedelta(days=365)
+    if not expiry_hours:
+        if token_lifetime == "short-lived":
+            expires_delta = timedelta(hours=12)
+        elif token_lifetime == "long-lived":
+            expires_delta = timedelta(days=365)
+        else:
+            raise ValueError("Invalid token type. Must be 'short-lived' or 'long-lived'.")
     else:
-        raise ValueError("Invalid token type. Must be 'short-lived' or 'long-lived'.")
+        expires_delta = timedelta(hours=expiry_hours)
 
     to_encode = token_data.model_dump()
     expire = datetime.now() + expires_delta
