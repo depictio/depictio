@@ -95,7 +95,7 @@ async def _async_fetch_user_from_id(user_id: PydanticObjectId) -> UserBeanie:
 
 
 @validate_call(validate_return=True)
-async def _check_if_token_is_valid(token: TokenBase) -> bool:
+async def _check_if_token_is_valid(token: TokenBase) -> dict:
     """
     Check if the provided token is valid and not expired.
 
@@ -103,25 +103,57 @@ async def _check_if_token_is_valid(token: TokenBase) -> bool:
         token: The token to check
 
     Returns:
-        True if the token is valid, False otherwise
+        dict: {
+            "access_valid": bool,
+            "refresh_valid": bool,
+            "can_refresh": bool,
+            "action": str  # "valid", "refresh", "logout"
+        }
     """
-    # Check if the token exists in the database and has not expired
-    check = await TokenBeanie.find_one(
+    logger.debug(f"Checking token: {token.access_token[:20]}...")
+
+    # Find token document in database
+    token_doc = await TokenBeanie.find_one(
         {
             "access_token": token.access_token,
-            "expire_datetime": {"$gt": datetime.now()},  # Use datetime object, not string
             "user_id": token.user_id,
         }
     )
-    logger.debug(f"Checking token: {token.access_token}")
-    if check:
-        # Token exists and is not expired
-        logger.debug(f"Token is valid: {format_pydantic(check)}")
-        return True
+
+    if not token_doc:
+        logger.debug("Token not found in database")
+        return {
+            "access_valid": False,
+            "refresh_valid": False,
+            "can_refresh": False,
+            "action": "logout",
+        }
+
+    current_time = datetime.now()
+
+    # Check access token expiry
+    access_valid = token_doc.expire_datetime > current_time
+
+    # Check refresh token expiry
+    refresh_valid = token_doc.refresh_expire_datetime > current_time
+
+    logger.debug(f"Access token valid: {access_valid}")
+    logger.debug(f"Refresh token valid: {refresh_valid}")
+
+    # Determine action
+    if access_valid:
+        action = "valid"  # Continue normally
+    elif refresh_valid:
+        action = "refresh"  # Access expired but can refresh
     else:
-        # Token does not exist or is expired
-        logger.debug(f"Token is invalid or expired: {token.access_token}")
-        return False
+        action = "logout"  # Both expired, force re-login
+
+    return {
+        "access_valid": access_valid,
+        "refresh_valid": refresh_valid,
+        "can_refresh": refresh_valid,
+        "action": action,
+    }
 
 
 @validate_call(validate_return=True)
@@ -238,11 +270,20 @@ async def _add_token(token_data: TokenData) -> TokenBeanie:
     email = token_data.sub
     logger.info(f"Adding token for user {email}.")
     logger.info(f"Token: {format_pydantic(token_data)}")
-    token_value, expire = await create_access_token(token_data)
+    access_token, expire = await create_access_token(
+        token_data,
+        expiry_hours=1,
+    )  # 1 hour
+    refresh_token, expire_refresh = await create_access_token(
+        token_data,
+        expiry_hours=7 * 24,
+    )  # 7 days
 
     token = TokenBeanie(
-        access_token=token_value,
+        access_token=access_token,
+        refresh_token=refresh_token,
         expire_datetime=expire.strftime("%Y-%m-%d %H:%M:%S"),
+        refresh_expire_datetime=expire_refresh.strftime("%Y-%m-%d %H:%M:%S"),
         name=token_data.name,
         token_lifetime=token_data.token_lifetime,
         user_id=token_data.sub,

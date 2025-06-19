@@ -95,7 +95,7 @@ known-first-party = ["depictio"]
 
 [tool.mypy]
 # Basic settings
-python_version = "3.9"              # Adjust to your Python version
+python_version = "3.11"              # Adjust to your Python version
 warn_return_any = false
 warn_unused_ignores = false
 disallow_untyped_defs = false

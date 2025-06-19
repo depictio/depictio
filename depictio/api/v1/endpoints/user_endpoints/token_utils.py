@@ -1,7 +1,5 @@
-from datetime import datetime, timedelta
 from typing import Any
 
-import jwt
 from beanie import PydanticObjectId
 
 from depictio.api.v1.configs.config import settings
@@ -10,21 +8,8 @@ from depictio.api.v1.endpoints.user_endpoints.agent_config_utils import (
     _generate_agent_config,
     export_agent_config,
 )
+from depictio.api.v1.endpoints.user_endpoints.utils import create_access_token
 from depictio.models.models.users import TokenBeanie, UserBeanie
-
-
-# Assuming you have this function somewhere in your codebase
-async def create_access_token(token_data: dict) -> tuple[str, datetime]:
-    """Create a JWT access token."""
-    # This is a placeholder - replace with your actual token creation logic
-    expires_delta = timedelta(days=30 if token_data["token_lifetime"] == "long-lived" else 1)
-    expire = datetime.now() + expires_delta
-
-    to_encode = token_data.copy()
-    to_encode.update({"exp": expire})
-
-    encoded_jwt = jwt.encode(to_encode, "your-secret-key", algorithm="HS256")
-    return encoded_jwt, expire
 
 
 async def add_token(token_data: dict) -> TokenBeanie:
