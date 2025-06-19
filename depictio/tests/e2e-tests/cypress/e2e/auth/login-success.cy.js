@@ -1,4 +1,4 @@
-describe('Login Success TOTO', () => {
+describe('Login Success', () => {
   let testUser;
   console.log('Running login success test');
 

@@ -216,10 +216,13 @@ def check_token_validity(token: TokenBase):
         json=convert_model_to_dict(token),  # Sending the token in the body
     )
     if response.status_code == 200:
-        logger.info("Token is valid.")
-        return True
-    logger.error("Token is invalid.")
-    return False
+        logger.debug("Token validity check successful.")
+        validity = response.json()["success"]
+        logger.debug(f"Token validity: {validity}")
+        return validity
+    else:
+        logger.error(f"Error checking token validity: {response.text}")
+        return False
 
 
 def api_create_group(group_dict: dict, current_token: str):

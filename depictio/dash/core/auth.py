@@ -22,15 +22,26 @@ def process_authentication(pathname, local_data):
     # trigger = pathname  # For logging purposes
     logger.debug(f"URL Pathname: {pathname}")
     logger.debug(f"Local Data: {local_data}")
+    logger.debug("Processing authentication...")
+    # logger.debug(f"Check token validity TOTO: {check_token_validity(TokenBase(**local_data))}")
+
+    token_validity = False
+
+    if "access_token" in local_data:
+        if local_data["access_token"] is not None:
+            token_validity = check_token_validity(TokenBase(**local_data))
+            logger.debug(f"Token Validity: {token_validity}")
 
     # Check if user is authenticated
     if (
         not local_data
         or not local_data.get("logged_in")
-        or not check_token_validity(TokenBase(**local_data))
+        # or check_token_validity(TokenBase(**local_data)) is False
+        or token_validity is False
     ):
         logger.debug("User not logged in")
         logger.debug("Redirect to /auth")
+        # logger.warning(f"Token validity check: {check_token_validity(TokenBase(**local_data))}")
         return handle_unauthenticated_user(pathname)
 
     # Default to /dashboards if pathname is None or "/"

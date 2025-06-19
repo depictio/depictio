@@ -4,6 +4,7 @@ import bcrypt
 import mongomock
 import pytest
 from beanie import init_beanie
+from bson import ObjectId
 from mongomock_motor import AsyncMongoMockClient
 
 from depictio.api.v1.endpoints.user_endpoints.core_functions import (
@@ -580,6 +581,7 @@ class TestCreateUserInDb:
         await init_beanie(database=client.test_db, document_models=[UserBeanie])
 
         # Set up test data
+        id = ObjectId("507f1f77bcf86cd799439011")  # Example ObjectId
         email = "test@example.com"
         password = "securepassword"
 
@@ -590,7 +592,11 @@ class TestCreateUserInDb:
             mock_hash.return_value = "$2b$12$mockedhashedpassword"
 
             # Call the function
-            payload = await _create_user_in_db(email=email, password=password)
+            payload = await _create_user_in_db(
+                id=id,
+                email=email,
+                password=password,
+            )
             result = payload["user"]
 
             # Assertions
@@ -618,8 +624,9 @@ class TestCreateUserInDb:
         await init_beanie(database=client.test_db, document_models=[UserBeanie])
 
         # Set up test data
+        id = ObjectId("507f1f77bcf86cd799439012")  # Example ObjectId
         email = "admin@example.com"
-        password = "securepassword"
+        password = "changeme"
 
         # Mock the hash_password function
         with patch(
@@ -628,7 +635,12 @@ class TestCreateUserInDb:
             mock_hash.return_value = "$2b$12$mockedhashedpassword"
 
             # Call the function with is_admin=True
-            payload = await _create_user_in_db(email=email, password=password, is_admin=True)
+            payload = await _create_user_in_db(
+                id=id,
+                email=email,
+                password=password,
+                is_admin=True,
+            )
             result = payload["user"]
 
             # Assertions
@@ -648,15 +660,20 @@ class TestCreateUserInDb:
         await init_beanie(database=client.test_db, document_models=[UserBeanie])
 
         # Set up test data
+        id = ObjectId("507f1f77bcf86cd799439013")  # Example ObjectId
         email = "existing@example.com"
-        password = "securepassword"
+        password = "changeme"
 
         # Create a user first
         with patch(
             "depictio.api.v1.endpoints.user_endpoints.core_functions._hash_password"
         ) as mock_hash:
             mock_hash.return_value = "$2b$12$mockedhashedpassword"
-            existing_user = await _create_user_in_db(email=email, password=password)
+            existing_user = await _create_user_in_db(
+                id=id,
+                email=email,
+                password=password,
+            )
             existing_user = existing_user["user"]
 
         # Now try to create the same user again
@@ -666,7 +683,11 @@ class TestCreateUserInDb:
             mock_hash.return_value = "$2b$12$mockedhashedpassword"
 
             # Call the function and expect a response with success=False
-            response = await _create_user_in_db(email=email, password=password)
+            response = await _create_user_in_db(
+                id=id,
+                email=email,
+                password=password,
+            )
 
             # Verify the response details
             assert response["success"] is False

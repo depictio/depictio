@@ -149,6 +149,7 @@ async def initialize_db(wipe: bool = False) -> UserBeanie | None:
         logger.debug(user_config)
 
         user_payload = await _create_user_in_db(
+            id=user_config["id"],
             email=user_config["email"],
             password=user_config["password"],
             is_admin=user_config.get("is_admin", False),

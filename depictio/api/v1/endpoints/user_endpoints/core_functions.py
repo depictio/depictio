@@ -7,6 +7,7 @@ from pydantic import EmailStr, validate_call
 
 from depictio.api.v1.configs.logging_init import format_pydantic, logger
 from depictio.api.v1.endpoints.user_endpoints.utils import create_access_token
+from depictio.models.models.base import PyObjectId
 from depictio.models.models.users import TokenBase, TokenBeanie, TokenData, UserBeanie
 
 
@@ -112,12 +113,14 @@ async def _check_if_token_is_valid(token: TokenBase) -> bool:
             "user_id": token.user_id,
         }
     )
-    logger.debug(f"Checking token: {token.access_token} : {check}")
+    logger.debug(f"Checking token: {token.access_token}")
     if check:
         # Token exists and is not expired
+        logger.debug(f"Token is valid: {format_pydantic(check)}")
         return True
     else:
         # Token does not exist or is expired
+        logger.debug(f"Token is invalid or expired: {token.access_token}")
         return False
 
 
@@ -292,7 +295,11 @@ def _hash_password(password: str) -> str:
 
 @validate_call(validate_return=True)
 async def _create_user_in_db(
-    email: EmailStr, password: str, is_admin: bool = False
+    email: EmailStr,
+    password: str,
+    is_admin: bool = False,
+    id: PyObjectId = None,
+    group: str | None = None,
 ) -> dict[str, bool | str | UserBeanie | None] | None:
     """
     Helper function to create a user in the database using Beanie.
@@ -309,7 +316,10 @@ async def _create_user_in_db(
     logger.info(f"Creating user with email: {email}")
 
     # Check if the user already exists
-    existing_user = await UserBeanie.find_one({"email": email})
+    search_query = {"email": email}
+    if id:
+        search_query["_id"] = id
+    existing_user = await UserBeanie.find_one(search_query)
 
     if existing_user:
         logger.warning(f"User {email} already exists in the database")
@@ -327,6 +337,7 @@ async def _create_user_in_db(
 
     # Create new UserBeanie
     user_beanie = UserBeanie(
+        id=id if id else PyObjectId(),
         email=email,
         password=hashed_password,
         is_admin=is_admin,

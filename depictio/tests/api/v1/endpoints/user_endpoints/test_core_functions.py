@@ -460,16 +460,11 @@ class TestCheckIfTokenIsValid:
         )
         await token.save()
 
-        # Patch the logger to avoid actual logging during tests
-        with patch("depictio.api.v1.endpoints.user_endpoints.core_functions.logger") as mock_logger:
-            # Act
-            result = await _check_if_token_is_valid(token)
+        # Act
+        result = await _check_if_token_is_valid(token)
 
-            # Assert
-            assert result is False
-
-            # Verify logging
-            mock_logger.debug.assert_called_once()
+        # Assert
+        assert result is False
 
     async def test_check_if_token_is_valid_token_not_found(self):
         """Test when token does not exist in database."""
@@ -489,16 +484,11 @@ class TestCheckIfTokenIsValid:
             name="unsaved_token",
         )
 
-        # Patch the logger to avoid actual logging during tests
-        with patch("depictio.api.v1.endpoints.user_endpoints.core_functions.logger") as mock_logger:
-            # Act
-            result = await _check_if_token_is_valid(token)
+        # Act
+        result = await _check_if_token_is_valid(token)
 
-            # Assert
-            assert result is False
-
-            # Verify logging
-            mock_logger.debug.assert_called_once()
+        # Assert
+        assert result is False
 
     async def test_check_if_token_is_valid_wrong_user(self):
         """Test when token exists but for a different user."""
@@ -528,16 +518,11 @@ class TestCheckIfTokenIsValid:
             name="valid_token",
         )
 
-        # Patch the logger to avoid actual logging during tests
-        with patch("depictio.api.v1.endpoints.user_endpoints.core_functions.logger") as mock_logger:
-            # Act
-            result = await _check_if_token_is_valid(token_to_check)
+        # Act
+        result = await _check_if_token_is_valid(token_to_check)
 
-            # Assert
-            assert result is False
-
-            # Verify logging
-            mock_logger.debug.assert_called_once()
+        # Assert
+        assert result is False
 
 
 # ------------------------------------------------------
