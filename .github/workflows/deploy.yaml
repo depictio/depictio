@@ -1,4 +1,4 @@
-name: Split Depictio CI
+name: Depictio Quality, Integration and E2E Tests
 
 on:
   push:
