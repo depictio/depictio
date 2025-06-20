@@ -75,7 +75,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: dist
-          path: depictio/cli/dist/
+          path: dist/
 
   publish:
     runs-on: ubuntu-latest
@@ -98,7 +98,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: dist
-          path: depictio/cli/dist/
+          path: dist/
 
       - name: Install publishing dependencies
         run: |
@@ -107,13 +107,12 @@ jobs:
 
       - name: Verify build artifacts
         run: |
-          cd depictio/cli
-          python -m twine check dist/*
+          python -m twine check dist/*  # ✅ Check from root
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           password: ${{ secrets.PYPI_API_TOKEN }}
-          packages-dir: depictio/cli/dist/
+          packages-dir: dist/
           skip-existing: true
           verify-metadata: true
