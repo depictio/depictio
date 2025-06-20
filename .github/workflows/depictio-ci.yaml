@@ -1,4 +1,4 @@
-name: Split Depictio CI
+name: "Depictio – Full CI: Quality, Build, Integration, E2E Tests"
 
 on:
   push:

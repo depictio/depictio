@@ -45,7 +45,7 @@ RUN rm -f /tmp/depictio.yaml
 
 # Install dependencies more efficiently
 RUN apt-get update && apt-get install --no-install-recommends -y \
-    xvfb xauth sudo git git-lfs curl \
+    xvfb xauth sudo git git-lfs curl netcat-openbsd \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
