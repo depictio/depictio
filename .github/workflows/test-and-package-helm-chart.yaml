@@ -460,8 +460,8 @@ jobs:
           kubectl delete configmap --all || true
           sleep 15
 
-          # Generate new random release name for package test
-          PACKAGE_RELEASE_NAME=$(openssl rand -hex 5)
+          PACKAGE_RANDOM_SUFFIX=$(openssl rand -hex 4 | cut -c1-9)
+          PACKAGE_RELEASE_NAME="p${PACKAGE_RANDOM_SUFFIX}"
           echo "🎲 Package test release name: $PACKAGE_RELEASE_NAME"
 
           # Install from packaged chart

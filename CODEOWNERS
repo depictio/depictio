@@ -1,0 +1,4 @@
+# CODEOWNERS for Depictio
+
+# Global owner - all files default to weber8thomas
+* @weber8thomas
