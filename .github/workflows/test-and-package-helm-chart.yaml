@@ -181,14 +181,19 @@ jobs:
             --set frontend.image.tag=${{ steps.chart-info.outputs.app_version }} \
             --set frontend.image.pullPolicy=Never
 
-
-
-
       - name: Test Inter-Service Connectivity
         run: |
           echo "🔗 Testing inter-service connectivity..."
           RELEASE_NAME="${{ steps.release-info.outputs.release_name }}"
           echo "🎯 Using release name: $RELEASE_NAME"
+
+          # Wait for pods to be ready first
+          echo "⏳ Waiting for pods to be ready..."
+          kubectl wait --for=condition=ready pod -l "app=depictio-backend" --timeout=300s
+          kubectl wait --for=condition=ready pod -l "app=depictio-frontend" --timeout=300s
+
+          # Additional wait for containers to fully start
+          sleep 30
 
           # Use the working selectors from your debug output
           BACKEND_POD=$(kubectl get pods -l "app=depictio-backend" -o jsonpath='{.items[0].metadata.name}')
@@ -213,30 +218,61 @@ jobs:
           echo "🔍 Verifying services exist..."
           kubectl get svc $MONGODB_SERVICE $MINIO_SERVICE $BACKEND_SERVICE $FRONTEND_SERVICE
 
-          # Test Backend -> MongoDB connectivity (PORT: 27018)
+          # Test Backend -> MongoDB connectivity (PORT: 27018) - REMOVED || true
           echo "🧪 Testing Backend -> MongoDB connectivity..."
-          kubectl exec $BACKEND_POD -- sh -c "nc -z $MONGODB_SERVICE 27018 && echo '✅ Backend can reach MongoDB on port 27018' || echo '❌ Backend cannot reach MongoDB on port 27018'" || true
+          if kubectl exec $BACKEND_POD -- sh -c "nc -z $MONGODB_SERVICE 27018"; then
+            echo "✅ Backend can reach MongoDB on port 27018"
+          else
+            echo "❌ Backend cannot reach MongoDB on port 27018"
+            exit 1
+          fi
 
-          # Test Backend -> MinIO connectivity (PORT: 9000)
+          # Test Backend -> MinIO connectivity (PORT: 9000) - REMOVED || true
           echo "🧪 Testing Backend -> MinIO connectivity..."
-          kubectl exec $BACKEND_POD -- sh -c "nc -z $MINIO_SERVICE 9000 && echo '✅ Backend can reach MinIO on port 9000' || echo '❌ Backend cannot reach MinIO on port 9000'" || true
+          if kubectl exec $BACKEND_POD -- sh -c "nc -z $MINIO_SERVICE 9000"; then
+            echo "✅ Backend can reach MinIO on port 9000"
+          else
+            echo "❌ Backend cannot reach MinIO on port 9000"
+            exit 1
+          fi
 
-          # Test Backend -> Frontend connectivity (PORT: 80)
+          # Test Backend -> Frontend connectivity (PORT: 80) - REMOVED || true
           echo "🧪 Testing Backend -> Frontend connectivity..."
-          kubectl exec $BACKEND_POD -- sh -c "nc -z $FRONTEND_SERVICE 80 && echo '✅ Backend can reach Frontend on port 80' || echo '❌ Backend cannot reach Frontend on port 80'" || true
+          if kubectl exec $BACKEND_POD -- sh -c "nc -z $FRONTEND_SERVICE 80"; then
+            echo "✅ Backend can reach Frontend on port 80"
+          else
+            echo "❌ Backend cannot reach Frontend on port 80"
+            exit 1
+          fi
 
-          # Test Frontend -> Backend connectivity (PORT: 80)
+          # Test Frontend -> Backend connectivity (PORT: 80) - REMOVED || true
           echo "🧪 Testing Frontend -> Backend connectivity..."
-          kubectl exec $FRONTEND_POD -- sh -c "nc -z $BACKEND_SERVICE 80 && echo '✅ Frontend can reach Backend on port 80' || echo '❌ Frontend cannot reach Backend on port 80'" || true
+          if kubectl exec $FRONTEND_POD -- sh -c "nc -z $BACKEND_SERVICE 80"; then
+            echo "✅ Frontend can reach Backend on port 80"
+          else
+            echo "❌ Frontend cannot reach Backend on port 80"
+            exit 1
+          fi
 
-          # Test Frontend -> MinIO connectivity (PORT: 9000)
+          # Test Frontend -> MinIO connectivity (PORT: 9000) - REMOVED || true
           echo "🧪 Testing Frontend -> MinIO connectivity..."
-          kubectl exec $FRONTEND_POD -- sh -c "nc -z $MINIO_SERVICE 9000 && echo '✅ Frontend can reach MinIO on port 9000' || echo '❌ Frontend cannot reach MinIO on port 9000'" || true
+          if kubectl exec $FRONTEND_POD -- sh -c "nc -z $MINIO_SERVICE 9000"; then
+            echo "✅ Frontend can reach MinIO on port 9000"
+          else
+            echo "❌ Frontend cannot reach MinIO on port 9000"
+            exit 1
+          fi
 
-          # Test MinIO Console connectivity (PORT: 9001)
+          # Test MinIO Console connectivity (PORT: 9001) - REMOVED || true
           echo "🧪 Testing Backend -> MinIO Console connectivity..."
-          kubectl exec $BACKEND_POD -- sh -c "nc -z $MINIO_SERVICE 9001 && echo '✅ Backend can reach MinIO Console on port 9001' || echo '❌ Backend cannot reach MinIO Console on port 9001'" || true
+          if kubectl exec $BACKEND_POD -- sh -c "nc -z $MINIO_SERVICE 9001"; then
+            echo "✅ Backend can reach MinIO Console on port 9001"
+          else
+            echo "❌ Backend cannot reach MinIO Console on port 9001"
+            exit 1
+          fi
 
+          echo "🎉 All inter-service connectivity tests passed!"
 
       - name: Test Database and Storage Functionality
         run: |
