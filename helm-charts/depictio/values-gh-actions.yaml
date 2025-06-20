@@ -12,8 +12,8 @@ mongo:
       memory: "256Mi"
       cpu: "0.1"
     limits:
-      memory: "512Mi"
-      cpu: "0.5"
+      memory: "2Gi"
+      cpu: "1"
 
 minio:
   resources:
@@ -21,8 +21,8 @@ minio:
       memory: "256Mi"
       cpu: "0.1"
     limits:
-      memory: "512Mi"
-      cpu: "0.5"
+      memory: "2Gi"
+      cpu: "1"
 
 backend:
   resources:
@@ -30,8 +30,10 @@ backend:
       memory: "256Mi"
       cpu: "0.1"
     limits:
-      memory: "512Mi"
-      cpu: "0.5"
+      memory: "2Gi"
+      cpu: "1"
+  env:
+    DEPICTIO_LOGGING_VERBOSITY_LEVEL: "DEBUG"
 
 frontend:
   resources:
@@ -39,8 +41,8 @@ frontend:
       memory: "256Mi"
       cpu: "0.1"
     limits:
-      memory: "512Mi"
-      cpu: "0.5"
+      memory: "2Gi"
+      cpu: "1"
 
 # Use small PVC sizes for testing
 persistence:

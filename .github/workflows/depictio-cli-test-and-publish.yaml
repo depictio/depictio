@@ -8,6 +8,7 @@ on:
       - "v*.*.*"
       - "v*.*.*-b*"
   pull_request:
+    branches: [ main ]
     paths:
       - "depictio/cli/**"
       - "depictio/models/**"
