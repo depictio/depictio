@@ -1,6 +1,6 @@
 [project]
 name = "depictio"
-version = "0.0.6-beta3"
+version = "0.0.6"
 description = "Depictio API & Frontend"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -57,6 +57,7 @@ classifiers = [
 dev = [
   "black",
   "ruff",
+  "pre-commit",
   "pytest",
   "pytest-asyncio",
   "pytest",

@@ -1,10 +1,9 @@
 [project]
 name = "depictio-cli"
-version = "0.0.6-beta3"
+version = "0.0.6"
 description = "Depictio CLI to interact with the Depictio API"
 readme = "README.md"
 requires-python = ">=3.11"
-# Fix license format to avoid deprecation warnings
 license = "MIT"
 dependencies = [
   "boto3",
