@@ -83,6 +83,9 @@ jobs:
             echo "🔨 Image doesn't exist, will build ${FULL_IMAGE}"
           fi
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build and push Docker image
         id: build
         if: steps.check-rebuild.outputs.rebuild == 'true'
