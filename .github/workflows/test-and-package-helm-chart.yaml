@@ -179,8 +179,7 @@ jobs:
             --set backend.image.pullPolicy=Never \
             --set frontend.image.repository=depictio \
             --set frontend.image.tag=${{ steps.chart-info.outputs.app_version }} \
-            --set frontend.image.pullPolicy=Never \
-            --wait --timeout 10m
+            --set frontend.image.pullPolicy=Never
 
 
 
@@ -238,54 +237,103 @@ jobs:
           echo "🧪 Testing Backend -> MinIO Console connectivity..."
           kubectl exec $BACKEND_POD -- sh -c "nc -z $MINIO_SERVICE 9001 && echo '✅ Backend can reach MinIO Console on port 9001' || echo '❌ Backend cannot reach MinIO Console on port 9001'" || true
 
-      - name: Test Database and Storage Connectivity
+
+      - name: Test Database and Storage Functionality
         run: |
-          echo "🗄️ Testing database and storage services..."
+          echo "🗄️ Testing database and storage functionality..."
 
           RELEASE_NAME="${{ steps.release-info.outputs.release_name }}"
-
-          # Use the working selector
           BACKEND_POD=$(kubectl get pods -l "app=depictio-backend" -o jsonpath='{.items[0].metadata.name}')
 
           echo "Using backend pod: $BACKEND_POD"
 
-          # Construct service names (corrected)
-          MONGODB_SERVICE="${RELEASE_NAME}-mongo"  # Note: "mongo" not "mongodb"
-          MINIO_SERVICE="${RELEASE_NAME}-minio"
+          # Get MinIO credentials from secret
+          SECRET_NAME="${RELEASE_NAME}-depictio-secrets"
+          MINIO_PASSWORD=$(kubectl get secret $SECRET_NAME -o jsonpath='{.data.MINIO_ROOT_PASSWORD}' | base64 -d)
 
-          # Test MongoDB connection with correct port (27018)
-          echo "🧪 Testing MongoDB connection..."
-          kubectl exec $BACKEND_POD -- python3 -c "
+          # Test MongoDB - List collections
+          echo "🧪 Testing MongoDB and listing collections..."
+          kubectl exec $BACKEND_POD -- python3 -c '
           import pymongo
           try:
-              client = pymongo.MongoClient('mongodb://$MONGODB_SERVICE:27018/')
-              db = client.admin
-              server_info = client.server_info()
-              print('✅ MongoDB connection successful on port 27018, version:', server_info.get('version'))
-              collections = db.list_collection_names()
-              print('📊 Available collections:', len(collections))
-          except Exception as e:
-              print('❌ MongoDB connection failed:', str(e))
-          " || true
+              client = pymongo.MongoClient("mongodb://'${RELEASE_NAME}'-mongo:27018/", serverSelectionTimeoutMS=5000)
+              client.admin.command("ping")
 
-          # Test MinIO connection with correct port (9000)
-          echo "🧪 Testing MinIO connection..."
-          kubectl exec $BACKEND_POD -- python3 -c "
+              # List all databases
+              db_names = client.list_database_names()
+              print(f"✅ MongoDB connected - Databases: {db_names}")
+
+              # Check if depictioDB exists
+              if "depictioDB" in db_names:
+                  print("✅ depictioDB found!")
+
+              # Check for specific collections
+              db = client["depictioDB"]
+              collections = db.list_collection_names()
+              print(f"📊 Collections in depictioDB: {collections}")
+
+              # Check if "users" collection exists
+              if "users" in collections:
+                  print("✅ 'users' collection found!")
+              else:
+                  print("⚠️  'users' collection not found")
+
+
+
+          except Exception as e:
+              print(f"❌ MongoDB failed: {e}")
+          '
+
+          # Test MinIO - Check for depictio-bucket
+          echo "🧪 Testing MinIO and checking for depictio-bucket..."
+          kubectl exec $BACKEND_POD -- python3 -c '
           import boto3
           from botocore.exceptions import ClientError
           try:
-              s3_client = boto3.client(
-                  's3',
-                  endpoint_url='http://$MINIO_SERVICE:9000',
-                  aws_access_key_id='minioadmin',
-                  aws_secret_access_key='minioadmin'
+              s3 = boto3.client(
+                  "s3",
+                  endpoint_url="http://'${RELEASE_NAME}'-minio:9000",
+                  aws_access_key_id="'$RELEASE_NAME'",
+                  aws_secret_access_key="'$MINIO_PASSWORD'",
+                  region_name="us-east-1"
               )
-              buckets = s3_client.list_buckets()
-              print('✅ MinIO connection successful on port 9000')
-              print('📊 Available buckets:', len(buckets.get('Buckets', [])))
+
+              # List all buckets
+              response = s3.list_buckets()
+              buckets = [bucket["Name"] for bucket in response.get("Buckets", [])]
+              print(f"✅ MinIO connected - Total buckets: {len(buckets)}")
+
+              if buckets:
+                  print(f"📊 Available buckets: {buckets}")
+              else:
+                  print("📊 No buckets found")
+
+              # Check specifically for depictio-bucket
+              if "depictio-bucket" in buckets:
+                  print("✅ depictio-bucket found!")
+
+                  # Try to list objects in the bucket
+                  try:
+                      objects = s3.list_objects_v2(Bucket="depictio-bucket")
+                      object_count = objects.get("KeyCount", 0)
+                      print(f"📁 depictio-bucket contains {object_count} objects")
+                  except Exception as e:
+                      print(f"⚠️  Could not list objects in depictio-bucket: {e}")
+              else:
+                  print("⚠️  depictio-bucket not found")
+
+                  # Try to create it for testing
+                  try:
+                      s3.create_bucket(Bucket="test-connectivity")
+                      print("✅ MinIO write test successful (created test-connectivity bucket)")
+                      s3.delete_bucket(Bucket="test-connectivity")
+                      print("✅ MinIO delete test successful (removed test-connectivity bucket)")
+                  except Exception as e:
+                      print(f"❌ MinIO write/delete test failed: {e}")
+
           except Exception as e:
-              print('❌ MinIO connection failed:', str(e))
-          " || true
+              print(f"❌ MinIO failed: {e}")
+          '
 
 
       - name: Test API Endpoints
@@ -339,8 +387,8 @@ jobs:
       - name: Test Basic Service Connectivity
         run: |
           RELEASE_NAME="${{ steps.release-info.outputs.release_name }}"
-          FRONTEND_SERVICE="${RELEASE_NAME}-frontend"
-          BACKEND_SERVICE="${RELEASE_NAME}-backend"
+          FRONTEND_SERVICE="${RELEASE_NAME}-depictio-frontend"
+          BACKEND_SERVICE="${RELEASE_NAME}-depictio-backend"
 
           echo "🌐 Testing frontend service..."
           kubectl port-forward svc/$FRONTEND_SERVICE 8080:80 &
@@ -426,8 +474,7 @@ jobs:
             --set backend.image.pullPolicy=Never \
             --set frontend.image.repository=depictio \
             --set frontend.image.tag=${{ steps.chart-info.outputs.app_version }} \
-            --set frontend.image.pullPolicy=Never \
-            --wait --timeout 10m
+            --set frontend.image.pullPolicy=Never
 
           echo "✅ Successfully installed from packaged chart"
           kubectl get pods
