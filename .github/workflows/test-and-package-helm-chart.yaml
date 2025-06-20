@@ -450,34 +450,6 @@ jobs:
 
           kill $PID_BACKEND || true
 
-      - name: Test Direct MinIO Connectivity
-        run: |
-          echo "🗄️ Testing direct MinIO connectivity..."
-
-          RELEASE_NAME="${{ steps.release-info.outputs.release_name }}"
-          MINIO_SERVICE="${RELEASE_NAME}-minio"
-
-          # Port forward to MinIO service (port 9000)
-          kubectl port-forward svc/$MINIO_SERVICE 9000:9000 &
-          PID_MINIO=$!
-          sleep 5
-
-          # Test MinIO health endpoint
-          echo "🧪 Testing MinIO health endpoint..."
-          MINIO_HEALTH=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:9000/minio/health/live 2>/dev/null || echo "000")
-          echo "MinIO health status: $MINIO_HEALTH"
-
-          # Port forward to MinIO Console (port 9001)
-          kubectl port-forward svc/$MINIO_SERVICE 9001:9001 &
-          PID_MINIO_CONSOLE=$!
-          sleep 5
-
-          # Test MinIO Console
-          echo "🧪 Testing MinIO Console..."
-          CONSOLE_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:9001 2>/dev/null || echo "000")
-          echo "MinIO Console status: $CONSOLE_STATUS"
-
-          kill $PID_MINIO $PID_MINIO_CONSOLE || true
 
       - name: Test install from package
         run: |
