@@ -155,10 +155,19 @@ jobs:
       - name: Generate random release name
         id: release-info
         run: |
-          # Generate random 10-character release name (letters + numbers)
-          RELEASE_NAME=$(openssl rand -hex 5)
+          # Generate DNS-compliant release name: letter + 9 random hex chars
+          RANDOM_SUFFIX=$(openssl rand -hex 4 | cut -c1-9)
+          RELEASE_NAME="r${RANDOM_SUFFIX}"
           echo "release_name=${RELEASE_NAME}" >> $GITHUB_OUTPUT
-          echo "🎲 Generated release name: ${RELEASE_NAME}"
+          echo "🎲 Generated DNS-compliant release name: ${RELEASE_NAME}"
+
+          # Validate the name meets DNS requirements
+          if [[ $RELEASE_NAME =~ ^[a-z][a-z0-9-]*[a-z0-9]$ ]]; then
+            echo "✅ Release name is DNS-compliant"
+          else
+            echo "❌ Release name validation failed: $RELEASE_NAME"
+            exit 1
+          fi
 
       - name: Install Helm chart (from local directory)
         run: |
