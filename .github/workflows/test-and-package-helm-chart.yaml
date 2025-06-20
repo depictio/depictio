@@ -482,7 +482,15 @@ jobs:
             exit 1
           fi
 
-          # Test screenshot endpoint with proper timeout
+          # Get backend pod name
+          BACKEND_POD=$(kubectl get pods -l "app=depictio-backend" -o jsonpath='{.items[0].metadata.name}')
+          echo "Backend pod: $BACKEND_POD"
+
+          # Log backend BEFORE the request
+          echo "📋 Backend logs BEFORE screenshot request:"
+          kubectl logs $BACKEND_POD --tail=200
+
+          # Test screenshot endpoint
           echo "🧪 Testing screenshot generation endpoint..."
           DASHBOARD_ID="6824cb3b89d2b72169309737"
 
@@ -494,6 +502,10 @@ jobs:
             http://localhost:8083/depictio/api/v1/dashboards/screenshot/$DASHBOARD_ID)
           CURL_EXIT_CODE=$?
           set -e
+
+          # Log backend AFTER the request
+          echo "📋 Backend logs AFTER screenshot request:"
+          kubectl logs $BACKEND_POD --tail=200
 
           if [ $CURL_EXIT_CODE -eq 0 ]; then
             # Extract HTTP status code (last line)
