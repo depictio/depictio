@@ -173,25 +173,27 @@ jobs:
             --set frontend.image.pullPolicy=Never \
             --wait --timeout 10m
 
+
+
+
       - name: Test Inter-Service Connectivity
         run: |
           echo "🔗 Testing inter-service connectivity..."
-
           RELEASE_NAME="${{ steps.release-info.outputs.release_name }}"
           echo "🎯 Using release name: $RELEASE_NAME"
 
-          # Get service names and endpoints dynamically
-          BACKEND_POD=$(kubectl get pods -l "app.kubernetes.io/name=depictio,app.kubernetes.io/component=backend,app.kubernetes.io/instance=$RELEASE_NAME" -o jsonpath='{.items[0].metadata.name}')
-          FRONTEND_POD=$(kubectl get pods -l "app.kubernetes.io/name=depictio,app.kubernetes.io/component=frontend,app.kubernetes.io/instance=$RELEASE_NAME" -o jsonpath='{.items[0].metadata.name}')
+          # Use the working selectors from your debug output
+          BACKEND_POD=$(kubectl get pods -l "app=depictio-backend" -o jsonpath='{.items[0].metadata.name}')
+          FRONTEND_POD=$(kubectl get pods -l "app=depictio-frontend" -o jsonpath='{.items[0].metadata.name}')
 
           echo "Backend pod: $BACKEND_POD"
           echo "Frontend pod: $FRONTEND_POD"
 
-          # Construct service names based on release name and chart structure
-          MONGODB_SERVICE="${RELEASE_NAME}-mongodb"
+          # Construct service names (these match your output)
+          MONGODB_SERVICE="${RELEASE_NAME}-mongo"  # Note: "mongo" not "mongodb"
           MINIO_SERVICE="${RELEASE_NAME}-minio"
-          BACKEND_SERVICE="${RELEASE_NAME}-backend"
-          FRONTEND_SERVICE="${RELEASE_NAME}-frontend"
+          BACKEND_SERVICE="${RELEASE_NAME}-depictio-backend"
+          FRONTEND_SERVICE="${RELEASE_NAME}-depictio-frontend"
 
           echo "📋 Service names:"
           echo "  MongoDB: $MONGODB_SERVICE"
@@ -232,17 +234,20 @@ jobs:
           echo "🗄️ Testing database and storage services..."
 
           RELEASE_NAME="${{ steps.release-info.outputs.release_name }}"
-          BACKEND_POD=$(kubectl get pods -l "app.kubernetes.io/name=depictio,app.kubernetes.io/component=backend,app.kubernetes.io/instance=$RELEASE_NAME" -o jsonpath='{.items[0].metadata.name}')
 
-          # Construct service names
-          MONGODB_SERVICE="${RELEASE_NAME}-mongodb"
+          # Use the working selector
+          BACKEND_POD=$(kubectl get pods -l "app=depictio-backend" -o jsonpath='{.items[0].metadata.name}')
+
+          echo "Using backend pod: $BACKEND_POD"
+
+          # Construct service names (corrected)
+          MONGODB_SERVICE="${RELEASE_NAME}-mongo"  # Note: "mongo" not "mongodb"
           MINIO_SERVICE="${RELEASE_NAME}-minio"
 
           # Test MongoDB connection with correct port (27018)
           echo "🧪 Testing MongoDB connection..."
           kubectl exec $BACKEND_POD -- python3 -c "
           import pymongo
-          import os
           try:
               client = pymongo.MongoClient('mongodb://$MONGODB_SERVICE:27018/')
               db = client.admin
@@ -273,12 +278,13 @@ jobs:
               print('❌ MinIO connection failed:', str(e))
           " || true
 
+
       - name: Test API Endpoints
         run: |
           echo "🚀 Testing confirmed API endpoints..."
 
           RELEASE_NAME="${{ steps.release-info.outputs.release_name }}"
-          BACKEND_SERVICE="${RELEASE_NAME}-backend"
+          BACKEND_SERVICE="${RELEASE_NAME}-depictio-backend"  # Updated service name
 
           # Port forward to backend
           kubectl port-forward svc/$BACKEND_SERVICE 8082:80 &
