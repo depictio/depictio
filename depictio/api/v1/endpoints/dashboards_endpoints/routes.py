@@ -1,5 +1,6 @@
 import asyncio
 import json
+from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -270,7 +271,7 @@ async def screenshot_dashboard(
                 {
                     "user_id": current_user.id,
                     # "token_lifetime": "short-lived",
-                    # "expire_datetime": {"$gt": datetime.now()},
+                    "refresh_expire_datetime": {"$gt": datetime.now()},
                 }
             )
             logger.info(f"Token: {token}")

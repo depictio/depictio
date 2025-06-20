@@ -153,6 +153,22 @@ spec:
 
             echo "Permissions fixed!"
         {{- end }}
+
+        - name: copy-screenshot-file
+          image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
+          imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          command: ['sh', '-c']
+          args:
+            - |
+              if [ -f /app/depictio/dash/static/screenshots/6824cb3b89d2b72169309737.png ]; then
+                cp /app/depictio/dash/static/screenshots/6824cb3b89d2b72169309737.png /mounted-screenshots/
+                echo "Screenshot file copied successfully"
+              else
+                echo "Screenshot file not found in image, skipping copy"
+              fi
+          volumeMounts:
+            - name: depictio-screenshots
+              mountPath: /mounted-screenshots
         - name: wait-for-mongo
           image: busybox:1.35
           command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-mongo {{ .Values.mongo.service.port }}; do echo "Waiting for mongo..."; sleep 2; done']
