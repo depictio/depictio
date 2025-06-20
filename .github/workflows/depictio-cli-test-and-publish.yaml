@@ -131,7 +131,7 @@ jobs:
 
       - name: Dry run publish (for testing)
         # For manual dispatch, do a dry run to test everything works
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
         run: |
           python -m twine check dist/*
           echo "✅ Package would be valid for PyPI publishing"
