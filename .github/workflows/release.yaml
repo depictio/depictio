@@ -42,7 +42,7 @@ jobs:
         id: changelog
         run: |
           PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-          .github/scripts/changelog_generator.sh $PREVIOUS_TAG ${{ github.ref_name }} > CHANGELOG.md
+          bash .github/scripts/changelog_generator.sh $PREVIOUS_TAG ${{ github.ref_name }} > CHANGELOG.md
 
           # Convert to GitHub Actions output
           CHANGELOG=$(cat CHANGELOG.md)
@@ -62,7 +62,7 @@ jobs:
       - name: Create Release
         uses: actions/create-release@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GHCR_PAT }}
         with:
           tag_name: ${{ github.ref }}
           release_name: Release ${{ needs.changelog.outputs.version }}
