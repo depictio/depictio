@@ -4,7 +4,7 @@ on:
   push:
     tags:
       - 'v[0-9]*.[0-9]*.[0-9]*'        # Stable releases (v0.0.4)
-      - 'v[0-9]*.[0-9]*.[0-9]*-b*'  # Beta releases (v0.0.4-beta1)
+      - 'v[0-9]*.[0-9]*.[0-9]*-b*'  # Beta releases (v0.0.4-b1)
   workflow_dispatch:
 
 env:
@@ -32,7 +32,7 @@ jobs:
           echo "version=$TAG" >> $GITHUB_OUTPUT
 
           # Determine if it's a beta
-          if [[ $TAG == *"-beta"* ]]; then
+          if [[ $TAG == *"-b"* ]]; then
             echo "is_beta=true" >> $GITHUB_OUTPUT
           else
             echo "is_beta=false" >> $GITHUB_OUTPUT
@@ -60,15 +60,16 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Create Release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GHCR_PAT }}
+        uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ needs.changelog.outputs.version }}
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ needs.changelog.outputs.version }}
           body: ${{ needs.changelog.outputs.changelog }}
           draft: false
           prerelease: ${{ needs.changelog.outputs.is_beta == 'true' }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # Force overwrite existing release
+          overwrite: true
 
       - name: Update CHANGELOG.md
         # if: ${{ needs.changelog.outputs.is_beta != 'true' }}
