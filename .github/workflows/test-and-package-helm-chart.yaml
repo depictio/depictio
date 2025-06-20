@@ -2,13 +2,13 @@ name: Test, Build and Push Helm Chart
 
 on:
   push:
-    # branches: [ main ]
+    branches: [ main ]
     paths:
       - "helm-charts/depictio/**"
       - "docker-images/Dockerfile_depictio.dockerfile"
       - ".github/workflows/test-and-package-helm-chart.yaml"
   pull_request:
-    # branches: [ main ]
+    branches: [ main ]
     paths:
       - "helm-charts/depictio/**"
       - "docker-images/Dockerfile_depictio.dockerfile"
