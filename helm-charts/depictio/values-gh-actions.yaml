@@ -49,4 +49,8 @@ persistence:
   minio:
     size: 1Gi
   screenshots:
-    size: 1Gi
+    size: 100Mi
+  keys:
+    size: 1Mi
+
+local_development: false # Set to true for local development

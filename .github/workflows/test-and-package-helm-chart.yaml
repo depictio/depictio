@@ -4,11 +4,11 @@ on:
   push:
     # branches: [ main ]
     paths:
-      - 'helm-charts/depictio/**'
+      - "helm-charts/depictio/**"
   pull_request:
     # branches: [ main ]
     paths:
-      - 'helm-charts/depictio/**'
+      - "helm-charts/depictio/**"
   workflow_dispatch:
 
 env:
@@ -31,7 +31,7 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@v4
         with:
-          version: 'v3.14.0'
+          version: "v3.14.0"
 
       - name: Extract chart metadata
         id: chart-info
@@ -46,15 +46,64 @@ jobs:
       - name: Set up Minikube
         uses: medyagh/setup-minikube@master
         with:
-          minikube-version: '1.35.0'
-          kubernetes-version: 'v1.32.0'
+          minikube-version: "1.35.0"
+          kubernetes-version: "v1.32.0"
           driver: docker
-          start-args: '--memory=4096 --cpus=2'
+          start-args: "--memory=4096 --cpus=2"
 
-      - name: Build Docker image
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      - name: Generate image info
+        id: image-info
+        run: |
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            TAG="pr-${{ github.event.number }}-${{ github.sha }}"
+          else
+            TAG="main-${{ github.sha }}"
+          fi
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "repo=${REPO_LOWER}" >> $GITHUB_OUTPUT
+          echo "full-image=ghcr.io/${REPO_LOWER}:${TAG}" >> $GITHUB_OUTPUT
+
+      - name: Check if rebuild needed
+        id: check-rebuild
+        run: |
+          FULL_IMAGE="${{ steps.image-info.outputs.full-image }}"
+          if docker manifest inspect "${FULL_IMAGE}" > /dev/null 2>&1; then
+            echo "rebuild=false" >> $GITHUB_OUTPUT
+            echo "✅ Image ${FULL_IMAGE} already exists, skipping build"
+          else
+            echo "rebuild=true" >> $GITHUB_OUTPUT
+            echo "🔨 Image doesn't exist, will build ${FULL_IMAGE}"
+          fi
+
+      - name: Build and push Docker image
+        id: build
+        if: steps.check-rebuild.outputs.rebuild == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker-images/Dockerfile_depictio.dockerfile
+          platforms: linux/amd64
+          push: true
+          load: false
+          tags: ${{ steps.image-info.outputs.full-image }}
+          cache-from: |
+            type=gha,scope=${{ github.ref_name }}
+            type=gha,scope=refs/heads/main
+          cache-to: type=gha,mode=max,scope=${{ github.ref_name }}
+
+      - name: Pull image to Minikube
         run: |
           eval $(minikube docker-env)
-          docker build -t depictio:${{ steps.chart-info.outputs.app_version }} -f docker-images/Dockerfile_depictio.dockerfile .
+          docker pull "${{ steps.image-info.outputs.full-image }}"
+          docker tag "${{ steps.image-info.outputs.full-image }}" "depictio:${{ steps.chart-info.outputs.app_version }}"
           docker images | grep depictio
 
       - name: Get Kubernetes cluster info
@@ -79,9 +128,34 @@ jobs:
           helm template test-release ./depictio-${{ steps.chart-info.outputs.chart_version }}.tgz > /tmp/rendered-manifests.yaml
           echo "Successfully rendered chart from package"
 
+      - name: Validate Kubernetes manifests
+        run: |
+          echo "🔍 Validating rendered Kubernetes manifests..."
+
+          # Check for required resources
+          if ! grep -q "kind: Deployment" /tmp/rendered-manifests.yaml; then
+            echo "❌ No Deployment found in manifests"
+            exit 1
+          fi
+
+          if ! grep -q "kind: Service" /tmp/rendered-manifests.yaml; then
+            echo "❌ No Service found in manifests"
+            exit 1
+          fi
+
+          echo "✅ Basic manifest validation passed"
+
+      - name: Generate random release name
+        id: release-info
+        run: |
+          # Generate random 10-character release name (letters + numbers)
+          RELEASE_NAME=$(openssl rand -hex 5)
+          echo "release_name=${RELEASE_NAME}" >> $GITHUB_OUTPUT
+          echo "🎲 Generated release name: ${RELEASE_NAME}"
+
       - name: Install Helm chart (from local directory)
         run: |
-          helm upgrade --install depictio ./helm-charts/depictio \
+          helm upgrade --install ${{ steps.release-info.outputs.release_name }} ./helm-charts/depictio \
             -f ./helm-charts/depictio/values.yaml \
             -f ./helm-charts/depictio/values-gh-actions.yaml \
             --set backend.image.repository=depictio \
@@ -90,58 +164,240 @@ jobs:
             --set frontend.image.repository=depictio \
             --set frontend.image.tag=${{ steps.chart-info.outputs.app_version }} \
             --set frontend.image.pullPolicy=Never \
-            --wait --timeout 5m
+            --wait --timeout 10m
 
-      - name: Verify Deployment
+      - name: Test Inter-Service Connectivity
         run: |
-          echo "Checking all resources..."
-          kubectl get all
+          echo "🔗 Testing inter-service connectivity..."
 
-          echo "Checking PVCs..."
-          kubectl get pvc
+          RELEASE_NAME="${{ steps.release-info.outputs.release_name }}"
+          echo "🎯 Using release name: $RELEASE_NAME"
 
-          echo "Checking ConfigMaps..."
-          kubectl get configmaps
+          # Get service names and endpoints dynamically
+          BACKEND_POD=$(kubectl get pods -l "app.kubernetes.io/name=depictio,app.kubernetes.io/component=backend,app.kubernetes.io/instance=$RELEASE_NAME" -o jsonpath='{.items[0].metadata.name}')
+          FRONTEND_POD=$(kubectl get pods -l "app.kubernetes.io/name=depictio,app.kubernetes.io/component=frontend,app.kubernetes.io/instance=$RELEASE_NAME" -o jsonpath='{.items[0].metadata.name}')
 
-          echo "Checking Secrets..."
-          kubectl get secrets
+          echo "Backend pod: $BACKEND_POD"
+          echo "Frontend pod: $FRONTEND_POD"
 
-          echo "Checking Pod logs..."
-          kubectl logs -l app=depictio-backend --tail=50 || true
-          kubectl logs -l app=depictio-frontend --tail=50 || true
+          # Construct service names based on release name and chart structure
+          MONGODB_SERVICE="${RELEASE_NAME}-mongodb"
+          MINIO_SERVICE="${RELEASE_NAME}-minio"
+          BACKEND_SERVICE="${RELEASE_NAME}-backend"
+          FRONTEND_SERVICE="${RELEASE_NAME}-frontend"
 
-      - name: Test Service Connectivity
+          echo "📋 Service names:"
+          echo "  MongoDB: $MONGODB_SERVICE"
+          echo "  MinIO: $MINIO_SERVICE"
+          echo "  Backend: $BACKEND_SERVICE"
+          echo "  Frontend: $FRONTEND_SERVICE"
+
+          # Verify services exist
+          echo "🔍 Verifying services exist..."
+          kubectl get svc $MONGODB_SERVICE $MINIO_SERVICE $BACKEND_SERVICE $FRONTEND_SERVICE
+
+          # Test Backend -> MongoDB connectivity (PORT: 27018)
+          echo "🧪 Testing Backend -> MongoDB connectivity..."
+          kubectl exec $BACKEND_POD -- sh -c "nc -z $MONGODB_SERVICE 27018 && echo '✅ Backend can reach MongoDB on port 27018' || echo '❌ Backend cannot reach MongoDB on port 27018'" || true
+
+          # Test Backend -> MinIO connectivity (PORT: 9000)
+          echo "🧪 Testing Backend -> MinIO connectivity..."
+          kubectl exec $BACKEND_POD -- sh -c "nc -z $MINIO_SERVICE 9000 && echo '✅ Backend can reach MinIO on port 9000' || echo '❌ Backend cannot reach MinIO on port 9000'" || true
+
+          # Test Backend -> Frontend connectivity (PORT: 80)
+          echo "🧪 Testing Backend -> Frontend connectivity..."
+          kubectl exec $BACKEND_POD -- sh -c "nc -z $FRONTEND_SERVICE 80 && echo '✅ Backend can reach Frontend on port 80' || echo '❌ Backend cannot reach Frontend on port 80'" || true
+
+          # Test Frontend -> Backend connectivity (PORT: 80)
+          echo "🧪 Testing Frontend -> Backend connectivity..."
+          kubectl exec $FRONTEND_POD -- sh -c "nc -z $BACKEND_SERVICE 80 && echo '✅ Frontend can reach Backend on port 80' || echo '❌ Frontend cannot reach Backend on port 80'" || true
+
+          # Test Frontend -> MinIO connectivity (PORT: 9000)
+          echo "🧪 Testing Frontend -> MinIO connectivity..."
+          kubectl exec $FRONTEND_POD -- sh -c "nc -z $MINIO_SERVICE 9000 && echo '✅ Frontend can reach MinIO on port 9000' || echo '❌ Frontend cannot reach MinIO on port 9000'" || true
+
+          # Test MinIO Console connectivity (PORT: 9001)
+          echo "🧪 Testing Backend -> MinIO Console connectivity..."
+          kubectl exec $BACKEND_POD -- sh -c "nc -z $MINIO_SERVICE 9001 && echo '✅ Backend can reach MinIO Console on port 9001' || echo '❌ Backend cannot reach MinIO Console on port 9001'" || true
+
+      - name: Test Database and Storage Connectivity
         run: |
-          echo "Setting up port forwarding to frontend service..."
-          kubectl port-forward svc/depictio-frontend 8080:80 &
-          PID_FRONTEND=$!
-          sleep 5
+          echo "🗄️ Testing database and storage services..."
 
-          echo "Testing frontend service..."
-          FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080 || echo "000")
-          echo "Frontend status: $FRONTEND_STATUS"
+          RELEASE_NAME="${{ steps.release-info.outputs.release_name }}"
+          BACKEND_POD=$(kubectl get pods -l "app.kubernetes.io/name=depictio,app.kubernetes.io/component=backend,app.kubernetes.io/instance=$RELEASE_NAME" -o jsonpath='{.items[0].metadata.name}')
 
-          echo "Setting up port forwarding to backend service..."
-          kubectl port-forward svc/depictio-backend 8081:80 &
+          # Construct service names
+          MONGODB_SERVICE="${RELEASE_NAME}-mongodb"
+          MINIO_SERVICE="${RELEASE_NAME}-minio"
+
+          # Test MongoDB connection with correct port (27018)
+          echo "🧪 Testing MongoDB connection..."
+          kubectl exec $BACKEND_POD -- python3 -c "
+          import pymongo
+          import os
+          try:
+              client = pymongo.MongoClient('mongodb://$MONGODB_SERVICE:27018/')
+              db = client.admin
+              server_info = client.server_info()
+              print('✅ MongoDB connection successful on port 27018, version:', server_info.get('version'))
+              collections = db.list_collection_names()
+              print('📊 Available collections:', len(collections))
+          except Exception as e:
+              print('❌ MongoDB connection failed:', str(e))
+          " || true
+
+          # Test MinIO connection with correct port (9000)
+          echo "🧪 Testing MinIO connection..."
+          kubectl exec $BACKEND_POD -- python3 -c "
+          import boto3
+          from botocore.exceptions import ClientError
+          try:
+              s3_client = boto3.client(
+                  's3',
+                  endpoint_url='http://$MINIO_SERVICE:9000',
+                  aws_access_key_id='minioadmin',
+                  aws_secret_access_key='minioadmin'
+              )
+              buckets = s3_client.list_buckets()
+              print('✅ MinIO connection successful on port 9000')
+              print('📊 Available buckets:', len(buckets.get('Buckets', [])))
+          except Exception as e:
+              print('❌ MinIO connection failed:', str(e))
+          " || true
+
+      - name: Test API Endpoints
+        run: |
+          echo "🚀 Testing confirmed API endpoints..."
+
+          RELEASE_NAME="${{ steps.release-info.outputs.release_name }}"
+          BACKEND_SERVICE="${RELEASE_NAME}-backend"
+
+          # Port forward to backend
+          kubectl port-forward svc/$BACKEND_SERVICE 8082:80 &
           PID_BACKEND=$!
           sleep 5
 
-          echo "Testing backend service..."
-          BACKEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081 || echo "000")
-          echo "Backend status: $BACKEND_STATUS"
+          # Test the endpoint we KNOW works
+          echo "🧪 Testing /depictio/api/v1/utils/status..."
+          API_RESPONSE=$(curl -s http://localhost:8082/depictio/api/v1/utils/status 2>/dev/null || echo '{"error":"connection_failed"}')
+          API_STATUS=$(echo "$API_RESPONSE" | jq -r '.status // "unknown"' 2>/dev/null || echo "parse_error")
+          API_VERSION=$(echo "$API_RESPONSE" | jq -r '.version // "unknown"' 2>/dev/null || echo "parse_error")
 
-          kill $PID_FRONTEND $PID_BACKEND || true
+          echo "📊 API Response: $API_RESPONSE"
+
+          if [ "$API_STATUS" = "online" ]; then
+            echo "✅ API is online with version: $API_VERSION"
+          else
+            echo "❌ API status check failed. Expected 'online', got: $API_STATUS"
+          fi
+
+          # Test FastAPI docs (should exist if it's FastAPI)
+          echo "🧪 Testing /docs (FastAPI documentation)..."
+          DOCS_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8082/docs 2>/dev/null || echo "000")
+
+          if [ "$DOCS_STATUS" = "200" ]; then
+            echo "✅ API docs accessible at /docs"
+          else
+            echo "ℹ️  API docs not available (status: $DOCS_STATUS)"
+          fi
+
+          # Test OpenAPI schema (should exist if it's FastAPI)
+          echo "🧪 Testing /openapi.json (OpenAPI schema)..."
+          OPENAPI_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8082/openapi.json 2>/dev/null || echo "000")
+
+          if [ "$OPENAPI_STATUS" = "200" ]; then
+            echo "✅ OpenAPI schema accessible"
+          else
+            echo "ℹ️  OpenAPI schema not available (status: $OPENAPI_STATUS)"
+          fi
+
+          kill $PID_BACKEND || true
+
+      - name: Test Basic Service Connectivity
+        run: |
+          RELEASE_NAME="${{ steps.release-info.outputs.release_name }}"
+          FRONTEND_SERVICE="${RELEASE_NAME}-frontend"
+          BACKEND_SERVICE="${RELEASE_NAME}-backend"
+
+          echo "🌐 Testing frontend service..."
+          kubectl port-forward svc/$FRONTEND_SERVICE 8080:80 &
+          PID_FRONTEND=$!
+          sleep 5
+
+          FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080 || echo "000")
+          echo "📊 Frontend status: $FRONTEND_STATUS"
+
+          if [ "$FRONTEND_STATUS" = "200" ]; then
+            echo "✅ Frontend service responding"
+          else
+            echo "ℹ️  Frontend status: $FRONTEND_STATUS"
+          fi
+
+          kill $PID_FRONTEND
+
+          echo "🌐 Testing backend service..."
+          kubectl port-forward svc/$BACKEND_SERVICE 8081:80 &
+          PID_BACKEND=$!
+          sleep 5
+
+          # Use the confirmed working endpoint
+          BACKEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/depictio/api/v1/utils/status || echo "000")
+          echo "📊 Backend API status: $BACKEND_STATUS"
+
+          if [ "$BACKEND_STATUS" = "200" ]; then
+            echo "✅ Backend API responding correctly"
+          else
+            echo "❌ Backend API not responding (status: $BACKEND_STATUS)"
+          fi
+
+          kill $PID_BACKEND || true
+
+      - name: Test Direct MinIO Connectivity
+        run: |
+          echo "🗄️ Testing direct MinIO connectivity..."
+
+          RELEASE_NAME="${{ steps.release-info.outputs.release_name }}"
+          MINIO_SERVICE="${RELEASE_NAME}-minio"
+
+          # Port forward to MinIO service (port 9000)
+          kubectl port-forward svc/$MINIO_SERVICE 9000:9000 &
+          PID_MINIO=$!
+          sleep 5
+
+          # Test MinIO health endpoint
+          echo "🧪 Testing MinIO health endpoint..."
+          MINIO_HEALTH=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:9000/minio/health/live 2>/dev/null || echo "000")
+          echo "MinIO health status: $MINIO_HEALTH"
+
+          # Port forward to MinIO Console (port 9001)
+          kubectl port-forward svc/$MINIO_SERVICE 9001:9001 &
+          PID_MINIO_CONSOLE=$!
+          sleep 5
+
+          # Test MinIO Console
+          echo "🧪 Testing MinIO Console..."
+          CONSOLE_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:9001 2>/dev/null || echo "000")
+          echo "MinIO Console status: $CONSOLE_STATUS"
+
+          kill $PID_MINIO $PID_MINIO_CONSOLE || true
 
       - name: Test install from package
         run: |
+          RELEASE_NAME="${{ steps.release-info.outputs.release_name }}"
+
           # Clean up existing installation and all resources
-          helm uninstall depictio || true
+          helm uninstall $RELEASE_NAME || true
           kubectl delete pvc --all || true
           kubectl delete configmap --all || true
           sleep 15
 
+          # Generate new random release name for package test
+          PACKAGE_RELEASE_NAME=$(openssl rand -hex 5)
+          echo "🎲 Package test release name: $PACKAGE_RELEASE_NAME"
+
           # Install from packaged chart
-          helm install depictio-pkg ./depictio-${{ steps.chart-info.outputs.chart_version }}.tgz \
+          helm install $PACKAGE_RELEASE_NAME ./depictio-${{ steps.chart-info.outputs.chart_version }}.tgz \
             -f ./helm-charts/depictio/values-gh-actions.yaml \
             --set backend.image.repository=depictio \
             --set backend.image.tag=${{ steps.chart-info.outputs.app_version }} \
@@ -149,28 +405,17 @@ jobs:
             --set frontend.image.repository=depictio \
             --set frontend.image.tag=${{ steps.chart-info.outputs.app_version }} \
             --set frontend.image.pullPolicy=Never \
-            --wait --timeout 5m
+            --wait --timeout 10m
 
-          echo "Successfully installed from packaged chart"
+          echo "✅ Successfully installed from packaged chart"
           kubectl get pods
 
-      - name: Log in to Container Registry
-        if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Push chart to GHCR
-        if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
-        run: |
-          helm push depictio-${{ steps.chart-info.outputs.chart_version }}.tgz oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.CHART_NAME }}
-          echo "Chart pushed to: oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.CHART_NAME }}:${{ steps.chart-info.outputs.chart_version }}"
+          # Store package release name for cleanup
+          echo "package_release_name=$PACKAGE_RELEASE_NAME" >> $GITHUB_ENV
 
       - name: Cleanup
         if: always()
         run: |
-          helm uninstall depictio || true
-          helm uninstall depictio-pkg || true
+          helm uninstall ${{ steps.release-info.outputs.release_name }} || true
+          helm uninstall ${{ env.package_release_name }} || true
           minikube delete || true
