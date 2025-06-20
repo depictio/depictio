@@ -450,7 +450,6 @@ jobs:
 
           kill $PID_BACKEND || true
 
-
       - name: Test install from package
         run: |
           RELEASE_NAME="${{ steps.release-info.outputs.release_name }}"
@@ -480,6 +479,12 @@ jobs:
 
           # Store package release name for cleanup
           echo "package_release_name=$PACKAGE_RELEASE_NAME" >> $GITHUB_ENV
+
+      - name: Push chart to GHCR
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+        run: |
+          helm push depictio-${{ steps.chart-info.outputs.chart_version }}.tgz oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.CHART_NAME }}
+          echo "Chart pushed to: oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.CHART_NAME }}:${{ steps.chart-info.outputs.chart_version }}"
 
       - name: Cleanup
         if: always()
