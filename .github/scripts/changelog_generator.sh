@@ -32,6 +32,9 @@ fi
 # Extract PR numbers and add links
 CHANGELOG=$(echo "$COMMITS" | sed -E 's|\(#([0-9]+)\)|([#\1](https://github.com/'"${GITHUB_REPOSITORY:-username/repo}"'/pull/\1))|g')
 
+
+echo -e "\n<details>\n<summary>Click to expand the changelog for $CURRENT_VERSION</summary>\n" # Start details section with a summary
+
 echo "### Changes 📜"
 echo "" # Add a blank line after the sub-header
 
@@ -99,3 +102,10 @@ if [ -n "$OTHER" ]; then
 fi
 
 # echo "---" # End of changelog section
+
+echo -e "\n</details>\n" # Close the details section with a blank line before it
+
+# Documentation section
+echo "### Documentation 📖"
+echo "" # Add a blank line after the sub-header
+echo "For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)"
