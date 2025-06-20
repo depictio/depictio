@@ -5,10 +5,14 @@ on:
     # branches: [ main ]
     paths:
       - "helm-charts/depictio/**"
+      - "docker-images/Dockerfile_depictio.dockerfile"
+      - ".github/workflows/test-and-package-helm-chart.yaml"
   pull_request:
     # branches: [ main ]
     paths:
       - "helm-charts/depictio/**"
+      - "docker-images/Dockerfile_depictio.dockerfile"
+      - ".github/workflows/test-and-package-helm-chart.yaml"
   workflow_dispatch:
 
 env:
