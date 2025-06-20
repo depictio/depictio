@@ -328,8 +328,8 @@ async def screenshot_dashboard(
                 "url": settings.dash.internal_url,
                 "message": "Screenshot taken successfully",
                 "screenshot_path": f"{output_folder}/dash_screenshot.png",
-                "token": convert_objectid_to_str(token_data),
-                "user": current_user.model_dump(exclude_none=True),
+                # "token": convert_objectid_to_str(token_data),
+                # "user": current_user.model_dump(exclude_none=True),
             }
 
     except Exception as e:

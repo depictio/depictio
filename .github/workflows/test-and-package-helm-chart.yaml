@@ -181,90 +181,44 @@ jobs:
             --set frontend.image.tag=${{ steps.chart-info.outputs.app_version }} \
             --set frontend.image.pullPolicy=Never
 
-      - name: Test Inter-Service Connectivity
+      - name: Test Basic Service Connectivity
         run: |
-          echo "🔗 Testing inter-service connectivity..."
           RELEASE_NAME="${{ steps.release-info.outputs.release_name }}"
-          echo "🎯 Using release name: $RELEASE_NAME"
-
-          # Wait for pods to be ready first
-          echo "⏳ Waiting for pods to be ready..."
-          kubectl wait --for=condition=ready pod -l "app=depictio-backend" --timeout=300s
-          kubectl wait --for=condition=ready pod -l "app=depictio-frontend" --timeout=300s
-
-          # Additional wait for containers to fully start
-          sleep 30
-
-          # Use the working selectors from your debug output
-          BACKEND_POD=$(kubectl get pods -l "app=depictio-backend" -o jsonpath='{.items[0].metadata.name}')
-          FRONTEND_POD=$(kubectl get pods -l "app=depictio-frontend" -o jsonpath='{.items[0].metadata.name}')
-
-          echo "Backend pod: $BACKEND_POD"
-          echo "Frontend pod: $FRONTEND_POD"
-
-          # Construct service names (these match your output)
-          MONGODB_SERVICE="${RELEASE_NAME}-mongo"  # Note: "mongo" not "mongodb"
-          MINIO_SERVICE="${RELEASE_NAME}-minio"
-          BACKEND_SERVICE="${RELEASE_NAME}-depictio-backend"
           FRONTEND_SERVICE="${RELEASE_NAME}-depictio-frontend"
+          BACKEND_SERVICE="${RELEASE_NAME}-depictio-backend"
 
-          echo "📋 Service names:"
-          echo "  MongoDB: $MONGODB_SERVICE"
-          echo "  MinIO: $MINIO_SERVICE"
-          echo "  Backend: $BACKEND_SERVICE"
-          echo "  Frontend: $FRONTEND_SERVICE"
+          echo "🌐 Testing frontend service..."
+          kubectl port-forward svc/$FRONTEND_SERVICE 8080:80 &
+          PID_FRONTEND=$!
+          sleep 5
 
-          # Verify services exist
-          echo "🔍 Verifying services exist..."
-          kubectl get svc $MONGODB_SERVICE $MINIO_SERVICE $BACKEND_SERVICE $FRONTEND_SERVICE
+          FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080 || echo "000")
+          echo "📊 Frontend status: $FRONTEND_STATUS"
 
-          # Test Backend -> MongoDB connectivity (PORT: 27018) - REMOVED || true
-          echo "🧪 Testing Backend -> MongoDB connectivity..."
-          if kubectl exec $BACKEND_POD -- sh -c "nc -z $MONGODB_SERVICE 27018"; then
-            echo "✅ Backend can reach MongoDB on port 27018"
+          if [ "$FRONTEND_STATUS" = "200" ]; then
+            echo "✅ Frontend service responding"
           else
-            echo "❌ Backend cannot reach MongoDB on port 27018"
-            exit 1
+            echo "ℹ️  Frontend status: $FRONTEND_STATUS"
           fi
 
-          # Test Backend -> MinIO connectivity (PORT: 9000) - REMOVED || true
-          echo "🧪 Testing Backend -> MinIO connectivity..."
-          if kubectl exec $BACKEND_POD -- sh -c "nc -z $MINIO_SERVICE 9000"; then
-            echo "✅ Backend can reach MinIO on port 9000"
+          kill $PID_FRONTEND
+
+          echo "🌐 Testing backend service..."
+          kubectl port-forward svc/$BACKEND_SERVICE 8081:80 &
+          PID_BACKEND=$!
+          sleep 5
+
+          # Use the confirmed working endpoint
+          BACKEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/depictio/api/v1/utils/status || echo "000")
+          echo "📊 Backend API status: $BACKEND_STATUS"
+
+          if [ "$BACKEND_STATUS" = "200" ]; then
+            echo "✅ Backend API responding correctly"
           else
-            echo "❌ Backend cannot reach MinIO on port 9000"
-            exit 1
+            echo "❌ Backend API not responding (status: $BACKEND_STATUS)"
           fi
 
-          # Test Backend -> Frontend connectivity (PORT: 80) - REMOVED || true
-          echo "🧪 Testing Backend -> Frontend connectivity..."
-          if kubectl exec $BACKEND_POD -- sh -c "nc -z $FRONTEND_SERVICE 80"; then
-            echo "✅ Backend can reach Frontend on port 80"
-          else
-            echo "❌ Backend cannot reach Frontend on port 80"
-            exit 1
-          fi
-
-          # Test Frontend -> Backend connectivity (PORT: 80) - REMOVED || true
-          echo "🧪 Testing Frontend -> Backend connectivity..."
-          if kubectl exec $FRONTEND_POD -- sh -c "nc -z $BACKEND_SERVICE 80"; then
-            echo "✅ Frontend can reach Backend on port 80"
-          else
-            echo "❌ Frontend cannot reach Backend on port 80"
-            exit 1
-          fi
-
-          # Test Frontend -> MinIO connectivity (PORT: 9000) - REMOVED || true
-          echo "🧪 Testing Frontend -> MinIO connectivity..."
-          if kubectl exec $FRONTEND_POD -- sh -c "nc -z $MINIO_SERVICE 9000"; then
-            echo "✅ Frontend can reach MinIO on port 9000"
-          else
-            echo "❌ Frontend cannot reach MinIO on port 9000"
-            exit 1
-          fi
-
-
-          echo "🎉 All inter-service connectivity tests passed!"
+          kill $PID_BACKEND || true
 
       - name: Test Database and Storage Functionality
         run: |
@@ -411,41 +365,154 @@ jobs:
 
           kill $PID_BACKEND || true
 
-      - name: Test Basic Service Connectivity
+      - name: Test Inter-Service Connectivity
         run: |
+          echo "🔗 Testing inter-service connectivity..."
           RELEASE_NAME="${{ steps.release-info.outputs.release_name }}"
-          FRONTEND_SERVICE="${RELEASE_NAME}-depictio-frontend"
+          echo "🎯 Using release name: $RELEASE_NAME"
+
+          # Wait for pods to be ready first
+          echo "⏳ Waiting for pods to be ready..."
+          kubectl wait --for=condition=ready pod -l "app=depictio-backend" --timeout=300s
+          kubectl wait --for=condition=ready pod -l "app=depictio-frontend" --timeout=300s
+
+          # Additional wait for containers to fully start
+          sleep 30
+
+          # Use the working selectors from your debug output
+          BACKEND_POD=$(kubectl get pods -l "app=depictio-backend" -o jsonpath='{.items[0].metadata.name}')
+          FRONTEND_POD=$(kubectl get pods -l "app=depictio-frontend" -o jsonpath='{.items[0].metadata.name}')
+
+          echo "Backend pod: $BACKEND_POD"
+          echo "Frontend pod: $FRONTEND_POD"
+
+          # Construct service names (these match your output)
+          MONGODB_SERVICE="${RELEASE_NAME}-mongo"  # Note: "mongo" not "mongodb"
+          MINIO_SERVICE="${RELEASE_NAME}-minio"
           BACKEND_SERVICE="${RELEASE_NAME}-depictio-backend"
+          FRONTEND_SERVICE="${RELEASE_NAME}-depictio-frontend"
 
-          echo "🌐 Testing frontend service..."
-          kubectl port-forward svc/$FRONTEND_SERVICE 8080:80 &
-          PID_FRONTEND=$!
-          sleep 5
+          echo "📋 Service names:"
+          echo "  MongoDB: $MONGODB_SERVICE"
+          echo "  MinIO: $MINIO_SERVICE"
+          echo "  Backend: $BACKEND_SERVICE"
+          echo "  Frontend: $FRONTEND_SERVICE"
 
-          FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080 || echo "000")
-          echo "📊 Frontend status: $FRONTEND_STATUS"
+          # Verify services exist
+          echo "🔍 Verifying services exist..."
+          kubectl get svc $MONGODB_SERVICE $MINIO_SERVICE $BACKEND_SERVICE $FRONTEND_SERVICE
 
-          if [ "$FRONTEND_STATUS" = "200" ]; then
-            echo "✅ Frontend service responding"
+          # Test Backend -> MongoDB connectivity (PORT: 27018) - REMOVED || true
+          echo "🧪 Testing Backend -> MongoDB connectivity..."
+          if kubectl exec $BACKEND_POD -- sh -c "nc -z $MONGODB_SERVICE 27018"; then
+            echo "✅ Backend can reach MongoDB on port 27018"
           else
-            echo "ℹ️  Frontend status: $FRONTEND_STATUS"
+            echo "❌ Backend cannot reach MongoDB on port 27018"
+            exit 1
           fi
 
-          kill $PID_FRONTEND
+          # Test Backend -> MinIO connectivity (PORT: 9000) - REMOVED || true
+          echo "🧪 Testing Backend -> MinIO connectivity..."
+          if kubectl exec $BACKEND_POD -- sh -c "nc -z $MINIO_SERVICE 9000"; then
+            echo "✅ Backend can reach MinIO on port 9000"
+          else
+            echo "❌ Backend cannot reach MinIO on port 9000"
+            exit 1
+          fi
 
-          echo "🌐 Testing backend service..."
-          kubectl port-forward svc/$BACKEND_SERVICE 8081:80 &
+          # Test Backend -> Frontend connectivity (PORT: 80) - REMOVED || true
+          echo "🧪 Testing Backend -> Frontend connectivity..."
+          if kubectl exec $BACKEND_POD -- sh -c "nc -z $FRONTEND_SERVICE 80"; then
+            echo "✅ Backend can reach Frontend on port 80"
+          else
+            echo "❌ Backend cannot reach Frontend on port 80"
+            exit 1
+          fi
+
+          # Test Frontend -> Backend connectivity (PORT: 80) - REMOVED || true
+          echo "🧪 Testing Frontend -> Backend connectivity..."
+          if kubectl exec $FRONTEND_POD -- sh -c "nc -z $BACKEND_SERVICE 80"; then
+            echo "✅ Frontend can reach Backend on port 80"
+          else
+            echo "❌ Frontend cannot reach Backend on port 80"
+            exit 1
+          fi
+
+          # Test Frontend -> MinIO connectivity (PORT: 9000) - REMOVED || true
+          echo "🧪 Testing Frontend -> MinIO connectivity..."
+          if kubectl exec $FRONTEND_POD -- sh -c "nc -z $MINIO_SERVICE 9000"; then
+            echo "✅ Frontend can reach MinIO on port 9000"
+          else
+            echo "❌ Frontend cannot reach MinIO on port 9000"
+            exit 1
+          fi
+
+
+          echo "🎉 All inter-service connectivity tests passed!"
+
+      - name: Test Screenshot Generation
+        run: |
+          echo "📸 Testing screenshot generation functionality..."
+
+          RELEASE_NAME="${{ steps.release-info.outputs.release_name }}"
+          BACKEND_SERVICE="${RELEASE_NAME}-depictio-backend"
+
+          # Port forward to backend
+          kubectl port-forward svc/$BACKEND_SERVICE 8083:80 &
           PID_BACKEND=$!
           sleep 5
 
-          # Use the confirmed working endpoint
-          BACKEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/depictio/api/v1/utils/status || echo "000")
-          echo "📊 Backend API status: $BACKEND_STATUS"
+          # Test screenshot endpoint with a dashboard ID
+          echo "🧪 Testing screenshot generation endpoint..."
 
-          if [ "$BACKEND_STATUS" = "200" ]; then
-            echo "✅ Backend API responding correctly"
+          # Note: Using a dummy dashboard ID - replace with actual dashboard ID if needed
+          DASHBOARD_ID="6824cb3b89d2b72169309737"
+
+          # Make the API call and capture response
+          SCREENSHOT_RESPONSE=$(curl -s -w "\n%{http_code}" http://localhost:8083/depictio/api/v1/dashboards/screenshot/$DASHBOARD_ID)
+
+          # Extract HTTP status code (last line)
+          HTTP_CODE=$(echo "$SCREENSHOT_RESPONSE" | tail -n1)
+
+          # Extract JSON response (all lines except last)
+          JSON_RESPONSE=$(echo "$SCREENSHOT_RESPONSE" | head -n -1)
+
+          echo "📊 HTTP Status: $HTTP_CODE"
+
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ Screenshot endpoint responded successfully"
+
+            # Parse and check response without logging sensitive data
+            SUCCESS=$(echo "$JSON_RESPONSE" | jq -r '.success // false' 2>/dev/null)
+            MESSAGE=$(echo "$JSON_RESPONSE" | jq -r '.message // "unknown"' 2>/dev/null)
+            SCREENSHOT_PATH=$(echo "$JSON_RESPONSE" | jq -r '.screenshot_path // "unknown"' 2>/dev/null)
+            URL=$(echo "$JSON_RESPONSE" | jq -r '.url // "unknown"' 2>/dev/null)
+
+            echo "📋 Response details:"
+            echo "  Success: $SUCCESS"
+            echo "  Message: $MESSAGE"
+            echo "  Screenshot path: $SCREENSHOT_PATH"
+            echo "  URL: $URL"
+
+            if [ "$SUCCESS" = "true" ]; then
+              echo "✅ Screenshot generation successful"
+
+              # Additional verification - check if screenshot path is valid
+              if [[ "$SCREENSHOT_PATH" == *".png" ]]; then
+                echo "✅ Screenshot path format is valid"
+              else
+                echo "⚠️  Screenshot path format may be invalid"
+              fi
+
+            else
+              echo "❌ Screenshot generation failed"
+              exit 1
+            fi
+
           else
-            echo "❌ Backend API not responding (status: $BACKEND_STATUS)"
+            echo "❌ Screenshot endpoint failed with status: $HTTP_CODE"
+            echo "Response: $JSON_RESPONSE"
+            exit 1
           fi
 
           kill $PID_BACKEND || true
