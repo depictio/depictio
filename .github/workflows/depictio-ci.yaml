@@ -1,4 +1,4 @@
-name: Depictio Quality, Integration and E2E Tests
+name: "Depictio – Full CI: Quality, Build, Integration, E2E Tests"
 
 on:
   push:
