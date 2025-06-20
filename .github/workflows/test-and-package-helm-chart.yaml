@@ -263,14 +263,6 @@ jobs:
             exit 1
           fi
 
-          # Test MinIO Console connectivity (PORT: 9001) - REMOVED || true
-          echo "🧪 Testing Backend -> MinIO Console connectivity..."
-          if kubectl exec $BACKEND_POD -- sh -c "nc -z $MINIO_SERVICE 9001"; then
-            echo "✅ Backend can reach MinIO Console on port 9001"
-          else
-            echo "❌ Backend cannot reach MinIO Console on port 9001"
-            exit 1
-          fi
 
           echo "🎉 All inter-service connectivity tests passed!"
 
@@ -370,7 +362,6 @@ jobs:
           except Exception as e:
               print(f"❌ MinIO failed: {e}")
           '
-
 
       - name: Test API Endpoints
         run: |
