@@ -191,7 +191,6 @@ async def edit_dashboard_name(
         )
 
 
-# /Users/tweber/Gits/depictio/dev/jup_nb/.jupyter/jupyter_notebook_config.py
 @dashboards_endpoint_router.post("/save/{dashboard_id}")
 async def save_dashboard(
     dashboard_id: PyObjectId,
@@ -327,7 +326,7 @@ async def screenshot_dashboard(
                 "success": True,
                 "url": settings.dash.internal_url,
                 "message": "Screenshot taken successfully",
-                "screenshot_path": f"{output_folder}/dash_screenshot.png",
+                "screenshot_path": output_file,
                 # "token": convert_objectid_to_str(token_data),
                 # "user": current_user.model_dump(exclude_none=True),
             }
