@@ -48,6 +48,11 @@ class TestTokenData:
         assert token_data.token_type == "custom"
         assert str(token_data.sub) == str(sub)
 
+    def test_token_data_permanent(self):
+        sub = PydanticObjectId()
+        token_data = TokenData(sub=sub, token_lifetime="permanent")
+        assert token_data.token_lifetime == "permanent"
+
     def test_token_data_invalid_lifetime(self):
         """Test validation of token lifetime."""
         sub = PydanticObjectId()
@@ -137,6 +142,18 @@ class TestToken:
 
         # Verify ISO format for datetime
         assert token_dict["expire_datetime"] == future_time.isoformat()
+
+    def test_token_permanent_lifetime(self):
+        """Tokens with permanent lifetime should allow max datetime."""
+        sub = PydanticObjectId()
+        token = Token(
+            access_token="ValidToken123A1",
+            expire_datetime=datetime.max,
+            sub=sub,
+            token_lifetime="permanent",
+        )
+        assert token.token_lifetime == "permanent"
+        assert token.expire_datetime == datetime.max
 
 
 # ---------------------------------

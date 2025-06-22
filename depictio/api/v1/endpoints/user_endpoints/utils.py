@@ -191,8 +191,12 @@ async def create_access_token(
             expires_delta = timedelta(hours=12)
         elif token_lifetime == "long-lived":
             expires_delta = timedelta(days=365)
+        elif token_lifetime == "permanent":
+            expires_delta = timedelta(days=365 * 100)
         else:
-            raise ValueError("Invalid token type. Must be 'short-lived' or 'long-lived'.")
+            raise ValueError(
+                "Invalid token type. Must be 'short-lived', 'long-lived', or 'permanent'."
+            )
     else:
         expires_delta = timedelta(hours=expiry_hours)
 

@@ -5,10 +5,43 @@ from beanie import PydanticObjectId
 from fastapi import HTTPException
 from pydantic import EmailStr, validate_call
 
+from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import format_pydantic, logger
 from depictio.api.v1.endpoints.user_endpoints.utils import create_access_token
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.users import TokenBase, TokenBeanie, TokenData, UserBeanie
+
+
+async def _create_permanent_token(user: UserBeanie) -> TokenBeanie:
+    """Create a permanent token for a user."""
+    token_data = TokenData(sub=user.id, name="anonymous_permanent_token", token_lifetime="permanent")
+    access_token, _ = await create_access_token(token_data, expiry_hours=24 * 365)
+    token = TokenBeanie(
+        access_token=access_token,
+        refresh_token="",
+        expire_datetime=datetime.max,
+        refresh_expire_datetime=datetime.max,
+        name=token_data.name,
+        token_lifetime="permanent",
+        user_id=user.id,
+        logged_in=True,
+    )
+    await token.save()
+    return token
+
+
+async def _create_anonymous_user() -> UserBeanie:
+    """Create the anonymous user if it does not exist."""
+    user = await UserBeanie.find_one({"email": settings.anonymous_user_email})
+    if user:
+        return user
+    payload = await _create_user_in_db(
+        email=settings.anonymous_user_email,
+        password="",
+        is_admin=False,
+        is_anonymous=True,
+    )
+    return payload["user"] if payload else None
 
 
 @validate_call(validate_return=True)
@@ -270,20 +303,30 @@ async def _add_token(token_data: TokenData) -> TokenBeanie:
     email = token_data.sub
     logger.info(f"Adding token for user {email}.")
     logger.info(f"Token: {format_pydantic(token_data)}")
-    access_token, expire = await create_access_token(
-        token_data,
-        expiry_hours=1,
-    )  # 1 hour
-    refresh_token, expire_refresh = await create_access_token(
-        token_data,
-        expiry_hours=7 * 24,
-    )  # 7 days
+    if token_data.token_lifetime == "permanent":
+        access_token, _ = await create_access_token(token_data, expiry_hours=24 * 365)
+        refresh_token = ""
+        expire = datetime.max
+        expire_refresh = datetime.max
+    else:
+        access_token, expire = await create_access_token(
+            token_data,
+            expiry_hours=1,
+        )  # 1 hour
+        refresh_token, expire_refresh = await create_access_token(
+            token_data,
+            expiry_hours=7 * 24,
+        )  # 7 days
 
     token = TokenBeanie(
         access_token=access_token,
         refresh_token=refresh_token,
-        expire_datetime=expire.strftime("%Y-%m-%d %H:%M:%S"),
-        refresh_expire_datetime=expire_refresh.strftime("%Y-%m-%d %H:%M:%S"),
+        expire_datetime=(expire.strftime("%Y-%m-%d %H:%M:%S") if isinstance(expire, datetime) and expire != datetime.max else datetime.max),
+        refresh_expire_datetime=(
+            expire_refresh.strftime("%Y-%m-%d %H:%M:%S")
+            if isinstance(expire_refresh, datetime) and expire_refresh != datetime.max
+            else datetime.max
+        ),
         name=token_data.name,
         token_lifetime=token_data.token_lifetime,
         user_id=token_data.sub,
@@ -339,6 +382,7 @@ async def _create_user_in_db(
     email: EmailStr,
     password: str,
     is_admin: bool = False,
+    is_anonymous: bool = False,
     id: PyObjectId = None,
     group: str | None = None,
 ) -> dict[str, bool | str | UserBeanie | None] | None:
@@ -382,6 +426,7 @@ async def _create_user_in_db(
         email=email,
         password=hashed_password,
         is_admin=is_admin,
+        is_anonymous=is_anonymous,
         registration_date=current_time,
         last_login=current_time,
         # groups=[group],

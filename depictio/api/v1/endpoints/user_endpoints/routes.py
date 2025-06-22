@@ -18,6 +18,7 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     _async_fetch_user_from_token,
     _check_if_token_is_valid,
     _check_password,
+    _create_permanent_token,
     _create_user_in_db,
     _delete_token,
     _edit_password,
@@ -78,6 +79,17 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> Use
     return user
 
 
+async def get_user_or_anonymous(token: Annotated[str | None, Depends(oauth2_scheme)] = None) -> User:
+    """Return the authenticated user or the anonymous user if unauthenticated mode is enabled."""
+    if settings.unauthenticated_mode:
+        anon = await UserBeanie.find_one({"email": settings.anonymous_user_email})
+        if anon:
+            return anon
+    if token is None:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    return await get_current_user(token)
+
+
 # Login endpoint
 @auth_endpoint_router.post("/login", response_model=TokenBeanie)
 async def login(login_request: OAuth2PasswordRequestForm = Depends()):
@@ -95,38 +107,25 @@ async def login(login_request: OAuth2PasswordRequestForm = Depends()):
     """
     logger.info(f"Login attempt for user: {login_request.username}")
 
-    # Verify credentials
+    if settings.unauthenticated_mode:
+        anon = await UserBeanie.find_one({"email": settings.anonymous_user_email})
+        token = await TokenBeanie.find_one({"user_id": anon.id, "token_lifetime": "permanent"})
+        if not token:
+            token = await _create_permanent_token(anon)
+        return token
+
     _ = await _check_password(login_request.username, login_request.password)
     if not _:
         logger.error("Invalid credentials")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
-    # Generate random name for the token
     token_name = f"{login_request.username}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
-
     user = await _async_fetch_user_from_email(login_request.username)
-    logger.debug(f"User: {user}")
-
-    token_data = TokenData(
-        name=token_name,
-        token_lifetime="short-lived",
-        sub=user.id,
-    )
-    logger.debug(f"Token data: {token_data}")
-
-    # Generate and store token
+    token_data = TokenData(name=token_name, token_lifetime="short-lived", sub=user.id)
     token = await _add_token(token_data)
-    logger.info(f"Token : {format_pydantic(token)}")
     if token is None:
-        logger.error("Token with the same name already exists.")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Token with the same name already exists",
-        )
-
-    # Set logged_in to True
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Token with the same name already exists")
     token.logged_in = True
-
     return token  # TokenBeanie
 
 
@@ -255,6 +254,11 @@ async def register(
         Dictionary with user data, success status and message
     """
     logger.info(f"Registering user with email: {request.email}")
+    if settings.unauthenticated_mode:
+        raise HTTPException(
+            status_code=403,
+            detail="User registration disabled in unauthenticated mode",
+        )
     try:
         return await _create_user_in_db(request.email, request.password, request.is_admin)
 
@@ -473,6 +477,11 @@ async def check_token_validity_endpoint(token: TokenBase):
 async def generate_agent_config_endpoint(
     token: TokenBeanie, current_user: UserBase = Depends(get_current_user)
 ) -> CLIConfig:
+    if settings.unauthenticated_mode:
+        raise HTTPException(
+            status_code=403,
+            detail="CLI agent generation disabled in unauthenticated mode",
+        )
     logger.info(f"Token: {token}")
     logger.info(f"Token: {format_pydantic(token)}")
     depictio_agent_config = await _generate_agent_config(user=current_user, token=token)
