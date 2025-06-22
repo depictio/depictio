@@ -11,10 +11,10 @@ from depictio.api.v1.configs.logging_init import logger
 is_testing = os.environ.get("DEV_MODE", "false").lower() == "true" or any(
     "pytest" in arg for arg in sys.argv
 )
-logger.info(f"Is testing: {is_testing}")
+logger.debug(f"Is testing: {is_testing}")
 
 # Initialize MongoDB client
-logger.info(f"Using MongoDB URL: {MONGODB_URL}")
+logger.debug(f"Using MongoDB URL: {MONGODB_URL}")
 client = pymongo.MongoClient(MONGODB_URL)
 
 # Get the database name from settings
@@ -41,7 +41,7 @@ def clean_test_database():
         for collection_name in collection_names:
             client[db_name].drop_collection(collection_name)
 
-        logger.info(f"Cleaned test database: {db_name}")
+        logger.debug(f"Cleaned test database: {db_name}")
         return True
     except Exception as e:
         logger.error(f"Error cleaning test database: {e}")
@@ -49,9 +49,9 @@ def clean_test_database():
 
 
 db = client[db_name]
-logger.info(f"MongoDB database selected: {db_name}")
-logger.info(f"Client: {client}")
-logger.info(f"DB: {db}")
+logger.debug(f"MongoDB database selected: {db_name}")
+logger.debug(f"Client: {client}")
+logger.debug(f"DB: {db}")
 
 
 # Define the collections
