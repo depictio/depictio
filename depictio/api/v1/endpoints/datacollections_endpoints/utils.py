@@ -29,7 +29,7 @@ def symmetrize_join_details(join_details_map: dict[str, list[dict]]):
 
 
 def generate_join_dict(workflow: dict) -> dict[str, dict[str, dict]]:
-    logger.info(f"Workflow: {workflow}")
+    # logger.info(f"Workflow: {workflow}")
 
     join_dict = {}
 
@@ -42,20 +42,20 @@ def generate_join_dict(workflow: dict) -> dict[str, dict[str, dict]]:
         for dc in workflow["data_collections"]
         if dc["config"]["type"].lower() == "table"
     }
-    logger.info(f"Data collections: {dc_ids}")
+    logger.debug(f"Data collections: {dc_ids}")
     visited = set()
 
     def find_joins(dc_id, join_configs):
-        logger.info(f"Data collection: {dc_id}")
-        logger.info(f"Visited: {visited}")
-        logger.info(f"Join configs: {join_configs}")
+        # logger.debug(f"Data collection: {dc_id}")
+        # logger.debug(f"Visited: {visited}")
+        # logger.debug(f"Join configs: {join_configs}")
 
         if dc_id in visited:
             return
         visited.add(dc_id)
         if "join" in dc_ids[dc_id]["config"]:
             join_info = dc_ids[dc_id]["config"]["join"]
-            logger.info(f"Join info: {join_info}")
+            # logger.info(f"Join info: {join_info}")
             if join_info:
                 for related_dc_tag in join_info.get("with_dc", []):
                     related_dc_id = next(

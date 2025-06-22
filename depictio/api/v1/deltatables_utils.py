@@ -52,8 +52,8 @@ def process_metadata_and_filter(metadata):
         if "metadata" in component:
             # logger.info(f"Component {i} does not have metadata key : {component}")
             # continue
-            logger.info(f"i: {i}")
-            logger.info(f"component: {component}")
+            # logger.info(f"i: {i}")
+            # logger.info(f"component: {component}")
             interactive_component_type = component["metadata"]["interactive_component_type"]
             column_name = component["metadata"]["column_name"]
         else:
@@ -220,13 +220,13 @@ def load_deltatable_lite(
         )
         raise Exception("Invalid response: missing 'delta_table_location'")
 
-    logger.info(
-        f"Loading deltatable for workflow {workflow_id_str}, data collection "
-        f"{data_collection_id_str}, metadata: {metadata}, from file_id: {file_id}"
-    )
+    # logger.info(
+    #     f"Loading deltatable for workflow {workflow_id_str}, data collection "
+    #     f"{data_collection_id_str}, metadata: {metadata}, from file_id: {file_id}"
+    # )
 
-    logger.debug(f"polars_s3_config: {polars_s3_config}")
-    logger.debug(f"file_id: {file_id}")
+    # logger.debug(f"polars_s3_config: {polars_s3_config}")
+    # logger.debug(f"file_id: {file_id}")
 
     # Initialize the Delta table scan
     delta_scan = pl.scan_delta(file_id, storage_options=polars_s3_config)
@@ -540,9 +540,9 @@ def iterative_join(
     metadata_dict: dict,
     TOKEN: str | None = None,
 ):
-    logger.info(f"worfklow_id: {workflow_id}")
-    logger.info(f"joins_dict: {joins_dict}")
-    logger.info(f"metadata_dict: {metadata_dict}")
+    # logger.debug(f"worfklow_id: {workflow_id}")
+    # logger.debug(f"joins_dict: {joins_dict}")
+    # logger.debug(f"metadata_dict: {metadata_dict}")
 
     interactive_components_list = list()
     for metadata in metadata_dict.values():
@@ -568,79 +568,79 @@ def iterative_join(
     for join_key_tuple in joins_dict.keys():
         for dc_id in join_key_tuple:
             if dc_id not in loaded_dfs:
-                logger.info(f"Metadata dict: {metadata_dict}")
+                # logger.info(f"Metadata dict: {metadata_dict}")
                 # Filter metadata for the current dc_id
                 relevant_metadata = [
                     md for md in metadata_dict.values() if md["metadata"]["dc_id"] == dc_id
                 ]
-                logger.info(f"Relevant metadata: {relevant_metadata}")
+                # logger.info(f"Relevant metadata: {relevant_metadata}")
                 for e in relevant_metadata:
                     values_dict[e["metadata"]["dc_id"]] = e["value"]
-                logger.info(
-                    f"Loading dataframe for dc_id: {dc_id} with metadata: {relevant_metadata}"
-                )
+                # logger.info(
+                #     f"Loading dataframe for dc_id: {dc_id} with metadata: {relevant_metadata}"
+                # )
                 loaded_dfs[dc_id] = load_deltatable_lite(
                     workflow_id, dc_id, relevant_metadata, TOKEN=TOKEN
                 )
-                logger.info(f"Loaded df : {loaded_dfs[dc_id]}")
+                # logger.info(f"Loaded df : {loaded_dfs[dc_id]}")
                 logger.info(
                     f"Loaded dataframe for dc_id: {dc_id} with shape: {loaded_dfs[dc_id].shape}"
                 )
-    logger.info(f"values_dict: {values_dict}")
+    # logger.info(f"values_dict: {values_dict}")
 
     # Initialize merged_df with the first dataframe in the first join
     initial_dc_id = next(iter(joins_dict.keys()))[0]
     merged_df = loaded_dfs[initial_dc_id]
     used_dcs.add(initial_dc_id)
-    logger.info(f"Initial merged_df shape: {merged_df.shape}")
-    logger.info(f"Initial merged_df columns: {merged_df.columns}")
-    logger.info(f"Used data collections: {used_dcs}")
+    logger.debug(f"Initial merged_df shape: {merged_df.shape}")
+    logger.debug(f"Initial merged_df columns: {merged_df.columns}")
+    logger.debug(f"Used data collections: {used_dcs}")
 
     # Iteratively join dataframes based on joins_dict
     for join_key_tuple, join_list in joins_dict.items():
-        logger.info(f"Processing joins for: {join_key_tuple}")
+        logger.debug(f"Processing joins for: {join_key_tuple}")
         for join in join_list:
-            logger.info(f"Join elem : {join}")
+            logger.debug(f"Join elem : {join}")
             join_id, join_details = list(join.items())[0]
             dc_id1, dc_id2 = join_id.split("--")
 
             # Determine which dataframe to join with merged_df
             if dc_id1 in used_dcs and dc_id2 in used_dcs:
-                logger.info(f"Skipping join {join_id} as both data collections are already used.")
+                logger.debug(f"Skipping join {join_id} as both data collections are already used.")
                 continue
             elif dc_id1 in used_dcs:
-                logger.info(
+                logger.debug(
                     f"dc_id1 already in used_dcs - {dc_id1} - joinin with dc_id2 - {dc_id2}"
                 )
                 right_df = loaded_dfs[dc_id2]
-                logger.info(f"right_df shape: {right_df.shape}")
-                logger.info(f"right_df columns: {right_df.columns}")
+                logger.debug(f"right_df shape: {right_df.shape}")
+                logger.debug(f"right_df columns: {right_df.columns}")
                 used_dcs.add(dc_id2)
             elif dc_id2 in used_dcs:
-                logger.info(
+                logger.debug(
                     f"dc_id2 already in used_dcs - {dc_id2} - joinin with dc_id1 - {dc_id1}"
                 )
                 right_df = loaded_dfs[dc_id1]
-                logger.info(f"right_df shape: {right_df.shape}")
-                logger.info(f"right_df columns: {right_df.columns}")
+                logger.debug(f"right_df shape: {right_df.shape}")
+                logger.debug(f"right_df columns: {right_df.columns}")
                 used_dcs.add(dc_id1)
             else:
-                logger.info(
+                logger.debug(
                     f"Initial join with {dc_id1} and {dc_id2} on columns: {join_details['on_columns']} with method: {join_details['how']}"
                 )
                 right_df = loaded_dfs[dc_id2]
-                logger.info(f"right_df shape: {right_df.shape}")
-                logger.info(f"right_df columns: {right_df.columns}")
+                logger.debug(f"right_df shape: {right_df.shape}")
+                logger.debug(f"right_df columns: {right_df.columns}")
                 used_dcs.add(dc_id2)
                 merged_df = loaded_dfs[dc_id1]
                 used_dcs.add(dc_id1)
-                logger.info(
+                logger.debug(
                     f"Initial join with {dc_id1} and {dc_id2} on columns: {join_details['on_columns']} with method: {join_details['how']}"
                 )
 
-            logger.info(f"Used data collections: {used_dcs}")
+            logger.debug(f"Used data collections: {used_dcs}")
 
-            logger.info(
+            logger.debug(
                 f"Joining {dc_id1} and {dc_id2} on columns: {join_details['on_columns']} with method: {join_details['how']}"
             )
 
@@ -652,8 +652,8 @@ def iterative_join(
             # Perform the join
             merged_df = merged_df.join(right_df, on=join_columns, how=join_details["how"])
 
-            logger.info(f"Merged dataframe shape after join: {merged_df.shape}")
-            logger.info(f"Merged dataframe columns after join: {merged_df.columns}")
+            logger.debug(f"Merged dataframe shape after join: {merged_df.shape}")
+            logger.debug(f"Merged dataframe columns after join: {merged_df.columns}")
 
     return merged_df
 
@@ -687,15 +687,15 @@ def get_join_tables(wf, TOKEN):
 
 
 def return_joins_dict(wf, stored_metadata, TOKEN, extra_dc=None):
-    logger.info(f"wf - {wf}")
-    logger.info(f"return_joins_dict - stored_metadata - {stored_metadata}")
+    # logger.info(f"wf - {wf}")
+    # logger.info(f"return_joins_dict - stored_metadata - {stored_metadata}")
     # Extract all the data collection IDs from the stored metadata
     dc_ids_all_components = list(
         set([v["dc_id"] for v in stored_metadata if v["component_type"] not in ["jbrowse"]])
     )
     if extra_dc:
         dc_ids_all_components += [extra_dc]
-    logger.info(f"dc_ids_all_components - {dc_ids_all_components}")
+    # logger.info(f"dc_ids_all_components - {dc_ids_all_components}")
 
     # Using itertools, generate all the combinations of dc_ids in order to get all the possible joins
     dc_ids_all_joins = list(itertools.combinations(dc_ids_all_components, 2))
@@ -704,41 +704,41 @@ def return_joins_dict(wf, stored_metadata, TOKEN, extra_dc=None):
         f"{dc_id2}--{dc_id1}" for dc_id1, dc_id2 in dc_ids_all_joins
     ]
 
-    logger.info(f"dc_ids_all_joins - {dc_ids_all_joins}")
+    # logger.info(f"dc_ids_all_joins - {dc_ids_all_joins}")
 
     stored_metadata_interactive_components_wf = [e for e in stored_metadata if e["wf_id"] == wf]
     # stored_metadata_interactive_components_wf = [e for e in stored_metadata if e["component_type"] in ["interactive"] and e["wf_id"] == wf]
-    logger.info(
-        f"stored_metadata_interactive_components_wf - {stored_metadata_interactive_components_wf}"
-    )
+    # logger.info(
+    #     f"stored_metadata_interactive_components_wf - {stored_metadata_interactive_components_wf}"
+    # )
     # stored_metadata_interactive_components_wf = [v for k, v in interactive_components_dict.items() if v["metadata"]["wf_id"] == wf]
     join_tables_for_wf = get_join_tables(wf, TOKEN)
-    logger.info(f"join_tables_for_wf - {join_tables_for_wf}")
+    # logger.info(f"join_tables_for_wf - {join_tables_for_wf}")
 
     # Extract the intersection between dc_ids_all_joins and join_tables_for_wf[wf].keys()
     join_tables_for_wf[wf] = {
         k: join_tables_for_wf[wf][k] for k in join_tables_for_wf[wf].keys() if k in dc_ids_all_joins
     }
-    logger.info(f"join_tables_for_wf - {join_tables_for_wf}")
+    # logger.info(f"join_tables_for_wf - {join_tables_for_wf}")
 
     # Initialize Union-Find structure
     uf = UnionFind()
 
     joins = []
 
-    logger.info(
-        f"stored_metadata_interactive_components_wf - {stored_metadata_interactive_components_wf}"
-    )
+    # logger.info(
+    #     f"stored_metadata_interactive_components_wf - {stored_metadata_interactive_components_wf}"
+    # )
     for interactive_component in stored_metadata_interactive_components_wf:
         wf_dc_key = (interactive_component["wf_id"], interactive_component["dc_id"])
-        logger.info(f"wf_dc - {wf_dc_key}")
+        # logger.info(f"wf_dc - {wf_dc_key}")
 
         # Gather joins for the current workflow data collection
         for j in join_tables_for_wf[wf_dc_key[0]].keys():
             if (wf_dc_key[1] in j) and (wf_dc_key[1] in dc_ids_all_components):
-                logger.info(f"j - {j}")
-                logger.info(f"dc_ids_all_components - {dc_ids_all_components}")
-                logger.info(f"wf_dc[1] - {wf_dc_key[1]}")
+                # logger.info(f"j - {j}")
+                # logger.info(f"dc_ids_all_components - {dc_ids_all_components}")
+                # logger.info(f"wf_dc[1] - {wf_dc_key[1]}")
                 joins.append({j: join_tables_for_wf[wf_dc_key[0]][j]})
 
         # Union the related data collection IDs
@@ -772,12 +772,12 @@ def return_joins_dict(wf, stored_metadata, TOKEN, extra_dc=None):
                 joins_dict[join_key_tuple].append(join)
                 added_joins.add(join_id)
 
-    logger.info(f"joins_dict - {joins_dict}")
+    # logger.info(f"joins_dict - {joins_dict}")
 
     # Identify and add missing joins
     for join_key_tuple, join_list in joins_dict.items():
         # for join_key_tuple, joins in joins_dict.items():
-        logger.info(f"Processing joins for: {join_key_tuple}")
+        # logger.info(f"Processing joins for: {join_key_tuple}")
 
         dc_ids = list(join_key_tuple)
         all_possible_joins = list(itertools.combinations(dc_ids, 2))

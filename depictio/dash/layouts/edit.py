@@ -29,8 +29,7 @@ def enable_box_edit_mode(
     # logger.info(box["props"])
     btn_index = box["props"]["id"]["index"]
 
-    logger.info(f"ENABLE BOX EDIT MODE - index: {btn_index}")
-    logger.info(f"ENABLE BOX EDIT MODE - component_data: {component_data}")
+    logger.debug(f"ENABLE BOX EDIT MODE - index: {btn_index}")
 
     component_type = None
     if not component_data:
@@ -38,12 +37,10 @@ def enable_box_edit_mode(
             component_data = get_component_data(
                 input_id=btn_index, dashboard_id=dashboard_id, TOKEN=TOKEN
             )
-            logger.info(f"ENABLE BOX EDIT MODE - component_data: {component_data}")
             if component_data:
                 component_type = component_data.get("component_type", None)
     else:
         component_type = component_data.get("component_type", None)
-    logger.info(f"ENABLE BOX EDIT MODE - index - component_type: {btn_index} - {component_type}")
 
     edit_button = dbc.Button(
         "Edit",
@@ -118,7 +115,7 @@ def enable_box_edit_mode(
             spacing="xs",
             style={"margin-left": "12px"},
         )
-        logger.info(f"ENABLE BOX EDIT MODE - component_type: {component_type}")
+        # logger.info(f"ENABLE BOX EDIT MODE - component_type: {component_type}")
 
         if component_type:
             if (

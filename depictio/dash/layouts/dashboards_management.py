@@ -12,9 +12,6 @@ from dash_iconify import DashIconify
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.custom_logging import format_pydantic
 from depictio.api.v1.configs.logging_init import logger
-
-# from depictio.api.v1.endpoints.dashboards_endpoints.models import DashboardData
-# from depictio.api.v1.endpoints.user_endpoints.models import UserBase
 from depictio.dash.api_calls import api_call_fetch_user_from_token, api_get_project_from_id
 from depictio.dash.layouts.layouts_toolbox import (
     create_dashboard_modal,
@@ -28,10 +25,7 @@ modal, modal_id = create_dashboard_modal()
 
 layout = html.Div(
     [
-        # dcc.Store(id="modal-store", storage_type="local", data={"email": "", "submitted": False}),
-        dcc.Store(
-            id="dashboard-modal-store", storage_type="session", data={"title": ""}
-        ),  # Store for new dashboard data
+        dcc.Store(id="dashboard-modal-store", storage_type="session", data={"title": ""}),
         dcc.Store(id="init-create-dashboard-button", storage_type="memory", data=False),
         modal,
         html.Div(id="landing-page"),  # Initially hidden
@@ -40,7 +34,7 @@ layout = html.Div(
 
 
 def load_dashboards_from_db(token):
-    logger.info(f"Loading dashboards from the database with token {token}")
+    logger.info("Loading dashboards from the database")
     if not token:
         raise ValueError("Token is required to load dashboards from the database.")
 
@@ -52,18 +46,7 @@ def load_dashboards_from_db(token):
 
         if response.status_code == 200:
             dashboards = response.json()
-            logger.info(f"dashboards: {dashboards}")
 
-            # # Extract dashboard IDs and determine the maximum dashboard_id
-            # dashboard_ids = [int(dashboard["dashboard_id"]) for dashboard in dashboards if "dashboard_id" in dashboard]
-
-            # # If there are no dashboards, start with index 1
-            # if dashboard_ids:
-            #     next_index = max(dashboard_ids) + 1
-            # else:
-            #     next_index = 1
-
-            # logger.info(f"next_index: {next_index}")
             return {"dashboards": dashboards}
 
         else:
@@ -71,11 +54,11 @@ def load_dashboards_from_db(token):
 
     except Exception as e:
         logger.error(f"Error loading dashboards from the database: {e}")
-        # return {"next_index": 1, "dashboards": []}
         return {"dashboards": []}
 
 
 def insert_dashboard(dashboard_id, dashboard_data, token):
+    logger.info(f"Inserting dashboard with ID: {dashboard_id} and data: {dashboard_data}")
     if not token:
         raise ValueError("Token is required to insert a dashboard into the database.")
 
@@ -84,10 +67,8 @@ def insert_dashboard(dashboard_id, dashboard_data, token):
 
     if not dashboard_id:
         raise ValueError("Dashboard ID is required to insert a dashboard into the database.")
-    logger.info(f"dashboard_id: {dashboard_id}")
-    logger.info(f"dashboard_data: {dashboard_data}")
     dashboard_data = convert_objectid_to_str(dashboard_data)
-    logger.info(f"dashboard_data converted: {dashboard_data}")
+    logger.debug(f"Inserting dashboard with ID: {dashboard_id} and data: {dashboard_data}")
 
     response = httpx.post(
         f"{API_BASE_URL}/depictio/api/v1/dashboards/save/{dashboard_id}",
@@ -103,6 +84,7 @@ def insert_dashboard(dashboard_id, dashboard_data, token):
 
 
 def delete_dashboard(dashboard_id, token):
+    logger.info(f"Deleting dashboard with ID: {dashboard_id}")
     response = httpx.delete(
         f"{API_BASE_URL}/depictio/api/v1/dashboards/delete/{dashboard_id}",
         headers={"Authorization": f"Bearer {token}"},
@@ -117,8 +99,6 @@ def delete_dashboard(dashboard_id, token):
 
 def edit_dashboard_name(new_name, dashboard_id, dashboards, token):
     logger.info(f"Editing dashboard name for dashboard ID: {dashboard_id}")
-    logger.info(f"dashboards: {dashboards}")
-    logger.info(f"token: {token}")
 
     updated_dashboards = list()
 
@@ -141,16 +121,10 @@ def edit_dashboard_name(new_name, dashboard_id, dashboards, token):
     else:
         raise ValueError(f"Failed to edit dashboard name in the database. Error: {response.text}")
 
-    logger.info(f"updated_dashboards: {updated_dashboards}")
-
     return updated_dashboards
 
 
 def render_welcome_section(email):
-    # style = {
-    #     "border": f"1px solid {dmc.theme.DEFAULT_COLORS['indigo'][4]}",
-    #     "textAlign": "center",
-    # }
     return dmc.Grid(
         children=[
             dmc.Col(
@@ -165,7 +139,6 @@ def render_welcome_section(email):
                         position="bottom",
                     ),
                     href="/profile",
-                    # tar ="_blank",
                 ),
                 span="content",
             ),
@@ -200,9 +173,7 @@ def render_dashboard_list_section(email):
 
 def register_callbacks_dashboards_management(app):
     def create_dashboards_view(dashboards):
-        logger.info(f"dashboards: {dashboards}")
-
-        # dashboards = [convert_objectid_to_str(dashboard.mongo()) for dashboard in dashboards]
+        logger.debug(f"dashboards: {dashboards}")
 
         dashboards_view = [
             dmc.Paper(
@@ -253,15 +224,10 @@ def register_callbacks_dashboards_management(app):
             )
             for dashboard in dashboards
         ]
-        logger.info(f"dashboards_view: {dashboards_view}")
         return dashboards_view
 
     def create_homepage_view(dashboards, user_id, token):
-        logger.info(f"dashboards: {dashboards}")
-
-        # dashboards = [convert_objectid_to_str(dashboard.mongo()) for dashboard in dashboards]
-
-        # title = dmc.Title("Recently viewed:", order=3)
+        logger.debug(f"dashboards: {dashboards}")
 
         def modal_edit_name_dashboard(dashboard):
             modal = dmc.Modal(
@@ -308,7 +274,6 @@ def register_callbacks_dashboards_management(app):
 
         def create_dashboad_view_header(dashboard, user_id, token):
             public = dashboard["is_public"]
-            # public = True if "*" in [e for e in dashboard["permissions"]["viewers"]] else False
 
             if str(user_id) in [str(owner["_id"]) for owner in dashboard["permissions"]["owners"]]:
                 color_badge_ownership = "blue"
@@ -322,17 +287,9 @@ def register_callbacks_dashboards_management(app):
                 leftSection=DashIconify(icon="mdi:account", width=16, color="grey"),
             )
 
-            # get project from id
-            logger.info(f"Project ID: {dashboard['project_id']}")
-            # response = httpx.get(
-            #     f"{API_BASE_URL}/depictio/api/v1/projects/get/from_id",
-            #     params={"project_id": dashboard["project_id"]},
-            #     headers={"Authorization": f"Bearer {token}"},
-            # )
-
             response = api_get_project_from_id(project_id=dashboard["project_id"], token=token)
             if response.status_code == 200:
-                logger.info(f"Project response: {response.json()}")
+                # logger.debug(f"Project response: {response.json()}")
                 project = response.json()
                 project_name = project["name"]
             else:
@@ -505,13 +462,6 @@ def register_callbacks_dashboards_management(app):
 
         def return_thumbnail(user_id, dashboard):
             import os
-            import sys
-
-            # log current working directory
-            logger.info(f"Current working directory: {os.getcwd()}")
-
-            logger.info(f"sys.path: {sys.path}")
-            logger.info(f"dashboard: {dashboard}")
 
             # Define the output folder where screenshots are saved
             output_folder = (
@@ -525,14 +475,6 @@ def register_callbacks_dashboards_management(app):
             thumbnail_fs_path = os.path.join(output_folder, filename)
             # URL path for the Image src
             thumbnail_url = f"/static/screenshots/{filename}"
-
-            # thumbnail_path = f"assets/screenshots/{user_id}_{dashboard['_id']}.png"
-            # thumbnail_path_check = f"depictio/dash/{thumbnail_path}"
-
-            logger.info(f"Thumbnail filesystem path: {thumbnail_fs_path}")
-            logger.info(f"Thumbnail URL path: {thumbnail_url}")
-
-            logger.info(f"Thumbnail exists: {os.path.exists(thumbnail_fs_path)}")
 
             # Check if the thumbnail exists in the static/screenshots folder
             if not os.path.exists(thumbnail_fs_path):
@@ -672,7 +614,6 @@ def register_callbacks_dashboards_management(app):
             order=3,
         )
         private_dashboards = [d for d in dashboards if d["is_public"] is False]
-        logger.info(f"private_dashboards: {private_dashboards}")
         # private_dashboards_ids = [d["dashboard_id"] for d in private_dashboards]
         private_dashboards_view = dmc.SimpleGrid(
             loop_over_dashboards(user_id, private_dashboards, token),
@@ -732,15 +673,12 @@ def register_callbacks_dashboards_management(app):
         prevent_initial_call=True,
     )
     def load_projects(n_clicks, user_data):
-        logger.info("Loading projects")
-
         response = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/projects/get/all",
             headers={"Authorization": f"Bearer {user_data['access_token']}"},
         )
         if response.status_code == 200:
             projects = response.json()
-            logger.info(f"Projects: {projects}")
             projects_multiselect_options = [
                 {
                     "label": f"{project['name']} ({str(project['id'])})",
@@ -748,7 +686,6 @@ def register_callbacks_dashboards_management(app):
                 }
                 for project in projects
             ]
-            logger.info(f"projects_multiselect_options: {projects_multiselect_options}")
             return projects_multiselect_options
 
         else:
@@ -793,11 +730,9 @@ def register_callbacks_dashboards_management(app):
         user_data,
         modal_data,
     ):
-        logger.info("\nupdate_dashboards triggered")
-        log_context_info()
+        # log_context_info()
 
         current_user = api_call_fetch_user_from_token(user_data["access_token"])
-        logger.info(f"current_user: {current_user}")
         # current_userbase = UserBase(
         #     convert_model_to_dict(current_user, exclude_none=True).dict(
         #         exclude={
@@ -811,14 +746,11 @@ def register_callbacks_dashboards_management(app):
         #     )
         # )
         current_userbase = current_user.turn_to_userbase()
-        logger.info(f"current_userbase : {current_userbase}")
 
         index_data = load_dashboards_from_db(user_data["access_token"])
-        logger.info(f"index_data: {index_data}")
         dashboards = [
             DashboardData.from_mongo(dashboard) for dashboard in index_data.get("dashboards", [])
         ]
-        logger.info(f"dashboards: {dashboards}")
         # next_index = index_data.get("next_index", 1)
 
         if not ctx.triggered_id:
@@ -847,18 +779,13 @@ def register_callbacks_dashboards_management(app):
             )
 
         if ctx.triggered_id.get("type") == "make-public-dashboard-button":
-            logger.info("Make public dashboard button clicked")
-            logger.info(f"make_public_children_list: {make_public_children_list}")
-            logger.info(f"make_public_n_clicks_list: {make_public_n_clicks_list}")
-            logger.info(f"make_public_id_list: {make_public_id_list}")
+            logger.info(f"Make public dashboard button clicked with ID: {ctx.triggered_id}")
             public_current_status = [
                 child
                 for child, id in zip(make_public_children_list, make_public_id_list)
                 if str(id["index"]) == str(ctx.triggered_id["index"])
             ][0]
-            logger.info(f"public_current_status: {public_current_status}")
             public_current_status = False if public_current_status == "Make public" else True
-            logger.info(f"public_current_status: {public_current_status}")
 
             return handle_dashboard_make_public(
                 dashboards,
@@ -869,12 +796,8 @@ def register_callbacks_dashboards_management(app):
             )
 
         if ctx.triggered_id.get("type") == "save-edit-name-dashboard":
-            logger.info("Edit dashboard button clicked")
             # Extract the new name from the input field
             index = ctx.triggered_id["index"]
-            logger.info(f"index: {index}")
-            logger.info(f"new_name_list_values : {new_name_list_values}")
-            logger.info(f"new_name_list_ids: {new_name_list_ids}")
 
             # Iterate over the new_name_list to find the new name corresponding to the index
             new_name = [
@@ -923,8 +846,7 @@ def register_callbacks_dashboards_management(app):
                 dashboard_id=dashboard_id,
                 project_id=PyObjectId(modal_data["project_id"]),
             )
-            logger.info(f"New dashboard: {format_pydantic(new_dashboard)}")
-            logger.info(f"New dashboard dump : {new_dashboard.model_dump()}")
+            logger.debug(f"New dashboard: {format_pydantic(new_dashboard)}")
             dashboards.append(new_dashboard)
             insert_dashboard(dashboard_id, new_dashboard.mongo(), user_data["access_token"])
             # next_index += 1
@@ -956,18 +878,12 @@ def register_callbacks_dashboards_management(app):
     ):
         logger.info("Make public dashboard button clicked")
         ctx_triggered_dict = ctx.triggered[0]
-        logger.info(f"ctx_triggered_dict: {ctx_triggered_dict}")
         index_make_public = eval(ctx_triggered_dict["prop_id"].split(".")[0])["index"]
-        logger.info(f"index_make_public: {index_make_public}")
-        logger.info(f"User data: {user_data}")
-        logger.info(f"current_userbase: {current_userbase}")
-        logger.info(f"public_current_status: {public_current_status}")
-        logger.info(f"NOT public_current_status: {not public_current_status}")
 
         updated_dashboards = list()
         for dashboard in dashboards:
             if str(dashboard.dashboard_id) == str(index_make_public):
-                logger.info(f"Found dashboard to update status: {dashboard}")
+                logger.debug(f"Found dashboard to update status: {dashboard}")
                 response = httpx.post(
                     f"{API_BASE_URL}/depictio/api/v1/dashboards/toggle_public_status/{index_make_public}",
                     headers={"Authorization": f"Bearer {user_data['access_token']}"},
@@ -975,13 +891,12 @@ def register_callbacks_dashboards_management(app):
                 )
                 if response.status_code != 200:
                     raise ValueError(f"Failed to update dashboard status. Error: {response.text}")
-                logger.info(f"Response: {response.json()}")
                 dashboard.is_public = response.json()["is_public"]
                 # dashboard.permissions = response.json()["permissions"]
                 updated_dashboards.append(dashboard)
 
                 if response.status_code == 200:
-                    logger.info(
+                    logger.debug(
                         f"Successfully made dashboard '{not public_current_status}': {dashboard}"
                     )
 
@@ -998,10 +913,6 @@ def register_callbacks_dashboards_management(app):
         logger.info("Duplicate dashboard button clicked")
         ctx_triggered_dict = ctx.triggered[0]
         index_duplicate = eval(ctx_triggered_dict["prop_id"].split(".")[0])["index"]
-        logger.info(f"index_duplicate: {index_duplicate}")
-        logger.info(f"User data: {user_data}")
-        logger.info(f"current_userbase: {current_userbase}")
-        logger.info(f"Dashboards: {dashboards}")
 
         updated_dashboards = list()
         for dashboard in dashboards:
@@ -1061,7 +972,6 @@ def register_callbacks_dashboards_management(app):
         logger.info("Edit dashboard button clicked")
         ctx_triggered_dict = ctx.triggered[0]
         index_edit = eval(ctx_triggered_dict["prop_id"].split(".")[0])["index"]
-        logger.info(f"index_edit: {index_edit}")
         updated_dashboards = edit_dashboard_name(
             new_name, index_edit, dashboards, user_data["access_token"]
         )
@@ -1073,16 +983,11 @@ def register_callbacks_dashboards_management(app):
 
     def generate_dashboard_view_response(dashboards, store_data_list, current_userbase, user_data):
         dashboards = [convert_objectid_to_str(dashboard.mongo()) for dashboard in dashboards]
-        logger.info(f"dashboards: {dashboards}")
+        logger.debug(f"dashboards: {dashboards}")
         dashboards_view = create_homepage_view(
             dashboards, current_userbase.id, user_data["access_token"]
         )
-        # new_index_data = {"next_index": next_index, "dashboards": dashboards}
-        # new_index_data = {"dashboards": dashboards}
-
-        logger.info(f"Generated dashboard view: {dashboards_view}")
         return [dashboards_view] * len(store_data_list)
-        # return [dashboards_view] * len(store_data_list), [new_index_data] * len(store_data_list)
 
     @app.callback(
         Output({"type": "edit-password-modal", "index": MATCH}, "opened"),
@@ -1125,18 +1030,7 @@ def register_callbacks_dashboards_management(app):
         init_create_dashboard_button,
         project,
     ):
-        logger.info("handle_create_dashboard_and_toggle_modal")
-        logger.info(f"n_clicks_create: {n_clicks_create}")
-        logger.info(f"n_clicks_submit: {n_clicks_submit}")
-        logger.info(f"title: {title}")
-        logger.info(f"opened: {opened}")
-        logger.info(f"user_data: {user_data}")
-        logger.info(f"init_create_dashboard_button: {init_create_dashboard_button}")
         data = {"title": "", "project_id": ""}
-
-        logger.info(f"CTX triggered: {ctx.triggered}")
-        logger.info(f"CTX triggered prop IDs: {ctx.triggered_prop_ids}")
-        logger.info(f"CTX triggered ID {ctx.triggered_id}")
 
         if not init_create_dashboard_button:
             logger.info("Init create dashboard button")
@@ -1160,13 +1054,9 @@ def register_callbacks_dashboards_management(app):
         if triggered_id == "create-dashboard-submit":
             logger.info("Submit button clicked")
             dashboards = load_dashboards_from_db(user_data["access_token"])["dashboards"]
-            logger.info(f"dashboards: {dashboards}")
-            logger.info(f"Len dashboards: {len(dashboards)}")
             if len(dashboards) > 0:
                 existing_titles = [dashboard["title"] for dashboard in dashboards]
 
-                logger.info(f"existing_titles: {existing_titles}")
-                logger.info(f"title: {title}")
                 if title in existing_titles:
                     logger.warning(f"Dashboard with title '{title}' already exists.")
                     return (
@@ -1216,39 +1106,9 @@ def register_callbacks_dashboards_management(app):
             data["project_id"] = project
             return data, False, False, {"display": "none"}, dash.no_update
 
-        logger.info("No relevant clicks")
+        logger.debug("No relevant clicks")
         # Return default values if no relevant clicks happened
         return data, opened, False, dash.no_update, dash.no_update
-
-    # # New callback to handle the creation of a new dashboard
-    # @app.callback(
-    #     Output("dashboard-modal-store", "data"),
-    #     [Input("create-dashboard-submit", "n_clicks")],
-    #     [State("dashboard-title-input", "value")],
-    #     prevent_initial_call=True,
-    # )
-    # def handle_create_dashboard(n_clicks, title):
-    #     logger.info("handle_create_dashboard")
-    #     logger.info(f"n_clicks: {n_clicks}")
-    #     logger.info(f"title: {title}")
-    #     data = {"title": ""}
-    #     if n_clicks:
-    #         data["title"] = title
-    #     return data
-
-    # # New callback to open the create dashboard modal
-    # @app.callback(
-    #     Output("dashboard-modal", "opened"),
-    #     [Input({"type": "create-dashboard-button", "index": ALL}, "n_clicks"), Input("create-dashboard-submit", "n_clicks")],
-    #     [State("dashboard-modal", "opened")],
-    #     prevent_initial_call=True,
-    # )
-    # def open_dashboard_modal(n_clicks_create, n_clicks_submit, opened):
-    #     if any(n_clicks_create):
-    #         return not opened
-    #     elif n_clicks_submit:
-    #         return opened
-    #     return opened
 
     @app.callback(
         Output({"type": "dashboard-delete-confirmation-modal", "index": MATCH}, "opened"),
@@ -1279,16 +1139,6 @@ def register_callbacks_dashboards_management(app):
         pathname,
         data,
     ):
-        logger.info("\n")
-        logger.info("update_landing_page")
-        logger.info(f"CTX triggered: {ctx.triggered}")
-        logger.info(f"CTX triggered prop IDs: {ctx.triggered_prop_ids}")
-        logger.info(f"CTX triggered ID {ctx.triggered_id}")
-        logger.info(f"CTX inputs: {ctx.inputs}")
-        logger.info(f"URL pathname: {pathname}")
-        logger.info(f"data: {data}")
-        logger.info("\n")
-
         user = api_call_fetch_user_from_token(data["access_token"])
 
         def render_landing_page(data):
@@ -1305,13 +1155,10 @@ def register_callbacks_dashboards_management(app):
             # return dash.no_update
             raise dash.exceptions.PreventUpdate
         trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
-        logger.info(f"trigger_id: {trigger_id}")
 
         # Respond to URL changes
         if trigger_id == "url":
             if pathname:
-                logger.info(f"trigger_id: {trigger_id}")
-                logger.info(f"URL pathname: {pathname}")
                 if pathname.startswith("/dashboard/"):
                     # dashboard_id = pathname.split("/")[-1]
                     # Fetch dashboard data based on dashboard_id and return the appropriate layout

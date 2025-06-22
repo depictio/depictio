@@ -171,7 +171,7 @@ def design_header(data, local_store):
     """
     Design the header of the dashboard
     """
-    logger.info(f"depictio dashboard data: {data}")
+    # logger.info(f"depictio dashboard data: {data}")
 
     if data:
         if "stored_add_button" not in data:
@@ -180,7 +180,7 @@ def design_header(data, local_store):
             data["stored_edit_dashboard_mode_button"] = [int(0)]
 
     current_user = api_call_fetch_user_from_token(local_store["access_token"])
-    logger.info(f"current_user: {current_user}")
+    # logger.info(f"current_user: {current_user}")
 
     init_nclicks_add_button = (
         data["stored_add_button"] if data else {"count": 0, "initialized": False, "_id": ""}
@@ -196,7 +196,7 @@ def design_header(data, local_store):
         else False
     )
 
-    logger.info(f"{data['permissions']['viewers']}")
+    # logger.info(f"{data['permissions']['viewers']}")
 
     viewer_ids = [str(e["id"]) for e in data["permissions"]["viewers"] if e != "*"]
     is_viewer = str(current_user.id) in viewer_ids
@@ -212,10 +212,10 @@ def design_header(data, local_store):
         edit_dashboard_mode_button_checked = data["buttons_data"]["edit_dashboard_mode_button"]
         edit_components_button_checked = data["buttons_data"]["edit_components_button"]
 
-    logger.info(f"owner: {owner}, viewer: {viewer}")
-    logger.info(f"edit_dashboard_mode_button_checked: {edit_dashboard_mode_button_checked}")
-    logger.info(f"edit_components_button_checked: {edit_components_button_checked}")
-    logger.info(f"disabled: {disabled}")
+    # logger.info(f"owner: {owner}, viewer: {viewer}")
+    # logger.info(f"edit_dashboard_mode_button_checked: {edit_dashboard_mode_button_checked}")
+    # logger.info(f"edit_components_button_checked: {edit_components_button_checked}")
+    # logger.info(f"disabled: {disabled}")
 
     # if not data:
     #     disabled = True

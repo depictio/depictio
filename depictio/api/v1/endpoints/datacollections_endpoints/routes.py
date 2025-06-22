@@ -158,17 +158,14 @@ async def get_dc_joined(workflow_id: str, current_user: str = Depends(get_curren
     Retrieve join details for the data collections in a workflow.
     """
 
-    logger.info(f"Workflow ID: {workflow_id}")
-    logger.info(f"Current user: {current_user}")
+    logger.debug(f"Workflow ID: {workflow_id}")
 
     # Retrieve workflow
     workflow = await get_workflow_from_id(workflow_id, current_user=current_user)
-    logger.info(f"Workflow: {workflow}")
-    logger.info(f"type(workflow): {type(workflow)}")
 
     join_details_map = generate_join_dict(workflow)
 
-    logger.info(f"Join details: {join_details_map}")
+    logger.debug(f"Join details: {join_details_map}")
 
     return join_details_map
 

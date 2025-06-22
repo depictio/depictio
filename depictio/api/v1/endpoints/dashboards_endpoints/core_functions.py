@@ -8,7 +8,6 @@ from depictio.models.models.base import convert_objectid_to_str
 def load_dashboards_from_db(owner, admin_mode=False):
     logger.info("Loading dashboards from MongoDB")
 
-    logger.info(f"owner: {owner}")
     projection = {
         "_id": 1,
         "dashboard_id": 1,
@@ -25,13 +24,11 @@ def load_dashboards_from_db(owner, admin_mode=False):
     # dashboards = list(dashboards_collection.find({"permissions.owners._id": ObjectId(owner)}, projection))
 
     if admin_mode:
-        logger.info("Admin mode enabled.")
         # List all dashboards for all users
         dashboards = list(dashboards_collection.find({}, projection))
         # Sort dashboards by title
         dashboards = sorted(dashboards, key=lambda x: x["title"])
     else:
-        logger.info("Admin mode not enabled.")
         dashboards = list(
             dashboards_collection.find(
                 {
@@ -45,10 +42,8 @@ def load_dashboards_from_db(owner, admin_mode=False):
         )
 
     if not dashboards:
-        logger.info("No dashboards found.")
+        logger.warning("No dashboards found.")
         dashboards = []
-
-    logger.info(f"dashboards: {dashboards}")
 
     # turn mongodb ObjectId to string
     dashboards = [convert_objectid_to_str(dashboard) for dashboard in dashboards]

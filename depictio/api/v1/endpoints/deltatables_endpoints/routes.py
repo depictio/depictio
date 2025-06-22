@@ -193,17 +193,17 @@ async def list_registered_files(
     query = {"data_collection_id": data_collection_id}
     logger.info(f"Query: {query}")
     deltatable_cursor = list(deltatables_collection.find(query))
-    logger.info(f"Deltatable Cursor: {deltatable_cursor}")
+    # logger.info(f"Deltatable Cursor: {deltatable_cursor}")
     if len(list(deltatable_cursor)) == 0:
         raise HTTPException(
             status_code=404,
             detail=f"No DeltaTableAggregated found for Data Collection ID {data_collection_id}.",
         )
     deltatables = list(deltatable_cursor)[0]
-    logger.info(f"Deltatables: {deltatables}")
+    # logger.info(f"Deltatables: {deltatables}")
 
     deltatables = sanitize_for_json(deltatables)
-    logger.info(f"Deltatables sanitized: {deltatables}")
+    # logger.info(f"Deltatables sanitized: {deltatables}")
 
     return convert_objectid_to_str(deltatables)
     # return convert_objectid_to_str(deltatables)

@@ -45,9 +45,9 @@ async def get_dashboard(
             status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found."
         )
 
-    logger.info(f"Dashboard data: {dashboard_data}")
+    # logger.info(f"Dashboard data: {dashboard_data}")
     dashboard_data = DashboardData.from_mongo(dashboard_data)
-    logger.info(f"Dashboard data: {dashboard_data}")
+    # logger.info(f"Dashboard data: {dashboard_data}")
 
     # logger.info(f"Dashboard data from mongo: {dashboard_data}")
     # dashboard_data = convert_model_to_dict(dashboard_data)
@@ -190,7 +190,6 @@ async def edit_dashboard_name(
         )
 
 
-# /Users/tweber/Gits/depictio/dev/jup_nb/.jupyter/jupyter_notebook_config.py
 @dashboards_endpoint_router.post("/save/{dashboard_id}")
 async def save_dashboard(
     dashboard_id: PyObjectId,
@@ -203,7 +202,7 @@ async def save_dashboard(
 
     user_id = current_user.id
 
-    logger.info(f"Dashboard data: {data}")
+    # logger.info(f"Dashboard data: {data}")
 
     # Attempt to find and update the document, or insert if it doesn't exist
     result = dashboards_collection.find_one_and_update(
@@ -388,10 +387,7 @@ async def get_component_data_endpoint(
 
     dashboard_data = dashboards_collection.find_one(query)
 
-    logger.debug(f"Dashboard data: {dashboard_data}")
-
     dashboard_data = DashboardData.from_mongo(dashboard_data)
-    logger.debug(f"Dashboard data from mongo: {dashboard_data}")
 
     if not dashboard_data:
         raise HTTPException(
@@ -413,7 +409,7 @@ async def get_component_data_endpoint(
         logger.error(f"Component with ID {str(component_id)} not found in stored_metadata.")
         return None
 
-    logger.info(f"Component metadata found: {component_metadata}")
+    # logger.debug(f"Component metadata found: {component_metadata}")
 
     component_metadata = convert_objectid_to_str(component_metadata)
 

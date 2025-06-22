@@ -19,7 +19,7 @@ import httpx
 import requests
 from dash import Input, Output, State, ctx, dcc, html
 
-from depictio.api.v1.configs.config import API_BASE_URL
+from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.layouts.layouts_toolbox import create_add_with_input_modal
 from depictio.models.models.base import convert_objectid_to_str
@@ -135,7 +135,7 @@ def _process_permission_users(users, token, permission_type):
         user_api = httpx.get(
             f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_id",
             params={"user_id": user["id"]},
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"api-key": settings.auth.internal_api_key},
         )
         if user_api.status_code != 200:
             logger.error(f"Error fetching user data: {user_api.text}")
@@ -908,7 +908,7 @@ def register_projectwise_user_management_callbacks(app):
                 retrieve_user_resp = httpx.get(
                     f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_id",
                     params={"user_id": user["id"]},
-                    headers={"Authorization": f"Bearer {local_store_data['access_token']}"},
+                    headers={"api-key": settings.auth.internal_api_key},
                 )
                 if retrieve_user_resp.status_code != 200:
                     logger.error(f"Error fetching user data: {retrieve_user_resp.text}")

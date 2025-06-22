@@ -59,8 +59,8 @@ def get_component_data(input_id, dashboard_id, TOKEN):
         f"{API_BASE_URL}/depictio/api/v1/dashboards/get_component_data/{dashboard_id}/{input_id}",
         headers={"Authorization": f"Bearer {TOKEN}"},
     )
-    logger.info(f"Code: {response.status_code}")
-    logger.info(f"Response: {response.json()}")
+    # logger.info(f"Code: {response.status_code}")
+    # logger.info(f"Response: {response.json()}")
 
     if response.status_code == 200:
         return response.json()

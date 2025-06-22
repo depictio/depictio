@@ -22,8 +22,6 @@ async def _async_fetch_user_from_token(token: str) -> UserBeanie | None:
     Returns:
         The UserBeanie object if found, None otherwise
     """
-    logger.debug(f"Current token: {token}")
-
     # Validate input
     if not isinstance(token, str):
         logger.debug("Invalid token format")
@@ -54,7 +52,7 @@ async def _async_fetch_user_from_token(token: str) -> UserBeanie | None:
 
     # Fetch linked documents if needed
     # await user.fetch_all_links()
-    logger.debug(f"User fetched from token: {format_pydantic(user)}")
+    logger.debug(f"User fetched from token: {user.email}")
 
     return user
 
@@ -79,18 +77,18 @@ async def _async_fetch_user_from_email(email: EmailStr) -> UserBeanie | None:
         return None
 
     # Fetch linked documents
-    logger.debug(f"User fetched from email: {format_pydantic(user)}")
+    logger.debug(f"User fetched from email: {user}")
     return user
 
 
 @validate_call(validate_return=True)
 async def _async_fetch_user_from_id(user_id: PydanticObjectId) -> UserBeanie:
     logger.debug(f"Fetching user from ID: {user_id}")
-    logger.debug(f"Fetching user from ID of type: {type(user_id)}")
     user = await UserBeanie.find_one({"_id": user_id})
     if not user:
         logger.debug(f"No user found with ID {user_id}")
         raise HTTPException(status_code=404, detail="User not found")
+    logger.debug(f"User fetched from ID: {user}")
     return user
 
 
@@ -168,7 +166,7 @@ async def _purge_expired_tokens(user) -> dict[str, bool | int]:
 
     # Delete the expired tokens - delete many
     outdated_tokens = await TokenBeanie.find(
-        {"user_id": user.id, "expire_datetime": {"$lt": datetime.now()}}
+        {"user_id": user.id, "refresh_expire_datetime": {"$lt": datetime.now()}}
     ).to_list()
 
     for token in outdated_tokens:
@@ -268,8 +266,8 @@ async def _edit_password(user_id: PydanticObjectId, new_password: str) -> bool:
 @validate_call(validate_return=True)
 async def _add_token(token_data: TokenData) -> TokenBeanie:
     email = token_data.sub
-    logger.info(f"Adding token for user {email}.")
-    logger.info(f"Token: {format_pydantic(token_data)}")
+    logger.debug(f"Adding token for user {email}.")
+    logger.debug(f"Token data: {format_pydantic(token_data)}")
     access_token, expire = await create_access_token(
         token_data,
         expiry_hours=1,
@@ -288,7 +286,6 @@ async def _add_token(token_data: TokenData) -> TokenBeanie:
         token_lifetime=token_data.token_lifetime,
         user_id=token_data.sub,
     )
-    logger.debug(f"Token: {format_pydantic(token)}")
 
     await TokenBeanie.save(token)
 
@@ -299,8 +296,6 @@ async def _add_token(token_data: TokenData) -> TokenBeanie:
 
 @validate_call(validate_return=True)
 def _verify_password(stored_hash: str, password: str) -> bool:
-    logger.info(f"Stored hash: {stored_hash}")
-    logger.info(f"Password to verify: {password}")
     # Verify the password against the stored hash
     return bcrypt.checkpw(password.encode("utf-8"), stored_hash.encode("utf-8"))
 
@@ -315,9 +310,9 @@ async def _check_password(email: str, password: str) -> bool:
     Returns:
         bool: True if the password matches, False otherwise.
     """
-    logger.debug(f"Checking password for user {email}.")
+    logger.info(f"Checking password for user {email}.")
     user = await _async_fetch_user_from_email(email)
-    logger.debug(f"User found: {user}")
+    logger.debug(f"User found: {user.email if user else 'None'}")
     if user:
         if _verify_password(user.password, password):
             return True
@@ -386,9 +381,6 @@ async def _create_user_in_db(
         last_login=current_time,
         # groups=[group],
     )
-
-    logger.debug(user_beanie)
-    logger.debug(user_beanie.model_dump())
 
     # Save to database
     await user_beanie.create()

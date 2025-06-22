@@ -410,11 +410,11 @@ def register_callbacks_draggable(app):
         # logger.debug("CTX states: {}".format(ctx.states))
         # logger.debug("CTX states_list: {}".format(ctx.states_list))
 
-        logger.info(f"Input draggable layouts: {input_draggable_layouts}")
-        logger.info(f"Draggable layout : {draggable_layouts}")
-        logger.info(f"Stored draggable layouts: {state_stored_draggable_layouts}")
-        logger.info(f"Stored draggable children: {state_stored_draggable_children}")
-        logger.info(f"Input stored draggable children: {input_stored_draggable_children}")
+        # logger.info(f"Input draggable layouts: {input_draggable_layouts}")
+        # logger.info(f"Draggable layout : {draggable_layouts}")
+        # logger.info(f"Stored draggable layouts: {state_stored_draggable_layouts}")
+        # logger.info(f"Stored draggable children: {state_stored_draggable_children}")
+        # logger.info(f"Input stored draggable children: {input_stored_draggable_children}")
 
         # Extract dashboard_id from the pathname
         dashboard_id = pathname.split("/")[-1]
@@ -431,7 +431,7 @@ def register_callbacks_draggable(app):
                     f"Initializing layouts from stored layouts for dashboard {dashboard_id}"
                 )
                 draggable_layouts = state_stored_draggable_layouts[dashboard_id]
-                logger.info(f"Updated draggable layouts: {draggable_layouts}")
+                # logger.info(f"Updated draggable layouts: {draggable_layouts}")
 
         if isinstance(ctx.triggered_id, dict):
             triggered_input = ctx.triggered_id["type"]
@@ -501,20 +501,20 @@ def register_callbacks_draggable(app):
                     child_type, draggable_layouts, child_id, len(draggable_children)
                 )
 
-                logger.info(f"Required breakpoints: {required_breakpoints}")
-                logger.info(f"Draggable layouts: {draggable_layouts}")
+                # logger.info(f"Required breakpoints: {required_breakpoints}")
+                # logger.info(f"Draggable layouts: {draggable_layouts}")
                 for key in required_breakpoints:
-                    logger.info(f"Key: {key}")
+                    # logger.info(f"Key: {key}")
                     if key not in draggable_layouts:
-                        logger.info(f"Key not in draggable layouts: {key}")
+                        # logger.info(f"Key not in draggable layouts: {key}")
                         draggable_layouts[key] = []
                     draggable_layouts[key].append(new_layout_item)
-                    logger.info(f"New layout item: {new_layout_item}")
-                logger.info(f"New draggable layouts: {draggable_layouts}")
+                    # logger.info(f"New layout item: {new_layout_item}")
+                # logger.info(f"New draggable layouts: {draggable_layouts}")
                 state_stored_draggable_layouts[dashboard_id] = draggable_layouts
-                logger.info(f"State stored draggable layouts: {state_stored_draggable_layouts}")
+                # logger.info(f"State stored draggable layouts: {state_stored_draggable_layouts}")
 
-                logger.info(f"New draggable children: {draggable_children}")
+                # logger.info(f"New draggable children: {draggable_children}")
                 return (
                     draggable_children,
                     draggable_layouts,
@@ -528,9 +528,9 @@ def register_callbacks_draggable(app):
                 logger.info("Draggable callback triggered")
                 ctx_triggered_props_id = ctx.triggered_prop_ids
 
-                logger.info(f"CTX triggered props id: {ctx_triggered_props_id}")
-                logger.info(f"Draggable layouts: {input_draggable_layouts}")
-                logger.info(f"State stored draggable layouts: {state_stored_draggable_layouts}")
+                # logger.info(f"CTX triggered props id: {ctx_triggered_props_id}")
+                # logger.info(f"Draggable layouts: {input_draggable_layouts}")
+                # logger.info(f"State stored draggable layouts: {state_stored_draggable_layouts}")
 
                 if "draggable.layouts" in ctx_triggered_props_id:
                     new_layouts = input_draggable_layouts
@@ -657,8 +657,8 @@ def register_callbacks_draggable(app):
                         for metadata in stored_metadata:
                             if metadata["index"] == ctx_triggered_prop_id_index:
                                 metadata["filter_applied"] = False
-                        logger.info(f"Stored metadata: {stored_metadata}")
-                        logger.info(f"Interactive components dict: {interactive_components_dict}")
+                        # logger.info(f"Stored metadata: {stored_metadata}")
+                        # logger.info(f"Interactive components dict: {interactive_components_dict}")
 
                         new_children = update_interactive_component(
                             stored_metadata,
@@ -747,9 +747,9 @@ def register_callbacks_draggable(app):
                 # logger.info("Current draggable children: {}".format(draggable_children))
                 logger.info(f"Len Current draggable children: {len(draggable_children)}")
                 for child, child_metadata in zip(draggable_children, stored_metadata):
-                    logger.info(f"Child: {child}")
-                    logger.info("Child props: {}".format(child["props"]))
-                    logger.info("Child props children: {}".format(child["props"]["children"]))
+                    # logger.info(f"Child: {child}")
+                    # logger.info("Child props: {}".format(child["props"]))
+                    # logger.info("Child props children: {}".format(child["props"]["children"]))
                     if type(child["props"]["children"]) is dict:
                         child = enable_box_edit_mode(
                             child["props"]["children"]["props"]["children"][-1],
@@ -775,9 +775,9 @@ def register_callbacks_draggable(app):
                 # return new_children, dash.no_update, state_stored_draggable_children, dash.no_update
 
             elif triggered_input == "stored-draggable-layouts":
-                logger.info("Stored draggable layouts triggered")
-                logger.info(f"Input draggable layouts: {input_draggable_layouts}")
-                logger.info(f"State stored draggable layouts: {state_stored_draggable_layouts}")
+                # logger.info("Stored draggable layouts triggered")
+                # logger.info(f"Input draggable layouts: {input_draggable_layouts}")
+                # logger.info(f"State stored draggable layouts: {state_stored_draggable_layouts}")
 
                 if state_stored_draggable_layouts:
                     if dashboard_id in state_stored_draggable_layouts:
@@ -913,9 +913,9 @@ def register_callbacks_draggable(app):
                             updated_children.append(child)
 
                     for bp in required_breakpoints:
-                        logger.info(f"BP: {bp}")
+                        # logger.info(f"BP: {bp}")
                         for layout in draggable_layouts[bp]:
-                            logger.info(f"Layout: {layout}")
+                            # logger.info(f"Layout: {layout}")
                             if layout["i"] == f"box-{parent_index}":
                                 layout["i"] = f"box-{index}"
                                 break
@@ -1004,9 +1004,9 @@ def register_callbacks_draggable(app):
                 )
 
                 for key in required_breakpoints:
-                    logger.info(f"Key: {key}")
+                    # logger.info(f"Key: {key}")
                     draggable_layouts[key].append(new_layout)
-                    logger.info(f"New layout: {new_layout}")
+                    # logger.info(f"New layout: {new_layout}")
 
                 logger.info(
                     f"Duplicated component with new id 'box-{new_index}' and assigned layout {new_layout}"
@@ -1124,10 +1124,10 @@ def register_callbacks_draggable(app):
         initialized_add_button,
         # initialized_edit_button,
     ):
-        logger.info("\n\nTrigger modal")
-        logger.info(f"n_clicks: {add_button_nclicks}")
-        logger.info(f"stored_add_button: {stored_add_button}")
-        logger.info(f"initialized_add_button: {initialized_add_button}")
+        # logger.info("\n\nTrigger modal")
+        # logger.info(f"n_clicks: {add_button_nclicks}")
+        # logger.info(f"stored_add_button: {stored_add_button}")
+        # logger.info(f"initialized_add_button: {initialized_add_button}")
         # logger.info(f"edit_button_nclicks: {edit_button_nclicks}")
         # logger.info(f"initialized_edit_button: {initialized_edit_button}")
 
@@ -1206,12 +1206,12 @@ def register_callbacks_draggable(app):
 
         # Ensure that the lengths of interactive_values, ids, and stored_metadata match
         if not (len(interactive_values) == len(ids) == len(stored_metadata_interactive)):
-            logger.info(f"Interactive values: {interactive_values}")
-            logger.info(f"Interactive ids: {ids}")
-            logger.info(f"Stored metadata: {stored_metadata_interactive}")
-            logger.info(
-                f"Lengths of interactive_values : {len(interactive_values)}, ids: {len(ids)}, stored_metadata: {len(stored_metadata_interactive)}"
-            )
+            # logger.info(f"Interactive values: {interactive_values}")
+            # logger.info(f"Interactive ids: {ids}")
+            # logger.info(f"Stored metadata: {stored_metadata_interactive}")
+            # logger.info(
+            #     f"Lengths of interactive_values : {len(interactive_values)}, ids: {len(ids)}, stored_metadata: {len(stored_metadata_interactive)}"
+            # )
             logger.error("Mismatch in lengths of interactive_values, ids, and stored_metadata.")
             raise dash.exceptions.PreventUpdate
 
@@ -1232,10 +1232,10 @@ def register_callbacks_draggable(app):
 def design_draggable(
     init_layout: dict, init_children: list[dict], dashboard_id: str, local_data: dict
 ):
-    logger.info("design_draggable - Initializing draggable layout")
-    logger.info(f"design_draggable - Dashboard ID: {dashboard_id}")
-    logger.info(f"design_draggable - Local data: {local_data}")
-    logger.info(f"design_draggable - Initial layout: {init_layout}")
+    # logger.info("design_draggable - Initializing draggable layout")
+    # logger.info(f"design_draggable - Dashboard ID: {dashboard_id}")
+    # logger.info(f"design_draggable - Local data: {local_data}")
+    # logger.info(f"design_draggable - Initial layout: {init_layout}")
 
     # Generate core layout based on data availability
 
@@ -1245,16 +1245,16 @@ def design_draggable(
         f"{API_BASE_URL}/depictio/api/v1/projects/get/from_dashboard_id/{dashboard_id}",
         headers={"Authorization": f"Bearer {TOKEN}"},
     ).json()
-    logger.info(f"design_draggable - Project: {project}")
+    # logger.info(f"design_draggable - Project: {project}")
     from depictio.models.models.projects import Project
 
     project = Project.from_mongo(project)
-    logger.info(f"design_draggable - Project: {project}")
+    # logger.info(f"design_draggable - Project: {project}")
     workflows = project.workflows
     delta_table_locations = []
     for wf in workflows:
         for dc in wf.data_collections:
-            print(dc)
+            # print(dc)
             # Check if deltatable exists
             response = httpx.get(
                 f"{API_BASE_URL}/depictio/api/v1/deltatables/get/{str(dc.id)}",
@@ -1268,12 +1268,12 @@ def design_draggable(
                 logger.error(
                     f"Error retrieving deltatable for data collection '{dc.id}': {response.text}"
                 )
-    logger.info(f"Delta table locations: {delta_table_locations}")
+    # logger.info(f"Delta table locations: {delta_table_locations}")
 
     if len(delta_table_locations) == 0:
         # When there are no workflows, log information and prepare a message
         # logger.info(f"init_children {init_children}")
-        logger.info(f"init_layout {init_layout}")
+        # logger.info(f"init_layout {init_layout}")
         # message = html.Div(["No workflows available."])
         message = html.Div(
             [
@@ -1305,14 +1305,14 @@ def design_draggable(
         display_style = "flex"  # Show the draggable layout
         core_children = []
 
-    logger.info(f"Init layout: {init_layout}")
+    # logger.info(f"Init layout: {init_layout}")
 
     # Ensure init_layout has the required breakpoints
     if init_layout:
         for key in required_breakpoints:
             if key not in init_layout:
                 init_layout[key] = []
-        logger.info(f"Initialized layout with required breakpoints: {init_layout}")
+        # logger.info(f"Initialized layout with required breakpoints: {init_layout}")
 
     # Create the draggable layout outside of the if-else to keep it in the DOM
     draggable = dash_draggable.ResponsiveGridLayout(

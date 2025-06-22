@@ -133,16 +133,16 @@ def build_figure(**kwargs):
     TOKEN = kwargs.get("access_token")
     filter_applied = kwargs.get("filter_applied", False)
 
-    selected_point = kwargs.get("selected_point")  # New parameter for selected point
+    # selected_point = kwargs.get("selected_point")  # New parameter for selected point
 
     logger.info(f"Building figure with index {index}")
-    logger.info(f"Dict kwargs: {dict_kwargs}")
-    logger.info(f"Visu type: {visu_type}")
-    logger.info(f"WF ID: {wf_id}")
-    logger.info(f"DC ID: {dc_id}")
-    logger.info(f"DC config: {dc_config}")
-    logger.info(f"Build frame: {build_frame}")
-    logger.info(f"Selected Point: {selected_point}")
+    # logger.info(f"Dict kwargs: {dict_kwargs}")
+    # logger.info(f"Visu type: {visu_type}")
+    # logger.info(f"WF ID: {wf_id}")
+    # logger.info(f"DC ID: {dc_id}")
+    # logger.info(f"DC config: {dc_config}")
+    # logger.info(f"Build frame: {build_frame}")
+    # logger.info(f"Selected Point: {selected_point}")
 
     store_index = index.replace("-tmp", "")
 
@@ -203,8 +203,8 @@ def build_figure(**kwargs):
     if filter_applied:
         if visu_type.lower() == "scatter":
             filter_badge_style = {"display": "block"}
-    logger.info(f"Filter applied: {filter_applied}")
-    logger.info(f"Filter badge style: {filter_badge_style}")
+    logger.debug(f"Filter applied: {filter_applied}")
+    logger.debug(f"Filter badge style: {filter_badge_style}")
 
     filter_badge = dmc.Tooltip(
         children=dmc.Badge(

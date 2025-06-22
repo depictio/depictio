@@ -5,7 +5,6 @@ from pydantic import BaseModel, EmailStr, Field, field_serializer, field_validat
 
 # from depictio.models.models.s3 import S3DepictioCLIConfig
 from depictio.api.v1.configs.settings_models import S3DepictioCLIConfig
-from depictio.models.logging import logger
 from depictio.models.models.base import MongoModel, PyObjectId
 
 
@@ -252,9 +251,9 @@ class Permission(BaseModel):
             raise ValueError(f"Expected a list, got {type(v)}")
 
         result = []
-        logger.debug(f"Converting list to UserBase: {v}")
+        # logger.debug(f"Converting list to UserBase: {v}")
         for item in v:
-            logger.debug(f"Converting {item} to UserBase")
+            # logger.debug(f"Converting {item} to UserBase")
             if isinstance(item, dict):
                 # keep only id, email, is_admin, groups
                 item = {
@@ -262,7 +261,7 @@ class Permission(BaseModel):
                     for key, value in item.items()
                     if key in ["id", "_id", "email", "is_admin", "groups"]
                 }
-                logger.debug(f"Filtered dictionary: {item}")
+                # logger.debug(f"Filtered dictionary: {item}")
 
                 result.append(UserBase.from_mongo(item))  # Convert dict to UserBase
             elif isinstance(item, str) and item == "*":
@@ -273,7 +272,7 @@ class Permission(BaseModel):
                 raise ValueError(
                     "Owners, editors, and viewers must be UserBase instances or valid types"
                 )
-        logger.debug(f"Converted list to UserBase: {result}")
+        # logger.debug(f"Converted list to UserBase: {result}")
         return result
 
     # Step 2: Validate permissions after field-level validation
@@ -282,9 +281,9 @@ class Permission(BaseModel):
         owners = values.owners
         editors = values.editors
         viewers = values.viewers
-        logger.debug(f"Owners: {owners}")
-        logger.debug(f"Editors: {editors}")
-        logger.debug(f"Viewers: {viewers}")
+        # logger.debug(f"Owners: {owners}")
+        # logger.debug(f"Editors: {editors}")
+        # logger.debug(f"Viewers: {viewers}")
 
         owner_ids = {owner.id for owner in owners}
         editor_ids = {editor.id for editor in editors if isinstance(editor, UserBase)}
