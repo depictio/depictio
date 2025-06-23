@@ -18,12 +18,12 @@ def add_filter(
     min_value=None,
     max_value=None,
 ):
-    logger.info(f"filter_list: {filter_list}")
-    logger.info(f"interactive_component_type: {interactive_component_type}")
-    logger.info(f"column_name: {column_name}")
-    logger.info(f"value: {value}")
-    logger.info(f"min_value: {min_value}")
-    logger.info(f"max_value: {max_value}")
+    # logger.debug(f"filter_list: {filter_list}")
+    # logger.info(f"interactive_component_type: {interactive_component_type}")
+    # logger.info(f"column_name: {column_name}")
+    # logger.info(f"value: {value}")
+    # logger.info(f"min_value: {min_value}")
+    # logger.info(f"max_value: {max_value}")
 
     if interactive_component_type in ["Select", "MultiSelect", "SegmentedControl"]:
         if value:

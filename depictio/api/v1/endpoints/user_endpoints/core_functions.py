@@ -108,7 +108,7 @@ async def _check_if_token_is_valid(token: TokenBase) -> dict:
             "action": str  # "valid", "refresh", "logout"
         }
     """
-    logger.debug(f"Checking token: {token.access_token[:20]}...")
+    logger.debug(f"Checking token: {token.access_token[:10]}...")
 
     # Find token document in database
     token_doc = await TokenBeanie.find_one(

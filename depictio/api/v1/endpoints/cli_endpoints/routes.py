@@ -12,7 +12,7 @@ cli_endpoint_router = APIRouter()
 
 @cli_endpoint_router.post("/validate_cli_config", response_model=BaseApiResponse)
 async def validate_cli_config_endpoint(cli_config: CLIConfig):
-    logger.info(f"CLI config: {cli_config}")
+    # logger.info(f"CLI config: {cli_config}")
 
     token = cli_config.user.token
 
@@ -33,7 +33,7 @@ async def validate_cli_config_endpoint(cli_config: CLIConfig):
     if not user:
         logger.error("User not found.")
         return {"success": False, "message": "User not found."}
-    logger.info(f"User check: {user}")
+    # logger.info(f"User check: {user}")
 
     return {"success": True, "message": "CLI config is valid."}
 

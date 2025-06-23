@@ -370,8 +370,8 @@ def update_interactive_component(
             # logger.info(f"GRAPH COMPONENT - {component}")
 
             child = helpers_mapping[component["component_type"]](**component)
-            if component["component_type"] == "card":
-                logger.info(f"Card CHILD - {child}")
+            # if component["component_type"] == "card":
+            #     logger.debug(f"Card CHILD - {child}")
             child = enable_box_edit_mode(
                 child.to_plotly_json(),
                 switch_state=switch_state,
@@ -388,7 +388,7 @@ def update_interactive_component(
 
             child = helpers_mapping[component["component_type"]](**component)
 
-            logger.info(f"JBROWSE CHILD - {child}")
+            logger.debug(f"JBROWSE CHILD - {child}")
 
             child = enable_box_edit_mode(
                 child.to_plotly_json(),
@@ -397,8 +397,8 @@ def update_interactive_component(
                 TOKEN=TOKEN,
             )
             children.append(child)
-        logger.info(f"ITERATIVE - len(children) - {len(children)}")
+        # logger.info(f"ITERATIVE - len(children) - {len(children)}")
 
-    logger.info(f"Len children - {len(children)}")
+    # logger.info(f"Len children - {len(children)}")
     # logger.info(f"Children - {children}")
     return children
