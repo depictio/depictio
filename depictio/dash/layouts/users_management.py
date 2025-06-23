@@ -40,35 +40,35 @@ def render_login_form():
                 id="register-email",
                 placeholder="Enter your email",
                 style={"width": "100%", "display": "none"},
-                debounce=500,  # Add debounce to avoid too many requests
+                # debounce=500,  # Add debounce to avoid too many requests
             ),
             dmc.PasswordInput(
                 label="Password:",
                 id="register-password",
                 placeholder="Enter your password",
                 style={"width": "100%", "display": "none"},
-                debounce=500,  # Add debounce to avoid too many requests
+                # debounce=500,  # Add debounce to avoid too many requests
             ),
             dmc.TextInput(
                 label="Email:",
                 id="login-email",
                 placeholder="Enter your email",
                 style={"width": "100%"},
-                debounce=500,  # Add debounce to avoid too many requests
+                # debounce=500,  # Add debounce to avoid too many requests
             ),
             dmc.PasswordInput(
                 label="Password:",
                 id="login-password",
                 placeholder="Enter your password",
                 style={"width": "100%"},
-                debounce=500,  # Add debounce to avoid too many requests
+                # debounce=500,  # Add debounce to avoid too many requests
             ),
             dmc.PasswordInput(
                 label="Confirm Password:",
                 id="register-confirm-password",
                 placeholder="Confirm your password",
                 style={"width": "100%", "display": "none"},
-                debounce=500,  # Add debounce to avoid too many requests
+                # debounce=500,  # Add debounce to avoid too many requests
             ),
             html.Div(id="user-feedback"),
             dmc.Space(h=20),

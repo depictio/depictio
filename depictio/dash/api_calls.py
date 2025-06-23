@@ -131,6 +131,7 @@ def api_call_fetch_user_from_email(email: EmailStr) -> User | None:
         Optional[User]: The user if found, None otherwise
     """
     logger.debug(f"Fetching user with email: {email}")
+    logger.debug(f"API internal key: {settings.auth.internal_api_key}")
 
     response = httpx.get(
         f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_email",
