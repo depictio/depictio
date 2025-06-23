@@ -181,12 +181,12 @@ async def upsert_deltatable(
 
 
 @deltatables_endpoint_router.get("/get/{data_collection_id}")
-async def list_registered_files(
+async def get_deltatable(
     data_collection_id: PyObjectId,
     current_user: str = Depends(get_current_user),
 ):
     """
-    Fetch all files registered from a Data Collection registered into a workflow.
+    Fetch a DeltaTableAggregated object by data collection ID.
     """
 
     # Query to find deltatable associated with the data collection
