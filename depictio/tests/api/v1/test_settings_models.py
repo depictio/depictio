@@ -339,7 +339,7 @@ class TestAuthConfig:
             assert config.keys_dir == Path("depictio/keys")
             assert config.keys_algorithm == "RS256"
             assert config.cli_config_dir == Path("depictio/.depictio")
-            assert config.internal_api_key != ""
+            assert config.internal_api_key is None
 
     def test_custom_values(self):
         """Test Auth with custom values."""

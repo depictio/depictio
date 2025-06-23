@@ -52,7 +52,7 @@ async def _async_fetch_user_from_token(token: str) -> UserBeanie | None:
 
     # Fetch linked documents if needed
     # await user.fetch_all_links()
-    logger.debug(f"User fetched from token: {user.email}")
+    # logger.debug(f"User fetched from token: {user.id}")
 
     return user
 

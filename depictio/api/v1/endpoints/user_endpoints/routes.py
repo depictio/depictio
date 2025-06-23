@@ -70,7 +70,10 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> Use
         raise HTTPException(status_code=401, detail="Invalid token")
 
     user = await _async_fetch_user_from_token(token)
-    logger.debug(f"User: {user.email if user else 'None'}")
+    if user:
+        logger.debug(f"User: {user.email if 'email' in user else 'No email found'}")
+    else:
+        logger.error("User not found for the provided token")
 
     if user is None:
         raise HTTPException(status_code=401, detail="Invalid token")

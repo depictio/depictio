@@ -177,9 +177,9 @@ class AuthConfig(BaseSettings):
     keys_dir: Path = Field(default=Path("./depictio/keys"))
     keys_algorithm: str = Field(default="RS256")
     cli_config_dir: Path = Field(default=Path("./depictio/.depictio"))
-    internal_api_key_env: Optional[str] = Field(default=None, env="DEPICTIO_AUTH_INTERNAL_API_KEY")
+    internal_api_key: Optional[str] = Field(default=None)
 
-    model_config = SettingsConfigDict(env_prefix="DEPICTIO_AUTH_")
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_AUTH_", case_sensitive=False)
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -187,7 +187,7 @@ class AuthConfig(BaseSettings):
 
     @computed_field
     @property
-    def internal_api_key(self) -> str:
+    def computed_internal_api_key(self) -> str:
         """
         Automatically generate and manage internal API key for container communication.
 
@@ -202,30 +202,30 @@ class AuthConfig(BaseSettings):
         5. Fallback to default (should not happen in normal operation)
         """
         context = os.getenv("DEPICTIO_CONTEXT", "server")
-        print(f"[DEBUG] AuthConfig.internal_api_key called from context: {context}")
+        # print(f"[DEBUG] AuthConfig.internal_api_key called from context: {context}")
 
         # 1. Use environment variable if provided (highest priority)
-        if self.internal_api_key_env:
-            print("[DEBUG] Using internal API key from environment variable")
-            return self.internal_api_key_env
+        if self.internal_api_key:
+            # print("[DEBUG] Using internal API key from environment variable")
+            return self.internal_api_key
 
         # 2. Return cached key if available
         if self._cached_key:
-            print("[DEBUG] Using cached internal API key")
+            # print("[DEBUG] Using cached internal API key")
             return self._cached_key
 
         # 3. Check for existing key file in shared volume
         key_file = self.keys_dir / "internal_api_key.txt"
-        print(f"[DEBUG] Checking for key file at: {key_file}")
+        # print(f"[DEBUG] Checking for key file at: {key_file}")
 
         if key_file.exists():
-            print("[DEBUG] Key file exists, attempting to read...")
+            # print("[DEBUG] Key file exists, attempting to read...")
             try:
                 with open(key_file, "r") as f:
                     existing_key = f.read().strip()
                 if existing_key:
-                    print(f"[DEBUG] Successfully read key from file (length: {len(existing_key)})")
-                    print(f"[DEBUG - WARNING TO REMOVE] Internal API key found: {existing_key}")
+                    # print(f"[DEBUG] Successfully read key from file (length: {len(existing_key)})")
+                    # print(f"[DEBUG - WARNING TO REMOVE] Internal API key found: {existing_key}")
                     # Cache the key for future calls
                     self._cached_key = existing_key
                     return existing_key
@@ -237,29 +237,29 @@ class AuthConfig(BaseSettings):
             print("[DEBUG] Key file does not exist")
 
         # 4. Generate new key (should only happen on backend/first startup)
-        print(f"[DEBUG] Context is {context}, checking if should generate key...")
+        # print(f"[DEBUG] Context is {context}, checking if should generate key...")
 
         if context in ["server", "API"]:  # Backend should generate the key
-            print("[DEBUG] Backend context detected, attempting to generate new key...")
+            # print("[DEBUG] Backend context detected, attempting to generate new key...")
             try:
                 # Ensure keys directory exists
-                print(f"[DEBUG] Creating keys directory at: {self.keys_dir}")
+                # print(f"[DEBUG] Creating keys directory at: {self.keys_dir}")
                 self.keys_dir.mkdir(parents=True, exist_ok=True)
 
                 # Generate a secure random key
                 new_key = secrets.token_urlsafe(32)  # 256-bit key, URL-safe
-                print(f"[DEBUG] Generated new key (length: {len(new_key)})")
+                # print(f"[DEBUG] Generated new key (length: {len(new_key)})")
 
                 # Save to shared file for frontend to read
-                print(f"[DEBUG] Saving key to file: {key_file}")
+                # print(f"[DEBUG] Saving key to file: {key_file}")
                 with open(key_file, "w") as f:
                     f.write(new_key)
 
                 # Set appropriate permissions (readable by container user)
                 os.chmod(key_file, 0o644)
-                print("[DEBUG] Set file permissions to 644")
+                # print("[DEBUG] Set file permissions to 644")
 
-                print(f"[DEBUG] Generated new internal API key and saved to {key_file}")
+                # print(f"[DEBUG] Generated new internal API key and saved to {key_file}")
 
                 # Cache the key for future calls
                 self._cached_key = new_key
