@@ -13,7 +13,7 @@ class TokenData(BaseModel):
     token_lifetime: str = Field(
         default="short-lived",
         description="Lifetime of the token",
-        pattern="^(short-lived|long-lived)$",
+        pattern="^(short-lived|long-lived|permanent)$",
     )
     token_type: str = Field(
         default="bearer",
@@ -35,7 +35,7 @@ class TokenData(BaseModel):
         """
         Validate token lifetime value.
         """
-        allowed_lifetimes = ["short-lived", "long-lived"]
+        allowed_lifetimes = ["short-lived", "long-lived", "permanent"]
         if v not in allowed_lifetimes:
             raise ValueError(f"Token lifetime must be one of {allowed_lifetimes}")
         return v
@@ -73,7 +73,7 @@ class Token(TokenData):
         """
         Validate that expiration datetime is in the future.
         """
-        if v <= datetime.now():
+        if v != datetime.max and v <= datetime.now():
             raise ValueError("Expiration datetime must be in the future")
         return v
 
@@ -157,6 +157,7 @@ class Group(MongoModel):
 class UserBase(MongoModel):
     email: EmailStr
     is_admin: bool = False
+    is_anonymous: bool = False
 
 
 class UserBaseCLIConfig(UserBase):
