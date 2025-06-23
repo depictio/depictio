@@ -26,7 +26,7 @@ services:
       - docker-compose/.env
     environment:
         DEV_MODE: "${DEV_MODE:-false}"
-        DEPICTIO_LOGGING_VERBOSITY_LEVEL: "DEBUG"
+        DEPICTIO_LOGGING_VERBOSITY_LEVEL: "${DEPICTIO_LOGGING_VERBOSITY_LEVEL:-DEBUG}"
     command: ["/app/run_dash.sh"]
     user: "${UID:-1000}:${GID:-1000}"
     depends_on:
@@ -50,7 +50,7 @@ services:
       - docker-compose/.env
     environment:
         DEV_MODE: "${DEV_MODE:-false}"
-        DEPICTIO_LOGGING_VERBOSITY_LEVEL: "DEBUG"
+        DEPICTIO_LOGGING_VERBOSITY_LEVEL: "${DEPICTIO_LOGGING_VERBOSITY_LEVEL:-DEBUG}"
     command: ["/app/run_fastapi.sh"]
     user: "${UID:-1000}:${GID:-1000}"
     depends_on:
