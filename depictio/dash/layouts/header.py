@@ -68,18 +68,20 @@ def register_callbacks_header(app):
         viewer_ids = [str(e["id"]) for e in data["permissions"]["viewers"] if e != "*"]
         is_viewer = str(current_user.id) in viewer_ids
         has_wildcard = "*" in data["permissions"]["viewers"]
-        viewer = is_viewer or has_wildcard
-        logger.debug(f"owner: {owner}, viewer: {viewer}")
+        is_public = data.get("is_public", False)
+        viewer = is_viewer or has_wildcard or is_public
+
+        logger.debug(f"owner: {owner}, viewer: {viewer}, is_public: {is_public}")
         logger.debug(f"switch_state: {switch_state}")
         logger.debug(f"current_user: {current_user}")
         logger.debug(f"viewer_ids: {viewer_ids}")
         logger.debug(f"has_wildcard: {has_wildcard}")
         logger.debug(f"is_viewer: {is_viewer}")
-        logger.debug(f"owner: {owner}")
-        logger.debug(f"viewer: {viewer}")
 
+        # If not owner (but has viewing access), disable all editing controls
         if not owner and viewer:
-            return [dash.no_update] * (len_output - 2) + [False] * 2
+            # Disable all editing buttons + disable draggable/resizable
+            return [True] * (len_output - 2) + [False] * 2
 
         # workflows = httpx.get(
         #     f"{API_BASE_URL}/depictio/api/v1/workflows/get_all_workflows",
@@ -201,8 +203,10 @@ def design_header(data, local_store):
     viewer_ids = [str(e["id"]) for e in data["permissions"]["viewers"] if e != "*"]
     is_viewer = str(current_user.id) in viewer_ids
     has_wildcard = "*" in data["permissions"]["viewers"]
-    viewer = is_viewer or has_wildcard
+    is_public = data.get("is_public", False)
+    viewer = is_viewer or has_wildcard or is_public
 
+    # If not owner (including public dashboard viewers), disable editing controls
     if not owner and viewer:
         disabled = True
         edit_dashboard_mode_button_checked = False
