@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 from typing import Any
 
 import httpx
@@ -20,6 +21,10 @@ is_testing = os.environ.get("DEV_MODE", "false").lower() == "true" or any(
 
 # Add a query parameter to API calls when in test mode to indicate test database should be used
 API_QUERY_PARAMS = {"test_mode": "true"} if is_testing else {}
+
+# Simple cache for user data to reduce redundant API calls
+_user_cache: dict[str, tuple[Any, float]] = {}
+_cache_timeout = 30  # seconds
 
 
 @validate_call(validate_return=True)
@@ -66,7 +71,7 @@ def api_call_register_user(
 def api_call_fetch_user_from_token(token: str) -> User | None:
     """
     Fetch a user from the authentication service using a token.
-    Synchronous version for Dash compatibility.
+    Synchronous version for Dash compatibility with caching to reduce redundant API calls.
 
     Args:
         token: The authentication token
@@ -74,6 +79,17 @@ def api_call_fetch_user_from_token(token: str) -> User | None:
     Returns:
         Optional[User]: The user if found, None otherwise
     """
+    # Check cache first
+    current_time = time.time()
+    cache_key = f"user_token_{token}"
+
+    if cache_key in _user_cache:
+        cached_data, cache_time = _user_cache[cache_key]
+        if current_time - cache_time < _cache_timeout:
+            logger.debug("Returning cached user data")
+            return cached_data
+
+    # Make API call if not cached or expired
     response = httpx.get(
         f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_token",
         params={"token": token},
@@ -84,14 +100,20 @@ def api_call_fetch_user_from_token(token: str) -> User | None:
         return None
 
     user_data = response.json()
-    logger.debug(f"User data fetched: {user_data.get('email', 'No email found')}")
+    logger.debug(f"User data fetched from API: {user_data.get('email', 'No email found')}")
 
     if not user_data:
         return None
 
     user = User(**user_data)
 
-    # logger.debug(f"User object created: {format_pydantic(user)}")
+    # Cache the result
+    _user_cache[cache_key] = (user, current_time)
+
+    # Clean old cache entries (simple cleanup)
+    if len(_user_cache) > 100:  # Prevent memory buildup
+        oldest_key = min(_user_cache.keys(), key=lambda k: _user_cache[k][1])
+        del _user_cache[oldest_key]
 
     return user
 
