@@ -22,6 +22,7 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     _create_user_in_db,
     _delete_token,
     _edit_password,
+    _get_anonymous_user_session,
     _hash_password,
     _list_tokens,
     _purge_expired_tokens,
@@ -86,8 +87,8 @@ async def get_user_or_anonymous(
     token: Annotated[str | None, Depends(oauth2_scheme)] = None,
 ) -> User:
     """Return the authenticated user or the anonymous user if unauthenticated mode is enabled."""
-    if settings.unauthenticated_mode:
-        anon = await UserBeanie.find_one({"email": settings.anonymous_user_email})
+    if settings.auth.unauthenticated_mode:
+        anon = await UserBeanie.find_one({"email": settings.auth.anonymous_user_email})
         if anon:
             return anon
     if token is None:
@@ -112,15 +113,15 @@ async def login(login_request: OAuth2PasswordRequestForm = Depends()):
     """
     logger.debug(f"Login attempt for user: {login_request.username}")
 
-    if settings.unauthenticated_mode:
-        anon = await UserBeanie.find_one({"email": settings.anonymous_user_email})
+    if settings.auth.unauthenticated_mode:
+        anon = await UserBeanie.find_one({"email": settings.auth.anonymous_user_email})
         token = await TokenBeanie.find_one({"user_id": anon.id, "token_lifetime": "permanent"})
         if not token:
             token = await _create_permanent_token(anon)
         return token
 
-    if settings.unauthenticated_mode:
-        anon = await UserBeanie.find_one({"email": settings.anonymous_user_email})
+    if settings.auth.unauthenticated_mode:
+        anon = await UserBeanie.find_one({"email": settings.auth.anonymous_user_email})
         token = await TokenBeanie.find_one({"user_id": anon.id, "token_lifetime": "permanent"})
         if not token:
             token = await _create_permanent_token(anon)
@@ -278,6 +279,30 @@ async def api_fetch_user_from_id(
     return user
 
 
+@auth_endpoint_router.get("/get_anonymous_user_session", include_in_schema=True)
+async def api_get_anonymous_user_session(
+    api_key: str = Header(..., description="Internal API key for authentication"),
+) -> dict:
+    """Get the anonymous user session data for unauthenticated mode."""
+    logger.debug("Fetching anonymous user session")
+
+    if api_key != settings.auth.internal_api_key:
+        logger.error("Invalid API key")
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid API key",
+        )
+
+    if not settings.auth.unauthenticated_mode:
+        raise HTTPException(
+            status_code=403,
+            detail="Anonymous user session only available in unauthenticated mode",
+        )
+
+    session_data = await _get_anonymous_user_session()
+    return session_data
+
+
 @auth_endpoint_router.post("/register")
 async def register(
     request: RequestUserRegistration,
@@ -292,7 +317,7 @@ async def register(
         Dictionary with user data, success status and message
     """
     logger.info(f"Registering user with email: {request.email}")
-    if settings.unauthenticated_mode:
+    if settings.auth.unauthenticated_mode:
         raise HTTPException(
             status_code=403,
             detail="User registration disabled in unauthenticated mode",
@@ -508,7 +533,7 @@ async def check_token_validity_endpoint(token: TokenBase):
 async def generate_agent_config_endpoint(
     token: TokenBeanie, current_user: UserBase = Depends(get_current_user)
 ) -> CLIConfig:
-    if settings.unauthenticated_mode:
+    if settings.auth.unauthenticated_mode:
         raise HTTPException(
             status_code=403,
             detail="CLI agent generation disabled in unauthenticated mode",

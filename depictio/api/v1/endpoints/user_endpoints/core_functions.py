@@ -34,11 +34,11 @@ async def _create_permanent_token(user: UserBeanie) -> TokenBeanie:
 
 async def _create_anonymous_user() -> UserBeanie:
     """Create the anonymous user if it does not exist."""
-    user = await UserBeanie.find_one({"email": settings.anonymous_user_email})
+    user = await UserBeanie.find_one({"email": settings.auth.anonymous_user_email})
     if user:
         return user
     payload = await _create_user_in_db(
-        email=settings.anonymous_user_email,
+        email=settings.auth.anonymous_user_email,
         password="",
         is_admin=False,
         is_anonymous=True,
@@ -221,10 +221,10 @@ async def _list_tokens(
     user_id: PydanticObjectId | None = None,
     token_lifetime: str | None = None,
 ) -> list[TokenBeanie]:
-    if token_lifetime not in ["short-lived", "long-lived", None]:
+    if token_lifetime not in ["short-lived", "long-lived", "permanent", None]:
         raise HTTPException(
             status_code=400,
-            detail="Invalid token_lifetime. Must be 'short-lived' or 'long-lived'.",
+            detail="Invalid token_lifetime. Must be 'short-lived', 'long-lived', or 'permanent'.",
         )
 
     query = {
@@ -239,6 +239,57 @@ async def _list_tokens(
     logger.debug(f"CLI configs nb: {len(cli_configs)}")
 
     return cli_configs
+
+
+@validate_call(validate_return=True)
+async def _get_anonymous_user_session() -> dict:
+    """
+    Fetch the anonymous user and their permanent token for frontend session.
+
+    Returns:
+        dict: Session data compatible with frontend authentication
+    """
+    # Find the anonymous user
+    anonymous_user = await UserBeanie.find_one({"email": settings.auth.anonymous_user_email})
+    if not anonymous_user:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Anonymous user not found: {settings.auth.anonymous_user_email}",
+        )
+
+    # Get the permanent token for the anonymous user
+    permanent_tokens = await _list_tokens(user_id=anonymous_user.id, token_lifetime="permanent")
+
+    if not permanent_tokens:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No permanent token found for anonymous user: {anonymous_user.email}",
+        )
+
+    # Use the first permanent token (there should only be one)
+    permanent_token = permanent_tokens[0]
+
+    # Convert to session data format expected by frontend
+    session_data = {
+        "logged_in": True,
+        "email": anonymous_user.email,
+        "user_id": str(anonymous_user.id),
+        "access_token": permanent_token.access_token,
+        "refresh_token": permanent_token.refresh_token,
+        "expire_datetime": permanent_token.expire_datetime.isoformat()
+        if permanent_token.expire_datetime
+        else "9999-12-31T23:59:59",
+        "refresh_expire_datetime": permanent_token.refresh_expire_datetime.isoformat()
+        if permanent_token.refresh_expire_datetime
+        else "9999-12-31T23:59:59",
+        "is_anonymous": True,
+        "name": permanent_token.name,
+        "token_lifetime": permanent_token.token_lifetime,
+        "token_type": permanent_token.token_type or "bearer",
+    }
+
+    logger.info(f"Retrieved anonymous user session for: {anonymous_user.email}")
+    return session_data
 
 
 @validate_call(validate_return=True)
