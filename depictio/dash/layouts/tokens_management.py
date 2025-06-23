@@ -7,7 +7,7 @@ from dash.exceptions import PreventUpdate
 from dash_extensions.enrich import Input, Output, State, html
 from dash_iconify import DashIconify
 
-from depictio.api.v1.configs.logging_init import format_pydantic, logger
+from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import (
     api_call_create_token,
     api_call_delete_token,
@@ -84,7 +84,7 @@ def render_tokens_list(tokens):
     # If we have tokens, render a nicer looking list
     token_items = []
     for token in tokens:
-        logger.info(f"Token: {token}")
+        # logger.info(f"Token: {token}")
 
         # Format expiration date nicer
         expiration = token["expire_datetime"]
@@ -403,8 +403,8 @@ def register_tokens_management_callbacks(app):
         prevent_initial_call=True,
     )
     def copy_config(n_clicks, content):
-        logger.info(f"Copying config to clipboard: {n_clicks}")
-        logger.info(f"Content: {content}")
+        # logger.info(f"Copying config to clipboard: {n_clicks}")
+        # logger.info(f"Content: {content}")
         if n_clicks:
             # Copy the content to the clipboard
             return content
@@ -445,6 +445,7 @@ def register_tokens_management_callbacks(app):
         local_store,
         delete_token_id,
     ):
+        logger.info("Handling token management callbacks")
         triggered = ctx.triggered_id
 
         if not local_store:
@@ -455,9 +456,9 @@ def register_tokens_management_callbacks(app):
         tokens = api_call_list_tokens(
             current_token=local_store["access_token"], token_lifetime="long-lived"
         )
-        logger.info(f"tokens: {tokens}")
-        logger.info(f"triggered: {triggered}")
-        logger.info(f"local_store: {local_store}")
+        # logger.info(f"tokens: {tokens}")
+        # logger.info(f"triggered: {triggered}")
+        # logger.info(f"local_store: {local_store}")
         delete_token_id = delete_token_id or {}
 
         if triggered == "add-token-button" and add_clicks > 0:
@@ -525,10 +526,10 @@ def register_tokens_management_callbacks(app):
                 "token_type": "bearer",
                 "sub": user.id,  # Explicitly pass the user ID
             }
-            logger.debug(f"Token data dict: {_token_data_dict}")
+            # logger.debug(f"Token data dict: {_token_data_dict}")
             token_data = TokenData(**_token_data_dict)
-            logger.debug(f"Token data: {format_pydantic(token_data)}")
-            logger.debug(token_data.model_dump())
+            # logger.debug(f"Token data: {format_pydantic(token_data)}")
+            # logger.debug(token_data.model_dump())
             token_generated = api_call_create_token(token_data=token_data)
 
             if not token_generated:
@@ -555,13 +556,13 @@ def register_tokens_management_callbacks(app):
                     "",
                 )
 
-            logger.info(f"Token generated: {token_generated}")
+            # logger.info(f"Token generated: {token_generated}")
             token_generated = TokenBase(**token_generated)
-            logger.info(f"Token generated: {format_pydantic(token_generated)}")
+            # logger.info(f"Token generated: {format_pydantic(token_generated)}")
             agent_config = api_call_generate_agent_config(
                 token=token_generated, current_token=local_store["access_token"]
             )
-            logger.info(f"Config: {agent_config}")
+            # logger.info(f"Config: {agent_config}")
 
             tokens = api_call_list_tokens(
                 current_token=local_store["access_token"], token_lifetime="long-lived"
@@ -569,12 +570,12 @@ def register_tokens_management_callbacks(app):
 
             # Format token data for display using dcc.Markdown, using YAML format
             agent_config = yaml.dump(agent_config, default_flow_style=False)
-            logger.info(f"Token data: {token_data}")
+            # logger.info(f"Token data: {token_data}")
 
             # Add extra formatting to color with YAML ('''...''') and add a copy button
             agent_config = f"""```yaml\n{agent_config}\n```"""
 
-            logger.info(f"Config: {agent_config}")
+            # logger.info(f"Config: {agent_config}")
 
             # Modified component definition
             div_agent_config = html.Div(
@@ -703,9 +704,9 @@ def register_tokens_management_callbacks(app):
             and delete_confirm_input == "delete"
         ):
             logger.info(f"Deleting config {delete_token_id}")
-            logger.info(f"tokens: {tokens}")
+            # logger.info(f"tokens: {tokens}")
             if delete_token_id in [str(t["_id"]) for t in tokens]:
-                logger.info(f"Deleting token {delete_token_id}")
+                # logger.info(f"Deleting token {delete_token_id}")
                 api_call_delete_token(token_id=delete_token_id)
                 tokens = [e for e in tokens if str(e["_id"]) != delete_token_id]
 
