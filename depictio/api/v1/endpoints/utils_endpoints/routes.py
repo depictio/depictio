@@ -60,12 +60,12 @@ async def drop_S3_content(current_user=Depends(get_current_user)):
     # List and delete all objects in the bucket
     objects_to_delete = s3_client.list_objects_v2(Bucket=bucket_name)
     while objects_to_delete.get("Contents"):
-        print(f"Deleting {len(objects_to_delete['Contents'])} objects...")
+        logger.info(f"Deleting {len(objects_to_delete['Contents'])} objects...")
         delete_keys = [{"Key": obj["Key"]} for obj in objects_to_delete["Contents"]]
         s3_client.delete_objects(Bucket=bucket_name, Delete={"Objects": delete_keys})
         objects_to_delete = s3_client.list_objects_v2(Bucket=bucket_name)
 
-    print("All objects deleted from the bucket.")
+    logger.info("All objects deleted from the bucket.")
 
     # FIXME: remove this - only for testing purposes
     # Delete directory content directly from the file system

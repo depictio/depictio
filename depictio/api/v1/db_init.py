@@ -52,7 +52,10 @@ async def create_initial_project(admin_user: UserBeanie, token_payload: TokenBea
 
         logger.debug(f"Project creation payload: {payload}")
         if payload["success"]:
-            logger.info(f"Project created successfully: {format_pydantic(payload['project'])}")
+            project_name = (
+                payload["project"].name if hasattr(payload["project"], "name") else "unknown"
+            )
+            logger.info(f"Project created successfully: {project_name}")
             return {
                 "success": True,
                 "project": payload["project"],
@@ -118,7 +121,7 @@ async def initialize_db(wipe: bool = False) -> UserBeanie | None:
     """
     Initialize the database with default users and groups. If wipe is True, the database will be wiped before initialization.
     """
-    logger.info(f"Bootstrap: {wipe} and type: {type(wipe)}")
+    logger.debug(f"Bootstrap: {wipe} and type: {type(wipe)}")
 
     _ensure_mongodb_connection()
 
@@ -160,12 +163,12 @@ async def initialize_db(wipe: bool = False) -> UserBeanie | None:
         if user_payload["success"]:
             token_payload = await create_default_token(user_payload["user"])
             if token_payload:
-                logger.info(f"Created token: {format_pydantic(token_payload['token'])}")
+                logger.info("Created default token")
 
             if user_payload["user"].is_admin:
                 admin_user = user_payload["user"]
                 logger.info(f"Admin user created: {admin_user.email}")
-                logger.info(f"Admin token created: {format_pydantic(token_payload)}")
+                logger.debug(f"Admin token created: {format_pydantic(token_payload)}")
         else:
             token_beanie = await TokenBeanie.find_one(
                 {"user_id": user_payload["user"].id, "name": "default_token"}
@@ -177,7 +180,7 @@ async def initialize_db(wipe: bool = False) -> UserBeanie | None:
                     "config_path": None,
                     "new_token_created": False,
                 }
-                logger.info(f"Token payload: {format_pydantic(token_payload)}")
+                logger.debug(f"Token payload: {format_pydantic(token_payload)}")
                 logger.info(f"Default token already exists for {user_payload['user'].email}")
             else:
                 logger.warning(f"Failed to create default token for {user_payload['user'].email}")

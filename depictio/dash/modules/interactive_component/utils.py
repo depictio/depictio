@@ -81,7 +81,7 @@ def format_mark_label(value):
     Returns:
         str or None: Formatted label as a string, or None if formatting fails.
     """
-    logger.info(f"Formatting mark label for value '{value}'")
+    logger.debug(f"Formatting mark label for value '{value}'")
     try:
         if not isinstance(value, int | float):
             raise TypeError(f"Value {value} is not a number.")
@@ -94,7 +94,7 @@ def format_mark_label(value):
             label = f"{value:.2e}"
         else:
             label = f"{value:.2f}"
-        logger.info(f"Formatted label: {label}")
+        logger.debug(f"Formatted label: {label}")
         return label
     except Exception as e:
         logger.error(f"Error formatting mark label for value '{value}': {e}")
@@ -113,13 +113,13 @@ def generate_log_marks(min_val, max_val, data_min, data_max, tolerance=0.5):
         dict: A dictionary where keys are positions on the slider and values are formatted labels.
     """
     try:
-        logger.info(f"Generating log marks with min_val={min_val}, max_val={max_val}")
-        logger.info(f"Data min: {data_min}, Data max: {data_max}")
+        logger.debug(f"Generating log marks with min_val={min_val}, max_val={max_val}")
+        logger.debug(f"Data min: {data_min}, Data max: {data_max}")
 
         # Calculate the exponent range
         min_exp = math.floor(min_val)
         max_exp = math.ceil(max_val)
-        logger.info(f"Exponent range: {min_exp} to {max_exp}")
+        logger.debug(f"Exponent range: {min_exp} to {max_exp}")
 
         marks = {}
 
@@ -127,25 +127,25 @@ def generate_log_marks(min_val, max_val, data_min, data_max, tolerance=0.5):
         marks[np.log10(data_min)] = format_mark_label(data_min)
 
         for exp in range(min_exp, max_exp + 1):
-            logger.info(f"Processing exponent: {exp}")
+            logger.debug(f"Processing exponent: {exp}")
 
             # Calculate the original value at this exponent
             original_value = 10**exp
-            logger.info(f"Original value at 10^{exp}: {original_value}")
+            logger.debug(f"Original value at 10^{exp}: {original_value}")
 
             # Position on the slider (log-transformed space)
             pos = math.log10(original_value)
-            logger.info(f"Position on slider: {pos}")
+            logger.debug(f"Position on slider: {pos}")
 
             # Check if this mark is too close to data_min or data_max
             too_close_min = data_min >= original_value * (1 - tolerance)
-            logger.info(f"Too close to data_min: {too_close_min}")
-            logger.info(f"Data min: {data_min}")
-            logger.info(f"Original value * (1 - tolerance): {original_value * (1 - tolerance)}")
+            logger.debug(f"Too close to data_min: {too_close_min}")
+            logger.debug(f"Data min: {data_min}")
+            logger.debug(f"Original value * (1 - tolerance): {original_value * (1 - tolerance)}")
             too_close_max = data_max <= original_value * (1 + tolerance)
-            logger.info(f"Too close to data_max: {too_close_max}")
-            logger.info(f"Data max: {data_max}")
-            logger.info(f"Original value * (1 + tolerance): {original_value * (1 + tolerance)}")
+            logger.debug(f"Too close to data_max: {too_close_max}")
+            logger.debug(f"Data max: {data_max}")
+            logger.debug(f"Original value * (1 + tolerance): {original_value * (1 + tolerance)}")
 
             if too_close_min or too_close_max:
                 if too_close_max:
@@ -326,7 +326,7 @@ def build_interactive(**kwargs):
     stepper = kwargs.get("stepper", False)
     parent_index = kwargs.get("parent_index", None)
 
-    logger.info(f"Interactive - kwargs: {kwargs}")
+    # logger.info(f"Interactive - kwargs: {kwargs}")
 
     if stepper:
         value_div_type = "interactive-component-value-tmp"
@@ -393,14 +393,14 @@ def build_interactive(**kwargs):
 
     # If the aggregation value is TextInput
     elif interactive_component_type == "TextInput":
-        logger.info("TextInput")
-        logger.info(f"Value: {value}")
-        logger.info(f"Value type: {type(value)}")
+        logger.debug("TextInput")
+        logger.debug(f"Value: {value}")
+        logger.debug(f"Value type: {type(value)}")
         kwargs = {"persistence_type": "local"}
         if not value:
             value = ""
-        logger.info(f"Value: {value}")
-        logger.info(f"Value type: {type(value)}")
+        logger.debug(f"Value: {value}")
+        logger.debug(f"Value type: {type(value)}")
         kwargs.update({"value": value})
         interactive_component = func_name(
             placeholder="Your selected value",
@@ -596,8 +596,6 @@ def build_interactive(**kwargs):
         data=store_data,
         storage_type="memory",
     )
-
-    logger.info(f"Interactive - store_component: {store_component}")
 
     new_interactive_component = html.Div([card_title_h5, interactive_component, store_component])
 

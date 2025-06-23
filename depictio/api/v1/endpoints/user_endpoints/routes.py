@@ -8,7 +8,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import EmailStr
 
 from depictio.api.v1.configs.config import settings
-from depictio.api.v1.configs.logging_init import format_pydantic, logger
+from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import users_collection
 from depictio.api.v1.endpoints.user_endpoints.agent_config_utils import _generate_agent_config
 from depictio.api.v1.endpoints.user_endpoints.core_functions import (
@@ -70,7 +70,10 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> Use
         raise HTTPException(status_code=401, detail="Invalid token")
 
     user = await _async_fetch_user_from_token(token)
-    logger.debug(f"User: {user}")
+    if user:
+        logger.debug(f"User: {user.email if 'email' in user else 'No email found'}")
+    else:
+        logger.error("User not found for the provided token")
 
     if user is None:
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -93,7 +96,7 @@ async def login(login_request: OAuth2PasswordRequestForm = Depends()):
     Returns:
         _type_: _description_
     """
-    logger.info(f"Login attempt for user: {login_request.username}")
+    logger.debug(f"Login attempt for user: {login_request.username}")
 
     # Verify credentials
     _ = await _check_password(login_request.username, login_request.password)
@@ -116,7 +119,6 @@ async def login(login_request: OAuth2PasswordRequestForm = Depends()):
 
     # Generate and store token
     token = await _add_token(token_data)
-    logger.info(f"Token : {format_pydantic(token)}")
     if token is None:
         logger.error("Token with the same name already exists.")
         raise HTTPException(
@@ -126,29 +128,29 @@ async def login(login_request: OAuth2PasswordRequestForm = Depends()):
 
     # Set logged_in to True
     token.logged_in = True
+    logger.debug(f"User logged in: {user.email}")
 
     return token  # TokenBeanie
 
 
-@auth_endpoint_router.post("/create_token", include_in_schema=False)
+@auth_endpoint_router.post("/create_token", include_in_schema=True)
 async def create_token(
-    token: TokenData,
+    token_data: TokenData,
     api_key: str = Header(..., description="Internal API key for authentication"),
 ) -> TokenBeanie:
-    logger.info(f"API key: {api_key}")
-    logger.info(f"Token: {token}")
-    logger.info(f"Internal API key: {settings.auth.internal_api_key}")
+    logger.debug("Creating new token")
 
     if api_key != settings.auth.internal_api_key:
+        logger.error("Invalid API key")
         raise HTTPException(
             status_code=403,
             detail="Invalid API key",
         )
 
     # Generate and store token
-    token = await _add_token(token)
-    logger.info(f"Token : {format_pydantic(token)}")
+    token = await _add_token(token_data)
     if token is None:
+        logger.error("Failed to create token: Token with the same name already exists.")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Token with the same name already exists",
@@ -157,8 +159,20 @@ async def create_token(
     return token
 
 
-@auth_endpoint_router.post("/refresh_token")
-async def refresh_token_endpoint(request: dict):
+@auth_endpoint_router.post("/refresh_token", include_in_schema=True)
+async def refresh_token_endpoint(
+    request: dict,
+    api_key: str = Header(..., description="Internal API key for authentication"),
+):
+    logger.debug("Refreshing token")
+
+    if api_key != settings.auth.internal_api_key:
+        logger.error("Invalid API key")
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid API key",
+        )
+
     refresh_token = request.get("refresh_token")
 
     # Find token by refresh_token and check if not expired
@@ -188,30 +202,36 @@ async def refresh_token_endpoint(request: dict):
     return {"access_token": new_access_token, "expire_datetime": token_doc.expire_datetime}
 
 
-@auth_endpoint_router.get("/fetch_user/from_token")
-async def api_fetch_user_from_token(token: str, current_user=Depends(get_current_user)) -> User:
+@auth_endpoint_router.get("/fetch_user/from_token", include_in_schema=True)
+async def api_fetch_user_from_token(
+    token: str,
+    api_key: str = Header(..., description="Internal API key for authentication"),
+) -> User:
+    logger.debug("Fetching user from token")
+    if api_key != settings.auth.internal_api_key:
+        logger.error("Invalid API key")
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid API key",
+        )
+
     user = await _async_fetch_user_from_token(token)
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found for the provided token")
 
-    # if user id differs from current user id
-    if user.id != current_user.id:
-        raise HTTPException(status_code=403, detail="Token does not belong to the current user")
-
     return user
 
 
-@auth_endpoint_router.get("/fetch_user/from_email", include_in_schema=False)
+@auth_endpoint_router.get("/fetch_user/from_email", include_in_schema=True)
 async def api_fetch_user_from_email(
     email: EmailStr,
     api_key: str = Header(..., description="Internal API key for authentication"),
 ) -> User:
-    logger.info(f"API key: {api_key}")
-    logger.info(f"Email: {email}")
-    logger.info(f"Internal API key: {settings.auth.internal_api_key}")
+    logger.debug(f"Fetching user from email: {email}")
 
     if api_key != settings.auth.internal_api_key:
+        logger.error("Invalid API key")
         raise HTTPException(
             status_code=403,
             detail="Invalid API key",
@@ -225,18 +245,24 @@ async def api_fetch_user_from_email(
     return user
 
 
-@auth_endpoint_router.get("/fetch_user/from_id")
+@auth_endpoint_router.get("/fetch_user/from_id", include_in_schema=True)
 async def api_fetch_user_from_id(
-    user_id: PydanticObjectId, current_user=Depends(get_current_user)
+    user_id: PydanticObjectId,
+    api_key: str = Header(..., description="Internal API key for authentication"),
 ) -> User:
+    logger.debug(f"Fetching user from ID: {user_id}")
+
+    if api_key != settings.auth.internal_api_key:
+        logger.error("Invalid API key")
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid API key",
+        )
+
     user = await _async_fetch_user_from_id(user_id)
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found for the provided ID")
-
-    # if user id differs from current user id
-    if user.id != current_user.id:
-        raise HTTPException(status_code=403, detail="ID does not belong to the current user")
 
     return user
 
@@ -254,7 +280,7 @@ async def register(
     Returns:
         Dictionary with user data, success status and message
     """
-    logger.info(f"Registering user with email: {request.email}")
+    logger.debug(f"Registering user with email: {request.email}")
     try:
         return await _create_user_in_db(request.email, request.password, request.is_admin)
 
@@ -266,7 +292,7 @@ async def register(
         raise HTTPException(status_code=500, detail=f"Failed to create user: {str(e)}")
 
 
-@auth_endpoint_router.get("/get_all_groups")
+@auth_endpoint_router.get("/get_all_groups", include_in_schema=False)
 async def get_all_groups(current_user=Depends(get_current_user)):
     if not current_user:
         raise HTTPException(status_code=401, detail="Current user not found.")
@@ -279,7 +305,7 @@ async def get_all_groups(current_user=Depends(get_current_user)):
     return groups
 
 
-@auth_endpoint_router.get("/get_all_groups_including_users")
+@auth_endpoint_router.get("/get_all_groups_including_users", include_in_schema=False)
 async def get_all_groups_with_users(current_user=Depends(get_current_user)):
     if not current_user:
         raise HTTPException(status_code=401, detail="Current user not found.")
@@ -323,7 +349,7 @@ async def get_all_groups_with_users(current_user=Depends(get_current_user)):
     return groups
 
 
-@auth_endpoint_router.get("/get_users_group")
+@auth_endpoint_router.get("/get_users_group", include_in_schema=False)
 async def get_users_group():
     from depictio.api.v1.db import groups_collection
 
@@ -336,14 +362,14 @@ async def get_users_group():
     return groups[0]
 
 
-@auth_endpoint_router.post("/edit_password")
+@auth_endpoint_router.post("/edit_password", include_in_schema=True)
 async def edit_password(
     request: RequestEditPassword, current_user: UserBeanie = Depends(get_current_user)
 ) -> dict:
     """
     Endpoint to handle user password updates.
     """
-    logger.debug(f"User data: {current_user}")
+    logger.debug(f"Editing password for user: {current_user.email}")
 
     # Validate password change request
     if not _check_password(current_user.email, request.old_password):
@@ -367,7 +393,7 @@ async def edit_password(
         return {"success": False, "message": "Failed to update password"}
 
 
-@auth_endpoint_router.post("/delete_token", include_in_schema=False)
+@auth_endpoint_router.post("/delete_token", include_in_schema=True)
 async def delete_token(
     token_id: PydanticObjectId,
     api_key: str = Header(..., description="Internal API key for authentication"),
@@ -435,19 +461,10 @@ async def delete_token(
 #     return {"success": result.modified_count > 0}
 
 
-@auth_endpoint_router.post("/purge_expired_tokens", include_in_schema=False)
+@auth_endpoint_router.post("/purge_expired_tokens", include_in_schema=True)
 async def purge_expired_tokens_endpoint(
-    # api_key: str = Header(..., description="Internal API key for authentication"),
     current_user: UserBase = Depends(get_current_user),
 ):
-    # logger.debug(f"API key: {api_key}")
-    # logger.debug(f"Internal API key: {FASTAPI_INTERNAL_API_KEY}")
-    # if api_key != FASTAPI_INTERNAL_API_KEY:
-    #     raise HTTPException(
-    #         status_code=403,
-    #         detail="Invalid API key",
-    #     )
-
     result = await _purge_expired_tokens(current_user)
 
     if result["success"]:
@@ -457,10 +474,10 @@ async def purge_expired_tokens_endpoint(
 
 
 # Updated backend endpoint
-@auth_endpoint_router.post("/check_token_validity")
+@auth_endpoint_router.post("/check_token_validity", include_in_schema=True)
 async def check_token_validity_endpoint(token: TokenBase):
     validation_result = await _check_if_token_is_valid(token)
-    logger.info(f"Token validity check for {token.name}: {validation_result}")
+    logger.debug(f"Token validity check for {token.name}: {validation_result}")
 
     return {
         "success": validation_result["access_valid"],
@@ -469,18 +486,18 @@ async def check_token_validity_endpoint(token: TokenBase):
     }
 
 
-@auth_endpoint_router.post("/generate_agent_config", response_model=CLIConfig)
+@auth_endpoint_router.post(
+    "/generate_agent_config", response_model=CLIConfig, include_in_schema=True
+)
 async def generate_agent_config_endpoint(
     token: TokenBeanie, current_user: UserBase = Depends(get_current_user)
 ) -> CLIConfig:
-    logger.info(f"Token: {token}")
-    logger.info(f"Token: {format_pydantic(token)}")
     depictio_agent_config = await _generate_agent_config(user=current_user, token=token)
 
     return depictio_agent_config
 
 
-@auth_endpoint_router.get("/list_tokens", response_model=list[TokenBeanie])
+@auth_endpoint_router.get("/list_tokens", response_model=list[TokenBeanie], include_in_schema=True)
 async def list_tokens_(
     current_user: UserBase = Depends(get_current_user),
     token_lifetime: str | None = None,
@@ -492,7 +509,7 @@ async def list_tokens_(
     return cli_configs
 
 
-@auth_endpoint_router.get("/list", response_model=list[UserBaseUI])
+@auth_endpoint_router.get("/list", response_model=list[UserBaseUI], include_in_schema=True)
 async def list_users(current_user: UserBase = Depends(get_current_user)):
     users = await UserBeanie.find_all().to_list()
     logger.debug(f"Users: {users}")
@@ -500,7 +517,7 @@ async def list_users(current_user: UserBase = Depends(get_current_user)):
     return users
 
 
-@auth_endpoint_router.delete("/delete/{user_id}")
+@auth_endpoint_router.delete("/delete/{user_id}", include_in_schema=True)
 def delete_user(user_id: str, current_user=Depends(get_current_user)):
     if not current_user:
         raise HTTPException(status_code=401, detail="Current user not found.")
@@ -528,7 +545,7 @@ def delete_user(user_id: str, current_user=Depends(get_current_user)):
         return {"success": False}
 
 
-@auth_endpoint_router.post("/turn_sysadmin/{user_id}/{is_admin}")
+@auth_endpoint_router.post("/turn_sysadmin/{user_id}/{is_admin}", include_in_schema=True)
 def turn_sysadmin(user_id: str, is_admin: bool, current_user=Depends(get_current_user)):
     if not current_user:
         raise HTTPException(status_code=401, detail="Current user not found.")
@@ -556,7 +573,7 @@ def turn_sysadmin(user_id: str, is_admin: bool, current_user=Depends(get_current
         return {"success": False}
 
 
-@auth_endpoint_router.delete("/delete_group/{group_id}")
+@auth_endpoint_router.delete("/delete_group/{group_id}", include_in_schema=False)
 def delete_group(group_id: str, current_user=Depends(get_current_user)):
     if not current_user:
         raise HTTPException(status_code=401, detail="Current user not found.")
@@ -597,12 +614,12 @@ def update_group_in_users(group_id: str, request: dict, current_user=Depends(get
     if "users" not in request:
         raise HTTPException(status_code=400, detail="No users provided in request")
 
-    logger.info(f"Request: {request}")
+    logger.debug(f"Request: {request}")
 
     # Convert user dicts to UserBase objects
     users = [UserBase(**user) for user in request["users"]]
 
-    logger.info(f"Users: {users}")
+    logger.debug(f"Users: {users}")
 
     # Ensure group_id is an ObjectId
     group_id_obj = (
@@ -616,7 +633,7 @@ def update_group_in_users(group_id: str, request: dict, current_user=Depends(get
             else ObjectId(str(group_id))
         )
     )
-    logger.info(f"Group ID: {group_id_obj}")
+    logger.debug(f"Group ID: {group_id_obj}")
 
     response = update_group_in_users_helper(group_id_obj, users)
     return response

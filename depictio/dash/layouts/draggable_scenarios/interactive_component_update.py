@@ -70,7 +70,7 @@ def filter_data(new_df, n_dict):
     Filter the data based on the interactive component type and the selected value
     """
     pd.set_option("display.max_columns", None)
-    logger.info(f"n_dict - {n_dict}")
+    # logger.info(f"n_dict - {n_dict}")
 
     # Handles the case of the object type
     if n_dict["metadata"]["column_type"] == "object":
@@ -238,7 +238,7 @@ def update_interactive_component(
 ):
     children = list()
 
-    logger.info(f"interactive_components_dict - {interactive_components_dict}")
+    # logger.info(f"interactive_components_dict - {interactive_components_dict}")
 
     if not interactive_components_dict:
         for metadata in stored_metadata_raw:
@@ -256,13 +256,13 @@ def update_interactive_component(
 
         # stored_metadata = sorted(stored_metadata, key=lambda x: x["index"])
         # Filter stored_metadata based on the workflow id
-        logger.info(f"wf - {wf}")
-        logger.info(f"stored_metadata_raw - {stored_metadata_raw}")
+        # logger.info(f"wf - {wf}")
+        # logger.info(f"stored_metadata_raw - {stored_metadata_raw}")
         stored_metadata = [v for v in stored_metadata_raw if v["wf_id"] == wf]
-        stored_metadata_interactive_components = [
-            e for e in stored_metadata if e["component_type"] in ["interactive"]
-        ]
-        logger.info(f"stored_metadata - {stored_metadata}")
+        # stored_metadata_interactive_components = [
+        #     e for e in stored_metadata if e["component_type"] in ["interactive"]
+        # ]
+        # logger.info(f"stored_metadata - {stored_metadata}")
         # stored_metadata_table_components = [
         #     e
         #     for e in stored_metadata
@@ -278,20 +278,20 @@ def update_interactive_component(
 
         # Perform the joins
         for join_key_tuple, joins in joins_dict.items():
-            logger.info(f"Processing joins for: {join_key_tuple}")
-            logger.info(f"joins - {joins}")
-            logger.info(f"interactive_components_dict - {interactive_components_dict}")
-            logger.info(
-                f"stored_metadata_interactive_components - {stored_metadata_interactive_components}"
-            )
+            # logger.info(f"Processing joins for: {join_key_tuple}")
+            # logger.info(f"joins - {joins}")
+            # logger.info(f"interactive_components_dict - {interactive_components_dict}")
+            # logger.info(
+            #     f"stored_metadata_interactive_components - {stored_metadata_interactive_components}"
+            # )
             merged_df = iterative_join(
                 wf, {join_key_tuple: joins}, interactive_components_dict, TOKEN
             )
-            logger.info(f"merged_df - {merged_df}")
+            # logger.info(f"merged_df - {merged_df}")
             df_dict_processed[wf][join_key_tuple] = merged_df
         for e in stored_metadata:
             if e["component_type"] == "jbrowse":
-                logger.info(f"build_jbrowse_df_mapping_dict - access_token: {TOKEN}")
+                # logger.info(f"build_jbrowse_df_mapping_dict - access_token: {TOKEN}")
                 build_jbrowse_df_mapping_dict(
                     stored_metadata, df_dict_processed[wf], access_token=TOKEN
                 )
@@ -347,7 +347,7 @@ def update_interactive_component(
 
     #         logger.info(f"Interactive CHILD after update - {child}")
 
-    logger.info(f"df_dict_processed - {df_dict_processed}")
+    # logger.info(f"df_dict_processed - {df_dict_processed}")
 
     # Add or update the non-interactive components
     for component in stored_metadata:
@@ -366,12 +366,12 @@ def update_interactive_component(
             component["refresh"] = True
             component["access_token"] = TOKEN
 
-            if component["component_type"] == "figure":
-                logger.info(f"GRAPH COMPONENT - {component}")
+            # if component["component_type"] == "figure":
+            # logger.info(f"GRAPH COMPONENT - {component}")
 
             child = helpers_mapping[component["component_type"]](**component)
-            if component["component_type"] == "card":
-                logger.info(f"Card CHILD - {child}")
+            # if component["component_type"] == "card":
+            #     logger.debug(f"Card CHILD - {child}")
             child = enable_box_edit_mode(
                 child.to_plotly_json(),
                 switch_state=switch_state,
@@ -388,7 +388,7 @@ def update_interactive_component(
 
             child = helpers_mapping[component["component_type"]](**component)
 
-            logger.info(f"JBROWSE CHILD - {child}")
+            logger.debug(f"JBROWSE CHILD - {child}")
 
             child = enable_box_edit_mode(
                 child.to_plotly_json(),
@@ -397,8 +397,8 @@ def update_interactive_component(
                 TOKEN=TOKEN,
             )
             children.append(child)
-        logger.info(f"ITERATIVE - len(children) - {len(children)}")
+        # logger.info(f"ITERATIVE - len(children) - {len(children)}")
 
-    logger.info(f"Len children - {len(children)}")
+    # logger.info(f"Len children - {len(children)}")
     # logger.info(f"Children - {children}")
     return children

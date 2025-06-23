@@ -147,7 +147,7 @@ class DataCollectionConfig(MongoModel):
     @model_validator(mode="before")
     def validate_join(cls, values):
         type_value = values.get("type").lower()  # normalize to lowercase for comparison
-        logger.debug(f"Validating join for type: {type_value}")
+        # logger.debug(f"Validating join for type: {type_value}")
 
         # Get the dc_specific_properties
         dc_specific_properties = values.get("dc_specific_properties")

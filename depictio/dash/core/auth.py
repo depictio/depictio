@@ -85,7 +85,7 @@ def process_authentication(pathname, local_data):
         pathname = "/dashboards"
 
     logger.debug(f"Final pathname: {pathname}")
-    logger.debug(f"Access Token: {local_data['access_token'][:20]}...")
+    logger.debug(f"Access Token: {local_data['access_token'][:10]}...")
     logger.debug("HANDLE AUTHENTICATED USER")
 
     # Handle authenticated user logic

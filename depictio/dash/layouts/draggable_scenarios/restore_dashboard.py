@@ -29,37 +29,38 @@ build_functions = {
 def return_interactive_components_dict(dashboard_data):
     # logger.info(f"Dashboard data: {dashboard_data}")
 
-    logger.debug(f"Dashboard data: {dashboard_data}")
-    logger.debug(f"Dashboard data type: {type(dashboard_data)}")
+    # logger.debug(f"Dashboard data: {dashboard_data}")
+    # logger.debug(f"Dashboard data type: {type(dashboard_data)}")
 
     interactive_components_dict = collections.defaultdict(dict)
 
     for e in dashboard_data:
-        logger.debug(f"e: {e}")
+        # logger.debug(f"e: {e}")
 
         if "component_type" not in e:
             logger.debug(f"Component type not found in e: {e}")
             continue
 
         if e["component_type"] == "interactive":
-            logger.debug(f"e: {e}")
-            logger.debug(f"e['value']: {e['value']}")
-            logger.debug(f"e['component_type']: {e['component_type']}")
+            # logger.debug(f"e: {e}")
+            # logger.debug(f"e['value']: {e['value']}")
+            # logger.debug(f"e['component_type']: {e['component_type']}")
             interactive_components_dict[e["index"]] = {
                 "value": e["value"],
                 "metadata": e,
             }
 
     # interactive_components_dict = {e["index"]: {"value": e["value"], "metadata": e} for e in dashboard_data if e["component_type"] == "interactive"}
-    logger.debug(f"Interactive components dict: {interactive_components_dict}")
+    # logger.debug(f"Interactive components dict: {interactive_components_dict}")
     return interactive_components_dict
 
 
 def render_dashboard(stored_metadata, edit_components_button, dashboard_id, TOKEN):
+    logger.info(f"Rendering dashboard with ID: {dashboard_id}")
     from depictio.dash.layouts.draggable import clean_stored_metadata
 
     stored_metadata = clean_stored_metadata(stored_metadata)
-    logger.info(f"Stored metadata: {stored_metadata}")
+    # logger.info(f"Stored metadata: {stored_metadata}")
 
     children = list()
 
@@ -84,7 +85,7 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, TOKE
         child = build_function(**child_metadata)
         # logger.debug(f"child : ")
         children.append(child)
-    logger.info(f"Children: {children}")
+    # logger.info(f"Children: {children}")
 
     interactive_components_dict = return_interactive_components_dict(stored_metadata)
 
@@ -97,7 +98,7 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, TOKE
         )
         for child in children
     ]
-    logger.info(f"Children: {children}")
+    # logger.info(f"Children: {children}")
 
     children = update_interactive_component(
         stored_metadata,
@@ -107,11 +108,12 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, TOKE
         TOKEN=TOKEN,
         dashboard_id=dashboard_id,
     )
-    logger.info(f"Children: {children}")
+    # logger.info(f"Children: {children}")
     return children
 
 
 def load_depictio_data(dashboard_id, local_data):
+    logger.info(f"Loading Depictio data for dashboard ID: {dashboard_id}")
     if not local_data["access_token"]:
         logger.warning("Access token not found.")
         return None
@@ -130,7 +132,7 @@ def load_depictio_data(dashboard_id, local_data):
         )
         raise ValueError(f"Failed to fetch dashboard data: {response.status_code}")
 
-    logger.info(f"load_depictio_data : {dashboard_data}")
+    # logger.info(f"load_depictio_data : {dashboard_data}")
 
     if dashboard_data:
         if not hasattr(dashboard_data, "buttons_data"):
@@ -158,11 +160,11 @@ def load_depictio_data(dashboard_id, local_data):
                 else False
             )
 
-            logger.info(f"Owner: {owner}")
-            logger.info(f"Current user: {current_user.id}")
-            logger.info(
-                f"Dashboard owners: {[str(e.id) for e in dashboard_data.permissions.owners]}"
-            )
+            # logger.info(f"Owner: {owner}")
+            # logger.info(f"Current user: {current_user.id}")
+            # logger.info(
+            #     f"Dashboard owners: {[str(e.id) for e in dashboard_data.permissions.owners]}"
+            # )
 
             viewer_ids = [str(e.id) for e in dashboard_data.permissions.viewers]
             is_viewer = str(current_user.id) in viewer_ids
@@ -188,12 +190,12 @@ def load_depictio_data(dashboard_id, local_data):
                 dashboard_id,
                 local_data["access_token"],
             )
-            logger.info(f"Render Children: {children}")
+            # logger.info(f"Render Children: {children}")
 
             dashboard_data.stored_children_data = children
-        logger.info(f"Dashboard data RETURN: {dashboard_data}")
+        # logger.info(f"Dashboard data RETURN: {dashboard_data}")
         dashboard_data = convert_model_to_dict(dashboard_data)
-        logger.info(f"Dashboard data RETURN to dict: {dashboard_data}")
+        # logger.info(f"Dashboard data RETURN to dict: {dashboard_data}")
         return dashboard_data
     else:
         return None

@@ -53,8 +53,8 @@ def handle_unauthenticated_user(pathname):
 
 
 def handle_authenticated_user(pathname, local_data):
-    logger.info("User logged in")
-    logger.info(f"Local data: {local_data}")
+    logger.info(f"User logged in: {local_data.get('email', 'Unknown')}")
+    # logger.info(f"Local data: {local_data}")
 
     purge_expired_tokens(local_data["access_token"])
 
@@ -62,7 +62,7 @@ def handle_authenticated_user(pathname, local_data):
     if pathname.startswith("/dashboard/"):
         dashboard_id = pathname.split("/")[-1]
         depictio_dash_data = load_depictio_data(dashboard_id, local_data)
-        logger.info(f"Depictio dash data: {depictio_dash_data}")
+        # logger.info(f"Depictio dash data: {depictio_dash_data}")
         header = design_header(data=depictio_dash_data, local_store=local_data)
         dashboard_id = pathname.split("/")[-1]
         return (
@@ -79,7 +79,7 @@ def handle_authenticated_user(pathname, local_data):
     elif pathname == "/dashboards":
         user = api_call_fetch_user_from_token(local_data["access_token"])
         # user = fetch_user_from_token(local_data["access_token"])
-        logger.info(f"User: {user}")
+        # logger.info(f"User: {user}")
         create_button = return_create_dashboard_button(user.email)
         header = create_header_with_button("Dashboards", create_button)
         content = create_dashboards_management_layout()
@@ -320,7 +320,7 @@ def create_tokens_management_layout():
 def create_dashboard_layout(depictio_dash_data=dict, dashboard_id=str, local_data=dict):
     # Init layout and children if depictio_dash_data is available, else set to empty
     if depictio_dash_data:
-        logger.info(f"Depictio dash data: {depictio_dash_data}")
+        # logger.info(f"Depictio dash data: {depictio_dash_data}")
         if "stored_layout_data" in depictio_dash_data:
             init_layout = depictio_dash_data["stored_layout_data"]
         else:
@@ -330,7 +330,7 @@ def create_dashboard_layout(depictio_dash_data=dict, dashboard_id=str, local_dat
         else:
             init_children = list()
 
-    logger.info(f"Loaded depictio init_layout: {init_layout}")
+    # logger.info(f"Loaded depictio init_layout: {init_layout}")
     # header, backend_components = design_header(depictio_dash_data)
 
     # Generate draggable layout

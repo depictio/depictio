@@ -28,10 +28,6 @@ async def _generate_agent_config(user: UserBeanie, token: TokenBeanie) -> CLICon
         id=user.id, email=user.email, is_admin=user.is_admin, token=token
     )
 
-    # Create S3 config for CLI (uses external URL)
-    # s3_for_cli = settings.minio.model_copy()
-    # logger.debug(f"S3 config for CLI: {s3_for_cli}")
-
     # Create the complete CLI config
     cli_config = CLIConfig(
         user=user_cli_config,
@@ -39,7 +35,7 @@ async def _generate_agent_config(user: UserBeanie, token: TokenBeanie) -> CLICon
         s3=settings.minio,
     )
 
-    logger.debug(f"Generated CLI config: {cli_config}")
+    logger.debug(f"Generated CLI config for user: {user.email}")
     return cli_config
 
 

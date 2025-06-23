@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 from typing import Any
 
 import httpx
@@ -21,6 +22,10 @@ is_testing = os.environ.get("DEV_MODE", "false").lower() == "true" or any(
 # Add a query parameter to API calls when in test mode to indicate test database should be used
 API_QUERY_PARAMS = {"test_mode": "true"} if is_testing else {}
 
+# Simple cache for user data to reduce redundant API calls
+_user_cache: dict[str, tuple[Any, float]] = {}
+_cache_timeout = 30  # seconds
+
 
 @validate_call(validate_return=True)
 def api_call_register_user(
@@ -40,30 +45,16 @@ def api_call_register_user(
     """
     try:
         logger.info(f"Registering user with email: {email}")
-        logger.debug(f"Password: {password}")
-        logger.debug(f"Group: {group}")
-        logger.debug(f"Is Admin: {is_admin}")
 
         # Create payload with parameters
         params = {"email": email, "password": password, "is_admin": is_admin}
-
-        # # Add group if provided
-        # if group:
-        #     params["group"] = group
-
-        # Add test mode parameter if in test environment
-        # params.update(API_QUERY_PARAMS)
 
         # Convert boolean to string for is_admin
         response = httpx.post(
             f"{API_BASE_URL}/depictio/api/v1/auth/register",
             json=params,
         )
-        # Sending parameters as URL query parameters to match the FastAPI endpoint signature
-        # response = httpx.post(
-        #     f"{API_BASE_URL}/depictio/api/v1/auth/register",
-        #     params={"email": email, "password": password, "is_admin": str(is_admin)},
-        # )
+
         if response.status_code == 200:
             logger.info("User registered successfully.")
             return dict(response.json())
@@ -80,7 +71,7 @@ def api_call_register_user(
 def api_call_fetch_user_from_token(token: str) -> User | None:
     """
     Fetch a user from the authentication service using a token.
-    Synchronous version for Dash compatibility.
+    Synchronous version for Dash compatibility with caching to reduce redundant API calls.
 
     Args:
         token: The authentication token
@@ -88,24 +79,41 @@ def api_call_fetch_user_from_token(token: str) -> User | None:
     Returns:
         Optional[User]: The user if found, None otherwise
     """
+    # Check cache first
+    current_time = time.time()
+    cache_key = f"user_token_{token}"
+
+    if cache_key in _user_cache:
+        cached_data, cache_time = _user_cache[cache_key]
+        if current_time - cache_time < _cache_timeout:
+            logger.debug("Returning cached user data")
+            return cached_data
+
+    # Make API call if not cached or expired
     response = httpx.get(
         f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_token",
         params={"token": token},
-        headers={"Authorization": f"Bearer {token}"},
+        headers={"api-key": settings.auth.internal_api_key},
     )
 
     if response.status_code == 404:
         return None
 
     user_data = response.json()
-    logger.debug(f"User data fetched: {user_data}")
+    logger.debug(f"User data fetched from API: {user_data.get('email', 'No email found')}")
 
     if not user_data:
         return None
 
     user = User(**user_data)
 
-    logger.debug(f"User object created: {format_pydantic(user)}")
+    # Cache the result
+    _user_cache[cache_key] = (user, current_time)
+
+    # Clean old cache entries (simple cleanup)
+    if len(_user_cache) > 100:  # Prevent memory buildup
+        oldest_key = min(_user_cache.keys(), key=lambda k: _user_cache[k][1])
+        del _user_cache[oldest_key]
 
     return user
 
@@ -123,8 +131,7 @@ def api_call_fetch_user_from_email(email: EmailStr) -> User | None:
         Optional[User]: The user if found, None otherwise
     """
     logger.debug(f"Fetching user with email: {email}")
-    logger.debug(f"API Base URL: {API_BASE_URL}")
-    logger.debug(f"Internal API Key: {settings.auth.internal_api_key}")
+    logger.debug(f"API internal key: {settings.auth.internal_api_key}")
 
     response = httpx.get(
         f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_email",
@@ -136,14 +143,14 @@ def api_call_fetch_user_from_email(email: EmailStr) -> User | None:
         return None
 
     user_data = response.json()
-    logger.debug(f"User data fetched: {user_data}")
+    logger.debug(
+        f"User data fetched: {user_data.get('email', 'No email found')} with ID {user_data.get('_id', 'No ID found')}"
+    )
 
     if not user_data:
         return None
 
     user = User(**user_data)
-
-    logger.debug(f"User object created: {format_pydantic(user)}")
 
     return user
 
@@ -216,16 +223,16 @@ def refresh_access_token(refresh_token: str) -> dict | None:
         response = httpx.post(
             f"{API_BASE_URL}/depictio/api/v1/auth/refresh_token",
             json={"refresh_token": refresh_token},
+            headers={"api-key": settings.auth.internal_api_key},
             timeout=10,
         )
 
         if response.status_code == 200:
             data = response.json()
-            logger.info("Access token refreshed successfully")
+            logger.debug("Access token refreshed successfully")
             return {
                 "access_token": data["access_token"],
                 "expire_datetime": data["expire_datetime"],
-                # Note: refresh_token stays the same
             }
         else:
             logger.error(f"Token refresh failed with status {response.status_code}")
@@ -248,8 +255,10 @@ def check_token_validity(token: TokenBase) -> dict:
             "action": str  # "valid", "refresh", "logout"
         }
     """
-    logger.info("Checking token validity (enhanced).")
-    logger.info(f"Token: {format_pydantic(token)}")
+    logger.info("Checking token validity.")
+    logger.info(
+        f"Token with name: {token.name}, user_id: {token.user_id}, access_token: {token.access_token[:10]}..."
+    )
 
     try:
         response = httpx.post(
@@ -266,7 +275,7 @@ def check_token_validity(token: TokenBase) -> dict:
                 "action": data.get("action", "logout"),
             }
 
-            logger.info(f"Token validation result: {result}")
+            # logger.debug(f"Token validation result: {result['valid']}, can refresh: {result['can_refresh']}, action: {result['action']}")
             return result
         else:
             logger.error(f"Token validation failed with status {response.status_code}")
@@ -367,7 +376,7 @@ def api_call_generate_agent_config(token: TokenData, current_token: str) -> dict
     Returns:
         Response from the agent config generation or None if failed
     """
-    logger.info(f"Generating agent config for token: {token}")
+    logger.info("Generating agent config")
     response = httpx.post(
         f"{API_BASE_URL}/depictio/api/v1/auth/generate_agent_config",
         json=convert_model_to_dict(token),

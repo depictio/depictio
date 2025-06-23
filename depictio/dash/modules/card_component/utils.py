@@ -25,7 +25,7 @@ AGGREGATION_MAPPING = {
 
 
 def compute_value(data, column_name, aggregation):
-    logger.info(f"Computing value for {column_name} with {aggregation}")
+    logger.debug(f"Computing value for {column_name} with {aggregation}")
 
     # FIXME: optimization - consider checking if data is already a pandas DataFrame
     data = data.to_pandas()
@@ -34,16 +34,16 @@ def compute_value(data, column_name, aggregation):
         mode_series = data[column_name].mode()
         if not mode_series.empty:
             new_value = mode_series.iloc[0]
-            logger.info(f"Computed mode: {new_value}")
-            logger.info(f"Type of mode value: {type(new_value)}")
+            logger.debug(f"Computed mode: {new_value}")
+            logger.debug(f"Type of mode value: {type(new_value)}")
         else:
             new_value = None
-            logger.info("No mode found; returning None")
+            logger.warning("No mode found; returning None")
     elif aggregation == "range":
         series = data[column_name]
         if pd.api.types.is_numeric_dtype(series):
             new_value = series.max() - series.min()
-            logger.info(f"Computed range: {new_value} (Type: {type(new_value)})")
+            logger.debug(f"Computed range: {new_value} (Type: {type(new_value)})")
         else:
             logger.error(
                 f"Range aggregation is not supported for non-numeric column '{column_name}'."
@@ -64,14 +64,14 @@ def compute_value(data, column_name, aggregation):
             return None
         else:
             try:
-                logger.info(f"Applying aggregation function '{pandas_agg}'")
-                logger.info(f"Column name: {column_name}")
-                logger.info(f"Data: {data}")
-                logger.info(f"Data cols {data.columns}")
-                logger.info(f"Data type: {data[column_name].dtype}")
-                logger.info(f"Data: {data[column_name]}")
+                logger.debug(f"Applying aggregation function '{pandas_agg}'")
+                # logger.info(f"Column name: {column_name}")
+                # logger.info(f"Data: {data}")
+                # logger.info(f"Data cols {data.columns}")
+                # logger.info(f"Data type: {data[column_name].dtype}")
+                # logger.info(f"Data: {data[column_name]}")
                 new_value = data[column_name].agg(pandas_agg)
-                logger.info(
+                logger.debug(
                     f"Computed {aggregation} ({pandas_agg}): {new_value} (Type: {type(new_value)})"
                 )
             except AttributeError as e:
@@ -80,7 +80,7 @@ def compute_value(data, column_name, aggregation):
 
         if isinstance(new_value, np.float64):
             new_value = round(new_value, 4)
-            logger.info(f"New value rounded: {new_value}")
+            logger.debug(f"New value rounded: {new_value}")
 
     return new_value
 
@@ -169,15 +169,15 @@ def build_card(**kwargs):
     # else:
     index = index
 
-    logger.info(f"Card kwargs: {kwargs}")
+    # logger.debug(f"Card kwargs: {kwargs}")
 
     if refresh or not v:
         import polars as pl
 
         data = kwargs.get("df", pl.DataFrame())
 
-        logger.info(f"Existing data: {data}")
-        logger.info(f"Existing data columns: {list(data.to_pandas().columns)}")
+        # logger.info(f"Existing data: {data}")
+        # logger.info(f"Existing data columns: {list(data.to_pandas().columns)}")
 
         if data.is_empty():
             from depictio.api.v1.deltatables_utils import load_deltatable_lite

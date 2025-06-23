@@ -21,8 +21,6 @@ from pydantic import (
 )
 from pydantic_core import CoreSchema, core_schema
 
-from depictio.models.logging import logger
-
 
 def convert_objectid_to_str(item):
     if isinstance(item, dict):
@@ -90,7 +88,6 @@ class MongoModel(BaseModel):
         """
         Ensures the `_id` field uses the provided value or generates a new ObjectId.
         """
-        logger.debug(f"Ensuring values: {values}")
 
         # If values is not a dict, skip processing and return as-is
         if not isinstance(values, dict):
@@ -101,7 +98,6 @@ class MongoModel(BaseModel):
             values["id"] = values.pop("_id")
         if "id" in values and values["id"] is not None:
             # If `id` is provided, validate and retain it
-            logger.debug(f"Validating ID: {values['id']}")
             values["id"] = PyObjectId.validate(values["id"])
         else:
             # Generate a new ObjectId if no valid ID is provided
@@ -118,19 +114,15 @@ class MongoModel(BaseModel):
         # If value is a Description instance, extract the string
         # if isinstance(value, Description):
         #     value = value.description
-        logger.debug(f"Sanitizing description: {value}")
 
         if not value:
-            logger.debug("No description provided.")
             return None
 
         # Step 1: Convert special characters to their HTML-safe equivalents
         neutralized = html.escape(value)
-        logger.debug(f"Neutralized description: {neutralized}")
 
         # Step 2: Use bleach to remove all HTML tags and attributes
         sanitized = bleach.clean(neutralized, tags=[], attributes={}, strip=True)
-        logger.debug(f"Sanitized description: {sanitized}")
 
         # Step 3: Check if HTML tags were successfully removed
         if any(char in sanitized for char in ("<", ">", "&lt;", "&gt;")):
@@ -150,7 +142,6 @@ class MongoModel(BaseModel):
 
         # Helper function to convert nested documents
         def convert_ids(document):
-            # logger.warning(f"Converting : {document}")
             if isinstance(document, list):
                 return [convert_ids(item) for item in document]
             if isinstance(document, dict):
@@ -257,7 +248,7 @@ class HashModel(BaseModel):
         yield cls.validate
 
     @classmethod
-    def validate(cls, value: str) -> "HashModel":
+    def validate(cls, value: str):
         if not re.match(r"^[a-fA-F0-9]{64}$", value):
             raise ValueError("Invalid hash")
         # Return an instance of HashModel

@@ -1,5 +1,3 @@
-import os
-
 from depictio.api.v1.configs.logging_init import initialize_loggers, logger
 from depictio.api.v1.configs.settings_models import Settings
 from depictio.api.v1.key_utils import generate_keys, load_private_key, load_public_key
@@ -14,16 +12,14 @@ settings = Settings()
 # Initialize all loggers with the verbosity level from settings
 initialize_loggers(verbose_level=settings.logging.verbosity_level)
 
-logger.info(f"Settings: {settings}")
+logger.debug(f"Settings: {settings}")
 API_BASE_URL = settings.fastapi.internal_url
 DASH_BASE_URL = settings.dash.internal_url
 MONGODB_URL = f"mongodb://{settings.mongodb.service_name}:{settings.mongodb.service_port}"
-logger.info(f"MongoDB URL: {MONGODB_URL}")
+logger.debug(f"MongoDB URL: {MONGODB_URL}")
 _KEYS_DIR = settings.auth.keys_dir
-# Use the shared internal API key from settings
-settings.auth.internal_api_key = os.getenv(
-    "DEPICTIO_AUTH_INTERNAL_API_KEY", settings.auth.internal_api_key
-)
+# The internal API key is now automatically managed via the computed field
+# No manual assignment needed - it checks environment variables and generates/reads from file
 
 
 # Algorithm used for signing
@@ -47,5 +43,5 @@ PRIVATE_KEY = load_private_key(
 )  # Load private key from file
 PUBLIC_KEY = load_public_key(settings.auth.keys_dir / "public_key.pem")  # Load public key from file
 
-logger.info(f"Private key value: {PRIVATE_KEY}")
-logger.info(f"Public key value: {PUBLIC_KEY}")
+logger.debug("Private key successfully loaded")
+logger.debug("Public key successfully loaded")

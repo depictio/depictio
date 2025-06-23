@@ -30,10 +30,10 @@ def register_callbacks_header(app):
         # prevent_initial_call=True,
     )
     def toggle_buttons(switch_state, local_store, pathname):
-        logger.info("\n\n\n")
-        logger.info("toggle_buttons")
-        logger.info(switch_state)
-        logger.info("API_BASE_URL: " + str(API_BASE_URL))
+        # logger.info("\n\n\n")
+        # logger.info("toggle_buttons")
+        # logger.info(switch_state)
+        # logger.info("API_BASE_URL: " + str(API_BASE_URL))
 
         len_output = 8
 
@@ -63,20 +63,20 @@ def register_callbacks_header(app):
             else False
         )
 
-        logger.info(f"{data['permissions']['viewers']}")
+        logger.debug(f"{data['permissions']['viewers']}")
 
         viewer_ids = [str(e["id"]) for e in data["permissions"]["viewers"] if e != "*"]
         is_viewer = str(current_user.id) in viewer_ids
         has_wildcard = "*" in data["permissions"]["viewers"]
         viewer = is_viewer or has_wildcard
-        logger.info(f"owner: {owner}, viewer: {viewer}")
-        logger.info(f"switch_state: {switch_state}")
-        logger.info(f"current_user: {current_user}")
-        logger.info(f"viewer_ids: {viewer_ids}")
-        logger.info(f"has_wildcard: {has_wildcard}")
-        logger.info(f"is_viewer: {is_viewer}")
-        logger.info(f"owner: {owner}")
-        logger.info(f"viewer: {viewer}")
+        logger.debug(f"owner: {owner}, viewer: {viewer}")
+        logger.debug(f"switch_state: {switch_state}")
+        logger.debug(f"current_user: {current_user}")
+        logger.debug(f"viewer_ids: {viewer_ids}")
+        logger.debug(f"has_wildcard: {has_wildcard}")
+        logger.debug(f"is_viewer: {is_viewer}")
+        logger.debug(f"owner: {owner}")
+        logger.debug(f"viewer: {viewer}")
 
         if not owner and viewer:
             return [dash.no_update] * (len_output - 2) + [False] * 2
@@ -171,7 +171,7 @@ def design_header(data, local_store):
     """
     Design the header of the dashboard
     """
-    logger.info(f"depictio dashboard data: {data}")
+    # logger.info(f"depictio dashboard data: {data}")
 
     if data:
         if "stored_add_button" not in data:
@@ -180,7 +180,7 @@ def design_header(data, local_store):
             data["stored_edit_dashboard_mode_button"] = [int(0)]
 
     current_user = api_call_fetch_user_from_token(local_store["access_token"])
-    logger.info(f"current_user: {current_user}")
+    # logger.info(f"current_user: {current_user}")
 
     init_nclicks_add_button = (
         data["stored_add_button"] if data else {"count": 0, "initialized": False, "_id": ""}
@@ -196,7 +196,7 @@ def design_header(data, local_store):
         else False
     )
 
-    logger.info(f"{data['permissions']['viewers']}")
+    # logger.info(f"{data['permissions']['viewers']}")
 
     viewer_ids = [str(e["id"]) for e in data["permissions"]["viewers"] if e != "*"]
     is_viewer = str(current_user.id) in viewer_ids
@@ -212,10 +212,10 @@ def design_header(data, local_store):
         edit_dashboard_mode_button_checked = data["buttons_data"]["edit_dashboard_mode_button"]
         edit_components_button_checked = data["buttons_data"]["edit_components_button"]
 
-    logger.info(f"owner: {owner}, viewer: {viewer}")
-    logger.info(f"edit_dashboard_mode_button_checked: {edit_dashboard_mode_button_checked}")
-    logger.info(f"edit_components_button_checked: {edit_components_button_checked}")
-    logger.info(f"disabled: {disabled}")
+    # logger.info(f"owner: {owner}, viewer: {viewer}")
+    # logger.info(f"edit_dashboard_mode_button_checked: {edit_dashboard_mode_button_checked}")
+    # logger.info(f"edit_components_button_checked: {edit_components_button_checked}")
+    # logger.info(f"disabled: {disabled}")
 
     # if not data:
     #     disabled = True

@@ -93,7 +93,7 @@ def build_jbrowse(**kwargs):
     access_token = kwargs.get("access_token")
     dashboard_id = kwargs.get("dashboard_id")
 
-    logger.info(f"build_jbrowse access_token {access_token}")
+    # logger.info(f"build_jbrowse access_token {access_token}")
     logger.info(f"build_jbrowse dc_config {dc_config}")
     logger.info(f"build_jbrowse stored_metadata_jbrowse {stored_metadata_jbrowse}")
     logger.info(f"build_jbrowse index {index}")

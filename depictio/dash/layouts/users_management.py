@@ -40,30 +40,35 @@ def render_login_form():
                 id="register-email",
                 placeholder="Enter your email",
                 style={"width": "100%", "display": "none"},
+                # debounce=500,  # Add debounce to avoid too many requests
             ),
             dmc.PasswordInput(
                 label="Password:",
                 id="register-password",
                 placeholder="Enter your password",
                 style={"width": "100%", "display": "none"},
+                # debounce=500,  # Add debounce to avoid too many requests
             ),
             dmc.TextInput(
                 label="Email:",
                 id="login-email",
                 placeholder="Enter your email",
                 style={"width": "100%"},
+                # debounce=500,  # Add debounce to avoid too many requests
             ),
             dmc.PasswordInput(
                 label="Password:",
                 id="login-password",
                 placeholder="Enter your password",
                 style={"width": "100%"},
+                # debounce=500,  # Add debounce to avoid too many requests
             ),
             dmc.PasswordInput(
                 label="Confirm Password:",
                 id="register-confirm-password",
                 placeholder="Confirm your password",
                 style={"width": "100%", "display": "none"},
+                # debounce=500,  # Add debounce to avoid too many requests
             ),
             html.Div(id="user-feedback"),
             dmc.Space(h=20),
@@ -420,15 +425,15 @@ def register_callbacks_users_management(app):
     ):
         button_id = ctx.triggered[0]["prop_id"].split(".")[0]
 
-        logger.debug(f"Button ID: {button_id}")
-        logger.debug(f"Current state: {current_state}")
-        logger.debug(f"Local data: {local_data}")
-        logger.debug(f"Modal open: {modal_open}")
-        logger.debug(f"Login email: {login_email}")
-        logger.debug(f"Login password: {login_password}")
-        logger.debug(f"Register email: {register_email}")
-        logger.debug(f"Register password: {register_password}")
-        logger.debug(f"Register confirm password: {register_confirm_password}")
+        # logger.debug(f"Button ID: {button_id}")
+        # logger.debug(f"Current state: {current_state}")
+        # logger.debug(f"Local data: {local_data}")
+        # logger.debug(f"Modal open: {modal_open}")
+        # logger.debug(f"Login email: {login_email}")
+        # logger.debug(f"Login password: {login_password}")
+        # logger.debug(f"Register email: {register_email}")
+        # logger.debug(f"Register password: {register_password}")
+        # logger.debug(f"Register confirm password: {register_confirm_password}")
 
         # If user is already logged in, do not show the login form
         if local_data and local_data.get("logged_in", False):
@@ -470,10 +475,10 @@ def register_callbacks_users_management(app):
             feedback_message, modal_open_new, session_data, local_data_new = validate_login(
                 login_email, login_password
             )
-            logger.debug(f"Feedback message: {feedback_message}")
-            logger.debug(f"Modal open new: {modal_open_new}")
-            logger.debug(f"Session data: {session_data}")
-            logger.debug(f"Local data new: {local_data_new}")
+            # logger.debug(f"Feedback message: {feedback_message}")
+            # logger.debug(f"Modal open new: {modal_open_new}")
+            # logger.debug(f"Session data: {session_data}")
+            # logger.debug(f"Local data new: {local_data_new}")
             if not modal_open_new:
                 content = render_login_form()
             else:

@@ -46,9 +46,9 @@ async def get_dashboard(
             status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found."
         )
 
-    logger.info(f"Dashboard data: {dashboard_data}")
+    # logger.info(f"Dashboard data: {dashboard_data}")
     dashboard_data = DashboardData.from_mongo(dashboard_data)
-    logger.info(f"Dashboard data: {dashboard_data}")
+    # logger.info(f"Dashboard data: {dashboard_data}")
 
     # logger.info(f"Dashboard data from mongo: {dashboard_data}")
     # dashboard_data = convert_model_to_dict(dashboard_data)
@@ -191,7 +191,6 @@ async def edit_dashboard_name(
         )
 
 
-# /Users/tweber/Gits/depictio/dev/jup_nb/.jupyter/jupyter_notebook_config.py
 @dashboards_endpoint_router.post("/save/{dashboard_id}")
 async def save_dashboard(
     dashboard_id: PyObjectId,
@@ -204,7 +203,7 @@ async def save_dashboard(
 
     user_id = current_user.id
 
-    logger.info(f"Dashboard data: {data}")
+    # logger.info(f"Dashboard data: {data}")
 
     # Attempt to find and update the document, or insert if it doesn't exist
     result = dashboards_collection.find_one_and_update(
@@ -264,7 +263,7 @@ async def screenshot_dashboard(
             current_user = await UserBeanie.find_one({"email": "admin@example.com"})
 
             # current_user = await UserBeanie.find_one({"email": "admin@example.com"})
-            logger.info(f"Current user: {current_user}")
+            logger.debug(f"Current user: {current_user}")
 
             # get the current user a functional token
             token = await TokenBeanie.find_one(
@@ -274,15 +273,15 @@ async def screenshot_dashboard(
                     "refresh_expire_datetime": {"$gt": datetime.now()},
                 }
             )
-            logger.info(f"Token: {token}")
+            logger.debug(f"Token: {token}")
 
             token_data = token.model_dump(exclude_none=True)
             token_data["_id"] = token_data.pop("id", None)
             token_data["logged_in"] = True
-            logger.info(f"Token: {token}")
+            logger.debug(f"Token: {token}")
 
             token_data_json = json.dumps(token_data)
-            logger.info(f"Token data: {token_data_json}")
+            logger.debug(f"Token data: {token_data_json}")
 
             # Set data in the local storage
             await page.evaluate(
@@ -371,51 +370,94 @@ async def get_component_data_endpoint(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Fetch component data related to a component ID.
+    Fetch component data related to a component ID using optimized MongoDB aggregation.
+
+    This endpoint uses MongoDB aggregation pipeline to:
+    1. Filter by dashboard_id and user permissions
+    2. Filter the stored_metadata array to find only the specific component
+    3. Return only the component data without loading the full dashboard
     """
 
     user_id = current_user.id
-    logger.debug(f"Current user ID: {user_id}")
+    logger.debug(f"Current user ID: {user_id}, fetching component: {component_id}")
 
-    # Find dashboards where current_user is either an owner or a viewer
-    query = {
-        "dashboard_id": dashboard_id,
-        "$or": [
-            {"permissions.owners._id": user_id},
-            {"permissions.viewers._id": user_id},
-            {"permissions.viewers": "*"},
-        ],
-    }
+    # Optimized aggregation pipeline to fetch only the specific component
+    pipeline = [
+        # Stage 1: Match dashboard and user permissions
+        {
+            "$match": {
+                "dashboard_id": dashboard_id,
+                "$or": [
+                    {"permissions.owners._id": user_id},
+                    {"permissions.viewers._id": user_id},
+                    {"permissions.viewers": "*"},
+                    {"is_public": True},  # Allow public access if dashboard is public
+                ],
+            }
+        },
+        # Stage 2: Project only the filtered component from stored_metadata
+        {
+            "$project": {
+                "_id": 1,
+                "dashboard_id": 1,
+                "component_metadata": {
+                    "$filter": {
+                        "input": "$stored_metadata",
+                        "as": "metadata",
+                        "cond": {"$eq": ["$$metadata.index", str(component_id)]},
+                    }
+                },
+            }
+        },
+        # Stage 3: Unwind the component_metadata array to get single object
+        {
+            "$unwind": {
+                "path": "$component_metadata",
+                "preserveNullAndEmptyArrays": False,  # Skip if no matching component found
+            }
+        },
+        # Stage 4: Replace root with just the component metadata
+        {"$replaceRoot": {"newRoot": "$component_metadata"}},
+    ]
 
-    dashboard_data = dashboards_collection.find_one(query)
+    # Execute aggregation pipeline
+    result = list(dashboards_collection.aggregate(pipeline))
 
-    logger.debug(f"Dashboard data: {dashboard_data}")
+    logger.debug(f"Aggregation result: {result}")
 
-    dashboard_data = DashboardData.from_mongo(dashboard_data)
-    logger.debug(f"Dashboard data from mongo: {dashboard_data}")
-
-    if not dashboard_data:
-        raise HTTPException(
-            status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found."
+    if not result:
+        # Check if dashboard exists vs component not found
+        dashboard_exists = dashboards_collection.find_one(
+            {
+                "dashboard_id": dashboard_id,
+                "$or": [
+                    {"permissions.owners._id": user_id},
+                    {"permissions.viewers._id": user_id},
+                    {"permissions.viewers": "*"},
+                    {"is_public": True},  # Allow public access if dashboard is public
+                ],
+            },
+            {"_id": 1},  # Only fetch _id to check existence
         )
 
-    # Extract stored_metadata
-    stored_metadata = dashboard_data.stored_metadata
-    if not stored_metadata:
-        logger.error(f"No stored_metadata found in dashboard {dashboard_id}.")
-        return None
+        if not dashboard_exists:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Dashboard with ID '{dashboard_id}' not found or access denied.",
+            )
+        else:
+            logger.error(f"Component with ID {component_id} not found in dashboard {dashboard_id}.")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Component with ID '{component_id}' not found in dashboard.",
+            )
 
-    # Find the component metadata by component_id
-    component_metadata = next(
-        (item for item in stored_metadata if item.get("index") == str(component_id)),
-        None,
-    )
-    if not component_metadata:
-        logger.error(f"Component with ID {str(component_id)} not found in stored_metadata.")
-        return None
+    # Get the component metadata
+    component_metadata = result[0]
 
-    logger.info(f"Component metadata found: {component_metadata}")
+    logger.debug(f"Component metadata found for ID {component_id}")
 
+    # Convert ObjectIds to strings for JSON serialization
     component_metadata = convert_objectid_to_str(component_metadata)
 
     return component_metadata

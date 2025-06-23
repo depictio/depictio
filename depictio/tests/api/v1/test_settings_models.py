@@ -339,7 +339,7 @@ class TestAuthConfig:
             assert config.keys_dir == Path("depictio/keys")
             assert config.keys_algorithm == "RS256"
             assert config.cli_config_dir == Path("depictio/.depictio")
-            assert config.internal_api_key != ""
+            assert config.internal_api_key_env is None
 
     def test_custom_values(self):
         """Test Auth with custom values."""
@@ -363,13 +363,13 @@ class TestAuthConfig:
                     keys_dir=custom_keys_dir,
                     keys_algorithm="RS256",
                     cli_config_dir=custom_config_dir,
-                    internal_api_key="custom_api_key",
+                    internal_api_key_env="custom_api_key",
                 )
 
                 assert config.keys_dir == Path(custom_keys_dir)
                 assert config.keys_algorithm == "RS256"
                 assert config.cli_config_dir == Path(custom_config_dir)
-                assert config.internal_api_key == "custom_api_key"
+                assert config.internal_api_key_env == "custom_api_key"
         finally:
             # Clean up the temporary directory
             import shutil
@@ -400,7 +400,7 @@ class TestAuthConfig:
                 assert config.keys_dir == Path(env_keys_dir)
                 assert config.keys_algorithm == "ES256"
                 assert config.cli_config_dir == Path(env_config_dir)
-                assert config.internal_api_key == "env_api_key"
+                assert config.internal_api_key_env == "env_api_key"
         finally:
             # Clean up
             import shutil
@@ -504,7 +504,7 @@ class TestSettings:
             assert dash.external_port == 6000
             assert minio.public_url == "https://env-s3.example.com"
             # assert jbrowse.enabled is False
-            assert auth.internal_api_key == "env_token"
+            assert auth.internal_api_key_env == "env_token"
 
             # Create Settings instance explicitly with our configs
             settings = Settings(
@@ -523,4 +523,4 @@ class TestSettings:
             assert settings.minio.public_url == "https://env-s3.example.com"
             assert settings.fastapi.public_url == "https://env-fastapi.example.com"
             # assert settings.jbrowse.enabled is False
-            assert settings.auth.internal_api_key == "env_token"
+            assert settings.auth.internal_api_key_env == "env_token"

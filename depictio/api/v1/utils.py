@@ -32,21 +32,21 @@ async def clean_screenshots():
         for filename in os.listdir(screenshots_dir):
             if filename.endswith(".png"):
                 file_path = os.path.join(screenshots_dir, filename)
-                print(f"Checking file: {file_path}")
+                logger.debug(f"Checking file: {file_path}")
                 # Extract the dashboard ID from the filename
                 dashboard_id = filename.split(".")[0]
                 # Check if the dashboard ID is in the list of dashboard IDs
                 if dashboard_id not in dashboard_ids:
-                    print(
+                    logger.debug(
                         f"Dashboard ID {dashboard_id} not found in DB. Removing file: {file_path}"
                     )
                     try:
                         os.remove(file_path)
-                        print(f"Removed file: {file_path}")
+                        logger.debug(f"Removed file: {file_path}")
                     except Exception as e:
-                        print(f"Error removing file {file_path}: {e}")
+                        logger.debug(f"Error removing file {file_path}: {e}")
     else:
-        print(f"Directory {screenshots_dir} does not exist.")
+        logger.debug(f"Directory {screenshots_dir} does not exist.")
         return {"success": False, "message": "No project found in the database"}
     return {"success": True, "message": "Screenshots cleaned up"}
 

@@ -73,6 +73,7 @@ def register_callbacks_save(app):
         n_clicks_remove,
         n_clicks_remove_all,
     ):
+        logger.info("Saving dashboard data...")
         # Early return if user is not logged in
         if not local_store:
             logger.warning("User not logged in.")
@@ -97,8 +98,8 @@ def register_callbacks_save(app):
             dashboard_data_response.raise_for_status()
             dashboard_data = dashboard_data_response.json()
 
-            logger.info(f"Dashboard data fetched successfully for dashboard {dashboard_id}.")
-            logger.info(f"Dashboard data: {dashboard_data}")
+            logger.debug(f"Dashboard data fetched successfully for dashboard {dashboard_id}.")
+            # logger.info(f"Dashboard data: {dashboard_data}")
         except httpx.HTTPStatusError as e:
             logger.error(f"Failed to fetch dashboard data: {e}")
             return dash.no_update
@@ -138,22 +139,22 @@ def register_callbacks_save(app):
         unique_metadata = []
         seen_indexes = set()
 
-        logger.info(f"Stored metadata: {stored_metadata}")
+        # logger.info(f"Stored metadata: {stored_metadata}")
         for elem in stored_metadata:
             if elem["index"] not in seen_indexes:
                 unique_metadata.append(elem)
                 seen_indexes.add(elem["index"])
-        logger.info(f"Unique metadata: {unique_metadata}")
-        logger.info(f"seen_indexes: {seen_indexes}")
+        # logger.info(f"Unique metadata: {unique_metadata}")
+        # logger.info(f"seen_indexes: {seen_indexes}")
         # Remove child components for edit mode
         if "btn-done-edit" in triggered_id:
             unique_metadata = [elem for elem in unique_metadata if "parent_index" not in elem]
-            logger.info(f"Unique metadata after removing child components: {unique_metadata}")
+            # logger.info(f"Unique metadata after removing child components: {unique_metadata}")
 
         # Use draggable layout metadata if triggered by draggable
         if "draggable" in triggered_id:
             unique_metadata = dashboard_data.get("stored_metadata", unique_metadata)
-            logger.info(f"Unique metadata after using draggable layout metadata: {unique_metadata}")
+            # logger.info(f"Unique metadata after using draggable layout metadata: {unique_metadata}")
 
         updated_dashboard_data = {
             "stored_metadata": unique_metadata,
@@ -167,11 +168,11 @@ def register_callbacks_save(app):
             },
             "last_saved_ts": str(datetime.now()),
         }
-        logger.info(f"Updated dashboard data: {updated_dashboard_data}")
+        # logger.info(f"Updated dashboard data: {updated_dashboard_data}")
 
         # Update dashboard data
         dashboard_data.update(updated_dashboard_data)
-        logger.info(f"Updated dashboard data: {dashboard_data}")
+        # logger.info(f"Updated dashboard data: {dashboard_data}")
 
         # Save dashboard data
         try:
