@@ -71,7 +71,7 @@ async def run_initialization(
     logger.info("Initialization data saved to the database.")
     logger.debug(f"Initialization data: {init_data}")
 
-    if settings.unauthenticated_mode:
+    if settings.auth.unauthenticated_mode:
         anon = await _create_anonymous_user()
         if anon:
             await _create_permanent_token(anon)
