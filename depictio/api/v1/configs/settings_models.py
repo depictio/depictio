@@ -321,6 +321,12 @@ class JBrowseConfig(BaseSettings):
 class Settings(BaseSettings):
     context: str = Field(default="server")
 
+    unauthenticated_mode: bool = Field(default=False, description="Enable unauthenticated mode")
+    anonymous_user_email: str = Field(
+        default="anonymous@depictio.local",
+        description="Default anonymous user email",
+    )
+
     fastapi: FastAPIConfig = Field(default_factory=FastAPIConfig)
     dash: DashConfig = Field(default_factory=DashConfig)
     mongodb: MongoDBConfig = Field(default_factory=MongoDBConfig)

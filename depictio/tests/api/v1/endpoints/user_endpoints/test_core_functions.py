@@ -872,7 +872,7 @@ class TestAddToken:
         """Test token creation with different lifetime values."""
         # Arrange
         user_id = PydanticObjectId()
-        lifetimes = ["short-lived", "long-lived"]
+        lifetimes = ["short-lived", "long-lived", "permanent"]
 
         for lifetime in lifetimes:
             token_data = TokenData(
@@ -897,5 +897,6 @@ class TestAddToken:
 
             # Verify refresh token fields are set
             assert saved_token.refresh_token is not None
-            assert len(saved_token.refresh_token) > 0
-            assert saved_token.refresh_expire_datetime > datetime.now()
+            if lifetime != "permanent":
+                assert len(saved_token.refresh_token) > 0
+                assert saved_token.refresh_expire_datetime > datetime.now()
