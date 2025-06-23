@@ -93,7 +93,7 @@ async def login(login_request: OAuth2PasswordRequestForm = Depends()):
     Returns:
         _type_: _description_
     """
-    logger.info(f"Login attempt for user: {login_request.username}")
+    logger.debug(f"Login attempt for user: {login_request.username}")
 
     # Verify credentials
     _ = await _check_password(login_request.username, login_request.password)
@@ -135,7 +135,7 @@ async def create_token(
     token_data: TokenData,
     api_key: str = Header(..., description="Internal API key for authentication"),
 ) -> TokenBeanie:
-    logger.info("Creating new token")
+    logger.debug("Creating new token")
 
     if api_key != settings.auth.internal_api_key:
         logger.error("Invalid API key")
@@ -161,7 +161,7 @@ async def refresh_token_endpoint(
     request: dict,
     api_key: str = Header(..., description="Internal API key for authentication"),
 ):
-    logger.info("Refreshing token")
+    logger.debug("Refreshing token")
 
     if api_key != settings.auth.internal_api_key:
         logger.error("Invalid API key")
@@ -204,7 +204,7 @@ async def api_fetch_user_from_token(
     token: str,
     api_key: str = Header(..., description="Internal API key for authentication"),
 ) -> User:
-    logger.info("Fetching user from token")
+    logger.debug("Fetching user from token")
     if api_key != settings.auth.internal_api_key:
         logger.error("Invalid API key")
         raise HTTPException(
@@ -277,7 +277,7 @@ async def register(
     Returns:
         Dictionary with user data, success status and message
     """
-    logger.info(f"Registering user with email: {request.email}")
+    logger.debug(f"Registering user with email: {request.email}")
     try:
         return await _create_user_in_db(request.email, request.password, request.is_admin)
 
@@ -474,7 +474,7 @@ async def purge_expired_tokens_endpoint(
 @auth_endpoint_router.post("/check_token_validity", include_in_schema=True)
 async def check_token_validity_endpoint(token: TokenBase):
     validation_result = await _check_if_token_is_valid(token)
-    logger.info(f"Token validity check for {token.name}: {validation_result}")
+    logger.debug(f"Token validity check for {token.name}: {validation_result}")
 
     return {
         "success": validation_result["access_valid"],
@@ -611,12 +611,12 @@ def update_group_in_users(group_id: str, request: dict, current_user=Depends(get
     if "users" not in request:
         raise HTTPException(status_code=400, detail="No users provided in request")
 
-    logger.info(f"Request: {request}")
+    logger.debug(f"Request: {request}")
 
     # Convert user dicts to UserBase objects
     users = [UserBase(**user) for user in request["users"]]
 
-    logger.info(f"Users: {users}")
+    logger.debug(f"Users: {users}")
 
     # Ensure group_id is an ObjectId
     group_id_obj = (
@@ -630,7 +630,7 @@ def update_group_in_users(group_id: str, request: dict, current_user=Depends(get
             else ObjectId(str(group_id))
         )
     )
-    logger.info(f"Group ID: {group_id_obj}")
+    logger.debug(f"Group ID: {group_id_obj}")
 
     response = update_group_in_users_helper(group_id_obj, users)
     return response

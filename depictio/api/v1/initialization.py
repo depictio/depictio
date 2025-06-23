@@ -24,7 +24,7 @@ async def run_initialization(
     # Use internal S3 config if not provided
     if s3_config_input is None:
         s3_config_input = settings.minio
-        logger.info(f"Using S3 config: {s3_config_input}")
+        logger.debug(f"Using S3 config: {s3_config_input}")
 
     # logger.info(f"OS Environment: {os.environ}")
 

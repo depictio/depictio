@@ -27,7 +27,7 @@ async def validate_cli_config_endpoint(cli_config: CLIConfig):
     if not _token_check:
         logger.error("Token expired or not found.")
         return {"success": False, "message": "Token expired or not found."}
-    logger.info(f"Token check: {_token_check}")
+    logger.debug(f"Token check: {_token_check}")
     # Check if the user exists in the database
     user = await _async_fetch_user_from_id(token.user_id)
     if not user:

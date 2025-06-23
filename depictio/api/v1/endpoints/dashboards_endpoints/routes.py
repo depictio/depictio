@@ -262,7 +262,7 @@ async def screenshot_dashboard(
             current_user = await UserBeanie.find_one({"email": "admin@example.com"})
 
             # current_user = await UserBeanie.find_one({"email": "admin@example.com"})
-            logger.info(f"Current user: {current_user}")
+            logger.debug(f"Current user: {current_user}")
 
             # get the current user a functional token
             token = await TokenBeanie.find_one(
@@ -272,15 +272,15 @@ async def screenshot_dashboard(
                     # "expire_datetime": {"$gt": datetime.now()},
                 }
             )
-            logger.info(f"Token: {token}")
+            logger.debug(f"Token: {token}")
 
             token_data = token.model_dump(exclude_none=True)
             token_data["_id"] = token_data.pop("id", None)
             token_data["logged_in"] = True
-            logger.info(f"Token: {token}")
+            logger.debug(f"Token: {token}")
 
             token_data_json = json.dumps(token_data)
-            logger.info(f"Token data: {token_data_json}")
+            logger.debug(f"Token data: {token_data_json}")
 
             # Set data in the local storage
             await page.evaluate(

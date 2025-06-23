@@ -234,18 +234,18 @@ def load_deltatable_lite(
     # Apply filtering if metadata is provided
     if metadata:
         filter_expressions = process_metadata_and_filter(metadata)
-        logger.info(f"Filter expressions: {filter_expressions}")
+        logger.debug(f"Filter expressions: {filter_expressions}")
 
         if filter_expressions:
             combined_filter = filter_expressions[0]
             for filt in filter_expressions[1:]:
                 combined_filter &= filt
             delta_scan = delta_scan.filter(combined_filter)
-            logger.info("Applied filters based on metadata.")
+            logger.debug("Applied filters based on metadata.")
 
     if limit_rows:
         delta_scan = delta_scan.limit(limit_rows)
-        logger.info(f"Applied row limit: {limit_rows}")
+        logger.debug(f"Applied row limit: {limit_rows}")
 
     # Collect the DataFrame
     try:
@@ -259,7 +259,7 @@ def load_deltatable_lite(
         df = df.drop("depictio_aggregation_time")
         logger.debug("Dropped 'depictio_aggregation_time' column.")
 
-    logger.info(f"Loaded DataFrame with {df.height} rows and {df.width} columns.")
+    logger.debug(f"Loaded DataFrame with {df.height} rows and {df.width} columns.")
     return df
 
 
@@ -293,7 +293,7 @@ def merge_multiple_dataframes(
     logger.info("Starting the merge process.")
 
     # Step 1: Determine Common Column Types
-    logger.info("Aligning column types across all DataFrames.")
+    logger.debug("Aligning column types across all DataFrames.")
     column_types = {}
 
     for df_id, df in dataframes.items():
@@ -318,7 +318,7 @@ def merge_multiple_dataframes(
                         column_types[col] = pl.Utf8
                     logger.debug(f"Column '{col}' type promoted to {column_types[col]}.")
 
-    logger.info(f"Common column types determined: {column_types}")
+    logger.debug(f"Common column types determined: {column_types}")
 
     # Step 2: Cast Columns to Common Types
     for df_id, df in dataframes.items():
@@ -331,13 +331,13 @@ def merge_multiple_dataframes(
                 )
         if cast_columns:
             dataframes[df_id] = df.with_columns(cast_columns)
-            logger.info(f"DataFrame '{df_id}' columns casted to common types.")
+            logger.debug(f"DataFrame '{df_id}' columns casted to common types.")
 
     # Step 3: Perform Joins
     merged_df = None
     dc_ids_processed = set()
     if not join_instructions:
-        logger.info("No join instructions provided. Returning the first DataFrame.")
+        logger.debug("No join instructions provided. Returning the first DataFrame.")
         return next(iter(dataframes.values()))
     for idx, join_step in enumerate(join_instructions, start=1):
         left_id = join_step["left"]
@@ -345,7 +345,9 @@ def merge_multiple_dataframes(
         how = join_step["how"]
         on = join_step["on"].copy()  # Make a copy to modify
 
-        logger.info(f"Join Step {idx}: '{left_id}' {how} joined with '{right_id}' on columns {on}.")
+        logger.debug(
+            f"Join Step {idx}: '{left_id}' {how} joined with '{right_id}' on columns {on}."
+        )
 
         # Determine the current left DataFrame
         if merged_df is None:
@@ -354,7 +356,7 @@ def merge_multiple_dataframes(
             left_df = merged_df
 
         if right_id in dc_ids_processed:
-            logger.info(f"Skipping join with '{right_id}' as it has already been processed.")
+            logger.debug(f"Skipping join with '{right_id}' as it has already been processed.")
             continue
 
         # The right DataFrame is always from the join instructions
@@ -363,16 +365,16 @@ def merge_multiple_dataframes(
         # Identify overlapping columns excluding join keys
         overlapping_cols = set(left_df.columns).intersection(set(right_df.columns)) - set(on)
 
-        logger.info(f"Overlapping columns detected: {overlapping_cols}")
+        logger.debug(f"Overlapping columns detected: {overlapping_cols}")
 
         # Determine overlapping essential columns
         overlapping_essential_cols = overlapping_cols.intersection(essential_cols)
 
-        logger.info(f"Overlapping essential columns detected: {overlapping_essential_cols}")
+        logger.debug(f"Overlapping essential columns detected: {overlapping_essential_cols}")
 
         # # Add overlapping essential columns to 'on' list and drop them from right_df
         if overlapping_cols:
-            logger.info(
+            logger.debug(
                 f"Overlapping essential columns detected: {overlapping_cols}. Adding to join keys."
             )
             on += list(overlapping_cols)
@@ -396,24 +398,24 @@ def merge_multiple_dataframes(
 
         # Perform the join using Polars' join method
         try:
-            logger.info(
+            logger.debug(
                 f"Performing '{how}' join between left DataFrame and '{right_id}' on columns: {on}."
             )
-            logger.info(f"Left DataFrame shape: {left_df.shape} and columns: {left_df.columns}")
-            logger.info(
+            logger.debug(f"Left DataFrame shape: {left_df.shape} and columns: {left_df.columns}")
+            logger.debug(
                 f"Right DataFrame '{right_id}' shape: {right_df.shape} and columns: {right_df.columns}"
             )
 
             if merged_df is None:
                 # Initial merge
                 merged_df = left_df.join(right_df, on=on, how=how)
-                logger.info(
+                logger.debug(
                     f"Joined '{left_id}' and '{right_id}'. Merged DataFrame shape: {merged_df.shape}"
                 )
             else:
                 # Subsequent merges
                 merged_df = left_df.join(right_df, on=on, how=how)
-                logger.info(f"Joined with '{right_id}'. Merged DataFrame shape: {merged_df.shape}")
+                logger.debug(f"Joined with '{right_id}'. Merged DataFrame shape: {merged_df.shape}")
             dc_ids_processed.add(left_id)
             dc_ids_processed.add(right_id)
         except Exception as e:
@@ -427,8 +429,8 @@ def merge_multiple_dataframes(
     if missing_essentials:
         logger.warning(f"Essential columns missing from the final DataFrame: {missing_essentials}")
 
-    logger.info(f"Final merged DataFrame shape: {merged_df.shape}")
-    logger.info(f"Final merged DataFrame columns: {merged_df.columns}")
+    logger.debug(f"Final merged DataFrame shape: {merged_df.shape}")
+    logger.debug(f"Final merged DataFrame columns: {merged_df.columns}")
 
     return merged_df
 
