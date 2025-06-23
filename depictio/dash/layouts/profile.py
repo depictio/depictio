@@ -8,6 +8,7 @@ from dash_extensions.enrich import Output as enrich_Output
 from dash_extensions.enrich import State as enrich_State
 from dash_iconify import DashIconify
 
+from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.endpoints.user_endpoints.core_functions import _check_password
 from depictio.api.v1.endpoints.user_endpoints.utils import logout_user
@@ -109,6 +110,7 @@ layout = dbc.Container(
                                             variant="filled",
                                             # color=colors["pink"],
                                             radius=BUTTON_RADIUS,
+                                            disabled=settings.auth.unauthenticated_mode,
                                             leftIcon=DashIconify(
                                                 icon="mdi:logout", width=ICON_SIZE
                                             ),
@@ -132,6 +134,7 @@ layout = dbc.Container(
                                                 variant="filled",
                                                 # color=colors["blue"],
                                                 radius=BUTTON_RADIUS,
+                                                disabled=settings.auth.unauthenticated_mode,
                                                 leftIcon=DashIconify(
                                                     icon="mdi:lock-outline",
                                                     width=ICON_SIZE,
@@ -157,6 +160,7 @@ layout = dbc.Container(
                                                 variant="filled",
                                                 # color=colors["green"],
                                                 radius=BUTTON_RADIUS,
+                                                disabled=settings.auth.unauthenticated_mode,
                                                 leftIcon=DashIconify(
                                                     icon="mdi:console", width=ICON_SIZE
                                                 ),
@@ -173,7 +177,9 @@ layout = dbc.Container(
                                                     }
                                                 },
                                             ),
-                                            href="/cli_configs",
+                                            href="/cli_configs"
+                                            if not settings.auth.unauthenticated_mode
+                                            else "#",
                                         ),
                                     ],
                                     spacing="md",

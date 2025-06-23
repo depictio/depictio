@@ -157,6 +157,42 @@ def api_call_fetch_user_from_email(email: EmailStr) -> User | None:
 
 
 @validate_call(validate_return=True)
+def api_call_get_anonymous_user_session() -> dict | None:
+    """
+    Get the anonymous user session data for unauthenticated mode.
+    Synchronous version for Dash compatibility.
+
+    Returns:
+        Optional[dict]: The session data if successful, None otherwise
+    """
+    logger.debug("Fetching anonymous user session via API")
+
+    try:
+        response = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/auth/get_anonymous_user_session",
+            headers={"api-key": settings.auth.internal_api_key},
+            timeout=10,
+        )
+
+        if response.status_code == 200:
+            session_data = response.json()
+            logger.debug("Anonymous user session fetched successfully via API")
+            return session_data
+        elif response.status_code == 403:
+            logger.warning("Anonymous user session not available - unauthenticated mode disabled")
+            return None
+        else:
+            logger.error(
+                f"Error fetching anonymous user session: {response.status_code} - {response.text}"
+            )
+            return None
+
+    except Exception as e:
+        logger.error(f"Exception during anonymous user session fetch: {e}")
+        return None
+
+
+@validate_call(validate_return=True)
 def api_call_create_token(token_data: TokenData) -> dict[str, Any] | None:
     """
     Create a new token for a user by calling the API.
