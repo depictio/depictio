@@ -30,10 +30,10 @@ def register_callbacks_header(app):
         # prevent_initial_call=True,
     )
     def toggle_buttons(switch_state, local_store, pathname):
-        logger.info("\n\n\n")
-        logger.info("toggle_buttons")
-        logger.info(switch_state)
-        logger.info("API_BASE_URL: " + str(API_BASE_URL))
+        # logger.info("\n\n\n")
+        # logger.info("toggle_buttons")
+        # logger.info(switch_state)
+        # logger.info("API_BASE_URL: " + str(API_BASE_URL))
 
         len_output = 8
 
@@ -63,20 +63,20 @@ def register_callbacks_header(app):
             else False
         )
 
-        logger.info(f"{data['permissions']['viewers']}")
+        logger.debug(f"{data['permissions']['viewers']}")
 
         viewer_ids = [str(e["id"]) for e in data["permissions"]["viewers"] if e != "*"]
         is_viewer = str(current_user.id) in viewer_ids
         has_wildcard = "*" in data["permissions"]["viewers"]
         viewer = is_viewer or has_wildcard
-        logger.info(f"owner: {owner}, viewer: {viewer}")
-        logger.info(f"switch_state: {switch_state}")
-        logger.info(f"current_user: {current_user}")
-        logger.info(f"viewer_ids: {viewer_ids}")
-        logger.info(f"has_wildcard: {has_wildcard}")
-        logger.info(f"is_viewer: {is_viewer}")
-        logger.info(f"owner: {owner}")
-        logger.info(f"viewer: {viewer}")
+        logger.debug(f"owner: {owner}, viewer: {viewer}")
+        logger.debug(f"switch_state: {switch_state}")
+        logger.debug(f"current_user: {current_user}")
+        logger.debug(f"viewer_ids: {viewer_ids}")
+        logger.debug(f"has_wildcard: {has_wildcard}")
+        logger.debug(f"is_viewer: {is_viewer}")
+        logger.debug(f"owner: {owner}")
+        logger.debug(f"viewer: {viewer}")
 
         if not owner and viewer:
             return [dash.no_update] * (len_output - 2) + [False] * 2

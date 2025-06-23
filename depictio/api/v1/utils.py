@@ -37,7 +37,9 @@ async def clean_screenshots():
                 dashboard_id = filename.split(".")[0]
                 # Check if the dashboard ID is in the list of dashboard IDs
                 if dashboard_id not in dashboard_ids:
-                    logger.debug(f"Dashboard ID {dashboard_id} not found in DB. Removing file: {file_path}")
+                    logger.debug(
+                        f"Dashboard ID {dashboard_id} not found in DB. Removing file: {file_path}"
+                    )
                     try:
                         os.remove(file_path)
                         logger.debug(f"Removed file: {file_path}")

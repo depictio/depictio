@@ -52,7 +52,9 @@ async def create_initial_project(admin_user: UserBeanie, token_payload: TokenBea
 
         logger.debug(f"Project creation payload: {payload}")
         if payload["success"]:
-            project_name = payload["project"].name if hasattr(payload["project"], "name") else "unknown"
+            project_name = (
+                payload["project"].name if hasattr(payload["project"], "name") else "unknown"
+            )
             logger.info(f"Project created successfully: {project_name}")
             return {
                 "success": True,

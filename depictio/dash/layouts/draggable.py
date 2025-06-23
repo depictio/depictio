@@ -142,12 +142,12 @@ def register_callbacks_draggable(app):
         Returns:
             dict: Updated components' wf/dc data.
         """
-        logger.info("Entering store_wf_dc_selection callback")
-        logger.info(f"Workflow values (IDs): {wf_values}")
-        logger.info(f"Data collection values (IDs): {dc_values}")
-        logger.info(f"URL pathname: {pathname}")
-        logger.info(f"Local store data: {local_store}")
-        logger.info(f"Components store data before update: {components_store}")
+        logger.info("Storing workflow and data collection selections in components store.")
+        # logger.info(f"Workflow values (IDs): {wf_values}")
+        # logger.info(f"Data collection values (IDs): {dc_values}")
+        # logger.info(f"URL pathname: {pathname}")
+        # logger.info(f"Local store data: {local_store}")
+        # logger.info(f"Components store data before update: {components_store}")
 
         # Validate access token
         if not local_store or "access_token" not in local_store:

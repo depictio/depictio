@@ -25,7 +25,7 @@ AGGREGATION_MAPPING = {
 
 
 def compute_value(data, column_name, aggregation):
-    logger.info(f"Computing value for {column_name} with {aggregation}")
+    logger.debug(f"Computing value for {column_name} with {aggregation}")
 
     # FIXME: optimization - consider checking if data is already a pandas DataFrame
     data = data.to_pandas()
@@ -64,14 +64,14 @@ def compute_value(data, column_name, aggregation):
             return None
         else:
             try:
-                logger.info(f"Applying aggregation function '{pandas_agg}'")
+                logger.debug(f"Applying aggregation function '{pandas_agg}'")
                 # logger.info(f"Column name: {column_name}")
                 # logger.info(f"Data: {data}")
                 # logger.info(f"Data cols {data.columns}")
                 # logger.info(f"Data type: {data[column_name].dtype}")
                 # logger.info(f"Data: {data[column_name]}")
                 new_value = data[column_name].agg(pandas_agg)
-                logger.info(
+                logger.debug(
                     f"Computed {aggregation} ({pandas_agg}): {new_value} (Type: {type(new_value)})"
                 )
             except AttributeError as e:
@@ -80,7 +80,7 @@ def compute_value(data, column_name, aggregation):
 
         if isinstance(new_value, np.float64):
             new_value = round(new_value, 4)
-            logger.info(f"New value rounded: {new_value}")
+            logger.debug(f"New value rounded: {new_value}")
 
     return new_value
 
