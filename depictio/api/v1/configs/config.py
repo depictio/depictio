@@ -1,5 +1,3 @@
-import os
-
 from depictio.api.v1.configs.logging_init import initialize_loggers, logger
 from depictio.api.v1.configs.settings_models import Settings
 from depictio.api.v1.key_utils import generate_keys, load_private_key, load_public_key
@@ -20,10 +18,8 @@ DASH_BASE_URL = settings.dash.internal_url
 MONGODB_URL = f"mongodb://{settings.mongodb.service_name}:{settings.mongodb.service_port}"
 logger.info(f"MongoDB URL: {MONGODB_URL}")
 _KEYS_DIR = settings.auth.keys_dir
-# Use the shared internal API key from settings
-settings.auth.internal_api_key = os.getenv(
-    "DEPICTIO_AUTH_INTERNAL_API_KEY", settings.auth.internal_api_key
-)
+# The internal API key is now automatically managed via the computed field
+# No manual assignment needed - it checks environment variables and generates/reads from file
 
 
 # Algorithm used for signing
