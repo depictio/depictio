@@ -10,7 +10,7 @@ from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
     generate_join_dict,
     normalize_join_details,
 )
-from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
+from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
 from depictio.api.v1.endpoints.validators import validate_workflow_and_collection
 from depictio.api.v1.endpoints.workflow_endpoints.routes import (
     get_all_workflows,
@@ -32,7 +32,7 @@ users_collection = db["users"]
 @datacollections_endpoint_router.get("/specs/{data_collection_id}")
 async def specs(
     data_collection_id: PyObjectId,
-    current_user: str = Depends(get_current_user),
+    current_user: str = Depends(get_user_or_anonymous),
 ):
     try:
         data_collection_oid = ObjectId(data_collection_id)
@@ -49,6 +49,7 @@ async def specs(
                     {"permissions.owners._id": current_user.id},
                     {"permissions.viewers._id": current_user.id},
                     {"permissions.viewers": "*"},
+                    {"is_public": True},
                 ],
             }
         },
@@ -102,7 +103,7 @@ async def delete_datacollection(
 async def get_join_tables(
     workflow_id: str,
     data_collection_id: str,
-    current_user: str = Depends(get_current_user),
+    current_user: str = Depends(get_user_or_anonymous),
 ):
     """
     Retrieve join details for the data collections in a workflow.
@@ -153,7 +154,7 @@ async def get_join_tables(
 
 
 @datacollections_endpoint_router.get("/get_dc_joined/{workflow_id}")
-async def get_dc_joined(workflow_id: str, current_user: str = Depends(get_current_user)):
+async def get_dc_joined(workflow_id: str, current_user: str = Depends(get_user_or_anonymous)):
     """
     Retrieve join details for the data collections in a workflow.
     """
@@ -173,7 +174,7 @@ async def get_dc_joined(workflow_id: str, current_user: str = Depends(get_curren
 @datacollections_endpoint_router.get("/get_tag_from_id/{data_collection_id}")
 async def get_tag_from_id(
     data_collection_id: str,
-    current_user: str = Depends(get_current_user),
+    current_user: str = Depends(get_user_or_anonymous),
 ):
     try:
         data_collection_oid = ObjectId(data_collection_id)
@@ -190,6 +191,7 @@ async def get_tag_from_id(
                     {"permissions.owners._id": current_user.id},
                     {"permissions.viewers._id": current_user.id},
                     {"permissions.viewers": "*"},
+                    {"is_public": True},
                 ],
             }
         },

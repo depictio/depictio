@@ -7,7 +7,7 @@ from pymongo import ReturnDocument
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import projects_collection, users_collection, workflows_collection
-from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
+from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
 from depictio.api.v1.endpoints.workflow_endpoints.utils import compare_models
 from depictio.models.models.base import convert_objectid_to_str
 from depictio.models.models.users import UserBase
@@ -40,6 +40,7 @@ async def get_all_workflows(current_user: str = Depends(get_current_user)):
             {"permissions.owners._id": user_id},
             {"permissions.viewers._id": user_id},
             {"permissions.viewers": "*"},  # This makes workflows with "*" publicly accessible
+            {"is_public": True},  # Allow access to public workflows
         ]
     }
 
@@ -59,7 +60,7 @@ async def get_workflow_from_args(
     name: str,
     engine: str,
     permissions: str | None = None,
-    current_user: str = Depends(get_current_user),
+    current_user: str = Depends(get_user_or_anonymous),
 ):
     logger.debug(f"workflow_name: {name}")
     logger.debug(f"workflow_engine: {engine}")
@@ -106,6 +107,7 @@ async def get_workflow_from_args(
             {"permissions.owners._id": user_id},
             {"permissions.viewers._id": user_id},
             {"permissions.viewers": "*"},  # This makes workflows with "*" publicly accessible
+            {"is_public": True},  # Allow access to public workflows
         ]
     }
 
@@ -159,7 +161,9 @@ async def get_workflow_from_args(
 
 @workflows_endpoint_router.get("/get/from_id")
 # @workflows_endpoint_router.get("/get_workflows", response_model=List[Workflow])
-async def get_workflow_from_id(workflow_id: str, current_user: str = Depends(get_current_user)):
+async def get_workflow_from_id(
+    workflow_id: str, current_user: str = Depends(get_user_or_anonymous)
+):
     logger.debug(f"workflow_id: {workflow_id}")
 
     if not current_user:
@@ -180,6 +184,7 @@ async def get_workflow_from_id(workflow_id: str, current_user: str = Depends(get
                     {"permissions.owners._id": current_user.id},
                     {"permissions.viewers._id": current_user.id},
                     {"permissions.viewers": "*"},
+                    {"is_public": True},
                 ],
             }
         },
@@ -206,7 +211,9 @@ async def get_workflow_from_id(workflow_id: str, current_user: str = Depends(get
 
 
 @workflows_endpoint_router.get("/get_tag_from_id/{workflow_id}")
-async def get_workflow_tag_from_id(workflow_id: str, current_user: str = Depends(get_current_user)):
+async def get_workflow_tag_from_id(
+    workflow_id: str, current_user: str = Depends(get_user_or_anonymous)
+):
     logger.debug(f"workflow_id: {workflow_id}")
 
     if not current_user:
@@ -227,6 +234,7 @@ async def get_workflow_tag_from_id(workflow_id: str, current_user: str = Depends
                     {"permissions.owners._id": current_user.id},
                     {"permissions.viewers._id": current_user.id},
                     {"permissions.viewers": "*"},
+                    {"is_public": True},
                 ],
             }
         },

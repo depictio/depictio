@@ -16,6 +16,7 @@ def load_dashboards_from_db(owner, admin_mode=False):
         "permissions": 1,
         "last_saved_ts": 1,
         "project_id": 1,
+        "is_public": 1,
     }
     if admin_mode:
         projection["stored_metadata"] = 1
@@ -35,6 +36,8 @@ def load_dashboards_from_db(owner, admin_mode=False):
                     "$or": [
                         {"permissions.owners._id": ObjectId(owner)},
                         {"permissions.viewers._id": ObjectId(owner)},
+                        {"permissions.viewers": {"$in": ["*"]}},
+                        {"is_public": True},
                     ]
                 },
                 projection,
