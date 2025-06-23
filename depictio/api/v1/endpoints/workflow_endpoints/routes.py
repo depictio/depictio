@@ -61,22 +61,22 @@ async def get_workflow_from_args(
     permissions: str | None = None,
     current_user: str = Depends(get_current_user),
 ):
-    logger.info(f"workflow_name: {name}")
-    logger.info(f"workflow_engine: {engine}")
-    logger.info(f"permissions: {permissions}")
+    logger.debug(f"workflow_name: {name}")
+    logger.debug(f"workflow_engine: {engine}")
+    logger.debug(f"permissions: {permissions}")
 
     # Parse the permissions if provided
     if permissions:
         try:
-            logger.info(f"permissions: {permissions}")
+            logger.debug(f"permissions: {permissions}")
             permissions_request = json.loads(permissions)
-            logger.info(f"permissions_request: {permissions_request}")
+            logger.debug(f"permissions_request: {permissions_request}")
         except json.JSONDecodeError:
             raise HTTPException(status_code=400, detail="Invalid JSON in permissions")
     else:
         permissions_request = None
 
-    logger.info(
+    logger.debug(
         f"Name: {name}, Engine: {engine}, Permissions: {permissions_request}, User: {current_user}"
     )
 
@@ -91,7 +91,7 @@ async def get_workflow_from_args(
 
     # current_user = api_call_fetch_user_from_token(token)
 
-    logger.info(f"current_user: {current_user}")
+    logger.debug(f"current_user: {current_user}")
 
     # Assuming the 'current_user' now holds a 'user_id' as an ObjectId after being parsed in 'get_current_user'
     user_id = current_user.id
@@ -110,9 +110,9 @@ async def get_workflow_from_args(
     }
 
     if permissions_request:
-        logger.info(f"permissions_request: {permissions_request}")
-        logger.info(f"type(permissions_request): {type(permissions_request)}")
-        logger.info(f"permissions_request['$or']: {permissions_request['$or']}")
+        logger.debug(f"permissions_request: {permissions_request}")
+        logger.debug(f"type(permissions_request): {type(permissions_request)}")
+        logger.debug(f"permissions_request['$or']: {permissions_request['$or']}")
 
         # turn the user_id into an ObjectId
         for elem in permissions_request["$or"]:
@@ -138,7 +138,7 @@ async def get_workflow_from_args(
 
     # Retrieve the workflows & convert them to Workflow objects to validate the model
     workflows = list(workflows_collection.find(query))
-    logger.info(f"workflows: {workflows}")
+    logger.debug(f"workflows: {workflows}")
 
     if not workflows:
         raise HTTPException(
@@ -160,7 +160,7 @@ async def get_workflow_from_args(
 @workflows_endpoint_router.get("/get/from_id")
 # @workflows_endpoint_router.get("/get_workflows", response_model=List[Workflow])
 async def get_workflow_from_id(workflow_id: str, current_user: str = Depends(get_current_user)):
-    logger.info(f"workflow_id: {workflow_id}")
+    logger.debug(f"workflow_id: {workflow_id}")
 
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
@@ -207,7 +207,7 @@ async def get_workflow_from_id(workflow_id: str, current_user: str = Depends(get
 
 @workflows_endpoint_router.get("/get_tag_from_id/{workflow_id}")
 async def get_workflow_tag_from_id(workflow_id: str, current_user: str = Depends(get_current_user)):
-    logger.info(f"workflow_id: {workflow_id}")
+    logger.debug(f"workflow_id: {workflow_id}")
 
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
@@ -258,16 +258,16 @@ async def create_workflow(workflow: dict, current_user: str = Depends(get_curren
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
 
-    logger.info(f"current_user: {current_user}")
+    logger.debug(f"current_user: {current_user}")
 
     current_access_token = current_user.current_access_token
     # hash the token
     token_hash = hashlib.sha256(current_access_token.encode()).hexdigest()
-    logger.info(f"Token hash: {token_hash}")
+    logger.debug(f"Token hash: {token_hash}")
 
     # fetch user DB object from the token
     response_user = users_collection.find_one({"_id": ObjectId(current_user.id)})
-    logger.info(f"response_user: {response_user}")
+    logger.debug(f"response_user: {response_user}")
 
     if not workflow:
         raise HTTPException(status_code=400, detail="Workflow is required to create it.")
@@ -279,7 +279,7 @@ async def create_workflow(workflow: dict, current_user: str = Depends(get_curren
             "permissions.owners._id": current_user.id,
         }
     )
-    logger.info(f"existing_workflow: {existing_workflow}")
+    logger.debug(f"existing_workflow: {existing_workflow}")
 
     if existing_workflow:
         raise HTTPException(
@@ -290,55 +290,55 @@ async def create_workflow(workflow: dict, current_user: str = Depends(get_curren
 
     # Correctly update the owners list in the permissions attribute
     new_owner = UserBase(id=current_user.id, email=current_user.email, groups=current_user.groups)
-    logger.info(f"new_owner: {new_owner}")
+    logger.debug(f"new_owner: {new_owner}")
     # new_owner = convert_objectid_to_str(new_owner.mongo())
-    # logger.info(f"new_owner: {new_owner}")
+    # logger.debug(f"new_owner: {new_owner}")
 
     # Replace or extend the owners list as needed
     # workflow["permissions"]["owners"].append(new_owner)  # Appending the new owner
 
-    logger.info(f"workflow: {workflow}")
+    logger.debug(f"workflow: {workflow}")
 
     # Convert the workflow to a Workflow object
     workflow = Workflow(**workflow)
 
-    logger.info(f"workflow: {workflow}")
+    logger.debug(f"workflow: {workflow}")
 
     # Add the new owner to the permissions
     workflow.permissions.owners.append(new_owner)
 
-    logger.info(f"workflow: {workflow}")
+    logger.debug(f"workflow: {workflow}")
 
     # Assign PyObjectId to workflow ID and data collection IDs
     workflow.id = ObjectId()
 
-    logger.info(f"workflow: {workflow}")
+    logger.debug(f"workflow: {workflow}")
 
     for data_collection in workflow.data_collections:
         data_collection.id = ObjectId()
     assert isinstance(workflow.id, ObjectId)
 
-    logger.info(f"Workflow: {workflow}")
+    logger.debug(f"Workflow: {workflow}")
 
     res = workflows_collection.insert_one(workflow.mongo())
     assert res.inserted_id == workflow.id
 
-    logger.info(f"res: {res}")
+    logger.debug(f"res: {res}")
 
     # check if the workflow was created in the DB
     res = workflows_collection.find_one({"_id": workflow.id})
-    logger.info(f"res query : {res}")
+    logger.debug(f"res query : {res}")
 
     # check if the workflow was created in the DB using the workflow_tag
     res = workflows_collection.find_one({"workflow_tag": workflow.workflow_tag})
-    logger.info(f"res query tag : {res}")
+    logger.debug(f"res query tag : {res}")
 
     return_dict = {
         str(workflow.id): [str(data_collection.id) for data_collection in workflow.data_collections]
     }
 
     return_dict = convert_objectid_to_str(workflow)
-    logger.info(f"return_dict: {return_dict}")
+    logger.debug(f"return_dict: {return_dict}")
     return return_dict
 
 
@@ -357,7 +357,7 @@ async def update_workflow(workflow: Workflow, current_user: str = Depends(get_cu
         }
     )
 
-    logger.info(f"existing_workflow: {existing_workflow}")
+    logger.debug(f"existing_workflow: {existing_workflow}")
 
     if not existing_workflow:
         raise HTTPException(
@@ -384,7 +384,7 @@ async def update_workflow(workflow: Workflow, current_user: str = Depends(get_cu
         return_document=ReturnDocument.AFTER,
     )
 
-    logger.info(f"res: {res}")
+    logger.debug(f"res: {res}")
 
     # Verify the update was successful
     # if not res:
@@ -406,7 +406,7 @@ async def delete_workflow(workflow_id: str, current_user: str = Depends(get_curr
     assert isinstance(workflow_oid, ObjectId)
     existing_workflow = workflows_collection.find_one({"_id": workflow_oid})
 
-    print(existing_workflow)
+    logger.debug(existing_workflow)
 
     if not existing_workflow:
         raise HTTPException(
@@ -419,7 +419,7 @@ async def delete_workflow(workflow_id: str, current_user: str = Depends(get_curr
 
     # Ensure that the current user is authorized to update the workflow
     user_id = current_user.id
-    print(
+    logger.debug(
         user_id,
         type(user_id),
         existing_workflow["permissions"]["owners"],
@@ -450,8 +450,8 @@ async def compare_models_endpoint(
     existing_workflow: Workflow,
     current_user=Depends(get_current_user),
 ):
-    logger.info(f"new_workflow: {new_workflow}")
-    logger.info(f"existing_workflow: {existing_workflow}")
+    logger.debug(f"new_workflow: {new_workflow}")
+    logger.debug(f"existing_workflow: {existing_workflow}")
 
     if not current_user:
         raise HTTPException(status_code=401, detail="Current user not found.")

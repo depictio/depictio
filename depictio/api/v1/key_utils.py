@@ -211,11 +211,11 @@ def generate_keys(
     if not algorithm:
         algorithm = "RS256"  # Default algorithm
 
-    logger.info(f"Generating keys with algorithm: {algorithm}")
-    logger.info(f"Keys directory: {keys_dir}")
-    logger.info(f"Private key path: {private_key_path}")
-    logger.info(f"Public key path: {public_key_path}")
-    logger.info(f"Wipe existing keys: {wipe}")
+    logger.debug(f"Generating keys with algorithm: {algorithm}")
+    logger.debug(f"Keys directory: {keys_dir}")
+    logger.debug(f"Private key path: {private_key_path}")
+    logger.debug(f"Public key path: {public_key_path}")
+    logger.debug(f"Wipe existing keys: {wipe}")
 
     if wipe:
         logger.warning("Wiping existing keys as requested.")
@@ -296,9 +296,9 @@ def check_and_generate_keys(
         logger.warning("Key files not found. Generating new keys.")
         return generate_keys(private_key_path, public_key_path, keys_dir, algorithm)
 
-    logger.info("Key files already exist. No need to generate new keys.")
-    logger.info(f"Private key path: {private_key_path}")
-    logger.info(f"Public key path: {public_key_path}")
+    logger.debug("Key files already exist. No need to generate new keys.")
+    logger.debug(f"Private key path: {private_key_path}")
+    logger.debug(f"Public key path: {public_key_path}")
     return private_key_path, public_key_path
 
 
