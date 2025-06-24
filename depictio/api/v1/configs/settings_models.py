@@ -175,8 +175,18 @@ class AuthConfig(BaseSettings):
     keys_dir: Path = Field(default=Path("./depictio/keys"))
     keys_algorithm: str = Field(default="RS256")
     cli_config_dir: Path = Field(default=Path("./depictio/.depictio"))
+    internal_api_key_env: Optional[str] = Field(default=None)
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_AUTH_", case_sensitive=False)
+
+    def __init__(self, **data):
+        super().__init__(**data)
+
+        # Manually read the environment variable if not set
+        if self.internal_api_key_env is None:
+            import os
+
+            self.internal_api_key_env = os.getenv("DEPICTIO_AUTH_INTERNAL_API_KEY")
 
     @computed_field
     @property
@@ -185,6 +195,11 @@ class AuthConfig(BaseSettings):
         Get the internal API key using the existing key_utils_base functions.
         This maintains consistency and avoids code duplication.
         """
+        # First check if environment variable is set
+        if self.internal_api_key_env:
+            return self.internal_api_key_env
+
+        # Otherwise use the key utils to load/generate
         from depictio.api.v1.key_utils_base import _load_or_generate_api_internal_key
 
         return _load_or_generate_api_internal_key(
