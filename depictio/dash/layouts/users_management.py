@@ -7,7 +7,7 @@ from dash import Input, Output, State, ctx, dcc, html
 from dash.exceptions import PreventUpdate
 from dash_extensions import EventListener
 
-from depictio.api.v1.configs.config import API_BASE_URL
+from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.endpoints.user_endpoints.core_functions import _verify_password
 from depictio.api.v1.endpoints.user_endpoints.utils import login_user
@@ -90,6 +90,7 @@ def render_login_form():
                             variant="outline",
                             color="gray",
                             fullWidth=True,
+                            disabled=settings.auth.unauthenticated_mode,
                         ),
                         id="open-register-form",
                     ),
@@ -460,6 +461,18 @@ def register_callbacks_users_management(app):
 
         # Handle button clicks
         if button_id == "open-register-form":
+            # Check if registration is disabled in unauthenticated mode
+            if settings.auth.unauthenticated_mode:
+                # Don't open register form if registration is disabled
+                return (
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                )
+
             logger.info("Opening register form")
             modal_state = "register"
             content = render_register_form()
@@ -498,6 +511,25 @@ def register_callbacks_users_management(app):
             )
 
         elif button_id == "register-button":
+            # Check if registration is disabled in unauthenticated mode
+            if settings.auth.unauthenticated_mode:
+                feedback_message = "User registration is disabled in unauthenticated mode"
+                modal_open_new = True
+                content = render_register_form()
+
+                return (
+                    True,
+                    content,
+                    dmc.Text(
+                        feedback_message,
+                        color="red",
+                        id="user-feedback-message-register",
+                    ),
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                )
+
             feedback_message, modal_open_new = handle_registration(
                 register_email, register_password, register_confirm_password
             )

@@ -2,7 +2,7 @@ import collections
 
 import httpx
 
-from depictio.api.v1.configs.config import API_BASE_URL
+from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import api_call_fetch_user_from_token
 from depictio.dash.layouts.draggable_scenarios.interactive_component_update import (
@@ -183,6 +183,19 @@ def load_depictio_data(dashboard_id, local_data):
                 edit_components_button_checked = dashboard_data.buttons_data[
                     "edit_components_button"
                 ]
+
+            # Disable edit_components_button for anonymous users and temporary users on public dashboards in unauthenticated mode
+            if settings.auth.unauthenticated_mode:
+                # Disable for anonymous users (non-temporary)
+                if (
+                    hasattr(current_user, "is_anonymous")
+                    and current_user.is_anonymous
+                    and not getattr(current_user, "is_temporary", False)
+                ):
+                    edit_components_button_checked = False
+                # Also disable for temporary users viewing public dashboards they don't own
+                elif getattr(current_user, "is_temporary", False) and not owner:
+                    edit_components_button_checked = False
 
             children = render_dashboard(
                 dashboard_data.stored_metadata,

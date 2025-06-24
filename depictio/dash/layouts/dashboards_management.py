@@ -9,7 +9,7 @@ from bson import ObjectId
 from dash import ALL, MATCH, Input, Output, State, ctx, dcc, html
 from dash_iconify import DashIconify
 
-from depictio.api.v1.configs.config import API_BASE_URL
+from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.custom_logging import format_pydantic
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import api_call_fetch_user_from_token, api_get_project_from_id
@@ -226,7 +226,7 @@ def register_callbacks_dashboards_management(app):
         ]
         return dashboards_view
 
-    def create_homepage_view(dashboards, user_id, token):
+    def create_homepage_view(dashboards, user_id, token, current_user):
         logger.debug(f"dashboards: {dashboards}")
 
         def modal_edit_name_dashboard(dashboard):
@@ -366,12 +366,20 @@ def register_callbacks_dashboards_management(app):
             )
             return group
 
-        def create_buttons(dashboard, user_id):
+        def create_buttons(dashboard, user_id, current_user):
             disabled = (
                 True
                 if str(user_id)
                 not in [str(owner["_id"]) for owner in dashboard["permissions"]["owners"]]
                 else False
+            )
+
+            # Disable duplicate button for anonymous users in unauthenticated mode
+            duplicate_disabled = (
+                settings.auth.unauthenticated_mode
+                and hasattr(current_user, "is_anonymous")
+                and current_user.is_anonymous
+                and not getattr(current_user, "is_temporary", False)
             )
             public = dashboard["is_public"]
             # public = True if "*" in [e for e in dashboard["permissions"]["viewers"]] else False
@@ -422,6 +430,7 @@ def register_callbacks_dashboards_management(app):
                                 # style={"fontFamily": "Virgil"},
                                 size="xs",
                                 style={"padding": "2px 6px", "fontSize": "12px"},
+                                disabled=duplicate_disabled,
                             ),
                             dmc.Button(
                                 "Delete",
@@ -518,7 +527,7 @@ def register_callbacks_dashboards_management(app):
 
             return thumbnail
 
-        def loop_over_dashboards(user_id, dashboards, token):
+        def loop_over_dashboards(user_id, dashboards, token, current_user):
             view = list()
             for dashboard in dashboards:
                 # delete_modal = modal_delete_dashboard(dashboard)
@@ -528,7 +537,7 @@ def register_callbacks_dashboards_management(app):
                     title=f"Delete dashboard : {dashboard['title']}",
                 )
                 edit_name_modal = modal_edit_name_dashboard(dashboard)
-                buttons = create_buttons(dashboard, user_id)
+                buttons = create_buttons(dashboard, user_id, current_user)
                 dashboard_header = create_dashboad_view_header(dashboard, user_id, token)
 
                 buttons = dmc.Accordion(
@@ -616,7 +625,7 @@ def register_callbacks_dashboards_management(app):
         private_dashboards = [d for d in dashboards if d["is_public"] is False]
         # private_dashboards_ids = [d["dashboard_id"] for d in private_dashboards]
         private_dashboards_view = dmc.SimpleGrid(
-            loop_over_dashboards(user_id, private_dashboards, token),
+            loop_over_dashboards(user_id, private_dashboards, token, current_user),
             cols=3,  # Default number of columns
             spacing="xl",
             verticalSpacing="xl",
@@ -637,7 +646,7 @@ def register_callbacks_dashboards_management(app):
 
         public_dashboards = [d for d in dashboards if d["is_public"] is True]
         public_dashboards_view = dmc.SimpleGrid(
-            loop_over_dashboards(user_id, public_dashboards, token),
+            loop_over_dashboards(user_id, public_dashboards, token, current_user),
             cols=3,  # Default number of columns
             spacing="xl",
             verticalSpacing="xl",
@@ -939,6 +948,7 @@ def register_callbacks_dashboards_management(app):
                 new_dashboard.dashboard_id = str(new_dashboard.id)
                 new_dashboard.permissions.owners = [current_userbase]
                 new_dashboard.permissions.viewers = []
+                new_dashboard.is_public = False  # Always make duplicated dashboards private
                 logger.info(f"New dashboard: {format_pydantic(new_dashboard)}")
                 # new_dashboard.dashboard_id = generate_unique_index()
                 # new_dashboard.dashboard_id = str(len(dashboards) + 1)
@@ -984,8 +994,9 @@ def register_callbacks_dashboards_management(app):
     def generate_dashboard_view_response(dashboards, store_data_list, current_userbase, user_data):
         dashboards = [convert_objectid_to_str(dashboard.mongo()) for dashboard in dashboards]
         logger.debug(f"dashboards: {dashboards}")
+        current_user = api_call_fetch_user_from_token(user_data["access_token"])
         dashboards_view = create_homepage_view(
-            dashboards, current_userbase.id, user_data["access_token"]
+            dashboards, current_userbase.id, user_data["access_token"], current_user
         )
         return [dashboards_view] * len(store_data_list)
 

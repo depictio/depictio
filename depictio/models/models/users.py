@@ -158,6 +158,8 @@ class UserBase(MongoModel):
     email: EmailStr
     is_admin: bool = False
     is_anonymous: bool = False
+    is_temporary: bool = False
+    expiration_time: datetime | None = None
 
 
 class UserBaseCLIConfig(UserBase):

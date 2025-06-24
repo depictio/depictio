@@ -12,7 +12,11 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.endpoints.user_endpoints.core_functions import _check_password
 from depictio.api.v1.endpoints.user_endpoints.utils import logout_user
-from depictio.dash.api_calls import api_call_edit_password, api_call_fetch_user_from_token
+from depictio.dash.api_calls import (
+    api_call_edit_password,
+    api_call_fetch_user_from_token,
+    api_call_upgrade_to_temporary_user,
+)
 from depictio.dash.colors import colors  # Import our color palette
 from depictio.dash.layouts.layouts_toolbox import create_edit_password_modal
 
@@ -110,7 +114,7 @@ layout = dbc.Container(
                                             variant="filled",
                                             # color=colors["pink"],
                                             radius=BUTTON_RADIUS,
-                                            disabled=settings.auth.unauthenticated_mode,
+                                            disabled=False,  # Enable logout button even in unauthenticated mode
                                             leftIcon=DashIconify(
                                                 icon="mdi:logout", width=ICON_SIZE
                                             ),
@@ -124,6 +128,30 @@ layout = dbc.Container(
                                                         "backgroundColor": colors["red"],
                                                     },
                                                     "backgroundColor": colors["red"],
+                                                },
+                                            },
+                                        ),
+                                        dmc.Button(
+                                            "Enable Interactive Mode",
+                                            id="upgrade-to-temporary-button",
+                                            variant="filled",
+                                            radius=BUTTON_RADIUS,
+                                            style={
+                                                "display": "none"
+                                            },  # Hidden by default, shown conditionally
+                                            leftIcon=DashIconify(
+                                                icon="mdi:account-arrow-up", width=ICON_SIZE
+                                            ),
+                                            styles={
+                                                "root": {
+                                                    "boxShadow": "0 2px 5px rgba(0, 0, 0, 0.1)",
+                                                    "transition": "all 0.2s ease",
+                                                    "&:hover": {
+                                                        "transform": "translateY(-2px)",
+                                                        "boxShadow": "0 4px 8px rgba(0, 0, 0, 0.2)",
+                                                        "backgroundColor": colors["blue"],
+                                                    },
+                                                    "backgroundColor": colors["blue"],
                                                 },
                                             },
                                         ),
@@ -186,6 +214,8 @@ layout = dbc.Container(
                                     position="left",
                                     mt="lg",
                                 ),
+                                # Upgrade feedback area
+                                html.Div(id="upgrade-feedback", style={"marginTop": "1rem"}),
                             ],
                             width=True,
                         ),
@@ -196,6 +226,73 @@ layout = dbc.Container(
         ),
         # Password modal (kept as is)
         password_modal,
+        # Upgrade confirmation modal
+        dmc.Modal(
+            id="upgrade-confirmation-modal",
+            title="Enable Interactive Mode",
+            centered=True,
+            size="md",
+            children=[
+                dmc.Stack(
+                    [
+                        dmc.Group(
+                            [
+                                DashIconify(icon="mdi:account-arrow-up", width=30, color="blue"),
+                                dmc.Title("Upgrade to Interactive Mode?", order=3, color="blue"),
+                            ],
+                            spacing="sm",
+                        ),
+                        dmc.Text(
+                            "This will create a temporary account that expires in 24 hours, "
+                            "allowing you to duplicate and modify dashboards.",
+                            size="sm",
+                            color="dimmed",
+                        ),
+                        dmc.Alert(
+                            title="What you'll get:",
+                            icon=DashIconify(icon="mdi:information"),
+                            children=[
+                                dmc.List(
+                                    [
+                                        dmc.ListItem(
+                                            "• Ability to duplicate and modify dashboards"
+                                        ),
+                                        dmc.ListItem("• Your own isolated workspace"),
+                                        dmc.ListItem("• All changes auto-save to your session"),
+                                        dmc.ListItem("• Session expires automatically in 24 hours"),
+                                    ]
+                                ),
+                            ],
+                            color="blue",
+                            variant="light",
+                        ),
+                        dmc.Group(
+                            [
+                                dmc.Button(
+                                    "Cancel",
+                                    id="upgrade-modal-cancel",
+                                    variant="outline",
+                                    color="gray",
+                                ),
+                                dmc.Button(
+                                    [
+                                        "Enable Interactive Mode ",
+                                        DashIconify(icon="mdi:arrow-right", width=16),
+                                    ],
+                                    id="upgrade-modal-confirm",
+                                    variant="filled",
+                                    color="blue",
+                                ),
+                            ],
+                            position="right",
+                            mt="md",
+                        ),
+                    ],
+                    spacing="md",
+                ),
+            ],
+            opened=False,
+        ),
     ],
     fluid=True,
     className="py-4",
@@ -424,6 +521,7 @@ def register_profile_callbacks(app):
         [
             Output("avatar-placeholder", "children"),
             Output("user-info-placeholder", "children"),
+            Output("upgrade-to-temporary-button", "style"),
         ],
         [State("local-store", "data"), Input("url", "pathname")],
     )
@@ -431,14 +529,14 @@ def register_profile_callbacks(app):
         logger.info(f"URL pathname: {pathname}")
         logger.info(f"session_data: {local_data}")
         if local_data is None or "access_token" not in local_data:
-            return html.Div(), html.Div()
+            return html.Div(), html.Div(), {"display": "none"}
 
         user = api_call_fetch_user_from_token(local_data["access_token"])
         logger.info(f"PROFILE user: {user}")
-        user = user.dict()
+        user = user.model_dump()
 
         if not user:
-            return html.Div(), html.Div()
+            return html.Div(), html.Div(), {"display": "none"}
 
         # Use the Depictio brand color for avatar background
         avatar = html.Div(
@@ -497,7 +595,17 @@ def register_profile_callbacks(app):
 
         user_info_display = dmc.Stack(info_items, spacing="xs")
 
-        return avatar, user_info_display
+        # Determine if upgrade button should be visible
+        # Show button in unauthenticated mode for anonymous users (not temporary)
+        show_upgrade_button = (
+            settings.auth.unauthenticated_mode
+            and user.get("is_anonymous", False)
+            and not user.get("is_temporary", False)
+        )
+
+        upgrade_button_style = {"display": "block"} if show_upgrade_button else {"display": "none"}
+
+        return avatar, user_info_display, upgrade_button_style
 
     @app.callback(
         [
@@ -513,3 +621,101 @@ def register_profile_callbacks(app):
             return dash.no_update, dash.no_update
 
         return "/auth", logout_user()
+
+    @app.callback(
+        Output("upgrade-confirmation-modal", "opened"),
+        [Input("upgrade-to-temporary-button", "n_clicks")],
+        prevent_initial_call=True,
+    )
+    def show_upgrade_modal(n_clicks):
+        """Show upgrade confirmation modal when button is clicked."""
+        if n_clicks is None:
+            return False
+        return True
+
+    @app.callback(
+        Output("upgrade-confirmation-modal", "opened", allow_duplicate=True),
+        [Input("upgrade-modal-cancel", "n_clicks")],
+        prevent_initial_call=True,
+    )
+    def close_upgrade_modal(n_clicks):
+        """Close upgrade confirmation modal when cancel is clicked."""
+        if n_clicks is None:
+            return dash.no_update
+        return False
+
+    @app.callback(
+        [
+            Output("local-store", "data", allow_duplicate=True),
+            Output("upgrade-feedback", "children"),
+            Output("url", "pathname", allow_duplicate=True),
+            Output("upgrade-confirmation-modal", "opened", allow_duplicate=True),
+        ],
+        [Input("upgrade-modal-confirm", "n_clicks")],
+        [State("local-store", "data")],
+        prevent_initial_call=True,
+    )
+    def upgrade_to_temporary_callback(n_clicks, local_data):
+        """Handle upgrade from anonymous to temporary user after confirmation."""
+        logger.info(f"Upgrade confirm button clicked: {n_clicks}")
+        if n_clicks is None:
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+        if not local_data or "access_token" not in local_data:
+            return (
+                dash.no_update,
+                dmc.Alert("Error: No access token found", color="red", title="Upgrade Failed"),
+                dash.no_update,
+                False,
+            )
+
+        if not settings.auth.unauthenticated_mode:
+            return (
+                dash.no_update,
+                dmc.Alert(
+                    "Upgrade not available - not in unauthenticated mode",
+                    color="red",
+                    title="Upgrade Not Available",
+                ),
+                dash.no_update,
+                False,
+            )
+
+        # Attempt to upgrade
+        try:
+            access_token = local_data.get("access_token")
+            upgrade_result = api_call_upgrade_to_temporary_user(access_token, expiry_hours=24)
+
+            if upgrade_result:
+                logger.info("Successfully upgraded to temporary user")
+                # Update local store and redirect to profile page to refresh UI
+                return (
+                    upgrade_result,
+                    dmc.Alert(
+                        "Successfully upgraded to interactive mode! You can now duplicate and modify dashboards. Your session will expire in 24 hours.",
+                        color="green",
+                        title="Upgrade Successful",
+                    ),
+                    "/profile",
+                    False,
+                )
+            else:
+                return (
+                    dash.no_update,
+                    dmc.Alert(
+                        "You are already a temporary user or upgrade failed - please try again",
+                        color="orange",
+                        title="Upgrade Not Needed",
+                    ),
+                    dash.no_update,
+                    False,
+                )
+
+        except Exception as e:
+            logger.error(f"Error during upgrade: {e}")
+            return (
+                dash.no_update,
+                dmc.Alert(f"Error during upgrade: {str(e)}", color="red", title="Upgrade Error"),
+                dash.no_update,
+                False,
+            )
