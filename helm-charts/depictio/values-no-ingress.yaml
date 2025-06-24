@@ -4,19 +4,19 @@
 storageClass: "standard"
 # Storage class for Rancher Desktop
 # storageClass: "local-path"
-persistence:
-  mongo:
-    size: 1Gi
-    accessMode: ReadWriteOnce
-  minio:
-    size: 1Gi
-    accessMode: ReadWriteOnce
-  screenshots:
-    size: 100Mi
-    accessMode: ReadWriteOnce
-  keys:
-    size: 1Mi
-    accessMode: ReadWriteOnce
+# persistence:
+#   mongo:
+#     size: 1Gi
+#     accessMode: ReadWriteOnce
+#   minio:
+#     size: 1Gi
+#     accessMode: ReadWriteOnce
+#   screenshots:
+#     size: 100Mi
+#     accessMode: ReadWriteOnce
+#   keys:
+#     size: 1Mi
+#     accessMode: ReadWriteOnce
 
 
 
