@@ -206,13 +206,29 @@ async def save_dashboard(
 
     # logger.info(f"Dashboard data: {data}")
 
-    # Attempt to find and update the document, or insert if it doesn't exist
-    result = dashboards_collection.find_one_and_update(
-        {"dashboard_id": dashboard_id, "permissions.owners._id": user_id},
-        {"$set": data.mongo()},
-        upsert=True,
-        return_document=True,  # Adjust based on your MongoDB driver version, some versions might use ReturnDocument.AFTER
-    )
+    # Check if dashboard exists first
+    existing_dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+
+    if existing_dashboard:
+        # Dashboard exists - check user ownership for update
+        result = dashboards_collection.find_one_and_update(
+            {"dashboard_id": dashboard_id, "permissions.owners._id": user_id},
+            {"$set": data.mongo()},
+            return_document=True,
+        )
+        if not result:
+            # User doesn't have permission to update this dashboard
+            raise HTTPException(
+                status_code=403, detail="You don't have permission to update this dashboard."
+            )
+    else:
+        # Dashboard doesn't exist - insert new (for duplication case)
+        result = dashboards_collection.find_one_and_update(
+            {"dashboard_id": dashboard_id},
+            {"$set": data.mongo()},
+            upsert=True,
+            return_document=True,
+        )
 
     # MongoDB should always return a document after an upsert operation
     if result:
