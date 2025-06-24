@@ -196,6 +196,10 @@ def load_depictio_data(dashboard_id, local_data):
                 # Also disable for temporary users viewing public dashboards they don't own
                 elif getattr(current_user, "is_temporary", False) and not owner:
                     edit_components_button_checked = False
+            else:
+                # If not in unauthenticated mode, check if the user is owner or has edit permissions
+                if not owner and not viewer:
+                    edit_components_button_checked = False
 
             children = render_dashboard(
                 dashboard_data.stored_metadata,
