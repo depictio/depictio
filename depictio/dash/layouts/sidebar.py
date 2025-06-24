@@ -81,7 +81,8 @@ def register_sidebar_callbacks(app):
             return []
 
         current_user = api_call_fetch_user_from_token(local_store["access_token"])
-
+        if not current_user or not current_user.email:
+            return []
         email = current_user.email
         name = email.split("@")[0]
         avatar = dcc.Link(
@@ -174,7 +175,8 @@ def register_sidebar_callbacks(app):
     def show_admin_link(pathname, local_store):
         if pathname == "/auth":
             return dash.no_update
-
+        if not local_store or "access_token" not in local_store:
+            return {"padding": "20px", "display": "none"}
         current_user = api_call_fetch_user_from_token(local_store["access_token"])
         if current_user.is_admin:
             return {"padding": "20px"}
