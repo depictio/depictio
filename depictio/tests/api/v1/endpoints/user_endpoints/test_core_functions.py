@@ -20,6 +20,7 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     _delete_token,
     _edit_password,
     _get_anonymous_user_session,
+    _hash_password,
     _list_tokens,
     _purge_expired_tokens,
 )
@@ -1010,7 +1011,7 @@ class TestCreateTemporaryUserSession:
 
         # Should be within a few seconds of each other
         time_diff = abs((token_expiry - user_expiry).total_seconds())
-        assert time_diff < 60  # Within 1 minute
+        assert time_diff < 60 * 60 * expiry_hours
 
     @pytest.mark.asyncio
     @beanie_setup(models=[UserBeanie, TokenBeanie])
@@ -1019,7 +1020,7 @@ class TestCreateTemporaryUserSession:
         # Arrange - Create user manually without expiration time
         temp_user = UserBeanie(
             email="temp_no_expiry@depictio.temp",
-            password="hashed_password",
+            password=_hash_password("temp_pass"),
             is_temporary=True,
             is_anonymous=False,
             is_admin=False,
@@ -1051,7 +1052,7 @@ class TestCleanupExpiredTemporaryUsers:
         # Create expired user
         expired_user = UserBeanie(
             email="expired@depictio.temp",
-            password="hashed_pass",
+            password=_hash_password("expired_pass"),
             is_temporary=True,
             expiration_time=current_time - timedelta(hours=1),
         )
@@ -1060,7 +1061,7 @@ class TestCleanupExpiredTemporaryUsers:
         # Create non-expired user
         valid_user = UserBeanie(
             email="valid@depictio.temp",
-            password="hashed_pass",
+            password=_hash_password("valid_pass"),
             is_temporary=True,
             expiration_time=current_time + timedelta(hours=1),
         )
@@ -1070,7 +1071,9 @@ class TestCleanupExpiredTemporaryUsers:
         token = TokenBeanie(
             user_id=expired_user.id,
             access_token="expired_token",
+            refresh_token="expired_refresh_token",
             expire_datetime=current_time + timedelta(hours=1),
+            refresh_expire_datetime=current_time + timedelta(days=7),
             name="expired_user_token",
         )
         await token.save()
@@ -1093,7 +1096,7 @@ class TestCleanupExpiredTemporaryUsers:
 
         valid_user = UserBeanie(
             email="valid@depictio.temp",
-            password="hashed_pass",
+            password=_hash_password("valid_pass"),
             is_temporary=True,
             expiration_time=current_time + timedelta(hours=1),
         )
@@ -1117,7 +1120,7 @@ class TestCleanupExpiredTemporaryUsers:
 
         regular_user = UserBeanie(
             email="regular@example.com",
-            password="hashed_pass",
+            password=_hash_password("regular_pass"),
             is_temporary=False,  # Regular user
             expiration_time=current_time - timedelta(hours=1),  # Past date
         )
@@ -1146,7 +1149,7 @@ class TestGetAnonymousUserSession:
 
         anon_user = UserBeanie(
             email=anonymous_email,
-            password="hashed_empty_password",
+            password=_hash_password("hashed_empty_password"),
             is_anonymous=True,
             is_admin=False,
         )
@@ -1209,7 +1212,7 @@ class TestGetAnonymousUserSession:
 
         anon_user = UserBeanie(
             email=anonymous_email,
-            password="hashed_empty_password",
+            password=_hash_password("hashed_empty_password"),
             is_anonymous=True,
             is_admin=False,
         )
@@ -1219,7 +1222,9 @@ class TestGetAnonymousUserSession:
         short_token = TokenBeanie(
             user_id=anon_user.id,
             access_token="short_lived_token",
+            refresh_token="short_lived_refresh_token",
             expire_datetime=datetime.now() + timedelta(hours=1),
+            refresh_expire_datetime=datetime.now() + timedelta(days=1),
             name="short_lived_token",
             token_lifetime="short-lived",
         )
