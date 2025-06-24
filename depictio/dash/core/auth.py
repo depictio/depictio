@@ -67,13 +67,22 @@ def process_authentication(pathname, local_data):
                 "Found existing session data in local store - using it instead of anonymous"
             )
 
-            # Default to /dashboards if pathname is None or "/"
-            if pathname is None or pathname == "/" or pathname == "/auth":
-                logger.debug("Pathname is None or / - redirect to /dashboards")
-                pathname = "/dashboards"
+            try:
+                # Default to /dashboards if pathname is None or "/"
+                if pathname is None or pathname == "/" or pathname == "/auth":
+                    logger.debug("Pathname is None or / - redirect to /dashboards")
+                    pathname = "/dashboards"
 
-            logger.debug("HANDLE AUTHENTICATED USER (EXISTING SESSION)")
-            return handle_authenticated_user(pathname, local_data)
+                logger.debug("HANDLE AUTHENTICATED USER (EXISTING SESSION)")
+                return handle_authenticated_user(pathname, local_data)
+
+            except Exception as e:
+                logger.error(f"Failed to handle existing session data: {e}")
+                # Fallback to unauthenticated user if session handling fails
+                # Fetch the real anonymous user and their permanent token
+                anonymous_local_data = get_anonymous_user_session()
+
+                return handle_authenticated_user(pathname, anonymous_local_data)
 
         else:
             logger.debug("No existing session data - fetching anonymous user session")
