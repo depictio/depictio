@@ -3,8 +3,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import HTTPException, status
 
-# Import the function to test
-from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
+# Import the functions to test
+from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
 from depictio.models.models.users import TokenBeanie, UserBeanie
 from depictio.tests.api.v1.endpoints.user_endpoints.conftest import beanie_setup
 
@@ -167,3 +167,89 @@ class TestLoginEndpoint:
         print(response.json())
         # Verify response
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+# ------------------------------------------------------
+# Test get_user_or_anonymous function
+# ------------------------------------------------------
+
+
+class TestGetUserOrAnonymous:
+    def setup_method(self):
+        """Set up test fixtures."""
+        # Mock get_current_user
+        self.get_current_user_patcher = patch(
+            "depictio.api.v1.endpoints.user_endpoints.routes.get_current_user",
+            new_callable=AsyncMock,
+        )
+        self.mock_get_current_user = self.get_current_user_patcher.start()
+
+        # Mock UserBeanie.find_one for anonymous user lookup
+        self.user_find_one_patcher = patch(
+            "depictio.api.v1.endpoints.user_endpoints.routes.UserBeanie.find_one",
+            new_callable=AsyncMock,
+        )
+        self.mock_user_find_one = self.user_find_one_patcher.start()
+
+        # Mock settings
+        self.settings_patcher = patch("depictio.api.v1.endpoints.user_endpoints.routes.settings")
+        self.mock_settings = self.settings_patcher.start()
+
+    def teardown_method(self):
+        """Clean up test fixtures."""
+        self.get_current_user_patcher.stop()
+        self.user_find_one_patcher.stop()
+        self.settings_patcher.stop()
+
+    @pytest.mark.asyncio
+    async def test_get_user_or_anonymous_valid_token(self):
+        """Test successful authentication with valid token."""
+        # Arrange
+        mock_user = MagicMock(spec=UserBeanie)
+        self.mock_get_current_user.return_value = mock_user
+
+        # Act
+        result = await get_user_or_anonymous(token="valid_token")
+
+        # Assert
+        self.mock_get_current_user.assert_called_once_with("valid_token")
+        assert result == mock_user
+        # Anonymous user lookup should not be called
+        self.mock_user_find_one.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_get_user_or_anonymous_invalid_token_unauthenticated_mode(self):
+        """Test fallback to anonymous user when token is invalid and unauthenticated mode is enabled."""
+        # Arrange
+        self.mock_get_current_user.side_effect = HTTPException(
+            status_code=401, detail="Invalid token"
+        )
+        self.mock_settings.auth.unauthenticated_mode = True
+        self.mock_settings.auth.anonymous_user_email = "anon@depictio.io"
+
+        mock_anonymous_user = MagicMock(spec=UserBeanie)
+        self.mock_user_find_one.return_value = mock_anonymous_user
+
+        # Act
+        result = await get_user_or_anonymous(token="invalid_token")
+
+        # Assert
+        self.mock_get_current_user.assert_called_once_with("invalid_token")
+        self.mock_user_find_one.assert_called_once_with({"email": "anon@depictio.io"})
+        assert result == mock_anonymous_user
+
+    @pytest.mark.asyncio
+    async def test_get_user_or_anonymous_no_token_authenticated_mode(self):
+        """Test rejection when no token provided and authenticated mode is enabled."""
+        # Arrange
+        self.mock_settings.auth.unauthenticated_mode = False
+
+        # Act & Assert
+        with pytest.raises(HTTPException) as exc_info:
+            await get_user_or_anonymous(token=None)
+
+        assert exc_info.value.status_code == 401
+        assert exc_info.value.detail == "Invalid token"
+        # get_current_user should not be called when token is None
+        self.mock_get_current_user.assert_not_called()
+        self.mock_user_find_one.assert_not_called()
