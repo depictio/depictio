@@ -1,6 +1,7 @@
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import (
+    api_call_create_temporary_user,
     api_call_get_anonymous_user_session,
     check_token_validity,
     refresh_access_token,
@@ -23,6 +24,23 @@ def get_anonymous_user_session():
     return session_data
 
 
+def get_temporary_user_session(expiry_hours: int = 24):
+    """
+    Create a temporary user session with automatic expiration.
+
+    Args:
+        expiry_hours: Number of hours until the user expires (default: 24)
+
+    Returns:
+        dict: Session data for the temporary user
+    """
+    session_data = api_call_create_temporary_user(expiry_hours=expiry_hours)
+    if not session_data:
+        raise Exception("Failed to create temporary user session via API")
+
+    return session_data
+
+
 # Enhanced process_authentication with refresh logic
 def process_authentication(pathname, local_data):
     """
@@ -41,24 +59,40 @@ def process_authentication(pathname, local_data):
 
     # Check if unauthenticated mode is enabled
     if settings.auth.unauthenticated_mode:
-        logger.debug("Unauthenticated mode is enabled - fetching anonymous user session")
+        logger.debug("Unauthenticated mode is enabled")
 
-        try:
-            # Fetch the real anonymous user and their permanent token
-            anonymous_local_data = get_anonymous_user_session()
+        # Check if we already have valid local_data (e.g. temporary user session)
+        if local_data and local_data.get("access_token") and local_data.get("logged_in"):
+            logger.debug(
+                "Found existing session data in local store - using it instead of anonymous"
+            )
 
             # Default to /dashboards if pathname is None or "/"
             if pathname is None or pathname == "/" or pathname == "/auth":
                 logger.debug("Pathname is None or / - redirect to /dashboards")
                 pathname = "/dashboards"
 
-            logger.debug("HANDLE AUTHENTICATED USER (ANONYMOUS MODE)")
-            return handle_authenticated_user(pathname, anonymous_local_data)
+            logger.debug("HANDLE AUTHENTICATED USER (EXISTING SESSION)")
+            return handle_authenticated_user(pathname, local_data)
 
-        except Exception as e:
-            logger.error(f"Failed to fetch anonymous user session: {e}")
-            # Fallback to unauthenticated user if anonymous user setup fails
-            return handle_unauthenticated_user(pathname)
+        else:
+            logger.debug("No existing session data - fetching anonymous user session")
+            try:
+                # Fetch the real anonymous user and their permanent token
+                anonymous_local_data = get_anonymous_user_session()
+
+                # Default to /dashboards if pathname is None or "/"
+                if pathname is None or pathname == "/" or pathname == "/auth":
+                    logger.debug("Pathname is None or / - redirect to /dashboards")
+                    pathname = "/dashboards"
+
+                logger.debug("HANDLE AUTHENTICATED USER (ANONYMOUS MODE)")
+                return handle_authenticated_user(pathname, anonymous_local_data)
+
+            except Exception as e:
+                logger.error(f"Failed to fetch anonymous user session: {e}")
+                # Fallback to unauthenticated user if anonymous user setup fails
+                return handle_unauthenticated_user(pathname)
 
     # Basic validation for authenticated mode
     if not local_data or not local_data.get("logged_in"):

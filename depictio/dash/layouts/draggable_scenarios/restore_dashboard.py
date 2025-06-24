@@ -174,6 +174,19 @@ def load_depictio_data(dashboard_id, local_data):
                     "edit_components_button"
                 ]
 
+            # Disable edit_components_button for anonymous users and temporary users on public dashboards in unauthenticated mode
+            if settings.auth.unauthenticated_mode:
+                # Disable for anonymous users (non-temporary)
+                if (
+                    hasattr(current_user, "is_anonymous")
+                    and current_user.is_anonymous
+                    and not getattr(current_user, "is_temporary", False)
+                ):
+                    edit_components_button_checked = False
+                # Also disable for temporary users viewing public dashboards they don't own
+                elif getattr(current_user, "is_temporary", False) and not owner:
+                    edit_components_button_checked = False
+
             children = render_dashboard(
                 dashboard_data.stored_metadata,
                 edit_components_button_checked,
