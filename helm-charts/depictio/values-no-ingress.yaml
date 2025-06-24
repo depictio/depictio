@@ -1,9 +1,9 @@
 # Minikube-specific values overlay (values-minikube.yaml)
 
 # Storage class for Minikube
-# storageClass: "standard"
+storageClass: "standard"
 # Storage class for Rancher Desktop
-storageClass: "local-path"
+# storageClass: "local-path"
 persistence:
   mongo:
     size: 1Gi

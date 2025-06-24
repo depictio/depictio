@@ -261,6 +261,28 @@ spec:
         - name: wait-for-backend
           image: busybox:1.35
           command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-depictio-backend {{ .Values.backend.service.httpPort }}; do echo "Waiting for backend..."; sleep 2; done']
+        - name: wait-for-api-key
+          image: busybox:1.35
+          command:
+            - 'sh'
+            - '-c'
+            - |
+              echo "Waiting for API internal key file to be generated..."
+              timeout=300  # 5 minutes timeout
+              elapsed=0
+
+              while [ $elapsed -lt $timeout ]; do
+                if [ -f /app/depictio/keys/api_internal_key.pem ]; then
+                  echo "✅ API internal key file found at /app/depictio/keys/api_internal_key.pem"
+                  exit 0
+                fi
+                echo "⏳ Waiting for API key file... (${elapsed}s/${timeout}s)"
+                sleep 5
+                elapsed=$((elapsed + 5))
+              done
+
+              echo "❌ Timeout: API internal key file not found after ${timeout} seconds"
+              exit 1
       containers:
         - name: depictio-frontend
           image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
