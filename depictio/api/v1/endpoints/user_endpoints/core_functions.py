@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import bcrypt
 from beanie import PydanticObjectId
@@ -44,6 +44,159 @@ async def _create_anonymous_user() -> UserBeanie:
         is_anonymous=True,
     )
     return payload["user"] if payload else None
+
+
+async def _create_temporary_user(expiry_hours: int = 24) -> UserBeanie:
+    """Create a temporary user that will be automatically cleaned up after expiry_hours.
+
+    Args:
+        expiry_hours: Number of hours until the user expires (default: 24)
+
+    Returns:
+        The created temporary UserBeanie object
+    """
+    import secrets
+    import uuid
+
+    # Generate a unique temporary email
+    temp_id = str(uuid.uuid4())[:8]
+    temp_email = f"temp_user_{temp_id}@depictio.temp"
+
+    # Set expiration time
+    expiration_time = datetime.now() + timedelta(hours=expiry_hours)
+
+    logger.info(f"Creating temporary user with email: {temp_email}, expires at: {expiration_time}")
+
+    # Generate a random password for the temporary user
+    temp_password = secrets.token_urlsafe(32)
+    hashed_password = _hash_password(temp_password)
+
+    # Create current timestamp
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # Create new temporary UserBeanie
+    user_beanie = UserBeanie(
+        id=PyObjectId(),
+        email=temp_email,
+        password=hashed_password,
+        is_admin=False,
+        is_anonymous=False,
+        is_temporary=True,
+        expiration_time=expiration_time,
+        registration_date=current_time,
+        last_login=current_time,
+    )
+
+    # Save to database
+    await user_beanie.create()
+    logger.info(f"Temporary user created with id: {user_beanie.id}, expires at: {expiration_time}")
+
+    return user_beanie
+
+
+async def _create_temporary_user_session(temp_user: UserBeanie) -> dict:
+    """Create a session token for a temporary user.
+
+    Args:
+        temp_user: The temporary user to create a session for
+
+    Returns:
+        Session data dictionary with access token and user info
+    """
+    # Create a temporary token with same expiration as user
+    token_data = TokenData(
+        sub=temp_user.id, name=f"temp_session_{temp_user.id}", token_lifetime="long-lived"
+    )
+
+    # Calculate hours until expiration
+    if temp_user.expiration_time:
+        expiry_hours = max(
+            1, int((temp_user.expiration_time - datetime.now()).total_seconds() / 3600)
+        )
+    else:
+        expiry_hours = 24
+
+    access_token, expire_datetime = await create_access_token(token_data, expiry_hours=expiry_hours)
+
+    token = TokenBeanie(
+        access_token=access_token,
+        refresh_token="",
+        expire_datetime=expire_datetime,
+        refresh_expire_datetime=expire_datetime,
+        name=token_data.name,
+        token_lifetime="long-lived",
+        user_id=temp_user.id,
+        logged_in=True,
+    )
+    await token.save()
+
+    # Convert to session data format expected by frontend
+    session_data = {
+        "logged_in": True,
+        "email": temp_user.email,
+        "user_id": str(temp_user.id),
+        "access_token": token.access_token,
+        "refresh_token": token.refresh_token,
+        "expire_datetime": token.expire_datetime.isoformat(),
+        "refresh_expire_datetime": token.refresh_expire_datetime.isoformat(),
+        "is_temporary": True,
+        "expiration_time": temp_user.expiration_time.isoformat()
+        if temp_user.expiration_time
+        else None,
+        "name": token.name,
+        "token_lifetime": token.token_lifetime,
+        "token_type": token.token_type or "bearer",
+    }
+
+    logger.info(f"Created session for temporary user: {temp_user.email}")
+    return session_data
+
+
+async def _cleanup_expired_temporary_users() -> dict:
+    """Clean up expired temporary users and their associated tokens.
+
+    Returns:
+        Dictionary with cleanup results
+    """
+    logger.info("Starting cleanup of expired temporary users")
+
+    current_time = datetime.now()
+
+    # Find all expired temporary users
+    expired_users = await UserBeanie.find(
+        {"is_temporary": True, "expiration_time": {"$lte": current_time}}
+    ).to_list()
+
+    cleanup_results = {
+        "expired_users_found": len(expired_users),
+        "users_deleted": 0,
+        "tokens_deleted": 0,
+        "errors": [],
+    }
+
+    for user in expired_users:
+        try:
+            # Delete associated tokens first
+            user_tokens = await TokenBeanie.find({"user_id": user.id}).to_list()
+            for token in user_tokens:
+                await token.delete()
+                cleanup_results["tokens_deleted"] += 1
+
+            # Delete the user
+            await user.delete()
+            cleanup_results["users_deleted"] += 1
+
+            logger.info(
+                f"Deleted expired temporary user: {user.email} (expired at: {user.expiration_time})"
+            )
+
+        except Exception as e:
+            error_msg = f"Failed to delete user {user.email}: {str(e)}"
+            logger.error(error_msg)
+            cleanup_results["errors"].append(error_msg)
+
+    logger.info(f"Cleanup completed: {cleanup_results}")
+    return cleanup_results
 
 
 @validate_call(validate_return=True)
