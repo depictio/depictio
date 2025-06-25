@@ -18,6 +18,9 @@ from depictio.api.v1.db import (
 )
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.api.v1.endpoints.utils_endpoints.core_functions import create_bucket
+from depictio.api.v1.endpoints.utils_endpoints.infrastructure_diagnostics import (
+    run_comprehensive_diagnostics,
+)
 from depictio.api.v1.endpoints.utils_endpoints.process_data_collections import (
     process_initial_data_collections,
 )
@@ -216,6 +219,93 @@ async def capture_network_activity(page, duration_ms: int = 5000):
     return network_logs
 
 
+async def wait_for_network_idle(page, timeout: int = 30000) -> bool:
+    """
+    Wait for network to be idle (no ongoing requests) to ensure content is fully loaded.
+    Based on the ERR_CONNECTION_TIMED_OUT error in logs.
+    """
+    try:
+        logger.info("⏳ Waiting for network to be idle...")
+        await page.wait_for_load_state("networkidle", timeout=timeout)
+        logger.info("✅ Network is idle - all requests completed")
+        return True
+    except Exception as e:
+        logger.warning(f"⚠️ Network idle wait failed: {e}")
+        return False
+
+
+async def check_dashboard_health(page, url: str) -> tuple[bool, str]:
+    """
+    Check if dashboard is actually healthy and rendering properly.
+    Based on log analysis showing dashboard content not loading.
+    """
+    try:
+        # Check page title
+        page_title = await page.title()
+        current_url = page.url
+
+        logger.info(f"🔍 Dashboard health check - Title: '{page_title}', URL: {current_url}")
+
+        # Check for error indicators
+        error_indicators = [
+            ("title", "error", page_title.lower()),
+            ("title", "404", page_title.lower()),
+            ("title", "not found", page_title.lower()),
+            ("url", "auth", current_url.lower()),
+            ("url", "login", current_url.lower()),
+            ("url", "error", current_url.lower()),
+        ]
+
+        for check_type, error_text, content in error_indicators:
+            if error_text in content:
+                logger.error(
+                    f"❌ Dashboard health check failed: {error_text} found in {check_type}"
+                )
+                return False, f"error_detected_{error_text}_in_{check_type}"
+
+        # Check for loading spinners that might be stuck
+        stuck_loading_selectors = [
+            ".loading-spinner:not([style*='display: none'])",
+            ".dash-loading:not([style*='display: none'])",
+            "[data-dash-loading='true']",
+        ]
+
+        for selector in stuck_loading_selectors:
+            try:
+                element = await page.query_selector(selector)
+                if element and await element.is_visible():
+                    logger.warning(f"⚠️ Found stuck loading indicator: {selector}")
+                    return (
+                        False,
+                        f"stuck_loading_{selector.replace('[', '').replace(']', '').replace(':', '_')}",
+                    )
+            except Exception:
+                continue
+
+        # Check for JavaScript errors in console
+        console_errors = []
+
+        def log_js_error(msg):
+            if msg.type in ["error", "warning"]:
+                console_errors.append(f"{msg.type}: {msg.text}")
+
+        page.on("console", log_js_error)
+        await asyncio.sleep(2)  # Give time for console errors to appear
+        page.remove_listener("console", log_js_error)
+
+        if console_errors:
+            logger.warning(
+                f"⚠️ JavaScript errors detected: {console_errors[:3]}"
+            )  # Log first 3 errors
+
+        logger.info("✅ Dashboard health check passed")
+        return True, "healthy"
+
+    except Exception as e:
+        logger.error(f"❌ Dashboard health check error: {e}")
+        return False, f"health_check_failed_{str(e)[:50]}"
+
+
 async def navigate_for_screenshot(page, url: str) -> tuple[bool, str]:
     """
     Navigate specifically optimized for screenshot generation.
@@ -257,34 +347,92 @@ async def navigate_for_screenshot(page, url: str) -> tuple[bool, str]:
         await page.wait_for_selector("body", timeout=content_timeout)
         logger.info("✅ Page body loaded")
 
-        # For dashboard pages, wait for main content
+        # For dashboard pages, wait for main content with better error handling
         if "/dashboard/" in url:
             selectors_to_try = [
-                "div#page-content",  # Main content div
-                "div[data-dash-app]",  # Dash app container
-                "div#app",  # Alternative app container
-                "main",  # Generic main content
+                ("div#page-content", "Main dashboard content"),
+                ("div[data-dash-app]", "Dash app container"),
+                ("div#app", "App container"),
+                (".dash-renderer", "Dash renderer"),
+                ("main", "Main content"),
+                ("[data-testid='dashboard']", "Dashboard test ID"),
             ]
 
-            for selector in selectors_to_try:
+            dashboard_ready = False
+            for selector, description in selectors_to_try:
                 try:
-                    await page.wait_for_selector(selector, timeout=content_timeout)
-                    logger.info(f"✅ Found dashboard content: {selector}")
+                    # Wait for selector to be present and visible
+                    await page.wait_for_selector(selector, state="visible", timeout=content_timeout)
+                    logger.info(f"✅ Found dashboard content: {description} ({selector})")
+                    dashboard_ready = True
                     break
-                except Exception:
-                    logger.info(f"⏳ Selector {selector} not found, trying next...")
+                except Exception as e:
+                    logger.info(f"⏳ {description} ({selector}) not found: {str(e)[:100]}")
                     continue
-            else:
-                logger.warning("⚠️ No specific dashboard content found, using fallback wait")
-                await asyncio.sleep(stabilization_wait)  # Use environment-specific fallback wait
+
+            if not dashboard_ready:
+                logger.warning("⚠️ No dashboard content found, checking for loading states...")
+
+                # Check if we're stuck in loading state
+                loading_selectors = [
+                    ".loading-spinner",
+                    ".dash-loading",
+                    "[data-dash-loading]",
+                    ".spinner",
+                ]
+
+                for loading_selector in loading_selectors:
+                    try:
+                        loading_element = await page.query_selector(loading_selector)
+                        if loading_element:
+                            logger.warning(
+                                f"⏳ Found loading indicator: {loading_selector}, waiting longer..."
+                            )
+                            await asyncio.sleep(
+                                stabilization_wait * 2
+                            )  # Wait longer for loading to complete
+                            break
+                    except Exception:
+                        continue
+                else:
+                    # Check page source for debugging
+                    page_title = await page.title()
+                    current_url = page.url
+                    logger.warning(
+                        f"⚠️ Dashboard not loading properly. Title: '{page_title}', URL: {current_url}"
+                    )
+
+                    # Check if we're redirected to auth or error page
+                    if "auth" in current_url.lower() or "login" in current_url.lower():
+                        logger.error("❌ Redirected to auth page - authentication failed")
+                        return False, "auth_redirect_detected"
+
+                    # Fallback wait with longer duration for slow loading
+                    logger.info("⏳ Using extended fallback wait for slow dashboard loading...")
+                    await asyncio.sleep(stabilization_wait * 3)
         else:
             # For root pages, shorter wait
             await asyncio.sleep(
                 stabilization_wait / 2
             )  # Half the stabilization wait for root pages
 
-        # Phase 3: Brief wait for dynamic content (environment-specific)
-        logger.info("⏳ Phase 3: Brief wait for dynamic content...")
+        # Phase 3: Wait for network to be idle (addresses ERR_CONNECTION_TIMED_OUT)
+        logger.info("⏳ Phase 3: Waiting for network requests to complete...")
+        network_idle = await wait_for_network_idle(page, content_timeout)
+
+        if not network_idle:
+            logger.warning("⚠️ Network not idle, but continuing with screenshot...")
+
+        # Phase 4: Health check for dashboard (addresses content loading issues from logs)
+        logger.info("⏳ Phase 4: Performing dashboard health check...")
+        dashboard_healthy, health_status = await check_dashboard_health(page, url)
+
+        if not dashboard_healthy:
+            logger.error(f"❌ Dashboard health check failed: {health_status}")
+            return False, f"health_check_failed_{health_status}"
+
+        # Phase 5: Brief final wait for dynamic content (environment-specific)
+        logger.info("⏳ Phase 5: Final wait for dynamic content...")
         await asyncio.sleep(stabilization_wait)
 
         total_time = (datetime.now() - start_time).total_seconds()
@@ -634,24 +782,47 @@ async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
                 }
             """)
 
-            # Take screenshot
+            # Take screenshot with environment-specific timeout
             logger.info("📸 Taking screenshot...")
             final_url = page.url
 
+            # Use dedicated screenshot capture timeout (production needs longer due to rendering complexity)
+            screenshot_capture_timeout = settings.performance.screenshot_capture_timeout
+            logger.info(
+                f"🎯 Screenshot capture timeout set to {screenshot_capture_timeout}ms for production robustness"
+            )
+
             try:
-                # Try to screenshot the main content area
+                # Try to screenshot the main content area with timeout
                 element = await page.query_selector("div#page-content")
                 if element and await element.is_visible():
-                    await element.screenshot(path=output_file, type="png")
+                    await element.screenshot(
+                        path=output_file, type="png", timeout=screenshot_capture_timeout
+                    )
                     logger.info("📸 Screenshot of page-content taken")
                 else:
-                    # Fallback to full page
-                    await page.screenshot(path=output_file, full_page=True, type="png")
+                    # Fallback to full page with timeout
+                    await page.screenshot(
+                        path=output_file,
+                        full_page=True,
+                        type="png",
+                        timeout=screenshot_capture_timeout,
+                    )
                     logger.info("📸 Full page screenshot taken (fallback)")
             except Exception as e:
                 logger.warning(f"⚠️ Screenshot error: {e}")
-                await page.screenshot(path=output_file, full_page=True, type="png")
-                logger.info("📸 Basic screenshot taken")
+                try:
+                    # Final fallback with even longer timeout
+                    await page.screenshot(
+                        path=output_file,
+                        full_page=True,
+                        type="png",
+                        timeout=screenshot_capture_timeout * 2,
+                    )
+                    logger.info("📸 Basic screenshot taken with extended timeout")
+                except Exception as final_e:
+                    logger.error(f"❌ Final screenshot attempt failed: {final_e}")
+                    raise final_e
 
             await browser.close()
 
@@ -678,3 +849,49 @@ async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
     except Exception as e:
         logger.error(f"❌ Screenshot failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Screenshot failed: {str(e)}")
+
+
+@utils_endpoint_router.get("/infrastructure-diagnostics")
+async def infrastructure_diagnostics(current_user=Depends(get_current_user)):
+    """
+    Run comprehensive infrastructure diagnostics to identify performance bottlenecks.
+
+    This endpoint helps identify the root cause of screenshot performance issues by testing:
+    - DNS resolution performance
+    - Network latency between services
+    - Browser performance in container environment
+    - System resource constraints
+    - Storage I/O performance
+
+    Use this to compare performance between working (laptop/minikube) and problematic
+    (production K8s) environments.
+    """
+    if not current_user:
+        logger.error("Current user not found.")
+        raise HTTPException(status_code=401, detail="Current user not found.")
+
+    # Only allow admin users to run diagnostics
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required for diagnostics.")
+
+    try:
+        logger.info("🔍 Starting infrastructure diagnostics requested by admin...")
+        diagnostics = await run_comprehensive_diagnostics()
+
+        # Log summary for immediate visibility
+        summary = diagnostics.get("summary", {})
+        if summary.get("issues_found"):
+            logger.warning(f"⚠️ Infrastructure issues detected: {summary['issues_found']}")
+        else:
+            logger.info("✅ No infrastructure issues detected")
+
+        return {
+            "success": True,
+            "message": "Infrastructure diagnostics completed",
+            "diagnostics": diagnostics,
+            "timestamp": datetime.now().isoformat(),
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Infrastructure diagnostics failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Diagnostics failed: {str(e)}")

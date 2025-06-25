@@ -113,6 +113,7 @@ backend:
     DEPICTIO_PERFORMANCE_SCREENSHOT_NAVIGATION_TIMEOUT: "75000"  # 75s for screenshot navigation
     DEPICTIO_PERFORMANCE_SCREENSHOT_CONTENT_WAIT: "30000"        # 30s for content loading
     DEPICTIO_PERFORMANCE_SCREENSHOT_STABILIZATION_WAIT: "10000"  # 10s for UI stabilization
+    DEPICTIO_PERFORMANCE_SCREENSHOT_CAPTURE_TIMEOUT: "120000"    # 120s for actual screenshot capture
     DEPICTIO_PERFORMANCE_SCREENSHOT_API_TIMEOUT: "360"          # 6 minutes for complete screenshot API call
 
     # Service readiness checks - more robust for production
