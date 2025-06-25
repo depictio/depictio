@@ -129,14 +129,26 @@ async def process_initial_data_collections_endpoint(
     }
 
 
-async def check_service_readiness(url: str, max_retries: int = 5, delay: int = 2) -> bool:
+async def check_service_readiness(
+    url: str, max_retries: int = None, delay: int = None, timeout: int = None
+) -> bool:
     """
     Check if a service is ready to serve requests with retry logic.
     Similar to the init container pattern used in deployments.
+    Uses environment-specific performance settings.
     """
     import httpx
 
-    timeout = httpx.Timeout(10.0)
+    # Use environment-specific settings or fallback to defaults
+    max_retries = max_retries or settings.performance.service_readiness_retries
+    delay = delay or settings.performance.service_readiness_delay
+    timeout_val = timeout or settings.performance.service_readiness_timeout
+
+    timeout = httpx.Timeout(float(timeout_val))
+
+    logger.info(
+        f"🔍 Service readiness check starting for {url} (retries: {max_retries}, delay: {delay}s, timeout: {timeout_val}s)"
+    )
 
     for attempt in range(max_retries):
         try:
@@ -204,34 +216,121 @@ async def capture_network_activity(page, duration_ms: int = 5000):
     return network_logs
 
 
+async def navigate_for_screenshot(page, url: str) -> tuple[bool, str]:
+    """
+    Navigate specifically optimized for screenshot generation.
+    Uses environment-specific performance settings for production optimization.
+
+    Strategy: Skip complex wait strategies and use a content-based approach:
+    1. Navigate with minimal wait
+    2. Wait for specific DOM elements that indicate page is ready for screenshot
+    3. Much faster than waiting for full resource loading
+    """
+    logger.info(f"📸 Using screenshot-optimized navigation for: {url}")
+
+    # Use environment-specific timeouts
+    nav_timeout = settings.performance.screenshot_navigation_timeout
+    content_timeout = settings.performance.screenshot_content_wait
+    stabilization_wait = (
+        settings.performance.screenshot_stabilization_wait / 1000
+    )  # Convert ms to seconds
+
+    logger.info(
+        f"🎯 Performance settings - Nav: {nav_timeout}ms, Content: {content_timeout}ms, Stabilization: {stabilization_wait}s"
+    )
+
+    try:
+        # Phase 1: Quick navigation without waiting for full load
+        logger.info("⚡ Phase 1: Quick navigation with 'commit' wait strategy...")
+        start_time = datetime.now()
+
+        await page.goto(
+            url, timeout=nav_timeout, wait_until="commit"
+        )  # Just wait for navigation to commit
+        navigation_time = (datetime.now() - start_time).total_seconds()
+        logger.info(f"⏱️ Navigation committed in {navigation_time:.2f} seconds")
+
+        # Phase 2: Wait for essential content to appear (much faster than full page load)
+        logger.info("⏳ Phase 2: Waiting for essential dashboard content...")
+
+        # Wait for basic page structure with environment-specific timeout
+        await page.wait_for_selector("body", timeout=content_timeout)
+        logger.info("✅ Page body loaded")
+
+        # For dashboard pages, wait for main content
+        if "/dashboard/" in url:
+            selectors_to_try = [
+                "div#page-content",  # Main content div
+                "div[data-dash-app]",  # Dash app container
+                "div#app",  # Alternative app container
+                "main",  # Generic main content
+            ]
+
+            for selector in selectors_to_try:
+                try:
+                    await page.wait_for_selector(selector, timeout=content_timeout)
+                    logger.info(f"✅ Found dashboard content: {selector}")
+                    break
+                except Exception:
+                    logger.info(f"⏳ Selector {selector} not found, trying next...")
+                    continue
+            else:
+                logger.warning("⚠️ No specific dashboard content found, using fallback wait")
+                await asyncio.sleep(stabilization_wait)  # Use environment-specific fallback wait
+        else:
+            # For root pages, shorter wait
+            await asyncio.sleep(
+                stabilization_wait / 2
+            )  # Half the stabilization wait for root pages
+
+        # Phase 3: Brief wait for dynamic content (environment-specific)
+        logger.info("⏳ Phase 3: Brief wait for dynamic content...")
+        await asyncio.sleep(stabilization_wait)
+
+        total_time = (datetime.now() - start_time).total_seconds()
+        success_method = f"screenshot_optimized_total_{total_time:.1f}s"
+        logger.info(f"✅ Screenshot-optimized navigation completed in {total_time:.2f}s")
+
+        return True, success_method
+
+    except Exception as e:
+        logger.error(f"❌ Screenshot-optimized navigation failed: {e}")
+        return False, f"screenshot_navigation_failed_{str(e)[:50]}"
+
+
 async def navigate_with_hybrid_strategy(page, url: str, max_retries: int = 2) -> tuple[bool, str]:
     """
     Navigate to URL with hybrid approach: optimized strategies first, proven fallbacks second.
     Returns (success, method_used)
+    Uses environment-specific performance settings for production optimization.
 
     Strategy:
     1. Try optimized page-specific strategies (fast)
     2. If all fail, fall back to proven working methods (slower but reliable)
     3. Capture network activity to debug slow loads
     """
-    # Phase 1: Optimized strategies based on URL pattern
+    # Use environment-specific timeouts
+    nav_timeout = settings.performance.browser_navigation_timeout
+    page_load_timeout = settings.performance.browser_page_load_timeout
+
+    # Phase 1: Optimized strategies based on URL pattern (environment-aware)
     if "/dashboard/" in url:
         optimized_strategies = [
-            ("domcontentloaded", 30000),  # Fast for dashboard pages
-            ("load", 45000),  # Quick fallback
+            ("domcontentloaded", nav_timeout),  # Fast for dashboard pages
+            ("load", nav_timeout + 15000),  # Quick fallback with buffer
         ]
         page_type = "dashboard"
     else:
         optimized_strategies = [
-            ("load", 45000),  # Primary for root pages
-            ("domcontentloaded", 30000),  # Quick fallback
+            ("load", nav_timeout),  # Primary for root pages
+            ("domcontentloaded", nav_timeout - 15000),  # Quick fallback
         ]
         page_type = "root"
 
-    # Phase 2: Proven fallback strategies (from production logs)
+    # Phase 2: Proven fallback strategies (environment-aware for production)
     proven_strategies = [
-        ("load", 120000),  # This worked in production logs
-        ("domcontentloaded", 60000),  # This also worked
+        ("load", page_load_timeout),  # Use environment-specific page load timeout
+        ("domcontentloaded", page_load_timeout - 30000),  # Shorter fallback
     ]
 
     logger.info(f"🎯 Using hybrid navigation for {page_type} page: {url}")
@@ -284,6 +383,10 @@ async def navigate_with_hybrid_strategy(page, url: str, max_retries: int = 2) ->
                 f"{page_type}_proven_fallback_strategy_{wait_until}_timeout_{timeout}ms"
             )
             logger.info(f"✅ Successfully navigated with proven fallback: {success_method}")
+
+            # Capture post-navigation network activity to debug slow loads
+            logger.info("🔍 Capturing post-navigation network activity...")
+            await capture_network_activity(page, duration_ms=10000)
             return True, success_method
         except Exception as e:
             logger.warning(f"⚠️ Proven strategy failed with {wait_until}: {e}")
@@ -386,18 +489,16 @@ async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
             # working_base_url = "http://depictio-frontend:5080"
             dashboard_url = f"{working_base_url}/dashboard/{dashboard_id}"
 
-            # Step 0: Check service readiness before attempting screenshot
+            # Step 0: Check service readiness before attempting screenshot (environment-aware)
             logger.info("🔍 Step 0: Checking service readiness...")
-            if not await check_service_readiness(working_base_url, max_retries=5, delay=3):
+            if not await check_service_readiness(working_base_url):
                 raise HTTPException(
                     status_code=503, detail=f"Frontend service not ready: {working_base_url}"
                 )
 
             logger.info("🚀 Step 1: Navigate to root page first")
-            # First, go to the root page to establish session with hybrid strategy
-            root_success, root_method = await navigate_with_hybrid_strategy(
-                page, working_base_url, max_retries=1
-            )
+            # First, go to the root page to establish session with screenshot-optimized navigation
+            root_success, root_method = await navigate_for_screenshot(page, working_base_url)
             if not root_success:
                 raise HTTPException(
                     status_code=503,
@@ -416,10 +517,8 @@ async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
             """)
 
             logger.info("🔄 Step 3: Navigate to dashboard with auth")
-            # Now navigate to the dashboard with hybrid strategy
-            dashboard_success, dashboard_method = await navigate_with_hybrid_strategy(
-                page, dashboard_url, max_retries=1
-            )
+            # Now navigate to the dashboard with screenshot-optimized navigation
+            dashboard_success, dashboard_method = await navigate_for_screenshot(page, dashboard_url)
             if not dashboard_success:
                 logger.warning("⚠️ Failed to navigate to dashboard, attempting fallback methods...")
                 # Fallback: try basic navigation without retries
@@ -494,11 +593,16 @@ async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
                     """)
                     await asyncio.sleep(5)
 
-            # Wait for dashboard content to load with increased timeouts for production
+            # Wait for dashboard content to load with environment-specific timeouts
             logger.info("⏳ Waiting for dashboard content...")
+            element_timeout = settings.performance.browser_element_timeout
+            stabilization_wait = (
+                settings.performance.screenshot_stabilization_wait / 1000
+            )  # Convert ms to seconds
+
             try:
-                # Wait for dashboard-specific content with longer timeout
-                await page.wait_for_selector("div#page-content", timeout=30000)
+                # Wait for dashboard-specific content with environment-specific timeout
+                await page.wait_for_selector("div#page-content", timeout=element_timeout)
                 logger.info("✅ Found page-content div")
             except Exception:
                 logger.warning("⚠️ page-content div not found, trying alternative selectors...")
@@ -506,7 +610,9 @@ async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
                 alternative_selectors = ["div#app", "div[data-dash-app]", "body"]
                 for selector in alternative_selectors:
                     try:
-                        await page.wait_for_selector(selector, timeout=10000)
+                        await page.wait_for_selector(
+                            selector, timeout=element_timeout // 3
+                        )  # Shorter timeout for alternatives
                         logger.info(f"✅ Found alternative selector: {selector}")
                         break
                     except Exception:
@@ -514,9 +620,11 @@ async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
                 else:
                     logger.warning("⚠️ No dashboard elements found, continuing anyway...")
 
-            # Give extra time for any dynamic content to load (increased for production)
+            # Give extra time for any dynamic content to load (environment-specific)
             logger.info("⏳ Waiting for dynamic content to stabilize...")
-            await asyncio.sleep(10)
+            await asyncio.sleep(
+                stabilization_wait * 2
+            )  # Double stabilization wait for final content
 
             # Remove debug elements
             await page.evaluate("""
