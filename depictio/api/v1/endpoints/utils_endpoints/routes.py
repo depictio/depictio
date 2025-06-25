@@ -159,39 +159,138 @@ async def check_service_readiness(url: str, max_retries: int = 5, delay: int = 2
     return False
 
 
-async def navigate_with_retries(page, url: str, max_retries: int = 3) -> tuple[bool, str]:
+async def capture_network_activity(page, duration_ms: int = 5000):
     """
-    Navigate to URL with multiple wait strategies and retry logic.
-    Returns (success, method_used)
+    Capture network activity for debugging slow page loads.
     """
-    wait_strategies = ["domcontentloaded", "networkidle", "load"]
-    timeouts = [60000, 90000, 120000]  # Increasing timeouts for production
+    network_logs = []
 
+    def log_request(request):
+        network_logs.append(
+            {
+                "type": "request",
+                "url": request.url,
+                "method": request.method,
+                "timestamp": datetime.now().isoformat(),
+            }
+        )
+
+    def log_response(response):
+        network_logs.append(
+            {
+                "type": "response",
+                "url": response.url,
+                "status": response.status,
+                "timestamp": datetime.now().isoformat(),
+            }
+        )
+
+    page.on("request", log_request)
+    page.on("response", log_response)
+
+    # Wait and capture network activity
+    await asyncio.sleep(duration_ms / 1000)
+
+    # Log summary
+    requests = [log for log in network_logs if log["type"] == "request"]
+    responses = [log for log in network_logs if log["type"] == "response"]
+
+    logger.info(
+        f"📊 Network activity captured: {len(requests)} requests, {len(responses)} responses"
+    )
+    for req in requests[:5]:  # Log first 5 requests
+        logger.info(f"🌐 Request: {req['method']} {req['url']}")
+
+    return network_logs
+
+
+async def navigate_with_hybrid_strategy(page, url: str, max_retries: int = 2) -> tuple[bool, str]:
+    """
+    Navigate to URL with hybrid approach: optimized strategies first, proven fallbacks second.
+    Returns (success, method_used)
+
+    Strategy:
+    1. Try optimized page-specific strategies (fast)
+    2. If all fail, fall back to proven working methods (slower but reliable)
+    3. Capture network activity to debug slow loads
+    """
+    # Phase 1: Optimized strategies based on URL pattern
+    if "/dashboard/" in url:
+        optimized_strategies = [
+            ("domcontentloaded", 30000),  # Fast for dashboard pages
+            ("load", 45000),  # Quick fallback
+        ]
+        page_type = "dashboard"
+    else:
+        optimized_strategies = [
+            ("load", 45000),  # Primary for root pages
+            ("domcontentloaded", 30000),  # Quick fallback
+        ]
+        page_type = "root"
+
+    # Phase 2: Proven fallback strategies (from production logs)
+    proven_strategies = [
+        ("load", 120000),  # This worked in production logs
+        ("domcontentloaded", 60000),  # This also worked
+    ]
+
+    logger.info(f"🎯 Using hybrid navigation for {page_type} page: {url}")
+
+    # Phase 1: Try optimized strategies
+    logger.info("⚡ Phase 1: Trying optimized strategies...")
     for retry in range(max_retries):
-        for i, (wait_until, timeout) in enumerate(zip(wait_strategies, timeouts)):
+        for i, (wait_until, timeout) in enumerate(optimized_strategies):
             try:
                 logger.info(
-                    f"🌐 Navigation attempt {retry + 1}, strategy {i + 1}: {wait_until} (timeout: {timeout}ms)"
+                    f"🌐 Optimized attempt {retry + 1}, strategy {i + 1}: {wait_until} (timeout: {timeout}ms)"
                 )
+
+                # Capture timing information
+                start_time = datetime.now()
                 await page.goto(url, timeout=timeout, wait_until=wait_until)
-                success_method = f"retry_{retry + 1}_strategy_{wait_until}_timeout_{timeout}ms"
-                logger.info(f"✅ Successfully navigated to {url} with {success_method}")
+                navigation_time = (datetime.now() - start_time).total_seconds()
+
+                logger.info(
+                    f"⏱️ Navigation took {navigation_time:.2f} seconds to reach {wait_until} state"
+                )
+                success_method = f"{page_type}_optimized_retry_{retry + 1}_strategy_{wait_until}_timeout_{timeout}ms"
+                logger.info(f"✅ Successfully navigated with optimized strategy: {success_method}")
+
+                # Capture post-navigation network activity to debug slow loads
+                logger.info("🔍 Capturing post-navigation network activity...")
+                await capture_network_activity(page, duration_ms=10000)
+
                 return True, success_method
             except Exception as e:
-                logger.warning(f"⚠️ Navigation failed with {wait_until}: {e}")
+                logger.warning(f"⚠️ Optimized navigation failed with {wait_until}: {e}")
                 if "timeout" in str(e).lower():
-                    logger.info("⏳ Timeout detected, trying next strategy...")
+                    logger.info("⏳ Timeout detected, trying next optimized strategy...")
                     continue
                 else:
-                    logger.warning(f"❌ Non-timeout error: {e}")
+                    logger.warning(f"❌ Non-timeout error in optimized strategy: {e}")
                     break
 
         if retry < max_retries - 1:
-            logger.info(f"🔄 Retrying navigation attempt {retry + 2}/{max_retries}...")
-            await asyncio.sleep(5)
+            logger.info(f"🔄 Retrying optimized strategies {retry + 2}/{max_retries}...")
+            await asyncio.sleep(2)
 
-    logger.error(f"❌ All navigation attempts failed for {url}")
-    return False, "all_attempts_failed"
+    # Phase 2: Fall back to proven strategies
+    logger.warning("🛡️ Phase 2: Optimized strategies failed, trying proven fallback strategies...")
+    for i, (wait_until, timeout) in enumerate(proven_strategies):
+        try:
+            logger.info(f"🌐 Proven fallback strategy {i + 1}: {wait_until} (timeout: {timeout}ms)")
+            await page.goto(url, timeout=timeout, wait_until=wait_until)
+            success_method = (
+                f"{page_type}_proven_fallback_strategy_{wait_until}_timeout_{timeout}ms"
+            )
+            logger.info(f"✅ Successfully navigated with proven fallback: {success_method}")
+            return True, success_method
+        except Exception as e:
+            logger.warning(f"⚠️ Proven strategy failed with {wait_until}: {e}")
+            continue
+
+    logger.error(f"❌ All navigation strategies (optimized + proven) failed for {url}")
+    return False, "all_strategies_failed"
 
 
 @utils_endpoint_router.get("/screenshot-dash-fixed/{dashboard_id}")
@@ -273,6 +372,16 @@ async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
             )
             page = await context.new_page()
 
+            # Set up console and error logging
+            def log_console(msg):
+                logger.info(f"🖥️ Browser Console [{msg.type}]: {msg.text}")
+
+            def log_page_error(error):
+                logger.error(f"❌ Browser Error: {error}")
+
+            page.on("console", log_console)
+            page.on("pageerror", log_page_error)
+
             working_base_url = settings.dash.internal_url
             # working_base_url = "http://depictio-frontend:5080"
             dashboard_url = f"{working_base_url}/dashboard/{dashboard_id}"
@@ -285,9 +394,9 @@ async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
                 )
 
             logger.info("🚀 Step 1: Navigate to root page first")
-            # First, go to the root page to establish session with retry logic
-            root_success, root_method = await navigate_with_retries(
-                page, working_base_url, max_retries=3
+            # First, go to the root page to establish session with hybrid strategy
+            root_success, root_method = await navigate_with_hybrid_strategy(
+                page, working_base_url, max_retries=1
             )
             if not root_success:
                 raise HTTPException(
@@ -307,9 +416,9 @@ async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
             """)
 
             logger.info("🔄 Step 3: Navigate to dashboard with auth")
-            # Now navigate to the dashboard with retry logic
-            dashboard_success, dashboard_method = await navigate_with_retries(
-                page, dashboard_url, max_retries=3
+            # Now navigate to the dashboard with hybrid strategy
+            dashboard_success, dashboard_method = await navigate_with_hybrid_strategy(
+                page, dashboard_url, max_retries=1
             )
             if not dashboard_success:
                 logger.warning("⚠️ Failed to navigate to dashboard, attempting fallback methods...")
@@ -358,9 +467,9 @@ async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
                 await page.reload(wait_until="domcontentloaded")
                 await asyncio.sleep(3)
 
-                # Try navigating to dashboard again with retry logic
-                retry_success, retry_method = await navigate_with_retries(
-                    page, dashboard_url, max_retries=2
+                # Try navigating to dashboard again with hybrid strategy
+                retry_success, retry_method = await navigate_with_hybrid_strategy(
+                    page, dashboard_url, max_retries=1
                 )
                 if not retry_success:
                     logger.warning("⚠️ Retry navigation to dashboard failed")
