@@ -220,6 +220,37 @@ class JBrowseConfig(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_JBROWSE_")
 
 
+class PerformanceConfig(BaseSettings):
+    """Performance and timeout settings that can be tuned per environment."""
+
+    # HTTP client timeouts (in seconds)
+    http_client_timeout: int = Field(default=30)
+    api_request_timeout: int = Field(default=60)
+
+    # Playwright/browser timeouts (in milliseconds)
+    browser_navigation_timeout: int = Field(default=60000)  # 60s default
+    browser_page_load_timeout: int = Field(default=90000)  # 90s default
+    browser_element_timeout: int = Field(default=30000)  # 30s default
+
+    # Screenshot-specific timeouts (production typically needs longer)
+    screenshot_navigation_timeout: int = Field(default=45000)  # 45s for navigation
+    screenshot_content_wait: int = Field(default=15000)  # 15s for content
+    screenshot_stabilization_wait: int = Field(default=5000)  # 5s for stability
+    screenshot_api_timeout: int = Field(default=300)  # 5 minutes for complete screenshot API call
+
+    # Service readiness check settings
+    service_readiness_retries: int = Field(default=5)
+    service_readiness_delay: int = Field(default=3)
+    service_readiness_timeout: int = Field(default=10)
+
+    # DNS and network performance settings
+    dns_cache_ttl: int = Field(default=300)  # 5 minutes
+    connection_pool_size: int = Field(default=10)
+    max_keepalive_connections: int = Field(default=5)
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_PERFORMANCE_")
+
+
 class Settings(BaseSettings):
     context: str = Field(default="server")
 
@@ -230,5 +261,6 @@ class Settings(BaseSettings):
     auth: AuthConfig = Field(default_factory=AuthConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     jbrowse: JBrowseConfig = Field(default_factory=JBrowseConfig)
+    performance: PerformanceConfig = Field(default_factory=PerformanceConfig)
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_")
