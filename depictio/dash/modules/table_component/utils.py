@@ -94,7 +94,20 @@ def build_table(**kwargs):
     value_div_type = "table-aggrid"
 
     if df.is_empty():
-        df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
+        # Check if we're in a refresh context where we should load new data
+        if kwargs.get("refresh", True):
+            logger.info(
+                f"Table component {index}: Loading delta table for {wf_id}:{dc_id} (no pre-loaded df)"
+            )
+            df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
+        else:
+            # If refresh=False and df is empty, this means filters resulted in no data
+            # Keep the empty DataFrame to properly reflect the filtered state
+            logger.info(
+                f"Table component {index}: Using empty DataFrame from filters (shape: {df.shape}) - filters exclude all data"
+            )
+    else:
+        logger.debug(f"Table component {index}: Using pre-loaded DataFrame (shape: {df.shape})")
 
     # Add dah aggrid filters to the columns
     for c in cols:

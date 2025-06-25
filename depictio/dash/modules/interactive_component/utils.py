@@ -354,9 +354,18 @@ def build_interactive(**kwargs):
         "parent_index": parent_index,
     }
 
+    logger.debug(f"Interactive component {index}: store_data: {store_data}")
+
     # Load the delta table & get the specs
-    # if not isinstance(df, pl.DataFrame):
-    df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
+    if df is None:
+        logger.info(
+            f"Interactive component {index}: Loading delta table for {wf_id}:{dc_id} (no pre-loaded df)"
+        )
+        df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
+    else:
+        logger.debug(
+            f"Interactive component {index}: Using pre-loaded DataFrame (shape: {df.shape})"
+        )
 
     # Handling different aggregation values
 
@@ -366,14 +375,56 @@ def build_interactive(**kwargs):
     if interactive_component_type in ["Select", "MultiSelect", "SegmentedControl"]:
         data = sorted(df[column_name].drop_nulls().unique())
 
+        # CRITICAL: If DataFrame is empty but we have a preserved value, include those values in options
+        # This ensures the component can display the preserved selection even when filtered data is empty
+        if df.height == 0 and value:
+            if interactive_component_type == "MultiSelect" and isinstance(value, list):
+                # For MultiSelect, extend data with all preserved values
+                for val in value:
+                    if val not in data:
+                        data.append(val)
+                data = sorted(data)
+                logger.debug(
+                    f"MultiSelect {index}: Added preserved values {value} to empty options, final data: {data}"
+                )
+            elif interactive_component_type in ["Select", "SegmentedControl"] and value not in data:
+                # For Select/SegmentedControl, add the single preserved value
+                data.append(value)
+                data = sorted(data)
+                logger.debug(
+                    f"{interactive_component_type} {index}: Added preserved value '{value}' to empty options, final data: {data}"
+                )
+
+        # Prepare kwargs for all component types to preserve value
+        component_kwargs = {"data": data, "id": {"type": value_div_type, "index": str(index)}}
+
+        # CRITICAL: Preserve value for ALL interactive component types, not just MultiSelect
+        if value is not None:
+            # For Select: only set value if it's still valid (in data options)
+            if interactive_component_type == "Select":
+                if value in data:
+                    component_kwargs["value"] = value
+                    logger.debug(
+                        f"Select component {index}: Preserved value '{value}' (available in options)"
+                    )
+                else:
+                    logger.warning(
+                        f"Select component {index}: Value '{value}' no longer available in options {data}"
+                    )
+            # For MultiSelect and SegmentedControl: preserve value even if partially invalid
+            else:
+                component_kwargs["value"] = value
+                logger.debug(
+                    f"{interactive_component_type} component {index}: Preserved value '{value}'"
+                )
+
         # WARNING: This is a temporary solution to avoid modifying dashboard data - the -tmp suffix is added to the id and removed once clicked on the btn-done D
-        interactive_component = func_name(
-            data=data, id={"type": value_div_type, "index": str(index)}
-        )
+        interactive_component = func_name(**component_kwargs)
 
         # If the aggregation value is MultiSelect, make the component searchable and clearable
         if interactive_component_type == "MultiSelect":
-            kwargs = {
+            # Add MultiSelect-specific styling properties
+            multiselect_kwargs = {
                 "searchable": True,
                 "clearable": True,
                 "clearSearchOnChange": False,
@@ -382,14 +433,10 @@ def build_interactive(**kwargs):
                 "zIndex": 1000,
                 # "position": "relative",
             }
-            if not value:
-                value = []
-            kwargs.update({"value": value})
-            interactive_component = func_name(
-                data=data,
-                id={"type": value_div_type, "index": str(index)},
-                **kwargs,
-            )
+            # Merge with existing component_kwargs that already includes the preserved value
+            component_kwargs.update(multiselect_kwargs)
+            # Recreate the component with additional MultiSelect properties
+            interactive_component = func_name(**component_kwargs)
 
     # If the aggregation value is TextInput
     elif interactive_component_type == "TextInput":

@@ -77,12 +77,24 @@ def build_figure_frame(index, children=None):
         )
 
 
+# Cache for sampled data to avoid re-sampling large datasets
+_sampling_cache = {}
+
+
 def render_figure(dict_kwargs, visu_type, df, cutoff=100000, selected_point=None):
     if dict_kwargs and visu_type.lower() in plotly_vizu_dict and df is not None:
         if df.height > cutoff:
-            figure = plotly_vizu_dict[visu_type.lower()](
-                df.sample(n=cutoff, seed=0).to_pandas(), **dict_kwargs
-            )
+            # Use caching for sampled data to improve performance
+            cache_key = f"{id(df)}_{cutoff}_{hash(str(dict_kwargs))}"
+            if cache_key not in _sampling_cache:
+                _sampling_cache[cache_key] = df.sample(n=cutoff, seed=0).to_pandas()
+                logger.debug(
+                    f"Figure: Cached sampled data for large dataset (cache_key: {cache_key})"
+                )
+            else:
+                logger.debug(f"Figure: Using cached sampled data (cache_key: {cache_key})")
+
+            figure = plotly_vizu_dict[visu_type.lower()](_sampling_cache[cache_key], **dict_kwargs)
         else:
             figure = plotly_vizu_dict[visu_type.lower()](df.to_pandas(), **dict_kwargs)
     else:
@@ -91,31 +103,25 @@ def render_figure(dict_kwargs, visu_type, df, cutoff=100000, selected_point=None
     if selected_point:
         selected_x = selected_point["x"]
         selected_y = selected_point["y"]
-        # selected_label = selected_point['text']
 
-        # Update marker colors
+        # Optimized: Single vectorized operation instead of multiple list comprehensions
+        x_col = df[dict_kwargs["x"]]
+        y_col = df[dict_kwargs["y"]]
+
+        # Create boolean mask for selected points
+        is_selected = (x_col == selected_x) & (y_col == selected_y)
+
+        # Use vectorized operations for better performance
+        colors = ["red" if sel else "blue" for sel in is_selected]
+        opacities = [1.0 if sel else 0.3 for sel in is_selected]
+
+        # Update marker colors with optimized data
         figure.update_traces(
             marker=dict(
-                color=[
-                    "red" if (x == selected_x and y == selected_y) else "blue"
-                    for x, y in zip(df[dict_kwargs["x"]], df[dict_kwargs["y"]])
-                ],
-                # size=[15 if (x == selected_x and y == selected_y) else 10 for x, y in zip(df[dict_kwargs['x']], df[dict_kwargs['y']])],
-                opacity=[
-                    1.0 if (x == selected_x and y == selected_y) else 0.3
-                    for x, y in zip(df[dict_kwargs["x"]], df[dict_kwargs["y"]])
-                ],
+                color=colors,
+                opacity=opacities,
             )
         )
-
-        # Add annotation for the selected point
-        # figure.add_annotation(
-        #     x=selected_x,
-        #     y=selected_y,
-        #     text=f"({selected_x}, {selected_y})",
-        #     showarrow=True,
-        #     arrowhead=1
-        # )
 
     return figure
 
@@ -162,7 +168,20 @@ def build_figure(**kwargs):
 
     # wf_id, dc_id = return_mongoid(workflow_id=wf_id, data_collection_id=dc_id)
     if df.is_empty():
-        df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
+        # Check if we're in a refresh context where we should load new data
+        if kwargs.get("refresh", True):
+            logger.info(
+                f"Figure component {index}: Loading delta table for {wf_id}:{dc_id} (no pre-loaded df)"
+            )
+            df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
+        else:
+            # If refresh=False and df is empty, this means filters resulted in no data
+            # Keep the empty DataFrame to properly reflect the filtered state
+            logger.info(
+                f"Figure component {index}: Using empty DataFrame from filters (shape: {df.shape}) - filters exclude all data"
+            )
+    else:
+        logger.debug(f"Figure component {index}: Using pre-loaded DataFrame (shape: {df.shape})")
 
     # figure = render_figure(dict_kwargs, visu_type, df)
 
@@ -323,13 +342,25 @@ def process_json_from_docstring(data):
     return data
 
 
+# Cache for parameter information to avoid re-processing docstrings
+_param_info_cache = {}
+
+
 def get_param_info(plotly_vizu_list):
-    # Code for extract_info_from_docstring and process_json_from_docstring...
-    # ...
+    # Use caching to avoid re-processing docstrings on every call
+    cache_key = tuple(func.__name__ for func in plotly_vizu_list)
+
+    if cache_key in _param_info_cache:
+        logger.debug("Figure: Using cached parameter info")
+        return _param_info_cache[cache_key]
+
+    logger.debug("Figure: Processing parameter info from docstrings")
     param_info = {}
     for func in plotly_vizu_list:
         param_info[func.__name__] = extract_info_from_docstring(func.__doc__)
         param_info[func.__name__] = process_json_from_docstring(param_info[func.__name__])
+
+    _param_info_cache[cache_key] = param_info
     return param_info
 
 
