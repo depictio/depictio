@@ -74,7 +74,7 @@ minio:
 backend:
   image:
     repository: ghcr.io/depictio/depictio # Corrected repository path with .io
-    tag: "0.1.0-b6"
+    tag: "0.1.0-b7"
     pullPolicy: Always
   resources:
     requests:
@@ -132,7 +132,7 @@ backend:
 frontend:
   image:
     repository: ghcr.io/depictio/depictio # Corrected repository path with .io
-    tag: "0.1.0-b6"
+    tag: "0.1.0-b7"
     pullPolicy: Always
   resources:
     requests:
