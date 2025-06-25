@@ -129,10 +129,75 @@ async def process_initial_data_collections_endpoint(
     }
 
 
+async def check_service_readiness(url: str, max_retries: int = 5, delay: int = 2) -> bool:
+    """
+    Check if a service is ready to serve requests with retry logic.
+    Similar to the init container pattern used in deployments.
+    """
+    import httpx
+
+    timeout = httpx.Timeout(10.0)
+
+    for attempt in range(max_retries):
+        try:
+            async with httpx.AsyncClient(timeout=timeout, verify=False) as client:
+                response = await client.get(url)
+                logger.info(
+                    f"🔍 Service readiness check attempt {attempt + 1}: {url} -> {response.status_code}"
+                )
+                if response.status_code < 500:  # Accept any non-server error status
+                    logger.info(f"✅ Service is ready: {url}")
+                    return True
+        except Exception as e:
+            logger.warning(f"⚠️ Service readiness check attempt {attempt + 1} failed: {e}")
+
+        if attempt < max_retries - 1:
+            logger.info(f"⏳ Waiting {delay}s before retry...")
+            await asyncio.sleep(delay)
+
+    logger.error(f"❌ Service readiness check failed after {max_retries} attempts: {url}")
+    return False
+
+
+async def navigate_with_retries(page, url: str, max_retries: int = 3) -> tuple[bool, str]:
+    """
+    Navigate to URL with multiple wait strategies and retry logic.
+    Returns (success, method_used)
+    """
+    wait_strategies = ["domcontentloaded", "networkidle", "load"]
+    timeouts = [60000, 90000, 120000]  # Increasing timeouts for production
+
+    for retry in range(max_retries):
+        for i, (wait_until, timeout) in enumerate(zip(wait_strategies, timeouts)):
+            try:
+                logger.info(
+                    f"🌐 Navigation attempt {retry + 1}, strategy {i + 1}: {wait_until} (timeout: {timeout}ms)"
+                )
+                await page.goto(url, timeout=timeout, wait_until=wait_until)
+                success_method = f"retry_{retry + 1}_strategy_{wait_until}_timeout_{timeout}ms"
+                logger.info(f"✅ Successfully navigated to {url} with {success_method}")
+                return True, success_method
+            except Exception as e:
+                logger.warning(f"⚠️ Navigation failed with {wait_until}: {e}")
+                if "timeout" in str(e).lower():
+                    logger.info("⏳ Timeout detected, trying next strategy...")
+                    continue
+                else:
+                    logger.warning(f"❌ Non-timeout error: {e}")
+                    break
+
+        if retry < max_retries - 1:
+            logger.info(f"🔄 Retrying navigation attempt {retry + 2}/{max_retries}...")
+            await asyncio.sleep(5)
+
+    logger.error(f"❌ All navigation attempts failed for {url}")
+    return False, "all_attempts_failed"
+
+
 @utils_endpoint_router.get("/screenshot-dash-fixed/{dashboard_id}")
 async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
     """
-    Fixed screenshot endpoint with proper authentication handling
+    Fixed screenshot endpoint with proper authentication handling, retries, and service readiness checks
     """
     from playwright.async_api import async_playwright
 
@@ -212,9 +277,24 @@ async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
             # working_base_url = "http://depictio-frontend:5080"
             dashboard_url = f"{working_base_url}/dashboard/{dashboard_id}"
 
+            # Step 0: Check service readiness before attempting screenshot
+            logger.info("🔍 Step 0: Checking service readiness...")
+            if not await check_service_readiness(working_base_url, max_retries=5, delay=3):
+                raise HTTPException(
+                    status_code=503, detail=f"Frontend service not ready: {working_base_url}"
+                )
+
             logger.info("🚀 Step 1: Navigate to root page first")
-            # First, go to the root page to establish session
-            await page.goto(working_base_url, timeout=30000, wait_until="domcontentloaded")
+            # First, go to the root page to establish session with retry logic
+            root_success, root_method = await navigate_with_retries(
+                page, working_base_url, max_retries=3
+            )
+            if not root_success:
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"Failed to navigate to frontend service: {working_base_url}",
+                )
+            logger.info(f"📊 Root navigation successful with: {root_method}")
             await asyncio.sleep(2)
 
             logger.info("🔑 Step 2: Set authentication in localStorage")
@@ -227,8 +307,28 @@ async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
             """)
 
             logger.info("🔄 Step 3: Navigate to dashboard with auth")
-            # Now navigate to the dashboard
-            await page.goto(dashboard_url, timeout=30000, wait_until="domcontentloaded")
+            # Now navigate to the dashboard with retry logic
+            dashboard_success, dashboard_method = await navigate_with_retries(
+                page, dashboard_url, max_retries=3
+            )
+            if not dashboard_success:
+                logger.warning("⚠️ Failed to navigate to dashboard, attempting fallback methods...")
+                # Fallback: try basic navigation without retries
+                try:
+                    await page.goto(
+                        dashboard_url, timeout=120000, wait_until="domcontentloaded"
+                    )  # Longer timeout
+                    dashboard_method = "fallback_basic_navigation_120s_timeout"
+                    logger.info(
+                        f"📊 Dashboard navigation successful with fallback: {dashboard_method}"
+                    )
+                except Exception as e:
+                    logger.error(f"❌ Dashboard navigation failed completely: {e}")
+                    raise HTTPException(
+                        status_code=503, detail=f"Failed to navigate to dashboard: {dashboard_url}"
+                    )
+            else:
+                logger.info(f"📊 Dashboard navigation successful with: {dashboard_method}")
             await asyncio.sleep(3)
 
             # Check if we're still on the auth page
@@ -258,8 +358,15 @@ async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
                 await page.reload(wait_until="domcontentloaded")
                 await asyncio.sleep(3)
 
-                # Try navigating to dashboard again
-                await page.goto(dashboard_url, timeout=30000, wait_until="domcontentloaded")
+                # Try navigating to dashboard again with retry logic
+                retry_success, retry_method = await navigate_with_retries(
+                    page, dashboard_url, max_retries=2
+                )
+                if not retry_success:
+                    logger.warning("⚠️ Retry navigation to dashboard failed")
+                else:
+                    logger.info(f"📊 Retry navigation successful with: {retry_method}")
+                    dashboard_method = f"auth_retry_{retry_method}"
                 await asyncio.sleep(3)
 
                 current_url = page.url
@@ -278,17 +385,29 @@ async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
                     """)
                     await asyncio.sleep(5)
 
-            # Wait for dashboard content to load
+            # Wait for dashboard content to load with increased timeouts for production
             logger.info("⏳ Waiting for dashboard content...")
             try:
-                # Wait for dashboard-specific content
-                await page.wait_for_selector("div#page-content", timeout=15000)
+                # Wait for dashboard-specific content with longer timeout
+                await page.wait_for_selector("div#page-content", timeout=30000)
                 logger.info("✅ Found page-content div")
             except Exception:
-                logger.warning("⚠️ page-content div not found, continuing...")
+                logger.warning("⚠️ page-content div not found, trying alternative selectors...")
+                # Try waiting for other common dashboard elements
+                alternative_selectors = ["div#app", "div[data-dash-app]", "body"]
+                for selector in alternative_selectors:
+                    try:
+                        await page.wait_for_selector(selector, timeout=10000)
+                        logger.info(f"✅ Found alternative selector: {selector}")
+                        break
+                    except Exception:
+                        continue
+                else:
+                    logger.warning("⚠️ No dashboard elements found, continuing anyway...")
 
-            # Give extra time for any dynamic content
-            await asyncio.sleep(5)
+            # Give extra time for any dynamic content to load (increased for production)
+            logger.info("⏳ Waiting for dynamic content to stabilize...")
+            await asyncio.sleep(10)
 
             # Remove debug elements
             await page.evaluate("""
@@ -325,13 +444,17 @@ async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
 
             return {
                 "success": True,
-                "message": "Screenshot taken with fixed authentication",
+                "message": "Screenshot taken with improved resilience and retry logic",
                 "dashboard_url": dashboard_url,
                 "final_url": final_url,
                 "redirected_to_auth": "/auth" in final_url,
                 "screenshot_path": output_file,
                 "screenshot_size": Path(output_file).stat().st_size,
                 "auth_method": "localStorage with fallbacks",
+                "navigation_methods": {
+                    "root_navigation": root_method,
+                    "dashboard_navigation": dashboard_method,
+                },
                 "timestamp": datetime.now().isoformat(),
             }
 
