@@ -171,7 +171,9 @@ def build_card(**kwargs):
 
     # logger.debug(f"Card kwargs: {kwargs}")
 
-    if refresh or not v:
+    # CRITICAL FIX: Card components MUST always recalculate values when data is provided
+    # even if refresh=False, because they need to compute aggregations on filtered data
+    if refresh or not v or kwargs.get("df") is not None:
         import polars as pl
 
         data = kwargs.get("df", pl.DataFrame())
@@ -180,15 +182,32 @@ def build_card(**kwargs):
         # logger.info(f"Existing data columns: {list(data.to_pandas().columns)}")
 
         if data.is_empty():
-            from depictio.api.v1.deltatables_utils import load_deltatable_lite
+            # Check if we're in a refresh context where we should load new data
+            if kwargs.get("refresh", True):
+                from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
-            data = load_deltatable_lite(
-                workflow_id=wf_id,
-                data_collection_id=dc_id,
-                TOKEN=kwargs.get("access_token"),
+                logger.info(
+                    f"Card component {index}: Loading delta table for {wf_id}:{dc_id} (no pre-loaded df)"
+                )
+                data = load_deltatable_lite(
+                    workflow_id=wf_id,
+                    data_collection_id=dc_id,
+                    TOKEN=kwargs.get("access_token"),
+                )
+            else:
+                # If refresh=False and data is empty, this means filters resulted in no data
+                # Keep the empty DataFrame and compute appropriate "no data" value
+                logger.info(
+                    f"Card component {index}: Using empty DataFrame from filters (shape: {data.shape}) - filters exclude all data"
+                )
+        else:
+            logger.debug(
+                f"Card component {index}: Recalculating value with filtered DataFrame (shape: {data.shape})"
             )
 
+        # Always recalculate value when we have data (filtered or unfiltered)
         v = compute_value(data, column_name, aggregation)
+        logger.debug(f"Card component {index}: Computed new value: {v}")
 
     try:
         v = round(float(v), 4)
