@@ -251,9 +251,9 @@ async def check_dashboard_health(page, url: str) -> tuple[bool, str]:
             ("title", "error", page_title.lower()),
             ("title", "404", page_title.lower()),
             ("title", "not found", page_title.lower()),
-            ("url", "auth", current_url.lower()),
-            ("url", "login", current_url.lower()),
-            ("url", "error", current_url.lower()),
+            # ("url", "auth", current_url.lower()),
+            # ("url", "login", current_url.lower()),
+            # ("url", "error", current_url.lower()),
         ]
 
         for check_type, error_text, content in error_indicators:
