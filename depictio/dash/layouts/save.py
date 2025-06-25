@@ -191,8 +191,8 @@ def register_callbacks_save(app):
                 # Screenshot the dashboard
                 screenshot_response = httpx.get(
                     # f"{API_BASE_URL}/depictio/api/v1/utils/screenshot-minimal/{dashboard_id}",
-                    # f"{API_BASE_URL}/depictio/api/v1/utils/screenshot-dash-fixed/{dashboard_id}",
-                    f"{API_BASE_URL}/depictio/api/v1/dashboards/screenshot/{dashboard_id}",
+                    f"{API_BASE_URL}/depictio/api/v1/utils/screenshot-dash-fixed/{dashboard_id}",
+                    # f"{API_BASE_URL}/depictio/api/v1/dashboards/screenshot/{dashboard_id}",
                     # headers={
                     #     "Authorization": f"Bearer {TOKEN}",
                     # },
