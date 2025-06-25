@@ -86,7 +86,7 @@ def register_callbacks_stepper_part_two(app):
                 dmc.Center(dbc.Row(special_components)),
             ]
         )
-        logger.info(f"Buttons list: {buttons_list}")
+        # logger.info(f"Buttons list: {buttons_list}")
 
         store_list = [
             figure_stepper_button_store,
