@@ -265,7 +265,8 @@ jobs:
           DASHBOARD_ID="6824cb3b89d2b72169309737"
 
           # Make the API call and capture response
-          SCREENSHOT_RESPONSE=$(curl -s -w "\n%{http_code}" http://localhost:8058/depictio/api/v1/dashboards/screenshot/$DASHBOARD_ID)
+          SCREENSHOT_RESPONSE=$(curl -s -w "\n%{http_code}" http://localhost:8058/depictio/api/v1/utils/screenshot-dash-fixed/$DASHBOARD_ID)
+          # SCREENSHOT_RESPONSE=$(curl -s -w "\n%{http_code}" http://localhost:8058/depictio/api/v1/dashboards/screenshot/$DASHBOARD_ID)
 
           # Extract HTTP status code (last line)
           HTTP_CODE=$(echo "$SCREENSHOT_RESPONSE" | tail -n1)
