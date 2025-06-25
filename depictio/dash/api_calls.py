@@ -94,6 +94,7 @@ def api_call_fetch_user_from_token(token: str) -> User | None:
         f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_token",
         params={"token": token},
         headers={"api-key": settings.auth.internal_api_key},
+        timeout=settings.performance.api_request_timeout,
     )
 
     if response.status_code == 404:
@@ -428,6 +429,7 @@ def api_call_edit_password(
             "new_password": new_password,
         },
         headers={"Authorization": f"Bearer {access_token}"},
+        timeout=settings.performance.api_request_timeout,
     )
     if response.status_code == 200:
         logger.info("Password edited successfully.")
@@ -438,3 +440,100 @@ def api_call_edit_password(
             "success": False,
             "message": f"Error editing password: {response.text}",
         }
+
+
+@validate_call(validate_return=True)
+def api_call_get_dashboard(dashboard_id: str, token: str) -> dict[str, Any] | None:
+    """
+    Get dashboard data by calling the API.
+    Uses environment-specific timeout settings.
+
+    Args:
+        dashboard_id: The dashboard ID
+        token: The authentication token
+
+    Returns:
+        Optional[Dict[str, Any]]: Dashboard data or None if failed
+    """
+    try:
+        response = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/dashboards/get/{dashboard_id}",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=settings.performance.api_request_timeout,
+        )
+        response.raise_for_status()
+        logger.debug(f"Dashboard data fetched successfully for dashboard {dashboard_id}.")
+        return response.json()
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Failed to fetch dashboard data: {e}")
+        return None
+
+
+@validate_call(validate_return=True)
+def api_call_save_dashboard(dashboard_id: str, dashboard_data: dict, token: str) -> bool:
+    """
+    Save dashboard data by calling the API.
+    Uses environment-specific timeout settings.
+
+    Args:
+        dashboard_id: The dashboard ID
+        dashboard_data: The dashboard data to save
+        token: The authentication token
+
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    try:
+        response = httpx.post(
+            f"{API_BASE_URL}/depictio/api/v1/dashboards/save/{dashboard_id}",
+            json=dashboard_data,
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=settings.performance.api_request_timeout,
+        )
+        response.raise_for_status()
+        logger.info(f"Dashboard data saved successfully for dashboard {dashboard_id}.")
+        return True
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Failed to save dashboard data: {e}")
+        return False
+
+
+@validate_call(validate_return=True)
+def api_call_screenshot_dashboard(dashboard_id: str) -> bool:
+    """
+    Request dashboard screenshot generation by calling the API.
+    Uses generous timeout for screenshot generation to handle production complexity.
+
+    Args:
+        dashboard_id: The dashboard ID
+
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    try:
+        # Use dedicated screenshot API timeout (configurable per environment)
+        # Production environments need generous timeouts due to:
+        # - Browser startup overhead
+        # - Network latency for service communication
+        # - Complex page rendering and content loading
+        # - Screenshot capture and file I/O operations
+        screenshot_timeout = settings.performance.screenshot_api_timeout
+
+        logger.info(
+            f"🎯 Screenshot API timeout set to {screenshot_timeout}s for production robustness"
+        )
+
+        response = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/utils/screenshot-dash-fixed/{dashboard_id}",
+            timeout=screenshot_timeout,
+        )
+
+        if response.status_code == 200:
+            logger.info("Dashboard screenshot saved successfully.")
+            return True
+        else:
+            logger.warning(f"Failed to save dashboard screenshot: {response.json()}")
+            return False
+    except Exception as e:
+        logger.error(f"Failed to save dashboard screenshot: {str(e)}")
+        return False

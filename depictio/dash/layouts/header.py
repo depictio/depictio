@@ -6,9 +6,9 @@ import dash_mantine_components as dmc
 import httpx
 from dash import Input, Output, State, dcc, html
 
-from depictio.api.v1.configs.config import API_BASE_URL
+from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.logging_init import logger
-from depictio.dash.api_calls import api_call_fetch_user_from_token
+from depictio.dash.api_calls import api_call_fetch_user_from_token, api_call_get_dashboard
 
 current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -47,14 +47,9 @@ def register_callbacks_header(app):
 
         dashboard_id = pathname.split("/")[-1]
 
-        dashboard_data_response = httpx.get(
-            f"{API_BASE_URL}/depictio/api/v1/dashboards/get/{dashboard_id}",
-            headers={"Authorization": f"Bearer {TOKEN}"},
-        )
-        if dashboard_data_response.status_code != 200:
+        data = api_call_get_dashboard(dashboard_id, TOKEN)
+        if not data:
             return [True] * len_output
-
-        data = dashboard_data_response.json()
 
         # Check if data is available, if not set the buttons to disabled
         owner = (
@@ -388,6 +383,7 @@ def design_header(data, local_store):
         f"{API_BASE_URL}/depictio/api/v1/projects/get/from_id",
         params={"project_id": data["project_id"]},
         headers={"Authorization": f"Bearer {local_store['access_token']}"},
+        timeout=settings.performance.api_request_timeout,
     )
     if response.status_code != 200:
         raise Exception("Failed to fetch project data.")
