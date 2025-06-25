@@ -54,7 +54,24 @@ def get_size(obj, seen=None):
     return size
 
 
+# Cache for component data to avoid redundant API calls
+_component_data_cache = {}
+
+
 def get_component_data(input_id, dashboard_id, TOKEN):
+    """
+    Get component data with caching to improve edit operation performance.
+    """
+    # Create cache key combining dashboard, component, and token hash
+    cache_key = f"{dashboard_id}_{input_id}_{hash(TOKEN) % 10000 if TOKEN else 'none'}"
+
+    # Check cache first
+    if cache_key in _component_data_cache:
+        logger.debug(f"Using cached component data for {input_id} in dashboard {dashboard_id}")
+        return _component_data_cache[cache_key]
+
+    logger.debug(f"Fetching component data for {input_id} in dashboard {dashboard_id}")
+
     response = httpx.get(
         f"{API_BASE_URL}/depictio/api/v1/dashboards/get_component_data/{dashboard_id}/{input_id}",
         headers={"Authorization": f"Bearer {TOKEN}"},
@@ -63,8 +80,13 @@ def get_component_data(input_id, dashboard_id, TOKEN):
     # logger.info(f"Response: {response.json()}")
 
     if response.status_code == 200:
-        return response.json()
+        component_data = response.json()
+        # Cache the result
+        _component_data_cache[cache_key] = component_data
+        logger.debug(f"Cached component data for {input_id}")
+        return component_data
     else:
+        logger.warning(f"Failed to fetch component data for {input_id}: {response.status_code}")
         return None
 
 
@@ -96,30 +118,38 @@ def return_user_from_token(token: str) -> dict:
         return None
 
 
-def list_workflows(token: str | None = None):
-    # print("list_workflows")
-    # print(token)
+# Cache for workflows to avoid redundant API calls
+_workflows_cache = {}
 
+
+def list_workflows(token: str | None = None):
+    """
+    List workflows with caching to improve performance.
+    """
     if not token:
         print("A valid token must be provided for authentication.")
         return None
 
-    # # print(token)
-    # user = return_user_from_token(token)  # Decode the token to get the user information
-    # if not user:
-    #     print("Invalid token or unable to decode user information.")
-    #     return None
+    # Create cache key
+    cache_key = f"workflows_{hash(token) % 10000}"
 
-    # # Set permissions with the user as both owner and viewer
-    headers = {"Authorization": f"Bearer {token}"}  # Token is now mandatory
+    # Check cache first
+    if cache_key in _workflows_cache:
+        logger.debug("Using cached workflows list")
+        return _workflows_cache[cache_key]
 
-    # print(token)
+    logger.debug("Fetching workflows from API")
+    headers = {"Authorization": f"Bearer {token}"}
+
     workflows = httpx.get(
         f"{API_BASE_URL}/depictio/api/v1/workflows/get_all_workflows", headers=headers
     )
     workflows_json = workflows.json()
-    # pretty_workflows = json.dumps(workflows_json, indent=4)
-    # typer.echo(pretty_workflows)
+
+    # Cache the result
+    _workflows_cache[cache_key] = workflows_json
+    logger.debug("Cached workflows list")
+
     return workflows_json
 
 
@@ -232,19 +262,27 @@ def return_mongoid(
     return workflow_id, data_collection_id
 
 
+# Cache for data collection specs to avoid duplicate API calls
+_data_collection_specs_cache = {}
+
+
 def get_columns_from_data_collection(
     workflow_id: str,
     data_collection_id: str,
     TOKEN: str,
 ):
-    logger.info(f"get_columns_from_data_collection - TOKEN: {TOKEN}")
-    # print("\n\n\n")
-    # print("get_columns_from_data_collection")
+    """
+    Get columns from data collection with simple caching to avoid duplicate API calls.
+    """
+    # Create cache key
+    cache_key = f"{data_collection_id}_{hash(TOKEN) % 10000 if TOKEN else 'none'}"
 
-    # workflows = list_workflows(TOKEN)
-    # workflow_id = [e for e in workflows if e["workflow_tag"] == workflow_id][0]["_id"]
-    # data_collection_id = [f for e in workflows if e["_id"] == workflow_id for f in e["data_collections"] if f["data_collection_tag"] == data_collection_id][0]["_id"]
-    # workflow_id, data_collection_id = return_mongoid(workflow_tag=workflow_tag, data_collection_tag=data_collection_tag, TOKEN=TOKEN)
+    # Check cache first
+    if cache_key in _data_collection_specs_cache:
+        logger.debug(f"Using cached specs for data_collection_id: {data_collection_id}")
+        return _data_collection_specs_cache[cache_key]
+
+    logger.debug(f"Fetching specs for data_collection_id: {data_collection_id}")
 
     if workflow_id is not None and data_collection_id is not None:
         response = httpx.get(
@@ -253,22 +291,26 @@ def get_columns_from_data_collection(
                 "Authorization": f"Bearer {TOKEN}",
             },
         )
-        # print(response)
+
         if response.status_code == 200:
             json_cols = response.json()
-            # print("get_columns_from_data_collection")
-            # print(json_cols)
-            # json_cols = json["columns"]
             reformat_cols = collections.defaultdict(dict)
-            # print(json_cols)
             for c in json_cols:
                 reformat_cols[c["name"]]["type"] = c["type"]
                 reformat_cols[c["name"]]["description"] = c["description"]
                 reformat_cols[c["name"]]["specs"] = c["specs"]
+
+            # Cache the result
+            _data_collection_specs_cache[cache_key] = reformat_cols
+            logger.debug(f"Cached specs for data_collection_id: {data_collection_id}")
+
             return reformat_cols
         else:
-            print("No workflows found")
-            return None
+            logger.error(f"Error getting columns for {data_collection_id}: {response.text}")
+            return collections.defaultdict(dict)
+    else:
+        logger.error("workflow_id or data_collection_id is None")
+        return collections.defaultdict(dict)
 
 
 def serialize_dash_component(obj):
