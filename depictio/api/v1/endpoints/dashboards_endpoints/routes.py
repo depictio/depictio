@@ -26,7 +26,7 @@ async def get_dashboard(
     Fetch dashboard data related to a dashboard ID.
     """
 
-    user_id = current_user.id
+    user_id = PyObjectId(current_user.id)
     logger.debug(f"Current user ID: {user_id}")
 
     # Find dashboards where current_user is either an owner or a viewer, or dashboard is public
