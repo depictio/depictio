@@ -241,103 +241,118 @@ async def screenshot_dashboard(
 
     output_folder = "/app/depictio/dash/static/screenshots"  # Directly set to the desired path
     logger.info(f"Output folder: {output_folder}")
-    try:
-        async with async_playwright() as p:
-            # Launch browser
-            browser = await p.chromium.launch(headless=True)
-            # Set viewport size
-            viewport_width = 1920
-            viewport_height = 1080
-            context = await browser.new_context(
-                viewport={"width": viewport_width, "height": viewport_height}
-            )
-            page = await context.new_page()
+    # try:
+    async with async_playwright() as p:
+        # Launch browser
+        browser = await p.chromium.launch(headless=True)
+        # Set viewport size
+        viewport_width = 1920
+        viewport_height = 1080
+        context = await browser.new_context(
+            viewport={"width": viewport_width, "height": viewport_height}
+        )
+        page = await context.new_page()
 
-            # Navigate to Dash service
-            logger.info(f"Navigating to Dash service at {settings.dash.internal_url}")
-            await page.goto(settings.dash.internal_url, timeout=90000)
+        # Navigate to Dash service
+        logger.info(f"Navigating to Dash service at {settings.dash.internal_url}")
+        await page.goto(settings.dash.internal_url, timeout=90000)
 
-            # Wait for page to load
-            await page.wait_for_load_state("networkidle")
+        # Wait for page to load
+        # await page.wait_for_load_state("networkidle")
+        logger.debug("Looking for user in the database...")
+        current_user = await UserBeanie.find_one({"email": "admin@example.com"})
 
-            current_user = await UserBeanie.find_one({"email": "admin@example.com"})
+        # current_user = await UserBeanie.find_one({"email": "admin@example.com"})
+        logger.debug(f"Current user: {current_user}")
 
-            # current_user = await UserBeanie.find_one({"email": "admin@example.com"})
-            logger.debug(f"Current user: {current_user}")
+        # Get all tokens for the current user
+        logger.debug("Fetching tokens for the current user...")
+        tokens = await TokenBeanie.find({"user_id": current_user.id}).to_list()
+        logger.debug(f"Tokens found: {tokens}")
 
-            # get the current user a functional token
-            token = await TokenBeanie.find_one(
-                {
-                    "user_id": current_user.id,
-                    # "token_lifetime": "short-lived",
-                    "refresh_expire_datetime": {"$gt": datetime.now()},
-                }
-            )
-            logger.debug(f"Token: {token}")
+        # Log datetime.now() for debugging purposes
+        logger.debug(f"Current datetime: {datetime.now()}")
 
-            token_data = token.model_dump(exclude_none=True)
-            token_data["_id"] = token_data.pop("id", None)
-            token_data["logged_in"] = True
-            logger.debug(f"Token: {token}")
-
-            token_data_json = json.dumps(token_data)
-            logger.debug(f"Token data: {token_data_json}")
-
-            # Set data in the local storage
-            await page.evaluate(
-                f"""() => {{
-                localStorage.setItem('local-store', '{token_data_json}');
-            }}"""
-            )
-            # await asyncio.sleep(3600)  # Keeps the browser open for 1 hour
-
-            await page.reload()
-
-            await asyncio.sleep(3)  # Wait for the page to stabilize
-            # dashboard_id = "6824cb3b89d2b72169309737"
-            await page.goto(f"{settings.dash.internal_url}/dashboard/{dashboard_id}", timeout=90000)
-            await page.wait_for_load_state("networkidle")
-            await page.reload()
-            await asyncio.sleep(3)
-
-            await page.evaluate(
-                """() => {
-                const debugMenuOuter = document.querySelector('.dash-debug-menu__outer');
-                if (debugMenuOuter) {
-                    debugMenuOuter.remove();
-                }
-                const debugMenu = document.querySelector('.dash-debug-menu');
-                if (debugMenu) {
-                    debugMenu.remove();
-                }
-            }"""
+        # Log refresh_expire_datetime for each token
+        for token in tokens:
+            logger.debug(
+                f"Token ID: {token.id}, refresh_expire_datetime: {token.refresh_expire_datetime}"
             )
 
-            element = await page.query_selector("div#page-content")
-
-            # await page.screenshot(path=f"{output_folder}/dash_screenshot.png", full_page=True)
-            output_file = f"{output_folder}/{str(dashboard_id)}.png"
-            await element.screenshot(path=output_file)
-
-            await browser.close()
-            logger.info(f"Screenshot saved to {output_file}")
-
-            return {
-                "success": True,
-                "url": settings.dash.internal_url,
-                "message": "Screenshot taken successfully",
-                "screenshot_path": output_file,
-                # "token": convert_objectid_to_str(token_data),
-                # "user": current_user.model_dump(exclude_none=True),
+        # get the current user a functional token
+        token = await TokenBeanie.find_one(
+            {
+                "user_id": current_user.id,
+                # "token_lifetime": "short-lived",
+                "refresh_expire_datetime": {"$gt": datetime.now()},
             }
+        )
+        logger.debug(f"Token: {token}")
 
-    except Exception as e:
+        token_data = token.model_dump(exclude_none=True)
+        logger.debug(f"Token data: {token_data}")
+        token_data["_id"] = token_data.pop("id", None)
+        token_data["logged_in"] = True
+        logger.debug(f"Token: {token}")
+
+        token_data_json = json.dumps(token_data)
+        logger.debug(f"Token data: {token_data_json}")
+
+        # Set data in the local storage
+        await page.evaluate(
+            f"""() => {{
+            localStorage.setItem('local-store', '{token_data_json}');
+        }}"""
+        )
+        # await asyncio.sleep(3600)  # Keeps the browser open for 1 hour
+
+        await page.reload()
+
+        await asyncio.sleep(3)  # Wait for the page to stabilize
+        # dashboard_id = "6824cb3b89d2b72169309737"
+        await page.goto(f"{settings.dash.internal_url}/dashboard/{dashboard_id}", timeout=90000)
+        # await page.wait_for_load_state("networkidle")
+        await page.reload()
+        await asyncio.sleep(3)
+
+        await page.evaluate(
+            """() => {
+            const debugMenuOuter = document.querySelector('.dash-debug-menu__outer');
+            if (debugMenuOuter) {
+                debugMenuOuter.remove();
+            }
+            const debugMenu = document.querySelector('.dash-debug-menu');
+            if (debugMenu) {
+                debugMenu.remove();
+            }
+        }"""
+        )
+
+        element = await page.query_selector("div#page-content")
+
+        # await page.screenshot(path=f"{output_folder}/dash_screenshot.png", full_page=True)
+        output_file = f"{output_folder}/{str(dashboard_id)}.png"
+        await element.screenshot(path=output_file)
+
+        await browser.close()
+        logger.info(f"Screenshot saved to {output_file}")
+
         return {
-            "success": False,
+            "success": True,
             "url": settings.dash.internal_url,
-            "error": str(e),
-            "message": "Failed to take screenshot",
+            "message": "Screenshot taken successfully",
+            "screenshot_path": output_file,
+            # "token": convert_objectid_to_str(token_data),
+            # "user": current_user.model_dump(exclude_none=True),
         }
+
+    # except Exception as e:
+    #     return {
+    #         "success": False,
+    #         "url": settings.dash.internal_url,
+    #         "error": str(e),
+    #         "message": "Failed to take screenshot",
+    #     }
 
 
 @dashboards_endpoint_router.delete("/delete/{dashboard_id}")
