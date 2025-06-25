@@ -5,6 +5,7 @@
         "depictio/tests/api",
         "depictio/tests/cli",
         "depictio/tests/models",
+        "depictio/tests/dash",
         "-xvs",
         "-n",
         "auto"

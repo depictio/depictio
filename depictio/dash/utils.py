@@ -30,6 +30,10 @@ UNSELECTED_STYLE = {
 
 # Helper Functions
 def generate_unique_index():
+    """
+    Generate a unique index using UUID4.
+    Used to create unique identifiers for components.
+    """
     return str(uuid.uuid4())
 
 
@@ -55,7 +59,7 @@ def get_size(obj, seen=None):
 
 
 # Cache for component data to avoid redundant API calls
-_component_data_cache = {}
+_component_data_cache: dict = dict()
 
 
 def get_component_data(input_id, dashboard_id, TOKEN):
@@ -119,7 +123,7 @@ def return_user_from_token(token: str) -> dict:
 
 
 # Cache for workflows to avoid redundant API calls
-_workflows_cache = {}
+_workflows_cache: dict = dict()
 
 
 def list_workflows(token: str | None = None):
@@ -247,11 +251,10 @@ def return_mongoid(
         # print("data_collection_id", data_collection_id)
     elif workflow_id is not None and data_collection_tag is not None:
         # print("workflow_id and data_collection_tag")
-        workflow_id = str(workflow_id)
         data_collection_id = [
             f
             for e in workflows
-            if e["_id"] == workflow_id
+            if str(e["_id"]) == str(workflow_id)
             for f in e["data_collections"]
             if f["data_collection_tag"] == data_collection_tag
         ][0]["_id"]
@@ -263,7 +266,7 @@ def return_mongoid(
 
 
 # Cache for data collection specs to avoid duplicate API calls
-_data_collection_specs_cache = {}
+_data_collection_specs_cache: dict = dict()
 
 
 def get_columns_from_data_collection(
@@ -294,7 +297,7 @@ def get_columns_from_data_collection(
 
         if response.status_code == 200:
             json_cols = response.json()
-            reformat_cols = collections.defaultdict(dict)
+            reformat_cols: collections.defaultdict = collections.defaultdict(dict)
             for c in json_cols:
                 reformat_cols[c["name"]]["type"] = c["type"]
                 reformat_cols[c["name"]]["description"] = c["description"]

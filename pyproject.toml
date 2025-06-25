@@ -58,6 +58,7 @@ classifiers = [
 dev = [
   "black",
   "ruff",
+  "pandera[pandas,polars]",
   "pre-commit",
   "pytest",
   "pytest-asyncio",
@@ -134,6 +135,7 @@ testpaths = [
   "depictio/tests/api",
   "depictio/tests/models",
   "depictio/tests/cli",
+  "depictio/tests/dash",
 ]
 addopts = "-s"
 markers = [
@@ -147,6 +149,3 @@ filterwarnings = [
 ]
 asyncio_mode = "strict"
 asyncio_default_fixture_loop_scope = "function"
-
-[tool.pytest-playwright]
-headed = true
