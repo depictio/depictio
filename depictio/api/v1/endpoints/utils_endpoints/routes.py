@@ -146,12 +146,30 @@ async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
         if not current_user:
             raise HTTPException(status_code=404, detail="Admin user not found")
 
+        logger.info(f"🔑 Current user: {current_user.email} ; {current_user.id}")
+
+        # Fetch all  tokens for the current user
+        logger.info("🔑 Fetching all tokens for the current user...")
+        tokens = await TokenBeanie.find({"user_id": ObjectId(current_user.id)}).to_list()
+        logger.info(f"🔑 Found {len(tokens)} tokens for user {current_user.email}")
+        for token in tokens:
+            logger.info(f"🔑 Token: {token.access_token} ; Expire: {token.expire_datetime}")
+
+        # Show current datetime for debugging
+        logger.info(f"🔑 Current datetime: {datetime.now()}")
+
+        logger.info(
+            f"🔑 Current datetime strftime : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        )
+
         token = await TokenBeanie.find_one(
             {
                 "user_id": ObjectId(current_user.id),
                 "expire_datetime": {"$gt": datetime.now()},
             }
         )
+
+        logger.info(f"🔑 Selected token: {token.access_token if token else 'None'}")
         if not token:
             raise HTTPException(status_code=404, detail="Valid token not found")
 
@@ -190,7 +208,8 @@ async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
             )
             page = await context.new_page()
 
-            working_base_url = "http://depictio-frontend:5080"
+            working_base_url = settings.dash.internal_url
+            # working_base_url = "http://depictio-frontend:5080"
             dashboard_url = f"{working_base_url}/dashboard/{dashboard_id}"
 
             logger.info("🚀 Step 1: Navigate to root page first")
