@@ -176,6 +176,19 @@ class AuthConfig(BaseSettings):
     keys_algorithm: str = Field(default="RS256")
     cli_config_dir: Path = Field(default=Path("./depictio/.depictio"))
     internal_api_key_env: Optional[str] = Field(default=None)
+    unauthenticated_mode: bool = Field(default=False, description="Enable unauthenticated mode")
+    anonymous_user_email: str = Field(
+        default="anonymous@depict.io",
+        description="Default anonymous user email",
+    )
+    temporary_user_expiry_hours: int = Field(
+        default=24,
+        description="Number of hours until temporary users expire",
+    )
+    temporary_user_expiry_minutes: int = Field(
+        default=0,
+        description="Number of minutes until temporary users expire",
+    )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_AUTH_", case_sensitive=False)
 
@@ -254,7 +267,6 @@ class PerformanceConfig(BaseSettings):
 
 class Settings(BaseSettings):
     context: str = Field(default="server")
-
     fastapi: FastAPIConfig = Field(default_factory=FastAPIConfig)
     dash: DashConfig = Field(default_factory=DashConfig)
     mongodb: MongoDBConfig = Field(default_factory=MongoDBConfig)

@@ -9,7 +9,7 @@ from depictio.api.v1.endpoints.projects_endpoints.utils import (
     _async_get_project_from_id,
     _async_get_project_from_name,
 )
-from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
+from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
 from depictio.models.models.base import PyObjectId
 
 ## depictio-models imports
@@ -37,7 +37,7 @@ async def get_all_projects(current_user: User = Depends(get_current_user)) -> li
 @projects_endpoint_router.get("/get/from_id", response_model=Project)
 async def get_project_from_id(
     project_id: PyObjectId = Query(default="646b0f3c1e4a2d7f8e5b8c9a"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_user_or_anonymous),
 ):
     """Get a project by ID.
     This endpoint retrieves a project from the database using its ID. It checks if the user has the necessary permissions to access the project.
@@ -68,7 +68,7 @@ async def get_project_from_name(project_name: str, current_user: User = Depends(
 
 @projects_endpoint_router.get("/get/from_dashboard_id/{dashboard_id}", response_model=Project)
 async def get_project_from_dashboard_id(
-    dashboard_id: PyObjectId, current_user: User = Depends(get_current_user)
+    dashboard_id: PyObjectId, current_user: User = Depends(get_user_or_anonymous)
 ):
     logger.info(f"Getting project with dashboard ID: {dashboard_id}")
     if not current_user:
@@ -81,6 +81,7 @@ async def get_project_from_dashboard_id(
             {"permissions.owners._id": current_user.id},
             {"permissions.viewers._id": current_user.id},
             {"permissions.viewers": "*"},  # This makes projects with "*" publicly accessible
+            {"is_public": True},  # Allow access to public dashboards
         ],
     }
     response = dashboards_collection.find_one(query)

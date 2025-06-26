@@ -18,9 +18,14 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     _async_fetch_user_from_token,
     _check_if_token_is_valid,
     _check_password,
+    _cleanup_expired_temporary_users,
+    _create_permanent_token,
+    _create_temporary_user,
+    _create_temporary_user_session,
     _create_user_in_db,
     _delete_token,
     _edit_password,
+    _get_anonymous_user_session,
     _hash_password,
     _list_tokens,
     _purge_expired_tokens,
@@ -81,6 +86,28 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> Use
     return user
 
 
+async def get_user_or_anonymous(
+    token: Annotated[str | None, Depends(oauth2_scheme)] = None,
+) -> User:
+    """Return the authenticated user or the anonymous user if unauthenticated mode is enabled."""
+    # First try to authenticate with token if provided
+    if token is not None:
+        try:
+            return await get_current_user(token)
+        except HTTPException:
+            # Token is invalid, fall through to anonymous user logic if in unauthenticated mode
+            pass
+
+    # If no token provided or token is invalid, check if unauthenticated mode allows anonymous access
+    if settings.auth.unauthenticated_mode:
+        anon = await UserBeanie.find_one({"email": settings.auth.anonymous_user_email})
+        if anon:
+            return anon
+
+    # No token and not in unauthenticated mode, or anonymous user not found
+    raise HTTPException(status_code=401, detail="Invalid token")
+
+
 # Login endpoint
 @auth_endpoint_router.post("/login", response_model=TokenBeanie)
 async def login(login_request: OAuth2PasswordRequestForm = Depends()):
@@ -98,38 +125,35 @@ async def login(login_request: OAuth2PasswordRequestForm = Depends()):
     """
     logger.debug(f"Login attempt for user: {login_request.username}")
 
-    # Verify credentials
+    if settings.auth.unauthenticated_mode:
+        anon = await UserBeanie.find_one({"email": settings.auth.anonymous_user_email})
+        token = await TokenBeanie.find_one({"user_id": anon.id, "token_lifetime": "permanent"})
+        if not token:
+            token = await _create_permanent_token(anon)
+        return token
+
+    if settings.auth.unauthenticated_mode:
+        anon = await UserBeanie.find_one({"email": settings.auth.anonymous_user_email})
+        token = await TokenBeanie.find_one({"user_id": anon.id, "token_lifetime": "permanent"})
+        if not token:
+            token = await _create_permanent_token(anon)
+        return token
+
     _ = await _check_password(login_request.username, login_request.password)
     if not _:
         logger.error("Invalid credentials")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
-    # Generate random name for the token
     token_name = f"{login_request.username}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
-
     user = await _async_fetch_user_from_email(login_request.username)
-    logger.debug(f"User: {user}")
-
-    token_data = TokenData(
-        name=token_name,
-        token_lifetime="short-lived",
-        sub=user.id,
-    )
-    logger.debug(f"Token data: {token_data}")
-
-    # Generate and store token
+    token_data = TokenData(name=token_name, token_lifetime="short-lived", sub=user.id)
     token = await _add_token(token_data)
     if token is None:
-        logger.error("Token with the same name already exists.")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Token with the same name already exists",
         )
-
-    # Set logged_in to True
     token.logged_in = True
-    logger.debug(f"User logged in: {user.email}")
-
     return token  # TokenBeanie
 
 
@@ -267,6 +291,142 @@ async def api_fetch_user_from_id(
     return user
 
 
+@auth_endpoint_router.get("/get_anonymous_user_session", include_in_schema=True)
+async def api_get_anonymous_user_session(
+    api_key: str = Header(..., description="Internal API key for authentication"),
+) -> dict:
+    """Get the anonymous user session data for unauthenticated mode."""
+    logger.debug("Fetching anonymous user session")
+
+    if api_key != settings.auth.internal_api_key:
+        logger.error("Invalid API key")
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid API key",
+        )
+
+    if not settings.auth.unauthenticated_mode:
+        raise HTTPException(
+            status_code=403,
+            detail="Anonymous user session only available in unauthenticated mode",
+        )
+
+    session_data = await _get_anonymous_user_session()
+    return session_data
+
+
+@auth_endpoint_router.post("/create_temporary_user", include_in_schema=True)
+async def create_temporary_user_endpoint(
+    expiry_hours: int = 24,
+    expiry_minutes: int = 0,
+    api_key: str = Header(..., description="Internal API key for authentication"),
+) -> dict:
+    """Create a temporary user with automatic expiration.
+
+    Args:
+        expiry_hours: Number of hours until the user expires (default: 24)
+        api_key: Internal API key for authentication
+
+    Returns:
+        Session data for the temporary user
+    """
+    logger.debug(f"Creating temporary user with expiry: {expiry_hours} hours")
+
+    if api_key != settings.auth.internal_api_key:
+        logger.error("Invalid API key")
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid API key",
+        )
+
+    if not settings.auth.unauthenticated_mode:
+        raise HTTPException(
+            status_code=403,
+            detail="Temporary users only available in unauthenticated mode",
+        )
+
+    # Create temporary user
+    temp_user = await _create_temporary_user(
+        expiry_hours=expiry_hours,
+        expiry_minutes=expiry_minutes,
+    )
+
+    # Create session for the temporary user
+    session_data = await _create_temporary_user_session(temp_user)
+
+    logger.info(f"Created temporary user session: {temp_user.email}")
+    return session_data
+
+
+@auth_endpoint_router.post("/cleanup_expired_temporary_users", include_in_schema=True)
+async def cleanup_expired_temporary_users_endpoint(
+    api_key: str = Header(..., description="Internal API key for authentication"),
+) -> dict:
+    """Clean up expired temporary users and their tokens.
+
+    Args:
+        api_key: Internal API key for authentication
+
+    Returns:
+        Cleanup results
+    """
+    logger.debug("Cleaning up expired temporary users")
+
+    if api_key != settings.auth.internal_api_key:
+        logger.error("Invalid API key")
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid API key",
+        )
+
+    cleanup_results = await _cleanup_expired_temporary_users()
+    return cleanup_results
+
+
+@auth_endpoint_router.post("/upgrade_to_temporary_user", include_in_schema=True)
+async def upgrade_to_temporary_user_endpoint(
+    expiry_hours: int = 24,
+    expiry_minutes: int = 0,
+    current_user: User = Depends(get_user_or_anonymous),
+) -> dict:
+    """Upgrade from anonymous user to temporary user for interactive features.
+
+    Args:
+        expiry_hours: Number of hours until the temporary user expires (default: 24)
+        current_user: Current user (should be anonymous in unauthenticated mode)
+
+    Returns:
+        Session data for the new temporary user
+    """
+    logger.debug(f"Upgrading user to temporary user with expiry: {expiry_hours} hours")
+
+    if not settings.auth.unauthenticated_mode:
+        raise HTTPException(
+            status_code=403,
+            detail="User upgrade only available in unauthenticated mode",
+        )
+
+    # Check if user is already temporary (no need to upgrade)
+    if hasattr(current_user, "is_temporary") and current_user.is_temporary:
+        logger.info(f"User {current_user.email} is already temporary, no upgrade needed")
+        raise HTTPException(
+            status_code=400,
+            detail="User is already a temporary user",
+        )
+
+    # Create new temporary user
+    temp_user = await _create_temporary_user(
+        expiry_hours=expiry_hours,
+        expiry_minutes=expiry_minutes,
+    )
+
+    # Create session for the temporary user
+    session_data = await _create_temporary_user_session(temp_user)
+
+    logger.info(f"Upgraded anonymous user to temporary user: {temp_user.email}")
+    return session_data
+
+
 @auth_endpoint_router.post("/register")
 async def register(
     request: RequestUserRegistration,
@@ -280,7 +440,12 @@ async def register(
     Returns:
         Dictionary with user data, success status and message
     """
-    logger.debug(f"Registering user with email: {request.email}")
+    logger.info(f"Registering user with email: {request.email}")
+    if settings.auth.unauthenticated_mode:
+        raise HTTPException(
+            status_code=403,
+            detail="User registration disabled in unauthenticated mode",
+        )
     try:
         return await _create_user_in_db(request.email, request.password, request.is_admin)
 
@@ -492,6 +657,13 @@ async def check_token_validity_endpoint(token: TokenBase):
 async def generate_agent_config_endpoint(
     token: TokenBeanie, current_user: UserBase = Depends(get_current_user)
 ) -> CLIConfig:
+    if settings.auth.unauthenticated_mode:
+        raise HTTPException(
+            status_code=403,
+            detail="CLI agent generation disabled in unauthenticated mode",
+        )
+    # logger.info(f"Token: {token}")
+    # logger.info(f"Token: {format_pydantic(token)}")
     depictio_agent_config = await _generate_agent_config(user=current_user, token=token)
 
     return depictio_agent_config

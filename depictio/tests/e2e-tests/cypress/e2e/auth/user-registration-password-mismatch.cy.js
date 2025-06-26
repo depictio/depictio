@@ -1,4 +1,12 @@
 describe('Unsuccessful Registration - Password Mismatch', () => {
+
+  beforeEach(() => {
+    // Skip if in unauthenticated mode
+    if (Cypress.env('UNAUTHENTICATED_MODE')) {
+      cy.skip()
+    }
+  })
+
     it('tests unsuccessful registration with password mismatch', () => {
       // Navigate to the auth page
       cy.visit('/auth')

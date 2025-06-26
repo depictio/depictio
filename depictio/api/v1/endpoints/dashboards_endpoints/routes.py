@@ -9,7 +9,7 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import dashboards_collection
 from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import load_dashboards_from_db
-from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
+from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.dashboards import DashboardData
 from depictio.models.models.users import TokenBeanie, User, UserBeanie
@@ -20,7 +20,7 @@ dashboards_endpoint_router = APIRouter()
 @dashboards_endpoint_router.get("/get/{dashboard_id}", response_model=DashboardData)
 async def get_dashboard(
     dashboard_id: PyObjectId,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_user_or_anonymous),
 ):
     """
     Fetch dashboard data related to a dashboard ID.
@@ -29,13 +29,14 @@ async def get_dashboard(
     user_id = current_user.id
     logger.debug(f"Current user ID: {user_id}")
 
-    # Find dashboards where current_user is either an owner or a viewer
+    # Find dashboards where current_user is either an owner or a viewer, or dashboard is public
     query = {
         "dashboard_id": dashboard_id,
         "$or": [
             {"permissions.owners._id": user_id},
             {"permissions.viewers._id": user_id},
             {"permissions.viewers": {"$in": ["*"]}},
+            {"is_public": True},
         ],
     }
 
@@ -59,7 +60,7 @@ async def get_dashboard(
 
 @dashboards_endpoint_router.get("/list")
 async def list_dashboards(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_user_or_anonymous),
 ):
     """
     Fetch a list of dashboards for the current user.
@@ -201,17 +202,40 @@ async def save_dashboard(
     Check if an entry with the same dashboard_id exists, if not, insert, if yes, update.
     """
 
+    # Additional check for anonymous users (though get_current_user should already prevent this)
+    if hasattr(current_user, "is_anonymous") and current_user.is_anonymous:
+        raise HTTPException(
+            status_code=403,
+            detail="Anonymous users cannot create or modify dashboards. Please login to continue.",
+        )
+
     user_id = current_user.id
 
     # logger.info(f"Dashboard data: {data}")
 
-    # Attempt to find and update the document, or insert if it doesn't exist
-    result = dashboards_collection.find_one_and_update(
-        {"dashboard_id": dashboard_id, "permissions.owners._id": user_id},
-        {"$set": data.mongo()},
-        upsert=True,
-        return_document=True,  # Adjust based on your MongoDB driver version, some versions might use ReturnDocument.AFTER
-    )
+    # Check if dashboard exists first
+    existing_dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+
+    if existing_dashboard:
+        # Dashboard exists - check user ownership for update
+        result = dashboards_collection.find_one_and_update(
+            {"dashboard_id": dashboard_id, "permissions.owners._id": user_id},
+            {"$set": data.mongo()},
+            return_document=True,
+        )
+        if not result:
+            # User doesn't have permission to update this dashboard
+            raise HTTPException(
+                status_code=403, detail="You don't have permission to update this dashboard."
+            )
+    else:
+        # Dashboard doesn't exist - insert new (for duplication case)
+        result = dashboards_collection.find_one_and_update(
+            {"dashboard_id": dashboard_id},
+            {"$set": data.mongo()},
+            upsert=True,
+            return_document=True,
+        )
 
     # MongoDB should always return a document after an upsert operation
     if result:
@@ -382,7 +406,7 @@ async def delete_dashboard(
 async def get_component_data_endpoint(
     dashboard_id: PyObjectId,
     component_id: UUID,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_user_or_anonymous),
 ):
     """
     Fetch component data related to a component ID using optimized MongoDB aggregation.

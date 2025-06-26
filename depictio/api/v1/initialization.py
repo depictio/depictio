@@ -4,6 +4,10 @@ from depictio.api.v1.configs.logging_init import logger
 # from depictio.models.models.s3 import S3DepictioCLIConfig
 from depictio.api.v1.configs.settings_models import S3DepictioCLIConfig
 from depictio.api.v1.db_init import initialize_db
+from depictio.api.v1.endpoints.user_endpoints.core_functions import (
+    _create_anonymous_user,
+    _create_permanent_token,
+)
 from depictio.api.v1.endpoints.utils_endpoints.core_functions import create_bucket
 from depictio.models.s3_utils import S3_storage_checks
 
@@ -66,6 +70,11 @@ async def run_initialization(
     initialization_collection.insert_one(init_data)
     logger.info("Initialization data saved to the database.")
     logger.debug(f"Initialization data: {init_data}")
+
+    if settings.auth.unauthenticated_mode:
+        anon = await _create_anonymous_user()
+        if anon:
+            await _create_permanent_token(anon)
     logger.info("System initialization complete.")
 
     return init_data

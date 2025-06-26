@@ -157,6 +157,156 @@ def api_call_fetch_user_from_email(email: EmailStr) -> User | None:
 
 
 @validate_call(validate_return=True)
+def api_call_get_anonymous_user_session() -> dict | None:
+    """
+    Get the anonymous user session data for unauthenticated mode.
+    Synchronous version for Dash compatibility.
+
+    Returns:
+        Optional[dict]: The session data if successful, None otherwise
+    """
+    logger.debug("Fetching anonymous user session via API")
+
+    try:
+        response = httpx.get(
+            f"{API_BASE_URL}/depictio/api/v1/auth/get_anonymous_user_session",
+            headers={"api-key": settings.auth.internal_api_key},
+            timeout=10,
+        )
+
+        if response.status_code == 200:
+            session_data = response.json()
+            logger.debug("Anonymous user session fetched successfully via API")
+            return session_data
+        elif response.status_code == 403:
+            logger.warning("Anonymous user session not available - unauthenticated mode disabled")
+            return None
+        else:
+            logger.error(
+                f"Error fetching anonymous user session: {response.status_code} - {response.text}"
+            )
+            return None
+
+    except Exception as e:
+        logger.error(f"Exception during anonymous user session fetch: {e}")
+        return None
+
+
+def api_call_create_temporary_user(expiry_hours: int = 24) -> dict[str, Any] | None:
+    """
+    Create a temporary user with automatic expiration.
+
+    Args:
+        expiry_hours: Number of hours until the user expires (default: 24)
+
+    Returns:
+        Session data for the temporary user or None if failed
+    """
+    try:
+        logger.info(f"Creating temporary user with expiry: {expiry_hours} hours")
+
+        response = httpx.post(
+            f"{API_BASE_URL}/depictio/api/v1/auth/create_temporary_user",
+            params={"expiry_hours": expiry_hours},
+            headers={"api-key": settings.auth.internal_api_key},
+            timeout=30.0,
+        )
+
+        if response.status_code == 200:
+            session_data = response.json()
+            logger.info("Successfully created temporary user session")
+            return session_data
+        else:
+            logger.error(
+                f"Failed to create temporary user: {response.status_code} - {response.text}"
+            )
+            return None
+
+    except Exception as e:
+        logger.error(f"Error creating temporary user: {e}")
+        return None
+
+
+def api_call_cleanup_expired_temporary_users() -> dict[str, Any] | None:
+    """
+    Clean up expired temporary users and their tokens.
+
+    Returns:
+        Cleanup results or None if failed
+    """
+    try:
+        logger.info("Requesting cleanup of expired temporary users")
+
+        response = httpx.post(
+            f"{API_BASE_URL}/depictio/api/v1/auth/cleanup_expired_temporary_users",
+            headers={"api-key": settings.auth.internal_api_key},
+            timeout=30.0,
+        )
+
+        if response.status_code == 200:
+            cleanup_results = response.json()
+            logger.info(f"Cleanup completed: {cleanup_results}")
+            return cleanup_results
+        else:
+            logger.error(
+                f"Failed to cleanup temporary users: {response.status_code} - {response.text}"
+            )
+            return None
+
+    except Exception as e:
+        logger.error(f"Error cleaning up temporary users: {e}")
+        return None
+
+
+def api_call_upgrade_to_temporary_user(
+    access_token: str, expiry_hours: int = 24, expiry_minutes: int = 0
+) -> dict[str, Any] | None:
+    """
+    Upgrade from anonymous user to temporary user for interactive features.
+
+    Args:
+        access_token: Current user's access token
+        expiry_hours: Number of hours until the temporary user expires (default: 24)
+        expiry_minutes: Number of additional minutes until the temporary user expires (default: 0)
+
+    Returns:
+        Session data for the new temporary user or None if failed
+    """
+    try:
+        logger.info(
+            f"Upgrading to temporary user with expiry: {expiry_hours} hours, {expiry_minutes} minutes"
+        )
+
+        params = {"expiry_hours": expiry_hours}
+        if expiry_minutes > 0:
+            params["expiry_minutes"] = expiry_minutes
+
+        response = httpx.post(
+            f"{API_BASE_URL}/depictio/api/v1/auth/upgrade_to_temporary_user",
+            params=params,
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=30.0,
+        )
+
+        if response.status_code == 200:
+            session_data = response.json()
+            logger.info("Successfully upgraded to temporary user")
+            return session_data
+        elif response.status_code == 400:
+            logger.info("User is already a temporary user, no upgrade needed")
+            return None
+        else:
+            logger.error(
+                f"Failed to upgrade to temporary user: {response.status_code} - {response.text}"
+            )
+            return None
+
+    except Exception as e:
+        logger.error(f"Error upgrading to temporary user: {e}")
+        return None
+
+
+@validate_call(validate_return=True)
 def api_call_create_token(token_data: TokenData) -> dict[str, Any] | None:
     """
     Create a new token for a user by calling the API.

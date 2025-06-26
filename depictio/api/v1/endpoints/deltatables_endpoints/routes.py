@@ -12,7 +12,7 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import format_pydantic, logger
 from depictio.api.v1.db import deltatables_collection, projects_collection, users_collection
 from depictio.api.v1.endpoints.deltatables_endpoints.utils import precompute_columns_specs
-from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
+from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
 from depictio.api.v1.s3 import polars_s3_config
 from depictio.api.v1.utils import agg_functions
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
@@ -183,11 +183,39 @@ async def upsert_deltatable(
 @deltatables_endpoint_router.get("/get/{data_collection_id}")
 async def get_deltatable(
     data_collection_id: PyObjectId,
-    current_user: str = Depends(get_current_user),
+    current_user: str = Depends(get_user_or_anonymous),
 ):
     """
     Fetch a DeltaTableAggregated object by data collection ID.
     """
+
+    # First check if user has permission to access the data collection via project permissions
+    pipeline = [
+        # Match projects containing this data collection and with appropriate permissions
+        {
+            "$match": {
+                "workflows.data_collections._id": ObjectId(data_collection_id),
+                "$or": [
+                    {"permissions.owners._id": current_user.id},
+                    {"permissions.viewers._id": current_user.id},
+                    {"permissions.viewers": "*"},
+                    {"is_public": True},
+                ],
+            }
+        },
+        # Unwind the workflows array
+        {"$unwind": "$workflows"},
+        # Unwind the data_collections array
+        {"$unwind": "$workflows.data_collections"},
+        # Match the specific data collection ID
+        {"$match": {"workflows.data_collections._id": ObjectId(data_collection_id)}},
+        # Return only the data collection
+        {"$replaceRoot": {"newRoot": "$workflows.data_collections"}},
+    ]
+
+    project_result = list(projects_collection.aggregate(pipeline))
+    if not project_result:
+        raise HTTPException(status_code=404, detail="Data collection not found or access denied.")
 
     # Query to find deltatable associated with the data collection
     query = {"data_collection_id": data_collection_id}
@@ -212,12 +240,40 @@ async def get_deltatable(
 @deltatables_endpoint_router.get("/specs/{data_collection_id}")
 async def specs(
     data_collection_id: PyObjectId,
-    current_user: str = Depends(get_current_user),
+    current_user: str = Depends(get_user_or_anonymous),
 ):
     """
     Fetch columns list and specs from data collection
     # TODO: currently returns the last aggregation, need to fix with versioning
     """
+
+    # First check if user has permission to access the data collection via project permissions
+    pipeline = [
+        # Match projects containing this data collection and with appropriate permissions
+        {
+            "$match": {
+                "workflows.data_collections._id": ObjectId(data_collection_id),
+                "$or": [
+                    {"permissions.owners._id": current_user.id},
+                    {"permissions.viewers._id": current_user.id},
+                    {"permissions.viewers": "*"},
+                    {"is_public": True},
+                ],
+            }
+        },
+        # Unwind the workflows array
+        {"$unwind": "$workflows"},
+        # Unwind the data_collections array
+        {"$unwind": "$workflows.data_collections"},
+        # Match the specific data collection ID
+        {"$match": {"workflows.data_collections._id": ObjectId(data_collection_id)}},
+        # Return only the data collection
+        {"$replaceRoot": {"newRoot": "$workflows.data_collections"}},
+    ]
+
+    project_result = list(projects_collection.aggregate(pipeline))
+    if not project_result:
+        raise HTTPException(status_code=404, detail="Data collection not found or access denied.")
 
     # Query to find deltatable associated with the data collection
     query = {"data_collection_id": data_collection_id}

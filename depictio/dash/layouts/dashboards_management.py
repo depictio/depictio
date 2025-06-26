@@ -9,7 +9,7 @@ from bson import ObjectId
 from dash import ALL, MATCH, Input, Output, State, ctx, dcc, html
 from dash_iconify import DashIconify
 
-from depictio.api.v1.configs.config import API_BASE_URL
+from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.custom_logging import format_pydantic
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import api_call_fetch_user_from_token, api_get_project_from_id
@@ -124,7 +124,13 @@ def edit_dashboard_name(new_name, dashboard_id, dashboards, token):
     return updated_dashboards
 
 
-def render_welcome_section(email):
+def render_welcome_section(email, is_anonymous=False):
+    # Check if user is anonymous and disable button accordingly
+    button_disabled = is_anonymous
+    button_text = "+ New Dashboard" if not is_anonymous else "Login to Create Dashboards"
+    button_variant = "gradient" if not is_anonymous else "outline"
+    button_color = {"from": "black", "to": "grey", "deg": 135} if not is_anonymous else "gray"
+
     return dmc.Grid(
         children=[
             dmc.Col(
@@ -147,13 +153,15 @@ def render_welcome_section(email):
                     dmc.Title(f"Welcome, {email}!", order=2, align="center"),
                     dmc.Center(
                         dmc.Button(
-                            "+ New Dashboard",
+                            button_text,
                             id={"type": "create-dashboard-button", "index": email},
                             n_clicks=0,
-                            variant="gradient",
-                            gradient={"from": "black", "to": "grey", "deg": 135},
+                            variant=button_variant,
+                            gradient=button_color if not is_anonymous else None,
+                            color="gray" if is_anonymous else None,
                             style={"margin": "20px 0", "fontFamily": "Virgil"},
                             size="xl",
+                            disabled=button_disabled,
                         ),
                     ),
                     dmc.Divider(style={"margin": "20px 0"}),
@@ -226,7 +234,7 @@ def register_callbacks_dashboards_management(app):
         ]
         return dashboards_view
 
-    def create_homepage_view(dashboards, user_id, token):
+    def create_homepage_view(dashboards, user_id, token, current_user):
         logger.debug(f"dashboards: {dashboards}")
 
         def modal_edit_name_dashboard(dashboard):
@@ -234,39 +242,92 @@ def register_callbacks_dashboards_management(app):
                 id={"type": "edit-password-modal", "index": dashboard["dashboard_id"]},
                 opened=False,
                 centered=True,
-                withCloseButton=True,
-                closeOnEscape=True,
-                closeOnClickOutside=True,
-                size="lg",
-                title="Edit Dashboard name",
-                style={"fontSize": 16},
+                withCloseButton=False,
+                overlayOpacity=0.55,
+                overlayBlur=3,
+                shadow="xl",
+                radius="md",
+                size="md",
+                zIndex=1000,
+                styles={
+                    "modal": {
+                        "padding": "24px",
+                    }
+                },
                 children=[
-                    dmc.TextInput(
-                        placeholder="New name",
-                        label="New name",
-                        id={
-                            "type": "new-name-dashboard",
-                            "index": dashboard["dashboard_id"],
-                        },
-                    ),
-                    dmc.Text(
-                        id={
-                            "type": "message-edit-name-dashboard",
-                            "index": dashboard["dashboard_id"],
-                        },
-                        color="red",
-                        style={"display": "none"},
-                    ),
-                    dmc.Center(
-                        dmc.Button(
-                            "Save",
-                            color="blue",
-                            id={
-                                "type": "save-edit-name-dashboard",
-                                "index": dashboard["dashboard_id"],
-                            },
-                            style={"margin": "10px 0"},
-                        )
+                    dmc.Stack(
+                        spacing="lg",
+                        children=[
+                            # Header with icon and title
+                            dmc.Group(
+                                position="left",
+                                spacing="sm",
+                                children=[
+                                    DashIconify(
+                                        icon="mdi:rename-box",
+                                        width=28,
+                                        height=28,
+                                        color="#228be6",  # Dash Mantine blue color
+                                    ),
+                                    dmc.Title(
+                                        "Edit Dashboard Name",
+                                        order=4,
+                                        style={"margin": 0},
+                                    ),
+                                ],
+                            ),
+                            # Divider
+                            dmc.Divider(),
+                            # Text input field
+                            dmc.TextInput(
+                                placeholder="Enter new dashboard name",
+                                label="Dashboard Name",
+                                id={
+                                    "type": "new-name-dashboard",
+                                    "index": dashboard["dashboard_id"],
+                                },
+                                radius="md",
+                                size="md",
+                            ),
+                            # Error message
+                            dmc.Text(
+                                id={
+                                    "type": "message-edit-name-dashboard",
+                                    "index": dashboard["dashboard_id"],
+                                },
+                                color="red",
+                                size="sm",
+                                style={"display": "none"},
+                            ),
+                            # Buttons
+                            dmc.Group(
+                                position="right",
+                                spacing="md",
+                                mt="md",
+                                children=[
+                                    dmc.Button(
+                                        "Cancel",
+                                        id={
+                                            "type": "cancel-edit-name-dashboard",
+                                            "index": dashboard["dashboard_id"],
+                                        },
+                                        color="gray",
+                                        variant="outline",
+                                        radius="md",
+                                    ),
+                                    dmc.Button(
+                                        "Save",
+                                        id={
+                                            "type": "save-edit-name-dashboard",
+                                            "index": dashboard["dashboard_id"],
+                                        },
+                                        color="blue",
+                                        radius="md",
+                                        leftIcon=DashIconify(icon="mdi:content-save", width=16),
+                                    ),
+                                ],
+                            ),
+                        ],
                     ),
                 ],
             )
@@ -282,7 +343,8 @@ def register_callbacks_dashboards_management(app):
             badge_icon = "material-symbols:public" if public else "material-symbols:lock"
 
             badge_owner = dmc.Badge(
-                f"Owner: {dashboard['permissions']['owners'][0]['email']} - {str(dashboard['permissions']['owners'][0]['_id'])}",
+                f"Owner: {dashboard['permissions']['owners'][0]['email']}",
+                # f"Owner: {dashboard['permissions']['owners'][0]['email']} - {str(dashboard['permissions']['owners'][0]['_id'])}",
                 color=color_badge_ownership,
                 leftSection=DashIconify(icon="mdi:account", width=16, color="grey"),
             )
@@ -338,7 +400,8 @@ def register_callbacks_dashboards_management(app):
                             html.Div(
                                 [
                                     dmc.Title(
-                                        f"{dashboard['title']} - {str(dashboard['dashboard_id'])}",
+                                        f"{dashboard['title']}",
+                                        # f"{dashboard['title']} - {str(dashboard['dashboard_id'])}",
                                         order=5,
                                     ),
                                     # dmc.Title(dashboard["title"], order=5),
@@ -366,12 +429,20 @@ def register_callbacks_dashboards_management(app):
             )
             return group
 
-        def create_buttons(dashboard, user_id):
+        def create_buttons(dashboard, user_id, current_user):
             disabled = (
                 True
                 if str(user_id)
                 not in [str(owner["_id"]) for owner in dashboard["permissions"]["owners"]]
                 else False
+            )
+
+            # Disable duplicate button for anonymous users in unauthenticated mode
+            duplicate_disabled = (
+                settings.auth.unauthenticated_mode
+                and hasattr(current_user, "is_anonymous")
+                and current_user.is_anonymous
+                and not getattr(current_user, "is_temporary", False)
             )
             public = dashboard["is_public"]
             # public = True if "*" in [e for e in dashboard["permissions"]["viewers"]] else False
@@ -422,6 +493,7 @@ def register_callbacks_dashboards_management(app):
                                 # style={"fontFamily": "Virgil"},
                                 size="xs",
                                 style={"padding": "2px 6px", "fontSize": "12px"},
+                                disabled=duplicate_disabled,
                             ),
                             dmc.Button(
                                 "Delete",
@@ -518,7 +590,7 @@ def register_callbacks_dashboards_management(app):
 
             return thumbnail
 
-        def loop_over_dashboards(user_id, dashboards, token):
+        def loop_over_dashboards(user_id, dashboards, token, current_user):
             view = list()
             for dashboard in dashboards:
                 # delete_modal = modal_delete_dashboard(dashboard)
@@ -528,7 +600,7 @@ def register_callbacks_dashboards_management(app):
                     title=f"Delete dashboard : {dashboard['title']}",
                 )
                 edit_name_modal = modal_edit_name_dashboard(dashboard)
-                buttons = create_buttons(dashboard, user_id)
+                buttons = create_buttons(dashboard, user_id, current_user)
                 dashboard_header = create_dashboad_view_header(dashboard, user_id, token)
 
                 buttons = dmc.Accordion(
@@ -616,7 +688,7 @@ def register_callbacks_dashboards_management(app):
         private_dashboards = [d for d in dashboards if d["is_public"] is False]
         # private_dashboards_ids = [d["dashboard_id"] for d in private_dashboards]
         private_dashboards_view = dmc.SimpleGrid(
-            loop_over_dashboards(user_id, private_dashboards, token),
+            loop_over_dashboards(user_id, private_dashboards, token, current_user),
             cols=3,  # Default number of columns
             spacing="xl",
             verticalSpacing="xl",
@@ -637,7 +709,7 @@ def register_callbacks_dashboards_management(app):
 
         public_dashboards = [d for d in dashboards if d["is_public"] is True]
         public_dashboards_view = dmc.SimpleGrid(
-            loop_over_dashboards(user_id, public_dashboards, token),
+            loop_over_dashboards(user_id, public_dashboards, token, current_user),
             cols=3,  # Default number of columns
             spacing="xl",
             verticalSpacing="xl",
@@ -939,6 +1011,7 @@ def register_callbacks_dashboards_management(app):
                 new_dashboard.dashboard_id = str(new_dashboard.id)
                 new_dashboard.permissions.owners = [current_userbase]
                 new_dashboard.permissions.viewers = []
+                new_dashboard.is_public = False  # Always make duplicated dashboards private
                 logger.info(f"New dashboard: {format_pydantic(new_dashboard)}")
                 # new_dashboard.dashboard_id = generate_unique_index()
                 # new_dashboard.dashboard_id = str(len(dashboards) + 1)
@@ -984,19 +1057,37 @@ def register_callbacks_dashboards_management(app):
     def generate_dashboard_view_response(dashboards, store_data_list, current_userbase, user_data):
         dashboards = [convert_objectid_to_str(dashboard.mongo()) for dashboard in dashboards]
         logger.debug(f"dashboards: {dashboards}")
+        current_user = api_call_fetch_user_from_token(user_data["access_token"])
         dashboards_view = create_homepage_view(
-            dashboards, current_userbase.id, user_data["access_token"]
+            dashboards, current_userbase.id, user_data["access_token"], current_user
         )
         return [dashboards_view] * len(store_data_list)
 
     @app.callback(
         Output({"type": "edit-password-modal", "index": MATCH}, "opened"),
-        [Input({"type": "edit-dashboard-button", "index": MATCH}, "n_clicks")],
+        [
+            Input({"type": "edit-dashboard-button", "index": MATCH}, "n_clicks"),
+            Input({"type": "cancel-edit-name-dashboard", "index": MATCH}, "n_clicks"),
+        ],
         [State({"type": "edit-password-modal", "index": MATCH}, "opened")],
         prevent_initial_call=True,
     )
-    def open_edit_password_modal(n_clicks, opened):
-        return not opened
+    def handle_edit_name_modal(edit_clicks, cancel_clicks, opened):
+        # Check which button was clicked
+        ctx = dash.callback_context
+        if not ctx.triggered:
+            return opened
+
+        triggered_id = ctx.triggered[0]["prop_id"].split(".")[0]
+
+        # If edit button was clicked, toggle modal
+        if "edit-dashboard-button" in triggered_id:
+            return not opened
+        # If cancel button was clicked, close modal
+        elif "cancel-edit-name-dashboard" in triggered_id:
+            return False
+
+        return opened
 
     @app.callback(
         [
@@ -1005,6 +1096,7 @@ def register_callbacks_dashboards_management(app):
             Output("init-create-dashboard-button", "data"),
             Output("unique-title-warning", "style"),
             Output("unique-title-warning", "children"),
+            Output("url", "pathname", allow_duplicate=True),
         ],
         [
             Input({"type": "create-dashboard-button", "index": ALL}, "n_clicks"),
@@ -1034,7 +1126,7 @@ def register_callbacks_dashboards_management(app):
 
         if not init_create_dashboard_button:
             logger.info("Init create dashboard button")
-            return data, opened, True, dash.no_update, dash.no_update
+            return data, opened, True, dash.no_update, dash.no_update, dash.no_update
 
         if "type" in ctx.triggered_id:
             triggered_id = ctx.triggered_id["type"]
@@ -1043,13 +1135,43 @@ def register_callbacks_dashboards_management(app):
 
         if triggered_id == "create-dashboard-button":
             logger.info("Create button clicked")
-            # Toggle the modal when the create button is clicked
-            return dash.no_update, True, dash.no_update, dash.no_update, dash.no_update
+
+            # Check if user is anonymous and redirect to profile page
+            current_user = api_call_fetch_user_from_token(user_data["access_token"])
+            if hasattr(current_user, "is_anonymous") and current_user.is_anonymous:
+                logger.info(
+                    "Anonymous user clicked 'Login to Create Dashboards' - redirecting to profile"
+                )
+                return (
+                    dash.no_update,
+                    False,  # Keep modal closed
+                    dash.no_update,
+                    {"display": "none"},  # Hide any warning messages
+                    dash.no_update,
+                    "/profile",  # Redirect to profile page
+                )
+
+            # Toggle the modal when the create button is clicked (for authenticated users)
+            return (
+                dash.no_update,
+                True,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+            )
 
         if triggered_id == "cancel-dashboard-button":
             logger.info("Create button clicked")
             # Toggle the modal when the create button is clicked
-            return dash.no_update, False, dash.no_update, dash.no_update, dash.no_update
+            return (
+                dash.no_update,
+                False,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+            )
 
         if triggered_id == "create-dashboard-submit":
             logger.info("Submit button clicked")
@@ -1070,6 +1192,7 @@ def register_callbacks_dashboards_management(app):
                             size=20,
                             id="unique-title-warning-badge",
                         ),
+                        dash.no_update,
                     )
 
                 if not title:
@@ -1085,6 +1208,7 @@ def register_callbacks_dashboards_management(app):
                             size=20,
                             id="unique-title-warning-badge",
                         ),
+                        dash.no_update,
                     )
             if not project:
                 logger.warning("Project not selected")
@@ -1099,16 +1223,17 @@ def register_callbacks_dashboards_management(app):
                         size=20,
                         id="unique-title-warning-badge",
                     ),
+                    dash.no_update,
                 )
 
             # Set the title and keep the modal open (or toggle it based on your preference)
             data["title"] = title
             data["project_id"] = project
-            return data, False, False, {"display": "none"}, dash.no_update
+            return data, False, False, {"display": "none"}, dash.no_update, dash.no_update
 
         logger.debug("No relevant clicks")
         # Return default values if no relevant clicks happened
-        return data, opened, False, dash.no_update, dash.no_update
+        return data, opened, False, dash.no_update, dash.no_update, dash.no_update
 
     @app.callback(
         Output({"type": "dashboard-delete-confirmation-modal", "index": MATCH}, "opened"),

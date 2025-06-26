@@ -531,3 +531,29 @@ class TestSettings:
             assert settings.fastapi.public_url == "https://env-fastapi.example.com"
             # assert settings.jbrowse.enabled is False
             assert settings.auth.internal_api_key_env == "env_token"
+
+    def test_unauthenticated_mode_configuration(self):
+        """Test Settings with unauthenticated mode configuration."""
+        env = {
+            "DEPICTIO_AUTH_UNAUTHENTICATED_MODE": "true",
+            "DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL": "test_anon@example.com",
+        }
+
+        with env_vars(env):
+            settings = Settings()
+
+            assert settings.auth.unauthenticated_mode is True
+            assert settings.auth.anonymous_user_email == "test_anon@example.com"
+
+    def test_unauthenticated_mode_defaults(self):
+        """Test Settings default values for unauthenticated mode."""
+        env_to_clear = {
+            "DEPICTIO_AUTH_UNAUTHENTICATED_MODE": None,
+            "DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL": None,
+        }
+
+        with env_vars(env_to_clear):
+            settings = Settings()
+
+            assert settings.auth.unauthenticated_mode is False
+            assert settings.auth.anonymous_user_email == "anonymous@depict.io"

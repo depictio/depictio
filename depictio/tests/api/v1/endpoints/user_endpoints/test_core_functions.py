@@ -14,8 +14,13 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     _async_fetch_user_from_id,
     _async_fetch_user_from_token,
     _check_if_token_is_valid,
+    _cleanup_expired_temporary_users,
+    _create_temporary_user,
+    _create_temporary_user_session,
     _delete_token,
     _edit_password,
+    _get_anonymous_user_session,
+    _hash_password,
     _list_tokens,
     _purge_expired_tokens,
 )
@@ -872,7 +877,7 @@ class TestAddToken:
         """Test token creation with different lifetime values."""
         # Arrange
         user_id = PydanticObjectId()
-        lifetimes = ["short-lived", "long-lived"]
+        lifetimes = ["short-lived", "long-lived", "permanent"]
 
         for lifetime in lifetimes:
             token_data = TokenData(
@@ -897,5 +902,342 @@ class TestAddToken:
 
             # Verify refresh token fields are set
             assert saved_token.refresh_token is not None
-            assert len(saved_token.refresh_token) > 0
-            assert saved_token.refresh_expire_datetime > datetime.now()
+            if lifetime != "permanent":
+                assert len(saved_token.refresh_token) > 0
+                assert saved_token.refresh_expire_datetime > datetime.now()
+
+
+# ------------------------------------------------------
+# Test _create_temporary_user function
+# ------------------------------------------------------
+
+
+class TestCreateTemporaryUser:
+    @pytest.mark.asyncio
+    @beanie_setup(models=[UserBeanie])
+    async def test_create_temporary_user_default_expiry(self):
+        """Test creating a temporary user with default 24-hour expiry."""
+        # Act
+        result = await _create_temporary_user()
+
+        # Assert
+        assert result is not None
+        assert isinstance(result, UserBeanie)
+        assert result.is_temporary is True
+        assert result.is_anonymous is False
+        assert result.is_admin is False
+        assert result.email.startswith("temp_user_")
+        assert result.email.endswith("@depictio.temp")
+        assert result.expiration_time is not None
+
+        # Check expiration time is approximately 24 hours from now
+        time_diff = result.expiration_time - datetime.now()
+        assert 23.5 <= time_diff.total_seconds() / 3600 <= 24.5
+
+    @pytest.mark.asyncio
+    @beanie_setup(models=[UserBeanie])
+    async def test_create_temporary_user_custom_expiry(self):
+        """Test creating a temporary user with custom expiry time."""
+        custom_hours = 48
+
+        # Act
+        result = await _create_temporary_user(expiry_hours=custom_hours)
+
+        # Assert
+        assert result is not None
+        assert result.is_temporary is True
+
+        # Check expiration time is approximately 48 hours from now
+        time_diff = result.expiration_time - datetime.now()
+        assert 47.5 <= time_diff.total_seconds() / 3600 <= 48.5
+
+    @pytest.mark.asyncio
+    @beanie_setup(models=[UserBeanie])
+    async def test_create_temporary_user_unique_emails(self):
+        """Test that multiple temporary users get unique emails."""
+        # Act - Create multiple temporary users
+        user1 = await _create_temporary_user()
+        user2 = await _create_temporary_user()
+
+        # Assert - All emails should be different
+        assert user1.email != user2.email
+
+        # All should follow the temp user email pattern
+        for user in [user1, user2]:
+            assert user.email.startswith("temp_user_")
+            assert user.email.endswith("@depictio.temp")
+
+
+# ------------------------------------------------------
+# Test _create_temporary_user_session function
+# ------------------------------------------------------
+
+
+class TestCreateTemporaryUserSession:
+    @pytest.mark.asyncio
+    @beanie_setup(models=[UserBeanie, TokenBeanie])
+    async def test_create_temporary_user_session_success(self):
+        """Test successful creation of temporary user session."""
+        # Arrange - Create a temporary user first
+        temp_user = await _create_temporary_user(expiry_hours=12)
+
+        # Act
+        session_data = await _create_temporary_user_session(temp_user)
+
+        # Assert session data structure
+        assert isinstance(session_data, dict)
+        assert session_data["logged_in"] is True
+        assert session_data["email"] == temp_user.email
+        assert session_data["user_id"] == str(temp_user.id)
+        assert session_data["is_temporary"] is True
+        assert session_data["access_token"] is not None
+        assert session_data["token_lifetime"] == "long-lived"
+        assert session_data["token_type"] == "bearer"
+
+    @pytest.mark.asyncio
+    @beanie_setup(models=[UserBeanie, TokenBeanie])
+    async def test_create_temporary_user_session_expiry_calculation(self):
+        """Test that session expiry matches user expiry time."""
+        # Arrange - Create temp user with specific expiry
+        expiry_hours = 6
+        temp_user = await _create_temporary_user(expiry_hours=expiry_hours)
+
+        # Act
+        session_data = await _create_temporary_user_session(temp_user)
+
+        # Assert - Token expiry should be close to user expiry
+        token_expiry = datetime.fromisoformat(session_data["expire_datetime"])
+        user_expiry = temp_user.expiration_time
+
+        # Should be within a few seconds of each other
+        time_diff = abs((token_expiry - user_expiry).total_seconds())
+        assert time_diff < 60 * 60 * expiry_hours
+
+    @pytest.mark.asyncio
+    @beanie_setup(models=[UserBeanie, TokenBeanie])
+    async def test_create_temporary_user_session_no_expiration_time(self):
+        """Test session creation when user has no expiration time."""
+        # Arrange - Create user manually without expiration time
+        temp_user = UserBeanie(
+            email="temp_no_expiry@depictio.temp",
+            password=_hash_password("temp_pass"),
+            is_temporary=True,
+            is_anonymous=False,
+            is_admin=False,
+            # expiration_time=None (not set)
+        )
+        await temp_user.create()
+
+        # Act
+        session_data = await _create_temporary_user_session(temp_user)
+
+        # Assert - Should still work with default 24-hour expiry
+        assert session_data["logged_in"] is True
+        assert session_data["expiration_time"] is None
+
+
+# ------------------------------------------------------
+# Test _cleanup_expired_temporary_users function
+# ------------------------------------------------------
+
+
+class TestCleanupExpiredTemporaryUsers:
+    @pytest.mark.asyncio
+    @beanie_setup(models=[UserBeanie, TokenBeanie])
+    async def test_cleanup_expired_users_success(self):
+        """Test successful cleanup of expired temporary users."""
+        # Arrange - Create expired and non-expired temporary users
+        current_time = datetime.now()
+
+        # Create expired user
+        expired_user = UserBeanie(
+            email="expired@depictio.temp",
+            password=_hash_password("expired_pass"),
+            is_temporary=True,
+            expiration_time=current_time - timedelta(hours=1),
+        )
+        await expired_user.create()
+
+        # Create non-expired user
+        valid_user = UserBeanie(
+            email="valid@depictio.temp",
+            password=_hash_password("valid_pass"),
+            is_temporary=True,
+            expiration_time=current_time + timedelta(hours=1),
+        )
+        await valid_user.create()
+
+        # Create token for expired user
+        token = TokenBeanie(
+            user_id=expired_user.id,
+            access_token="expired_token",
+            refresh_token="expired_refresh_token",
+            expire_datetime=current_time + timedelta(hours=1),
+            refresh_expire_datetime=current_time + timedelta(days=7),
+            name="expired_user_token",
+        )
+        await token.save()
+
+        # Act
+        result = await _cleanup_expired_temporary_users()
+
+        # Assert cleanup results
+        assert result["expired_users_found"] == 1
+        assert result["users_deleted"] == 1
+        assert result["tokens_deleted"] == 1
+        assert len(result["errors"]) == 0
+
+    @pytest.mark.asyncio
+    @beanie_setup(models=[UserBeanie, TokenBeanie])
+    async def test_cleanup_no_expired_users(self):
+        """Test cleanup when no expired users exist."""
+        # Arrange - Create only non-expired users
+        current_time = datetime.now()
+
+        valid_user = UserBeanie(
+            email="valid@depictio.temp",
+            password=_hash_password("valid_pass"),
+            is_temporary=True,
+            expiration_time=current_time + timedelta(hours=1),
+        )
+        await valid_user.create()
+
+        # Act
+        result = await _cleanup_expired_temporary_users()
+
+        # Assert
+        assert result["expired_users_found"] == 0
+        assert result["users_deleted"] == 0
+        assert result["tokens_deleted"] == 0
+        assert len(result["errors"]) == 0
+
+    @pytest.mark.asyncio
+    @beanie_setup(models=[UserBeanie])
+    async def test_cleanup_excludes_non_temporary_users(self):
+        """Test that cleanup doesn't affect non-temporary users."""
+        # Arrange - Create regular users with past dates
+        current_time = datetime.now()
+
+        regular_user = UserBeanie(
+            email="regular@example.com",
+            password=_hash_password("regular_pass"),
+            is_temporary=False,  # Regular user
+            expiration_time=current_time - timedelta(hours=1),  # Past date
+        )
+        await regular_user.create()
+
+        # Act
+        result = await _cleanup_expired_temporary_users()
+
+        # Assert - No users should be deleted
+        assert result["expired_users_found"] == 0
+        assert result["users_deleted"] == 0
+
+
+# ------------------------------------------------------
+# Test _get_anonymous_user_session function
+# ------------------------------------------------------
+
+
+class TestGetAnonymousUserSession:
+    @pytest.mark.asyncio
+    @beanie_setup(models=[UserBeanie, TokenBeanie])
+    async def test_get_anonymous_user_session_success(self):
+        """Test successful retrieval of anonymous user session."""
+        # Arrange - Create anonymous user and permanent token
+        anonymous_email = "anon@depictio.io"
+
+        anon_user = UserBeanie(
+            email=anonymous_email,
+            password=_hash_password("hashed_empty_password"),
+            is_anonymous=True,
+            is_admin=False,
+        )
+        await anon_user.create()
+
+        # Create permanent token
+        permanent_token = TokenBeanie(
+            user_id=anon_user.id,
+            access_token="permanent_access_token",
+            refresh_token="permanent_refresh_token",
+            expire_datetime=datetime.max,
+            refresh_expire_datetime=datetime.max,
+            name="anonymous_permanent_token",
+            token_lifetime="permanent",
+            logged_in=True,
+            token_type="bearer",
+        )
+        await permanent_token.save()
+
+        # Mock settings to return our test email
+        with patch(
+            "depictio.api.v1.endpoints.user_endpoints.core_functions.settings"
+        ) as mock_settings:
+            mock_settings.auth.anonymous_user_email = anonymous_email
+
+            # Act
+            session_data = await _get_anonymous_user_session()
+
+        # Assert session data structure
+        assert isinstance(session_data, dict)
+        assert session_data["logged_in"] is True
+        assert session_data["email"] == anonymous_email
+        assert session_data["is_anonymous"] is True
+        assert session_data["access_token"] == "permanent_access_token"
+        assert session_data["token_lifetime"] == "permanent"
+
+    @pytest.mark.asyncio
+    @beanie_setup(models=[UserBeanie, TokenBeanie])
+    async def test_get_anonymous_user_session_user_not_found(self):
+        """Test error when anonymous user doesn't exist."""
+        # Mock settings with non-existent user email
+        with patch(
+            "depictio.api.v1.endpoints.user_endpoints.core_functions.settings"
+        ) as mock_settings:
+            mock_settings.auth.anonymous_user_email = "nonexistent@example.com"
+
+            # Act & Assert
+            with pytest.raises(HTTPException) as exc_info:
+                await _get_anonymous_user_session()
+
+            assert exc_info.value.status_code == 404
+            assert "Anonymous user not found" in str(exc_info.value.detail)
+
+    @pytest.mark.asyncio
+    @beanie_setup(models=[UserBeanie, TokenBeanie])
+    async def test_get_anonymous_user_session_no_permanent_token(self):
+        """Test error when anonymous user has no permanent token."""
+        # Arrange - Create anonymous user without permanent token
+        anonymous_email = "anon@depictio.io"
+
+        anon_user = UserBeanie(
+            email=anonymous_email,
+            password=_hash_password("hashed_empty_password"),
+            is_anonymous=True,
+            is_admin=False,
+        )
+        await anon_user.create()
+
+        # Create only short-lived token (not permanent)
+        short_token = TokenBeanie(
+            user_id=anon_user.id,
+            access_token="short_lived_token",
+            refresh_token="short_lived_refresh_token",
+            expire_datetime=datetime.now() + timedelta(hours=1),
+            refresh_expire_datetime=datetime.now() + timedelta(days=1),
+            name="short_lived_token",
+            token_lifetime="short-lived",
+        )
+        await short_token.save()
+
+        with patch(
+            "depictio.api.v1.endpoints.user_endpoints.core_functions.settings"
+        ) as mock_settings:
+            mock_settings.auth.anonymous_user_email = anonymous_email
+
+            # Act & Assert
+            with pytest.raises(HTTPException) as exc_info:
+                await _get_anonymous_user_session()
+
+            assert exc_info.value.status_code == 404
+            assert "No permanent token found" in str(exc_info.value.detail)
