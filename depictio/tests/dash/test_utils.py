@@ -1,9 +1,6 @@
-"""
-Tests for depictio.dash.utils module.
-"""
-
 from unittest.mock import MagicMock, patch
 
+import pytest
 from bson import ObjectId
 
 from depictio.dash.utils import (
@@ -18,6 +15,9 @@ from depictio.dash.utils import (
     return_wf_tag_from_id,
     serialize_dash_component,
 )
+
+# Mark all tests in this module to skip database setup
+pytestmark = pytest.mark.no_db
 
 
 class TestGenerateUniqueIndex:
@@ -467,9 +467,10 @@ class TestReturnMongoid:
     def test_return_mongoid_with_workflow_id_and_dc_tag(self, mock_list_workflows):
         """Test MongoDB ID retrieval using workflow ID and data collection tag."""
         # Arrange
+        test_workflow_id = ObjectId()
         mock_list_workflows.return_value = [
             {
-                "_id": "wf_123",
+                "_id": str(test_workflow_id),
                 "workflow_tag": "test_workflow",
                 "data_collections": [{"_id": "dc_456", "data_collection_tag": "test_datacoll"}],
             }
@@ -477,13 +478,13 @@ class TestReturnMongoid:
 
         # Act
         wf_id, dc_id = return_mongoid(
-            workflow_id=ObjectId("507f1f77bcf86cd799439011"),
+            workflow_id=test_workflow_id,
             data_collection_tag="test_datacoll",
             TOKEN="test_token",
         )
 
         # Assert
-        assert wf_id == "507f1f77bcf86cd799439011"
+        assert wf_id == test_workflow_id  # Returns the original ObjectId
         assert dc_id == "dc_456"
 
     @patch("depictio.dash.utils.list_workflows")

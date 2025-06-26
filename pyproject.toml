@@ -137,12 +137,13 @@ testpaths = [
   "depictio/tests/cli",
   "depictio/tests/dash",
 ]
-addopts = "-s"
 markers = [
+  "no_db: mark test to skip database setup",
   "integration: mark test as an integration test.",
   "playwright: mark test as a playwright test.",
   "docker: mark test as requiring docker.",
 ]
+addopts = "-s"
 filterwarnings = [
   "ignore::pydantic.warnings.PydanticDeprecatedSince20",
   "ignore::DeprecationWarning:pydantic.*",

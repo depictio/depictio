@@ -1012,7 +1012,15 @@ class TestIterativeJoin:
         # Arrange
         df1 = pl.DataFrame({"id": [1, 2], "col1": ["a", "b"]})
         df2 = pl.DataFrame({"id": [1, 2], "col2": [10, 20]})
-        mock_load_deltatable.side_effect = [df1, df2]
+
+        def side_effect(workflow_id, dc_id, metadata, TOKEN=None):
+            if dc_id == "dc1":
+                return df1
+            elif dc_id == "dc2":
+                return df2
+            return pl.DataFrame()
+
+        mock_load_deltatable.side_effect = side_effect
 
         workflow_id = ObjectId()
         joins_dict = {("dc1", "dc2"): [{"dc1--dc2": {"how": "inner", "on_columns": ["id"]}}]}
@@ -1126,7 +1134,15 @@ class TestIterativeJoin:
         df2 = pl.DataFrame(
             {"id": [1, 2, 3], "category": ["A", "B", "A"], "value2": [100, 200, 300]}
         )
-        mock_load_deltatable.side_effect = [df1, df2]
+
+        def side_effect(workflow_id, dc_id, metadata, TOKEN=None):
+            if dc_id == "dc1":
+                return df1
+            elif dc_id == "dc2":
+                return df2
+            return pl.DataFrame()
+
+        mock_load_deltatable.side_effect = side_effect
 
         workflow_id = ObjectId()
         joins_dict = {("dc1", "dc2"): [{"dc1--dc2": {"how": "inner", "on_columns": ["id"]}}]}
@@ -1158,7 +1174,15 @@ class TestIterativeJoin:
         # Arrange
         df1 = pl.DataFrame({"id": [1, 2, 3], "name": ["Alice", "Bob", "Charlie"]})
         df2 = pl.DataFrame({"id": [2, 3, 4], "age": [25, 30, 35]})
-        mock_load_deltatable.side_effect = [df1, df2]
+
+        def side_effect(workflow_id, dc_id, metadata, TOKEN=None):
+            if dc_id == "dc1":
+                return df1
+            elif dc_id == "dc2":
+                return df2
+            return pl.DataFrame()
+
+        mock_load_deltatable.side_effect = side_effect
 
         workflow_id = ObjectId()
         joins_dict = {("dc1", "dc2"): [{"dc1--dc2": {"how": "left", "on_columns": ["id"]}}]}
@@ -1198,7 +1222,15 @@ class TestIterativeJoin:
                 "duration": [30, 45, 60, 25],
             }
         )
-        mock_load_deltatable.side_effect = [df1, df2]
+
+        def side_effect(workflow_id, dc_id, metadata, TOKEN=None):
+            if dc_id == "events":
+                return df1
+            elif dc_id == "metrics":
+                return df2
+            return pl.DataFrame()
+
+        mock_load_deltatable.side_effect = side_effect
 
         workflow_id = ObjectId()
         joins_dict = {
@@ -1234,7 +1266,15 @@ class TestIterativeJoin:
         # Arrange
         df1 = pl.DataFrame({"id": [1, 2], "category": ["A", "B"], "value": [10, 20]})
         df2 = pl.DataFrame({"id": [1, 2], "category": ["A", "B"], "score": [100, 200]})
-        mock_load_deltatable.side_effect = [df1, df2]
+
+        def side_effect(workflow_id, dc_id, metadata, TOKEN=None):
+            if dc_id == "dc1":
+                return df1
+            elif dc_id == "dc2":
+                return df2
+            return pl.DataFrame()
+
+        mock_load_deltatable.side_effect = side_effect
 
         workflow_id = ObjectId()
         joins_dict = {("dc1", "dc2"): [{"dc1--dc2": {"how": "inner", "on_columns": ["id"]}}]}
@@ -1257,7 +1297,7 @@ class TestIterativeJoin:
         assert result is not None
         assert result.height == 0  # No rows should match the filter
         # Schema should still be correct even with empty result
-        expected_columns = {"id", "category", "value", "score"}
+        expected_columns = {"id", "category", "value", "category_right", "score"}
         assert set(result.columns) == expected_columns
 
     @patch("depictio.api.v1.deltatables_utils.load_deltatable_lite")
