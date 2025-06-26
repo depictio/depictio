@@ -2,10 +2,23 @@ describe('Logout Test', () => {
     let testUser;
 
     before(() => {
+      // Skip this test suite if in unauthenticated mode
+      if (Cypress.env('UNAUTHENTICATED_MODE')) {
+        cy.log('Skipping logout test - running in unauthenticated mode')
+        return
+      }
+
       cy.fixture('test-credentials.json').then((credentials) => {
         testUser = credentials.testUser;
       });
     });
+
+    beforeEach(() => {
+      // Skip if in unauthenticated mode
+      if (Cypress.env('UNAUTHENTICATED_MODE')) {
+        cy.skip()
+      }
+    })
 
     it('logs out of the application', () => {
       // Navigate to the auth page

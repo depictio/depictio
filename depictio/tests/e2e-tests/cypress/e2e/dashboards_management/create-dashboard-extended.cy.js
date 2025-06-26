@@ -5,10 +5,23 @@ describe('Create and manage dashboard', () => {
     let duplicateDashboardId; // Variable for the duplicated dashboard ID
 
     before(() => {
+        // Skip this test suite if in unauthenticated mode
+        if (Cypress.env('UNAUTHENTICATED_MODE')) {
+            cy.log('Skipping extended dashboard test - running in unauthenticated mode')
+            return
+        }
+
         cy.fixture('test-credentials.json').then((credentials) => {
             adminUser = credentials.adminUser;
         });
     });
+
+    beforeEach(() => {
+        // Skip if in unauthenticated mode
+        if (Cypress.env('UNAUTHENTICATED_MODE')) {
+            cy.skip()
+        }
+    })
 
     it('logs in, creates, duplicates, edits, toggles privacy and manages dashboards', () => {
         cy.visit('/auth')

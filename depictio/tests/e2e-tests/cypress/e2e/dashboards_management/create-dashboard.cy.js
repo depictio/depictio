@@ -4,10 +4,23 @@ describe('Create and manage dashboard', () => {
     let dashboardId; // Variable to store the extracted dashboard ID
 
     before(() => {
+        // Skip this test suite if in unauthenticated mode
+        if (Cypress.env('UNAUTHENTICATED_MODE')) {
+            cy.log('Skipping dashboard creation test - running in unauthenticated mode')
+            return
+        }
+
         cy.fixture('test-credentials.json').then((credentials) => {
             adminUser = credentials.adminUser;
         });
     });
+
+    beforeEach(() => {
+        // Skip if in unauthenticated mode
+        if (Cypress.env('UNAUTHENTICATED_MODE')) {
+            cy.skip()
+        }
+    })
 
     it('logs in, creates and manages a dashboard', () => {
         cy.visit('/auth')

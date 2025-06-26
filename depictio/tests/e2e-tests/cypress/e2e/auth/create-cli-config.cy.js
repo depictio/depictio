@@ -3,10 +3,23 @@ describe('Create CLI Config Test', () => {
   let configName; // Variable to store the dynamic config name
 
   before(() => {
+    // Skip this test suite if in unauthenticated mode
+    if (Cypress.env('UNAUTHENTICATED_MODE')) {
+      cy.log('Skipping CLI config test - running in unauthenticated mode')
+      return
+    }
+
     cy.fixture('test-credentials.json').then((credentials) => {
       testUser = credentials.testUser;
     });
   });
+
+  beforeEach(() => {
+    // Skip if in unauthenticated mode
+    if (Cypress.env('UNAUTHENTICATED_MODE')) {
+      cy.skip()
+    }
+  })
 
   it('creates a new CLI configuration', () => {
     // Navigate to the auth page

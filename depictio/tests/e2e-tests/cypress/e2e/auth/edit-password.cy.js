@@ -3,10 +3,23 @@ describe('Edit Password Test', () => {
   const new_password = 'NewPassword123!'; // New password for the test
 
   before(() => {
+    // Skip this test suite if in unauthenticated mode
+    if (Cypress.env('UNAUTHENTICATED_MODE')) {
+      cy.log('Skipping edit password test - running in unauthenticated mode')
+      return
+    }
+
     cy.fixture('test-credentials.json').then((credentials) => {
       testUser = credentials.testUser;
     });
   });
+
+  beforeEach(() => {
+    // Skip if in unauthenticated mode
+    if (Cypress.env('UNAUTHENTICATED_MODE')) {
+      cy.skip()
+    }
+  })
 
   it('edits the password of the user', () => {
     // Navigate to the auth page

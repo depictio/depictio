@@ -560,7 +560,9 @@ jobs:
       - name: Run Cypress tests
         run: |
           cd depictio/tests/e2e-tests
-          npx cypress run --config screenshotsFolder=cypress/screenshots,videosFolder=cypress/videos,trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true
+          # Set environment variable for cypress to know it's authenticated mode
+          export CYPRESS_UNAUTHENTICATED_MODE=false
+          npx cypress run --config screenshotsFolder=cypress/screenshots,videosFolder=cypress/videos,trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true --spec "cypress/e2e/!(unauthenticated)/**/*.cy.js"
 
       - name: Upload screenshots
         uses: actions/upload-artifact@v4
@@ -576,4 +578,92 @@ jobs:
         with:
           name: cypress-videos
           path: depictio/tests/e2e-tests/cypress/videos
+          retention-days: 7
+
+  e2e-tests-unauthenticated:
+    needs: [docker-build, e2e-tests]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup environment
+        run: |
+          sudo chmod 666 /var/run/docker.sock
+          echo "UID=$(id -u)" >> $GITHUB_ENV
+          echo "GID=$(id -g)" >> $GITHUB_ENV
+          cp .env.example .env
+          # Enable unauthenticated mode
+          sed -i 's/DEPICTIO_AUTH_UNAUTHENTICATED_MODE=false/DEPICTIO_AUTH_UNAUTHENTICATED_MODE=true/' .env
+          sed -i 's/# DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL=anonymous@example.com/DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL=anonymous@test.com/' .env
+          mkdir -p depictioDB minio_data
+          chmod 777 depictioDB minio_data
+
+      - name: Log in and start services
+        run: |
+          echo ${{ secrets.GHCR_PAT }} | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
+          FULL_IMAGE="${{ needs.docker-build.outputs.full-image }}"
+          docker pull "${FULL_IMAGE}"
+          export DEPICTIO_VERSION="${FULL_IMAGE}"
+          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d
+          sleep 15
+
+      - name: Verify unauthenticated mode is enabled
+        run: |
+          echo "🔍 Verifying unauthenticated mode configuration..."
+
+          # Check if anonymous user was created
+          for i in {1..10}; do
+            ANON_USER=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.users.find({email: 'anonymous@test.com'}).toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.email == "anonymous@test.com") | .email')
+            if [ -n "$ANON_USER" ]; then
+              echo "✅ Anonymous user found: $ANON_USER"
+              break
+            fi
+            echo "⚠️ Anonymous user not found, attempt $i/10"
+            sleep 5
+          done
+          [ -z "$ANON_USER" ] && echo "❌ Anonymous user not found" && exit 1
+
+          # Verify frontend bypasses auth
+          echo "🌐 Testing unauthenticated access to frontend..."
+          curl -s -o /dev/null -w "%{http_code}" http://localhost:5080/ | grep -q "200" && echo "✅ Frontend accessible without authentication" || (echo "❌ Frontend not accessible" && exit 1)
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "16"
+
+      - name: Install Cypress dependencies
+        run: |
+          cd depictio/tests/e2e-tests
+          if [ ! -f "package.json" ]; then
+            npm init -y
+            npm install cypress --save-dev
+          else
+            npm ci
+          fi
+
+      - name: Run Cypress unauthenticated tests
+        run: |
+          cd depictio/tests/e2e-tests
+          # Set environment variable for cypress to know it's unauthenticated mode
+          export CYPRESS_UNAUTHENTICATED_MODE=true
+          npx cypress run --config screenshotsFolder=cypress/screenshots-unauthenticated,videosFolder=cypress/videos-unauthenticated,trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true --spec "cypress/e2e/unauthenticated/**/*.cy.js"
+
+      - name: Upload screenshots
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cypress-screenshots-unauthenticated
+          path: depictio/tests/e2e-tests/cypress/screenshots-unauthenticated
+          retention-days: 30
+
+      - name: Upload videos on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: cypress-videos-unauthenticated
+          path: depictio/tests/e2e-tests/cypress/videos-unauthenticated
           retention-days: 7

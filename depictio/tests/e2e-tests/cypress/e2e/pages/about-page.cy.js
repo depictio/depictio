@@ -2,10 +2,23 @@ describe('About Page Test', () => {
     let testUser;
 
     before(() => {
+      // Skip this test suite if in unauthenticated mode
+      if (Cypress.env('UNAUTHENTICATED_MODE')) {
+        cy.log('Skipping about page test - running in unauthenticated mode')
+        return
+      }
+
       cy.fixture('test-credentials.json').then((credentials) => {
         testUser = credentials.testUser;
       });
     });
+
+    beforeEach(() => {
+      // Skip if in unauthenticated mode
+      if (Cypress.env('UNAUTHENTICATED_MODE')) {
+        cy.skip()
+      }
+    })
 
     it('tests the About page for errors', () => {
       // Navigate to the auth page

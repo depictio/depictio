@@ -2,10 +2,23 @@ describe('Unsuccessful Registration - Already Registered', () => {
     let testUser;
 
     before(() => {
+      // Skip this test suite if in unauthenticated mode
+      if (Cypress.env('UNAUTHENTICATED_MODE')) {
+        cy.log('Skipping registration fail test - running in unauthenticated mode')
+        return
+      }
+
       cy.fixture('test-credentials.json').then((credentials) => {
         testUser = credentials.testUser;
       });
     });
+
+    beforeEach(() => {
+      // Skip if in unauthenticated mode
+      if (Cypress.env('UNAUTHENTICATED_MODE')) {
+        cy.skip()
+      }
+    })
 
     it('tests unsuccessful registration with already registered email', () => {
       // Navigate to the auth page
