@@ -8,6 +8,7 @@ from depictio.api.v1.endpoints.projects_endpoints.utils import (
     _async_get_all_projects,
     _async_get_project_from_id,
     _async_get_project_from_name,
+    validate_workflow_uniqueness_in_project,
 )
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
 from depictio.models.models.base import PyObjectId
@@ -122,6 +123,12 @@ async def create_project(project: Project, current_user: User = Depends(get_curr
         if e.status_code != 404:  # If error is not "not found"
             return {"success": False, "message": str(e.detail), "status_code": e.status_code}
 
+    # Validate workflow uniqueness within the project
+    try:
+        validate_workflow_uniqueness_in_project(project)
+    except HTTPException as e:
+        return {"success": False, "message": str(e.detail), "status_code": e.status_code}
+
     logger.info(f"Creating project: {project}")
     logger.info(f"Creating mongo project: {project.mongo()}")
 
@@ -160,6 +167,9 @@ async def update_project(project: Project, current_user: User = Depends(get_curr
 
     existing_project = Project.from_mongo(existing_project)
     logger.info(f"Existing project: {existing_project}")
+
+    # Validate workflow uniqueness within the project
+    validate_workflow_uniqueness_in_project(project)
 
     # Update the project in the database
     projects_collection.update_one({"_id": project.id}, {"$set": project.mongo()})

@@ -13,6 +13,7 @@ from depictio.api.v1.endpoints.projects_endpoints.utils import (
     _async_get_project_from_id,
     _async_get_project_from_name,
     _helper_create_project_beanie,
+    validate_workflow_uniqueness_in_project,
 )
 from depictio.models.models.projects import Project
 from depictio.models.models.users import Permission, UserBase
@@ -385,3 +386,76 @@ class TestGetProjectFromName:
         assert result is not None
         assert result["name"] == project.name
         assert result["permissions"]["viewers"] == ["*"]
+
+
+class TestWorkflowUniquenessValidation:
+    @pytest.fixture(autouse=True)
+    def set_depictio_context(self, monkeypatch):
+        """Set DEPICTIO_CONTEXT to 'api' for all tests."""
+        monkeypatch.setattr("depictio.models.models.projects.DEPICTIO_CONTEXT", "api")
+        monkeypatch.setattr("depictio.models.models.workflows.DEPICTIO_CONTEXT", "api")
+        monkeypatch.setattr("depictio.models.models.data_collections.DEPICTIO_CONTEXT", "api")
+
+    @pytest.fixture
+    def sample_project_with_unique_workflows(self, sample_user, test_yaml_path, yaml_config):
+        """Create a sample project with unique workflow tags."""
+        permission = Permission(owners=[sample_user])
+        project_config = yaml_config.copy()
+        project_config["yaml_config_path"] = test_yaml_path
+        project_config["permissions"] = permission
+        project_config["name"] = f"{project_config['name']} - Unique-Test-{ObjectId()}"
+
+        # Ensure workflows have unique tags
+        for i, workflow in enumerate(project_config["workflows"]):
+            workflow["workflow_tag"] = f"unique_workflow_{i}"
+
+        return Project(**project_config)
+
+    @pytest.fixture
+    def sample_project_with_duplicate_workflows(self, sample_user, test_yaml_path, yaml_config):
+        """Create a sample project with duplicate workflow tags."""
+        permission = Permission(owners=[sample_user])
+        project_config = yaml_config.copy()
+        project_config["yaml_config_path"] = test_yaml_path
+        project_config["permissions"] = permission
+        project_config["name"] = f"{project_config['name']} - Duplicate-Test-{ObjectId()}"
+
+        # Create multiple workflows with the same name and engine (which will generate the same workflow_tag)
+        original_workflow = project_config["workflows"][0].copy()
+
+        # Add a second workflow with the same name and engine but different id
+        duplicate_workflow = original_workflow.copy()
+        duplicate_workflow["id"] = str(ObjectId())
+        # Keep the same name and engine so the same workflow_tag gets generated
+        project_config["workflows"].append(duplicate_workflow)
+
+        return Project(**project_config)
+
+    def test_validate_workflow_uniqueness_success(self, sample_project_with_unique_workflows):
+        """Test workflow uniqueness validation passes with unique workflow tags."""
+        # Should not raise any exception
+        validate_workflow_uniqueness_in_project(sample_project_with_unique_workflows)
+
+    def test_validate_workflow_uniqueness_failure(self, sample_project_with_duplicate_workflows):
+        """Test workflow uniqueness validation fails with duplicate workflow tags."""
+        with pytest.raises(HTTPException) as excinfo:
+            validate_workflow_uniqueness_in_project(sample_project_with_duplicate_workflows)
+
+        assert excinfo.value.status_code == 400
+        assert "Duplicate workflow_tag(s) found within project" in excinfo.value.detail
+        assert "iris_workflow" in excinfo.value.detail  # The actual generated workflow_tag
+        assert "Each workflow_tag must be unique within a project" in excinfo.value.detail
+
+    def test_validate_workflow_uniqueness_empty_project(self, sample_user, test_yaml_path):
+        """Test workflow uniqueness validation with a project that has no workflows."""
+        permission = Permission(owners=[sample_user])
+        project_config = {
+            "name": f"Empty-Project-{ObjectId()}",
+            "yaml_config_path": test_yaml_path,
+            "permissions": permission,
+            "workflows": [],  # Empty workflows list
+        }
+        project = Project(**project_config)
+
+        # Should not raise any exception
+        validate_workflow_uniqueness_in_project(project)

@@ -126,3 +126,30 @@ async def _helper_create_project_beanie(project: Project) -> dict:
         "message": "Project created successfully.",
         "success": True,
     }
+
+
+def validate_workflow_uniqueness_in_project(project: Project) -> None:
+    """Validate that workflow_tag is unique within the project's workflows.
+
+    Args:
+        project (Project): Project object containing workflows to validate
+
+    Raises:
+        HTTPException: If duplicate workflow_tag is found within the project
+    """
+    workflow_tags = []
+    duplicates = []
+
+    for workflow in project.workflows:
+        if workflow.workflow_tag in workflow_tags:
+            duplicates.append(workflow.workflow_tag)
+        else:
+            workflow_tags.append(workflow.workflow_tag)
+
+    if duplicates:
+        duplicate_tags = ", ".join(set(duplicates))
+        raise HTTPException(
+            status_code=400,
+            detail=f"Duplicate workflow_tag(s) found within project '{project.name}': {duplicate_tags}. "
+            f"Each workflow_tag must be unique within a project.",
+        )
