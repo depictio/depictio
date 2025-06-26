@@ -605,6 +605,7 @@ async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
         token_data_json = json.dumps(token_data)
         logger.info(f"🔑 Token data prepared: {token_data}")
 
+        # Use the exact same pattern as the working dashboard endpoint
         async with async_playwright() as p:
             browser = await p.chromium.launch(
                 headless=True,
@@ -616,26 +617,7 @@ async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
                     "--disable-features=VizDisplayCompositor",
                 ],
             )
-
-            # Create context with error handling for CI environments
-            try:
-                context = await browser.new_context(
-                    viewport={"width": 1920, "height": 1080},
-                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                )
-            except Exception as context_error:
-                logger.warning(f"⚠️ Context creation with full options failed: {context_error}")
-                # Fallback to minimal context creation
-                try:
-                    context = await browser.new_context(
-                        # viewport={"width": 1920, "height": 1080}
-                    )
-                    logger.info("✅ Fallback context creation successful")
-                except Exception as fallback_error:
-                    logger.error(f"❌ Fallback context creation failed: {fallback_error}")
-                    # Final fallback - default context
-                    context = await browser.new_context()
-                    logger.info("✅ Default context creation used")
+            context = await browser.new_context(viewport={"width": 1920, "height": 1080})
             page = await context.new_page()
 
             # Set up console and error logging
