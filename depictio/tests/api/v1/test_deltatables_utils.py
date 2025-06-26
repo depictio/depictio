@@ -479,6 +479,224 @@ class TestConvertFilterModelToMetadata:
         assert result[0]["metadata"]["interactive_component_type"] == "Slider"
         assert result[0]["value"] == 42
 
+    def test_convert_filter_model_multiple_filters(self):
+        """Test converting multiple filters in one model."""
+        # Arrange
+        filter_model = {
+            "price": {"filterType": "number", "type": "inRange", "filter": 10, "filterTo": 100},
+            "category": {"filterType": "text", "type": "contains", "filter": "electronics"},
+            "rating": {"filterType": "number", "type": "equals", "filter": 5},
+        }
+
+        # Act
+        result = convert_filter_model_to_metadata(filter_model)
+
+        # Assert
+        assert len(result) == 3
+
+        # Check price filter
+        price_filter = next(r for r in result if r["metadata"]["column_name"] == "price")
+        assert price_filter["metadata"]["interactive_component_type"] == "RangeSlider"
+        assert price_filter["value"] == [10, 100]
+
+        # Check category filter
+        category_filter = next(r for r in result if r["metadata"]["column_name"] == "category")
+        assert category_filter["metadata"]["interactive_component_type"] == "TextInput"
+        assert category_filter["value"] == "electronics"
+
+        # Check rating filter
+        rating_filter = next(r for r in result if r["metadata"]["column_name"] == "rating")
+        assert rating_filter["metadata"]["interactive_component_type"] == "Slider"
+        assert rating_filter["value"] == 5
+
+    def test_convert_filter_model_empty_filter(self):
+        """Test converting empty filter model."""
+        # Arrange
+        filter_model = {}
+
+        # Act
+        result = convert_filter_model_to_metadata(filter_model)
+
+        # Assert
+        assert len(result) == 0
+        assert result == []
+
+    def test_convert_filter_model_text_filter_starts_with(self):
+        """Test converting text filter with startsWith type."""
+        # Arrange
+        filter_model = {"name": {"filterType": "text", "type": "startsWith", "filter": "prod"}}
+
+        # Act
+        result = convert_filter_model_to_metadata(filter_model)
+
+        # Assert
+        assert len(result) == 1
+        assert result[0]["metadata"]["interactive_component_type"] == "TextInput"
+        assert result[0]["value"] == "prod"
+
+    def test_convert_filter_model_text_filter_ends_with(self):
+        """Test converting text filter with endsWith type."""
+        # Arrange
+        filter_model = {"description": {"filterType": "text", "type": "endsWith", "filter": "tion"}}
+
+        # Act
+        result = convert_filter_model_to_metadata(filter_model)
+
+        # Assert
+        assert len(result) == 1
+        assert result[0]["metadata"]["interactive_component_type"] == "TextInput"
+        assert result[0]["value"] == "tion"
+
+    def test_convert_filter_model_numeric_filter_greater_than(self):
+        """Test converting numeric filter with greaterThan type."""
+        # Arrange
+        filter_model = {"score": {"filterType": "number", "type": "greaterThan", "filter": 80}}
+
+        # Act
+        result = convert_filter_model_to_metadata(filter_model)
+
+        # Assert
+        assert len(result) == 1
+        assert result[0]["metadata"]["interactive_component_type"] == "Slider"
+        assert result[0]["value"] == 80
+
+    def test_convert_filter_model_numeric_filter_less_than(self):
+        """Test converting numeric filter with lessThan type."""
+        # Arrange
+        filter_model = {"age": {"filterType": "number", "type": "lessThan", "filter": 65}}
+
+        # Act
+        result = convert_filter_model_to_metadata(filter_model)
+
+        # Assert
+        assert len(result) == 1
+        assert result[0]["metadata"]["interactive_component_type"] == "Slider"
+        assert result[0]["value"] == 65
+
+    def test_convert_filter_model_range_filter_with_floats(self):
+        """Test converting range filter with float values."""
+        # Arrange
+        filter_model = {
+            "temperature": {
+                "filterType": "number",
+                "type": "inRange",
+                "filter": 20.5,
+                "filterTo": 25.8,
+            }
+        }
+
+        # Act
+        result = convert_filter_model_to_metadata(filter_model)
+
+        # Assert
+        assert len(result) == 1
+        assert result[0]["metadata"]["interactive_component_type"] == "RangeSlider"
+        assert result[0]["value"] == [20.5, 25.8]
+
+    def test_convert_filter_model_missing_filter_value(self):
+        """Test converting filter model with missing filter value."""
+        # Arrange
+        filter_model = {"name": {"filterType": "text", "type": "contains"}}
+
+        # Act
+        result = convert_filter_model_to_metadata(filter_model)
+
+        # Assert
+        assert len(result) == 1  # Function still creates entry with None value
+        assert result[0]["metadata"]["column_name"] == "name"
+        assert result[0]["metadata"]["interactive_component_type"] == "TextInput"
+        assert result[0]["value"] is None
+
+    def test_convert_filter_model_range_filter_missing_filter_to(self):
+        """Test converting range filter with missing filterTo value."""
+        # Arrange
+        filter_model = {"price": {"filterType": "number", "type": "inRange", "filter": 10}}
+
+        # Act
+        result = convert_filter_model_to_metadata(filter_model)
+
+        # Assert
+        assert len(result) == 0  # Should skip incomplete range filters
+
+    def test_convert_filter_model_unknown_filter_type(self):
+        """Test converting filter model with unknown filter type."""
+        # Arrange
+        filter_model = {"custom": {"filterType": "unknown", "type": "custom", "filter": "value"}}
+
+        # Act
+        result = convert_filter_model_to_metadata(filter_model)
+
+        # Assert
+        assert len(result) == 0  # Function skips unknown filter types
+
+    def test_convert_filter_model_case_sensitivity(self):
+        """Test filter model conversion handles case-sensitive column names."""
+        # Arrange
+        filter_model = {
+            "UserID": {"filterType": "number", "type": "equals", "filter": 123},
+            "user_name": {"filterType": "text", "type": "contains", "filter": "john"},
+        }
+
+        # Act
+        result = convert_filter_model_to_metadata(filter_model)
+
+        # Assert
+        assert len(result) == 2
+
+        # Check UserID filter
+        userid_filter = next(r for r in result if r["metadata"]["column_name"] == "UserID")
+        assert userid_filter["metadata"]["interactive_component_type"] == "Slider"
+        assert userid_filter["value"] == 123
+
+        # Check user_name filter
+        username_filter = next(r for r in result if r["metadata"]["column_name"] == "user_name")
+        assert username_filter["metadata"]["interactive_component_type"] == "TextInput"
+        assert username_filter["value"] == "john"
+
+    def test_convert_filter_model_special_characters_in_values(self):
+        """Test filter model conversion with special characters in filter values."""
+        # Arrange
+        filter_model = {
+            "description": {"filterType": "text", "type": "contains", "filter": "special@#$%chars"},
+            "code": {"filterType": "text", "type": "equals", "filter": "ABC-123_XYZ"},
+        }
+
+        # Act
+        result = convert_filter_model_to_metadata(filter_model)
+
+        # Assert
+        assert len(result) == 2
+
+        # Check description filter
+        desc_filter = next(r for r in result if r["metadata"]["column_name"] == "description")
+        assert desc_filter["value"] == "special@#$%chars"
+
+        # Check code filter
+        code_filter = next(r for r in result if r["metadata"]["column_name"] == "code")
+        assert code_filter["value"] == "ABC-123_XYZ"
+
+    def test_convert_filter_model_zero_values(self):
+        """Test filter model conversion with zero values."""
+        # Arrange
+        filter_model = {
+            "count": {"filterType": "number", "type": "equals", "filter": 0},
+            "range_col": {"filterType": "number", "type": "inRange", "filter": 0, "filterTo": 0},
+        }
+
+        # Act
+        result = convert_filter_model_to_metadata(filter_model)
+
+        # Assert
+        assert len(result) == 2
+
+        # Check count filter
+        count_filter = next(r for r in result if r["metadata"]["column_name"] == "count")
+        assert count_filter["value"] == 0
+
+        # Check range filter
+        range_filter = next(r for r in result if r["metadata"]["column_name"] == "range_col")
+        assert range_filter["value"] == [0, 0]
+
 
 class TestLoadDeltatablelite:
     """Test Delta table loading functionality."""
@@ -623,6 +841,351 @@ class TestMergeMultipleDataframes:
 
         # Assert
         assert result.equals(df1)
+
+    def test_merge_multiple_dataframes_left_join(self):
+        """Test merging with left join preserves all left rows."""
+        # Arrange
+        df1 = pl.DataFrame({"id": [1, 2, 3], "name": ["A", "B", "C"]})
+        df2 = pl.DataFrame({"id": [1, 2], "value": [10, 20]})
+
+        dataframes = {"df1": df1, "df2": df2}
+        join_instructions = [{"left": "df1", "right": "df2", "how": "left", "on": ["id"]}]
+
+        # Act
+        result = merge_multiple_dataframes(dataframes, join_instructions)
+
+        # Assert
+        assert result is not None
+        assert result.height == 3  # All rows from left DataFrame preserved
+        assert "name" in result.columns
+        assert "value" in result.columns
+        # Check that id=3 has null value (left join behavior)
+        id_3_row = result.filter(pl.col("id") == 3)
+        assert id_3_row.height == 1
+        assert id_3_row["value"][0] is None
+
+    def test_merge_multiple_dataframes_right_join(self):
+        """Test merging with right join preserves all right rows."""
+        # Arrange
+        df1 = pl.DataFrame({"id": [1, 2], "name": ["A", "B"]})
+        df2 = pl.DataFrame({"id": [1, 2, 3], "value": [10, 20, 30]})
+
+        dataframes = {"df1": df1, "df2": df2}
+        join_instructions = [{"left": "df1", "right": "df2", "how": "right", "on": ["id"]}]
+
+        # Act
+        result = merge_multiple_dataframes(dataframes, join_instructions)
+
+        # Assert
+        assert result is not None
+        assert result.height == 3  # All rows from right DataFrame preserved
+        assert "name" in result.columns
+        assert "value" in result.columns
+        # Check that id=3 has null name (right join behavior)
+        id_3_row = result.filter(pl.col("id") == 3)
+        assert id_3_row.height == 1
+        assert id_3_row["name"][0] is None
+
+    def test_merge_multiple_dataframes_outer_join(self):
+        """Test merging with outer join preserves all rows from both sides."""
+        # Arrange
+        df1 = pl.DataFrame({"id": [1, 2], "name": ["A", "B"]})
+        df2 = pl.DataFrame({"id": [2, 3], "value": [20, 30]})
+
+        dataframes = {"df1": df1, "df2": df2}
+        join_instructions = [{"left": "df1", "right": "df2", "how": "full", "on": ["id"]}]
+
+        # Act
+        result = merge_multiple_dataframes(dataframes, join_instructions)
+
+        # Assert
+        assert result is not None
+        assert result.height == 3  # All unique ids from both DataFrames
+        assert "name" in result.columns
+        assert "value" in result.columns
+        assert "id_right" in result.columns  # Full join keeps both id columns
+
+        # Check id=1 (from left only) has null value and null id_right
+        id_1_row = result.filter((pl.col("id") == 1) & (pl.col("id_right").is_null()))
+        assert id_1_row.height == 1
+        assert id_1_row["value"][0] is None
+
+        # Check id=3 (from right only) has null name and null left id
+        id_3_row = result.filter((pl.col("id_right") == 3) & (pl.col("id").is_null()))
+        assert id_3_row.height == 1
+        assert id_3_row["name"][0] is None
+
+    def test_merge_multiple_dataframes_multiple_join_columns(self):
+        """Test merging with multiple join columns."""
+        # Arrange
+        df1 = pl.DataFrame(
+            {
+                "user_id": [1, 1, 2, 2],
+                "session_id": ["s1", "s2", "s1", "s2"],
+                "action": ["login", "logout", "login", "logout"],
+            }
+        )
+        df2 = pl.DataFrame(
+            {
+                "user_id": [1, 1, 2, 2],
+                "session_id": ["s1", "s2", "s1", "s2"],
+                "duration": [30, 45, 60, 25],
+            }
+        )
+
+        dataframes = {"events": df1, "metrics": df2}
+        join_instructions = [
+            {"left": "events", "right": "metrics", "how": "inner", "on": ["user_id", "session_id"]}
+        ]
+
+        # Act
+        result = merge_multiple_dataframes(dataframes, join_instructions)
+
+        # Assert
+        assert result is not None
+        assert result.height == 4
+        assert set(result.columns) >= {"user_id", "session_id", "action", "duration"}
+        # Verify specific combination
+        user1_s1 = result.filter((pl.col("user_id") == 1) & (pl.col("session_id") == "s1"))
+        assert user1_s1.height == 1
+        assert user1_s1["action"][0] == "login"
+        assert user1_s1["duration"][0] == 30
+
+    def test_merge_multiple_dataframes_three_way_join(self):
+        """Test merging three DataFrames in sequence."""
+        # Arrange
+        df1 = pl.DataFrame({"id": [1, 2], "name": ["A", "B"]})
+        df2 = pl.DataFrame({"id": [1, 2], "value": [10, 20]})
+        df3 = pl.DataFrame({"id": [1, 2], "score": [100, 200]})
+
+        dataframes = {"df1": df1, "df2": df2, "df3": df3}
+        join_instructions = [
+            {"left": "df1", "right": "df2", "how": "inner", "on": ["id"]},
+            {"left": "df1", "right": "df3", "how": "inner", "on": ["id"]},
+        ]
+
+        # Act
+        result = merge_multiple_dataframes(dataframes, join_instructions)
+
+        # Assert
+        assert result is not None
+        assert result.height == 2
+        assert set(result.columns) >= {"id", "name", "value", "score"}
+        # Verify all data is present
+        row1 = result.filter(pl.col("id") == 1).to_dicts()[0]
+        assert row1["name"] == "A"
+        assert row1["value"] == 10
+        assert row1["score"] == 100
+
+    def test_merge_multiple_dataframes_column_name_conflicts(self):
+        """Test merging with column name conflicts (non-join columns)."""
+        # Arrange - Use same values for conflicting columns to make join work
+        df1 = pl.DataFrame({"id": [1, 2], "name": ["A", "B"], "category": ["X", "Y"]})
+        df2 = pl.DataFrame({"id": [1, 2], "category": ["X", "Y"], "score": [10, 20]})
+
+        dataframes = {"df1": df1, "df2": df2}
+        join_instructions = [{"left": "df1", "right": "df2", "how": "inner", "on": ["id"]}]
+
+        # Act
+        result = merge_multiple_dataframes(dataframes, join_instructions)
+
+        # Assert
+        assert result is not None
+        assert result.height == 2
+        # The function adds overlapping columns to join keys
+        columns = set(result.columns)
+        assert "id" in columns
+        assert "name" in columns
+        assert "category" in columns
+        assert "score" in columns
+
+    def test_merge_multiple_dataframes_empty_dataframe(self):
+        """Test merging when one DataFrame is empty."""
+        # Arrange
+        df1 = pl.DataFrame({"id": [1, 2], "name": ["A", "B"]})
+        df2 = pl.DataFrame({"id": [], "value": []}, schema={"id": pl.Int64, "value": pl.Int64})
+
+        dataframes = {"df1": df1, "df2": df2}
+        join_instructions = [{"left": "df1", "right": "df2", "how": "inner", "on": ["id"]}]
+
+        # Act
+        result = merge_multiple_dataframes(dataframes, join_instructions)
+
+        # Assert
+        assert result is not None
+        assert result.height == 0  # Inner join with empty DataFrame results in empty
+        # Schema should still be correct
+        assert "id" in result.columns
+        assert "name" in result.columns
+        assert "value" in result.columns
+
+    def test_merge_multiple_dataframes_mixed_data_types(self):
+        """Test merging DataFrames with mixed data types."""
+        # Arrange
+        df1 = pl.DataFrame(
+            {"id": [1, 2, 3], "name": ["Alice", "Bob", "Charlie"], "active": [True, False, True]}
+        )
+        df2 = pl.DataFrame(
+            {
+                "id": [1, 2, 3],
+                "salary": [50000.5, 60000.0, 70000.25],
+                "start_date": ["2020-01-01", "2019-06-15", "2021-03-10"],
+            }
+        )
+
+        dataframes = {"employees": df1, "payroll": df2}
+        join_instructions = [
+            {"left": "employees", "right": "payroll", "how": "inner", "on": ["id"]}
+        ]
+
+        # Act
+        result = merge_multiple_dataframes(dataframes, join_instructions)
+
+        # Assert
+        assert result is not None
+        assert result.height == 3
+        assert set(result.columns) >= {"id", "name", "active", "salary", "start_date"}
+        # Verify data types are preserved
+        assert result["active"].dtype == pl.Boolean
+        assert result["salary"].dtype == pl.Float64
+        assert result["start_date"].dtype == pl.Utf8
+
+    def test_merge_multiple_dataframes_duplicate_rows(self):
+        """Test merging with duplicate rows in join keys."""
+        # Arrange
+        df1 = pl.DataFrame({"category": ["A", "A", "B"], "item": ["item1", "item2", "item3"]})
+        df2 = pl.DataFrame({"category": ["A", "B"], "price": [10, 20]})
+
+        dataframes = {"items": df1, "pricing": df2}
+        join_instructions = [
+            {"left": "items", "right": "pricing", "how": "inner", "on": ["category"]}
+        ]
+
+        # Act
+        result = merge_multiple_dataframes(dataframes, join_instructions)
+
+        # Assert
+        assert result is not None
+        assert result.height == 3  # Two 'A' items should both match with price 10
+        category_a_rows = result.filter(pl.col("category") == "A")
+        assert category_a_rows.height == 2
+        assert all(price == 10 for price in category_a_rows["price"].to_list())
+
+    def test_merge_multiple_dataframes_essential_columns_priority(self):
+        """Test that essential columns are prioritized and not dropped."""
+        # Arrange
+        df1 = pl.DataFrame(
+            {
+                "id": [1, 2],
+                "essential_col": ["important1", "important2"],
+                "regular_col": ["reg1", "reg2"],
+            }
+        )
+        df2 = pl.DataFrame(
+            {
+                "id": [1, 2],
+                "essential_col": ["important1", "important2"],  # Same values
+                "other_col": ["other1", "other2"],
+            }
+        )
+
+        dataframes = {"df1": df1, "df2": df2}
+        join_instructions = [{"left": "df1", "right": "df2", "how": "inner", "on": ["id"]}]
+        essential_cols = {"essential_col"}
+
+        # Act
+        result = merge_multiple_dataframes(dataframes, join_instructions, essential_cols)
+
+        # Assert
+        assert result is not None
+        assert "essential_col" in result.columns
+        assert "regular_col" in result.columns
+        assert "other_col" in result.columns
+        # Essential column should not have suffix even if it appears in both DataFrames
+        assert "essential_col_right" not in result.columns
+
+    def test_merge_multiple_dataframes_complex_chain(self):
+        """Test complex chain of merges with different join types."""
+        # Arrange
+        users = pl.DataFrame({"user_id": [1, 2, 3], "name": ["Alice", "Bob", "Charlie"]})
+        orders = pl.DataFrame(
+            {"order_id": [101, 102, 103], "user_id": [1, 1, 2], "amount": [100, 150, 200]}
+        )
+        products = pl.DataFrame({"order_id": [101, 102], "product": ["Widget", "Gadget"]})
+
+        dataframes = {"users": users, "orders": orders, "products": products}
+        join_instructions = [
+            {"left": "users", "right": "orders", "how": "left", "on": ["user_id"]},
+            {"left": "users", "right": "products", "how": "left", "on": ["order_id"]},
+        ]
+
+        # Act
+        result = merge_multiple_dataframes(dataframes, join_instructions)
+
+        # Assert
+        assert result is not None
+        # Alice has 2 orders, Bob has 1 order, Charlie has no orders = 4 total rows
+        assert result.height == 4
+        assert set(result.columns) >= {"user_id", "name", "order_id", "amount", "product"}
+
+        # Check Alice has 2 rows (2 orders)
+        alice_rows = result.filter(pl.col("user_id") == 1)
+        assert alice_rows.height == 2
+
+        # Check Charlie (user_id=3) has no orders
+        charlie_row = result.filter(pl.col("user_id") == 3)
+        assert charlie_row.height == 1
+        assert charlie_row["order_id"][0] is None
+        assert charlie_row["amount"][0] is None
+
+    def test_merge_multiple_dataframes_no_matching_keys(self):
+        """Test merging when join keys don't match."""
+        # Arrange
+        df1 = pl.DataFrame({"id": [1, 2], "name": ["A", "B"]})
+        df2 = pl.DataFrame({"id": [3, 4], "value": [30, 40]})
+
+        dataframes = {"df1": df1, "df2": df2}
+        join_instructions = [{"left": "df1", "right": "df2", "how": "inner", "on": ["id"]}]
+
+        # Act
+        result = merge_multiple_dataframes(dataframes, join_instructions)
+
+        # Assert
+        assert result is not None
+        assert result.height == 0  # No matching keys in inner join
+        # Schema should still include all columns
+        assert set(result.columns) >= {"id", "name", "value"}
+
+    def test_merge_multiple_dataframes_single_dataframe(self):
+        """Test merging with only one DataFrame returns it unchanged."""
+        # Arrange
+        df1 = pl.DataFrame({"id": [1, 2, 3], "name": ["A", "B", "C"]})
+        dataframes = {"df1": df1}
+        join_instructions = []
+
+        # Act
+        result = merge_multiple_dataframes(dataframes, join_instructions)
+
+        # Assert
+        assert result.equals(df1)
+
+    def test_merge_multiple_dataframes_edge_case_null_values(self):
+        """Test merging DataFrames with null values in join columns."""
+        # Arrange
+        df1 = pl.DataFrame({"id": [1, 2, None], "name": ["A", "B", "C"]})
+        df2 = pl.DataFrame({"id": [1, 2, None], "value": [10, 20, 30]})
+
+        dataframes = {"df1": df1, "df2": df2}
+        join_instructions = [{"left": "df1", "right": "df2", "how": "inner", "on": ["id"]}]
+
+        # Act
+        result = merge_multiple_dataframes(dataframes, join_instructions)
+
+        # Assert
+        assert result is not None
+        # Note: Polars join behavior with nulls - nulls don't match each other in joins
+        assert result.height == 2  # Only non-null ids should match
+        assert set(result.filter(pl.col("id").is_not_null())["id"].to_list()) == {1, 2}
 
 
 class TestComputeEssentialColumns:
