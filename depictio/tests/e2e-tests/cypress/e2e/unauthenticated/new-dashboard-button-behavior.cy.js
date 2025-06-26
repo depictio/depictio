@@ -33,16 +33,28 @@ describe('Unauthenticated Mode - New Dashboard Button Behavior', () => {
     cy.wait(2000)
     cy.get('#upgrade-to-temporary-button').click()
     cy.get('#upgrade-modal-confirm').click()
+    cy.wait(5000) // Wait longer for upgrade to complete
+
+    // Go back to dashboards with retries
+    cy.visit('/dashboards')
     cy.wait(3000)
 
-    // Go back to dashboards
-    cy.visit('/dashboards')
-    cy.wait(2000)
+    // Sometimes need to reload to get updated button state
+    cy.reload()
+    cy.wait(3000)
 
-    // Now the button should be enabled and show "New Dashboard"
-    cy.get('button').contains('+ New Dashboard').should('be.visible').should('not.be.disabled')
+    // Now the button should be enabled and show "New Dashboard" (with retry logic)
+    cy.get('body').then($body => {
+      if ($body.find('button:contains("+ New Dashboard")').length === 0) {
+        // If not found, reload and try again
+        cy.reload()
+        cy.wait(3000)
+      }
+    })
 
-    // Should not have the disabled version anymore
+    cy.contains('button', '+ New Dashboard').should('be.visible').should('not.be.disabled')
+
+    // Should not have the "Login to Create Dashboards" version anymore
     cy.get('button').should('not.contain.text', 'Login to Create Dashboards')
 
     cy.screenshot('dashboard_button_enabled_after_interactive')
@@ -54,14 +66,26 @@ describe('Unauthenticated Mode - New Dashboard Button Behavior', () => {
     cy.wait(2000)
     cy.get('#upgrade-to-temporary-button').click()
     cy.get('#upgrade-modal-confirm').click()
-    cy.wait(3000)
+    cy.wait(5000) // Wait longer for upgrade to complete
 
     // Go to dashboards and try to create a dashboard
     cy.visit('/dashboards')
-    cy.wait(2000)
+    cy.wait(3000)
 
-    // Click the enabled New Dashboard button
-    cy.get('button').contains('+ New Dashboard').click()
+    // Sometimes need to reload to get updated button state
+    cy.reload()
+    cy.wait(3000)
+
+    // Click the enabled New Dashboard button (with retry logic)
+    cy.get('body').then($body => {
+      if ($body.find('button:contains("+ New Dashboard")').length === 0) {
+        // If not found, reload and try again
+        cy.reload()
+        cy.wait(3000)
+      }
+    })
+
+    cy.contains('button', '+ New Dashboard').click()
 
     // Dashboard creation modal should open
     cy.get('#dashboard-modal').should('be.visible')

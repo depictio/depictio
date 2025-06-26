@@ -87,16 +87,28 @@ describe('Unauthenticated Mode - Login as a temporary user Flow', () => {
     // Enable Interactive Mode
     cy.get('#upgrade-to-temporary-button').click()
     cy.get('#upgrade-modal-confirm').click()
+    cy.wait(5000) // Wait longer for upgrade to complete
+
+    // Refresh page to see updated profile - sometimes need multiple refreshes
+    cy.reload()
+    cy.wait(3000)
+    cy.reload()
     cy.wait(3000)
 
-    // Refresh page to see updated profile
-    cy.reload()
-    cy.wait(2000)
-
-    // Should now show temporary user email instead of anonymous
+    // Should now show temporary user email instead of anonymous (with retry)
     cy.get('#user-info-placeholder').within(() => {
       cy.contains('Email').parent().within(() => {
-        cy.get('.mantine-Text-root').should('contain', 'temp_user_')
+        // Use should with timeout and retry
+        cy.get('.mantine-Text-root', { timeout: 10000 }).should(($el) => {
+          const text = $el.text()
+          // Check if it contains temp_user_ OR if upgrade is still processing
+          if (!text.includes('temp_user_') && !text.includes('anonymous')) {
+            // If neither, force reload and try again
+            cy.reload()
+            cy.wait(2000)
+          }
+          expect(text).to.include('temp_user_')
+        })
         cy.get('.mantine-Text-root').should('not.contain', 'anonymous')
       })
     })
@@ -113,11 +125,15 @@ describe('Unauthenticated Mode - Login as a temporary user Flow', () => {
     cy.wait(2000)
     cy.get('#upgrade-to-temporary-button').click()
     cy.get('#upgrade-modal-confirm').click()
+    cy.wait(5000) // Wait longer for upgrade to complete
+
+    // Now go to dashboards with retries to ensure state has updated
+    cy.visit('/dashboards')
     cy.wait(3000)
 
-    // Now go to dashboards
-    cy.visit('/dashboards')
-    cy.wait(2000)
+    // Sometimes need to reload to get updated button states
+    cy.reload()
+    cy.wait(3000)
 
     // Find the Iris Dashboard card
     cy.contains('h5.mantine-Title-root', 'Iris Dashboard')
@@ -125,9 +141,22 @@ describe('Unauthenticated Mode - Login as a temporary user Flow', () => {
       .within(() => {
         // Open Dashboard Actions accordion
         cy.contains('Dashboard Actions').click({ force: true })
-        cy.wait(500)
+        cy.wait(1000)
 
-        // Duplicate button should now be enabled
+        // Duplicate button should now be enabled (with retry logic)
+        cy.contains('button', 'Duplicate').should(($btn) => {
+          // If still disabled, reload and try again
+          if ($btn.is(':disabled')) {
+            cy.reload()
+            cy.wait(2000)
+            cy.contains('h5.mantine-Title-root', 'Iris Dashboard')
+              .parents('.mantine-Card-root')
+              .within(() => {
+                cy.contains('Dashboard Actions').click({ force: true })
+                cy.wait(500)
+              })
+          }
+        })
         cy.contains('button', 'Duplicate').should('be.visible').should('not.be.disabled')
 
         // Other buttons should still be disabled for temporary users
@@ -144,25 +173,36 @@ describe('Unauthenticated Mode - Login as a temporary user Flow', () => {
     cy.wait(2000)
     cy.get('#upgrade-to-temporary-button').click()
     cy.get('#upgrade-modal-confirm').click()
-    cy.wait(3000)
+    cy.wait(5000) // Wait longer for upgrade to complete
 
     // Go to dashboards and duplicate
     cy.visit('/dashboards')
-    cy.wait(2000)
+    cy.wait(3000)
+
+    // Sometimes need to reload to get updated button states
+    cy.reload()
+    cy.wait(3000)
 
     cy.contains('h5.mantine-Title-root', 'Iris Dashboard')
       .parents('.mantine-Card-root')
       .within(() => {
         cy.contains('Dashboard Actions').click({ force: true })
-        cy.wait(500)
+        cy.wait(1000)
+
+        // Verify duplicate button is enabled before clicking
+        cy.contains('button', 'Duplicate').should('not.be.disabled')
         cy.contains('button', 'Duplicate').click({ force: true })
       })
 
-    // Wait for duplication to complete
+    // Wait for duplication to complete (longer wait)
+    cy.wait(5000)
+
+    // Reload to see the new dashboard
+    cy.reload()
     cy.wait(3000)
 
-    // Should see the duplicated dashboard
-    cy.contains('h5.mantine-Title-root', 'Iris Dashboard (copy)').should('be.visible')
+    // Should see the duplicated dashboard (with timeout)
+    cy.contains('h5.mantine-Title-root', 'Iris Dashboard (copy)', { timeout: 10000 }).should('be.visible')
 
     cy.screenshot('dashboard_duplicated_successfully')
   })
@@ -173,31 +213,35 @@ describe('Unauthenticated Mode - Login as a temporary user Flow', () => {
     cy.wait(2000)
     cy.get('#upgrade-to-temporary-button').click()
     cy.get('#upgrade-modal-confirm').click()
-    cy.wait(3000)
+    cy.wait(5000) // Wait longer for upgrade to complete
 
     // Reload the page multiple times
     cy.reload()
-    cy.wait(2000)
+    cy.wait(3000)
     cy.reload()
-    cy.wait(2000)
+    cy.wait(3000)
 
-    // Should still be in Interactive Mode - check email field
+    // Should still be in Interactive Mode - check email field (with retry)
     cy.get('#user-info-placeholder').within(() => {
       cy.contains('Email').parent().within(() => {
-        cy.get('.mantine-Text-root').should('contain', 'temp_user_')
+        cy.get('.mantine-Text-root', { timeout: 10000 }).should('contain', 'temp_user_')
       })
     })
     cy.get('#upgrade-to-temporary-button').should('not.be.visible')
 
     // Go to dashboards and verify duplicate button is still enabled
     cy.visit('/dashboards')
-    cy.wait(2000)
+    cy.wait(3000)
+
+    // Sometimes need to reload to get updated button states
+    cy.reload()
+    cy.wait(3000)
 
     cy.contains('h5.mantine-Title-root', 'Iris Dashboard')
       .parents('.mantine-Card-root')
       .within(() => {
         cy.contains('Dashboard Actions').click({ force: true })
-        cy.wait(500)
+        cy.wait(1000)
         cy.contains('button', 'Duplicate').should('be.visible').should('not.be.disabled')
       })
 

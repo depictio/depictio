@@ -318,6 +318,7 @@ async def api_get_anonymous_user_session(
 @auth_endpoint_router.post("/create_temporary_user", include_in_schema=True)
 async def create_temporary_user_endpoint(
     expiry_hours: int = 24,
+    expiry_minutes: int = 0,
     api_key: str = Header(..., description="Internal API key for authentication"),
 ) -> dict:
     """Create a temporary user with automatic expiration.
@@ -345,7 +346,10 @@ async def create_temporary_user_endpoint(
         )
 
     # Create temporary user
-    temp_user = await _create_temporary_user(expiry_hours=expiry_hours)
+    temp_user = await _create_temporary_user(
+        expiry_hours=expiry_hours,
+        expiry_minutes=expiry_minutes,
+    )
 
     # Create session for the temporary user
     session_data = await _create_temporary_user_session(temp_user)
@@ -382,6 +386,7 @@ async def cleanup_expired_temporary_users_endpoint(
 @auth_endpoint_router.post("/upgrade_to_temporary_user", include_in_schema=True)
 async def upgrade_to_temporary_user_endpoint(
     expiry_hours: int = 24,
+    expiry_minutes: int = 0,
     current_user: User = Depends(get_user_or_anonymous),
 ) -> dict:
     """Upgrade from anonymous user to temporary user for interactive features.
@@ -410,7 +415,10 @@ async def upgrade_to_temporary_user_endpoint(
         )
 
     # Create new temporary user
-    temp_user = await _create_temporary_user(expiry_hours=expiry_hours)
+    temp_user = await _create_temporary_user(
+        expiry_hours=expiry_hours,
+        expiry_minutes=expiry_minutes,
+    )
 
     # Create session for the temporary user
     session_data = await _create_temporary_user_session(temp_user)

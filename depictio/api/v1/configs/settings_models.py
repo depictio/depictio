@@ -181,6 +181,14 @@ class AuthConfig(BaseSettings):
         default="anonymous@depict.io",
         description="Default anonymous user email",
     )
+    temporary_user_expiry_hours: int = Field(
+        default=24,
+        description="Number of hours until temporary users expire",
+    )
+    temporary_user_expiry_minutes: int = Field(
+        default=0,
+        description="Number of minutes until temporary users expire",
+    )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_AUTH_", case_sensitive=False)
 

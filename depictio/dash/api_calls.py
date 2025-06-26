@@ -259,7 +259,7 @@ def api_call_cleanup_expired_temporary_users() -> dict[str, Any] | None:
 
 
 def api_call_upgrade_to_temporary_user(
-    access_token: str, expiry_hours: int = 24
+    access_token: str, expiry_hours: int = 24, expiry_minutes: int = 0
 ) -> dict[str, Any] | None:
     """
     Upgrade from anonymous user to temporary user for interactive features.
@@ -267,16 +267,23 @@ def api_call_upgrade_to_temporary_user(
     Args:
         access_token: Current user's access token
         expiry_hours: Number of hours until the temporary user expires (default: 24)
+        expiry_minutes: Number of additional minutes until the temporary user expires (default: 0)
 
     Returns:
         Session data for the new temporary user or None if failed
     """
     try:
-        logger.info(f"Upgrading to temporary user with expiry: {expiry_hours} hours")
+        logger.info(
+            f"Upgrading to temporary user with expiry: {expiry_hours} hours, {expiry_minutes} minutes"
+        )
+
+        params = {"expiry_hours": expiry_hours}
+        if expiry_minutes > 0:
+            params["expiry_minutes"] = expiry_minutes
 
         response = httpx.post(
             f"{API_BASE_URL}/depictio/api/v1/auth/upgrade_to_temporary_user",
-            params={"expiry_hours": expiry_hours},
+            params=params,
             headers={"Authorization": f"Bearer {access_token}"},
             timeout=30.0,
         )
