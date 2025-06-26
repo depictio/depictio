@@ -579,8 +579,8 @@ async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
 
         token = await TokenBeanie.find_one(
             {
-                "user_id": ObjectId(current_user.id),
-                "expire_datetime": {"$gt": datetime.now()},
+                "user_id": current_user.id,
+                "refresh_expire_datetime": {"$gt": datetime.now()},
             }
         )
 
