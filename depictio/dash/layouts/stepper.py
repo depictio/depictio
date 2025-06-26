@@ -63,7 +63,7 @@ def register_callbacks_stepper(app):
             },
         ).json()
         all_wf_dc = project["workflows"]
-        logger.info(f"all_wf_dc: {all_wf_dc}")
+        # logger.info(f"all_wf_dc: {all_wf_dc}")
 
         # all_wf_dc = httpx.get(
         #     f"{API_BASE_URL}/depictio/api/v1/projects/get/from_id/{local_store['project_id']}",
@@ -169,8 +169,8 @@ def register_callbacks_stepper(app):
         # prevent_initial_call=True,
     )
     def set_datacollection_options(selected_workflow, id, n_clicks, local_store, pathname):
-        logger.info(f"CTX Triggered ID: {ctx.triggered_id}")
-        logger.info(f"CTX triggered: {ctx.triggered}")
+        # logger.info(f"CTX Triggered ID: {ctx.triggered_id}")
+        # logger.info(f"CTX triggered: {ctx.triggered}")
 
         if not local_store:
             raise dash.exceptions.PreventUpdate
@@ -192,7 +192,7 @@ def register_callbacks_stepper(app):
             },
         ).json()
         all_wf_dc = project["workflows"]
-        logger.info(f"all_wf_dc: {all_wf_dc}")
+        # logger.info(f"all_wf_dc: {all_wf_dc}")
 
         # all_wf_dc = httpx.get(
         #     f"{API_BASE_URL}/depictio/api/v1/workflows/get_all_workflows",
@@ -225,7 +225,7 @@ def register_callbacks_stepper(app):
             if component_selected in mapping_component_data_collection[dc["config"]["type"]]
         ]
 
-        logger.info(f"valid_dcs: {valid_dcs}")
+        # logger.info(f"valid_dcs: {valid_dcs}")
 
         logger.info(f"ID: {id}")
         if not selected_workflow:
@@ -649,6 +649,6 @@ def create_stepper_output(n, active):
         ],
         id=n,
     )
-    logger.info(f"TEST MODAL: {modal}")
+    # logger.info(f"TEST MODAL: {modal}")
 
     return modal

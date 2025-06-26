@@ -1,12 +1,17 @@
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from depictio.dash.api_calls import (
     api_call_cleanup_expired_temporary_users,
     api_call_create_temporary_user,
     api_call_get_anonymous_user_session,
     api_call_upgrade_to_temporary_user,
 )
+
+# Mark all tests in this module to skip database setup
+pytestmark = pytest.mark.no_db
 
 # ------------------------------------------------------
 # Test api_call_get_anonymous_user_session function

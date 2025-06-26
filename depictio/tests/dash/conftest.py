@@ -16,11 +16,16 @@ os.environ["DEPICTIO_MONGODB_DB_NAME"] = "depictioDB_test"
 
 
 @pytest.fixture(scope="function", autouse=True)
-def setup_test_database():
+def setup_test_database(request):
     """
     Fixture to set up the test database for all tests.
     This cleans the database and initializes it with test data.
     """
+    # Skip database setup for tests marked with 'no_db'
+    if "no_db" in [mark.name for mark in request.node.iter_markers()]:
+        yield
+        return
+
     # Import the database modules
     from depictio.api.v1.db import clean_test_database, groups_collection, users_collection
 

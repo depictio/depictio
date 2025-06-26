@@ -240,7 +240,7 @@ layout = dbc.Container(
                                 DashIconify(icon="mdi:account-arrow-up", width=30, color="blue"),
                                 dmc.Title("Login as a temporary user?", order=3, color="blue"),
                             ],
-                            spacing="sm",
+                            spacing="lg",
                         ),
                         dmc.Text(
                             "This will create a temporary account that expires in 24 hours, "

@@ -1,3 +1,4 @@
+import concurrent.futures
 import itertools
 
 import httpx
@@ -536,127 +537,218 @@ def compute_essential_columns(dataframes: dict[str, pl.DataFrame]) -> set[str]:
 #     return merged_df
 
 
+# Cache for loaded DataFrames to avoid redundant loading
+_iterative_join_cache = {}
+
+
 def iterative_join(
     workflow_id: ObjectId,
     joins_dict: dict,
     metadata_dict: dict,
     TOKEN: str | None = None,
 ):
-    # logger.debug(f"worfklow_id: {workflow_id}")
-    # logger.debug(f"joins_dict: {joins_dict}")
-    # logger.debug(f"metadata_dict: {metadata_dict}")
+    # Create cache key for this specific join operation
+    cache_key = f"{workflow_id}_{hash(str(joins_dict))}_{hash(str(metadata_dict))}"
 
-    interactive_components_list = list()
-    for metadata in metadata_dict.values():
-        if "component_type" in metadata:
-            if metadata["component_type"] in ["interactive"]:
-                interactive_components_list.append(metadata)
+    if cache_key in _iterative_join_cache:
+        logger.debug(f"IterativeJoin: Using cached result for workflow {workflow_id}")
+        return _iterative_join_cache[cache_key]
+
+    logger.debug(
+        f"IterativeJoin: Processing workflow {workflow_id} with {len(joins_dict)} join groups"
+    )
+
+    # Optimize: Pre-filter interactive components once
+    interactive_components_list = [
+        metadata
+        for metadata in metadata_dict.values()
+        if metadata.get("component_type") == "interactive"
+    ]
 
     if not joins_dict:
-        return load_deltatable_lite(
+        result = load_deltatable_lite(
             workflow_id,
-            next(iter(metadata_dict.keys()))["metadata"]["dc_id"],
+            next(iter(metadata_dict.values()))["metadata"]["dc_id"],
             interactive_components_list,
             TOKEN=TOKEN,
         )
+        _iterative_join_cache[cache_key] = result
+        return result
 
-    # Initialize a dictionary to store loaded dataframes
+    # Optimize: Collect all unique data collection IDs upfront
+    all_dc_ids = set()
+    for join_key_tuple in joins_dict.keys():
+        all_dc_ids.update(join_key_tuple)
+
+    logger.debug(f"IterativeJoin: Loading {len(all_dc_ids)} unique data collections")
+
+    # Initialize containers
     loaded_dfs = {}
     used_dcs = set()
 
-    values_dict = dict()
+    # Optimize: Pre-group metadata by dc_id for efficient lookup
+    metadata_by_dc_id = {}
+    component_values = {}  # Track individual component values for debugging
 
-    # Load all necessary dataframes based on joins_dict
-    for join_key_tuple in joins_dict.keys():
-        for dc_id in join_key_tuple:
-            if dc_id not in loaded_dfs:
-                # logger.info(f"Metadata dict: {metadata_dict}")
-                # Filter metadata for the current dc_id
-                relevant_metadata = [
-                    md for md in metadata_dict.values() if md["metadata"]["dc_id"] == dc_id
-                ]
-                # logger.info(f"Relevant metadata: {relevant_metadata}")
-                for e in relevant_metadata:
-                    values_dict[e["metadata"]["dc_id"]] = e["value"]
-                # logger.info(
-                #     f"Loading dataframe for dc_id: {dc_id} with metadata: {relevant_metadata}"
-                # )
-                loaded_dfs[dc_id] = load_deltatable_lite(
-                    workflow_id, dc_id, relevant_metadata, TOKEN=TOKEN
-                )
-                # logger.info(f"Loaded df : {loaded_dfs[dc_id]}")
-                logger.info(
-                    f"Loaded dataframe for dc_id: {dc_id} with shape: {loaded_dfs[dc_id].shape}"
-                )
-    # logger.info(f"values_dict: {values_dict}")
+    for component_id, metadata in metadata_dict.items():
+        dc_id = metadata["metadata"]["dc_id"]
+        if dc_id not in metadata_by_dc_id:
+            metadata_by_dc_id[dc_id] = []
+        metadata_by_dc_id[dc_id].append(metadata)
+        component_values[component_id] = {
+            "dc_id": dc_id,
+            "value": metadata["value"],
+            "component_type": metadata.get("component_type", "unknown"),
+        }
 
+    logger.debug(f"IterativeJoin: Component values breakdown: {component_values}")
+    logger.debug(f"IterativeJoin: Metadata by dc_id: {list(metadata_by_dc_id.keys())}")
+
+    # Load all necessary dataframes concurrently (optimized)
+
+    # Prepare loading tasks
+    loading_tasks = []
+    dc_ids_to_load = []
+
+    for dc_id in all_dc_ids:
+        if dc_id not in loaded_dfs:
+            relevant_metadata = metadata_by_dc_id.get(dc_id, [])
+            loading_tasks.append((dc_id, relevant_metadata))
+            logger.debug(
+                f"IterativeJoin: Preparing to load DataFrame for dc_id {dc_id} with metadata: {relevant_metadata}"
+            )
+            dc_ids_to_load.append(dc_id)
+
+    logger.debug(f"IterativeJoin: Loading {len(loading_tasks)} DataFrames concurrently")
+
+    import os
+    import threading
+
+    # Load DataFrames concurrently using ThreadPoolExecutor
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(loading_tasks), 4)) as executor:
+        future_to_dc_id = {
+            executor.submit(load_deltatable_lite, workflow_id, dc_id, metadata, TOKEN): dc_id
+            for dc_id, metadata in loading_tasks
+        }
+
+        for future in concurrent.futures.as_completed(future_to_dc_id):
+            dc_id = future_to_dc_id[future]
+            try:
+                df = future.result()
+                loaded_dfs[dc_id] = df
+                # Add thread/process ID to log message
+                thread_id = threading.get_ident()
+                process_id = os.getpid()
+                logger.debug(
+                    f"IterativeJoin: [PID:{process_id}|TID:{thread_id}] Loaded {dc_id} with shape: {df.shape}"
+                )
+            except Exception as e:
+                thread_id = threading.get_ident()
+                process_id = os.getpid()
+                logger.error(
+                    f"IterativeJoin: [PID:{process_id}|TID:{thread_id}] Failed to load {dc_id}: {e}"
+                )
+                raise
+
+    # Optimize join execution with improved strategy
+    thread_id = threading.get_ident()
+    process_id = os.getpid()
+    logger.debug(
+        f"IterativeJoin: [PID:{process_id}|TID:{thread_id}] Executing {sum(len(join_list) for join_list in joins_dict.values())} total joins"
+    )
     # Initialize merged_df with the first dataframe in the first join
     initial_dc_id = next(iter(joins_dict.keys()))[0]
     merged_df = loaded_dfs[initial_dc_id]
     used_dcs.add(initial_dc_id)
-    logger.debug(f"Initial merged_df shape: {merged_df.shape}")
-    logger.debug(f"Initial merged_df columns: {merged_df.columns}")
-    logger.debug(f"Used data collections: {used_dcs}")
+    logger.debug(f"IterativeJoin: Starting with {initial_dc_id} (shape: {merged_df.shape})")
 
+    join_count = 0
     # Iteratively join dataframes based on joins_dict
     for join_key_tuple, join_list in joins_dict.items():
-        logger.debug(f"Processing joins for: {join_key_tuple}")
+        logger.debug(
+            f"IterativeJoin: Processing {len(join_list)} joins for group: {join_key_tuple}"
+        )
+
         for join in join_list:
-            logger.debug(f"Join elem : {join}")
             join_id, join_details = list(join.items())[0]
             dc_id1, dc_id2 = join_id.split("--")
+            join_count += 1
 
-            # Determine which dataframe to join with merged_df
+            # Optimize: Skip already processed joins
             if dc_id1 in used_dcs and dc_id2 in used_dcs:
-                logger.debug(f"Skipping join {join_id} as both data collections are already used.")
+                logger.debug(
+                    f"IterativeJoin: Skipping join {join_count}/{join_id} (both collections already used)"
+                )
                 continue
-            elif dc_id1 in used_dcs:
-                logger.debug(
-                    f"dc_id1 already in used_dcs - {dc_id1} - joinin with dc_id2 - {dc_id2}"
-                )
+
+            # Determine which dataframe to join
+            if dc_id1 in used_dcs:
                 right_df = loaded_dfs[dc_id2]
-                logger.debug(f"right_df shape: {right_df.shape}")
-                logger.debug(f"right_df columns: {right_df.columns}")
                 used_dcs.add(dc_id2)
+                join_dc_id = dc_id2
             elif dc_id2 in used_dcs:
-                logger.debug(
-                    f"dc_id2 already in used_dcs - {dc_id2} - joinin with dc_id1 - {dc_id1}"
-                )
                 right_df = loaded_dfs[dc_id1]
-                logger.debug(f"right_df shape: {right_df.shape}")
-                logger.debug(f"right_df columns: {right_df.columns}")
                 used_dcs.add(dc_id1)
+                join_dc_id = dc_id1
             else:
-                logger.debug(
-                    f"Initial join with {dc_id1} and {dc_id2} on columns: {join_details['on_columns']} with method: {join_details['how']}"
-                )
+                # Initial join case
                 right_df = loaded_dfs[dc_id2]
-                logger.debug(f"right_df shape: {right_df.shape}")
-                logger.debug(f"right_df columns: {right_df.columns}")
                 used_dcs.add(dc_id2)
                 merged_df = loaded_dfs[dc_id1]
                 used_dcs.add(dc_id1)
-                logger.debug(
-                    f"Initial join with {dc_id1} and {dc_id2} on columns: {join_details['on_columns']} with method: {join_details['how']}"
-                )
+                join_dc_id = f"{dc_id1}+{dc_id2}"
 
-            logger.debug(f"Used data collections: {used_dcs}")
-
-            logger.debug(
-                f"Joining {dc_id1} and {dc_id2} on columns: {join_details['on_columns']} with method: {join_details['how']}"
+            # Optimize: Build join columns efficiently
+            base_columns = join_details["on_columns"]
+            join_columns = (
+                base_columns + ["depictio_run_id"]
+                if "depictio_run_id" in merged_df.columns and "depictio_run_id" in right_df.columns
+                else base_columns
             )
 
-            if "depictio_run_id" in merged_df.columns and "depictio_run_id" in right_df.columns:
-                join_columns = join_details["on_columns"] + ["depictio_run_id"]
-            else:
-                join_columns = join_details["on_columns"]
+            logger.debug(
+                f"IterativeJoin: Join {join_count} - {join_dc_id} ({right_df.shape}) -> merged ({merged_df.shape})"
+            )
 
             # Perform the join
             merged_df = merged_df.join(right_df, on=join_columns, how=join_details["how"])
 
-            logger.debug(f"Merged dataframe shape after join: {merged_df.shape}")
-            logger.debug(f"Merged dataframe columns after join: {merged_df.columns}")
+            logger.debug(f"IterativeJoin: Result shape: {merged_df.shape}")
 
+    logger.debug(f"IterativeJoin: Completed {join_count} joins, final shape: {merged_df.shape}")
+
+    # Apply post-join filtering based on interactive components
+    if interactive_components_list:
+        # Filter to only components that have actual filtering criteria
+        filterable_components = [
+            comp
+            for comp in interactive_components_list
+            if comp.get("metadata", {}).get("interactive_component_type") is not None
+            and comp.get("metadata", {}).get("column_name") is not None
+            and comp.get("value") is not None
+        ]
+
+        logger.debug(
+            f"IterativeJoin: Found {len(filterable_components)} filterable components out of {len(interactive_components_list)} total"
+        )
+
+        if filterable_components:
+            logger.debug(
+                f"IterativeJoin: Applying post-join filtering with {len(filterable_components)} components"
+            )
+            try:
+                filter_list = process_metadata_and_filter(filterable_components)
+                if filter_list:
+                    # Apply all filters to the merged dataframe
+                    for filter_condition in filter_list:
+                        merged_df = merged_df.filter(filter_condition)
+                    logger.debug(f"IterativeJoin: After filtering, final shape: {merged_df.shape}")
+            except Exception as e:
+                logger.warning(f"IterativeJoin: Failed to apply post-join filtering: {e}")
+                # Continue without filtering if there's an error
+
+    # Cache the result
+    _iterative_join_cache[cache_key] = merged_df
     return merged_df
 
 
@@ -678,13 +770,31 @@ class UnionFind:
             self.parent[root2] = root1
 
 
+# Cache for join tables to avoid redundant API calls
+_join_tables_cache = {}
+
+
 def get_join_tables(wf, TOKEN):
+    """
+    Get join tables with caching to improve performance.
+    """
+    cache_key = f"{wf}_{hash(TOKEN) % 10000 if TOKEN else 'none'}"
+
+    if cache_key in _join_tables_cache:
+        logger.debug(f"Using cached join tables for workflow {wf}")
+        return _join_tables_cache[cache_key]
+
+    logger.debug(f"Fetching join tables for workflow {wf}")
+
     response = httpx.get(
         f"{API_BASE_URL}/depictio/api/v1/datacollections/get_dc_joined/{wf}",
         headers={"Authorization": f"Bearer {TOKEN}"},
     )
     if response.status_code == 200:
-        return response.json()
+        result = response.json()
+        _join_tables_cache[cache_key] = result
+        logger.debug(f"Cached join tables for workflow {wf}")
+        return result
     return {}
 
 

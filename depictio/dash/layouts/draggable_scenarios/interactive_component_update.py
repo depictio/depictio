@@ -115,7 +115,7 @@ def process_joins(wf, wf_dc, joins, interactive_components, TOKEN):
 
 def group_interactive_components(interactive_components_dict):
     grouped = collections.defaultdict(list)
-    for k, v in interactive_components_dict.items():
+    for v in interactive_components_dict.values():
         grouped[v["metadata"]["wf_id"], v["metadata"]["dc_id"]].append(v)
     return grouped
 
@@ -276,19 +276,24 @@ def update_interactive_component(
 
         logger.info(f"Updated joins_dict - {joins_dict}")
 
-        # Perform the joins
-        for join_key_tuple, joins in joins_dict.items():
-            # logger.info(f"Processing joins for: {join_key_tuple}")
-            # logger.info(f"joins - {joins}")
-            # logger.info(f"interactive_components_dict - {interactive_components_dict}")
-            # logger.info(
-            #     f"stored_metadata_interactive_components - {stored_metadata_interactive_components}"
-            # )
-            merged_df = iterative_join(
-                wf, {join_key_tuple: joins}, interactive_components_dict, TOKEN
+        # OPTIMIZATION: Perform joins all at once instead of individual calls
+        if joins_dict:
+            # Single call to iterative_join with ALL joins for this workflow
+            logger.info(
+                f"Performing batch join for workflow {wf} with {len(joins_dict)} join combinations"
             )
-            # logger.info(f"merged_df - {merged_df}")
-            df_dict_processed[wf][join_key_tuple] = merged_df
+            merged_df = iterative_join(wf, joins_dict, interactive_components_dict, TOKEN)
+
+            # Store the same merged dataframe for all join combinations
+            # since iterative_join already handles all the joins internally
+            for join_key_tuple in joins_dict.keys():
+                df_dict_processed[wf][join_key_tuple] = merged_df
+                logger.debug(
+                    f"Stored merged df for join key: {join_key_tuple} (shape: {merged_df.shape})"
+                )
+        else:
+            logger.info(f"No joins found for workflow {wf}")
+
         for e in stored_metadata:
             if e["component_type"] == "jbrowse":
                 # logger.info(f"build_jbrowse_df_mapping_dict - access_token: {TOKEN}")
@@ -359,11 +364,20 @@ def update_interactive_component(
                     break
 
             if component["component_type"] == "interactive":
-                component["value"] = interactive_components_dict[component["index"]]["value"]
+                # Preserve existing value if interactive_components_dict doesn't have it
+                if component["index"] in interactive_components_dict:
+                    component["value"] = interactive_components_dict[component["index"]]["value"]
+                    logger.debug(
+                        f"Restored value for component {component['index']}: {component['value']}"
+                    )
+                else:
+                    logger.warning(
+                        f"Component {component['index']} not found in interactive_components_dict, preserving existing value: {component.get('value', 'None')}"
+                    )
 
-            # component["df"] = df_dict_processed[component["wf_id"], component["dc_id"]]
+            # Set component parameters to use pre-loaded data
             component["build_frame"] = True
-            component["refresh"] = True
+            component["refresh"] = False
             component["access_token"] = TOKEN
 
             # if component["component_type"] == "figure":

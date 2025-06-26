@@ -94,6 +94,11 @@ def register_callbacks_stepper_part_three(app):
             btn_index = [
                 i for i, (x, y) in enumerate(zip(btn_component, store_btn_component)) if x > y
             ]
+            # OPTIMIZATION: Load data once for both code paths to avoid duplicate loading
+            df = None
+            component_to_render = None
+            component_id = None
+
             if btn_index:
                 # button_clicked = True
                 component_selected = components_list[btn_index[0]]
@@ -103,14 +108,8 @@ def register_callbacks_stepper_part_three(app):
                     "Interactive",
                     "Table",
                 ]:
-                    df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
-
-                    id = ids[btn_index[0]]
-                    return return_design_component(component_selected, id, df, btn_component)
-                # elif component_selected == "JBrowse2":
-                #     return design_jbrowse(ids[btn_index[0]]), btn_component
-                # return html.Div("Not implemented yet"), btn_component
-
+                    component_to_render = component_selected
+                    component_id = ids[btn_index[0]]
                 else:
                     return html.Div("Not implemented yet"), btn_component
             else:
@@ -119,24 +118,24 @@ def register_callbacks_stepper_part_three(app):
                 logger.info(f"workflow_selection: {workflow_selection}")
                 logger.info(f"dc_id: {dc_id}")
                 logger.info(f"data_collection_selection: {data_collection_selection}")
-                # logger.info(f"df: {df}")
                 logger.info(f"last_button: {last_button}")
+
                 # Get id using components_list index, last_button and store_btn_component
                 if last_button != "None":
                     if last_button in ["Figure", "Card", "Interactive", "Table"]:
                         last_button_index = components_list.index(last_button)
-                        id = ids[last_button_index]
-                        logger.info(f"id: {id}")
-                        df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
-
-                        return return_design_component(last_button, id, df, btn_component)
-                    # elif last_button == "JBrowse2":
-                    #     id = ids[components_list.index(last_button)]
-                    #     return design_jbrowse(id), btn_component
+                        component_to_render = last_button
+                        component_id = ids[last_button_index]
+                        logger.info(f"id: {component_id}")
                     else:
                         return html.Div("Not implemented yet"), btn_component
 
-                else:
-                    return html.Div("Not implemented yet"), btn_component
+            # Load data once for whichever component needs to be rendered
+            if component_to_render and component_id:
+                df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
+                logger.debug(
+                    f"Stepper: Loaded delta table for {wf_id}:{dc_id} (shape: {df.shape}) for {component_to_render}"
+                )
+                return return_design_component(component_to_render, component_id, df, btn_component)
 
         return dash.no_update, btn_component if btn_component else dash.no_update

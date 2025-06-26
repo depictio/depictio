@@ -579,8 +579,8 @@ async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
 
         token = await TokenBeanie.find_one(
             {
-                "user_id": ObjectId(current_user.id),
-                "expire_datetime": {"$gt": datetime.now()},
+                "user_id": current_user.id,
+                "refresh_expire_datetime": {"$gt": datetime.now()},
             }
         )
 
@@ -605,6 +605,7 @@ async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
         token_data_json = json.dumps(token_data)
         logger.info(f"🔑 Token data prepared: {token_data}")
 
+        # Use the exact same pattern as the working dashboard endpoint
         async with async_playwright() as p:
             browser = await p.chromium.launch(
                 headless=True,
@@ -616,11 +617,7 @@ async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
                     "--disable-features=VizDisplayCompositor",
                 ],
             )
-
-            context = await browser.new_context(
-                viewport={"width": 1920, "height": 1080},
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            )
+            context = await browser.new_context(viewport={"width": 1920, "height": 1080})
             page = await context.new_page()
 
             # Set up console and error logging

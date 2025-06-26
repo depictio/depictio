@@ -336,9 +336,12 @@ class TestAuthConfig:
         with env_vars(env_to_clear):
             config = AuthConfig()
 
-            assert config.keys_dir == Path("depictio/keys")
+            # The keys_dir and cli_config_dir now use absolute paths based on the package location
+            assert config.keys_dir.name == "keys"
+            assert config.keys_dir.parent.name == "depictio"
             assert config.keys_algorithm == "RS256"
-            assert config.cli_config_dir == Path("depictio/.depictio")
+            assert config.cli_config_dir.name == ".depictio"
+            assert config.cli_config_dir.parent.name == "depictio"
             # internal_api_key is now computed and always returns a value (either from env or generated)
             assert config.internal_api_key is not None
             assert isinstance(config.internal_api_key, str)
