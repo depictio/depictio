@@ -132,7 +132,7 @@ layout = dbc.Container(
                                             },
                                         ),
                                         dmc.Button(
-                                            "Enable Interactive Mode",
+                                            "Login as a temporary user",
                                             id="upgrade-to-temporary-button",
                                             variant="filled",
                                             radius=BUTTON_RADIUS,
@@ -229,16 +229,16 @@ layout = dbc.Container(
         # Upgrade confirmation modal
         dmc.Modal(
             id="upgrade-confirmation-modal",
-            title="Enable Interactive Mode",
+            title="Login as a temporary user",
             centered=True,
-            size="md",
+            size="lg",
             children=[
                 dmc.Stack(
                     [
                         dmc.Group(
                             [
                                 DashIconify(icon="mdi:account-arrow-up", width=30, color="blue"),
-                                dmc.Title("Upgrade to Interactive Mode?", order=3, color="blue"),
+                                dmc.Title("Login as a temporary user?", order=3, color="blue"),
                             ],
                             spacing="sm",
                         ),
@@ -276,7 +276,7 @@ layout = dbc.Container(
                                 ),
                                 dmc.Button(
                                     [
-                                        "Enable Interactive Mode ",
+                                        "Login as a temporary user ",
                                         DashIconify(icon="mdi:arrow-right", width=16),
                                     ],
                                     id="upgrade-modal-confirm",

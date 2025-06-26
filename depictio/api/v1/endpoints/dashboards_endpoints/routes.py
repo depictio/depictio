@@ -202,6 +202,13 @@ async def save_dashboard(
     Check if an entry with the same dashboard_id exists, if not, insert, if yes, update.
     """
 
+    # Additional check for anonymous users (though get_current_user should already prevent this)
+    if hasattr(current_user, "is_anonymous") and current_user.is_anonymous:
+        raise HTTPException(
+            status_code=403,
+            detail="Anonymous users cannot create or modify dashboards. Please login to continue.",
+        )
+
     user_id = current_user.id
 
     # logger.info(f"Dashboard data: {data}")
