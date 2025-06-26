@@ -24,7 +24,7 @@ def get_anonymous_user_session():
     return session_data
 
 
-def get_temporary_user_session(expiry_hours: int = 24):
+def get_temporary_user_session(expiry_hours: int = 24, expiry_minutes: int = 0):
     """
     Create a temporary user session with automatic expiration.
 
@@ -34,7 +34,10 @@ def get_temporary_user_session(expiry_hours: int = 24):
     Returns:
         dict: Session data for the temporary user
     """
-    session_data = api_call_create_temporary_user(expiry_hours=expiry_hours)
+    session_data = api_call_create_temporary_user(
+        expiry_hours=expiry_hours,
+        expiry_minutes=expiry_minutes,
+    )
     if not session_data:
         raise Exception("Failed to create temporary user session via API")
 

@@ -597,7 +597,7 @@ jobs:
           echo "GID=$(id -g)" >> $GITHUB_ENV
           cp .env.example .env
           # Enable unauthenticated mode
-          sed -i 's/# DEPICTIO_AUTH_UNAUTHENTICATED_MODE=false/DEPICTIO_AUTH_UNAUTHENTICATED_MODE=true/' .env
+          sed -i 's/# DEPICTIO_AUTH_UNAUTHENTICATED_MODE=false/DEPICTIO_AUTH_UNAUTHENTICATED_MODE=true/' docker-compose/.env
           mkdir -p depictioDB minio_data
           chmod 777 depictioDB minio_data
 
@@ -607,7 +607,7 @@ jobs:
           FULL_IMAGE="${{ needs.docker-build.outputs.full-image }}"
           docker pull "${FULL_IMAGE}"
           export DEPICTIO_VERSION="${FULL_IMAGE}"
-          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d
+          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml --env-file docker-compose/.env up -d
           sleep 15
 
       - name: Verify unauthenticated mode is enabled

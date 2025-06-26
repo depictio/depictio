@@ -684,7 +684,11 @@ def register_profile_callbacks(app):
         # Attempt to upgrade
         try:
             access_token = local_data.get("access_token")
-            upgrade_result = api_call_upgrade_to_temporary_user(access_token, expiry_hours=24)
+            upgrade_result = api_call_upgrade_to_temporary_user(
+                access_token,
+                expiry_hours=settings.auth.temporary_user_expiry_hours,
+                expiry_minutes=settings.auth.temporary_user_expiry_minutes,
+            )
 
             if upgrade_result:
                 logger.info("Successfully upgraded to temporary user")

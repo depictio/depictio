@@ -46,7 +46,10 @@ async def _create_anonymous_user() -> UserBeanie:
     return payload["user"] if payload else None
 
 
-async def _create_temporary_user(expiry_hours: int = 24) -> UserBeanie:
+async def _create_temporary_user(
+    expiry_hours: int = 24,
+    expiry_minutes: int = 0,
+) -> UserBeanie:
     """Create a temporary user that will be automatically cleaned up after expiry_hours.
 
     Args:
@@ -63,7 +66,7 @@ async def _create_temporary_user(expiry_hours: int = 24) -> UserBeanie:
     temp_email = f"temp_user_{temp_id}@depictio.temp"
 
     # Set expiration time
-    expiration_time = datetime.now() + timedelta(hours=expiry_hours)
+    expiration_time = datetime.now() + timedelta(hours=expiry_hours, minutes=expiry_minutes)
 
     logger.info(f"Creating temporary user with email: {temp_email}, expires at: {expiration_time}")
 
