@@ -568,7 +568,7 @@ def iterative_join(
     if not joins_dict:
         result = load_deltatable_lite(
             workflow_id,
-            next(iter(metadata_dict.keys()))["metadata"]["dc_id"],
+            next(iter(metadata_dict.values()))["metadata"]["dc_id"],
             interactive_components_list,
             TOKEN=TOKEN,
         )
@@ -716,6 +716,36 @@ def iterative_join(
             logger.debug(f"IterativeJoin: Result shape: {merged_df.shape}")
 
     logger.debug(f"IterativeJoin: Completed {join_count} joins, final shape: {merged_df.shape}")
+
+    # Apply post-join filtering based on interactive components
+    if interactive_components_list:
+        # Filter to only components that have actual filtering criteria
+        filterable_components = [
+            comp
+            for comp in interactive_components_list
+            if comp.get("metadata", {}).get("interactive_component_type") is not None
+            and comp.get("metadata", {}).get("column_name") is not None
+            and comp.get("value") is not None
+        ]
+
+        logger.debug(
+            f"IterativeJoin: Found {len(filterable_components)} filterable components out of {len(interactive_components_list)} total"
+        )
+
+        if filterable_components:
+            logger.debug(
+                f"IterativeJoin: Applying post-join filtering with {len(filterable_components)} components"
+            )
+            try:
+                filter_list = process_metadata_and_filter(filterable_components)
+                if filter_list:
+                    # Apply all filters to the merged dataframe
+                    for filter_condition in filter_list:
+                        merged_df = merged_df.filter(filter_condition)
+                    logger.debug(f"IterativeJoin: After filtering, final shape: {merged_df.shape}")
+            except Exception as e:
+                logger.warning(f"IterativeJoin: Failed to apply post-join filtering: {e}")
+                # Continue without filtering if there's an error
 
     # Cache the result
     _iterative_join_cache[cache_key] = merged_df
