@@ -30,7 +30,7 @@ jobs:
           source venv/bin/activate
           uv pip install --upgrade pip
 
-          if uv pip install -e . && python -c "import polars" 2>/dev/null; then
+          if uv pip install -e ".[dev]" && python -c "import polars" 2>/dev/null; then
             echo "✅ Default installation with standard polars successful"
           else
             echo "⚠️ Standard polars failed, uninstalling and trying LTS version..."
@@ -41,10 +41,10 @@ jobs:
 
           python -c "import polars; print(f'Polars {polars.__version__} installed')"
 
-      - name: Install dependencies for quality check & testing
-        run: |
-          source venv/bin/activate
-          uv pip install -e ".[dev]"
+      # - name: Install dependencies for quality check & testing
+      #   run: |
+      #     source venv/bin/activate
+      #     uv pip install -e ".[dev]"
 
       - name: Run Ruff for formatting
         run: |
@@ -59,7 +59,7 @@ jobs:
       - name: Run tests
         run: |
           source venv/bin/activate
-          pytest depictio/tests/api depictio/tests/cli depictio/tests/models -xvs -n auto
+          python -m pytest -xvs -n auto
 
   docker-build:
     needs: quality

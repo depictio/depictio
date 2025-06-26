@@ -134,7 +134,6 @@ check_untyped_defs = true
 
 
 [tool.pytest.ini_options]
-pythonpath = "."
 python_files = "test_*.py"
 testpaths = [
   "depictio/tests/api",
