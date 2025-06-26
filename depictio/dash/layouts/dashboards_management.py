@@ -124,7 +124,13 @@ def edit_dashboard_name(new_name, dashboard_id, dashboards, token):
     return updated_dashboards
 
 
-def render_welcome_section(email):
+def render_welcome_section(email, is_anonymous=False):
+    # Check if user is anonymous and disable button accordingly
+    button_disabled = is_anonymous
+    button_text = "+ New Dashboard" if not is_anonymous else "Login to Create Dashboards"
+    button_variant = "gradient" if not is_anonymous else "outline"
+    button_color = {"from": "black", "to": "grey", "deg": 135} if not is_anonymous else "gray"
+
     return dmc.Grid(
         children=[
             dmc.Col(
@@ -147,13 +153,15 @@ def render_welcome_section(email):
                     dmc.Title(f"Welcome, {email}!", order=2, align="center"),
                     dmc.Center(
                         dmc.Button(
-                            "+ New Dashboard",
+                            button_text,
                             id={"type": "create-dashboard-button", "index": email},
                             n_clicks=0,
-                            variant="gradient",
-                            gradient={"from": "black", "to": "grey", "deg": 135},
+                            variant=button_variant,
+                            gradient=button_color if not is_anonymous else None,
+                            color="gray" if is_anonymous else None,
                             style={"margin": "20px 0", "fontFamily": "Virgil"},
                             size="xl",
+                            disabled=button_disabled,
                         ),
                     ),
                     dmc.Divider(style={"margin": "20px 0"}),
@@ -234,39 +242,92 @@ def register_callbacks_dashboards_management(app):
                 id={"type": "edit-password-modal", "index": dashboard["dashboard_id"]},
                 opened=False,
                 centered=True,
-                withCloseButton=True,
-                closeOnEscape=True,
-                closeOnClickOutside=True,
-                size="lg",
-                title="Edit Dashboard name",
-                style={"fontSize": 16},
+                withCloseButton=False,
+                overlayOpacity=0.55,
+                overlayBlur=3,
+                shadow="xl",
+                radius="md",
+                size="md",
+                zIndex=1000,
+                styles={
+                    "modal": {
+                        "padding": "24px",
+                    }
+                },
                 children=[
-                    dmc.TextInput(
-                        placeholder="New name",
-                        label="New name",
-                        id={
-                            "type": "new-name-dashboard",
-                            "index": dashboard["dashboard_id"],
-                        },
-                    ),
-                    dmc.Text(
-                        id={
-                            "type": "message-edit-name-dashboard",
-                            "index": dashboard["dashboard_id"],
-                        },
-                        color="red",
-                        style={"display": "none"},
-                    ),
-                    dmc.Center(
-                        dmc.Button(
-                            "Save",
-                            color="blue",
-                            id={
-                                "type": "save-edit-name-dashboard",
-                                "index": dashboard["dashboard_id"],
-                            },
-                            style={"margin": "10px 0"},
-                        )
+                    dmc.Stack(
+                        spacing="lg",
+                        children=[
+                            # Header with icon and title
+                            dmc.Group(
+                                position="left",
+                                spacing="sm",
+                                children=[
+                                    DashIconify(
+                                        icon="mdi:rename-box",
+                                        width=28,
+                                        height=28,
+                                        color="#228be6",  # Dash Mantine blue color
+                                    ),
+                                    dmc.Title(
+                                        "Edit Dashboard Name",
+                                        order=4,
+                                        style={"margin": 0},
+                                    ),
+                                ],
+                            ),
+                            # Divider
+                            dmc.Divider(),
+                            # Text input field
+                            dmc.TextInput(
+                                placeholder="Enter new dashboard name",
+                                label="Dashboard Name",
+                                id={
+                                    "type": "new-name-dashboard",
+                                    "index": dashboard["dashboard_id"],
+                                },
+                                radius="md",
+                                size="md",
+                            ),
+                            # Error message
+                            dmc.Text(
+                                id={
+                                    "type": "message-edit-name-dashboard",
+                                    "index": dashboard["dashboard_id"],
+                                },
+                                color="red",
+                                size="sm",
+                                style={"display": "none"},
+                            ),
+                            # Buttons
+                            dmc.Group(
+                                position="right",
+                                spacing="md",
+                                mt="md",
+                                children=[
+                                    dmc.Button(
+                                        "Cancel",
+                                        id={
+                                            "type": "cancel-edit-name-dashboard",
+                                            "index": dashboard["dashboard_id"],
+                                        },
+                                        color="gray",
+                                        variant="outline",
+                                        radius="md",
+                                    ),
+                                    dmc.Button(
+                                        "Save",
+                                        id={
+                                            "type": "save-edit-name-dashboard",
+                                            "index": dashboard["dashboard_id"],
+                                        },
+                                        color="blue",
+                                        radius="md",
+                                        leftIcon=DashIconify(icon="mdi:content-save", width=16),
+                                    ),
+                                ],
+                            ),
+                        ],
                     ),
                 ],
             )
@@ -1004,12 +1065,29 @@ def register_callbacks_dashboards_management(app):
 
     @app.callback(
         Output({"type": "edit-password-modal", "index": MATCH}, "opened"),
-        [Input({"type": "edit-dashboard-button", "index": MATCH}, "n_clicks")],
+        [
+            Input({"type": "edit-dashboard-button", "index": MATCH}, "n_clicks"),
+            Input({"type": "cancel-edit-name-dashboard", "index": MATCH}, "n_clicks"),
+        ],
         [State({"type": "edit-password-modal", "index": MATCH}, "opened")],
         prevent_initial_call=True,
     )
-    def open_edit_password_modal(n_clicks, opened):
-        return not opened
+    def handle_edit_name_modal(edit_clicks, cancel_clicks, opened):
+        # Check which button was clicked
+        ctx = dash.callback_context
+        if not ctx.triggered:
+            return opened
+
+        triggered_id = ctx.triggered[0]["prop_id"].split(".")[0]
+
+        # If edit button was clicked, toggle modal
+        if "edit-dashboard-button" in triggered_id:
+            return not opened
+        # If cancel button was clicked, close modal
+        elif "cancel-edit-name-dashboard" in triggered_id:
+            return False
+
+        return opened
 
     @app.callback(
         [
@@ -1018,6 +1096,7 @@ def register_callbacks_dashboards_management(app):
             Output("init-create-dashboard-button", "data"),
             Output("unique-title-warning", "style"),
             Output("unique-title-warning", "children"),
+            Output("url", "pathname", allow_duplicate=True),
         ],
         [
             Input({"type": "create-dashboard-button", "index": ALL}, "n_clicks"),
@@ -1047,7 +1126,7 @@ def register_callbacks_dashboards_management(app):
 
         if not init_create_dashboard_button:
             logger.info("Init create dashboard button")
-            return data, opened, True, dash.no_update, dash.no_update
+            return data, opened, True, dash.no_update, dash.no_update, dash.no_update
 
         if "type" in ctx.triggered_id:
             triggered_id = ctx.triggered_id["type"]
@@ -1056,13 +1135,43 @@ def register_callbacks_dashboards_management(app):
 
         if triggered_id == "create-dashboard-button":
             logger.info("Create button clicked")
-            # Toggle the modal when the create button is clicked
-            return dash.no_update, True, dash.no_update, dash.no_update, dash.no_update
+
+            # Check if user is anonymous and redirect to profile page
+            current_user = api_call_fetch_user_from_token(user_data["access_token"])
+            if hasattr(current_user, "is_anonymous") and current_user.is_anonymous:
+                logger.info(
+                    "Anonymous user clicked 'Login to Create Dashboards' - redirecting to profile"
+                )
+                return (
+                    dash.no_update,
+                    False,  # Keep modal closed
+                    dash.no_update,
+                    {"display": "none"},  # Hide any warning messages
+                    dash.no_update,
+                    "/profile",  # Redirect to profile page
+                )
+
+            # Toggle the modal when the create button is clicked (for authenticated users)
+            return (
+                dash.no_update,
+                True,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+            )
 
         if triggered_id == "cancel-dashboard-button":
             logger.info("Create button clicked")
             # Toggle the modal when the create button is clicked
-            return dash.no_update, False, dash.no_update, dash.no_update, dash.no_update
+            return (
+                dash.no_update,
+                False,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+                dash.no_update,
+            )
 
         if triggered_id == "create-dashboard-submit":
             logger.info("Submit button clicked")
@@ -1083,6 +1192,7 @@ def register_callbacks_dashboards_management(app):
                             size=20,
                             id="unique-title-warning-badge",
                         ),
+                        dash.no_update,
                     )
 
                 if not title:
@@ -1098,6 +1208,7 @@ def register_callbacks_dashboards_management(app):
                             size=20,
                             id="unique-title-warning-badge",
                         ),
+                        dash.no_update,
                     )
             if not project:
                 logger.warning("Project not selected")
@@ -1112,16 +1223,17 @@ def register_callbacks_dashboards_management(app):
                         size=20,
                         id="unique-title-warning-badge",
                     ),
+                    dash.no_update,
                 )
 
             # Set the title and keep the modal open (or toggle it based on your preference)
             data["title"] = title
             data["project_id"] = project
-            return data, False, False, {"display": "none"}, dash.no_update
+            return data, False, False, {"display": "none"}, dash.no_update, dash.no_update
 
         logger.debug("No relevant clicks")
         # Return default values if no relevant clicks happened
-        return data, opened, False, dash.no_update, dash.no_update
+        return data, opened, False, dash.no_update, dash.no_update, dash.no_update
 
     @app.callback(
         Output({"type": "dashboard-delete-confirmation-modal", "index": MATCH}, "opened"),

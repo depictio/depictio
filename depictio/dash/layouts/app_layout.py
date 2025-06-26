@@ -24,17 +24,23 @@ from depictio.dash.layouts.tokens_management import layout as tokens_management_
 from depictio.dash.layouts.users_management import layout as users_management_layout
 
 
-def return_create_dashboard_button(email):
+def return_create_dashboard_button(email, is_anonymous=False):
+    # For anonymous users, show "Login to Create Dashboards" button that redirects to profile
+    # For authenticated users, show normal "+ New Dashboard" button
+    button_text = "+ New Dashboard" if not is_anonymous else "Login to Create Dashboards"
+    button_color = (
+        "orange" if not is_anonymous else "blue"
+    )  # Use blue to match temporary user button
+
     create_button = dmc.Button(
-        "+ New Dashboard",
+        button_text,
         id={"type": "create-dashboard-button", "index": email},
         n_clicks=0,
-        color="orange",
-        # variant="gradient",
-        # gradient={"from": "black", "to": "grey", "deg": 135},
+        color=button_color,
         style={"fontFamily": "Virgil", "marginRight": "10px"},
         size="xl",
         radius="md",
+        disabled=False,  # Always enabled - behavior changes based on user type
     )
     return create_button
 
@@ -80,7 +86,11 @@ def handle_authenticated_user(pathname, local_data):
         user = api_call_fetch_user_from_token(local_data["access_token"])
         # user = fetch_user_from_token(local_data["access_token"])
         # logger.info(f"User: {user}")
-        create_button = return_create_dashboard_button(user.email)
+
+        # Check if user is anonymous
+        is_anonymous = hasattr(user, "is_anonymous") and user.is_anonymous
+
+        create_button = return_create_dashboard_button(user.email, is_anonymous=is_anonymous)
         header = create_header_with_button("Dashboards", create_button)
         content = create_dashboards_management_layout()
         return content, header, pathname, local_data
@@ -114,7 +124,11 @@ def handle_authenticated_user(pathname, local_data):
         if not user.is_admin:
             # Fallback to dashboards if user is not admin
             content = create_dashboards_management_layout()
-            create_button = return_create_dashboard_button(user.email)
+
+            # Check if user is anonymous
+            is_anonymous = hasattr(user, "is_anonymous") and user.is_anonymous
+
+            create_button = return_create_dashboard_button(user.email, is_anonymous=is_anonymous)
             header = create_header_with_button("Dashboards", create_button)
 
             return content, header, "/dashboards", local_data

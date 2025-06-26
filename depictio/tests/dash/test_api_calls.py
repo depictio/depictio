@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -370,3 +371,34 @@ class TestApiCallUpgradeToTemporaryUser:
         # Assert
         assert result is None
         self.mock_httpx_post.assert_called_once()
+
+    def test_upgrade_to_temporary_user_one_minute_expiry(self):
+        """Test upgrade with one minute expiry."""
+        # Arrange
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "logged_in": True,
+            "email": "temp_user_upgraded@depictio.temp",
+            "is_temporary": True,
+            "access_token": "new_temp_token",
+            "expiration_time": datetime.now() + timedelta(minutes=1),
+        }
+        self.mock_httpx_post.return_value = mock_response
+
+        # Act
+        result = api_call_upgrade_to_temporary_user("anon_token", expiry_hours=0, expiry_minutes=1)
+        # Assert
+        assert result is not None
+        assert result["is_temporary"] is True
+        assert "temp_user_" in result["email"]
+        assert result["expiration_time"] > datetime.now() and result[
+            "expiration_time"
+        ] < datetime.now() + timedelta(minutes=2)
+        # Verify HTTP call was made correctly
+        self.mock_httpx_post.assert_called_once_with(
+            "http://test-api/depictio/api/v1/auth/upgrade_to_temporary_user",
+            params={"expiry_hours": 0, "expiry_minutes": 1},
+            headers={"Authorization": "Bearer anon_token"},
+            timeout=30.0,
+        )

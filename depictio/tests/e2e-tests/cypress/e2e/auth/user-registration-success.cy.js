@@ -1,4 +1,12 @@
 describe('User Registration Test', () => {
+
+  beforeEach(() => {
+    // Skip if in unauthenticated mode
+    if (Cypress.env('UNAUTHENTICATED_MODE')) {
+      cy.skip()
+    }
+  })
+
     it('tests user registration functionality', () => {
       // Navigate to the auth page
       cy.visit('/auth')

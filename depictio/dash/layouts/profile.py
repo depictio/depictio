@@ -132,7 +132,7 @@ layout = dbc.Container(
                                             },
                                         ),
                                         dmc.Button(
-                                            "Enable Interactive Mode",
+                                            "Login as a temporary user",
                                             id="upgrade-to-temporary-button",
                                             variant="filled",
                                             radius=BUTTON_RADIUS,
@@ -229,16 +229,16 @@ layout = dbc.Container(
         # Upgrade confirmation modal
         dmc.Modal(
             id="upgrade-confirmation-modal",
-            title="Enable Interactive Mode",
+            title="Login as a temporary user",
             centered=True,
-            size="md",
+            size="lg",
             children=[
                 dmc.Stack(
                     [
                         dmc.Group(
                             [
                                 DashIconify(icon="mdi:account-arrow-up", width=30, color="blue"),
-                                dmc.Title("Upgrade to Interactive Mode?", order=3, color="blue"),
+                                dmc.Title("Login as a temporary user?", order=3, color="blue"),
                             ],
                             spacing="lg",
                         ),
@@ -276,7 +276,7 @@ layout = dbc.Container(
                                 ),
                                 dmc.Button(
                                     [
-                                        "Enable Interactive Mode ",
+                                        "Login as a temporary user ",
                                         DashIconify(icon="mdi:arrow-right", width=16),
                                     ],
                                     id="upgrade-modal-confirm",
@@ -684,7 +684,11 @@ def register_profile_callbacks(app):
         # Attempt to upgrade
         try:
             access_token = local_data.get("access_token")
-            upgrade_result = api_call_upgrade_to_temporary_user(access_token, expiry_hours=24)
+            upgrade_result = api_call_upgrade_to_temporary_user(
+                access_token,
+                expiry_hours=settings.auth.temporary_user_expiry_hours,
+                expiry_minutes=settings.auth.temporary_user_expiry_minutes,
+            )
 
             if upgrade_result:
                 logger.info("Successfully upgraded to temporary user")
