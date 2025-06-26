@@ -1,8 +1,6 @@
 import collections
 
-import httpx
-
-from depictio.api.v1.configs.config import API_BASE_URL, settings
+from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import api_call_fetch_user_from_token, api_call_get_dashboard
 from depictio.dash.layouts.draggable_scenarios.interactive_component_update import (

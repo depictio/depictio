@@ -582,7 +582,7 @@ jobs:
           retention-days: 7
 
   e2e-tests-unauthenticated:
-    needs: [docker-build, e2e-tests]
+    needs: [docker-build]
     runs-on: ubuntu-22.04
     permissions:
       contents: read
