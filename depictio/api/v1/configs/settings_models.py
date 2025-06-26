@@ -172,9 +172,13 @@ class MongoDBConfig(ServiceConfig):
 
 
 class AuthConfig(BaseSettings):
-    keys_dir: Path = Field(default=Path("./depictio/keys"))
+    keys_dir: Path = Field(
+        default_factory=lambda: Path(__file__).parent.parent.parent.parent / "keys"
+    )
     keys_algorithm: str = Field(default="RS256")
-    cli_config_dir: Path = Field(default=Path("./depictio/.depictio"))
+    cli_config_dir: Path = Field(
+        default_factory=lambda: Path(__file__).parent.parent.parent.parent / ".depictio"
+    )
     internal_api_key_env: Optional[str] = Field(default=None)
     unauthenticated_mode: bool = Field(default=False, description="Enable unauthenticated mode")
     anonymous_user_email: str = Field(
