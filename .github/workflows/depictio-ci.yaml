@@ -598,7 +598,6 @@ jobs:
           cp .env.example .env
           # Enable unauthenticated mode
           sed -i 's/# DEPICTIO_AUTH_UNAUTHENTICATED_MODE=false/DEPICTIO_AUTH_UNAUTHENTICATED_MODE=true/' .env
-          sed -i 's/# DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL=anonymous@example.com/DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL=anonymous@test.com/' .env
           mkdir -p depictioDB minio_data
           chmod 777 depictioDB minio_data
 
@@ -617,7 +616,7 @@ jobs:
 
           # Check if anonymous user was created
           for i in {1..10}; do
-            ANON_USER=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.users.find({email: 'anonymous@test.com'}).toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.email == "anonymous@test.com") | .email')
+            ANON_USER=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.users.find({email: 'anonymous@depict.io'}).toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.email == "anonymous@depict.io") | .email')
             if [ -n "$ANON_USER" ]; then
               echo "✅ Anonymous user found: $ANON_USER"
               break
