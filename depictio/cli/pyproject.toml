@@ -16,7 +16,7 @@ dependencies = [
   "pyyaml",
   "typer",
   "click>=8.0.0,<8.2.0",
-  "typeguard",
+  # "typeguard",
   "tomli",
   "rich",
   "pydantic[email]>=2.0.0",
