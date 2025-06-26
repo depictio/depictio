@@ -282,7 +282,8 @@ def register_callbacks_dashboards_management(app):
             badge_icon = "material-symbols:public" if public else "material-symbols:lock"
 
             badge_owner = dmc.Badge(
-                f"Owner: {dashboard['permissions']['owners'][0]['email']} - {str(dashboard['permissions']['owners'][0]['_id'])}",
+                f"Owner: {dashboard['permissions']['owners'][0]['email']}",
+                # f"Owner: {dashboard['permissions']['owners'][0]['email']} - {str(dashboard['permissions']['owners'][0]['_id'])}",
                 color=color_badge_ownership,
                 leftSection=DashIconify(icon="mdi:account", width=16, color="grey"),
             )
@@ -338,7 +339,8 @@ def register_callbacks_dashboards_management(app):
                             html.Div(
                                 [
                                     dmc.Title(
-                                        f"{dashboard['title']} - {str(dashboard['dashboard_id'])}",
+                                        f"{dashboard['title']}",
+                                        # f"{dashboard['title']} - {str(dashboard['dashboard_id'])}",
                                         order=5,
                                     ),
                                     # dmc.Title(dashboard["title"], order=5),
