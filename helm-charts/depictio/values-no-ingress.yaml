@@ -1,22 +1,22 @@
 # Minikube-specific values overlay (values-minikube.yaml)
 
 # Storage class for Minikube
-# storageClass: "standard"
+storageClass: "standard"
 # Storage class for Rancher Desktop
-storageClass: "local-path"
-persistence:
-  mongo:
-    size: 1Gi
-    accessMode: ReadWriteOnce
-  minio:
-    size: 1Gi
-    accessMode: ReadWriteOnce
-  screenshots:
-    size: 100Mi
-    accessMode: ReadWriteOnce
-  keys:
-    size: 1Mi
-    accessMode: ReadWriteOnce
+# storageClass: "local-path"
+# persistence:
+#   mongo:
+#     size: 1Gi
+#     accessMode: ReadWriteOnce
+#   minio:
+#     size: 1Gi
+#     accessMode: ReadWriteOnce
+#   screenshots:
+#     size: 100Mi
+#     accessMode: ReadWriteOnce
+#   keys:
+#     size: 1Mi
+#     accessMode: ReadWriteOnce
 
 
 

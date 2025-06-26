@@ -60,6 +60,9 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/usr/local/share/playwright-browsers
 RUN /opt/conda/envs/depictio/bin/playwright install --with-deps chromium && \
     chmod -R 755 /usr/local/share/playwright-browsers
 
+# TMP - This is a workaround
+RUN /opt/conda/envs/depictio/bin/pip install psutil
+
 # -----------------------------
 # Copy scripts and setup permissions
 # -----------------------------

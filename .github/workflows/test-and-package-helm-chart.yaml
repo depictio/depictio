@@ -497,9 +497,10 @@ jobs:
           echo "📞 Making screenshot request (timeout: 90s)..."
 
           # Add timeout for screenshot generation (it's slow)
+          # http://localhost:8083/depictio/api/v1/dashboards/screenshot/$DASHBOARD_ID)
           set +e  # Don't exit on curl error
           SCREENSHOT_RESPONSE=$(curl -s --max-time 90 -w "\n%{http_code}" \
-            http://localhost:8083/depictio/api/v1/dashboards/screenshot/$DASHBOARD_ID)
+            http://localhost:8083/depictio/api/v1/utils/screenshot-dash-fixed/$DASHBOARD_ID)
           CURL_EXIT_CODE=$?
           set -e
 

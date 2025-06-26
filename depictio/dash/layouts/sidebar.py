@@ -5,7 +5,7 @@ import httpx
 from dash import ALL, Input, Output, State, dcc, html
 from dash_iconify import DashIconify
 
-from depictio.api.v1.configs.config import API_BASE_URL
+from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import api_call_fetch_user_from_token
 
@@ -111,6 +111,7 @@ def register_sidebar_callbacks(app):
             response = httpx.get(
                 f"{API_BASE_URL}/depictio/api/v1/utils/status",
                 headers={"Authorization": f"Bearer {local_store['access_token']}"},
+                timeout=settings.performance.api_request_timeout,
             )
             if response.status_code != 200:
                 server_status_badge = dmc.Col(

@@ -145,7 +145,10 @@ async def lifespan(app: FastAPI):
         try:
             await run_initialization()
             await mark_initialization_complete()
+            # Clean up screenshots directory (each worker can do this safely)
             print(f"Worker {os.getpid()}: Initialization completed successfully")
+            await clean_screenshots()
+            print(f"Worker {os.getpid()}: Screenshots directory cleaned up")
         except Exception as e:
             print(f"Worker {os.getpid()}: Initialization failed: {e}")
             await cleanup_failed_initialization()
@@ -157,9 +160,6 @@ async def lifespan(app: FastAPI):
         except TimeoutError as e:
             print(f"Worker {os.getpid()}: {e}")
             raise
-
-    # Clean up screenshots directory (each worker can do this safely)
-    await clean_screenshots()
 
     # Only start background task on the worker that did initialization
     background_task = None

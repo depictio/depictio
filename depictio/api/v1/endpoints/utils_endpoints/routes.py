@@ -18,6 +18,9 @@ from depictio.api.v1.db import (
 )
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.api.v1.endpoints.utils_endpoints.core_functions import create_bucket
+from depictio.api.v1.endpoints.utils_endpoints.infrastructure_diagnostics import (
+    run_comprehensive_diagnostics,
+)
 from depictio.api.v1.endpoints.utils_endpoints.process_data_collections import (
     process_initial_data_collections,
 )
@@ -129,10 +132,422 @@ async def process_initial_data_collections_endpoint(
     }
 
 
+async def check_service_readiness(
+    url: str, max_retries: int = None, delay: int = None, timeout: int = None
+) -> bool:
+    """
+    Check if a service is ready to serve requests with retry logic.
+    Similar to the init container pattern used in deployments.
+    Uses environment-specific performance settings.
+    """
+    import httpx
+
+    # Use environment-specific settings or fallback to defaults
+    max_retries = max_retries or settings.performance.service_readiness_retries
+    delay = delay or settings.performance.service_readiness_delay
+    timeout_val = timeout or settings.performance.service_readiness_timeout
+
+    timeout = httpx.Timeout(float(timeout_val))
+
+    logger.info(
+        f"🔍 Service readiness check starting for {url} (retries: {max_retries}, delay: {delay}s, timeout: {timeout_val}s)"
+    )
+
+    for attempt in range(max_retries):
+        try:
+            async with httpx.AsyncClient(timeout=timeout, verify=False) as client:
+                response = await client.get(url)
+                logger.info(
+                    f"🔍 Service readiness check attempt {attempt + 1}: {url} -> {response.status_code}"
+                )
+                if response.status_code < 500:  # Accept any non-server error status
+                    logger.info(f"✅ Service is ready: {url}")
+                    return True
+        except Exception as e:
+            logger.warning(f"⚠️ Service readiness check attempt {attempt + 1} failed: {e}")
+
+        if attempt < max_retries - 1:
+            logger.info(f"⏳ Waiting {delay}s before retry...")
+            await asyncio.sleep(delay)
+
+    logger.error(f"❌ Service readiness check failed after {max_retries} attempts: {url}")
+    return False
+
+
+async def capture_network_activity(page, duration_ms: int = 5000):
+    """
+    Capture network activity for debugging slow page loads.
+    """
+    network_logs = []
+
+    def log_request(request):
+        network_logs.append(
+            {
+                "type": "request",
+                "url": request.url,
+                "method": request.method,
+                "timestamp": datetime.now().isoformat(),
+            }
+        )
+
+    def log_response(response):
+        network_logs.append(
+            {
+                "type": "response",
+                "url": response.url,
+                "status": response.status,
+                "timestamp": datetime.now().isoformat(),
+            }
+        )
+
+    page.on("request", log_request)
+    page.on("response", log_response)
+
+    # Wait and capture network activity
+    await asyncio.sleep(duration_ms / 1000)
+
+    # Log summary
+    requests = [log for log in network_logs if log["type"] == "request"]
+    responses = [log for log in network_logs if log["type"] == "response"]
+
+    logger.info(
+        f"📊 Network activity captured: {len(requests)} requests, {len(responses)} responses"
+    )
+    for req in requests[:5]:  # Log first 5 requests
+        logger.info(f"🌐 Request: {req['method']} {req['url']}")
+
+    return network_logs
+
+
+async def wait_for_network_idle(page, timeout: int = 30000) -> bool:
+    """
+    Wait for network to be idle (no ongoing requests) to ensure content is fully loaded.
+    Based on the ERR_CONNECTION_TIMED_OUT error in logs.
+    """
+    try:
+        logger.info("⏳ Waiting for network to be idle...")
+        await page.wait_for_load_state("networkidle", timeout=timeout)
+        logger.info("✅ Network is idle - all requests completed")
+        return True
+    except Exception as e:
+        logger.warning(f"⚠️ Network idle wait failed: {e}")
+        return False
+
+
+async def check_dashboard_health(page, url: str) -> tuple[bool, str]:
+    """
+    Check if dashboard is actually healthy and rendering properly.
+    Based on log analysis showing dashboard content not loading.
+    """
+    try:
+        # Check page title
+        page_title = await page.title()
+        current_url = page.url
+
+        logger.info(f"🔍 Dashboard health check - Title: '{page_title}', URL: {current_url}")
+
+        # Check for error indicators
+        error_indicators = [
+            ("title", "error", page_title.lower()),
+            ("title", "404", page_title.lower()),
+            ("title", "not found", page_title.lower()),
+            # ("url", "auth", current_url.lower()),
+            # ("url", "login", current_url.lower()),
+            # ("url", "error", current_url.lower()),
+        ]
+
+        for check_type, error_text, content in error_indicators:
+            if error_text in content:
+                logger.error(
+                    f"❌ Dashboard health check failed: {error_text} found in {check_type}"
+                )
+                return False, f"error_detected_{error_text}_in_{check_type}"
+
+        # Check for loading spinners that might be stuck
+        stuck_loading_selectors = [
+            ".loading-spinner:not([style*='display: none'])",
+            ".dash-loading:not([style*='display: none'])",
+            "[data-dash-loading='true']",
+        ]
+
+        for selector in stuck_loading_selectors:
+            try:
+                element = await page.query_selector(selector)
+                if element and await element.is_visible():
+                    logger.warning(f"⚠️ Found stuck loading indicator: {selector}")
+                    return (
+                        False,
+                        f"stuck_loading_{selector.replace('[', '').replace(']', '').replace(':', '_')}",
+                    )
+            except Exception:
+                continue
+
+        # Check for JavaScript errors in console
+        console_errors = []
+
+        def log_js_error(msg):
+            if msg.type in ["error", "warning"]:
+                console_errors.append(f"{msg.type}: {msg.text}")
+
+        page.on("console", log_js_error)
+        await asyncio.sleep(2)  # Give time for console errors to appear
+        page.remove_listener("console", log_js_error)
+
+        if console_errors:
+            logger.warning(
+                f"⚠️ JavaScript errors detected: {console_errors[:3]}"
+            )  # Log first 3 errors
+
+        logger.info("✅ Dashboard health check passed")
+        return True, "healthy"
+
+    except Exception as e:
+        logger.error(f"❌ Dashboard health check error: {e}")
+        return False, f"health_check_failed_{str(e)[:50]}"
+
+
+async def navigate_for_screenshot(page, url: str) -> tuple[bool, str]:
+    """
+    Navigate specifically optimized for screenshot generation.
+    Uses environment-specific performance settings for production optimization.
+
+    Strategy: Skip complex wait strategies and use a content-based approach:
+    1. Navigate with minimal wait
+    2. Wait for specific DOM elements that indicate page is ready for screenshot
+    3. Much faster than waiting for full resource loading
+    """
+    logger.info(f"📸 Using screenshot-optimized navigation for: {url}")
+
+    # Use environment-specific timeouts
+    nav_timeout = settings.performance.screenshot_navigation_timeout
+    content_timeout = settings.performance.screenshot_content_wait
+    stabilization_wait = (
+        settings.performance.screenshot_stabilization_wait / 1000
+    )  # Convert ms to seconds
+
+    logger.info(
+        f"🎯 Performance settings - Nav: {nav_timeout}ms, Content: {content_timeout}ms, Stabilization: {stabilization_wait}s"
+    )
+
+    try:
+        # Phase 1: Quick navigation without waiting for full load
+        logger.info("⚡ Phase 1: Quick navigation with 'commit' wait strategy...")
+        start_time = datetime.now()
+
+        await page.goto(
+            url, timeout=nav_timeout, wait_until="commit"
+        )  # Just wait for navigation to commit
+        navigation_time = (datetime.now() - start_time).total_seconds()
+        logger.info(f"⏱️ Navigation committed in {navigation_time:.2f} seconds")
+
+        # Phase 2: Wait for essential content to appear (much faster than full page load)
+        logger.info("⏳ Phase 2: Waiting for essential dashboard content...")
+
+        # Wait for basic page structure with environment-specific timeout
+        await page.wait_for_selector("body", timeout=content_timeout)
+        logger.info("✅ Page body loaded")
+
+        # For dashboard pages, wait for main content with better error handling
+        if "/dashboard/" in url:
+            selectors_to_try = [
+                ("div#page-content", "Main dashboard content"),
+                ("div[data-dash-app]", "Dash app container"),
+                ("div#app", "App container"),
+                (".dash-renderer", "Dash renderer"),
+                ("main", "Main content"),
+                ("[data-testid='dashboard']", "Dashboard test ID"),
+            ]
+
+            dashboard_ready = False
+            for selector, description in selectors_to_try:
+                try:
+                    # Wait for selector to be present and visible
+                    await page.wait_for_selector(selector, state="visible", timeout=content_timeout)
+                    logger.info(f"✅ Found dashboard content: {description} ({selector})")
+                    dashboard_ready = True
+                    break
+                except Exception as e:
+                    logger.info(f"⏳ {description} ({selector}) not found: {str(e)[:100]}")
+                    continue
+
+            if not dashboard_ready:
+                logger.warning("⚠️ No dashboard content found, checking for loading states...")
+
+                # Check if we're stuck in loading state
+                loading_selectors = [
+                    ".loading-spinner",
+                    ".dash-loading",
+                    "[data-dash-loading]",
+                    ".spinner",
+                ]
+
+                for loading_selector in loading_selectors:
+                    try:
+                        loading_element = await page.query_selector(loading_selector)
+                        if loading_element:
+                            logger.warning(
+                                f"⏳ Found loading indicator: {loading_selector}, waiting longer..."
+                            )
+                            await asyncio.sleep(
+                                stabilization_wait * 2
+                            )  # Wait longer for loading to complete
+                            break
+                    except Exception:
+                        continue
+                else:
+                    # Check page source for debugging
+                    page_title = await page.title()
+                    current_url = page.url
+                    logger.warning(
+                        f"⚠️ Dashboard not loading properly. Title: '{page_title}', URL: {current_url}"
+                    )
+
+                    # Check if we're redirected to auth or error page
+                    if "auth" in current_url.lower() or "login" in current_url.lower():
+                        logger.error("❌ Redirected to auth page - authentication failed")
+                        return False, "auth_redirect_detected"
+
+                    # Fallback wait with longer duration for slow loading
+                    logger.info("⏳ Using extended fallback wait for slow dashboard loading...")
+                    await asyncio.sleep(stabilization_wait * 3)
+        else:
+            # For root pages, shorter wait
+            await asyncio.sleep(
+                stabilization_wait / 2
+            )  # Half the stabilization wait for root pages
+
+        # Phase 3: Wait for network to be idle (addresses ERR_CONNECTION_TIMED_OUT)
+        logger.info("⏳ Phase 3: Waiting for network requests to complete...")
+        network_idle = await wait_for_network_idle(page, content_timeout)
+
+        if not network_idle:
+            logger.warning("⚠️ Network not idle, but continuing with screenshot...")
+
+        # Phase 4: Health check for dashboard (addresses content loading issues from logs)
+        logger.info("⏳ Phase 4: Performing dashboard health check...")
+        dashboard_healthy, health_status = await check_dashboard_health(page, url)
+
+        if not dashboard_healthy:
+            logger.error(f"❌ Dashboard health check failed: {health_status}")
+            return False, f"health_check_failed_{health_status}"
+
+        # Phase 5: Brief final wait for dynamic content (environment-specific)
+        logger.info("⏳ Phase 5: Final wait for dynamic content...")
+        await asyncio.sleep(stabilization_wait)
+
+        total_time = (datetime.now() - start_time).total_seconds()
+        success_method = f"screenshot_optimized_total_{total_time:.1f}s"
+        logger.info(f"✅ Screenshot-optimized navigation completed in {total_time:.2f}s")
+
+        return True, success_method
+
+    except Exception as e:
+        logger.error(f"❌ Screenshot-optimized navigation failed: {e}")
+        return False, f"screenshot_navigation_failed_{str(e)[:50]}"
+
+
+async def navigate_with_hybrid_strategy(page, url: str, max_retries: int = 2) -> tuple[bool, str]:
+    """
+    Navigate to URL with hybrid approach: optimized strategies first, proven fallbacks second.
+    Returns (success, method_used)
+    Uses environment-specific performance settings for production optimization.
+
+    Strategy:
+    1. Try optimized page-specific strategies (fast)
+    2. If all fail, fall back to proven working methods (slower but reliable)
+    3. Capture network activity to debug slow loads
+    """
+    # Use environment-specific timeouts
+    nav_timeout = settings.performance.browser_navigation_timeout
+    page_load_timeout = settings.performance.browser_page_load_timeout
+
+    # Phase 1: Optimized strategies based on URL pattern (environment-aware)
+    if "/dashboard/" in url:
+        optimized_strategies = [
+            ("domcontentloaded", nav_timeout),  # Fast for dashboard pages
+            ("load", nav_timeout + 15000),  # Quick fallback with buffer
+        ]
+        page_type = "dashboard"
+    else:
+        optimized_strategies = [
+            ("load", nav_timeout),  # Primary for root pages
+            ("domcontentloaded", nav_timeout - 15000),  # Quick fallback
+        ]
+        page_type = "root"
+
+    # Phase 2: Proven fallback strategies (environment-aware for production)
+    proven_strategies = [
+        ("load", page_load_timeout),  # Use environment-specific page load timeout
+        ("domcontentloaded", page_load_timeout - 30000),  # Shorter fallback
+    ]
+
+    logger.info(f"🎯 Using hybrid navigation for {page_type} page: {url}")
+
+    # Phase 1: Try optimized strategies
+    logger.info("⚡ Phase 1: Trying optimized strategies...")
+    for retry in range(max_retries):
+        for i, (wait_until, timeout) in enumerate(optimized_strategies):
+            try:
+                logger.info(
+                    f"🌐 Optimized attempt {retry + 1}, strategy {i + 1}: {wait_until} (timeout: {timeout}ms)"
+                )
+
+                # Capture timing information
+                start_time = datetime.now()
+                await page.goto(url, timeout=timeout, wait_until=wait_until)
+                navigation_time = (datetime.now() - start_time).total_seconds()
+
+                logger.info(
+                    f"⏱️ Navigation took {navigation_time:.2f} seconds to reach {wait_until} state"
+                )
+                success_method = f"{page_type}_optimized_retry_{retry + 1}_strategy_{wait_until}_timeout_{timeout}ms"
+                logger.info(f"✅ Successfully navigated with optimized strategy: {success_method}")
+
+                # Capture post-navigation network activity to debug slow loads
+                logger.info("🔍 Capturing post-navigation network activity...")
+                await capture_network_activity(page, duration_ms=10000)
+
+                return True, success_method
+            except Exception as e:
+                logger.warning(f"⚠️ Optimized navigation failed with {wait_until}: {e}")
+                if "timeout" in str(e).lower():
+                    logger.info("⏳ Timeout detected, trying next optimized strategy...")
+                    continue
+                else:
+                    logger.warning(f"❌ Non-timeout error in optimized strategy: {e}")
+                    break
+
+        if retry < max_retries - 1:
+            logger.info(f"🔄 Retrying optimized strategies {retry + 2}/{max_retries}...")
+            await asyncio.sleep(2)
+
+    # Phase 2: Fall back to proven strategies
+    logger.warning("🛡️ Phase 2: Optimized strategies failed, trying proven fallback strategies...")
+    for i, (wait_until, timeout) in enumerate(proven_strategies):
+        try:
+            logger.info(f"🌐 Proven fallback strategy {i + 1}: {wait_until} (timeout: {timeout}ms)")
+            await page.goto(url, timeout=timeout, wait_until=wait_until)
+            success_method = (
+                f"{page_type}_proven_fallback_strategy_{wait_until}_timeout_{timeout}ms"
+            )
+            logger.info(f"✅ Successfully navigated with proven fallback: {success_method}")
+
+            # Capture post-navigation network activity to debug slow loads
+            logger.info("🔍 Capturing post-navigation network activity...")
+            await capture_network_activity(page, duration_ms=10000)
+            return True, success_method
+        except Exception as e:
+            logger.warning(f"⚠️ Proven strategy failed with {wait_until}: {e}")
+            continue
+
+    logger.error(f"❌ All navigation strategies (optimized + proven) failed for {url}")
+    return False, "all_strategies_failed"
+
+
 @utils_endpoint_router.get("/screenshot-dash-fixed/{dashboard_id}")
 async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
     """
-    Fixed screenshot endpoint with proper authentication handling
+    Fixed screenshot endpoint with proper authentication handling, retries, and service readiness checks
     """
     from playwright.async_api import async_playwright
 
@@ -146,12 +561,30 @@ async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
         if not current_user:
             raise HTTPException(status_code=404, detail="Admin user not found")
 
+        logger.info(f"🔑 Current user: {current_user.email} ; {current_user.id}")
+
+        # Fetch all  tokens for the current user
+        logger.info("🔑 Fetching all tokens for the current user...")
+        tokens = await TokenBeanie.find({"user_id": ObjectId(current_user.id)}).to_list()
+        logger.info(f"🔑 Found {len(tokens)} tokens for user {current_user.email}")
+        for token in tokens:
+            logger.info(f"🔑 Token: {token.access_token} ; Expire: {token.expire_datetime}")
+
+        # Show current datetime for debugging
+        logger.info(f"🔑 Current datetime: {datetime.now()}")
+
+        logger.info(
+            f"🔑 Current datetime strftime : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        )
+
         token = await TokenBeanie.find_one(
             {
                 "user_id": ObjectId(current_user.id),
                 "expire_datetime": {"$gt": datetime.now()},
             }
         )
+
+        logger.info(f"🔑 Selected token: {token.access_token if token else 'None'}")
         if not token:
             raise HTTPException(status_code=404, detail="Valid token not found")
 
@@ -190,12 +623,36 @@ async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
             )
             page = await context.new_page()
 
-            working_base_url = "http://depictio-frontend:5080"
+            # Set up console and error logging
+            def log_console(msg):
+                logger.info(f"🖥️ Browser Console [{msg.type}]: {msg.text}")
+
+            def log_page_error(error):
+                logger.error(f"❌ Browser Error: {error}")
+
+            page.on("console", log_console)
+            page.on("pageerror", log_page_error)
+
+            working_base_url = settings.dash.internal_url
+            # working_base_url = "http://depictio-frontend:5080"
             dashboard_url = f"{working_base_url}/dashboard/{dashboard_id}"
 
+            # Step 0: Check service readiness before attempting screenshot (environment-aware)
+            logger.info("🔍 Step 0: Checking service readiness...")
+            if not await check_service_readiness(working_base_url):
+                raise HTTPException(
+                    status_code=503, detail=f"Frontend service not ready: {working_base_url}"
+                )
+
             logger.info("🚀 Step 1: Navigate to root page first")
-            # First, go to the root page to establish session
-            await page.goto(working_base_url, timeout=30000, wait_until="domcontentloaded")
+            # First, go to the root page to establish session with screenshot-optimized navigation
+            root_success, root_method = await navigate_for_screenshot(page, working_base_url)
+            if not root_success:
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"Failed to navigate to frontend service: {working_base_url}",
+                )
+            logger.info(f"📊 Root navigation successful with: {root_method}")
             await asyncio.sleep(2)
 
             logger.info("🔑 Step 2: Set authentication in localStorage")
@@ -208,8 +665,26 @@ async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
             """)
 
             logger.info("🔄 Step 3: Navigate to dashboard with auth")
-            # Now navigate to the dashboard
-            await page.goto(dashboard_url, timeout=30000, wait_until="domcontentloaded")
+            # Now navigate to the dashboard with screenshot-optimized navigation
+            dashboard_success, dashboard_method = await navigate_for_screenshot(page, dashboard_url)
+            if not dashboard_success:
+                logger.warning("⚠️ Failed to navigate to dashboard, attempting fallback methods...")
+                # Fallback: try basic navigation without retries
+                try:
+                    await page.goto(
+                        dashboard_url, timeout=120000, wait_until="domcontentloaded"
+                    )  # Longer timeout
+                    dashboard_method = "fallback_basic_navigation_120s_timeout"
+                    logger.info(
+                        f"📊 Dashboard navigation successful with fallback: {dashboard_method}"
+                    )
+                except Exception as e:
+                    logger.error(f"❌ Dashboard navigation failed completely: {e}")
+                    raise HTTPException(
+                        status_code=503, detail=f"Failed to navigate to dashboard: {dashboard_url}"
+                    )
+            else:
+                logger.info(f"📊 Dashboard navigation successful with: {dashboard_method}")
             await asyncio.sleep(3)
 
             # Check if we're still on the auth page
@@ -239,8 +714,15 @@ async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
                 await page.reload(wait_until="domcontentloaded")
                 await asyncio.sleep(3)
 
-                # Try navigating to dashboard again
-                await page.goto(dashboard_url, timeout=30000, wait_until="domcontentloaded")
+                # Try navigating to dashboard again with hybrid strategy
+                retry_success, retry_method = await navigate_with_hybrid_strategy(
+                    page, dashboard_url, max_retries=1
+                )
+                if not retry_success:
+                    logger.warning("⚠️ Retry navigation to dashboard failed")
+                else:
+                    logger.info(f"📊 Retry navigation successful with: {retry_method}")
+                    dashboard_method = f"auth_retry_{retry_method}"
                 await asyncio.sleep(3)
 
                 current_url = page.url
@@ -259,17 +741,38 @@ async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
                     """)
                     await asyncio.sleep(5)
 
-            # Wait for dashboard content to load
+            # Wait for dashboard content to load with environment-specific timeouts
             logger.info("⏳ Waiting for dashboard content...")
+            element_timeout = settings.performance.browser_element_timeout
+            stabilization_wait = (
+                settings.performance.screenshot_stabilization_wait / 1000
+            )  # Convert ms to seconds
+
             try:
-                # Wait for dashboard-specific content
-                await page.wait_for_selector("div#page-content", timeout=15000)
+                # Wait for dashboard-specific content with environment-specific timeout
+                await page.wait_for_selector("div#page-content", timeout=element_timeout)
                 logger.info("✅ Found page-content div")
             except Exception:
-                logger.warning("⚠️ page-content div not found, continuing...")
+                logger.warning("⚠️ page-content div not found, trying alternative selectors...")
+                # Try waiting for other common dashboard elements
+                alternative_selectors = ["div#app", "div[data-dash-app]", "body"]
+                for selector in alternative_selectors:
+                    try:
+                        await page.wait_for_selector(
+                            selector, timeout=element_timeout // 3
+                        )  # Shorter timeout for alternatives
+                        logger.info(f"✅ Found alternative selector: {selector}")
+                        break
+                    except Exception:
+                        continue
+                else:
+                    logger.warning("⚠️ No dashboard elements found, continuing anyway...")
 
-            # Give extra time for any dynamic content
-            await asyncio.sleep(5)
+            # Give extra time for any dynamic content to load (environment-specific)
+            logger.info("⏳ Waiting for dynamic content to stabilize...")
+            await asyncio.sleep(
+                stabilization_wait * 2
+            )  # Double stabilization wait for final content
 
             # Remove debug elements
             await page.evaluate("""
@@ -279,24 +782,47 @@ async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
                 }
             """)
 
-            # Take screenshot
+            # Take screenshot with environment-specific timeout
             logger.info("📸 Taking screenshot...")
             final_url = page.url
 
+            # Use dedicated screenshot capture timeout (production needs longer due to rendering complexity)
+            screenshot_capture_timeout = settings.performance.screenshot_capture_timeout
+            logger.info(
+                f"🎯 Screenshot capture timeout set to {screenshot_capture_timeout}ms for production robustness"
+            )
+
             try:
-                # Try to screenshot the main content area
+                # Try to screenshot the main content area with timeout
                 element = await page.query_selector("div#page-content")
                 if element and await element.is_visible():
-                    await element.screenshot(path=output_file, type="png")
+                    await element.screenshot(
+                        path=output_file, type="png", timeout=screenshot_capture_timeout
+                    )
                     logger.info("📸 Screenshot of page-content taken")
                 else:
-                    # Fallback to full page
-                    await page.screenshot(path=output_file, full_page=True, type="png")
+                    # Fallback to full page with timeout
+                    await page.screenshot(
+                        path=output_file,
+                        full_page=True,
+                        type="png",
+                        timeout=screenshot_capture_timeout,
+                    )
                     logger.info("📸 Full page screenshot taken (fallback)")
             except Exception as e:
                 logger.warning(f"⚠️ Screenshot error: {e}")
-                await page.screenshot(path=output_file, full_page=True, type="png")
-                logger.info("📸 Basic screenshot taken")
+                try:
+                    # Final fallback with even longer timeout
+                    await page.screenshot(
+                        path=output_file,
+                        full_page=True,
+                        type="png",
+                        timeout=screenshot_capture_timeout * 2,
+                    )
+                    logger.info("📸 Basic screenshot taken with extended timeout")
+                except Exception as final_e:
+                    logger.error(f"❌ Final screenshot attempt failed: {final_e}")
+                    raise final_e
 
             await browser.close()
 
@@ -306,16 +832,66 @@ async def screenshot_dash_fixed(dashboard_id: str = "6824cb3b89d2b72169309737"):
 
             return {
                 "success": True,
-                "message": "Screenshot taken with fixed authentication",
+                "message": "Screenshot taken with improved resilience and retry logic",
                 "dashboard_url": dashboard_url,
                 "final_url": final_url,
                 "redirected_to_auth": "/auth" in final_url,
                 "screenshot_path": output_file,
                 "screenshot_size": Path(output_file).stat().st_size,
                 "auth_method": "localStorage with fallbacks",
+                "navigation_methods": {
+                    "root_navigation": root_method,
+                    "dashboard_navigation": dashboard_method,
+                },
                 "timestamp": datetime.now().isoformat(),
             }
 
     except Exception as e:
         logger.error(f"❌ Screenshot failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Screenshot failed: {str(e)}")
+
+
+@utils_endpoint_router.get("/infrastructure-diagnostics")
+async def infrastructure_diagnostics(current_user=Depends(get_current_user)):
+    """
+    Run comprehensive infrastructure diagnostics to identify performance bottlenecks.
+
+    This endpoint helps identify the root cause of screenshot performance issues by testing:
+    - DNS resolution performance
+    - Network latency between services
+    - Browser performance in container environment
+    - System resource constraints
+    - Storage I/O performance
+
+    Use this to compare performance between working (laptop/minikube) and problematic
+    (production K8s) environments.
+    """
+    if not current_user:
+        logger.error("Current user not found.")
+        raise HTTPException(status_code=401, detail="Current user not found.")
+
+    # Only allow admin users to run diagnostics
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required for diagnostics.")
+
+    try:
+        logger.info("🔍 Starting infrastructure diagnostics requested by admin...")
+        diagnostics = await run_comprehensive_diagnostics()
+
+        # Log summary for immediate visibility
+        summary = diagnostics.get("summary", {})
+        if summary.get("issues_found"):
+            logger.warning(f"⚠️ Infrastructure issues detected: {summary['issues_found']}")
+        else:
+            logger.info("✅ No infrastructure issues detected")
+
+        return {
+            "success": True,
+            "message": "Infrastructure diagnostics completed",
+            "diagnostics": diagnostics,
+            "timestamp": datetime.now().isoformat(),
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Infrastructure diagnostics failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Diagnostics failed: {str(e)}")

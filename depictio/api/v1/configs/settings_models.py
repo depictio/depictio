@@ -1,6 +1,4 @@
 import os
-import secrets
-import time
 from pathlib import Path
 from typing import Optional
 
@@ -188,7 +186,6 @@ class AuthConfig(BaseSettings):
 
     def __init__(self, **data):
         super().__init__(**data)
-        self._cached_key: Optional[str] = None  # Internal cache, set after init
 
         # Manually read the environment variable if not set
         if self.internal_api_key_env is None:
@@ -200,115 +197,20 @@ class AuthConfig(BaseSettings):
     @property
     def internal_api_key(self) -> str:
         """
-        Automatically generate and manage internal API key for container communication.
-
-        The key is shared between backend and frontend containers via the shared volume.
-        Backend generates the key if it doesn't exist, frontend reads the existing key.
-
-        Priority:
-        1. Environment variable DEPICTIO_AUTH_INTERNAL_API_KEY (if set)
-        2. Cached key (avoid repeated file I/O)
-        3. Existing key file in shared volume
-        4. Generate new key (backend only) and save to shared volume
-        5. Fallback to default (should not happen in normal operation)
+        Get the internal API key using the existing key_utils_base functions.
+        This maintains consistency and avoids code duplication.
         """
-        context = os.getenv("DEPICTIO_CONTEXT", "server")
-        print(f"[DEBUG] AuthConfig.internal_api_key called from context: {context}")
-
-        # 1. Use environment variable if provided (highest priority)
+        # First check if environment variable is set
         if self.internal_api_key_env:
-            print("[DEBUG] Using internal API key from environment variable")
             return self.internal_api_key_env
 
-        # 2. Return cached key if available
-        if self._cached_key:
-            print("[DEBUG] Using cached internal API key")
-            return self._cached_key
+        # Otherwise use the key utils to load/generate
+        from depictio.api.v1.key_utils_base import _load_or_generate_api_internal_key
 
-        # 3. Check for existing key file in shared volume
-        key_file = self.keys_dir / "internal_api_key.txt"
-        print(f"[DEBUG] Checking for key file at: {key_file}")
-
-        if key_file.exists():
-            print("[DEBUG] Key file exists, attempting to read...")
-            try:
-                with open(key_file, "r") as f:
-                    existing_key = f.read().strip()
-                if existing_key:
-                    print(f"[DEBUG] Successfully read key from file (length: {len(existing_key)})")
-                    print(f"[DEBUG - WARNING TO REMOVE] Internal API key found: {existing_key}")
-                    # Cache the key for future calls
-                    self._cached_key = existing_key
-                    return existing_key
-                else:
-                    print("[DEBUG] Key file is empty")
-            except (IOError, OSError) as e:
-                print(f"[DEBUG] Warning: Could not read internal API key file: {e}")
-        else:
-            print("[DEBUG] Key file does not exist")
-
-        # 4. Generate new key (should only happen on backend/first startup)
-        print(f"[DEBUG] Context is {context}, checking if should generate key...")
-
-        if context in ["server", "API"]:  # Backend should generate the key
-            print("[DEBUG] Backend context detected, attempting to generate new key...")
-            try:
-                # Ensure keys directory exists
-                print(f"[DEBUG] Creating keys directory at: {self.keys_dir}")
-                self.keys_dir.mkdir(parents=True, exist_ok=True)
-
-                # Generate a secure random key
-                new_key = secrets.token_urlsafe(32)  # 256-bit key, URL-safe
-                print(f"[DEBUG] Generated new key (length: {len(new_key)})")
-
-                # Save to shared file for frontend to read
-                print(f"[DEBUG] Saving key to file: {key_file}")
-                with open(key_file, "w") as f:
-                    f.write(new_key)
-
-                # Set appropriate permissions (readable by container user)
-                os.chmod(key_file, 0o644)
-                print("[DEBUG] Set file permissions to 644")
-
-                print(f"[DEBUG] Generated new internal API key and saved to {key_file}")
-
-                # Cache the key for future calls
-                self._cached_key = new_key
-                return new_key
-
-            except (IOError, OSError) as e:
-                print(f"[DEBUG] Error: Could not generate/save internal API key: {e}")
-                print("[DEBUG] Falling back to default key - this may cause authentication issues")
-
-        else:  # Frontend should wait for backend to generate key
-            print(f"Warning: No internal API key found in {key_file}")
-            print("Frontend waiting for backend to generate key...")
-
-            # Retry mechanism: wait for backend to generate key
-            max_retries = 10
-            retry_delay = 2  # seconds
-
-            for attempt in range(max_retries):
-                time.sleep(retry_delay)
-
-                if key_file.exists():
-                    try:
-                        with open(key_file, "r") as f:
-                            existing_key = f.read().strip()
-                        if existing_key:
-                            print(f"Found internal API key after {attempt + 1} attempts")
-                            # Cache the key for future calls
-                            self._cached_key = existing_key
-                            return existing_key
-                    except (IOError, OSError):
-                        pass  # Continue retrying
-
-                print(f"Attempt {attempt + 1}/{max_retries}: Still waiting for internal API key...")
-
-            print("Warning: Max retries exceeded, backend may not have started yet")
-
-        # 4. Fallback to default (should not happen in normal operation)
-        return "default-internal-key-fallback"
+        return _load_or_generate_api_internal_key(
+            keys_dir=self.keys_dir,
+            algorithm=self.keys_algorithm,
+        )
 
 
 class LoggingConfig(BaseSettings):
@@ -323,6 +225,38 @@ class JBrowseConfig(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_JBROWSE_")
 
 
+class PerformanceConfig(BaseSettings):
+    """Performance and timeout settings that can be tuned per environment."""
+
+    # HTTP client timeouts (in seconds)
+    http_client_timeout: int = Field(default=30)
+    api_request_timeout: int = Field(default=60)
+
+    # Playwright/browser timeouts (in milliseconds)
+    browser_navigation_timeout: int = Field(default=60000)  # 60s default
+    browser_page_load_timeout: int = Field(default=90000)  # 90s default
+    browser_element_timeout: int = Field(default=30000)  # 30s default
+
+    # Screenshot-specific timeouts (production typically needs longer)
+    screenshot_navigation_timeout: int = Field(default=45000)  # 45s for navigation
+    screenshot_content_wait: int = Field(default=15000)  # 15s for content
+    screenshot_stabilization_wait: int = Field(default=5000)  # 5s for stability
+    screenshot_capture_timeout: int = Field(default=90000)  # 90s for actual screenshot capture
+    screenshot_api_timeout: int = Field(default=300)  # 5 minutes for complete screenshot API call
+
+    # Service readiness check settings
+    service_readiness_retries: int = Field(default=5)
+    service_readiness_delay: int = Field(default=3)
+    service_readiness_timeout: int = Field(default=10)
+
+    # DNS and network performance settings
+    dns_cache_ttl: int = Field(default=300)  # 5 minutes
+    connection_pool_size: int = Field(default=10)
+    max_keepalive_connections: int = Field(default=5)
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_PERFORMANCE_")
+
+
 class Settings(BaseSettings):
     context: str = Field(default="server")
     fastapi: FastAPIConfig = Field(default_factory=FastAPIConfig)
@@ -332,5 +266,6 @@ class Settings(BaseSettings):
     auth: AuthConfig = Field(default_factory=AuthConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     jbrowse: JBrowseConfig = Field(default_factory=JBrowseConfig)
+    performance: PerformanceConfig = Field(default_factory=PerformanceConfig)
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_")

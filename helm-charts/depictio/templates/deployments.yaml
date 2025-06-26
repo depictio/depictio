@@ -258,9 +258,74 @@ spec:
         type: app
     spec:
       initContainers:
+        # STEP 1: Wait for backend service to be available (network check)
         - name: wait-for-backend
           image: busybox:1.35
-          command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-depictio-backend {{ .Values.backend.service.httpPort }}; do echo "Waiting for backend..."; sleep 2; done']
+          command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-depictio-backend {{ .Values.backend.service.httpPort }}; do echo "Waiting for backend service..."; sleep 2; done']
+
+        # STEP 2: Wait for backend to fully start and generate keys
+        - name: wait-for-backend-startup
+          image: curlimages/curl:8.5.0
+          command:
+            - 'sh'
+            - '-c'
+            - |
+              echo "Waiting for backend to complete initialization..."
+              timeout=300
+              elapsed=0
+
+              while [ $elapsed -lt $timeout ]; do
+                # Try to get a response from backend (any response means it's started)
+                if curl -s -m 10 http://{{ .Release.Name }}-depictio-backend:{{ .Values.backend.service.httpPort }}/ >/dev/null 2>&1 || \
+                  curl -s -m 10 http://{{ .Release.Name }}-depictio-backend:{{ .Values.backend.service.httpPort }}/health >/dev/null 2>&1 || \
+                  curl -s -m 10 http://{{ .Release.Name }}-depictio-backend:{{ .Values.backend.service.httpPort }}/docs >/dev/null 2>&1; then
+                  echo "✅ Backend is responding to HTTP requests"
+                  # Additional wait to ensure key generation completes
+                  echo "⏳ Allowing time for key generation..."
+                  sleep 10
+                  break
+                fi
+                echo "⏳ Backend still starting up... (${elapsed}s/${timeout}s)"
+                sleep 5
+                elapsed=$((elapsed + 5))
+              done
+
+              if [ $elapsed -ge $timeout ]; then
+                echo "❌ Timeout waiting for backend to respond"
+                exit 1
+              fi
+
+        # STEP 3: Verify key files are actually available
+        - name: wait-for-api-key
+          image: busybox:1.35
+          command:
+            - 'sh'
+            - '-c'
+            - |
+              echo "Verifying API key files are available..."
+              timeout=120  # Shorter timeout since backend should be ready
+              elapsed=0
+              ls -la /app/depictio/keys/ || echo "Keys directory not accessible"
+
+              while [ $elapsed -lt $timeout ]; do
+                if [ -f /app/depictio/keys/api_internal_key.pem ]; then
+                  echo "✅ API internal key file found"
+                  ls -la /app/depictio/keys/
+                  exit 0
+                fi
+                echo "⏳ Waiting for API key file... (${elapsed}s/${timeout}s)"
+                sleep 3
+                elapsed=$((elapsed + 3))
+              done
+
+              echo "❌ API key file not found after ${timeout} seconds"
+              echo "Contents of keys directory:"
+              ls -la /app/depictio/keys/ || echo "Keys directory not accessible"
+              exit 1
+          volumeMounts:
+          - name: depictio-keys
+            mountPath: /app/depictio/keys
+
       containers:
         - name: depictio-frontend
           image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"

@@ -339,7 +339,10 @@ class TestAuthConfig:
             assert config.keys_dir == Path("depictio/keys")
             assert config.keys_algorithm == "RS256"
             assert config.cli_config_dir == Path("depictio/.depictio")
-            assert config.internal_api_key_env is None
+            # internal_api_key is now computed and always returns a value (either from env or generated)
+            assert config.internal_api_key is not None
+            assert isinstance(config.internal_api_key, str)
+            assert len(config.internal_api_key) > 0
 
     def test_custom_values(self):
         """Test Auth with custom values."""
@@ -370,6 +373,8 @@ class TestAuthConfig:
                 assert config.keys_algorithm == "RS256"
                 assert config.cli_config_dir == Path(custom_config_dir)
                 assert config.internal_api_key_env == "custom_api_key"
+                # Test that the computed property returns the custom value
+                assert config.internal_api_key == "custom_api_key"
         finally:
             # Clean up the temporary directory
             import shutil
@@ -401,6 +406,8 @@ class TestAuthConfig:
                 assert config.keys_algorithm == "ES256"
                 assert config.cli_config_dir == Path(env_config_dir)
                 assert config.internal_api_key_env == "env_api_key"
+                # Test that the computed property returns the environment value
+                assert config.internal_api_key == "env_api_key"
         finally:
             # Clean up
             import shutil

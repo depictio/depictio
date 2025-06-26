@@ -1,12 +1,15 @@
 from datetime import datetime
 
 import dash
-import httpx
 from dash import ALL, Input, Output, State
 
-from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
-from depictio.dash.api_calls import api_call_fetch_user_from_token
+from depictio.dash.api_calls import (
+    api_call_fetch_user_from_token,
+    api_call_get_dashboard,
+    api_call_save_dashboard,
+    api_call_screenshot_dashboard,
+)
 
 
 def register_callbacks_save(app):
@@ -89,19 +92,10 @@ def register_callbacks_save(app):
         # Extract dashboard ID from pathname
         dashboard_id = pathname.split("/")[-1]
 
-        # Fetch dashboard data
-        try:
-            dashboard_data_response = httpx.get(
-                f"{API_BASE_URL}/depictio/api/v1/dashboards/get/{dashboard_id}",
-                headers={"Authorization": f"Bearer {TOKEN}"},
-            )
-            dashboard_data_response.raise_for_status()
-            dashboard_data = dashboard_data_response.json()
-
-            logger.debug(f"Dashboard data fetched successfully for dashboard {dashboard_id}.")
-            # logger.info(f"Dashboard data: {dashboard_data}")
-        except httpx.HTTPStatusError as e:
-            logger.error(f"Failed to fetch dashboard data: {e}")
+        # Fetch dashboard data using API call with proper timeout
+        dashboard_data = api_call_get_dashboard(dashboard_id, TOKEN)
+        if not dashboard_data:
+            logger.error(f"Failed to fetch dashboard data for {dashboard_id}")
             return dash.no_update
 
         # Check user permissions
@@ -174,38 +168,16 @@ def register_callbacks_save(app):
         dashboard_data.update(updated_dashboard_data)
         # logger.info(f"Updated dashboard data: {dashboard_data}")
 
-        # Save dashboard data
-        try:
-            response = httpx.post(
-                f"{API_BASE_URL}/depictio/api/v1/dashboards/save/{dashboard_id}",
-                json=dashboard_data,
-                headers={"Authorization": f"Bearer {TOKEN}"},
-            )
-            response.raise_for_status()
-            logger.info(f"Dashboard data saved successfully for dashboard {dashboard_id}.")
-        except httpx.HTTPStatusError as e:
-            logger.error(f"Failed to save dashboard data: {e}")
+        # Save dashboard data using API call with proper timeout
+        save_success = api_call_save_dashboard(dashboard_id, dashboard_data, TOKEN)
+        if not save_success:
+            logger.error(f"Failed to save dashboard data for {dashboard_id}")
 
-        if n_clicks:
-            try:
-                # Screenshot the dashboard
-                screenshot_response = httpx.get(
-                    # f"{API_BASE_URL}/depictio/api/v1/utils/screenshot-minimal/{dashboard_id}",
-                    # f"{API_BASE_URL}/depictio/api/v1/utils/screenshot-dash-fixed/{dashboard_id}",
-                    f"{API_BASE_URL}/depictio/api/v1/dashboards/screenshot/{dashboard_id}",
-                    # headers={
-                    #     "Authorization": f"Bearer {TOKEN}",
-                    # },
-                    timeout=90.0,  # Timeout set to 60 seconds
-                )
-                if screenshot_response.status_code == 200:
-                    logger.info("Dashboard screenshot saved successfully.")
-                else:
-                    logger.warning(
-                        f"Failed to save dashboard screenshot: {screenshot_response.json()}"
-                    )
-            except Exception as e:
-                logger.error(f"Failed to save dashboard screenshot: {str(e)}")
+        # Screenshot the dashboard if save button was clicked
+        if n_clicks and save_success:
+            screenshot_success = api_call_screenshot_dashboard(dashboard_id)
+            if not screenshot_success:
+                logger.warning(f"Failed to save dashboard screenshot for {dashboard_id}")
 
         return dash.no_update
 
