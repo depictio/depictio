@@ -3,11 +3,12 @@ import json
 from datetime import datetime
 from uuid import UUID
 
+from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
-from depictio.api.v1.db import dashboards_collection
+from depictio.api.v1.db import dashboards_collection, projects_collection
 from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import load_dashboards_from_db
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
@@ -17,6 +18,169 @@ from depictio.models.models.users import TokenBeanie, User, UserBeanie
 dashboards_endpoint_router = APIRouter()
 
 
+@dashboards_endpoint_router.post("/sync_with_projects")
+async def sync_dashboard_permissions_with_projects(
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Sync all dashboard permissions and visibility with their parent projects.
+    This endpoint helps migrate from dashboard-specific permissions to project-based permissions.
+    Only admins can perform this operation.
+    """
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=403, detail="Only administrators can sync dashboard permissions."
+        )
+
+    logger.info("Starting dashboard permissions sync with projects")
+
+    # Get all dashboards
+    dashboards = list(dashboards_collection.find({}))
+    synced_count = 0
+    failed_count = 0
+    failed_dashboards = []
+
+    for dashboard in dashboards:
+        try:
+            dashboard_id = dashboard.get("dashboard_id")
+            project_id = dashboard.get("project_id")
+
+            if not project_id:
+                logger.warning(f"Dashboard {dashboard_id} has no project_id, skipping")
+                failed_count += 1
+                failed_dashboards.append({"dashboard_id": dashboard_id, "reason": "No project_id"})
+                continue
+
+            # Get project
+            project = projects_collection.find_one({"_id": ObjectId(project_id)})
+            if not project:
+                logger.warning(
+                    f"Project {project_id} not found for dashboard {dashboard_id}, skipping"
+                )
+                failed_count += 1
+                failed_dashboards.append(
+                    {"dashboard_id": dashboard_id, "reason": "Project not found"}
+                )
+                continue
+
+            # Update dashboard to match project visibility and permissions
+            update_data = {
+                "is_public": project.get("is_public", False),
+                # Note: We keep the dashboard permissions structure but rely on project permissions for access control
+            }
+
+            dashboards_collection.update_one({"dashboard_id": dashboard_id}, {"$set": update_data})
+
+            synced_count += 1
+            logger.debug(f"Synced dashboard {dashboard_id} with project {project_id}")
+
+        except Exception as e:
+            logger.error(
+                f"Failed to sync dashboard {dashboard.get('dashboard_id', 'unknown')}: {e}"
+            )
+            failed_count += 1
+            failed_dashboards.append(
+                {"dashboard_id": dashboard.get("dashboard_id"), "reason": str(e)}
+            )
+
+    logger.info(f"Dashboard sync completed: {synced_count} synced, {failed_count} failed")
+
+    return {
+        "success": True,
+        "synced_count": synced_count,
+        "failed_count": failed_count,
+        "failed_dashboards": failed_dashboards,
+        "message": f"Synced {synced_count} dashboards with their projects. {failed_count} failures.",
+    }
+
+
+# Utility functions for project-based permission inheritance
+def get_project_permissions_for_dashboard(dashboard_id: PyObjectId) -> dict:
+    """
+    Get project permissions for a dashboard by looking up the project_id.
+
+    Args:
+        dashboard_id: The dashboard ID to get project permissions for
+
+    Returns:
+        dict: Project data with permissions, or None if not found
+    """
+    # First get the dashboard to find its project_id
+    dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard:
+        return None
+
+    project_id = dashboard.get("project_id")
+    if not project_id:
+        return None
+
+    # Get the project with its permissions
+    project = projects_collection.find_one({"_id": ObjectId(project_id)})
+    return project
+
+
+def check_project_permission(
+    project_id: PyObjectId, user: User, required_permission: str = "viewer"
+) -> bool:
+    """
+    Check if user has required permission on project.
+
+    Args:
+        project_id: The project ID to check permissions for
+        user: The user to check permissions for
+        required_permission: "owner", "editor", or "viewer"
+
+    Returns:
+        bool: True if user has required permission or project is public
+    """
+    if user.is_admin:
+        return True
+
+    project = projects_collection.find_one({"_id": ObjectId(project_id)})
+    if not project:
+        return False
+
+    # Check if project is public
+    if project.get("is_public", False):
+        return True
+
+    user_id = ObjectId(user.id)
+    permissions = project.get("permissions", {})
+
+    # Check based on required permission level
+    if required_permission == "owner":
+        return any(owner.get("_id") == user_id for owner in permissions.get("owners", []))
+    elif required_permission == "editor":
+        # Editors can also access if they are owners
+        return any(owner.get("_id") == user_id for owner in permissions.get("owners", [])) or any(
+            editor.get("_id") == user_id for editor in permissions.get("editors", [])
+        )
+    else:  # viewer
+        # Viewers can access if they are owners, editors, or viewers
+        return (
+            any(owner.get("_id") == user_id for owner in permissions.get("owners", []))
+            or any(editor.get("_id") == user_id for editor in permissions.get("editors", []))
+            or any(viewer.get("_id") == user_id for viewer in permissions.get("viewers", []))
+            or "*" in permissions.get("viewers", [])
+        )
+
+
+def get_project_visibility(project_id: PyObjectId) -> bool:
+    """
+    Get project visibility status.
+
+    Args:
+        project_id: The project ID
+
+    Returns:
+        bool: True if project is public, False otherwise
+    """
+    project = projects_collection.find_one({"_id": ObjectId(project_id)})
+    if not project:
+        return False
+    return project.get("is_public", False)
+
+
 @dashboards_endpoint_router.get("/get/{dashboard_id}", response_model=DashboardData)
 async def get_dashboard(
     dashboard_id: PyObjectId,
@@ -24,36 +188,31 @@ async def get_dashboard(
 ):
     """
     Fetch dashboard data related to a dashboard ID.
+    Now uses project-based permissions instead of dashboard-specific permissions.
     """
 
-    user_id = PyObjectId(current_user.id)
-    logger.debug(f"Current user ID: {user_id}")
+    logger.debug(f"Current user ID: {current_user.id}")
 
-    # Find dashboards where current_user is either an owner or a viewer, or dashboard is public
-    query = {
-        "dashboard_id": dashboard_id,
-        "$or": [
-            {"permissions.owners._id": user_id},
-            {"permissions.viewers._id": user_id},
-            {"permissions.viewers": {"$in": ["*"]}},
-            {"is_public": True},
-        ],
-    }
-
-    dashboard_data = dashboards_collection.find_one(query)
-
+    # First check if dashboard exists
+    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
     if not dashboard_data:
         raise HTTPException(
             status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found."
         )
 
-    # logger.info(f"Dashboard data: {dashboard_data}")
-    dashboard_data = DashboardData.from_mongo(dashboard_data)
-    # logger.info(f"Dashboard data: {dashboard_data}")
+    # Get project_id from dashboard
+    project_id = dashboard_data.get("project_id")
+    if not project_id:
+        raise HTTPException(status_code=500, detail="Dashboard is not associated with a project.")
 
-    # logger.info(f"Dashboard data from mongo: {dashboard_data}")
-    # dashboard_data = convert_model_to_dict(dashboard_data)
-    # logger.info(f"Dashboard data from mongo: {dashboard_data}")
+    # Check project-based permissions (viewer level required for reading)
+    if not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(
+            status_code=403, detail="You don't have permission to access this dashboard."
+        )
+
+    dashboard_data = DashboardData.from_mongo(dashboard_data)
+    logger.debug(f"Dashboard access granted via project permissions for project {project_id}")
 
     return dashboard_data
 
@@ -107,55 +266,64 @@ async def make_dashboard_public(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Make a dashboard with the given dashboard ID public or private.
+    Toggle dashboard visibility. Dashboard visibility now inherits from project visibility.
+    Only project owners can change project (and thus dashboard) visibility.
     """
     _public_status = params.get("is_public", None)
-    if not _public_status:
+    if _public_status is None:
         return {
             "success": False,
             "message": "No public status provided. Use 'is_public' parameter.",
         }
-    logger.info(f"Making dashboard public: {_public_status}")
-    logger.info(f"Current user: {current_user}")
+
+    logger.info(f"Attempting to change dashboard visibility to: {_public_status}")
+    logger.info(f"Current user: {current_user.email}")
     logger.info(f"Dashboard ID: {dashboard_id}")
 
-    user_id = current_user.id
+    # Get dashboard to find project_id
+    dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard:
+        raise HTTPException(
+            status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found."
+        )
 
-    # if _public_status:
-    dashboards_collection.find_one_and_update(
-        {"dashboard_id": dashboard_id, "permissions.owners._id": user_id},
+    project_id = dashboard.get("project_id")
+    if not project_id:
+        raise HTTPException(status_code=500, detail="Dashboard is not associated with a project.")
+
+    # Check if user has owner permission on the project (required for visibility changes)
+    if not check_project_permission(project_id, current_user, "owner"):
+        raise HTTPException(
+            status_code=403, detail="Only project owners can change dashboard visibility."
+        )
+
+    # Update the project's visibility (this will affect all dashboards in the project)
+    project_result = projects_collection.find_one_and_update(
+        {"_id": ObjectId(project_id)},
         {"$set": {"is_public": _public_status}},
-        # return_document=True,  # Adjust based on your MongoDB driver version, some versions might use ReturnDocument.AFTER
+        return_document=True,
     )
-    logger.info(f"Dashboard with ID '{dashboard_id}' made public.")
-    # else:
-    #     # get_current_permissions = dashboards_collection.find_one(
-    #     #     {"dashboard_id": dashboard_id, "permissions.owners._id": user_id}
-    #     # )
-    #     result = dashboards_collection.find_one_and_update(
-    #         {"dashboard_id": dashboard_id, "permissions.owners._id": user_id},
-    #         {"$set": {"is_public": False}},
-    #         # return_document=True,  # Adjust based on your MongoDB driver version, some versions might use ReturnDocument.AFTER
-    #     )
-    #     logger.info(f"Dashboard with ID '{dashboard_id}' made private.")
 
-    # if result:
-    #     logger.info(
-    #         f"Dashboard with ID '{dashboard_id}' changed status to public: {_public_status}"
-    #     )
-    #     logger.info(f"Result: {result}")
-    #     logger.info(f"Permissions: {result['permissions']}")
+    if not project_result:
+        raise HTTPException(status_code=404, detail="Project not found.")
+
+    # Update all dashboards in this project to match project visibility
+    dashboards_update_result = dashboards_collection.update_many(
+        {"project_id": ObjectId(project_id)},
+        {"$set": {"is_public": _public_status}},
+    )
+
+    logger.info(f"Project visibility changed to: {_public_status}")
+    logger.info(
+        f"Updated {dashboards_update_result.modified_count} dashboards in project {project_id}"
+    )
 
     return {
         "success": True,
-        "message": f"Dashboard with ID '{dashboard_id}' changed status to public: {_public_status}",
-        # "permissions": convert_objectid_to_str(result["permissions"]),
+        "message": f"Project and all its dashboards changed visibility to: {'public' if _public_status else 'private'}",
         "is_public": _public_status,
+        "dashboards_updated": dashboards_update_result.modified_count,
     }
-    # else:
-    #     raise HTTPException(
-    #         status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found."
-    #     )
 
 
 @dashboards_endpoint_router.post("/edit_name/{dashboard_id}")
@@ -166,9 +334,8 @@ async def edit_dashboard_name(
 ):
     """
     Edit the name of a dashboard with the given dashboard ID.
+    Now uses project-based permissions (editor level required).
     """
-
-    user_id = current_user.id
 
     new_name = data.get("new_name", None)
     if not new_name:
@@ -177,19 +344,34 @@ async def edit_dashboard_name(
     logger.info(f"New name: {new_name}")
     logger.info(f"Dashboard ID: {dashboard_id} of type {type(dashboard_id)}")
 
+    # Get dashboard to find project_id
+    dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard:
+        raise HTTPException(
+            status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found."
+        )
+
+    project_id = dashboard.get("project_id")
+    if not project_id:
+        raise HTTPException(status_code=500, detail="Dashboard is not associated with a project.")
+
+    # Check if user has editor permission on the project (required for editing)
+    if not check_project_permission(project_id, current_user, "editor"):
+        raise HTTPException(
+            status_code=403, detail="You don't have permission to edit this dashboard."
+        )
+
     result = dashboards_collection.find_one_and_update(
-        {"dashboard_id": dashboard_id, "permissions.owners._id": user_id},
+        {"dashboard_id": dashboard_id},
         {"$set": {"title": new_name}},
-        return_document=True,  # Adjust based on your MongoDB driver version, some versions might use ReturnDocument.AFTER
+        return_document=True,
     )
 
     if result:
         logger.info(f"Dashboard name updated successfully to '{new_name}'.")
         return {"message": f"Dashboard name updated successfully to '{new_name}'."}
     else:
-        raise HTTPException(
-            status_code=404, detail=f"Dashboard with ID '{dashboard_id}' not found."
-        )
+        raise HTTPException(status_code=500, detail="Failed to update dashboard name.")
 
 
 @dashboards_endpoint_router.post("/save/{dashboard_id}")
@@ -209,27 +391,33 @@ async def save_dashboard(
             detail="Anonymous users cannot create or modify dashboards. Please login to continue.",
         )
 
-    user_id = current_user.id
-
     # logger.info(f"Dashboard data: {data}")
 
     # Check if dashboard exists first
     existing_dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})
 
     if existing_dashboard:
-        # Dashboard exists - check user ownership for update
-        result = dashboards_collection.find_one_and_update(
-            {"dashboard_id": dashboard_id, "permissions.owners._id": user_id},
-            {"$set": data.mongo()},
-            return_document=True,
-        )
-        if not result:
-            # User doesn't have permission to update this dashboard
+        # Dashboard exists - check project-based permissions for update
+        project_id = existing_dashboard.get("project_id")
+        if not project_id:
+            raise HTTPException(
+                status_code=500, detail="Dashboard is not associated with a project."
+            )
+
+        # Check if user has editor permission on the project (required for editing)
+        if not check_project_permission(project_id, current_user, "editor"):
             raise HTTPException(
                 status_code=403, detail="You don't have permission to update this dashboard."
             )
+
+        result = dashboards_collection.find_one_and_update(
+            {"dashboard_id": dashboard_id},
+            {"$set": data.mongo()},
+            return_document=True,
+        )
     else:
         # Dashboard doesn't exist - insert new (for duplication case)
+        # Note: For new dashboards, permissions should be set during creation
         result = dashboards_collection.find_one_and_update(
             {"dashboard_id": dashboard_id},
             {"$set": data.mongo()},
