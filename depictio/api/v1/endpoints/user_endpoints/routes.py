@@ -551,20 +551,21 @@ async def get_all_users(current_user=Depends(get_current_user)):
     if not current_user.is_admin:
         raise HTTPException(status_code=401, detail="Current user is not an admin.")
 
-    from depictio.api.v1.db import users_collection
+    # Use Beanie model to fetch users - works with both real DB and mocked DB
+    users = await UserBeanie.find_all().to_list()
 
-    # Fetch all users with minimal fields for security
-    users = users_collection.find(
-        {},
-        {"_id": 1, "email": 1, "is_admin": 1},  # Only return necessary fields
-    )
-    users = [
-        {"id": str(user["_id"]), "email": user["email"], "is_admin": user.get("is_admin", False)}
+    # Convert to safe format with minimal fields for security
+    users_list = [
+        {
+            "id": str(user.id),
+            "email": user.email,
+            "is_admin": user.is_admin if hasattr(user, "is_admin") and user.is_admin else False,
+        }
         for user in users
     ]
 
-    logger.debug(f"Returning {len(users)} users")
-    return users
+    logger.debug(f"Returning {len(users_list)} users")
+    return users_list
 
 
 @auth_endpoint_router.get("/get_users_group", include_in_schema=False)

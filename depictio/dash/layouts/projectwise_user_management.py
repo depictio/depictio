@@ -308,27 +308,30 @@ layout = dmc.Container(
                         dmc.Title("Add permissions section", order=3),
                         dmc.Col(
                             [
-                                dmc.CheckboxGroup(
-                                    id="permissions-manager-checkboxes",
-                                    orientation="horizontal",
-                                    children=[
-                                        dmc.Checkbox(
-                                            id="permissions-manager-checkbox-owner",
-                                            label="Owner",
-                                            value="Owner",
+                                html.Div(
+                                    [
+                                        dmc.Text("Permissions", weight="bold", size="sm"),
+                                        dmc.Group(
+                                            [
+                                                dmc.Checkbox(
+                                                    id="permissions-manager-checkbox-owner",
+                                                    label="Owner",
+                                                    value="Owner",
+                                                ),
+                                                dmc.Checkbox(
+                                                    id="permissions-manager-checkbox-editor",
+                                                    label="Editor",
+                                                    value="Editor",
+                                                ),
+                                                dmc.Checkbox(
+                                                    id="permissions-manager-checkbox-viewer",
+                                                    label="Viewer",
+                                                    value="Viewer",
+                                                ),
+                                            ],
+                                            spacing="md",
                                         ),
-                                        dmc.Checkbox(
-                                            id="permissions-manager-checkbox-editor",
-                                            label="Editor",
-                                            value="Editor",
-                                        ),
-                                        dmc.Checkbox(
-                                            id="permissions-manager-checkbox-viewer",
-                                            label="Viewer",
-                                            value="Viewer",
-                                        ),
-                                    ],
-                                    label="Permissions",
+                                    ]
                                 )
                             ],
                             span=12,
@@ -630,20 +633,33 @@ def register_projectwise_user_management_callbacks(app):
         Output("permissions-manager-checkbox-viewer", "disabled"),
         Output("permissions-manager-input-email", "disabled"),
         Input("permissions-manager-input-email", "value"),
-        Input("permissions-manager-checkboxes", "value"),
+        Input("permissions-manager-checkbox-owner", "checked"),
+        Input("permissions-manager-checkbox-editor", "checked"),
+        Input("permissions-manager-checkbox-viewer", "checked"),
         State("permissions-manager-user-permissions", "data"),
-        prevent_initial_call=True,
+        prevent_initial_call=False,  # Allow initial call to set proper state
     )
-    def toggle_add_buttons(selected_users, permissions, user_permissions_data):
+    def toggle_add_buttons(
+        selected_users, owner_checked, editor_checked, viewer_checked, user_permissions_data
+    ):
         """
         Enable or disable Add buttons and checkboxes based on current user and selections.
         """
-        # If user permissions data not available, disable everything
-        if not user_permissions_data:
-            return True, True, True, True, True
+        # Handle None values from initial callback
+        if selected_users is None:
+            selected_users = []
+        if owner_checked is None:
+            owner_checked = False
+        if editor_checked is None:
+            editor_checked = False
+        if viewer_checked is None:
+            viewer_checked = False
 
-        if not permissions:
-            permissions = []
+        # If user permissions data not available, keep controls enabled during initial load
+        # This prevents the "flash of disabled state" during page loading
+        if not user_permissions_data:
+            # During initial load, enable checkboxes but disable add button until data loads
+            return True, False, False, False, False
 
         # Get user permissions from stored data (set during initialization)
         is_admin = user_permissions_data.get("is_admin", False)
@@ -654,8 +670,26 @@ def register_projectwise_user_management_callbacks(app):
             return True, True, True, True, True  # Disable everything including multiselect
 
         # Check if users are selected and exactly one permission is selected
-        users_selected = selected_users and len(selected_users) > 0
-        add_user_disabled = not (users_selected and len(permissions) == 1)
+        users_selected = len(selected_users) > 0 if selected_users else False
+        permissions_checked = [owner_checked, editor_checked, viewer_checked]
+        exactly_one_permission = sum(permissions_checked) == 1
+
+        # Debug logging to understand what's happening
+        logger.info(f"Toggle buttons - user_permissions_data: {user_permissions_data}")
+        logger.info(
+            f"Toggle buttons - users_selected: {users_selected}, selected_users: {selected_users}"
+        )
+        logger.info(
+            f"Toggle buttons - owner_checked: {owner_checked}, editor_checked: {editor_checked}, viewer_checked: {viewer_checked}"
+        )
+        logger.info(
+            f"Toggle buttons - exactly_one_permission: {exactly_one_permission}, permissions_checked: {permissions_checked}"
+        )
+        logger.info(f"Toggle buttons - is_admin: {is_admin}, is_owner: {is_owner}")
+
+        add_user_disabled = not (users_selected and exactly_one_permission)
+
+        logger.info(f"Toggle buttons - add_user_disabled: {add_user_disabled}")
 
         # Enable checkboxes and multiselect for authorized users
         return add_user_disabled, False, False, False, False
@@ -664,12 +698,16 @@ def register_projectwise_user_management_callbacks(app):
         Output("permissions-manager-grid", "rowData", allow_duplicate=True),
         Output("permissions-manager-grid", "defaultColDef"),
         Output("permissions-manager-input-email", "value"),
-        Output("permissions-manager-checkboxes", "value"),
+        Output("permissions-manager-checkbox-owner", "checked"),
+        Output("permissions-manager-checkbox-editor", "checked"),
+        Output("permissions-manager-checkbox-viewer", "checked"),
         Output("permissions-manager-input-email", "data", allow_duplicate=True),
         Input("permissions-manager-btn-add-user", "n_clicks"),
         State("permissions-manager-input-email", "value"),
         State("permissions-manager-input-email", "data"),
-        State("permissions-manager-checkboxes", "value"),
+        State("permissions-manager-checkbox-owner", "checked"),
+        State("permissions-manager-checkbox-editor", "checked"),
+        State("permissions-manager-checkbox-viewer", "checked"),
         State("permissions-manager-grid", "rowData"),
         State("permissions-manager-grid", "defaultColDef"),
         Input("local-store", "data"),
@@ -680,7 +718,9 @@ def register_projectwise_user_management_callbacks(app):
         user_clicks,
         selected_user_ids,
         dropdown_data,
-        permissions,
+        owner_checked,
+        editor_checked,
+        viewer_checked,
         current_rows,
         grid_options,
         local_store_data,
@@ -690,17 +730,31 @@ def register_projectwise_user_management_callbacks(app):
         Add selected users to the project with specified permissions.
         """
         triggered_id = ctx.triggered_id
+
+        # Convert individual checkbox states to permissions list
+        permissions = []
+        logger.info(
+            f"Checkbox states - owner_checked: {owner_checked}, editor_checked: {editor_checked}, viewer_checked: {viewer_checked}"
+        )
+
+        if owner_checked:
+            permissions.append("Owner")
+        if editor_checked:
+            permissions.append("Editor")
+        if viewer_checked:
+            permissions.append("Viewer")
+
         logger.info(
             f"Triggered ID: {triggered_id}, selected_user_ids: {selected_user_ids}, Permissions: {permissions}"
         )
         logger.info(f"Current rows: {current_rows}")
 
         if local_store_data is None:
-            return current_rows, grid_options, [], [], dropdown_data
+            return current_rows, grid_options, [], False, False, False, dropdown_data
 
         current_user = get_current_user_info(local_store_data["access_token"])
         if not current_user:
-            return current_rows, grid_options, [], [], dropdown_data
+            return current_rows, grid_options, [], False, False, False, dropdown_data
 
         # Check if user has permission to add users (admin or project owner)
         is_admin = current_user.get("is_admin", False)
@@ -730,11 +784,11 @@ def register_projectwise_user_management_callbacks(app):
                 f"User {current_user.get('email')} attempted to add users without authorization"
             )
             grid_options["editable"] = False
-            return current_rows, grid_options, [], [], dropdown_data
+            return current_rows, grid_options, [], False, False, False, dropdown_data
 
         # Return unchanged if missing required data.
         if not selected_user_ids or not permissions:
-            return current_rows, grid_options, [], [], dropdown_data
+            return current_rows, grid_options, [], False, False, False, dropdown_data
 
         new_users = []
         project_id = pathname.split("/")[-1]
@@ -780,7 +834,7 @@ def register_projectwise_user_management_callbacks(app):
             option for option in dropdown_data if option["value"] not in selected_user_ids
         ]
 
-        return updated_rows, grid_options, [], [], updated_dropdown_data
+        return updated_rows, grid_options, [], False, False, False, updated_dropdown_data
 
     @app.callback(
         Output("permissions-manager-input-email", "data", allow_duplicate=True),
@@ -799,9 +853,14 @@ def register_projectwise_user_management_callbacks(app):
         all_user_options = fetch_all_users(token=local_store_data["access_token"])
 
         # Filter out users who are already in the permissions table
-        existing_user_ids = {user["id"] for user in current_rows}
+        # Add defensive check for None users
+        existing_user_ids = {
+            user["id"] for user in current_rows if user is not None and "id" in user
+        }
         filtered_user_options = [
-            option for option in all_user_options if option["value"] not in existing_user_ids
+            option
+            for option in all_user_options
+            if option and option.get("value") not in existing_user_ids
         ]
 
         logger.info(
@@ -1037,7 +1096,10 @@ def register_projectwise_user_management_callbacks(app):
             if not add_clicks or not selected_users:
                 return False
             # Check if any selected user already exists
-            current_user_ids = {row["id"] for row in current_rows}
+            # Add defensive check for None rows
+            current_user_ids = {
+                row["id"] for row in current_rows if row is not None and "id" in row
+            }
             return any(user_id in current_user_ids for user_id in selected_users)
         return False
 
