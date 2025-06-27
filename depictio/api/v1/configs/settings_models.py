@@ -269,6 +269,72 @@ class PerformanceConfig(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_PERFORMANCE_")
 
 
+class BackupConfig(BaseSettings):
+    """Backup and restore configuration settings."""
+
+    # Base directory for all backup-related files (similar to AuthConfig pattern)
+    base_dir: Path = Field(
+        default_factory=lambda: Path(__file__).parent.parent.parent.parent / "depictio"
+    )
+    # Directory where backup files are stored on the server (relative to base_dir)
+    backup_dir: str = Field(default="backups")
+
+    # S3 data backup strategy
+    s3_backup_strategy: str = Field(
+        default="s3_to_s3",
+        description="Strategy for S3 data backup: 's3_to_s3', 'local', or 'both'",
+    )
+
+    # Local S3 data backup directory (for local strategy)
+    s3_local_backup_dir: str = Field(default="s3_data_backups")
+
+    # Backup S3 configuration (for separate backup bucket)
+    backup_s3_enabled: bool = Field(default=False, description="Enable separate backup S3 bucket")
+    backup_s3_bucket: str = Field(default="depictio-backups", description="Backup S3 bucket name")
+    backup_s3_endpoint_url: Optional[str] = Field(
+        default=None, description="Backup S3 endpoint URL"
+    )
+    backup_s3_access_key: Optional[str] = Field(default=None, description="Backup S3 access key")
+    backup_s3_secret_key: Optional[str] = Field(default=None, description="Backup S3 secret key")
+    backup_s3_region: str = Field(default="us-east-1", description="Backup S3 region")
+
+    # Compression and optimization
+    compress_local_backups: bool = Field(default=True, description="Compress local S3 data backups")
+    backup_file_retention_days: int = Field(default=30, description="Days to retain backup files")
+
+    @computed_field
+    @property
+    def backup_path(self) -> str:
+        """Get absolute backup directory path for MongoDB backups."""
+        return str(self.base_dir / self.backup_dir)
+
+    @computed_field
+    @property
+    def s3_local_backup_path(self) -> str:
+        """Get absolute local backup directory path for S3 data."""
+        return str(self.base_dir / self.s3_local_backup_dir)
+
+    @computed_field
+    @property
+    def backup_s3_config(self) -> Optional[dict]:
+        """Get backup S3 configuration if enabled."""
+        if not self.backup_s3_enabled:
+            return None
+
+        config = {"bucket": self.backup_s3_bucket, "region_name": self.backup_s3_region}
+
+        if self.backup_s3_endpoint_url:
+            config["endpoint_url"] = self.backup_s3_endpoint_url
+        if self.backup_s3_access_key:
+            config["aws_access_key_id"] = self.backup_s3_access_key
+        if self.backup_s3_secret_key:
+            config["aws_secret_access_key"] = self.backup_s3_secret_key
+
+        return config
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_BACKUP_")
+
+
 class Settings(BaseSettings):
     context: str = Field(default="server")
     fastapi: FastAPIConfig = Field(default_factory=FastAPIConfig)
@@ -279,5 +345,6 @@ class Settings(BaseSettings):
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     jbrowse: JBrowseConfig = Field(default_factory=JBrowseConfig)
     performance: PerformanceConfig = Field(default_factory=PerformanceConfig)
+    backup: BackupConfig = Field(default_factory=BackupConfig)
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_")
