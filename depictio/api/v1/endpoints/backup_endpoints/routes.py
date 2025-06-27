@@ -224,8 +224,17 @@ async def create_backup(
             # Get deltatable locations from database
             deltatable_locations = []
             for deltatable in deltatables_collection.find({}):
-                if deltatable.get("location"):
-                    deltatable_locations.append(deltatable["location"])
+                # Check both possible field names for S3 location
+                location = deltatable.get("delta_table_location") or deltatable.get("location")
+                if location:
+                    # Extract the S3 path (remove s3://bucket/ prefix)
+                    if location.startswith("s3://"):
+                        # Extract just the path part after bucket name
+                        parts = location.replace("s3://", "").split("/", 1)
+                        if len(parts) > 1:
+                            deltatable_locations.append(parts[1])
+                    else:
+                        deltatable_locations.append(location)
 
             # Create S3 backup
             s3_backup_result = await create_backup_with_strategy(

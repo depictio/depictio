@@ -273,9 +273,7 @@ class BackupConfig(BaseSettings):
     """Backup and restore configuration settings."""
 
     # Base directory for all backup-related files (similar to AuthConfig pattern)
-    base_dir: Path = Field(
-        default_factory=lambda: Path(__file__).parent.parent.parent.parent / "depictio"
-    )
+    base_dir: Path = Field(default_factory=lambda: Path(__file__).parent.parent.parent.parent)
     # Directory where backup files are stored on the server (relative to base_dir)
     backup_dir: str = Field(default="backups")
 
@@ -286,7 +284,7 @@ class BackupConfig(BaseSettings):
     )
 
     # Local S3 data backup directory (for local strategy)
-    s3_local_backup_dir: str = Field(default="s3_data_backups")
+    s3_local_backup_dir: str = Field(default="backups/s3_data_backups")
 
     # Backup S3 configuration (for separate backup bucket)
     backup_s3_enabled: bool = Field(default=False, description="Enable separate backup S3 bucket")
