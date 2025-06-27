@@ -2,6 +2,7 @@
 from fastapi import APIRouter
 
 from depictio.api.v1.configs.config import settings
+from depictio.api.v1.endpoints.backup_endpoints.routes import backup_endpoint_router
 from depictio.api.v1.endpoints.cli_endpoints.routes import cli_endpoint_router
 from depictio.api.v1.endpoints.dashboards_endpoints.routes import dashboards_endpoint_router
 from depictio.api.v1.endpoints.datacollections_endpoints.routes import (
@@ -61,6 +62,12 @@ router.include_router(
     utils_endpoint_router,
     prefix="/utils",
     tags=["Utils"],
+)
+
+router.include_router(
+    backup_endpoint_router,
+    prefix="/backup",
+    tags=["Backup"],
 )
 
 router.include_router(
