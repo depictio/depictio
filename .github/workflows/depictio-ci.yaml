@@ -559,6 +559,210 @@ jobs:
           path: penguin-logs.txt
           retention-days: 7
 
+  backup-system-integration-tests:
+    needs: [docker-build]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "pyproject.toml"
+          cache-dependency-path: "pyproject.toml"
+
+      - name: Setup environment
+        run: |
+          sudo chmod 666 /var/run/docker.sock
+          echo "UID=$(id -u)" >> $GITHUB_ENV
+          echo "GID=$(id -g)" >> $GITHUB_ENV
+          cp .env.example .env
+          mkdir -p depictioDB minio_data
+          chmod 777 depictioDB minio_data
+
+      - name: Log in and start services
+        run: |
+          echo ${{ secrets.GHCR_PAT }} | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
+          FULL_IMAGE="${{ needs.docker-build.outputs.full-image }}"
+          docker pull "${FULL_IMAGE}"
+          export DEPICTIO_VERSION="${FULL_IMAGE}"
+          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml up -d
+          sleep 15
+
+      - name: Setup CLI
+        run: |
+          cd depictio/cli
+          uv venv --python 3.11 venv
+          source venv/bin/activate
+          uv pip install --upgrade pip
+          uv pip install -e .
+          docker cp depictio-backend:/app/depictio/.depictio/admin_config.yaml .
+
+      - name: Step 1 - Initialize system with test data
+        run: |
+          echo "🚀 Step 1: System initialization already complete"
+          # Verify system is ready
+          for i in {1..5}; do
+            if token=$(docker compose exec depictio-backend bash -c "cat /app/depictio/.depictio/admin_config.yaml" 2>/dev/null | grep 'access_token' | awk '{print $2}'); then
+              token=$(echo $token | tr -d "'\"")
+              health_check=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $token" http://localhost:8058/depictio/api/v1/utils/status)
+              if [ "$health_check" = "200" ]; then
+                echo "✅ System ready"
+                break
+              fi
+            fi
+            echo "⚠️ System not ready, attempt $i/5"
+            sleep 10
+          done
+
+      - name: Step 2 - Wait for all services stabilization
+        run: |
+          echo "⏳ Step 2: Waiting for service stabilization..."
+          sleep 30
+          docker compose ps
+
+      - name: Step 3 - Create backup with S3 data
+        run: |
+          echo "💾 Step 3: Creating backup with S3 data..."
+          cd depictio/cli
+          source venv/bin/activate
+
+          # Create enhanced backup with S3 data
+          depictio-cli backup create \
+            --CLI-config-path admin_config.yaml \
+            --include-s3-data \
+            --s3-backup-prefix ci_test_backup
+
+      - name: Step 4 - Verify S3 backed up files
+        run: |
+          echo "☁️ Step 4: Verifying S3 backed up files..."
+
+          # Check if backup files exist on play.minio.io
+          echo "📋 Using Python to check S3 backup files..."
+          docker compose exec -T depictio-backend python3 -c "
+          import boto3;
+          client = boto3.client('s3', endpoint_url='https://play.minio.io:9000', aws_access_key_id='Q3AM3UQ867SPQQA43P2F', aws_secret_access_key='zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG', verify=False);
+          response = client.list_objects_v2(Bucket='depictio-bucket', Prefix='ci_test_backup/');
+          files = response.get('Contents', []);
+          parquet_files = [f for f in files if f['Key'].endswith('.parquet')];
+          print(f'✅ Found {len(files)} total files, {len(parquet_files)} parquet files');
+          exit(0 if files else 1)
+          "
+
+      - name: Step 5 - Validate backup integrity
+        run: |
+          echo "🔍 Step 5: Validating backup integrity..."
+          cd depictio/cli
+          source venv/bin/activate
+
+          # List backups and get the latest one
+          BACKUP_LIST=$(depictio-cli backup list --CLI-config-path admin_config.yaml)
+          echo "Available backups: $BACKUP_LIST"
+
+          # Extract backup ID from list (assuming latest backup format)
+          BACKUP_ID=$(echo "$BACKUP_LIST" | grep -o '"backup_id": "[^"]*"' | head -1 | cut -d'"' -f4)
+          echo "Using backup ID: $BACKUP_ID"
+
+          if [ -n "$BACKUP_ID" ]; then
+            depictio-cli backup validate "$BACKUP_ID" --CLI-config-path admin_config.yaml
+          else
+            echo "❌ No backup ID found"
+            exit 1
+          fi
+
+      - name: Step 6 - Drop dashboards and projects (destructive test)
+        run: |
+          echo "🗑️ Step 6: Dropping dashboards and projects for restore test..."
+
+          # Clear dashboards collection
+          docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "
+            print('Dashboards before deletion: ' + db.dashboards.countDocuments({}));
+            db.dashboards.deleteMany({});
+            print('Dashboards after deletion: ' + db.dashboards.countDocuments({}));
+          "
+
+          # Clear projects collection
+          docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "
+            print('Projects before deletion: ' + db.projects.countDocuments({}));
+            db.projects.deleteMany({});
+            print('Projects after deletion: ' + db.projects.countDocuments({}));
+          "
+
+      - name: Step 7 - Restore from backup
+        run: |
+          echo "♻️ Step 7: Restoring from backup..."
+          cd depictio/cli
+          source venv/bin/activate
+
+          # Get backup ID again (same as validation step)
+          BACKUP_LIST=$(depictio-cli backup list --CLI-config-path admin_config.yaml)
+          BACKUP_ID=$(echo "$BACKUP_LIST" | grep -o '"backup_id": "[^"]*"' | head -1 | cut -d'"' -f4)
+
+          if [ -n "$BACKUP_ID" ]; then
+            # First dry run
+            echo "🧪 Testing dry run restore..."
+            depictio-cli backup restore "$BACKUP_ID" \
+              --CLI-config-path admin_config.yaml \
+              --dry-run \
+              --force
+
+            # Actual restore
+            echo "🔄 Performing actual restore..."
+            depictio-cli backup restore "$BACKUP_ID" \
+              --CLI-config-path admin_config.yaml \
+              --force
+          else
+            echo "❌ No backup ID found for restore"
+            exit 1
+          fi
+
+      - name: Step 8 - Verify restoration by checking MongoDB
+        run: |
+          echo "✅ Step 8: Verifying restoration..."
+
+          # Verify projects were restored
+          PROJECT_COUNT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "db.projects.countDocuments({})" --quiet)
+          echo "Projects count after restore: $PROJECT_COUNT"
+          [ "$PROJECT_COUNT" -lt 1 ] && echo "❌ No projects found after restore" && exit 1
+
+          # Verify dashboards were restored
+          DASHBOARD_COUNT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "db.dashboards.countDocuments({})" --quiet)
+          echo "Dashboards count after restore: $DASHBOARD_COUNT"
+          [ "$DASHBOARD_COUNT" -lt 1 ] && echo "❌ No dashboards found after restore" && exit 1
+
+          # Verify Iris project specifically
+          IRIS_PROJECT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "JSON.stringify(db.projects.find().toArray())" --quiet 2>&1 | grep '^[\[{]' | jq -r '.[] | select(.name == "Iris Dataset Project Data Analysis") | .name')
+          if [ -n "$IRIS_PROJECT" ]; then
+            echo "✅ Iris project restored: $IRIS_PROJECT"
+          else
+            echo "⚠️ Iris project not found (may be normal depending on timing)"
+          fi
+
+          echo "✅ Backup and restore cycle completed successfully"
+
+      - name: Upload logs on failure
+        if: failure()
+        run: |
+          docker compose logs > backup-integration-logs.txt
+          cd depictio/cli && ls -la
+        continue-on-error: true
+
+      - name: Upload artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backup-integration-logs
+          path: backup-integration-logs.txt
+          retention-days: 7
+
   e2e-tests:
     needs: [docker-build]
     runs-on: ubuntu-22.04

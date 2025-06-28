@@ -159,6 +159,7 @@ dashboards.json
 ## Keys
 ### ignore everything under depictio/keys
 /depictio/keys/*
+depictio/keys/internal_api_key.pem
 
 ### but keep the folder itself
 !/depictio/keys/
@@ -251,4 +252,6 @@ depictio/tests/e2e-tests/node_modules/
 depictio/tests/e2e-tests/cypress/screenshots/
 # depictio/tests/e2e-tests/package-lock.json
 
-depictio/depictio/keys/internal_api_key.pem
+# Backups
+depictio/backups/
+depictio/depictio/backups/

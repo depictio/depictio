@@ -95,7 +95,7 @@ packages = ["depictio"]
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "I"] # Enable import sorting (I rules)
+select = ["E", "F", "I"] # Enable import sorting (I rules) - restored original
 ignore = ["E501"]  # Ignore all line length errors
 
 [tool.ruff.lint.isort]

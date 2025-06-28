@@ -516,14 +516,27 @@ async def _add_token(token_data: TokenData) -> TokenBeanie:
         expire = datetime.max
         expire_refresh = datetime.max
     else:
-        access_token, expire = await create_access_token(
-            token_data,
-            expiry_hours=1,
-        )  # 1 hour
-        refresh_token, expire_refresh = await create_access_token(
-            token_data,
-            expiry_hours=7 * 24,
-        )  # 7 days
+        # For long-lived tokens (like CLI tokens), use appropriate expiry times
+        if token_data.token_lifetime == "long-lived":
+            # Long-lived tokens: 1 year access, 1 year + 7 days refresh
+            access_token, expire = await create_access_token(
+                token_data,
+                expiry_hours=365 * 24,  # 1 year
+            )
+            refresh_token, expire_refresh = await create_access_token(
+                token_data,
+                expiry_hours=365 * 24 + 7 * 24,  # 1 year + 7 days
+            )
+        else:
+            # Short-lived tokens: 1 hour access, 7 days refresh
+            access_token, expire = await create_access_token(
+                token_data,
+                expiry_hours=1,
+            )  # 1 hour
+            refresh_token, expire_refresh = await create_access_token(
+                token_data,
+                expiry_hours=7 * 24,
+            )  # 7 days
 
     token = TokenBeanie(
         access_token=access_token,

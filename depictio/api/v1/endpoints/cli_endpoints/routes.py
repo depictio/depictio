@@ -1,20 +1,32 @@
 from datetime import datetime
 
 from fastapi import APIRouter
+from pydantic import BaseModel
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.endpoints.user_endpoints.core_functions import _async_fetch_user_from_id
-from depictio.models.models.api import BaseApiResponse
 from depictio.models.models.users import CLIConfig, TokenBeanie
+
+
+class CLIValidationResponse(BaseModel):
+    """Response model for CLI config validation."""
+
+    success: bool
+    message: str
+    is_admin: bool = False
+    user_id: str = None
+    email: str = None
+
 
 cli_endpoint_router = APIRouter()
 
 
-@cli_endpoint_router.post("/validate_cli_config", response_model=BaseApiResponse)
+@cli_endpoint_router.post("/validate_cli_config", response_model=CLIValidationResponse)
 async def validate_cli_config_endpoint(cli_config: CLIConfig):
-    # logger.info(f"CLI config: {cli_config}")
+    logger.info(f"CLI config: {cli_config}")
 
     token = cli_config.user.token
+    logger.info(f"Token: {token}")
 
     _token_check = await TokenBeanie.find_one(
         {
@@ -26,16 +38,26 @@ async def validate_cli_config_endpoint(cli_config: CLIConfig):
 
     if not _token_check:
         logger.error("Token expired or not found.")
-        return {"success": False, "message": "Token expired or not found."}
+        return CLIValidationResponse(success=False, message="Token expired or not found.")
     logger.debug(f"Token check: {_token_check}")
     # Check if the user exists in the database
     user = await _async_fetch_user_from_id(token.user_id)
+    logger.debug(f"User fetched: {user}")
     if not user:
         logger.error("User not found.")
-        return {"success": False, "message": "User not found."}
+        return CLIValidationResponse(success=False, message="User not found.")
     # logger.info(f"User check: {user}")
 
-    return {"success": True, "message": "CLI config is valid."}
+    response = CLIValidationResponse(
+        success=True,
+        message="CLI config is valid.",
+        is_admin=bool(user.is_admin),
+        user_id=str(user.id),
+        email=user.email,
+    )
+
+    logger.info(f"CLI config validation response: {response}")
+    return response
 
 
 # @cli_endpoint_router.post("/validate_project_config")
