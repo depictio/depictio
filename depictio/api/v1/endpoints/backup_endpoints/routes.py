@@ -35,12 +35,12 @@ class BackupRequest(BaseModel):
 class BackupResponse(BaseModel):
     success: bool
     message: str
-    backup_id: str = None  # Server-side backup ID instead of path
+    backup_id: str | None = None  # Server-side backup ID instead of path
     total_documents: int = 0
     excluded_documents: int = 0
     collections_backed_up: list = []
-    timestamp: str = None
-    filename: str = None
+    timestamp: str | None = None
+    filename: str | None = None
 
 
 async def _create_mongodb_backup(current_user: User) -> dict:
@@ -217,7 +217,7 @@ async def create_backup(
         # Add S3 backup if requested
         if request.include_s3_data:
             logger.info("Adding S3 deltatable backup")
-            from depictio.api.v1.backup_utils.backup_strategy_manager import (
+            from depictio.api.v1.backup_strategy_manager import (
                 create_backup_with_strategy,
             )
 
@@ -281,7 +281,7 @@ async def create_backup(
         if request.include_s3_data and "s3_backup_metadata" in enhanced_backup:
             response_data["s3_backup_metadata"] = enhanced_backup["s3_backup_metadata"]
 
-        return BackupResponse(**response_data)
+        return BackupResponse(**response_data)  # type: ignore[misc]
 
     except Exception as e:
         logger.error(f"Backup creation failed: {str(e)}")

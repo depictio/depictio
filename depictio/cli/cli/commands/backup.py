@@ -331,7 +331,8 @@ def restore(
         bool, typer.Option("--dry-run/--no-dry-run", help="Simulate restore without making changes")
     ] = False,
     collections: Annotated[
-        str, typer.Option("--collections", help="Comma-separated list of collections to restore")
+        str | None,
+        typer.Option("--collections", help="Comma-separated list of collections to restore"),
     ] = None,
     force: Annotated[
         bool, typer.Option("--force", help="Skip confirmation prompt (use with caution!)")
