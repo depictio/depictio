@@ -42,18 +42,22 @@ class S3BackupStrategyManager:
         self.backup_config = settings.backup
 
         # Initialize source S3 client
+        logger.info(f"Initializing source S3 client with config: {source_s3_config}")
         self.source_client = boto3.client(
             "s3",
             endpoint_url=source_s3_config.get("endpoint_url"),
             aws_access_key_id=source_s3_config["aws_access_key_id"],
             aws_secret_access_key=source_s3_config["aws_secret_access_key"],
             region_name=source_s3_config.get("region_name", "us-east-1"),
+            verify=False,  # Disable SSL verification for local MinIO
         )
 
         # Initialize backup S3 client if configured
         self.backup_s3_client = None
         if self.backup_config.backup_s3_config:
-            self.backup_s3_client = boto3.client("s3", **self.backup_config.backup_s3_config)
+            backup_config = self.backup_config.backup_s3_config
+            logger.info(f"Initializing backup S3 client with config: {backup_config}")
+            self.backup_s3_client = boto3.client("s3", **backup_config)
 
     async def backup_deltatable_data(
         self, deltatable_locations: List[str], backup_prefix: str = "backup", dry_run: bool = False
@@ -136,6 +140,30 @@ class S3BackupStrategyManager:
         backup_bucket = self.backup_config.backup_s3_bucket
         source_bucket = self.source_s3_config["bucket"]
 
+        # Check if backup bucket is accessible
+        try:
+            # List available buckets to find a suitable one
+            response = self.backup_s3_client.list_buckets()
+            available_buckets = [bucket["Name"] for bucket in response.get("Buckets", [])]
+            logger.info(f"Available buckets on backup S3: {available_buckets}")
+
+            if backup_bucket not in available_buckets:
+                logger.warning(f"Backup bucket '{backup_bucket}' not found in available buckets")
+                if available_buckets:
+                    # Use the first available bucket
+                    backup_bucket = available_buckets[0]
+                    logger.info(f"Using existing bucket: {backup_bucket}")
+                else:
+                    raise ValueError("No buckets available on backup S3 server")
+            else:
+                logger.info(f"Using configured backup bucket: {backup_bucket}")
+
+        except ClientError as e:
+            logger.error(f"Error accessing backup S3 server: {e}")
+            results["success"] = False
+            results.setdefault("errors", []).append(f"Error accessing backup S3: {e}")
+            return results
+
         for location in deltatable_locations:
             try:
                 location_key = location.strip("/")
@@ -158,11 +186,26 @@ class S3BackupStrategyManager:
                     backup_key = source_key.replace(location_key, backup_location, 1)
 
                     if not dry_run:
-                        # Copy object to backup bucket
-                        copy_source = {"Bucket": source_bucket, "Key": source_key}
-                        self.backup_s3_client.copy_object(
-                            CopySource=copy_source, Bucket=backup_bucket, Key=backup_key
-                        )
+                        # Download from source and upload to backup (cross-service copy)
+                        logger.debug(f"Downloading from source: s3://{source_bucket}/{source_key}")
+                        try:
+                            # Download object from source S3
+                            response = self.source_client.get_object(
+                                Bucket=source_bucket, Key=source_key
+                            )
+                            object_data = response["Body"].read()
+
+                            # Upload to backup S3
+                            logger.debug(f"Uploading to backup: s3://{backup_bucket}/{backup_key}")
+                            self.backup_s3_client.put_object(
+                                Bucket=backup_bucket,
+                                Key=backup_key,
+                                Body=object_data,
+                                ContentType=response.get("ContentType", "application/octet-stream"),
+                            )
+                        except ClientError as copy_error:
+                            logger.error(f"Failed to copy {source_key}: {copy_error}")
+                            raise
 
                     files_copied += 1
                     bytes_copied += obj["Size"]

@@ -319,7 +319,10 @@ class BackupConfig(BaseSettings):
         if not self.backup_s3_enabled:
             return None
 
-        config = {"bucket": self.backup_s3_bucket, "region_name": self.backup_s3_region}
+        config = {
+            "region_name": self.backup_s3_region,
+            "verify": False,  # Disable SSL verification for play.minio.io
+        }
 
         if self.backup_s3_endpoint_url:
             config["endpoint_url"] = self.backup_s3_endpoint_url
