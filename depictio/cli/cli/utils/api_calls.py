@@ -6,8 +6,8 @@ from depictio.cli.cli.utils.common import generate_api_headers, load_depictio_co
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
 from depictio.cli.cli_logging import logger
 from depictio.models.models.base import BaseModel, PyObjectId, convert_objectid_to_str
+from depictio.models.models.cli import CLIConfig
 from depictio.models.models.files import File
-from depictio.models.models.users import CLIConfig
 from depictio.models.models.workflows import WorkflowRun
 from depictio.models.utils import convert_model_to_dict
 
@@ -47,7 +47,7 @@ def api_get_project_from_id(project_id: PyObjectId, CLI_config: CLIConfig):
     # First check if the project exists on the server DB for existing IDs and if the same metadata hash is used
     logger.info(f"Getting project with ID: {project_id}")
     response = httpx.get(
-        f"{CLI_config.base_url}/depictio/api/v1/projects/get/from_id",
+        f"{CLI_config.api_base_url}/depictio/api/v1/projects/get/from_id",
         params={"project_id": project_id},
         headers=generate_api_headers(CLI_config),
     )
@@ -61,7 +61,7 @@ def api_get_project_from_name(project_name: str, CLI_config: CLIConfig):
     """
     # First check if the project exists on the server DB for existing IDs and if the same metadata hash is used
     response = httpx.get(
-        f"{CLI_config.base_url}/depictio/api/v1/projects/get/from_name/{project_name}",
+        f"{CLI_config.api_base_url}/depictio/api/v1/projects/get/from_name/{project_name}",
         # params={"project_name": project_name},
         headers=generate_api_headers(CLI_config),
     )
@@ -76,7 +76,7 @@ def api_create_project(project_config: dict, CLI_config: CLIConfig):
     logger.info("Creating project on server...")
 
     response = httpx.post(
-        f"{CLI_config.base_url}/depictio/api/v1/projects/create",
+        f"{CLI_config.api_base_url}/depictio/api/v1/projects/create",
         json=project_config,
         headers=generate_api_headers(CLI_config),
     )
@@ -93,7 +93,7 @@ def api_update_project(project_config: dict, CLI_config: CLIConfig):
     logger.debug(f"Project configuration: {project_config}")
 
     response = httpx.put(
-        f"{CLI_config.base_url}/depictio/api/v1/projects/update",
+        f"{CLI_config.api_base_url}/depictio/api/v1/projects/update",
         json=project_config,
         headers=generate_api_headers(CLI_config),
     )
@@ -191,7 +191,7 @@ def api_create_files(
     logger.debug(f"Files: {files[:2]}")  # Log only the first two files for brevity
     light_payload = {"files": files[:2], "update": update}
     logger.debug(f"Light Payload: {light_payload}")  # Log only the first two files for brevity
-    url = f"{CLI_config.base_url}/depictio/api/v1/files/upsert_batch"
+    url = f"{CLI_config.api_base_url}/depictio/api/v1/files/upsert_batch"
 
     logger.debug(f"Payload: {payload}")
 
@@ -212,10 +212,10 @@ def api_get_files_by_dc_id(dc_id: str, CLI_config: CLIConfig) -> httpx.Response:
         httpx.Response: The response from the server.
     """
     logger.info(f"Getting files for data collection ID: {dc_id}")
-    logger.info(f"{CLI_config.base_url}/depictio/api/v1/files/list/{dc_id}")
+    logger.info(f"{CLI_config.api_base_url}/depictio/api/v1/files/list/{dc_id}")
     logger.info(generate_api_headers(CLI_config))
     response = httpx.get(
-        f"{CLI_config.base_url}/depictio/api/v1/files/list/{dc_id}",
+        f"{CLI_config.api_base_url}/depictio/api/v1/files/list/{dc_id}",
         headers=generate_api_headers(CLI_config),
         timeout=60.0,  # Increase timeout to 60 seconds
     )
@@ -239,7 +239,7 @@ def api_get_runs_by_wf_id(wf_id: str, CLI_config: CLIConfig) -> httpx.Response:
     """
     logger.info(f"Getting runs for workflow ID: {wf_id}")
 
-    url = f"{CLI_config.base_url}/depictio/api/v1/runs/list/{wf_id}"
+    url = f"{CLI_config.api_base_url}/depictio/api/v1/runs/list/{wf_id}"
     response = httpx.get(url, headers=generate_api_headers(CLI_config))
     return response
 
@@ -272,7 +272,7 @@ def api_upsert_runs_batch(
     # payload = {"runs": {}, "update": update}
     payload = {"runs": runs, "update": update}
     logger.debug(f"Payload runs upsert batch: {payload}")
-    url = f"{CLI_config.base_url}/depictio/api/v1/runs/upsert_batch"
+    url = f"{CLI_config.api_base_url}/depictio/api/v1/runs/upsert_batch"
 
     response = httpx.post(url, json=payload, headers=generate_api_headers(CLI_config))
     return response
@@ -292,7 +292,7 @@ def api_delete_run(run_id: str, CLI_config: CLIConfig) -> httpx.Response:
     """
     logger.info(f"Deleting run with ID: {run_id}")
 
-    url = f"{CLI_config.base_url}/depictio/api/v1/runs/delete/{run_id}"
+    url = f"{CLI_config.api_base_url}/depictio/api/v1/runs/delete/{run_id}"
     response = httpx.delete(url, headers=generate_api_headers(CLI_config))
     return response
 
@@ -311,7 +311,7 @@ def api_get_run(run_id: str, CLI_config: CLIConfig) -> httpx.Response:
     """
     logger.info(f"Getting run with ID: {run_id}")
 
-    url = f"{CLI_config.base_url}/depictio/api/v1/runs/get/{run_id}"
+    url = f"{CLI_config.api_base_url}/depictio/api/v1/runs/get/{run_id}"
     response = httpx.get(url, headers=generate_api_headers(CLI_config))
     return response
 
@@ -330,7 +330,7 @@ def api_delete_file(file_id: str, CLI_config: CLIConfig) -> httpx.Response:
     """
     logger.info(f"Deleting file with ID: {file_id}")
 
-    url = f"{CLI_config.base_url}/depictio/api/v1/files/delete/{file_id}"
+    url = f"{CLI_config.api_base_url}/depictio/api/v1/files/delete/{file_id}"
     response = httpx.delete(url, headers=generate_api_headers(CLI_config))
     return response
 
@@ -360,7 +360,7 @@ def api_upsert_deltatable(
         "update": update,
     }
 
-    url = f"{CLI_config.base_url}/depictio/api/v1/deltatables/upsert"
+    url = f"{CLI_config.api_base_url}/depictio/api/v1/deltatables/upsert"
 
     logger.debug(f"Payload: {payload}")
 
@@ -383,7 +383,7 @@ def api_get_deltatable_by_dc_id(dc_id: str, CLI_config: CLIConfig) -> httpx.Resp
     logger.info(f"Getting Delta Table for data collection ID: {dc_id}")
 
     response = httpx.get(
-        f"{CLI_config.base_url}/depictio/api/v1/deltatables/get/{dc_id}",
+        f"{CLI_config.api_base_url}/depictio/api/v1/deltatables/get/{dc_id}",
         headers=generate_api_headers(CLI_config),
     )
     return response
@@ -403,6 +403,6 @@ def api_delete_deltatable(delta_table_id: str, CLI_config: CLIConfig) -> httpx.R
     """
     logger.info(f"Deleting Delta Table with ID: {delta_table_id}")
 
-    url = f"{CLI_config.base_url}/depictio/api/v1/deltatables/delete/{delta_table_id}"
+    url = f"{CLI_config.api_base_url}/depictio/api/v1/deltatables/delete/{delta_table_id}"
     response = httpx.delete(url, headers=generate_api_headers(CLI_config))
     return response

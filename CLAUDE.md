@@ -35,7 +35,7 @@ ruff format .
 ruff check .
 
 # Type checking with ty (Astral's fast type checker)
-ty check depictio/models/ depictio/api/ depictio/dash/  # All folders pass with zero errors
+ty check depictio/models/ depictio/api/ depictio/dash/ depictio/cli/  # All folders pass with zero errors
 
 # Type checking with mypy (limited scope)
 mypy depictio/models/ depictio/cli/

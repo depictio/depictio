@@ -6,7 +6,7 @@ from pydantic import validate_call
 
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
 from depictio.cli.cli_logging import logger
-from depictio.models.models.users import CLIConfig
+from depictio.models.models.cli import CLIConfig
 from depictio.models.utils import get_config
 
 
@@ -50,7 +50,12 @@ def validate_depictio_cli_config(depictio_cli_config: dict) -> CLIConfig:
     """
     Validate the Depictio CLI configuration.
     """
-    config = CLIConfig(**depictio_cli_config)
+    # Map keys to match CLIConfig model expectations and create CLIConfig explicitly
+    config = CLIConfig(
+        user=depictio_cli_config["user"],
+        api_base_url=depictio_cli_config["base_url"],
+        s3_storage=depictio_cli_config["s3"],
+    )
     logger.info(f"Depictio CLI configuration validated: {config}")
     # config = convert_model_to_dict(config)
 

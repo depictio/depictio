@@ -1,8 +1,7 @@
 from datetime import datetime
-from typing import cast
 
-import deltalake
 import polars as pl
+from deltalake.exceptions import TableNotFoundError
 from pydantic import validate_call
 
 from depictio.cli.cli.utils.api_calls import (
@@ -12,10 +11,10 @@ from depictio.cli.cli.utils.api_calls import (
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
 from depictio.cli.cli_logging import logger
 from depictio.models.models.base import convert_objectid_to_str
+from depictio.models.models.cli import CLIConfig
 from depictio.models.models.data_collections import DataCollection
 from depictio.models.models.files import File
 from depictio.models.models.s3 import PolarsStorageOptions
-from depictio.models.models.users import CLIConfig
 from depictio.models.s3_utils import turn_S3_config_into_polars_storage_options
 
 
@@ -212,7 +211,7 @@ def aggregate_lazy_dataframes(lazy_frames: list) -> pl.DataFrame:
     )
     # Materialize the lazy operations.
     try:
-        aggregated_df = cast(pl.DataFrame, concatenated_lf.collect())
+        aggregated_df: pl.DataFrame = concatenated_lf.collect()  # type: ignore[unresolved-attribute]
         return aggregated_df
 
     except Exception as e:
@@ -324,12 +323,12 @@ def client_aggregate_data(
     else:
         overwrite = False
     # Generate destination prefix using the data collection id - should be a S3 path
-    destination_prefix = f"s3://{CLI_config.s3.bucket}/{str(data_collection.id)}"
+    destination_prefix = f"s3://{CLI_config.s3_storage.bucket}/{str(data_collection.id)}"
     logger.debug(f"Destination prefix: {destination_prefix}")
     # logger.info(f"Destination prefix: {destination_prefix}")
 
     # Check if existing Delta table exists and is accessible
-    storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3)
+    storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
     logger.debug(f"Storage options: {storage_options}")
     # logger.info(f"Storage options: {storage_options}")
 
@@ -355,7 +354,7 @@ def client_aggregate_data(
             logger.debug("No data returned from read_delta_table, will create it during processing")
             destination_exists = False
             logger.warning("No data returned, will create it during processing")
-    except deltalake.exceptions.TableNotFoundError:
+    except TableNotFoundError:
         destination_exists = False
         logger.warning("Destination prefix does not exist yet, will create it during processing")
     # logger.info(f"Destination exists: {destination_exists}")
@@ -417,16 +416,16 @@ def client_aggregate_data(
     extended = True if rich_tables else False
 
     if rich_tables:
-        aggregated_df.rich(
+        aggregated_df.rich(  # type: ignore[unresolved-attribute]
             title="Aggregated DataFrame - {data_collection.data_collection_tag}",
             max_rows=10,
             max_cols=10,
             show_dtypes=True,
         )
 
-        aggregated_df.rich_describe()
+        aggregated_df.rich_describe()  # type: ignore[unresolved-attribute]
 
-    aggregated_df.rich_info(extended)
+    aggregated_df.rich_info(extended)  # type: ignore[unresolved-attribute]
 
     # 6. Upsert object in the remote DB
     api_upsert_result = api_upsert_deltatable(
