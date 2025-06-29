@@ -184,16 +184,24 @@ def build_card(**kwargs):
         if data.is_empty():
             # Check if we're in a refresh context where we should load new data
             if kwargs.get("refresh", True):
+                from bson import ObjectId
+
                 from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
                 logger.info(
                     f"Card component {index}: Loading delta table for {wf_id}:{dc_id} (no pre-loaded df)"
                 )
-                data = load_deltatable_lite(
-                    workflow_id=wf_id,
-                    data_collection_id=dc_id,
-                    TOKEN=kwargs.get("access_token"),
-                )
+
+                # Validate that we have valid IDs before calling load_deltatable_lite
+                if not wf_id or not dc_id:
+                    logger.warning(f"Missing workflow_id ({wf_id}) or data_collection_id ({dc_id})")
+                    data = pl.DataFrame()  # Return empty DataFrame if IDs are missing
+                else:
+                    data = load_deltatable_lite(
+                        workflow_id=ObjectId(wf_id),
+                        data_collection_id=ObjectId(dc_id),
+                        TOKEN=kwargs.get("access_token"),
+                    )
             else:
                 # If refresh=False and data is empty, this means filters resulted in no data
                 # Keep the empty DataFrame and compute appropriate "no data" value
@@ -215,7 +223,7 @@ def build_card(**kwargs):
         pass
 
     # Metadata management - Create a store component to store the metadata of the card
-    store_index = index.replace("-tmp", "")
+    store_index = index.replace("-tmp", "") if index else "unknown"
     store_component = dcc.Store(
         id={
             "type": "stored-metadata-component",

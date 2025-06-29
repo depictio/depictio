@@ -59,7 +59,7 @@ jobs:
       - name: Run ty type checker (must pass)
         run: |
           source venv/bin/activate
-          ty check depictio/models/ depictio/api/
+          ty check depictio/models/ depictio/api/ depictio/dash/
 
       - name: Run tests
         run: |

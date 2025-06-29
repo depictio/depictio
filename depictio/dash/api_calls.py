@@ -10,7 +10,7 @@ from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.logging_init import format_pydantic, logger
 from depictio.api.v1.endpoints.user_endpoints.core_functions import _hash_password
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
-from depictio.models.models.users import TokenBase, TokenData, User
+from depictio.models.models.users import TokenBase, TokenData, UserBaseUI
 from depictio.models.utils import convert_model_to_dict
 
 # Check if running in a test environment
@@ -68,7 +68,7 @@ def api_call_register_user(
 
 
 @validate_call(validate_return=True)
-def api_call_fetch_user_from_token(token: str) -> User | None:
+def api_call_fetch_user_from_token(token: str) -> UserBaseUI | None:
     """
     Fetch a user from the authentication service using a token.
     Synchronous version for Dash compatibility with caching to reduce redundant API calls.
@@ -103,10 +103,31 @@ def api_call_fetch_user_from_token(token: str) -> User | None:
     user_data = response.json()
     logger.debug(f"User data fetched from API: {user_data.get('email', 'No email found')}")
 
-    if not user_data:
+    if not user_data or "email" not in user_data:
         return None
 
-    user = User(**user_data)
+    # Ensure all required fields are present with defaults
+    user = UserBaseUI(
+        email=user_data["email"],
+        is_admin=user_data.get("is_admin", False),
+        is_active=user_data.get("is_active", True),
+        is_verified=user_data.get("is_verified", False),
+        last_login=user_data.get("last_login"),
+        registration_date=user_data.get("registration_date"),
+        **{
+            k: v
+            for k, v in user_data.items()
+            if k
+            not in [
+                "email",
+                "is_admin",
+                "is_active",
+                "is_verified",
+                "last_login",
+                "registration_date",
+            ]
+        },
+    )
 
     # Cache the result
     _user_cache[cache_key] = (user, current_time)
@@ -120,7 +141,7 @@ def api_call_fetch_user_from_token(token: str) -> User | None:
 
 
 @validate_call(validate_return=True)
-def api_call_fetch_user_from_email(email: EmailStr) -> User | None:
+def api_call_fetch_user_from_email(email: EmailStr) -> UserBaseUI | None:
     """
     Fetch a user from the authentication service using an email.
     Synchronous version for Dash compatibility.
@@ -148,10 +169,31 @@ def api_call_fetch_user_from_email(email: EmailStr) -> User | None:
         f"User data fetched: {user_data.get('email', 'No email found')} with ID {user_data.get('_id', 'No ID found')}"
     )
 
-    if not user_data:
+    if not user_data or "email" not in user_data:
         return None
 
-    user = User(**user_data)
+    # Ensure all required fields are present with defaults
+    user = UserBaseUI(
+        email=user_data["email"],
+        is_admin=user_data.get("is_admin", False),
+        is_active=user_data.get("is_active", True),
+        is_verified=user_data.get("is_verified", False),
+        last_login=user_data.get("last_login"),
+        registration_date=user_data.get("registration_date"),
+        **{
+            k: v
+            for k, v in user_data.items()
+            if k
+            not in [
+                "email",
+                "is_admin",
+                "is_active",
+                "is_verified",
+                "last_login",
+                "registration_date",
+            ]
+        },
+    )
 
     return user
 
@@ -541,7 +583,7 @@ def api_call_generate_agent_config(token: TokenData, current_token: str) -> dict
         return None
 
 
-@validate_call(config=dict(arbitrary_types_allowed=True), validate_return=True)
+@validate_call(config=dict(arbitrary_types_allowed=True), validate_return=True)  # type: ignore[invalid-argument-type]
 def api_get_project_from_id(project_id: PyObjectId, token: str) -> httpx.Response:
     """
     Get a project from the server using the project ID.

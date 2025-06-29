@@ -4,6 +4,8 @@ import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import numpy as np
 import pandas as pd
+import polars as pl
+from bson import ObjectId
 from dash import dcc, html
 
 from depictio.api.v1.configs.logging_init import logger
@@ -336,7 +338,7 @@ def build_interactive(**kwargs):
     func_name = agg_functions[column_type]["input_methods"][interactive_component_type]["component"]
 
     # Common Store Component
-    store_index = index.replace("-tmp", "")
+    store_index = index.replace("-tmp", "") if index else "unknown"
 
     store_data = {
         "component_type": "interactive",
@@ -361,7 +363,12 @@ def build_interactive(**kwargs):
         logger.info(
             f"Interactive component {index}: Loading delta table for {wf_id}:{dc_id} (no pre-loaded df)"
         )
-        df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
+        # Validate that we have valid IDs before calling load_deltatable_lite
+        if not wf_id or not dc_id:
+            logger.warning(f"Missing workflow_id ({wf_id}) or data_collection_id ({dc_id})")
+            df = pl.DataFrame()  # Return empty DataFrame if IDs are missing
+        else:
+            df = load_deltatable_lite(ObjectId(wf_id), ObjectId(dc_id), TOKEN=TOKEN)
     else:
         logger.debug(
             f"Interactive component {index}: Using pre-loaded DataFrame (shape: {df.shape})"
@@ -597,10 +604,14 @@ def build_interactive(**kwargs):
 
     # If the aggregation value is Slider or RangeSlider
     elif interactive_component_type in ["Slider", "RangeSlider"]:
-        min_value, max_value = (
-            cols_json[column_name]["specs"]["min"],
-            cols_json[column_name]["specs"]["max"],
-        )
+        if not cols_json or column_name not in cols_json or "specs" not in cols_json[column_name]:
+            logger.warning(f"Missing column specs for {column_name}, using default values")
+            min_value, max_value = 0, 100
+        else:
+            min_value, max_value = (
+                cols_json[column_name]["specs"]["min"],
+                cols_json[column_name]["specs"]["max"],
+            )
         kwargs = {
             "min": min_value,
             "max": max_value,

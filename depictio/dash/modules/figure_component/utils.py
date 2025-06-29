@@ -5,6 +5,7 @@ import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import plotly.express as px
 import polars as pl
+from bson import ObjectId
 from dash import dcc, html
 from dash_iconify import DashIconify
 
@@ -150,7 +151,7 @@ def build_figure(**kwargs):
     # logger.info(f"Build frame: {build_frame}")
     # logger.info(f"Selected Point: {selected_point}")
 
-    store_index = index.replace("-tmp", "")
+    store_index = index.replace("-tmp", "") if index else "unknown"
 
     store_component_data = {
         "index": str(store_index),
@@ -173,7 +174,12 @@ def build_figure(**kwargs):
             logger.info(
                 f"Figure component {index}: Loading delta table for {wf_id}:{dc_id} (no pre-loaded df)"
             )
-            df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
+            # Validate that we have valid IDs before calling load_deltatable_lite
+            if not wf_id or not dc_id:
+                logger.warning(f"Missing workflow_id ({wf_id}) or data_collection_id ({dc_id})")
+                df = pl.DataFrame()  # Return empty DataFrame if IDs are missing
+            else:
+                df = load_deltatable_lite(ObjectId(wf_id), ObjectId(dc_id), TOKEN=TOKEN)
         else:
             # If refresh=False and df is empty, this means filters resulted in no data
             # Keep the empty DataFrame to properly reflect the filtered state
@@ -373,9 +379,11 @@ def get_common_params(plotly_vizu_list):
     Get the common parameters between a list of Plotly visualizations
     """
     # Iterate over the list of visualizations and get the parameters, then get the common ones
-    common_params = set.intersection(
-        *[set(inspect.signature(func).parameters.keys()) for func in plotly_vizu_list]
-    )
+    if not plotly_vizu_list:
+        return set(), []
+
+    param_sets = [set(inspect.signature(func).parameters.keys()) for func in plotly_vizu_list]
+    common_params = param_sets[0].intersection(*param_sets[1:]) if param_sets else set()
     # Sort the common parameters based on the order of the first visualization
     common_param_names = [p for p in list(common_params)]
     common_param_names.sort(
