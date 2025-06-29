@@ -389,7 +389,7 @@ class TestGetProjectFromName:
         )
 
         with pytest.raises(HTTPException) as excinfo:
-            _async_get_project_from_name(
+            _async_get_project_from_name(  # type: ignore[invalid-argument-type]
                 "Non-existent Project", current_user, mock_projects_collection
             )
 
