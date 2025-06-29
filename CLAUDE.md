@@ -34,7 +34,11 @@ ruff format .
 # Lint code
 ruff check .
 
-# Type checking (limited scope)
+# Type checking with ty (Astral's fast type checker)
+ty check depictio/models/  # Should pass with zero errors
+ty check depictio/api/     # Work in progress to achieve zero errors
+
+# Type checking with mypy (limited scope)
 mypy depictio/models/ depictio/cli/
 ```
 
@@ -137,6 +141,18 @@ docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio
 - Integration tests for API endpoints
 - E2E tests with Cypress for full user workflows
 - Docker-based integration testing with real databases
+
+**Type Checking with ty**
+
+The codebase uses Astral's `ty` type checker for static type analysis. When making changes:
+
+- Run `ty check depictio/models/` - This MUST pass with zero errors
+- Run `ty check depictio/api/` - Work towards zero errors, add `# type: ignore[error-type]` comments when necessary
+- Common type ignore patterns:
+  - `# type: ignore[invalid-argument-type]` - For Pydantic model instantiation with dict data
+  - `# type: ignore[unresolved-attribute]` - For dynamic attribute access on models
+  - `# type: ignore[invalid-assignment]` - For ObjectId/PyObjectId conversions
+  - `# type: ignore[missing-argument]` - For partial model instantiation in tests
 
 ## Key Dependencies
 

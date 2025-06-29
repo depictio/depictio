@@ -821,9 +821,9 @@ class TestPermission:
         )
 
         # Add ID attributes to simulate DB objects
-        user1.id = "user1_id"
-        user2.id = "user2_id"
-        user3.id = "user3_id"
+        user1.id = "user1_id"  # type: ignore[invalid-assignment]
+        user2.id = "user2_id"  # type: ignore[invalid-assignment]
+        user3.id = "user3_id"  # type: ignore[invalid-assignment]
 
         permission = Permission(owners=[user1], editors=[user2], viewers=[user3])
 
@@ -841,7 +841,7 @@ class TestPermission:
             email="owner@example.com",
             is_admin=True,
         )
-        user1.id = "user1_id"
+        user1.id = "user1_id"  # type: ignore[invalid-assignment]
 
         permission = Permission(
             owners=[user1],
@@ -894,7 +894,7 @@ class TestPermission:
             email="user@example.com",
             is_admin=True,
         )
-        user.id = "same_id"
+        user.id = "same_id"  # type: ignore[invalid-assignment]
 
         # Test user in owners and editors
         with pytest.raises(ValidationError, match="A User cannot be both an owner and an editor"):
@@ -932,8 +932,8 @@ class TestPermission:
             email="editor@example.com",
             is_admin=False,
         )
-        user1.id = "user1_id"
-        user2.id = "user2_id"
+        user1.id = "user1_id"  # type: ignore[invalid-assignment]
+        user2.id = "user2_id"  # type: ignore[invalid-assignment]
 
         permission = Permission(owners=[user1], editors=[user2], viewers=["*"])
 
@@ -955,13 +955,13 @@ class TestPermission:
         """Test creating a Permission with existing user IDs."""
         user1_id = PydanticObjectId()
         user1 = UserBase(
-            id=user1_id,
+            id=user1_id,  # type: ignore[invalid-argument-type]
             email="user1@example.com",
             is_admin=True,
         )
         user2_id = PydanticObjectId()
         user2 = UserBase(
-            id=user2_id,
+            id=user2_id,  # type: ignore[invalid-argument-type]
             email="user2@example.com",
             is_admin=False,
         )
@@ -997,7 +997,7 @@ class TestRequestEditPassword:
             "new_password": "newplainpassword123",
         }
 
-        model = RequestEditPassword(**valid_data)
+        model = RequestEditPassword(**valid_data)  # type: ignore[missing-argument]
         assert model.old_password == "$2b$12$validhashedpassword"
         assert model.new_password == "newplainpassword123"
 
@@ -1009,7 +1009,7 @@ class TestRequestEditPassword:
         }
 
         with pytest.raises(ValidationError) as exc_info:
-            RequestEditPassword(**invalid_data)
+            RequestEditPassword(**invalid_data)  # type: ignore[missing-argument]
 
         # Check that the error message mentions hashing
         error_details = str(exc_info.value)
@@ -1023,7 +1023,7 @@ class TestRequestEditPassword:
         }
 
         with pytest.raises(ValidationError) as exc_info:
-            RequestEditPassword(**invalid_data)
+            RequestEditPassword(**invalid_data)  # type: ignore[missing-argument]
 
         # Check that the error message mentions already hashed
         error_details = str(exc_info.value)
@@ -1033,15 +1033,15 @@ class TestRequestEditPassword:
         """Test that missing required fields raise validation errors."""
         # Missing old_password
         with pytest.raises(ValidationError):
-            RequestEditPassword(new_password="newpassword123")
+            RequestEditPassword(new_password="newpassword123")  # type: ignore[missing-argument]
 
         # Missing new_password
         with pytest.raises(ValidationError):
-            RequestEditPassword(old_password="$2b$12$validhashedpassword")
+            RequestEditPassword(old_password="$2b$12$validhashedpassword")  # type: ignore[missing-argument]
 
         # Empty dict (missing both)
         with pytest.raises(ValidationError):
-            RequestEditPassword()
+            RequestEditPassword()  # type: ignore[missing-argument]
 
 
 # ---------------------------------
@@ -1072,7 +1072,7 @@ class TestUserBaseCLIConfig:
     def test_user_base_cli_config_missing_token(self):
         """Test validation when token is missing."""
         with pytest.raises(ValidationError) as exc_info:
-            UserBaseCLIConfig(
+            UserBaseCLIConfig(  # type: ignore[missing-argument]
                 email="test@example.com",
             )
 

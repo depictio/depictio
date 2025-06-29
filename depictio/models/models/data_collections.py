@@ -106,10 +106,20 @@ class Scan(BaseModel):
         scan_parameters = values.get("scan_parameters")
         if type_value == "recursive":
             if not isinstance(scan_parameters, ScanRecursive):
-                values["scan_parameters"] = ScanRecursive(**values["scan_parameters"])
+                if isinstance(scan_parameters, dict) and "regex_config" in scan_parameters:
+                    try:
+                        values["scan_parameters"] = ScanRecursive(**scan_parameters)  # type: ignore[missing-argument]
+                    except Exception:
+                        # Keep original if conversion fails
+                        pass
         elif type_value == "single":
             if not isinstance(scan_parameters, ScanSingle):
-                values["scan_parameters"] = ScanSingle(**values["scan_parameters"])
+                if isinstance(scan_parameters, dict) and "filename" in scan_parameters:
+                    try:
+                        values["scan_parameters"] = ScanSingle(**scan_parameters)  # type: ignore[missing-argument]
+                    except Exception:
+                        # Keep original if conversion fails
+                        pass
         return values
 
 
@@ -155,11 +165,17 @@ class DataCollectionConfig(MongoModel):
         if type_value == "table":
             # Check if it's already a DCTableConfig instance
             if not isinstance(dc_specific_properties, DCTableConfig):
-                values["dc_specific_properties"] = DCTableConfig(**dc_specific_properties)
+                if isinstance(dc_specific_properties, dict) and "format" in dc_specific_properties:
+                    try:
+                        values["dc_specific_properties"] = DCTableConfig(**dc_specific_properties)  # type: ignore[missing-argument]
+                    except Exception:
+                        # Keep original if conversion fails
+                        pass
         elif type_value == "jbrowse2":
             # Check if it's already a DCJBrowse2Config instance
             if not isinstance(dc_specific_properties, DCJBrowse2Config):
-                values["dc_specific_properties"] = DCJBrowse2Config(**dc_specific_properties)
+                if isinstance(dc_specific_properties, dict):
+                    values["dc_specific_properties"] = DCJBrowse2Config(**dc_specific_properties)
         return values
 
 

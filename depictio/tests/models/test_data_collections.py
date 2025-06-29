@@ -36,7 +36,7 @@ class TestWildcardRegexBase:
     def test_extra_fields_forbidden(self):
         """Test that extra fields are not allowed."""
         with pytest.raises(ValidationError) as exc_info:
-            WildcardRegexBase(name="test", wildcard_regex="^test$", extra_field="should not work")
+            WildcardRegexBase(name="test", wildcard_regex="^test$", extra_field="should not work")  # type: ignore[call-arg]
         assert "extra" in str(exc_info.value) or "unexpected" in str(exc_info.value)
 
 
@@ -70,7 +70,7 @@ class TestRegex:
     def test_extra_fields_forbidden(self):
         """Test that extra fields are not allowed."""
         with pytest.raises(ValidationError) as exc_info:
-            Regex(pattern="^test$", extra_field="should not work")
+            Regex(pattern="^test$", extra_field="should not work")  # type: ignore[call-arg]
         assert "extra" in str(exc_info.value) or "unexpected" in str(exc_info.value)
 
 
@@ -99,7 +99,7 @@ class TestScanRecursive:
         """Test that extra fields are not allowed."""
         regex_config = Regex(pattern="^test.*$")
         with pytest.raises(ValidationError) as exc_info:
-            ScanRecursive(regex_config=regex_config, extra_field="should not work")
+            ScanRecursive(regex_config=regex_config, extra_field="should not work")  # type: ignore[call-arg]
         assert "extra" in str(exc_info.value) or "unexpected" in str(exc_info.value)
 
 
@@ -157,7 +157,7 @@ class TestScanSingle:
     def test_extra_fields_forbidden(self):
         """Test that extra fields are not allowed."""
         with pytest.raises(ValidationError) as exc_info:
-            ScanSingle(filename="test.txt", extra_field="should not work")
+            ScanSingle(filename="test.txt", extra_field="should not work")  # type: ignore[call-arg]
         assert "extra" in str(exc_info.value) or "unexpected" in str(exc_info.value)
 
 
@@ -167,7 +167,7 @@ class TestScan:
     def test_valid_recursive_mode(self):
         """Test creating a valid Scan instance with recursive mode."""
         scan_params = {"regex_config": {"pattern": "^test.*$"}, "max_depth": 3}
-        config = Scan(mode="recursive", scan_parameters=scan_params)
+        config = Scan(mode="recursive", scan_parameters=scan_params)  # type: ignore[arg-type]
         assert config.mode == "recursive"
         assert isinstance(config.scan_parameters, ScanRecursive)
         assert config.scan_parameters.max_depth == 3
@@ -177,7 +177,7 @@ class TestScan:
         monkeypatch.setattr("depictio.models.models.data_collections.DEPICTIO_CONTEXT", "server")
 
         scan_params = {"filename": "test.txt"}
-        config = Scan(mode="single", scan_parameters=scan_params)
+        config = Scan(mode="single", scan_parameters=scan_params)  # type: ignore[arg-type]
         assert config.mode == "single"
         assert isinstance(config.scan_parameters, ScanSingle)
         assert config.scan_parameters.filename == "test.txt"
@@ -185,7 +185,7 @@ class TestScan:
     def test_invalid_mode(self):
         """Test validation with invalid mode."""
         with pytest.raises(ValidationError) as exc_info:
-            Scan(mode="invalid", scan_parameters={})
+            Scan(mode="invalid", scan_parameters={})  # type: ignore[arg-type]
         assert "mode must be one of" in str(exc_info.value)
 
     def test_mode_case_insensitive(self, monkeypatch):
@@ -193,7 +193,7 @@ class TestScan:
         monkeypatch.setattr("depictio.models.models.data_collections.DEPICTIO_CONTEXT", "server")
 
         scan_params = {"filename": "test.txt"}
-        config = Scan(mode="SINGLE", scan_parameters=scan_params)
+        config = Scan(mode="SINGLE", scan_parameters=scan_params)  # type: ignore[arg-type]
         assert config.mode == "SINGLE"  # maintains original case
 
 
@@ -229,7 +229,7 @@ class TestTableJoinConfig:
     def test_extra_fields_forbidden(self):
         """Test that extra fields are not allowed."""
         with pytest.raises(ValidationError) as exc_info:
-            TableJoinConfig(on_columns=["col1"], with_dc=["dc1"], extra_field="should not work")
+            TableJoinConfig(on_columns=["col1"], with_dc=["dc1"], extra_field="should not work")  # type: ignore[call-arg]
         assert "extra" in str(exc_info.value) or "unexpected" in str(exc_info.value)
 
 
@@ -250,8 +250,8 @@ class TestDataCollectionConfig:
         config = DataCollectionConfig(
             type="table",
             metatype="test_meta",
-            scan=scan_config,
-            dc_specific_properties=dc_specific,
+            scan=scan_config,  # type: ignore[arg-type]
+            dc_specific_properties=dc_specific,  # type: ignore[arg-type]
         )
         assert config.type == "table"
         assert config.metatype == "test_meta"
@@ -262,11 +262,13 @@ class TestDataCollectionConfig:
     def test_valid_jbrowse2_config(self):
         """Test creating a valid DataCollectionConfig instance with jbrowse2 type."""
         # Assuming DCJBrowse2Config has specific required fields
-        dc_specific = {}  # Add required fields based on DCJBrowse2Config
+        dc_specific: dict[str, str] = {}  # Add required fields based on DCJBrowse2Config
         scan_config = {"mode": "single", "scan_parameters": {"filename": "test.txt"}}
 
         config = DataCollectionConfig(
-            type="jbrowse2", scan=scan_config, dc_specific_properties=dc_specific
+            type="jbrowse2",
+            scan=scan_config,
+            dc_specific_properties=dc_specific,  # type: ignore[arg-type]
         )
         assert config.type == "jbrowse2"
         assert isinstance(config.dc_specific_properties, DCJBrowse2Config)
@@ -277,7 +279,9 @@ class TestDataCollectionConfig:
         scan_config = {"mode": "single", "scan_parameters": {"filename": "test.txt"}}
 
         config = DataCollectionConfig(
-            type="TABLE", scan=scan_config, dc_specific_properties=dc_specific
+            type="TABLE",
+            scan=scan_config,
+            dc_specific_properties=dc_specific,  # type: ignore[arg-type]
         )
         assert config.type == "table"  # returns lowercase
 
@@ -286,8 +290,8 @@ class TestDataCollectionConfig:
         with pytest.raises(ValidationError) as exc_info:
             DataCollectionConfig(
                 type="invalid",
-                scan={"mode": "single", "scan_parameters": {"filename": "test.txt"}},
-                dc_specific_properties={},
+                scan={"mode": "single", "scan_parameters": {"filename": "test.txt"}},  # type: ignore[arg-type]
+                dc_specific_properties={},  # type: ignore[arg-type]
             )
         assert "type must be one of" in str(exc_info.value)
 
@@ -299,9 +303,9 @@ class TestDataCollectionConfig:
 
         config = DataCollectionConfig(
             type="table",
-            scan=scan_config,
-            dc_specific_properties=dc_specific,
-            join=join_config,
+            scan=scan_config,  # type: ignore[arg-type]
+            dc_specific_properties=dc_specific,  # type: ignore[arg-type]
+            join=join_config,  # type: ignore[arg-type]
         )
         assert isinstance(config.join, TableJoinConfig)
         assert config.join.on_columns == ["col1"]
@@ -323,7 +327,7 @@ class TestDataCollection:
             "dc_specific_properties": {"format": "csv"},
         }
 
-        data_collection = DataCollection(data_collection_tag="test_collection", config=config_dict)
+        data_collection = DataCollection(data_collection_tag="test_collection", config=config_dict)  # type: ignore[arg-type]
         assert data_collection.data_collection_tag == "test_collection"
         assert isinstance(data_collection.config, DataCollectionConfig)
         assert data_collection.config.type == "table"
@@ -336,9 +340,9 @@ class TestDataCollection:
             "dc_specific_properties": {"format": "csv"},
         }
 
-        data_collection1 = DataCollection(data_collection_tag="test_collection", config=config_dict)
-        data_collection2 = DataCollection(data_collection_tag="test_collection", config=config_dict)
-        data_collection3 = DataCollection(data_collection_tag="different_tag", config=config_dict)
+        data_collection1 = DataCollection(data_collection_tag="test_collection", config=config_dict)  # type: ignore[arg-type]
+        data_collection2 = DataCollection(data_collection_tag="test_collection", config=config_dict)  # type: ignore[arg-type]
+        data_collection3 = DataCollection(data_collection_tag="different_tag", config=config_dict)  # type: ignore[arg-type]
 
         assert data_collection1 == data_collection2
         assert data_collection1 != data_collection3
@@ -373,7 +377,7 @@ class TestDataCollectionIntegration:
         dc_data = workflow["data_collections"][0]
 
         # Validate DataCollection
-        data_collection = DataCollection(**dc_data)
+        data_collection = DataCollection(**dc_data)  # type: ignore[arg-type]
 
         # Assert main properties
         assert data_collection.data_collection_tag == "iris_table"
@@ -385,7 +389,7 @@ class TestDataCollectionIntegration:
         assert data_collection.config.scan.mode == "single"
         assert isinstance(data_collection.config.scan.scan_parameters, ScanSingle)
         assert (
-            data_collection.config.scan.scan_parameters.filename
+            data_collection.config.scan.scan_parameters.filename  # type: ignore[union-attr]
             == "/app/depictio/api/v1/configs/iris_dataset/iris.csv"
         )
 
@@ -415,7 +419,7 @@ class TestDataCollectionIntegration:
         # Test with non-existent file
         mock_exists.return_value = False
         with pytest.raises(ValidationError) as exc_info:
-            DataCollection(**dc_data)
+            DataCollection(**dc_data)  # type: ignore[arg-type]
 
         # Note: The validation error will be caught for the actual file path
         assert "does not exist" in str(exc_info.value)
@@ -436,12 +440,12 @@ class TestDataCollectionIntegration:
         dc_data = workflow["data_collections"][0]
 
         # Should validate without checking file existence in server context
-        data_collection = DataCollection(**dc_data)
+        data_collection = DataCollection(**dc_data)  # type: ignore[arg-type]
 
         # Assert main properties
         assert data_collection.data_collection_tag == "iris_table"
         assert data_collection.config.type == "table"
         assert (
-            data_collection.config.scan.scan_parameters.filename
+            data_collection.config.scan.scan_parameters.filename  # type: ignore[union-attr]
             == "/app/depictio/api/v1/configs/iris_dataset/iris.csv"
         )

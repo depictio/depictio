@@ -56,6 +56,11 @@ jobs:
           source venv/bin/activate
           ruff check depictio
 
+      - name: Run ty type checker (must pass)
+        run: |
+          source venv/bin/activate
+          ty check depictio/models/ depictio/api/
+
       - name: Run tests
         run: |
           source venv/bin/activate

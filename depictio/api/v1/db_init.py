@@ -20,7 +20,7 @@ from depictio.models.models.users import GroupBeanie, Permission, TokenBeanie, U
 from depictio.models.utils import get_config
 
 
-async def create_initial_project(admin_user: UserBeanie, token_payload: TokenBeanie) -> None:
+async def create_initial_project(admin_user: UserBeanie, token_payload: TokenBeanie) -> dict | None:
     # from depictio.models.models.projects import Project,
 
     project_yaml_path = os.path.join(
@@ -32,7 +32,7 @@ async def create_initial_project(admin_user: UserBeanie, token_payload: TokenBea
     project_config["permissions"] = {
         "owners": [
             UserBase(
-                id=admin_user.id,
+                id=admin_user.id,  # type: ignore[invalid-argument-type]  # type: ignore[invalid-argument-type]
                 email=admin_user.email,
                 is_admin=True,
             )
@@ -42,9 +42,9 @@ async def create_initial_project(admin_user: UserBeanie, token_payload: TokenBea
     }
 
     logger.debug(f"Project config: {project_config}")
-    project = ProjectBeanie(**project_config)
+    project = ProjectBeanie(**project_config)  # type: ignore[missing-argument]
     logger.debug(f"Project object: {format_pydantic(project)}")
-    token = TokenBeanie(**token_payload["token"])
+    token = TokenBeanie(**token_payload["token"])  # type: ignore[missing-argument]
     logger.debug(f"Token: {format_pydantic(token)}")
 
     try:
@@ -69,7 +69,7 @@ async def create_initial_project(admin_user: UserBeanie, token_payload: TokenBea
         }
 
 
-async def create_initial_dashboard(admin_user: UserBeanie) -> None:
+async def create_initial_dashboard(admin_user: UserBeanie) -> dict | None:
     """
     Create an initial dashboard for the admin user.
     This function is a placeholder and should be implemented based on your application's requirements.
@@ -98,7 +98,7 @@ async def create_initial_dashboard(admin_user: UserBeanie) -> None:
     dashboard_data.permissions = Permission(
         owners=[
             UserBase(
-                id=admin_user.id,
+                id=admin_user.id,  # type: ignore[invalid-argument-type]
                 email=admin_user.email,
                 is_admin=True,
             )
@@ -140,7 +140,7 @@ async def initialize_db(wipe: bool = False) -> UserBeanie | None:
 
     # Create groups
     for group_config in initial_config.get("groups", []):
-        group = GroupBeanie(**group_config)
+        group = GroupBeanie(**group_config)  # type: ignore[missing-argument]
         payload = await create_group_helper_beanie(group)
         logger.debug(f"Created group: {format_pydantic(payload['group'])}")
 
@@ -180,7 +180,7 @@ async def initialize_db(wipe: bool = False) -> UserBeanie | None:
                     "config_path": None,
                     "new_token_created": False,
                 }
-                logger.debug(f"Token payload: {format_pydantic(token_payload)}")
+                logger.debug(f"Token payload: {format_pydantic(token_payload)}")  # type: ignore[invalid-argument-type]
                 logger.info(f"Default token already exists for {user_payload['user'].email}")
             else:
                 logger.warning(f"Failed to create default token for {user_payload['user'].email}")
@@ -206,7 +206,7 @@ async def initialize_db(wipe: bool = False) -> UserBeanie | None:
             logger.warning("No admin user found in the database")
 
     project_payload = await create_initial_project(
-        admin_user=admin_user, token_payload=token_payload
+        admin_user=admin_user, token_payload=token_beanie
     )
     logger.debug(f"Project payload: {project_payload}")
 

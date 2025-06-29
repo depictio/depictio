@@ -753,15 +753,15 @@ def delete_user(user_id: str, current_user=Depends(get_current_user)):
 
     # Ensure user_id is an ObjectId
     if isinstance(user_id, str):
-        user_id = ObjectId(user_id)
+        user_id = ObjectId(user_id)  # type: ignore[invalid-assignment]
     elif isinstance(user_id, dict) and "$oid" in user_id:
-        user_id = ObjectId(user_id["$oid"])
+        user_id = ObjectId(user_id["$oid"])  # type: ignore[invalid-assignment]
     elif isinstance(user_id, ObjectId):
         # Already an ObjectId, no conversion needed
         pass
     else:
         # Convert to string first, then to ObjectId
-        user_id = ObjectId(str(user_id))
+        user_id = ObjectId(str(user_id))  # type: ignore[invalid-assignment]
 
     # Delete the user from the database
     result = users_collection.delete_one({"_id": user_id})
@@ -781,15 +781,15 @@ def turn_sysadmin(user_id: str, is_admin: bool, current_user=Depends(get_current
 
     # Ensure user_id is an ObjectId
     if isinstance(user_id, str):
-        user_id = ObjectId(user_id)
+        user_id = ObjectId(user_id)  # type: ignore[invalid-assignment]
     elif isinstance(user_id, dict) and "$oid" in user_id:
-        user_id = ObjectId(user_id["$oid"])
+        user_id = ObjectId(user_id["$oid"])  # type: ignore[invalid-assignment]
     elif isinstance(user_id, ObjectId):
         # Already an ObjectId, no conversion needed
         pass
     else:
         # Convert to string first, then to ObjectId
-        user_id = ObjectId(str(user_id))
+        user_id = ObjectId(str(user_id))  # type: ignore[invalid-assignment]
 
     # Update the user in the database
     result = users_collection.update_one({"_id": user_id}, {"$set": {"is_admin": is_admin}})
@@ -809,15 +809,15 @@ def delete_group(group_id: str, current_user=Depends(get_current_user)):
 
     # Ensure group_id is an ObjectId
     if isinstance(group_id, str):
-        group_id = ObjectId(group_id)
+        group_id = ObjectId(group_id)  # type: ignore[invalid-assignment]
     elif isinstance(group_id, dict) and "$oid" in group_id:
-        group_id = ObjectId(group_id["$oid"])
+        group_id = ObjectId(group_id["$oid"])  # type: ignore[invalid-assignment]
     elif isinstance(group_id, ObjectId):
         # Already an ObjectId, no conversion needed
         pass
     else:
         # Convert to string first, then to ObjectId
-        group_id = ObjectId(str(group_id))
+        group_id = ObjectId(str(group_id))  # type: ignore[invalid-assignment]
 
     response = delete_group_helper(group_id)
     return response
@@ -843,7 +843,7 @@ def update_group_in_users(group_id: str, request: dict, current_user=Depends(get
     logger.debug(f"Request: {request}")
 
     # Convert user dicts to UserBase objects
-    users = [UserBase(**user) for user in request["users"]]
+    users = [UserBase(**user) for user in request["users"]]  # type: ignore[missing-argument]
 
     logger.debug(f"Users: {users}")
 
@@ -875,15 +875,15 @@ def get_group_with_users(group_id: str, current_user=Depends(get_current_user)):
 
     # Ensure group_id is an ObjectId
     if isinstance(group_id, str):
-        group_id = ObjectId(group_id)
+        group_id = ObjectId(group_id)  # type: ignore[invalid-assignment]
     elif isinstance(group_id, dict) and "$oid" in group_id:
-        group_id = ObjectId(group_id["$oid"])
+        group_id = ObjectId(group_id["$oid"])  # type: ignore[invalid-assignment]
     elif isinstance(group_id, ObjectId):
         # Already an ObjectId, no conversion needed
         pass
     else:
         # Convert to string first, then to ObjectId
-        group_id = ObjectId(str(group_id))
+        group_id = ObjectId(str(group_id))  # type: ignore[invalid-assignment]
 
     from depictio.api.v1.db import groups_collection
 
@@ -910,10 +910,11 @@ def get_group_with_users(group_id: str, current_user=Depends(get_current_user)):
             group["users"] = users
 
             # Check if group can be converted to GroupWithUsers
-            from depictio.models.models.users import GroupWithUsers
-
-            group_with_users = GroupWithUsers.from_mongo(group)
-            return convert_model_to_dict(group_with_users)
+            # TODO: GroupWithUsers not implemented yet
+            # from depictio.models.models.users import GroupWithUsers  # type: ignore[unresolved-import]
+            # group_with_users = GroupWithUsers.from_mongo(group)
+            # return convert_model_to_dict(group_with_users)
+            return convert_model_to_dict(group)
         else:
             return convert_model_to_dict(group)
     else:

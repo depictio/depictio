@@ -319,7 +319,7 @@ class TestWorkflowEngine:
     def test_extra_fields_forbidden(self):
         """Test that extra fields are not allowed."""
         with pytest.raises(ValidationError) as exc_info:
-            WorkflowEngine(name="test", extra_field="should not work")
+            WorkflowEngine(name="test", extra_field="should not work")  # type: ignore[call-arg]
         assert "extra" in str(exc_info.value) or "unexpected" in str(exc_info.value)
 
 
@@ -362,7 +362,7 @@ class TestWorkflowCatalog:
             WorkflowCatalog(
                 name="workflowhub",
                 url="https://example.com",
-                extra_field="should not work",
+                extra_field="should not work",  # type: ignore[call-arg]
             )
         assert "extra" in str(exc_info.value) or "unexpected" in str(exc_info.value)
 
@@ -383,7 +383,7 @@ class TestWorkflow:
         data_collections = [
             DataCollection(
                 data_collection_tag="dc1",
-                config={
+                config={  # type: ignore[arg-type]
                     "type": "table",
                     "scan": {
                         "mode": "single",
@@ -419,7 +419,7 @@ class TestWorkflow:
 
         userbase = UserBase(email="test_user@example.com", is_admin=False)
 
-        data_collections = []
+        data_collections: list[DataCollection] = []
         runs = {
             "run1": WorkflowRun(
                 workflow_id=PyObjectId(),
@@ -464,7 +464,7 @@ class TestWorkflow:
         """Test validation with missing required fields."""
         # Missing name
         with pytest.raises(ValidationError) as exc_info:
-            Workflow(
+            Workflow(  # type: ignore[call-arg]
                 engine=WorkflowEngine(name="nextflow"),
                 data_location=WorkflowDataLocation(structure="flat", locations=["/path"]),
                 data_collections=[],
@@ -474,7 +474,7 @@ class TestWorkflow:
 
         # Missing engine
         with pytest.raises(ValidationError) as exc_info:
-            Workflow(
+            Workflow(  # type: ignore[call-arg]
                 name="test",
                 data_location=WorkflowDataLocation(structure="flat", locations=["/path"]),
                 data_collections=[],
@@ -517,22 +517,22 @@ class TestWorkflow:
         """Test validation of data_collections and runs fields."""
         # data_collections must be a list
         with pytest.raises(ValidationError) as exc_info:
-            Workflow(
+            Workflow(  # type: ignore[arg-type]
                 name="test",
                 engine=WorkflowEngine(name="nextflow"),
                 data_location=WorkflowDataLocation(structure="flat", locations=["/path"]),
-                data_collections="not a list",
+                data_collections="not a list",  # type: ignore[arg-type]
             )
         assert "data_collections must be a list" in str(exc_info.value)
 
         # runs must be a dictionary
         with pytest.raises(ValidationError) as exc_info:
-            Workflow(
+            Workflow(  # type: ignore[arg-type]
                 name="test",
                 engine=WorkflowEngine(name="nextflow"),
                 data_location=WorkflowDataLocation(structure="flat", locations=["/path"]),
                 data_collections=[],
-                runs="not a dict",
+                runs="not a dict",  # type: ignore[arg-type]
             )
         assert "runs must be a dictionary" in str(exc_info.value)
 
@@ -572,7 +572,7 @@ class TestWorkflowIntegration:
         # Create data collections from YAML
         data_collections = []
         for dc_data in workflow_data["data_collections"]:
-            data_collection = DataCollection(**dc_data)
+            data_collection = DataCollection(**dc_data)  # type: ignore[arg-type]
             data_collections.append(data_collection)
 
         # Create the workflow
@@ -602,9 +602,15 @@ class TestWorkflowIntegration:
         assert dc.data_collection_tag == "iris_table"
         assert dc.config.type == "table"
         assert dc.config.scan.mode == "single"
+        from depictio.models.models.data_collections import ScanSingle
+
+        assert isinstance(dc.config.scan.scan_parameters, ScanSingle)
         assert (
             dc.config.scan.scan_parameters.filename
             == "/app/depictio/api/v1/configs/iris_dataset/iris.csv"
         )
+        from depictio.models.models.data_collections_types.table import DCTableConfig
+
+        assert isinstance(dc.config.dc_specific_properties, DCTableConfig)
         assert dc.config.dc_specific_properties.format == "csv"
         assert dc.config.dc_specific_properties.polars_kwargs == {"separator": ","}

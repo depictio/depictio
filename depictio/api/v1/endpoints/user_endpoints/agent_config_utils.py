@@ -25,7 +25,10 @@ async def _generate_agent_config(user: UserBeanie, token: TokenBeanie) -> CLICon
 
     # Create the user CLI config
     user_cli_config = UserBaseCLIConfig(
-        id=user.id, email=user.email, is_admin=user.is_admin, token=token
+        id=user.id,  # type: ignore[invalid-argument-type]
+        email=user.email,
+        is_admin=user.is_admin,
+        token=token,  # type: ignore[invalid-argument-type]
     )
 
     # Create the complete CLI config
