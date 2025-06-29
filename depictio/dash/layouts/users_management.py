@@ -6,12 +6,18 @@ import httpx
 from dash import Input, Output, State, ctx, dcc, html
 from dash.exceptions import PreventUpdate
 from dash_extensions import EventListener
+from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.endpoints.user_endpoints.core_functions import _verify_password
 from depictio.api.v1.endpoints.user_endpoints.utils import login_user
-from depictio.dash.api_calls import api_call_fetch_user_from_email, api_call_register_user
+from depictio.dash.api_calls import (
+    api_call_fetch_user_from_email,
+    api_call_get_google_oauth_login_url,
+    api_call_handle_google_oauth_callback,
+    api_call_register_user,
+)
 
 event = {"event": "keydown", "props": ["key"]}
 
@@ -108,6 +114,42 @@ def render_login_form():
                 ],
                 position="center",
                 mt="1rem",
+            ),
+            # Google OAuth Section
+            dmc.Stack(
+                [
+                    dmc.Divider(
+                        label="Or",
+                        labelPosition="center",
+                        style={
+                            "margin": "1rem 0",
+                            "display": "block" if settings.auth.google_oauth_enabled else "none",
+                        },
+                    ),
+                    dmc.Button(
+                        [
+                            DashIconify(
+                                icon="devicon:google",
+                                width=20,
+                                height=20,
+                                style={"marginRight": "8px"},
+                            ),
+                            "Sign in with Google",
+                        ],
+                        id="google-oauth-button",
+                        radius="md",
+                        variant="outline",
+                        color="red",
+                        fullWidth=True,
+                        style={
+                            "display": "block" if settings.auth.google_oauth_enabled else "none",
+                            "border": "1px solid #db4437",
+                            "color": "#db4437",
+                        },
+                    ),
+                ],
+                spacing="0.5rem",
+                style={"display": "block" if settings.auth.google_oauth_enabled else "none"},
             ),
         ],
         spacing="1rem",
@@ -343,6 +385,13 @@ layout = html.Div(
                 ),
                 dmc.TextInput(id="login-email", style={"display": "none"}),
                 html.Div(id="user-feedback"),
+                # Google OAuth redirect component
+                html.A(
+                    id="google-oauth-redirect",
+                    href="",
+                    target="_self",
+                    style={"display": "none"},
+                ),
             ]
         ),
     ]
@@ -569,3 +618,117 @@ def register_callbacks_users_management(app):
             dash.no_update,
             dash.no_update,
         )
+
+
+# Google OAuth callback using server-side callback
+@dash.callback(
+    Output("google-oauth-redirect", "href"),
+    Input("google-oauth-button", "n_clicks"),
+    prevent_initial_call=True,
+)
+def handle_google_oauth_login(n_clicks):
+    """Handle Google OAuth login button click."""
+    if not n_clicks:
+        raise PreventUpdate
+
+    if not settings.auth.google_oauth_enabled:
+        logger.warning("Google OAuth is not enabled")
+        raise PreventUpdate
+
+    try:
+        # Call the API to get the Google OAuth login URL
+        oauth_data = api_call_get_google_oauth_login_url()
+
+        if oauth_data and "authorization_url" in oauth_data:
+            authorization_url = oauth_data["authorization_url"]
+            logger.info(f"Redirecting to Google OAuth: {authorization_url}")
+            return authorization_url
+        else:
+            logger.error("Failed to get OAuth URL from API")
+            raise PreventUpdate
+
+    except Exception as e:
+        logger.error(f"Error initiating Google OAuth: {e}")
+        raise PreventUpdate
+
+
+# Add JavaScript redirect handling for Google OAuth
+dash.clientside_callback(
+    """
+    function(href) {
+        if (href && href !== "") {
+            window.location.href = href;
+        }
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output("google-oauth-redirect", "target"),
+    Input("google-oauth-redirect", "href"),
+    prevent_initial_call=True,
+)
+
+
+# Add Google OAuth callback handler for when user returns from Google
+@dash.callback(
+    [
+        Output("local-store", "data", allow_duplicate=True),
+    ],
+    [
+        Input("url", "search"),
+    ],
+    [
+        State("local-store", "data"),
+    ],
+    prevent_initial_call=True,
+)
+def handle_google_oauth_callback(search_params, local_data):
+    """Handle OAuth callback when user returns from Google."""
+    if not search_params:
+        raise PreventUpdate
+
+    # Parse URL parameters
+    from urllib.parse import parse_qs, urlparse
+
+    parsed = urlparse(f"?{search_params}" if not search_params.startswith("?") else search_params)
+    params = parse_qs(parsed.query)
+
+    # Check if this is an OAuth callback
+    if "code" not in params or "state" not in params:
+        raise PreventUpdate
+
+    code = params["code"][0]
+    state = params["state"][0]
+
+    try:
+        # Call the OAuth callback API
+        oauth_result = api_call_handle_google_oauth_callback(code, state)
+
+        if oauth_result and oauth_result.get("success"):
+            # Extract token data and user info
+            token_data = oauth_result["token"]
+            user_data = oauth_result["user"]
+
+            # Create session data similar to regular login (only include TokenBase compatible fields)
+            session_data = {
+                "access_token": token_data["access_token"],
+                "refresh_token": token_data["refresh_token"],
+                "token_type": token_data["token_type"],
+                "expire_datetime": token_data["expire_datetime"],
+                "refresh_expire_datetime": token_data["refresh_expire_datetime"],
+                "logged_in": True,
+                "user_id": token_data["user_id"],
+            }
+
+            logger.info(f"Google OAuth login successful for: {user_data['email']}")
+
+            # Update session
+            return [session_data]
+        else:
+            logger.error(
+                f"OAuth callback failed: {oauth_result.get('message', 'Unknown error') if oauth_result else 'API call failed'}"
+            )
+            raise PreventUpdate
+
+    except Exception as e:
+        logger.error(f"Error handling OAuth callback: {e}")
+        raise PreventUpdate

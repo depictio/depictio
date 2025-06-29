@@ -687,3 +687,66 @@ def api_call_screenshot_dashboard(dashboard_id: str) -> bool:
     except Exception as e:
         logger.error(f"Failed to save dashboard screenshot: {str(e)}")
         return False
+
+
+def api_call_get_google_oauth_login_url() -> dict[str, Any] | None:
+    """
+    Get Google OAuth login URL from the API.
+
+    Returns:
+        Dictionary with authorization_url and state, or None if failed
+    """
+    try:
+        logger.info("Getting Google OAuth login URL")
+
+        with httpx.Client() as client:
+            response = client.get(f"{API_BASE_URL}/depictio/api/v1/auth/google/login")
+
+            if response.status_code == 200:
+                oauth_data = response.json()
+                logger.info("Successfully retrieved Google OAuth login URL")
+                return oauth_data
+            else:
+                logger.error(
+                    f"Failed to get Google OAuth login URL: {response.status_code} {response.text}"
+                )
+                return None
+
+    except Exception as e:
+        logger.error(f"Error getting Google OAuth login URL: {e}")
+        return None
+
+
+def api_call_handle_google_oauth_callback(code: str, state: str) -> dict[str, Any] | None:
+    """
+    Handle Google OAuth callback by calling the API.
+
+    Args:
+        code: Authorization code from Google
+        state: State parameter for CSRF protection
+
+    Returns:
+        Dictionary with OAuth result, or None if failed
+    """
+    try:
+        logger.info("Handling Google OAuth callback")
+
+        with httpx.Client() as client:
+            response = client.get(
+                f"{API_BASE_URL}/depictio/api/v1/auth/google/callback",
+                params={"code": code, "state": state},
+            )
+
+            if response.status_code == 200:
+                oauth_result = response.json()
+                logger.info("Google OAuth callback successful")
+                return oauth_result
+            else:
+                logger.error(
+                    f"Google OAuth callback failed: {response.status_code} {response.text}"
+                )
+                return None
+
+    except Exception as e:
+        logger.error(f"Error handling Google OAuth callback: {e}")
+        return None

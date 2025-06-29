@@ -194,6 +194,20 @@ class AuthConfig(BaseSettings):
         description="Number of minutes until temporary users expire",
     )
 
+    # Google OAuth Configuration
+    google_oauth_enabled: bool = Field(
+        default=False, description="Enable Google OAuth authentication"
+    )
+    google_oauth_client_id: Optional[str] = Field(
+        default=None, description="Google OAuth client ID"
+    )
+    google_oauth_client_secret: Optional[str] = Field(
+        default=None, description="Google OAuth client secret"
+    )
+    google_oauth_redirect_uri: Optional[str] = Field(
+        default=None, description="Google OAuth redirect URI"
+    )
+
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_AUTH_", case_sensitive=False)
 
     def __init__(self, **data):
