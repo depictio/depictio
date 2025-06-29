@@ -32,7 +32,7 @@ def process_collections():
 
             # Call the synchronous version of process_initial_data_collections
             from depictio.api.v1.endpoints.utils_endpoints.process_data_collections import (
-                sync_process_initial_data_collections,
+                sync_process_initial_data_collections,  # type: ignore[unresolved-import]
             )
 
             result = sync_process_initial_data_collections()
@@ -112,7 +112,7 @@ def sync_process_initial_data_collections() -> dict[str, Any]:
     # FIXME: not so clean, should rely on a endpoint
     # Get the first project
     project = projects_collection.find_one({"_id": ObjectId(project_config_id)})
-    project = Project.from_mongo(project)
+    project = Project.from_mongo(project)  # type: ignore[invalid-argument-type]
 
     logger.debug(f"Project: {project}")
     if not project:
@@ -157,11 +157,11 @@ def sync_process_initial_data_collections() -> dict[str, Any]:
         },
     )
     logger.debug(f"Result: {result}")
-    if result["result"] != "success":
-        logger.error(f"Error processing data collection: {result['message']}")
+    if result["result"] != "success":  # type: ignore[non-subscriptable]
+        logger.error(f"Error processing data collection: {result['message']}")  # type: ignore[non-subscriptable]
         return {
             "success": False,
-            "message": f"Error processing data collection: {result['message']}",
+            "message": f"Error processing data collection: {result['message']}",  # type: ignore[non-subscriptable]
         }
 
     return {"success": True, "message": "Data collections processed successfully"}

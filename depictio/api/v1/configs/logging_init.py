@@ -42,6 +42,10 @@ def initialize_loggers(
     if verbose_level is None:
         verbose_level = settings.logging.verbosity_level
 
+    # Ensure verbose is not None
+    if verbose is None:
+        verbose = True
+
     # Initialize loggers with the same settings
     setup_cli_logging(verbose=verbose, verbose_level=verbose_level)
     setup_models_logging(verbose=verbose, verbose_level=verbose_level)

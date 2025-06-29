@@ -46,6 +46,7 @@ dependencies = [
   "dash-draggable==0.1.2",
   "dash-ag-grid==31.3.0",
   "tomli",
+  "types-requests>=2.32.4.20250611",
 ]
 authors = [{ name = "Thomas Weber", email = "thomas.weber@embl.de" }]
 urls = { Homepage = "http://github.com/depictio/depictio" }
@@ -59,6 +60,7 @@ dev = [
   "bandit",
   "black",
   "ruff",
+  "ty",
   "pandera[pandas,polars]",
   "pre-commit",
   "pytest",

@@ -426,14 +426,14 @@ def merge_multiple_dataframes(
     logger.info("All join operations completed.")
 
     # Step 4: Verify Essential Columns
-    missing_essentials = essential_cols - set(merged_df.columns)
+    missing_essentials = essential_cols - set(merged_df.columns)  # type: ignore[possibly-unbound-attribute]
     if missing_essentials:
         logger.warning(f"Essential columns missing from the final DataFrame: {missing_essentials}")
 
-    logger.debug(f"Final merged DataFrame shape: {merged_df.shape}")
-    logger.debug(f"Final merged DataFrame columns: {merged_df.columns}")
+    logger.debug(f"Final merged DataFrame shape: {merged_df.shape}")  # type: ignore[possibly-unbound-attribute]
+    logger.debug(f"Final merged DataFrame columns: {merged_df.columns}")  # type: ignore[possibly-unbound-attribute]
 
-    return merged_df
+    return merged_df  # type: ignore[invalid-return-type]
 
 
 def transform_joins_dict_to_instructions(
@@ -932,8 +932,8 @@ def join_deltatables_dev(
                     f"Metadata: {[e for e in metadata if e['metadata']['dc_id'] == dc_id1]}"
                 )
                 loaded_dfs[dc_id1] = load_deltatable_lite(
-                    wf_id,
-                    dc_id1,
+                    ObjectId(wf_id),
+                    ObjectId(dc_id1),
                     [e for e in metadata if e["metadata"]["dc_id"] == dc_id1],
                     TOKEN=TOKEN,
                 )
@@ -946,8 +946,8 @@ def join_deltatables_dev(
                 )
 
                 loaded_dfs[dc_id2] = load_deltatable_lite(
-                    wf_id,
-                    dc_id2,
+                    ObjectId(wf_id),
+                    ObjectId(dc_id2),
                     [e for e in metadata if e["metadata"]["dc_id"] == dc_id2],
                     TOKEN=TOKEN,
                 )

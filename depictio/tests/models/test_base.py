@@ -124,21 +124,21 @@ class TestPyObjectId:
     def test_model_creation_with_string_id(self):
         """Test creating a model with a string ID."""
         id_str = "507f1f77bcf86cd799439011"
-        model = MyTestModel(_id=id_str, name="test")
+        model = MyTestModel(_id=id_str, name="test")  # type: ignore[unknown-argument]
         assert isinstance(model.id, ObjectId)
         assert str(model.id) == id_str
 
     def test_model_creation_with_objectid(self):
         """Test creating a model with an ObjectId."""
         obj_id = ObjectId()
-        model = MyTestModel(_id=obj_id, name="test")
+        model = MyTestModel(_id=obj_id, name="test")  # type: ignore[unknown-argument]
         assert isinstance(model.id, ObjectId)
         assert model.id == obj_id
 
     def test_model_serialization(self):
         """Test model serialization with PyObjectId."""
         id_str = "507f1f77bcf86cd799439011"
-        model = MyTestModel(_id=id_str, name="test")
+        model = MyTestModel(_id=id_str, name="test")  # type: ignore[unknown-argument]
         model_dict = model.model_dump(by_alias=True)
         assert isinstance(model_dict["_id"], str)
         assert model_dict["_id"] == id_str
@@ -146,7 +146,7 @@ class TestPyObjectId:
     def test_model_json_serialization(self):
         """Test model JSON serialization with PyObjectId."""
         id_str = "507f1f77bcf86cd799439011"
-        model = MyTestModel(_id=id_str, name="test")
+        model = MyTestModel(_id=id_str, name="test")  # type: ignore[unknown-argument]
         json_str = model.model_dump_json(by_alias=True)
         data = json.loads(json_str)
         assert isinstance(data["_id"], str)
@@ -155,7 +155,7 @@ class TestPyObjectId:
     def test_model_validation_error(self):
         """Test validation error with invalid ObjectId."""
         with pytest.raises(ValidationError):
-            MyTestModel(_id="invalid_objectid", name="test")
+            MyTestModel(_id="invalid_objectid", name="test")  # type: ignore[unknown-argument]
 
     def test_json_schema(self):
         """Test the JSON schema generation for PyObjectId."""
@@ -169,7 +169,7 @@ class TestPyObjectId:
         """Test that PyObjectId is serialized correctly in the core schema."""
         id_str = "507f1f77bcf86cd799439011"
         obj_id = ObjectId(id_str)
-        model = MyTestModel(_id=obj_id, name="test")
+        model = MyTestModel(_id=obj_id, name="test")  # type: ignore[unknown-argument]
         serialized = model.model_dump(by_alias=True)
         assert serialized["_id"] == id_str
         assert isinstance(serialized["_id"], str)
@@ -192,7 +192,7 @@ class TestPyObjectId:
 @pytest.fixture
 def sample_model():
     """Fixture to create a sample TestModel."""
-    return MyTestModel(_id="507f1f77bcf86cd799439011", name="test")
+    return MyTestModel(_id="507f1f77bcf86cd799439011", name="test")  # type: ignore[unknown-argument]
 
 
 def test_model_with_fixture(sample_model):
@@ -257,7 +257,7 @@ class TestMongoModel:
     def test_create_with_underscore_id(self):
         """Test creating a model with _id instead of id."""
         id_str = "507f1f77bcf86cd799439011"
-        model = MongoModel(_id=id_str)
+        model = MongoModel(_id=id_str)  # type: ignore[unknown-argument]
         print(format_pydantic(model))
         assert isinstance(model.id, ObjectId)
         assert str(model.id) == id_str
@@ -270,7 +270,7 @@ class TestMongoModel:
     def test_id_serialization(self):
         """Test serialization of ID field."""
         obj_id = ObjectId()
-        model = MongoModel(_id=obj_id)
+        model = MongoModel(_id=obj_id)  # type: ignore[unknown-argument]
         print(format_pydantic(model))
         serialized = model.model_dump()
         print(f"Serialized: {serialized}")
