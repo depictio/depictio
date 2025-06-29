@@ -47,7 +47,6 @@ ty check depictio/
 docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml --env-file docker-compose/.env up
 ```
 
-
 ## Architecture Overview
 
 ### Core Components
@@ -138,17 +137,18 @@ docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio
 - E2E tests with Cypress for full user workflows
 - Docker-based integration testing with real databases
 
-**Type Checking with ty**
+### Type Checking with ty
 
-The codebase uses Astral's `ty` type checker for static type analysis. When making changes:
+The codebase uses Astral's `ty` type checker for static type analysis and maintains perfect type safety:
 
-- Run `ty check depictio/models/` - This MUST pass with zero errors
-- Run `ty check depictio/api/` - Work towards zero errors, add `# type: ignore[error-type]` comments when necessary
-- Common type ignore patterns:
-  - `# type: ignore[invalid-argument-type]` - For Pydantic model instantiation with dict data
-  - `# type: ignore[unresolved-attribute]` - For dynamic attribute access on models
-  - `# type: ignore[invalid-assignment]` - For ObjectId/PyObjectId conversions
-  - `# type: ignore[missing-argument]` - For partial model instantiation in tests
+- Run `ty check depictio/models/ depictio/api/ depictio/dash/` - All folders MUST pass with zero errors
+- Type checking is enforced in CI/CD pipeline for all pull requests and commits
+- The codebase achieves complete type safety without using `# type: ignore` comments
+- Type-safe patterns used:
+  - Explicit field validation for Pydantic model instantiation
+  - Proper ObjectId/PyObjectId type conversions
+  - Defensive programming with None checks and validation
+  - Type guards for Union types and optional fields
 
 ## Key Dependencies
 

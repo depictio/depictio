@@ -2,6 +2,7 @@ import dash_ag_grid as dag
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import polars as pl
+from bson import ObjectId
 from dash import dcc, html
 
 from depictio.api.v1.configs.logging_init import logger
@@ -99,7 +100,12 @@ def build_table(**kwargs):
             logger.info(
                 f"Table component {index}: Loading delta table for {wf_id}:{dc_id} (no pre-loaded df)"
             )
-            df = load_deltatable_lite(wf_id, dc_id, TOKEN=TOKEN)
+            # Validate that we have valid IDs before calling load_deltatable_lite
+            if not wf_id or not dc_id:
+                logger.warning(f"Missing workflow_id ({wf_id}) or data_collection_id ({dc_id})")
+                df = pl.DataFrame()  # Return empty DataFrame if IDs are missing
+            else:
+                df = load_deltatable_lite(ObjectId(wf_id), ObjectId(dc_id), TOKEN=TOKEN)
         else:
             # If refresh=False and df is empty, this means filters resulted in no data
             # Keep the empty DataFrame to properly reflect the filtered state
@@ -110,15 +116,17 @@ def build_table(**kwargs):
         logger.debug(f"Table component {index}: Using pre-loaded DataFrame (shape: {df.shape})")
 
     # Add dah aggrid filters to the columns
-    for c in cols:
-        print(c, cols[c]["type"])
-        if cols[c]["type"] == "object":
-            cols[c]["filter"] = "agTextColumnFilter"
-        elif cols[c]["type"] in ["int64", "float64"]:
-            cols[c]["filter"] = "agNumberColumnFilter"
-        # FIXME: use properly this: https://dash.plotly.com/dash-ag-grid/date-filters
-        elif cols[c]["type"] == "datetime":
-            cols[c]["filter"] = "agDateColumnFilter"
+    if cols:
+        for c in cols:
+            if c in cols and "type" in cols[c]:
+                print(c, cols[c]["type"])
+                if cols[c]["type"] == "object":
+                    cols[c]["filter"] = "agTextColumnFilter"
+                elif cols[c]["type"] in ["int64", "float64"]:
+                    cols[c]["filter"] = "agNumberColumnFilter"
+                # FIXME: use properly this: https://dash.plotly.com/dash-ag-grid/date-filters
+                elif cols[c]["type"] == "datetime":
+                    cols[c]["filter"] = "agDateColumnFilter"
 
     # print(cols)
     columnDefs = [
@@ -127,12 +135,17 @@ def build_table(**kwargs):
             "headerTooltip": f"Column type: {e['type']}",
             "filter": e["filter"],
         }
-        for c, e in cols.items()
+        for c, e in cols.items()  # type: ignore[possibly-unbound-attribute]
     ]
 
     # if description in col sub dict, update headerTooltip
     for col in columnDefs:
-        if "description" in cols[col["field"]] and cols[col["field"]]["description"] is not None:
+        if (
+            cols
+            and col["field"] in cols
+            and "description" in cols[col["field"]]
+            and cols[col["field"]]["description"] is not None
+        ):
             col["headerTooltip"] = (
                 f"{col['headerTooltip']} | Description: {cols[col['field']]['description']}"
             )
@@ -196,7 +209,7 @@ def build_table(**kwargs):
     )
 
     # Metadata management - Create a store component to store the metadata of the card
-    store_index = index.replace("-tmp", "")
+    store_index = index.replace("-tmp", "")  # type: ignore[possibly-unbound-attribute]
     store_component = dcc.Store(
         id={
             "type": "stored-metadata-component",

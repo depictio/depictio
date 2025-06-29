@@ -3,6 +3,7 @@ import dash_ag_grid as dag
 import dash_mantine_components as dmc
 import httpx
 import yaml
+from bson import ObjectId
 from dash import MATCH, Input, Output, State, dcc, html
 from dash_iconify import DashIconify
 from pydantic import validate_call
@@ -95,8 +96,8 @@ def return_deltatable_for_view(workflow_id: str, dc: DataCollection, token: str)
     Return a DeltaTable component for viewing data collections.
     """
     df = load_deltatable_lite(
-        workflow_id=workflow_id,
-        data_collection_id=str(dc.id),
+        workflow_id=ObjectId(workflow_id),
+        data_collection_id=ObjectId(str(dc.id)),
         TOKEN=token,
         limit_rows=100,
     )
@@ -167,14 +168,13 @@ def render_data_collection(dc: DataCollection, workflow_id: str, token: str):
     preview_panel = None
     preview_control = None
 
+    metatype_lower = dc.config.metatype.lower() if dc.config.metatype else "unknown"
     badge_type_metatype = dmc.Badge(
-        children=("Metadata" if dc.config.metatype.lower() == "metadata" else "Aggregate"),
-        color="blue" if dc.config.metatype.lower() == "metadata" else "black",
+        children=("Metadata" if metatype_lower == "metadata" else "Aggregate"),
+        color="blue" if metatype_lower == "metadata" else "black",
         className="ml-2",
         style=(
-            {"display": "inline-block"}
-            if dc.config.metatype.lower() == "metadata"
-            else {"display": "none"}
+            {"display": "inline-block"} if metatype_lower == "metadata" else {"display": "none"}
         ),
     )
 
@@ -497,7 +497,9 @@ def render_workflow_item(wf: Workflow, token: str):
     )
 
 
-def render_project_item(project: Project, current_user: UserBase, admin_UI: False, token: str):
+def render_project_item(
+    project: Project, current_user: UserBase, admin_UI: bool = False, token: str = ""
+):
     """
     Render a single project item containing multiple workflows.
 
@@ -674,7 +676,9 @@ def render_project_item(project: Project, current_user: UserBase, admin_UI: Fals
     ]:
         role = "Editor"
         color = "teal"
-    elif str(current_user.id) in [str(v.id) for v in project.permissions.viewers]:
+    elif str(current_user.id) in [
+        str(v.id) for v in project.permissions.viewers if hasattr(v, "id")
+    ]:
         role = "Viewer"
         color = "gray"
 
@@ -837,7 +841,7 @@ def render_projects_list(projects: list[Project], admin_UI: bool = False, token:
                 project=project,
                 current_user=current_user,
                 admin_UI=admin_UI,
-                token=token,
+                token=token or "",
             )
             for project in projects
         ]

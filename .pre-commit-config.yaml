@@ -26,16 +26,16 @@ repos:
     -   id: ruff-format
         exclude: ^dev/
 
-# Type checking with ty (Astral) - disabled in pre-commit, use CI instead
-# -   repo: local
-#     hooks:
-#       - id: ty-check-models-api
-#         name: ty check models and api
-#         description: 'Run ty type checker on models and api folders (must pass)'
-#         entry: ty check depictio/models/ depictio/api/
-#         language: system
-#         files: ^depictio/(models|api)/
-#         pass_filenames: false
+# Type checking with ty (Astral)
+-   repo: local
+    hooks:
+      - id: ty-check-models-api-dash
+        name: ty check models, api and dash
+        description: 'Run ty type checker on models, api and dash folders (must pass)'
+        entry: bash -c 'source depictio-venv/bin/activate && ty check depictio/models/ depictio/api/ depictio/dash/'
+        language: system
+        files: ^depictio/(models|api|dash)/
+        pass_filenames: false
 
 # Lint helm chart
 -   repo: local

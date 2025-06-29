@@ -915,7 +915,7 @@ def register_callbacks_dashboards_management(app):
         if modal_data.get("title"):
             logger.info("Creating new dashboard")
 
-            dashboard_id = ObjectId()
+            dashboard_id = PyObjectId()
             # dashboard_id = generate_unique_index()
 
             new_dashboard = DashboardData(

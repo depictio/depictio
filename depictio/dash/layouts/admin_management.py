@@ -60,7 +60,7 @@ def render_dashboardwise_layout(dashboard):
 
     # dashboard_viewers = [u.mongo() for u in dashboard.permissions.viewers] if dashboard.permissions.viewers else ["None"]
     last_saved = dashboard.last_saved_ts
-    dashboard_title = f"{dashboard.title} - {dashboard_owner_raw['email']}"
+    dashboard_title = f"{dashboard.title} - {dashboard_owner_raw.get('email', 'Unknown') if isinstance(dashboard_owner_raw, dict) else 'Unknown'}"
     components_count = len(dashboard.stored_metadata)
     dashboard_id = dashboard.dashboard_id
     public_dashboard = True if "*" in dashboard.permissions.viewers else False
@@ -115,7 +115,9 @@ def render_dashboardwise_layout(dashboard):
                                                 [
                                                     dmc.Text("Owner: ", weight=700, size="sm"),
                                                     dmc.Text(
-                                                        dashboard_owner_raw["email"],
+                                                        dashboard_owner_raw.get("email", "Unknown")
+                                                        if isinstance(dashboard_owner_raw, dict)
+                                                        else "Unknown",
                                                         size="sm",
                                                     ),
                                                 ]
