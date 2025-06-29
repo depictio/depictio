@@ -131,7 +131,7 @@ def register_run_command(app: typer.Typer):
             try:
                 if not dry_run:
                     CLI_config = load_depictio_config(yaml_config_path=CLI_config_path)
-                    S3_storage_checks(CLI_config.s3)
+                    S3_storage_checks(CLI_config.s3_storage)
                 rich_print_checked_statement("S3 storage configuration check passed", "success")
                 success_count += 1
             except Exception as e:

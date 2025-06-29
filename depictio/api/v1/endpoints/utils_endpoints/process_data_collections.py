@@ -8,10 +8,10 @@ from bson import ObjectId
 from depictio.api.v1.configs.config import MONGODB_URL, settings
 from depictio.api.v1.configs.logging_init import format_pydantic, logger
 from depictio.cli.cli.utils.helpers import process_data_collection_helper
-from depictio.models.models.projects import Project
 
 # from depictio.models.models.s3 import S3DepictioCLIConfig
-from depictio.models.models.users import CLIConfig, UserBaseCLIConfig
+from depictio.models.models.cli import CLIConfig, TokenData, UserCLIConfig
+from depictio.models.models.projects import Project
 from depictio.models.utils import get_config
 
 
@@ -119,16 +119,21 @@ def sync_process_initial_data_collections() -> dict[str, Any]:
         logger.error("No project found in the database")
         return {"success": False, "message": "No project found in the database"}
 
-    # Create CLI config with localhost as base_url to avoid network issues
+    # Create CLI config with localhost as api_base_url to avoid network issues
     cli_config = CLIConfig(
-        user=UserBaseCLIConfig(
+        user=UserCLIConfig(
             id=admin_user["_id"],
             email=admin_user["email"],
             is_admin=admin_user["is_admin"],
-            token=token,
+            groups=[],  # Empty groups list for admin user
+            token=TokenData(
+                name=token.get("name", "admin"),
+                access_token=token["access_token"],
+                expire_datetime=token["expire_datetime"],
+            ),
         ),
-        base_url=f"http://localhost:{settings.fastapi.port}",
-        s3=settings.minio,
+        api_base_url=f"http://localhost:{settings.fastapi.port}",
+        s3_storage=settings.minio,
     )
 
     logger.debug(f"CLI config: {format_pydantic(cli_config)}")

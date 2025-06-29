@@ -1,11 +1,13 @@
+from typing import Any
+
 from pydantic import validate_call
 
 from depictio.cli.cli.utils.deltatables import client_aggregate_data
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
 from depictio.cli.cli.utils.scan import scan_files_for_data_collection
 from depictio.cli.cli_logging import logger
+from depictio.models.models.cli import CLIConfig
 from depictio.models.models.projects import Workflow
-from depictio.models.models.users import CLIConfig
 
 
 def process_project_helper(
@@ -63,9 +65,9 @@ def process_data_collection_helper(
     CLI_config: CLIConfig,
     wf: Workflow,
     dc_id: str,
-    command_parameters: dict = {},
+    command_parameters: dict[str, Any] = {},
     mode: str = "scan",
-) -> None:
+) -> dict[str, str] | dict:
     """_summary_
 
     Args:
@@ -104,6 +106,8 @@ def process_data_collection_helper(
             command_parameters=command_parameters,
         )
         return result
+    else:
+        raise ValueError(f"Invalid mode: {mode}. Must be 'scan' or 'process'")
     # logger.info(f"Result: {result}")
     # if result["result"] == "success":
     #     rich_print_checked_statement(
