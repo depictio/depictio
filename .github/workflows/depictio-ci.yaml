@@ -159,8 +159,8 @@ jobs:
           context: .
           file: docker-images/Dockerfile_depictio.dockerfile
           platforms: linux/amd64
-          push: ${{ env.ACT != 'true' && env.GITHUB_ACTIONS == 'true' }}
-          load: ${{ env.ACT == 'true' }}
+          push: ${{ env.ACT != 'true' }} # Push to registry unless using act
+          load: ${{ env.ACT == 'true' }} # Load locally only when using act
           tags: ${{ steps.image-info.outputs.full-image }}
           cache-from: |
             ${{ steps.cache-strategy.outputs.cache_from }}
@@ -169,21 +169,22 @@ jobs:
 
       # Move cache for next run (act only)
       - name: Move cache (act only)
-        if: env.ACT == 'true' && steps.check-rebuild.outputs.rebuild == 'true'
+        if: (env.ACT == 'true' || runner.os == 'act') && steps.check-rebuild.outputs.rebuild == 'true'
         run: |
           rm -rf /tmp/buildx-cache
           mv /tmp/buildx-cache-new /tmp/buildx-cache || true
 
       - name: Pull image (GitHub Actions only)
-        if: env.ACT != 'true'
+        if: env.ACT != 'true' && steps.check-rebuild.outputs.rebuild == 'true'
         run: docker pull "${{ steps.image-info.outputs.full-image }}"
 
       - name: Tag image for local use (act only)
-        if: env.ACT == 'true'
+        if: env.ACT == 'true' || runner.os == 'act'
         run: |
           # When using act, tag the built image with the expected name
           docker tag "${{ steps.image-info.outputs.full-image }}" depictio:local || true
           echo "Tagged image for local use"
+
   docker-system-init:
     needs: docker-build
     runs-on: ubuntu-22.04
