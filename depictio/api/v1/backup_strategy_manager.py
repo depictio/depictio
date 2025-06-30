@@ -101,10 +101,30 @@ class S3BackupStrategyManager:
             elif strategy == "both":
                 # Perform both strategies
                 s3_results = await self._backup_s3_to_s3(
-                    deltatable_locations, backup_prefix, backup_timestamp, dry_run, {}
+                    deltatable_locations,
+                    backup_prefix,
+                    backup_timestamp,
+                    dry_run,
+                    {
+                        "backup_locations": {},
+                        "total_files": 0,
+                        "total_bytes": 0,
+                        "success": True,
+                        "errors": [],
+                    },
                 )
                 local_results = await self._backup_s3_to_local(
-                    deltatable_locations, backup_prefix, backup_timestamp, dry_run, {}
+                    deltatable_locations,
+                    backup_prefix,
+                    backup_timestamp,
+                    dry_run,
+                    {
+                        "backup_locations": {},
+                        "total_files": 0,
+                        "total_bytes": 0,
+                        "success": True,
+                        "errors": [],
+                    },
                 )
 
                 # Combine results
@@ -115,6 +135,12 @@ class S3BackupStrategyManager:
                 results["success"] = s3_results.get("success", False) and local_results.get(
                     "success", False
                 )
+
+                # Combine backup locations from both strategies
+                combined_locations = {}
+                combined_locations.update(s3_results.get("backup_locations", {}))
+                combined_locations.update(local_results.get("backup_locations", {}))
+                results["backup_locations"] = combined_locations
             else:
                 raise ValueError(f"Unknown backup strategy: {strategy}")
 

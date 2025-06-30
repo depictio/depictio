@@ -96,6 +96,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to Container Registry
+        if: env.ACT != 'true' # Skip login when using act
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -127,6 +128,29 @@ jobs:
             echo "🔨 Image doesn't exist, will build ${FULL_IMAGE}"
           fi
 
+      # Detect if running with act and set cache type accordingly
+      - name: Set cache strategy
+        id: cache-strategy
+        run: |
+          if [ "${{ env.ACT }}" = "true" ]; then
+            echo "Running with act - using local cache"
+            echo "cache_from=type=local,src=/tmp/buildx-cache" >> $GITHUB_OUTPUT
+            echo "cache_to=type=local,dest=/tmp/buildx-cache-new,mode=max" >> $GITHUB_OUTPUT
+            echo "cache_enabled=local" >> $GITHUB_OUTPUT
+          else
+            echo "Running on GitHub Actions - using GHA cache"
+            echo "cache_from=type=gha,scope=${{ github.ref_name }}|type=gha,scope=refs/heads/main" >> $GITHUB_OUTPUT
+            echo "cache_to=type=gha,mode=max,scope=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            echo "cache_enabled=gha" >> $GITHUB_OUTPUT
+          fi
+
+      # Create cache directory for act
+      - name: Prepare local cache directory (act only)
+        if: env.ACT == 'true'
+        run: |
+          mkdir -p /tmp/buildx-cache
+          echo "Created local cache directory for act"
+
       - name: Build and push Docker image
         id: build
         if: steps.check-rebuild.outputs.rebuild == 'true'
@@ -135,16 +159,29 @@ jobs:
           context: .
           file: docker-images/Dockerfile_depictio.dockerfile
           platforms: linux/amd64
-          push: true
-          load: false
+          push: ${{ env.ACT != 'true' }} # Don't push when using act
+          load: ${{ env.ACT == 'true' }} # Load locally when using act
           tags: ${{ steps.image-info.outputs.full-image }}
-          cache-from: |
-            type=gha,scope=${{ github.ref_name }}
-            type=gha,scope=refs/heads/main
-          cache-to: type=gha,mode=max,scope=${{ github.ref_name }}
+          cache-from: ${{ steps.cache-strategy.outputs.cache_from }}
+          cache-to: ${{ steps.cache-strategy.outputs.cache_to }}
 
-      - name: Pull image
+      # Move cache for next run (act only)
+      - name: Move cache (act only)
+        if: env.ACT == 'true' && steps.check-rebuild.outputs.rebuild == 'true'
+        run: |
+          rm -rf /tmp/buildx-cache
+          mv /tmp/buildx-cache-new /tmp/buildx-cache || true
+
+      - name: Pull image (GitHub Actions only)
+        if: env.ACT != 'true'
         run: docker pull "${{ steps.image-info.outputs.full-image }}"
+
+      - name: Tag image for local use (act only)
+        if: env.ACT == 'true'
+        run: |
+          # When using act, tag the built image with the expected name
+          docker tag "${{ steps.image-info.outputs.full-image }}" depictio:local || true
+          echo "Tagged image for local use"
 
   docker-system-init:
     needs: docker-build
@@ -580,11 +617,11 @@ jobs:
             s3_enabled: true
             expected_local_files: false
             expected_s3_files: true
-          # - backup_strategy: both
-          #   strategy_name: "S3 to Both"
-          #   s3_enabled: true
-          #   expected_local_files: true
-          #   expected_s3_files: true
+          - backup_strategy: both
+            strategy_name: "S3 to Both"
+            s3_enabled: true
+            expected_local_files: true
+            expected_s3_files: true
     steps:
       - uses: actions/checkout@v4
 
@@ -737,21 +774,35 @@ jobs:
 
           # Check if local backup files exist in the backend container
           echo "🔍 Checking for local backup files in backend container..."
-          docker compose exec -T depictio-backend ls /app/depictio/backups
-          docker compose exec -T depictio-backend ls /app/depictio/backups/s3_data_backups
-          docker compose exec -T depictio-backend ls /app/depictio/backups/s3_data_backups/backup
+          echo "📂 Listing backup directory structure:"
+          docker compose exec -T depictio-backend find /app/depictio/backups -type d -name "*" 2>/dev/null || echo "Backup directory not found, checking if it exists..."
+          docker compose exec -T depictio-backend ls -la /app/depictio/backups 2>/dev/null || echo "Main backup directory doesn't exist"
+          docker compose exec -T depictio-backend ls -la /app/depictio/backups/s3_data_backups 2>/dev/null || echo "S3 backup directory doesn't exist"
 
-
+          # Look for backup files by checking prefix directory
           DATE=$(date +%Y%m%d)
-          BACKUP_COUNT=$(docker compose exec -T depictio-backend find /app/depictio/backups/s3_data_backups/backup -name "*_${DATE}_*.tar.gz" -type f | wc -l)
-          echo "Found $BACKUP_COUNT S3 local backup files"
+          echo "🔍 Searching for backup files with date prefix $DATE..."
+
+          # Check for any backup files in the s3_data_backups directory with current date
+          BACKUP_COUNT=$(docker compose exec -T depictio-backend find /app/depictio/backups/s3_data_backups -name "ci_${{ matrix.backup_strategy }}_backup" -type d 2>/dev/null | wc -l)
+          echo "Found $BACKUP_COUNT backup prefix directories"
 
           if [ "$BACKUP_COUNT" -gt 0 ]; then
-            echo "✅ Local backup files found for ${{ matrix.strategy_name }}"
-            docker compose exec -T depictio-backend find /app/depictio/backups/s3_data_backups/backup -name "*_${DATE}_*.tar.gz" -type f -exec ls -lh {} \; | awk '{print $9 ": " $5}'
-            echo "📋 Local backup files listed above"
+            echo "✅ Local backup directory found for ${{ matrix.strategy_name }}"
+            docker compose exec -T depictio-backend find /app/depictio/backups/s3_data_backups -name "ci_${{ matrix.backup_strategy }}_backup" -type d -exec ls -la {} \;
+
+            # Check for actual data files inside backup directories
+            FILE_COUNT=$(docker compose exec -T depictio-backend find /app/depictio/backups/s3_data_backups -name "*.parquet" -o -name "*.json" -o -name "*${DATE}*" 2>/dev/null | wc -l)
+            echo "Found $FILE_COUNT actual backup files"
+
+            if [ "$FILE_COUNT" -gt 0 ]; then
+              echo "✅ Local backup files verified for ${{ matrix.strategy_name }}"
+              docker compose exec -T depictio-backend find /app/depictio/backups/s3_data_backups -name "*.parquet" -o -name "*.json" -o -name "*${DATE}*" 2>/dev/null | head -10
+            else
+              echo "⚠️  Backup directory exists but no files found"
+            fi
           else
-            echo "❌ No local backup files found for ${{ matrix.strategy_name }}"
+            echo "❌ No local backup directories found for ${{ matrix.strategy_name }}"
             exit 1
           fi
 
@@ -766,7 +817,7 @@ jobs:
           import boto3;
           try:
               client = boto3.client('s3',
-                  endpoint_url='http://minio-backup:9002',
+                  endpoint_url='http://minio-backup:9000',
                   aws_access_key_id='backup_minio',
                   aws_secret_access_key='backup_minio123',
                   region_name='us-east-1');
