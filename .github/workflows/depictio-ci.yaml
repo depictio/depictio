@@ -648,9 +648,14 @@ jobs:
           echo "GID=$(id -g)" >> $GITHUB_ENV
           echo "UID: $(id -u), GID: $(id -g)"
 
-          echo "📁 Creating base environment file..."
+          echo "📁 Creating environment files..."
+          # Create root .env for Docker Compose variables
+          cp .env.example .env
+          echo "✅ Root .env file created"
+
+          # Copy to docker-compose/.env for application variables
           cp .env.example docker-compose/.env
-          echo "✅ Base docker-compose/.env file created"
+          echo "✅ docker-compose/.env file created"
 
           echo "⚙️ Configuring backup strategy in docker-compose/.env file..."
           # Remove any existing backup configuration first
