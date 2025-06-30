@@ -124,8 +124,8 @@ class TestGetAllUsersEndpoint:
         with pytest.raises(HTTPException) as exc_info:
             await get_all_users(current_user=None)
 
-        assert exc_info.value.status_code == 401
-        assert "Current user not found" in exc_info.value.detail
+        assert exc_info.value.status_code == 401  # type: ignore[unresolved-attribute]
+        assert "Current user not found" in exc_info.value.detail  # type: ignore[unresolved-attribute]
 
     @pytest.mark.asyncio
     async def test_get_all_users_non_admin_user(self, mock_mongodb_async):
@@ -138,8 +138,8 @@ class TestGetAllUsersEndpoint:
         with pytest.raises(HTTPException) as exc_info:
             await get_all_users(current_user=regular_user)
 
-        assert exc_info.value.status_code == 401
-        assert "Current user is not an admin" in exc_info.value.detail
+        assert exc_info.value.status_code == 401  # type: ignore[unresolved-attribute]
+        assert "Current user is not an admin" in exc_info.value.detail  # type: ignore[unresolved-attribute]
 
     @pytest.mark.asyncio
     async def test_get_all_users_empty_database(self):

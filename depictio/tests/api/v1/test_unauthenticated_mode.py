@@ -282,9 +282,9 @@ class TestDisabledFeatures:
             with pytest.raises(HTTPException) as exc_info:
                 await register(request)
 
-            assert exc_info.value.status_code == 403
+            assert exc_info.value.status_code == 403  # type: ignore[unresolved-attribute]
             assert "User registration disabled in unauthenticated mode" in str(
-                exc_info.value.detail
+                exc_info.value.detail  # type: ignore[unresolved-attribute]
             )
 
     @pytest.mark.asyncio
@@ -304,9 +304,9 @@ class TestDisabledFeatures:
             with pytest.raises(HTTPException) as exc_info:
                 await generate_agent_config_endpoint(mock_token, mock_user)
 
-            assert exc_info.value.status_code == 403
+            assert exc_info.value.status_code == 403  # type: ignore[unresolved-attribute]
             assert "CLI agent generation disabled in unauthenticated mode" in str(
-                exc_info.value.detail
+                exc_info.value.detail  # type: ignore[unresolved-attribute]
             )
 
 

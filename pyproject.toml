@@ -73,6 +73,7 @@ dev = [
   "bump2version",
   "typer",
   "rich",
+  "testcontainers[minio]",
   "types-bleach",
   "types-boto3",
 ]

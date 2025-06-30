@@ -7,12 +7,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Environment Setup
 
 ```bash
-# Install dependencies with uv (recommended)
+# Install dependencies with uv (recommended) - Python 3.12
 uv sync
 
 # Or with pip
 pip install -e .
 pip install -e ".[dev]"
+
+# Note: The project uses Python 3.12 in CI to ensure consistent type checking behavior
 ```
 
 ### Testing
@@ -36,6 +38,23 @@ ruff check .
 
 # Type checking with ty (Astral's fast type checker)
 ty check depictio/
+
+# Run pre-commit hooks
+pre-commit run --all-files
+```
+
+### Local CI Testing with Act
+
+```bash
+# Test GitHub Actions workflow locally using act
+# Requires Docker and act (https://github.com/nektos/act)
+act --workflows .github/workflows/depictio-ci.yaml -j quality -P ubuntu-22.04=catthehacker/ubuntu:full-22.04 --container-architecture linux/amd64 --container-options "--privileged" --reuse --action-offline-mode
+
+# Run specific job only
+act --workflows .github/workflows/depictio-ci.yaml -j quality
+
+# List available jobs
+act --workflows .github/workflows/depictio-ci.yaml --list
 ```
 
 ### Running the Application

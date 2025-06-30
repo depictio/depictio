@@ -15,6 +15,7 @@ from depictio.api.v1.endpoints.projects_endpoints.utils import (
     _helper_create_project_beanie,
     validate_workflow_uniqueness_in_project,
 )
+from depictio.api.v1.endpoints.user_endpoints.core_functions import _hash_password
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.projects import Project
 from depictio.models.models.users import Permission, User
@@ -28,7 +29,7 @@ def sample_user():
     return User(
         id=user_id,
         email="test@example.com",
-        password="hashed_password",
+        password=_hash_password("test_password"),
         is_admin=True,
     )
 
@@ -40,7 +41,7 @@ def sample_viewer_user():
     return User(
         id=user_id,
         email="viewer@example.com",
-        password="hashed_password",
+        password=_hash_password("viewer_password"),
         is_admin=False,
     )
 
@@ -52,7 +53,7 @@ def sample_editor_user():
     return User(
         id=user_id,
         email="editor@example.com",
-        password="hashed_password",
+        password=_hash_password("editor_password"),
         is_admin=False,
     )
 
@@ -235,7 +236,10 @@ class TestGetAllProjects:
     ):
         """Test getting all projects for a regular user."""
         current_user = User(
-            id=sample_user.id, email=sample_user.email, password="hashed_password", is_admin=False
+            id=sample_user.id,
+            email=sample_user.email,
+            password=_hash_password("user_password"),
+            is_admin=False,
         )
         result = _async_get_all_projects(current_user, mock_projects_collection)
 
@@ -247,7 +251,10 @@ class TestGetAllProjects:
     ):
         """Test getting all projects for an admin user."""
         admin_user = User(
-            id=sample_user.id, email=sample_user.email, password="hashed_password", is_admin=True
+            id=sample_user.id,
+            email=sample_user.email,
+            password=_hash_password("admin_password"),
+            is_admin=True,
         )
         result = _async_get_all_projects(admin_user, mock_projects_collection)
 
@@ -283,7 +290,10 @@ class TestGetProjectFromId:
     ):
         """Test getting a project by ID successfully."""
         current_user = User(
-            id=sample_user.id, email=sample_user.email, password="hashed_password", is_admin=False
+            id=sample_user.id,
+            email=sample_user.email,
+            password=_hash_password("user_password"),
+            is_admin=False,
         )
         result = _async_get_project_from_id(
             setup_single_project, current_user, mock_projects_collection
@@ -300,7 +310,10 @@ class TestGetProjectFromId:
         mock_projects_collection.delete_many({})
 
         current_user = User(
-            id=sample_user.id, email=sample_user.email, password="hashed_password", is_admin=False
+            id=sample_user.id,
+            email=sample_user.email,
+            password=_hash_password("user_password"),
+            is_admin=False,
         )
         non_existent_id = str(ObjectId())
 
@@ -347,7 +360,10 @@ class TestGetProjectFromName:
     ):
         """Test getting a project by name successfully."""
         current_user = User(
-            id=sample_user.id, email=sample_user.email, password="hashed_password", is_admin=False
+            id=sample_user.id,
+            email=sample_user.email,
+            password=_hash_password("user_password"),
+            is_admin=False,
         )
         result = _async_get_project_from_name(
             setup_named_project, current_user, mock_projects_collection
@@ -366,7 +382,10 @@ class TestGetProjectFromName:
         mock_projects_collection.delete_many({})
 
         current_user = User(
-            id=sample_user.id, email=sample_user.email, password="hashed_password", is_admin=False
+            id=sample_user.id,
+            email=sample_user.email,
+            password=_hash_password("user_password"),
+            is_admin=False,
         )
 
         with pytest.raises(HTTPException) as excinfo:
@@ -374,8 +393,8 @@ class TestGetProjectFromName:
                 "Non-existent Project", current_user, mock_projects_collection
             )
 
-        assert excinfo.value.status_code == 404
-        assert "Project not found" in excinfo.value.detail
+        assert excinfo.value.status_code == 404  # type: ignore[unresolved-attribute]
+        assert "Project not found" in excinfo.value.detail  # type: ignore[unresolved-attribute]
 
     async def test_async_get_project_from_name_public_access(
         self, sample_user, yaml_config, test_yaml_path, mock_projects_collection
@@ -399,7 +418,10 @@ class TestGetProjectFromName:
 
         # Create a different user
         other_user = User(
-            id=PyObjectId(), email="other@example.com", password="hashed_password", is_admin=False
+            id=PyObjectId(),
+            email="other@example.com",
+            password=_hash_password("other_password"),
+            is_admin=False,
         )
         result = _async_get_project_from_name(project.name, other_user, mock_projects_collection)
 
@@ -461,10 +483,10 @@ class TestWorkflowUniquenessValidation:
         with pytest.raises(HTTPException) as excinfo:
             validate_workflow_uniqueness_in_project(sample_project_with_duplicate_workflows)
 
-        assert excinfo.value.status_code == 400
-        assert "Duplicate workflow_tag(s) found within project" in excinfo.value.detail
-        assert "iris_workflow" in excinfo.value.detail  # The actual generated workflow_tag
-        assert "Each workflow_tag must be unique within a project" in excinfo.value.detail
+        assert excinfo.value.status_code == 400  # type: ignore[unresolved-attribute]
+        assert "Duplicate workflow_tag(s) found within project" in excinfo.value.detail  # type: ignore[unresolved-attribute]
+        assert "iris_workflow" in excinfo.value.detail  # type: ignore[unresolved-attribute]  # The actual generated workflow_tag
+        assert "Each workflow_tag must be unique within a project" in excinfo.value.detail  # type: ignore[unresolved-attribute]
 
     def test_validate_workflow_uniqueness_empty_project(self, sample_user, test_yaml_path):
         """Test workflow uniqueness validation with a project that has no workflows."""
