@@ -112,7 +112,7 @@ def render_login_form():
                         style={"display": "none"},
                     ),
                 ],
-                position="center",
+                justify="center",
                 mt="1rem",
             ),
             # Google OAuth Section
@@ -242,7 +242,7 @@ def render_register_form():
                         id="open-login-form",
                     ),
                 ],
-                position="center",
+                justify="center",
                 mt="1rem",
             ),
         ],

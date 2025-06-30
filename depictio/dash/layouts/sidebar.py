@@ -139,7 +139,7 @@ def register_sidebar_callbacks(app):
                         span="content",
                     )
 
-                    return [dmc.Group([server_status_badge], position="apart")]
+                    return [dmc.Group([server_status_badge], justify="space-between")]
                 else:
                     server_status_badge = dmc.Col(
                         dmc.Badge(

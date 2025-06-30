@@ -454,7 +454,7 @@ def create_stepper_output(n, active):
             dbc.Row(
                 [
                     dbc.Col(
-                        dmc.Title("Component selected:", order=3, align="left", weight=500),
+                        dmc.Title("Component selected:", order=3, align="left", fw=500),
                         width=4,
                     ),
                     dbc.Col(
@@ -463,7 +463,7 @@ def create_stepper_output(n, active):
                             id={"type": "component-selected", "index": n},
                             size="xl",
                             align="left",
-                            weight=500,
+                            fw=500,
                         ),
                         width=8,
                     ),
@@ -601,7 +601,7 @@ def create_stepper_output(n, active):
     )
 
     stepper_footer = dmc.Group(
-        position="center",
+        justify="center",
         mt="xl",
         children=[
             dmc.Button(

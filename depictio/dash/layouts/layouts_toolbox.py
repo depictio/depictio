@@ -55,7 +55,7 @@ def create_dashboard_modal(
                 children=[
                     # Header with icon and title
                     dmc.Group(
-                        position="center",
+                        justify="center",
                         spacing="sm",
                         children=[
                             DashIconify(
@@ -138,7 +138,7 @@ def create_dashboard_modal(
                     ),
                     # Buttons
                     dmc.Group(
-                        position="right",
+                        justify="flex-end",
                         spacing="md",
                         mt="lg",
                         children=[
@@ -221,7 +221,7 @@ def create_delete_confirmation_modal(
                 children=[
                     # Header with icon and title
                     dmc.Group(
-                        position="left",
+                        justify="flex-start",
                         spacing="sm",
                         children=[
                             DashIconify(
@@ -248,7 +248,7 @@ def create_delete_confirmation_modal(
                     ),
                     # Buttons
                     dmc.Group(
-                        position="right",
+                        justify="flex-end",
                         spacing="md",
                         mt="md",
                         children=[
@@ -331,7 +331,7 @@ def create_add_with_input_modal(
                 children=[
                     # Header with icon and title
                     dmc.Group(
-                        position="left",
+                        justify="flex-start",
                         spacing="sm",
                         children=[
                             DashIconify(
@@ -362,7 +362,7 @@ def create_add_with_input_modal(
                     input_field,
                     # Buttons
                     dmc.Group(
-                        position="right",
+                        justify="flex-end",
                         spacing="md",
                         mt="md",
                         children=[
@@ -463,7 +463,7 @@ def create_edit_password_modal(
                             children=[
                                 # Header with icon and title
                                 dmc.Group(
-                                    position="left",
+                                    justify="flex-start",
                                     spacing="sm",
                                     children=[
                                         DashIconify(
@@ -512,7 +512,7 @@ def create_edit_password_modal(
                                 ),
                                 # Button
                                 dmc.Group(
-                                    position="right",
+                                    justify="flex-end",
                                     mt="lg",
                                     children=[
                                         dmc.Button(

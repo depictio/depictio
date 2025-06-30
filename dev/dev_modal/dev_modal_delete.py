@@ -155,7 +155,7 @@ app.layout = dmc.Container(
                         dmc.Group(
                             position="apart",
                             children=[
-                                dmc.Text(item["name"], weight=500, size="lg"),
+                                dmc.Text(item["name"], fw=500, size="lg"),
                                 dmc.ActionIcon(
                                     color="red",
                                     variant="light",

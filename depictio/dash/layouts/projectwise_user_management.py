@@ -170,7 +170,7 @@ def create_project_header(project_name, project_id, is_public, is_admin=False, i
         radius="xl",
         disabled=not (is_admin or is_owner),  # Only allow admins/owners to change visibility
     )
-    title_button = dmc.Group([title, make_public_button], position="apart")
+    title_button = dmc.Group([title, make_public_button], justify="space-between")
     details = dmc.Text(
         f"Project ID: {project_id}",
         size="sm",
@@ -256,7 +256,7 @@ user_permissions_store = dcc.Store(
     id="permissions-manager-user-permissions", data=None, storage_type="memory"
 )
 
-text_table_header = dmc.Text("Project Permissions", size="xl", weight="bold", color="black")
+text_table_header = dmc.Text("Project Permissions", size="xl", fw="bold", color="black")
 
 # -----------------------------------------------------------------------------
 # Main Layout Definition
@@ -310,7 +310,7 @@ layout = dmc.Container(
                             [
                                 html.Div(
                                     [
-                                        dmc.Text("Permissions", weight="bold", size="sm"),
+                                        dmc.Text("Permissions", fw="bold", size="sm"),
                                         dmc.Group(
                                             [
                                                 dmc.Checkbox(
@@ -386,7 +386,7 @@ layout = dmc.Container(
                                             disabled=True,
                                         ),
                                     ],
-                                    position="left",
+                                    justify="flex-start",
                                     align="flex-end",
                                     style={"width": "100%"},
                                 ),

@@ -81,7 +81,7 @@ def update_page_content(pathname):
                 dmc.Text(
                     "Dashboards recently viewed",
                     size=20,
-                    weight=600,
+                    fw=600,
                     color="#333333",
                     style={"margin": "10px 10px 10px 10px"},
                 ),
@@ -117,7 +117,7 @@ def update_page_content(pathname):
                                                 p=1,
                                             ),
                                         ),
-                                        dmc.Text("Test", weight=700),
+                                        dmc.Text("Test", fw=700),
                                     ],
                                     mt="md",
                                     mb="xs",
