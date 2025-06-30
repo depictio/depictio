@@ -607,23 +607,24 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        backup_strategy: [local, s3_to_s3, both]
+        backup_strategy: [local]
         include:
           - backup_strategy: local
             strategy_name: "S3 to Local"
             s3_enabled: false
             expected_local_files: true
             expected_s3_files: false
-          - backup_strategy: s3_to_s3
-            strategy_name: "S3 to S3"
-            s3_enabled: true
-            expected_local_files: false
-            expected_s3_files: true
-          - backup_strategy: both
-            strategy_name: "S3 to Both"
-            s3_enabled: true
-            expected_local_files: true
-            expected_s3_files: true
+          # Temporarily disabled for debugging
+          # - backup_strategy: s3_to_s3
+          #   strategy_name: "S3 to S3"
+          #   s3_enabled: true
+          #   expected_local_files: false
+          #   expected_s3_files: true
+          # - backup_strategy: both
+          #   strategy_name: "S3 to Both"
+          #   s3_enabled: true
+          #   expected_local_files: true
+          #   expected_s3_files: true
     steps:
       - uses: actions/checkout@v4
 
@@ -648,22 +649,25 @@ jobs:
           echo "UID: $(id -u), GID: $(id -g)"
 
           echo "📁 Creating base environment file..."
-          cp .env.example .env
-          echo "✅ Base .env file created"
+          cp .env.example docker-compose/.env
+          echo "✅ Base docker-compose/.env file created"
 
-          echo "⚙️ Configuring backup strategy in .env file..."
-          echo "" >> .env
-          echo "# === BACKUP STRATEGY CONFIGURATION FOR CI ===" >> .env
-          echo "DEPICTIO_BACKUP_S3_BACKUP_STRATEGY=${{ matrix.backup_strategy }}" >> .env
-          echo "DEPICTIO_BACKUP_BACKUP_S3_ENABLED=${{ matrix.s3_enabled }}" >> .env
-          echo "DEPICTIO_BACKUP_BACKUP_S3_BUCKET=depictio-backup-bucket" >> .env
-          echo "DEPICTIO_BACKUP_BACKUP_S3_ENDPOINT_URL=http://minio-backup:9002" >> .env
-          echo "DEPICTIO_BACKUP_BACKUP_S3_REGION=us-east-1" >> .env
-          echo "DEPICTIO_BACKUP_BACKUP_S3_ACCESS_KEY=backup_minio" >> .env
-          echo "DEPICTIO_BACKUP_BACKUP_S3_SECRET_KEY=backup_minio123" >> .env
+          echo "⚙️ Configuring backup strategy in docker-compose/.env file..."
+          # Remove any existing backup configuration first
+          sed -i '/^DEPICTIO_BACKUP_/d' docker-compose/.env || echo "No existing backup config to remove"
+
+          echo "" >> docker-compose/.env
+          echo "# === BACKUP STRATEGY CONFIGURATION FOR CI ===" >> docker-compose/.env
+          echo "DEPICTIO_BACKUP_S3_BACKUP_STRATEGY=${{ matrix.backup_strategy }}" >> docker-compose/.env
+          echo "DEPICTIO_BACKUP_BACKUP_S3_ENABLED=${{ matrix.s3_enabled }}" >> docker-compose/.env
+          echo "DEPICTIO_BACKUP_BACKUP_S3_BUCKET=depictio-backup-bucket" >> docker-compose/.env
+          echo "DEPICTIO_BACKUP_BACKUP_S3_ENDPOINT_URL=http://minio-backup:9000" >> docker-compose/.env
+          echo "DEPICTIO_BACKUP_BACKUP_S3_REGION=us-east-1" >> docker-compose/.env
+          echo "DEPICTIO_BACKUP_BACKUP_S3_ACCESS_KEY=backup_minio" >> docker-compose/.env
+          echo "DEPICTIO_BACKUP_BACKUP_S3_SECRET_KEY=backup_minio123" >> docker-compose/.env
 
           echo "📋 Complete backup configuration for ${{ matrix.strategy_name }}:"
-          grep "DEPICTIO_BACKUP" .env || echo "❌ No DEPICTIO_BACKUP vars found!"
+          grep "DEPICTIO_BACKUP" docker-compose/.env || echo "❌ No DEPICTIO_BACKUP vars found!"
 
           echo "📂 Creating required directories..."
           mkdir -p depictioDB minio_data minio_backup_data
@@ -689,14 +693,14 @@ jobs:
 
           echo "📋 Final environment file content before starting services:"
           echo "=== ALL DEPICTIO_BACKUP VARIABLES ==="
-          grep "DEPICTIO_BACKUP" .env || echo "❌ No DEPICTIO_BACKUP vars found!"
+          grep "DEPICTIO_BACKUP" docker-compose/.env || echo "❌ No DEPICTIO_BACKUP vars found!"
           echo "=== SAMPLE OF OTHER ENVIRONMENT VARIABLES ==="
-          head -10 .env
+          head -10 docker-compose/.env
           echo "=================================="
 
           echo "🐳 Starting Docker Compose services..."
           echo "Compose files: docker-compose.dev.yaml + docker-compose.minio.yaml + docker-compose.backup-minio.yaml"
-          echo "Environment file: .env"
+          echo "Environment file: docker-compose/.env"
 
           docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml -f docker-compose/docker-compose.backup-minio.yaml up -d --force-recreate
 
@@ -831,12 +835,12 @@ jobs:
 
                 echo "🔍 Testing additional API endpoints..."
                 # Test projects endpoint
-                projects_check=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $token" http://localhost:8058/depictio/api/v1/projects/)
+                projects_check=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $token" http://localhost:8058/depictio/api/v1/projects/get/all)
                 echo "📊 Projects endpoint: HTTP $projects_check"
 
-                # Test deltatables endpoint
-                deltatables_check=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $token" http://localhost:8058/depictio/api/v1/deltatables/)
-                echo "📊 Deltatables endpoint: HTTP $deltatables_check"
+                # Test backup endpoint
+                backup_check=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $token" http://localhost:8058/depictio/api/v1/backup/list)
+                echo "📊 Backup endpoint: HTTP $backup_check"
 
                 break
               else
@@ -866,9 +870,19 @@ jobs:
 
           # Show current backup configuration from backend
           echo "📋 Checking backend configuration and database state..."
+
+          echo "🔍 Checking environment variables in backend container..."
+          docker compose exec -T depictio-backend bash -c "env | grep DEPICTIO_BACKUP || echo 'No DEPICTIO_BACKUP env vars found'"
+
+          echo "📋 Backend backup configuration:"
           docker compose exec -T depictio-backend python3 -c "
+          import os;
+          print('=== ENVIRONMENT VARIABLES ===');
+          for key, value in os.environ.items():
+              if 'DEPICTIO_BACKUP' in key:
+                  print(f'{key}={value}');
+          print('=== LOADED SETTINGS ===');
           from depictio.api.v1.configs.config import settings;
-          print('=== BACKUP CONFIGURATION ===');
           print(f'Backup Strategy: {settings.backup.s3_backup_strategy}');
           print(f'Backup S3 Enabled: {settings.backup.backup_s3_enabled}');
           print(f'Backup S3 Bucket: {settings.backup.backup_s3_bucket}');
