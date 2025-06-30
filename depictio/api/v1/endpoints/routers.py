@@ -2,6 +2,7 @@
 from fastapi import APIRouter
 
 from depictio.api.v1.configs.config import settings
+from depictio.api.v1.endpoints.auth_endpoints.google_oauth_routes import google_oauth_router
 from depictio.api.v1.endpoints.cli_endpoints.routes import cli_endpoint_router
 from depictio.api.v1.endpoints.dashboards_endpoints.routes import dashboards_endpoint_router
 from depictio.api.v1.endpoints.datacollections_endpoints.routes import (
@@ -80,4 +81,11 @@ router.include_router(
     auth_endpoint_router,
     prefix="/auth",
     tags=["Authentication"],
+)
+
+# Include Google OAuth router (enabled/disabled check is done in endpoints)
+router.include_router(
+    google_oauth_router,
+    prefix="/auth/google",
+    tags=["Google OAuth"],
 )
