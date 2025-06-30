@@ -607,24 +607,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        backup_strategy: [local]
+        backup_strategy: [local, s3_to_s3, both]
         include:
           - backup_strategy: local
             strategy_name: "S3 to Local"
             s3_enabled: false
             expected_local_files: true
             expected_s3_files: false
-          # Temporarily disabled for debugging
-          # - backup_strategy: s3_to_s3
-          #   strategy_name: "S3 to S3"
-          #   s3_enabled: true
-          #   expected_local_files: false
-          #   expected_s3_files: true
-          # - backup_strategy: both
-          #   strategy_name: "S3 to Both"
-          #   s3_enabled: true
-          #   expected_local_files: true
-          #   expected_s3_files: true
+          - backup_strategy: s3_to_s3
+            strategy_name: "S3 to S3"
+            s3_enabled: true
+            expected_local_files: false
+            expected_s3_files: true
+          - backup_strategy: both
+            strategy_name: "S3 to Both"
+            s3_enabled: true
+            expected_local_files: true
+            expected_s3_files: true
     steps:
       - uses: actions/checkout@v4
 
