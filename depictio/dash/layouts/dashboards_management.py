@@ -462,7 +462,7 @@ def register_callbacks_dashboards_management(app):
                                     },
                                     variant="outline",
                                     color="dark",
-                                    size="xs",
+                                    size="sm",
                                     # style={"fontFamily": "Virgil"},
                                     # leftIcon=DashIconify(icon="mdi:eye", width=12, color="black"),
                                     style={"padding": "2px 6px", "fontSize": "12px"},
@@ -479,7 +479,7 @@ def register_callbacks_dashboards_management(app):
                                 color="blue",
                                 # style={"fontFamily": "Virgil"},
                                 disabled=disabled,
-                                size="xs",
+                                size="sm",
                                 style={"padding": "2px 6px", "fontSize": "12px"},
                             ),
                             dmc.Button(
@@ -491,7 +491,7 @@ def register_callbacks_dashboards_management(app):
                                 variant="outline",
                                 color="gray",
                                 # style={"fontFamily": "Virgil"},
-                                size="xs",
+                                size="sm",
                                 style={"padding": "2px 6px", "fontSize": "12px"},
                                 disabled=duplicate_disabled,
                             ),
@@ -505,7 +505,7 @@ def register_callbacks_dashboards_management(app):
                                 color="red",
                                 # style={"fontFamily": "Virgil"},
                                 disabled=disabled,
-                                size="xs",
+                                size="sm",
                                 style={"padding": "2px 6px", "fontSize": "12px"},
                             ),
                             dmc.Button(
@@ -518,8 +518,8 @@ def register_callbacks_dashboards_management(app):
                                 color=color_privacy_button,
                                 # style={"fontFamily": "Virgil"},
                                 disabled=disabled,
-                                size="xs",
-                                style={"padding": "2px 6px", "fontSize": "12px"},
+                                size="sm",
+                                style={"padding": "2px 6px", "fontSize": "12px", "display": "none"},
                             ),
                         ]
                         # align="center",
@@ -678,17 +678,27 @@ def register_callbacks_dashboards_management(app):
                 )
             return view
 
-        private_dashboards_section_header = dmc.Title(
+        # Categorize dashboards based on ownership and access
+        owned_dashboards = [
+            d
+            for d in dashboards
+            if str(user_id) in [str(owner["_id"]) for owner in d["permissions"]["owners"]]
+        ]
+        accessed_dashboards = [
+            d
+            for d in dashboards
+            if str(user_id) not in [str(owner["_id"]) for owner in d["permissions"]["owners"]]
+        ]
+
+        owned_dashboards_section_header = dmc.Title(
             [
-                DashIconify(icon="mdi:lock", width=18, color="#7d56f2"),
-                " Private Dashboards",
+                DashIconify(icon="mdi:account-check", width=18, color="#1c7ed6"),
+                " Owned Dashboards",
             ],
             order=3,
         )
-        private_dashboards = [d for d in dashboards if d["is_public"] is False]
-        # private_dashboards_ids = [d["dashboard_id"] for d in private_dashboards]
-        private_dashboards_view = dmc.SimpleGrid(
-            loop_over_dashboards(user_id, private_dashboards, token, current_user),
+        owned_dashboards_view = dmc.SimpleGrid(
+            loop_over_dashboards(user_id, owned_dashboards, token, current_user),
             cols=3,  # Default number of columns
             spacing="xl",
             verticalSpacing="xl",
@@ -699,17 +709,16 @@ def register_callbacks_dashboards_management(app):
             ],
             style={"width": "100%"},
         )
-        public_dashboards_section_header = dmc.Title(
+        accessed_dashboards_section_header = dmc.Title(
             [
-                DashIconify(icon="material-symbols:public", width=18, color="#54ca74"),
-                " Public Dashboards",
+                DashIconify(icon="mdi:eye", width=18, color="#54ca74"),
+                " Accessed Dashboards",
             ],
             order=3,
         )
 
-        public_dashboards = [d for d in dashboards if d["is_public"] is True]
-        public_dashboards_view = dmc.SimpleGrid(
-            loop_over_dashboards(user_id, public_dashboards, token, current_user),
+        accessed_dashboards_view = dmc.SimpleGrid(
+            loop_over_dashboards(user_id, accessed_dashboards, token, current_user),
             cols=3,  # Default number of columns
             spacing="xl",
             verticalSpacing="xl",
@@ -724,16 +733,16 @@ def register_callbacks_dashboards_management(app):
         # Optional: Add padding to the parent div for better spacing on smaller screens
         return html.Div(
             [
-                # dmc.Grid([title], justify="space-between", align="center", style={"width": "100%", "padding": "20px 0"}), html.Hr(),
-                # private_dashboards_view
-                private_dashboards_section_header,
+                # Show owned dashboards section
+                owned_dashboards_section_header,
                 dmc.Space(h=10),
-                private_dashboards_view,
+                owned_dashboards_view,
                 dmc.Space(h=20),
                 html.Hr(),
-                public_dashboards_section_header,
+                # Show accessed dashboards section
+                accessed_dashboards_section_header,
                 dmc.Space(h=10),
-                public_dashboards_view,
+                accessed_dashboards_view,
             ],
             style={"width": "100%", "padding": "0 20px"},
         )

@@ -88,3 +88,10 @@ router.include_router(
     prefix="/auth",
     tags=["Authentication"],
 )
+
+# Include Google OAuth router (enabled/disabled check is done in endpoints)
+router.include_router(
+    google_oauth_router,
+    prefix="/auth/google",
+    tags=["Google OAuth"],
+)
