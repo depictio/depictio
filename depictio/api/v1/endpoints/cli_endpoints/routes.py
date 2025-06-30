@@ -14,8 +14,8 @@ class CLIValidationResponse(BaseModel):
     success: bool
     message: str
     is_admin: bool = False
-    user_id: str = None
-    email: str = None
+    user_id: str | None = None
+    email: str | None = None
 
 
 cli_endpoint_router = APIRouter()
