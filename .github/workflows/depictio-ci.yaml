@@ -729,15 +729,16 @@ jobs:
 
           echo "✅ Backup creation completed for ${{ matrix.strategy_name }}"
 
-      - name: Verify local backup files - ${{ matrix.strategy_name }}
+      - name: Verify S3 local backup files - ${{ matrix.strategy_name }}
         if: matrix.expected_local_files == true
         run: |
           echo "📁 Verifying local backup files for ${{ matrix.strategy_name }} strategy..."
 
           # Check if local backup files exist in the backend container
           echo "🔍 Checking for local backup files in backend container..."
-          BACKUP_COUNT=$(docker compose exec -T depictio-backend find /app -name "backup_*.zip" -type f | wc -l)
-          echo "Found $BACKUP_COUNT local backup files"
+          DATE=$(date +%Y%m%d)
+          BACKUP_COUNT=$(docker compose exec -T depictio-backend find /app/depictio/backups/s3_data_backups/backup -name "${DATE}_*" -type f | wc -l)
+          echo "Found $BACKUP_COUNT S3 local backup files"
 
           if [ "$BACKUP_COUNT" -gt 0 ]; then
             echo "✅ Local backup files found for ${{ matrix.strategy_name }}"
