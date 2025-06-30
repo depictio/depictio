@@ -136,7 +136,7 @@ def return_deltatable_for_view(workflow_id: str, dc: DataCollection, token: str)
     )
     preview_panel = dmc.AccordionPanel(dmc.Paper(grid))
     preview_control = dmc.AccordionControl(
-        dmc.Text("Preview", weight=700, className="label-text"),
+        dmc.Text("Preview", fw=700, className="label-text"),
         icon=DashIconify(icon="material-symbols:preview", width=20),
     )
     return preview_panel, preview_control
@@ -210,10 +210,10 @@ def render_data_collection(dc: DataCollection, workflow_id: str, token: str):
                                                         children=[
                                                             dmc.Text(
                                                                 "Database ID:",
-                                                                weight=700,
+                                                                fw=700,
                                                                 className="label-text",
                                                             ),
-                                                            dmc.Text(str(dc.id), weight=500),
+                                                            dmc.Text(str(dc.id), fw=500),
                                                         ],
                                                         spacing="xs",
                                                     ),
@@ -221,12 +221,12 @@ def render_data_collection(dc: DataCollection, workflow_id: str, token: str):
                                                         children=[
                                                             dmc.Text(
                                                                 "Tag:",
-                                                                weight=700,
+                                                                fw=700,
                                                                 className="label-text",
                                                             ),
                                                             dmc.Text(
                                                                 dc.data_collection_tag,
-                                                                weight=500,
+                                                                fw=500,
                                                             ),
                                                         ],
                                                         spacing="xs",
@@ -235,7 +235,7 @@ def render_data_collection(dc: DataCollection, workflow_id: str, token: str):
                                                         children=[
                                                             dmc.Text(
                                                                 "Description:",
-                                                                weight=700,
+                                                                fw=700,
                                                                 className="label-text",
                                                             ),
                                                             dmc.Text(
@@ -247,7 +247,7 @@ def render_data_collection(dc: DataCollection, workflow_id: str, token: str):
                                                                     )
                                                                     else ""
                                                                 ),
-                                                                weight=500,
+                                                                fw=500,
                                                             ),
                                                         ],
                                                         spacing="xs",
@@ -256,12 +256,12 @@ def render_data_collection(dc: DataCollection, workflow_id: str, token: str):
                                                         children=[
                                                             dmc.Text(
                                                                 "Type:",
-                                                                weight=700,
+                                                                fw=700,
                                                                 className="label-text",
                                                             ),
                                                             dmc.Text(
                                                                 dc.config.type,
-                                                                weight=500,
+                                                                fw=500,
                                                             ),
                                                         ],
                                                         spacing="xs",
@@ -270,12 +270,12 @@ def render_data_collection(dc: DataCollection, workflow_id: str, token: str):
                                                         children=[
                                                             dmc.Text(
                                                                 "MetaType:",
-                                                                weight=700,
+                                                                fw=700,
                                                                 className="label-text",
                                                             ),
                                                             dmc.Text(
                                                                 dc.config.metatype,
-                                                                weight=500,
+                                                                fw=500,
                                                             ),
                                                         ],
                                                         spacing="xs",
@@ -287,7 +287,7 @@ def render_data_collection(dc: DataCollection, workflow_id: str, token: str):
                                                     dmc.AccordionControl(
                                                         dmc.Text(
                                                             "depictio-CLI configuration",
-                                                            weight=700,
+                                                            fw=700,
                                                             className="label-text",
                                                         ),
                                                         icon=DashIconify(
@@ -354,66 +354,66 @@ def render_workflow_item(wf: Workflow, token: str):
                 children=[
                     dmc.Group(
                         children=[
-                            dmc.Text("Database ID:", weight=700, className="label-text"),
-                            dmc.Text(str(wf.id), weight=500),
+                            dmc.Text("Database ID:", fw=700, className="label-text"),
+                            dmc.Text(str(wf.id), fw=500),
                         ],
                         spacing="xs",
                     ),
                     dmc.Group(
                         children=[
-                            dmc.Text("Name:", weight=700, className="label-text"),
-                            dmc.Text(wf.name, weight=500),
+                            dmc.Text("Name:", fw=700, className="label-text"),
+                            dmc.Text(wf.name, fw=500),
                         ],
                         spacing="xs",
                     ),
                     dmc.Group(
                         children=[
-                            dmc.Text("Engine:", weight=700, className="label-text"),
+                            dmc.Text("Engine:", fw=700, className="label-text"),
                             dmc.Text(
                                 f"{wf.engine.name}"
                                 + (f" (version {wf.engine.version})" if wf.engine.version else ""),
-                                weight=500,
+                                fw=500,
                             ),
                         ],
                         spacing="xs",
                     ),
                     dmc.Group(
                         children=[
-                            dmc.Text("Repository URL:", weight=700, className="label-text"),
+                            dmc.Text("Repository URL:", fw=700, className="label-text"),
                             dmc.Anchor(
                                 wf.repository_url,
                                 href=wf.repository_url,
                                 target="_blank",
-                                weight=500,
+                                fw=500,
                             ),
                         ],
                         spacing="xs",
                     ),
                     dmc.Group(
                         children=[
-                            dmc.Text("Description:", weight=700, className="label-text"),
-                            dmc.Text(wf.description, weight=500),
+                            dmc.Text("Description:", fw=700, className="label-text"),
+                            dmc.Text(wf.description, fw=500),
                         ],
                         spacing="xs",
                     ),
                     dmc.Group(
                         children=[
-                            dmc.Text("Created at:", weight=700, className="label-text"),
-                            dmc.Text(wf.registration_time, weight=500),
+                            dmc.Text("Created at:", fw=700, className="label-text"),
+                            dmc.Text(wf.registration_time, fw=500),
                         ],
                         spacing="xs",
                     ),
                     # dmc.Group(
                     #     children=[
-                    #         dmc.Text("Owners:", weight=700, className="label-text"),
-                    #         dmc.Text(str([o.id for o in wf.permissions.owners]), weight=500),
+                    #         dmc.Text("Owners:", fw=700, className="label-text"),
+                    #         dmc.Text(str([o.id for o in wf.permissions.owners]), fw=500),
                     #     ],
                     #     spacing="xs",
                     # ),
                     # dmc.Group(
                     #     children=[
-                    #         dmc.Text("Viewers:", weight=700, className="label-text"),
-                    #         dmc.Text(str(wf.permissions.viewers), weight=500),
+                    #         dmc.Text("Viewers:", fw=700, className="label-text"),
+                    #         dmc.Text(str(wf.permissions.viewers), fw=500),
                     #     ],
                     #     spacing="xs",
                     # ),
@@ -518,24 +518,24 @@ def render_project_item(
                 children=[
                     dmc.Group(
                         children=[
-                            dmc.Text("Name:", weight=700, className="label-text"),
-                            dmc.Text(project.name, weight=500),
+                            dmc.Text("Name:", fw=700, className="label-text"),
+                            dmc.Text(project.name, fw=500),
                         ],
                         spacing="xs",
                     ),
                     dmc.Group(
                         children=[
-                            dmc.Text("Database ID:", weight=700, className="label-text"),
-                            dmc.Text(str(project.id), weight=500),
+                            dmc.Text("Database ID:", fw=700, className="label-text"),
+                            dmc.Text(str(project.id), fw=500),
                         ],
                         spacing="xs",
                     ),
                     dmc.Group(
                         children=[
-                            dmc.Text("Description:", weight=700, className="label-text"),
+                            dmc.Text("Description:", fw=700, className="label-text"),
                             dmc.Text(
                                 (project.description if project.description else "Not defined"),
-                                weight=500,
+                                fw=500,
                             ),
                         ],
                         spacing="xs",
@@ -544,7 +544,7 @@ def render_project_item(
                         children=[
                             dmc.Text(
                                 "Data Management Platform URL:",
-                                weight=700,
+                                fw=700,
                                 className="label-text",
                             ),
                             (
@@ -552,12 +552,12 @@ def render_project_item(
                                     project.data_management_platform_project_url,
                                     href=project.data_management_platform_project_url,
                                     target="_blank",
-                                    weight=500,
+                                    fw=500,
                                 )
                                 if project.data_management_platform_project_url
                                 else dmc.Text(
                                     "Not defined",
-                                    weight=500,
+                                    fw=500,
                                 )
                             ),
                         ],
@@ -565,28 +565,28 @@ def render_project_item(
                     ),
                     dmc.Group(
                         children=[
-                            dmc.Text("Created at:", weight=700, className="label-text"),
-                            dmc.Text(project.registration_time, weight=500),
+                            dmc.Text("Created at:", fw=700, className="label-text"),
+                            dmc.Text(project.registration_time, fw=500),
                         ],
                         spacing="xs",
                     ),
                     dmc.Group(
                         children=[
-                            dmc.Text("Owners:", weight=700, className="label-text"),
+                            dmc.Text("Owners:", fw=700, className="label-text"),
                             dmc.Text(
                                 str(
                                     " ; ".join(
                                         [f"{o.email} - {o.id}" for o in project.permissions.owners]
                                     )
                                 ),
-                                weight=500,
+                                fw=500,
                             ),
                         ],
                         spacing="xs",
                     ),
                     dmc.Group(
                         children=[
-                            dmc.Text("Editors:", weight=700, className="label-text"),
+                            dmc.Text("Editors:", fw=700, className="label-text"),
                             dmc.Text(
                                 (
                                     str(
@@ -600,14 +600,14 @@ def render_project_item(
                                     if project.permissions.editors
                                     else "None"
                                 ),
-                                weight=500,
+                                fw=500,
                             ),
                         ],
                         spacing="xs",
                     ),
                     dmc.Group(
                         children=[
-                            dmc.Text("Viewers:", weight=700, className="label-text"),
+                            dmc.Text("Viewers:", fw=700, className="label-text"),
                             dmc.Text(
                                 (
                                     str(
@@ -621,14 +621,14 @@ def render_project_item(
                                     if project.permissions.viewers
                                     else "None"
                                 ),
-                                weight=500,
+                                fw=500,
                             ),
                         ],
                         spacing="xs",
                     ),
                     dmc.Group(
                         children=[
-                            dmc.Text("Is public:", weight=700, className="label-text"),
+                            dmc.Text("Is public:", fw=700, className="label-text"),
                             dmc.Badge(
                                 "Public" if project.is_public else "Private",
                                 color="green" if project.is_public else "violet",
@@ -694,8 +694,8 @@ def render_project_item(
                 dmc.Group(
                     [
                         badge_ownership,
-                        dmc.Text(f"{project.name}", weight=700),
-                        # dmc.Text(f" ({str(project.id)})", weight=500),
+                        dmc.Text(f"{project.name}", fw=700),
+                        # dmc.Text(f" ({str(project.id)})", fw=500),
                     ],
                 ),
             ),
@@ -806,7 +806,7 @@ def render_projects_list(projects: list[Project], admin_UI: bool = False, token:
                             dmc.Text(
                                 "No projects available",
                                 align="center",
-                                weight=700,
+                                fw=700,
                                 size="xl",
                             ),
                             dmc.Text(
@@ -987,7 +987,7 @@ def register_workflows_callbacks(app):
                                 dmc.Text(
                                     "No projects available",
                                     align="center",
-                                    weight=700,
+                                    fw=700,
                                     size="xl",
                                 ),
                                 dmc.Text(

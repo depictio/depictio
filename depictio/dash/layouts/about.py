@@ -24,7 +24,7 @@ layout = html.Div(
                             dmc.Text(
                                 "Resources",
                                 size="xl",
-                                weight=700,
+                                fw=700,
                                 align="center",
                                 mb="md",
                             ),
@@ -63,7 +63,7 @@ layout = html.Div(
                                                 children=[
                                                     # Icon and Title
                                                     dmc.Group(
-                                                        position="center",
+                                                        justify="center",
                                                         spacing="sm",
                                                         children=[
                                                             DashIconify(
@@ -74,7 +74,7 @@ layout = html.Div(
                                                             dmc.Text(
                                                                 "GitHub Repository",
                                                                 size="xl",
-                                                                weight=700,  # Bold text
+                                                                fw=700,  # Bold text
                                                             ),
                                                         ],
                                                     ),
@@ -140,7 +140,7 @@ layout = html.Div(
                                                 children=[
                                                     # Icon and Title
                                                     dmc.Group(
-                                                        position="center",
+                                                        justify="center",
                                                         spacing="sm",
                                                         children=[
                                                             DashIconify(
@@ -151,7 +151,7 @@ layout = html.Div(
                                                             dmc.Text(
                                                                 "Documentation",
                                                                 size="xl",
-                                                                weight=700,
+                                                                fw=700,
                                                             ),
                                                         ],
                                                     ),
@@ -210,7 +210,7 @@ layout = html.Div(
                             dmc.Text(
                                 "Funding",
                                 size="xl",
-                                weight=700,
+                                fw=700,
                                 align="center",
                                 mb="xl",  # Margin bottom (increased spacing)
                             ),
@@ -260,7 +260,7 @@ layout = html.Div(
                                                     dmc.Text(
                                                         "Marie Skłodowska-Curie Grant",
                                                         size="lg",
-                                                        weight=700,
+                                                        fw=700,
                                                     ),
                                                     # Description
                                                     dmc.Text(
@@ -331,7 +331,7 @@ layout = html.Div(
                                                     dmc.Text(
                                                         "ARISE Programme",
                                                         size="lg",
-                                                        weight=700,
+                                                        fw=700,
                                                     ),
                                                     # Description
                                                     dmc.Text(
@@ -402,7 +402,7 @@ layout = html.Div(
                                                     dmc.Text(
                                                         "EMBL",
                                                         size="lg",
-                                                        weight=700,
+                                                        fw=700,
                                                     ),
                                                     # Description
                                                     dmc.Text(
@@ -453,7 +453,7 @@ layout = html.Div(
                             dmc.Text(
                                 "Academic Partners",
                                 size="xl",
-                                weight=700,
+                                fw=700,
                                 align="center",
                                 mb="xl",
                             ),
@@ -496,7 +496,7 @@ layout = html.Div(
                                                 dmc.Text(
                                                     "SciLifeLab Data Centre",
                                                     size="lg",
-                                                    weight=700,
+                                                    fw=700,
                                                     # style={"color": colors["blue"]},
                                                 ),
                                                 # Description
@@ -545,7 +545,7 @@ layout = html.Div(
                             dmc.Text(
                                 "Additional Resources",
                                 size="xl",
-                                weight=700,
+                                fw=700,
                                 align="center",
                                 mb="xl",
                             ),
@@ -575,7 +575,7 @@ layout = html.Div(
                                             children=[
                                                 # Icon and Title
                                                 dmc.Group(
-                                                    position="center",
+                                                    justify="center",
                                                     spacing="sm",
                                                     children=[
                                                         DashIconify(
@@ -586,7 +586,7 @@ layout = html.Div(
                                                         dmc.Text(
                                                             "Depictio Color Palette",
                                                             size="xl",
-                                                            weight=700,
+                                                            fw=700,
                                                             style={"color": colors["purple"]},
                                                         ),
                                                     ],

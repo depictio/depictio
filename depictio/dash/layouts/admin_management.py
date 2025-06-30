@@ -75,7 +75,7 @@ def render_dashboardwise_layout(dashboard):
                                 [
                                     dmc.Text(
                                         dashboard_title,
-                                        weight=500,
+                                        fw=500,
                                         size="lg",
                                         style={"flex": 1},
                                     ),
@@ -87,7 +87,7 @@ def render_dashboardwise_layout(dashboard):
                                         radius="sm",
                                     ),
                                 ],
-                                position="apart",
+                                justify="space-between",
                             ),
                         ]
                     ),
@@ -95,7 +95,7 @@ def render_dashboardwise_layout(dashboard):
                         [
                             dmc.Group(
                                 spacing="xs",
-                                position="apart",
+                                justify="space-between",
                                 children=[
                                     dmc.Stack(
                                         spacing="xs",
@@ -105,7 +105,7 @@ def render_dashboardwise_layout(dashboard):
                                                 [
                                                     dmc.Text(
                                                         "Dashboard ID: ",
-                                                        weight=700,
+                                                        fw=700,
                                                         size="sm",
                                                     ),
                                                     dmc.Text(str(dashboard_id), size="sm"),
@@ -113,7 +113,7 @@ def render_dashboardwise_layout(dashboard):
                                             ),
                                             dmc.Group(
                                                 [
-                                                    dmc.Text("Owner: ", weight=700, size="sm"),
+                                                    dmc.Text("Owner: ", fw=700, size="sm"),
                                                     dmc.Text(
                                                         dashboard_owner_raw.get("email", "Unknown")
                                                         if isinstance(dashboard_owner_raw, dict)
@@ -126,7 +126,7 @@ def render_dashboardwise_layout(dashboard):
                                                 [
                                                     dmc.Text(
                                                         "Viewers: ",
-                                                        weight=700,
+                                                        fw=700,
                                                         size="sm",
                                                     ),
                                                     dmc.List(
@@ -142,7 +142,7 @@ def render_dashboardwise_layout(dashboard):
                                                 [
                                                     dmc.Text(
                                                         "Components: ",
-                                                        weight=700,
+                                                        fw=700,
                                                         size="sm",
                                                     ),
                                                     dmc.Text(str(components_count), size="sm"),
@@ -152,7 +152,7 @@ def render_dashboardwise_layout(dashboard):
                                                 [
                                                     dmc.Text(
                                                         "Last Saved: ",
-                                                        weight=700,
+                                                        fw=700,
                                                         size="sm",
                                                     ),
                                                     dmc.Text(last_saved, size="sm"),
@@ -207,7 +207,7 @@ def render_groupwise_layout(group: GroupUI, all_users: list) -> dmc.Accordion:
     )
     actions_text = dmc.Text(
         "Actions: ",
-        weight=700,
+        fw=700,
         size="sm",
     )
 
@@ -246,12 +246,12 @@ def render_groupwise_layout(group: GroupUI, all_users: list) -> dmc.Accordion:
                                 [
                                     dmc.Text(
                                         group.name,
-                                        weight=500,
+                                        fw=500,
                                         size="lg",
                                         style={"flex": 1},
                                     ),
                                 ],
-                                position="apart",
+                                justify="space-between",
                             ),
                         ]
                     ),
@@ -259,7 +259,7 @@ def render_groupwise_layout(group: GroupUI, all_users: list) -> dmc.Accordion:
                         [
                             dmc.Group(
                                 spacing="xs",
-                                position="apart",
+                                justify="space-between",
                                 children=[
                                     dmc.Stack(
                                         spacing="xs",
@@ -269,7 +269,7 @@ def render_groupwise_layout(group: GroupUI, all_users: list) -> dmc.Accordion:
                                                 [
                                                     dmc.Text(
                                                         "Group ID: ",
-                                                        weight=700,
+                                                        fw=700,
                                                         size="sm",
                                                     ),
                                                     dmc.Text(str(group.id), size="sm"),
@@ -279,7 +279,7 @@ def render_groupwise_layout(group: GroupUI, all_users: list) -> dmc.Accordion:
                                                 [
                                                     dmc.Text(
                                                         "Users: ",
-                                                        weight=700,
+                                                        fw=700,
                                                         size="sm",
                                                     ),
                                                     dmc.List(
@@ -440,7 +440,7 @@ def render_userwise_layout(user: UserBaseUI) -> dmc.Accordion:
                                 [
                                     dmc.Text(
                                         user.email,
-                                        weight=500,
+                                        fw=500,
                                         size="lg",
                                         style={"flex": 1},
                                     ),
@@ -452,7 +452,7 @@ def render_userwise_layout(user: UserBaseUI) -> dmc.Accordion:
                                         radius="sm",
                                     ),
                                 ],
-                                position="apart",
+                                justify="space-between",
                             ),
                         ]
                     ),
@@ -460,7 +460,7 @@ def render_userwise_layout(user: UserBaseUI) -> dmc.Accordion:
                         [
                             dmc.Group(
                                 spacing="xs",
-                                position="apart",
+                                justify="space-between",
                                 children=[
                                     dmc.Stack(
                                         spacing="xs",
@@ -470,7 +470,7 @@ def render_userwise_layout(user: UserBaseUI) -> dmc.Accordion:
                                                 [
                                                     dmc.Text(
                                                         "User ID: ",
-                                                        weight=700,
+                                                        fw=700,
                                                         size="sm",
                                                     ),
                                                     dmc.Text(str(user.id), size="sm"),
@@ -480,7 +480,7 @@ def render_userwise_layout(user: UserBaseUI) -> dmc.Accordion:
                                                 [
                                                     dmc.Text(
                                                         "Registration Date: ",
-                                                        weight=700,
+                                                        fw=700,
                                                         size="sm",
                                                     ),
                                                     dmc.Text(registration_date, size="sm"),
@@ -490,7 +490,7 @@ def render_userwise_layout(user: UserBaseUI) -> dmc.Accordion:
                                                 [
                                                     dmc.Text(
                                                         "Last Login: ",
-                                                        weight=700,
+                                                        fw=700,
                                                         size="sm",
                                                     ),
                                                     dmc.Text(last_login, size="sm"),
@@ -500,7 +500,7 @@ def render_userwise_layout(user: UserBaseUI) -> dmc.Accordion:
                                             #     [
                                             #         dmc.Text(
                                             #             "Groups: ",
-                                            #             weight=700,
+                                            #             fw=700,
                                             #             size="sm",
                                             #         ),
                                             #         dmc.SimpleGrid(
@@ -536,7 +536,7 @@ def render_userwise_layout(user: UserBaseUI) -> dmc.Accordion:
                                                 [
                                                     dmc.Text(
                                                         "Account Status: ",
-                                                        weight=700,
+                                                        fw=700,
                                                         size="sm",
                                                     ),
                                                     dmc.Badge(
@@ -558,7 +558,7 @@ def render_userwise_layout(user: UserBaseUI) -> dmc.Accordion:
                                                 [
                                                     dmc.Text(
                                                         "Verified: ",
-                                                        weight=700,
+                                                        fw=700,
                                                         size="sm",
                                                     ),
                                                     dmc.Text(
@@ -571,7 +571,7 @@ def render_userwise_layout(user: UserBaseUI) -> dmc.Accordion:
                                                 [
                                                     dmc.Text(
                                                         "User status:",
-                                                        weight=700,
+                                                        fw=700,
                                                         size="sm",
                                                     ),
                                                     dmc.SegmentedControl(
@@ -599,7 +599,7 @@ def render_userwise_layout(user: UserBaseUI) -> dmc.Accordion:
                                             ),
                                             dmc.Group(
                                                 [
-                                                    dmc.Text("Actions", weight=700, size="sm"),
+                                                    dmc.Text("Actions", fw=700, size="sm"),
                                                     delete_user_button,
                                                     modal_delete_user,
                                                 ]
@@ -997,7 +997,7 @@ def register_admin_callbacks(app):
                                 dmc.Text(
                                     "No groups available - Ongoing feature",
                                     align="center",
-                                    weight=700,
+                                    fw=700,
                                     size="xl",
                                 ),
                                 dmc.Text(
@@ -1052,7 +1052,7 @@ def register_admin_callbacks(app):
                                             dmc.Text(
                                                 "No dashboards available",
                                                 align="center",
-                                                weight=700,
+                                                fw=700,
                                                 size="xl",
                                             ),
                                             dmc.Text(
@@ -1125,7 +1125,7 @@ def register_admin_callbacks(app):
                                         dmc.Text(
                                             "No projects available",
                                             align="center",
-                                            weight=700,
+                                            fw=700,
                                             size="xl",
                                         ),
                                         dmc.Text(

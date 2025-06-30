@@ -150,7 +150,7 @@ def handle_authenticated_user(pathname, local_data):
 def create_default_header(text):
     return dmc.Text(
         text,
-        weight=600,
+        fw=600,
         size="xl",
         style={"fontSize": "28px", "fontFamily": "Virgil", "padding": "20px 10px"},
     )
@@ -201,7 +201,7 @@ def create_admin_header(text):
                 fluid=True,  # Make the container fluid (full-width)
                 children=[
                     dmc.Group(
-                        position="apart",  # Space between the title and tabs
+                        justify="space-between",  # Space between the title and tabs
                         align="center",
                         style={"height": "100%"},
                         children=[
@@ -210,7 +210,7 @@ def create_admin_header(text):
                             #     text,
                             #     order=3,  # Corresponds to h3
                             #     size="h3",
-                            #     weight=700,
+                            #     fw=700,
                             #     color="dark",
                             # ),
                             # Navigation Tabs
@@ -309,7 +309,7 @@ def create_header_with_button(text, button):
             create_default_header(text),
             button,
         ],
-        position="apart",
+        justify="space-between",
         align="center",
         style={"backgroundColor": "#fff"},
     )

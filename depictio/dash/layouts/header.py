@@ -439,7 +439,7 @@ def design_header(data, local_store):
                     icon=DashIconify(
                         icon="mdi:format-list-bulleted-square",
                         width=16,
-                        color=dmc.theme.DEFAULT_COLORS["blue"][5],
+                        color="blue.5",
                     ),
                     # rightSection=DashIconify(icon="radix-icons:chevron-down"),
                 )
@@ -670,7 +670,7 @@ def design_header(data, local_store):
                                         # align="stretch",
                                         # style={"paddingTop": "5px"},
                                         spacing="xs",
-                                        position="right",  # Aligns items to the right
+                                        justify="flex-end",  # Aligns items to the right
                                         style={"paddingTop": "5px"},
                                     ),
                                 ],
