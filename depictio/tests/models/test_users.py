@@ -6,6 +6,7 @@ from mongomock_motor import AsyncMongoMockClient
 from pydantic import ValidationError
 
 from depictio.models.models.base import PyObjectId
+from depictio.models.models.cli import UserBaseCLIConfig
 from depictio.models.models.users import (  # UserBaseGroupLess,
     Group,
     GroupBeanie,
@@ -17,7 +18,6 @@ from depictio.models.models.users import (  # UserBaseGroupLess,
     TokenData,
     User,
     UserBase,
-    UserBaseCLIConfig,
     UserBeanie,
 )
 

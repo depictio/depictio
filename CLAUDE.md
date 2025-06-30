@@ -191,3 +191,66 @@ The codebase uses Astral's `ty` type checker for static type analysis and mainta
 - `docker-compose.yaml`: Local development environment
 - `helm-charts/depictio/`: Kubernetes deployment manifests
 - `.env`: Environment variables (create from examples in dev/)
+
+## Documentation Workflow
+
+When finishing a PR that adds new features or makes significant changes:
+
+### 1. Update depictio-docs (VS Code workspace)
+
+- **Required**: Update relevant documentation files in the depictio-docs repository
+- Document new features, API changes, configuration options, and user-facing functionality
+- Include code examples, usage patterns, and integration guides
+- Update README files, installation guides, and user documentation as needed
+
+### 2. Update Obsidian Notes (Core Developer Documentation)
+
+- **Required**: Extend corresponding Obsidian notes with detailed technical information
+- **Location**: Obsidian vault accessible via MCP integration (`mcp-obsidian`)
+- **Access**: Use MCP tools to read/write notes directly from Claude Code
+- **Focus areas**:
+  - Technical implementation details not suitable for public docs
+  - Architecture decisions and trade-offs
+  - Internal APIs and developer-specific patterns
+  - Performance considerations and optimization notes
+  - Debugging strategies and troubleshooting for developers
+  - Database schema changes and migration notes
+  - Security considerations and implementation details
+  - Testing strategies and coverage gaps
+  - Future refactoring opportunities and technical debt
+
+### Documentation Guidelines
+
+**depictio-docs (Public Documentation)**:
+
+- User-focused content
+- Clear examples and tutorials
+- Installation and deployment guides
+- API reference documentation
+- Best practices for end users
+
+**Obsidian Notes (Internal Documentation)**:
+
+- Developer-focused technical details
+- Implementation specifics and edge cases
+- Performance benchmarks and profiling results
+- Code review insights and lessons learned
+- Integration challenges and solutions
+- Monitoring and observability setup
+- Development environment quirks and fixes
+
+## Code Quality Enforcement
+
+**CRITICAL REQUIREMENT**: After every code operation (creating, editing, or deleting files), you MUST:
+
+1. **Run pre-commit hooks**: `pre-commit run --all-files`
+2. **Fix any failures** before considering the task complete
+3. **Re-run pre-commit** until all checks pass
+
+This ensures all code changes comply with project standards including:
+- Code formatting (ruff format)
+- Linting rules (ruff check)
+- Type checking (ty check)
+- Import sorting and other quality checks
+
+**No exceptions** - pre-commit compliance is mandatory for all code changes.
