@@ -2,7 +2,11 @@ import os
 
 import boto3
 import pytest
-from testcontainers.minio import MinioContainer
+
+try:
+    from testcontainers.minio import MinioContainer  # type: ignore[unresolved-import]
+except ImportError:
+    MinioContainer = None  # type: ignore[invalid-assignment]
 
 from depictio.models.models.s3 import S3DepictioCLIConfig
 from depictio.models.s3_utils import MinIOManager, S3_storage_checks
@@ -14,6 +18,8 @@ os.environ.setdefault("DOCKER_HOST", "unix:///Users/tweber/.docker/run/docker.so
 @pytest.fixture(scope="session")
 def minio_server():
     """Start a throwaway MinIO server in Docker for the entire test session."""
+    if MinioContainer is None:
+        pytest.skip("testcontainers not available")
     container = (
         MinioContainer("minio/minio:latest", access_key="minio", secret_key="minio123")
         # explicitly expose the container port so we can read it back
@@ -61,6 +67,7 @@ def create_test_bucket(minio_config):
 
 
 @pytest.mark.docker
+@pytest.mark.skipif(MinioContainer is None, reason="testcontainers not available")
 class TestMinIOManagerWithRealServer:
     def test_init(self, minio_server):
         print("MinIO server config:", minio_server.get_config())

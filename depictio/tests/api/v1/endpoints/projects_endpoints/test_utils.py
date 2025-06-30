@@ -165,8 +165,8 @@ class TestProjectCreation:
         with pytest.raises(HTTPException) as excinfo:
             await _helper_create_project_beanie(sample_project)
 
-        assert excinfo.value.status_code == 400
-        assert f"Project with name '{sample_project.name}' already exists" in excinfo.value.detail
+        assert excinfo.value.status_code == 400  # type: ignore[unresolved-attribute]
+        assert f"Project with name '{sample_project.name}' already exists" in excinfo.value.detail  # type: ignore[unresolved-attribute]
 
 
 @pytest.mark.asyncio
@@ -307,8 +307,8 @@ class TestGetProjectFromId:
         with pytest.raises(HTTPException) as excinfo:
             _async_get_project_from_id(non_existent_id, current_user, mock_projects_collection)  # type: ignore[invalid-argument-type]
 
-        assert excinfo.value.status_code == 404
-        assert "Project not found" in excinfo.value.detail
+        assert excinfo.value.status_code == 404  # type: ignore[unresolved-attribute]
+        assert "Project not found" in excinfo.value.detail  # type: ignore[unresolved-attribute]
 
 
 @pytest.mark.asyncio
