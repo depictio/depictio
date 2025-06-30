@@ -722,7 +722,7 @@ jobs:
           source venv/bin/activate
 
           # Create backup with strategy-specific prefix
-          depictio-cli backup create \
+          depictio-cli -v -vl DEBUG backup create \
             --CLI-config-path admin_config.yaml \
             --include-s3-data \
             --s3-backup-prefix "ci_${{ matrix.backup_strategy }}_backup"
@@ -736,6 +736,10 @@ jobs:
 
           # Check if local backup files exist in the backend container
           echo "🔍 Checking for local backup files in backend container..."
+          docker compose exec -T depictio-backend ls /app/depictio/backups
+          docker compose exec -T depictio-backend ls /app/depictio/backups/s3_data_backups
+
+
           DATE=$(date +%Y%m%d)
           BACKUP_COUNT=$(docker compose exec -T depictio-backend find /app/depictio/backups/s3_data_backups/backup -name "${DATE}_*" -type f | wc -l)
           echo "Found $BACKUP_COUNT S3 local backup files"
@@ -759,7 +763,7 @@ jobs:
           import boto3;
           try:
               client = boto3.client('s3',
-                  endpoint_url='http://minio-backup:9000',
+                  endpoint_url='http://minio-backup:9002',
                   aws_access_key_id='backup_minio',
                   aws_secret_access_key='backup_minio123',
                   region_name='us-east-1');
@@ -799,7 +803,7 @@ jobs:
           echo "Using backup ID for ${{ matrix.strategy_name }}: $BACKUP_ID"
 
           if [ -n "$BACKUP_ID" ]; then
-            depictio-cli backup validate "$BACKUP_ID" --CLI-config-path admin_config.yaml
+            depictio-cli -v -vl DEBUG backup validate "$BACKUP_ID" --CLI-config-path admin_config.yaml
             echo "✅ Backup validation successful for ${{ matrix.strategy_name }}"
           else
             echo "❌ No backup ID found for ${{ matrix.strategy_name }}"
@@ -828,7 +832,7 @@ jobs:
 
           if [ -n "$BACKUP_ID" ]; then
             echo "🔄 Performing restore test for ${{ matrix.strategy_name }}..."
-            depictio-cli backup restore "$BACKUP_ID" \
+            depictio-cli -v -vl DEBUG backup restore "$BACKUP_ID" \
               --CLI-config-path admin_config.yaml \
               --force
 
