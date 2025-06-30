@@ -96,6 +96,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to Container Registry
+        if: env.ACT != 'true' # Skip login when using act
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -127,6 +128,29 @@ jobs:
             echo "🔨 Image doesn't exist, will build ${FULL_IMAGE}"
           fi
 
+      # Detect if running with act and set cache type accordingly
+      - name: Set cache strategy
+        id: cache-strategy
+        run: |
+          if [ "${ACT:-false}" = "true" ]; then
+            echo "Running with act - using local cache"
+            echo "cache_from=type=local,src=/tmp/buildx-cache" >> $GITHUB_OUTPUT
+            echo "cache_to=type=local,dest=/tmp/buildx-cache-new,mode=max" >> $GITHUB_OUTPUT
+            echo "cache_enabled=local" >> $GITHUB_OUTPUT
+          else
+            echo "Running on GitHub Actions - using GHA cache"
+            echo "cache_from=type=gha,scope=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            echo "cache_to=type=gha,mode=max,scope=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            echo "cache_enabled=gha" >> $GITHUB_OUTPUT
+          fi
+
+      # Create cache directory for act
+      - name: Prepare local cache directory (act only)
+        if: env.ACT == 'true' || runner.os == 'act'
+        run: |
+          mkdir -p /tmp/buildx-cache
+          echo "Created local cache directory for act"
+
       - name: Build and push Docker image
         id: build
         if: steps.check-rebuild.outputs.rebuild == 'true'
@@ -135,16 +159,31 @@ jobs:
           context: .
           file: docker-images/Dockerfile_depictio.dockerfile
           platforms: linux/amd64
-          push: true
-          load: false
+          push: ${{ env.ACT != 'true' }} # Push to registry unless using act
+          load: ${{ env.ACT == 'true' }} # Load locally only when using act
           tags: ${{ steps.image-info.outputs.full-image }}
           cache-from: |
-            type=gha,scope=${{ github.ref_name }}
-            type=gha,scope=refs/heads/main
-          cache-to: type=gha,mode=max,scope=${{ github.ref_name }}
+            ${{ steps.cache-strategy.outputs.cache_from }}
+            ${{ env.ACT != 'true' && 'type=gha,scope=refs/heads/main' || '' }}
+          cache-to: ${{ steps.cache-strategy.outputs.cache_to }}
 
-      - name: Pull image
+      # Move cache for next run (act only)
+      - name: Move cache (act only)
+        if: (env.ACT == 'true' || runner.os == 'act') && steps.check-rebuild.outputs.rebuild == 'true'
+        run: |
+          rm -rf /tmp/buildx-cache
+          mv /tmp/buildx-cache-new /tmp/buildx-cache || true
+
+      - name: Pull image (GitHub Actions only)
+        if: env.ACT != 'true' && steps.check-rebuild.outputs.rebuild == 'true'
         run: docker pull "${{ steps.image-info.outputs.full-image }}"
+
+      - name: Tag image for local use (act only)
+        if: env.ACT == 'true' || runner.os == 'act'
+        run: |
+          # When using act, tag the built image with the expected name
+          docker tag "${{ steps.image-info.outputs.full-image }}" depictio:local || true
+          echo "Tagged image for local use"
 
   docker-system-init:
     needs: docker-build
@@ -557,6 +596,633 @@ jobs:
         with:
           name: penguin-integration-logs
           path: penguin-logs.txt
+          retention-days: 7
+
+  backup-s3-strategies-comprehensive-tests:
+    needs: [docker-build]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        backup_strategy: [local, s3_to_s3, both]
+        include:
+          - backup_strategy: local
+            strategy_name: "S3 to Local"
+            s3_enabled: false
+            expected_local_files: true
+            expected_s3_files: false
+          - backup_strategy: s3_to_s3
+            strategy_name: "S3 to S3"
+            s3_enabled: true
+            expected_local_files: false
+            expected_s3_files: true
+          - backup_strategy: both
+            strategy_name: "S3 to Both"
+            s3_enabled: true
+            expected_local_files: true
+            expected_s3_files: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "pyproject.toml"
+          cache-dependency-path: "pyproject.toml"
+
+      - name: Setup environment for ${{ matrix.strategy_name }}
+        run: |
+          echo "🔧 Setting up environment for ${{ matrix.strategy_name }} backup strategy..."
+          echo "🐳 Docker permissions and user setup..."
+          sudo chmod 666 /var/run/docker.sock
+          echo "UID=$(id -u)" >> $GITHUB_ENV
+          echo "GID=$(id -g)" >> $GITHUB_ENV
+          echo "UID: $(id -u), GID: $(id -g)"
+
+          echo "📁 Creating environment files..."
+          # Create root .env for Docker Compose variables
+          cp .env.example .env
+          echo "✅ Root .env file created"
+
+          # Copy to docker-compose/.env for application variables
+          cp .env.example docker-compose/.env
+          echo "✅ docker-compose/.env file created"
+
+          echo "⚙️ Configuring backup strategy in docker-compose/.env file..."
+          # Remove any existing backup configuration first
+          sed -i '/^DEPICTIO_BACKUP_/d' docker-compose/.env || echo "No existing backup config to remove"
+
+          echo "" >> docker-compose/.env
+          echo "# === BACKUP STRATEGY CONFIGURATION FOR CI ===" >> docker-compose/.env
+          echo "DEPICTIO_BACKUP_S3_BACKUP_STRATEGY=${{ matrix.backup_strategy }}" >> docker-compose/.env
+          echo "DEPICTIO_BACKUP_BACKUP_S3_ENABLED=${{ matrix.s3_enabled }}" >> docker-compose/.env
+          echo "DEPICTIO_BACKUP_BACKUP_S3_BUCKET=depictio-backup-bucket" >> docker-compose/.env
+          echo "DEPICTIO_BACKUP_BACKUP_S3_ENDPOINT_URL=http://minio-backup:9000" >> docker-compose/.env
+          echo "DEPICTIO_BACKUP_BACKUP_S3_REGION=us-east-1" >> docker-compose/.env
+          echo "DEPICTIO_BACKUP_BACKUP_S3_ACCESS_KEY=backup_minio" >> docker-compose/.env
+          echo "DEPICTIO_BACKUP_BACKUP_S3_SECRET_KEY=backup_minio123" >> docker-compose/.env
+
+          echo "📋 Complete backup configuration for ${{ matrix.strategy_name }}:"
+          grep "DEPICTIO_BACKUP" docker-compose/.env || echo "❌ No DEPICTIO_BACKUP vars found!"
+
+          echo "📂 Creating required directories..."
+          mkdir -p depictioDB minio_data minio_backup_data
+          chmod 777 depictioDB minio_data minio_backup_data
+          # Ensure MongoDB can create additional directories
+          chmod -R 777 depictioDB 2>/dev/null || echo "Directory permissions already set"
+          ls -la depictioDB minio_data minio_backup_data
+          echo "✅ Directories created and permissions set"
+
+      - name: Log in and start services for ${{ matrix.strategy_name }}
+        run: |
+          echo "🚀 Starting services for ${{ matrix.strategy_name }} backup strategy..."
+
+          echo "🔐 Logging into container registry..."
+          echo ${{ secrets.GHCR_PAT }} | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
+
+          echo "🐳 Setting up Docker image..."
+          FULL_IMAGE="${{ needs.docker-build.outputs.full-image }}"
+          echo "Using image: $FULL_IMAGE"
+          docker pull "${FULL_IMAGE}"
+          export DEPICTIO_VERSION="${FULL_IMAGE}"
+          echo "DEPICTIO_VERSION set to: $DEPICTIO_VERSION"
+
+          echo "📋 Final environment file content before starting services:"
+          echo "=== ALL DEPICTIO_BACKUP VARIABLES ==="
+          grep "DEPICTIO_BACKUP" docker-compose/.env || echo "❌ No DEPICTIO_BACKUP vars found!"
+          echo "=== SAMPLE OF OTHER ENVIRONMENT VARIABLES ==="
+          head -10 docker-compose/.env
+          echo "=================================="
+
+          echo "🐳 Starting Docker Compose services..."
+          echo "Compose files: docker-compose.dev.yaml + docker-compose.minio.yaml + docker-compose.backup-minio.yaml"
+          echo "Environment file: docker-compose/.env"
+
+          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml -f docker-compose/docker-compose.backup-minio.yaml up -d --force-recreate
+
+          echo "⏳ Waiting 30 seconds for services to start..."
+          sleep 30
+
+          echo "📊 Verifying services are running..."
+          docker compose ps
+
+          echo "🔍 Checking individual container status..."
+          echo "--- Depictio Backend ---"
+          docker compose logs --tail=10 depictio-backend || echo "❌ Backend logs not available"
+          echo "--- Main MinIO ---"
+          docker compose logs --tail=5 minio || echo "❌ MinIO logs not available"
+          echo "--- Backup MinIO ---"
+          docker compose logs --tail=5 minio-backup || echo "❌ Backup MinIO logs not available"
+          echo "--- MongoDB ---"
+          docker compose logs --tail=10 mongo || echo "❌ MongoDB logs not available"
+
+          # Wait for backup MinIO to be ready and create bucket
+          echo "⏳ Waiting for backup MinIO to be ready..."
+          sleep 10
+
+          echo "🔧 Testing backup MinIO connectivity and creating bucket..."
+          docker compose exec -T depictio-backend python3 -c "
+          import boto3
+          import time
+          from botocore.exceptions import ClientError
+
+          print('🔍 Attempting to connect to backup MinIO...')
+          print('Endpoint: http://minio-backup:9000')
+          print('Access Key: backup_minio')
+          print('Secret Key: backup_minio123')
+
+          # Wait for backup MinIO to be ready
+          for i in range(30):
+              try:
+                  client = boto3.client('s3',
+                      endpoint_url='http://minio-backup:9000',
+                      aws_access_key_id='backup_minio',
+                      aws_secret_access_key='backup_minio123',
+                      region_name='us-east-1')
+                  response = client.list_buckets()
+                  print(f'✅ Backup MinIO ready after {i+1} attempts')
+                  print(f'📋 Current buckets: {[b[\"Name\"] for b in response.get(\"Buckets\", [])]}')
+                  break
+              except Exception as e:
+                  print(f'⚠️ Backup MinIO not ready (attempt {i+1}/30): {e}')
+                  if i < 5:  # Show detailed error for first few attempts
+                      import traceback
+                      traceback.print_exc()
+                  time.sleep(2)
+          else:
+              print('❌ Backup MinIO failed to start after 30 attempts')
+              print('🔍 Final connection attempt with full error details:')
+              try:
+                  client = boto3.client('s3',
+                      endpoint_url='http://minio-backup:9000',
+                      aws_access_key_id='backup_minio',
+                      aws_secret_access_key='backup_minio123',
+                      region_name='us-east-1')
+                  client.list_buckets()
+              except Exception as final_e:
+                  import traceback
+                  traceback.print_exc()
+              exit(1)
+
+          # Create backup bucket
+          print('🪣 Creating backup bucket...')
+          try:
+              client.create_bucket(Bucket='depictio-backup-bucket')
+              print('✅ Backup bucket created successfully')
+          except ClientError as e:
+              if e.response['Error']['Code'] == 'BucketAlreadyOwnedByYou':
+                  print('✅ Backup bucket already exists')
+              else:
+                  print(f'❌ Failed to create backup bucket: {e}')
+                  exit(1)
+
+          # Final verification
+          final_buckets = client.list_buckets()
+          print(f'📋 Final bucket list: {[b[\"Name\"] for b in final_buckets.get(\"Buckets\", [])]}')
+          "
+
+          echo "✅ Services started for ${{ matrix.strategy_name }} strategy"
+
+      - name: Setup CLI for ${{ matrix.strategy_name }}
+        run: |
+          echo "🔧 Setting up CLI for ${{ matrix.strategy_name }} testing..."
+
+          echo "📁 Navigating to CLI directory..."
+          cd depictio/cli
+
+          echo "🐍 Creating Python virtual environment..."
+          uv venv --python 3.11 venv
+          source venv/bin/activate
+          echo "Python version: $(python --version)"
+          echo "Pip version: $(pip --version)"
+
+          echo "📦 Installing CLI dependencies..."
+          uv pip install --upgrade pip
+          uv pip install -e .
+          echo "✅ CLI dependencies installed"
+
+          echo "🔑 Copying admin configuration from backend container..."
+          docker cp depictio-backend:/app/depictio/.depictio/admin_config.yaml .
+          echo "📋 Admin config file copied, checking contents..."
+          ls -la admin_config.yaml
+          head -5 admin_config.yaml | grep -v "token" || echo "Config file structure check"
+
+          echo "✅ CLI setup completed for ${{ matrix.strategy_name }}"
+
+      - name: Wait for system initialization - ${{ matrix.strategy_name }}
+        run: |
+          echo "⏳ Waiting for system initialization for ${{ matrix.strategy_name }}..."
+
+          echo "🔑 Extracting authentication token for health checks..."
+          # Verify system is ready
+          for i in {1..10}; do
+            echo "🔍 Health check attempt $i/10..."
+
+            if token=$(docker compose exec depictio-backend bash -c "cat /app/depictio/.depictio/admin_config.yaml" 2>/dev/null | grep 'access_token' | awk '{print $2}'); then
+              token=$(echo $token | tr -d "'\"")
+              echo "✅ Token extracted successfully (length: ${#token})"
+
+              echo "🌐 Testing API health endpoint..."
+              health_check=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $token" http://localhost:8058/depictio/api/v1/utils/status)
+              echo "📊 Health check response: HTTP $health_check"
+
+              if [ "$health_check" = "200" ]; then
+                echo "✅ System ready for ${{ matrix.strategy_name }}"
+
+                echo "🔍 Testing additional API endpoints..."
+                # Test projects endpoint
+                projects_check=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $token" http://localhost:8058/depictio/api/v1/projects/get/all)
+                echo "📊 Projects endpoint: HTTP $projects_check"
+
+                # Test backup endpoint
+                backup_check=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $token" http://localhost:8058/depictio/api/v1/backup/list)
+                echo "📊 Backup endpoint: HTTP $backup_check"
+
+                break
+              else
+                echo "⚠️ Health check failed with HTTP $health_check"
+              fi
+            else
+              echo "❌ Failed to extract token from admin config"
+            fi
+
+            echo "⚠️ System not ready for ${{ matrix.strategy_name }}, attempt $i/10"
+            echo "🔍 Backend container logs (last 5 lines):"
+            docker compose logs --tail=5 depictio-backend || echo "Failed to get logs"
+            sleep 15
+          done
+
+          echo "⏳ Additional stabilization period..."
+          sleep 30
+
+          echo "📊 Final container status before backup testing:"
+          docker compose ps
+
+      - name: Create backup with ${{ matrix.strategy_name }} strategy
+        run: |
+          echo "💾 Creating backup with ${{ matrix.strategy_name }} strategy..."
+          cd depictio/cli
+          source venv/bin/activate
+
+          # Show current backup configuration from backend
+          echo "📋 Checking backend configuration and database state..."
+
+          echo "🔍 Checking environment variables in backend container..."
+          docker compose exec -T depictio-backend bash -c "env | grep DEPICTIO_BACKUP || echo 'No DEPICTIO_BACKUP env vars found'"
+
+          echo "📋 Backend backup configuration:"
+          docker compose exec -T depictio-backend python3 -c "
+          import os;
+          print('=== ENVIRONMENT VARIABLES ===');
+          for key, value in os.environ.items():
+              if 'DEPICTIO_BACKUP' in key:
+                  print(f'{key}={value}');
+          print('=== LOADED SETTINGS ===');
+          from depictio.api.v1.configs.config import settings;
+          print(f'Backup Strategy: {settings.backup.s3_backup_strategy}');
+          print(f'Backup S3 Enabled: {settings.backup.backup_s3_enabled}');
+          print(f'Backup S3 Bucket: {settings.backup.backup_s3_bucket}');
+          print(f'Backup S3 Endpoint: {settings.backup.backup_s3_endpoint_url}');
+          print(f'S3 Local Backup Path: {settings.backup.s3_local_backup_path}');
+          print(f'Compress Local Backups: {settings.backup.compress_local_backups}');
+
+          print('\n=== SOURCE S3 CONFIGURATION ===');
+          print(f'Source MinIO Bucket: {settings.minio.bucket}');
+          print(f'Source MinIO Endpoint: {settings.minio.endpoint_url}');
+
+          # Test connectivity to both MinIO instances
+          import boto3;
+          print('\n=== CONNECTIVITY TESTS ===');
+
+          # Test source MinIO
+          try:
+              source_client = boto3.client('s3',
+                  endpoint_url=settings.minio.endpoint_url,
+                  aws_access_key_id=settings.minio.aws_access_key_id,
+                  aws_secret_access_key=settings.minio.aws_secret_access_key,
+                  region_name='us-east-1');
+              source_buckets = source_client.list_buckets();
+              print(f'✅ Source MinIO accessible, buckets: {[b[\"Name\"] for b in source_buckets.get(\"Buckets\", [])]}');
+
+              # Check if source bucket has any deltatable data
+              if settings.minio.bucket in [b[\"Name\"] for b in source_buckets.get(\"Buckets\", [])]:
+                  objects = source_client.list_objects_v2(Bucket=settings.minio.bucket);
+                  object_count = len(objects.get('Contents', []));
+                  print(f'📊 Source bucket objects count: {object_count}');
+                  if object_count > 0:
+                      print('📋 Sample objects:');
+                      for obj in objects.get('Contents', [])[:5]:
+                          print(f'  - {obj[\"Key\"]} ({obj[\"Size\"]} bytes)');
+              else:
+                  print(f'❌ Source bucket {settings.minio.bucket} not found');
+          except Exception as e:
+              print(f'❌ Source MinIO not accessible: {e}');
+              import traceback;
+              traceback.print_exc();
+
+          # Test backup MinIO
+          try:
+              backup_client = boto3.client('s3',
+                  endpoint_url='http://minio-backup:9000',
+                  aws_access_key_id='backup_minio',
+                  aws_secret_access_key='backup_minio123',
+                  region_name='us-east-1');
+              backup_buckets = backup_client.list_buckets();
+              print(f'✅ Backup MinIO accessible, buckets: {[b[\"Name\"] for b in backup_buckets.get(\"Buckets\", [])]}');
+          except Exception as e:
+              print(f'❌ Backup MinIO not accessible: {e}');
+              import traceback;
+              traceback.print_exc();
+          "
+
+          echo ""
+          echo "📊 Database state analysis..."
+
+          echo "🔍 Testing MongoDB connectivity..."
+          docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "print('MongoDB connection test: ' + new Date())" --quiet || echo "❌ MongoDB query failed"
+
+          # Show deltatable count before backup with error handling
+          echo "📊 Querying deltatables collection..."
+          DELTATABLE_COUNT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "
+          try {
+            var count = db.deltatables.countDocuments({});
+            print('Deltatable count: ' + count);
+            print(count);
+          } catch(e) {
+            print('Error counting deltatables: ' + e);
+            print('0');
+          }" --quiet 2>&1 | tail -1)
+          echo "📊 Total deltatables in database: $DELTATABLE_COUNT"
+
+          # Show project count
+          PROJECT_COUNT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "
+          try {
+            var count = db.projects.countDocuments({});
+            print('Project count: ' + count);
+            print(count);
+          } catch(e) {
+            print('Error counting projects: ' + e);
+            print('0');
+          }" --quiet 2>&1 | tail -1)
+          echo "📊 Total projects in database: $PROJECT_COUNT"
+
+          # Debug database collections
+          echo "🔍 Available collections:"
+          docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "db.listCollectionNames()" --quiet || echo "❌ Failed to list collections"
+
+          if [ "$DELTATABLE_COUNT" -gt 0 ]; then
+            echo "📋 Deltatable details (first 3):"
+            docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "
+            db.deltatables.find({}).limit(3).forEach(function(doc) {
+              var location = doc.delta_table_location || doc.location || 'no location';
+              print('ID: ' + doc._id + ', Location: ' + location + ', Collection: ' + (doc.data_collection_id || 'no collection'));
+            })" --quiet
+          else
+            echo "⚠️  No deltatables found in database - backup will have no S3 data to process"
+            echo "🔍 Checking if system initialization completed..."
+            docker compose logs --tail=20 depictio-backend | grep -i "iris\|init\|startup" || echo "No initialization logs found"
+          fi
+
+          # Create backup with strategy-specific prefix
+          echo ""
+          echo "🚀 Starting backup creation with detailed logging..."
+          echo "Command: depictio-cli -v -vl DEBUG backup create --CLI-config-path admin_config.yaml --include-s3-data --s3-backup-prefix ci_${{ matrix.backup_strategy }}_backup"
+          echo "Strategy: ${{ matrix.backup_strategy }}"
+          echo "Expected S3 files: ${{ matrix.expected_s3_files }}"
+          echo "Expected local files: ${{ matrix.expected_local_files }}"
+          echo ""
+
+          # Set up timing
+          START_TIME=$(date +%s)
+
+          # Run backup command with full debugging
+          if depictio-cli -v -vl DEBUG backup create \
+            --CLI-config-path admin_config.yaml \
+            --include-s3-data \
+            --s3-backup-prefix "ci_${{ matrix.backup_strategy }}_backup"; then
+            END_TIME=$(date +%s)
+            DURATION=$((END_TIME - START_TIME))
+            echo "✅ Backup creation completed successfully for ${{ matrix.strategy_name }} in ${DURATION}s"
+          else
+            EXIT_CODE=$?
+            END_TIME=$(date +%s)
+            DURATION=$((END_TIME - START_TIME))
+            echo "❌ Backup creation failed for ${{ matrix.strategy_name }} after ${DURATION}s with exit code $EXIT_CODE"
+
+            echo "🔍 Backend logs after failed backup:"
+            docker compose logs --tail=30 depictio-backend
+
+            echo "🔍 CLI debug information:"
+            ls -la admin_config.yaml
+            echo "Environment variables:"
+            env | grep DEPICTIO | head -10
+
+            exit $EXIT_CODE
+          fi
+
+          echo ""
+          echo "📊 Post-backup analysis..."
+
+          # Check what was created after backup
+          echo "📁 Checking backup directory structure after backup..."
+          docker compose exec -T depictio-backend find /app/depictio/backups -type f -name "*" 2>/dev/null | head -10 || echo "No backup files found"
+
+          if [ "${{ matrix.expected_local_files }}" = "true" ]; then
+            echo "📂 Checking for local S3 backup files..."
+            docker compose exec -T depictio-backend find /app/depictio/backups/s3_data_backups -type f -name "*" 2>/dev/null | head -5 || echo "No S3 local backup files found"
+          fi
+
+      - name: Verify S3 local backup files - ${{ matrix.strategy_name }}
+        if: matrix.expected_local_files == true
+        run: |
+          echo "📁 Verifying local backup files for ${{ matrix.strategy_name }} strategy..."
+
+          # Check if local backup files exist in the backend container
+          echo "🔍 Checking for local backup files in backend container..."
+          echo "📂 Listing backup directory structure:"
+          docker compose exec -T depictio-backend find /app/depictio/backups -type d -name "*" 2>/dev/null || echo "Backup directory not found, checking if it exists..."
+          docker compose exec -T depictio-backend ls -la /app/depictio/backups 2>/dev/null || echo "Main backup directory doesn't exist"
+          docker compose exec -T depictio-backend ls -la /app/depictio/backups/s3_data_backups 2>/dev/null || echo "S3 backup directory doesn't exist"
+
+          # Look for backup files by checking prefix directory
+          DATE=$(date +%Y%m%d)
+          echo "🔍 Searching for backup files with date prefix $DATE..."
+
+          # Check for any backup files in the s3_data_backups directory with current date
+          BACKUP_COUNT=$(docker compose exec -T depictio-backend find /app/depictio/backups/s3_data_backups -name "ci_${{ matrix.backup_strategy }}_backup" -type d 2>/dev/null | wc -l)
+          echo "Found $BACKUP_COUNT backup prefix directories"
+
+          if [ "$BACKUP_COUNT" -gt 0 ]; then
+            echo "✅ Local backup directory found for ${{ matrix.strategy_name }}"
+            docker compose exec -T depictio-backend find /app/depictio/backups/s3_data_backups -name "ci_${{ matrix.backup_strategy }}_backup" -type d -exec ls -la {} \;
+
+            # Check for actual data files inside backup directories
+            FILE_COUNT=$(docker compose exec -T depictio-backend find /app/depictio/backups/s3_data_backups -name "*.parquet" -o -name "*.json" -o -name "*${DATE}*" 2>/dev/null | wc -l)
+            echo "Found $FILE_COUNT actual backup files"
+
+            if [ "$FILE_COUNT" -gt 0 ]; then
+              echo "✅ Local backup files verified for ${{ matrix.strategy_name }}"
+              docker compose exec -T depictio-backend find /app/depictio/backups/s3_data_backups -name "*.parquet" -o -name "*.json" -o -name "*${DATE}*" 2>/dev/null | head -10
+            else
+              echo "⚠️  Backup directory exists but no files found"
+            fi
+          else
+            echo "❌ No local backup directories found for ${{ matrix.strategy_name }}"
+            exit 1
+          fi
+
+      - name: Verify S3 backup files - ${{ matrix.strategy_name }}
+        if: matrix.expected_s3_files == true
+        run: |
+          echo "☁️ Verifying S3 backup files for ${{ matrix.strategy_name }} strategy..."
+
+          # Check if backup files exist on local backup MinIO
+          echo "📋 Checking S3 backup files in local backup MinIO for ${{ matrix.strategy_name }}..."
+          docker compose exec -T depictio-backend python3 -c "
+          import boto3;
+          try:
+              print('🔍 Connecting to backup MinIO...');
+              client = boto3.client('s3',
+                  endpoint_url='http://minio-backup:9000',
+                  aws_access_key_id='backup_minio',
+                  aws_secret_access_key='backup_minio123',
+                  region_name='us-east-1');
+
+              # Test connection first
+              print('📋 Testing backup MinIO connection...');
+              buckets = client.list_buckets();
+              print(f'Available buckets: {[b[\"Name\"] for b in buckets.get(\"Buckets\", [])]}');
+
+              # List all objects in the bucket for debugging
+              print('📋 Listing all objects in backup bucket...');
+              all_response = client.list_objects_v2(Bucket='depictio-backup-bucket');
+              all_files = all_response.get('Contents', []);
+              if all_files:
+                  print(f'📊 Total objects in backup bucket: {len(all_files)}');
+                  for f in all_files:
+                      print(f'  - {f[\"Key\"]} ({f[\"Size\"]} bytes)');
+              else:
+                  print('📊 No objects found in backup bucket');
+
+              # Now check for specific prefix
+              print(f'🔍 Searching for files with prefix: ci_${{ matrix.backup_strategy }}_backup/');
+              response = client.list_objects_v2(Bucket='depictio-backup-bucket', Prefix='ci_${{ matrix.backup_strategy }}_backup/');
+              files = response.get('Contents', []);
+              parquet_files = [f for f in files if f['Key'].endswith('.parquet')];
+              print(f'✅ ${{ matrix.strategy_name }}: Found {len(files)} total files, {len(parquet_files)} parquet files');
+
+              # List backup files with prefix for debugging
+              if files:
+                  print('📋 Prefix-specific backup files found:');
+                  for f in files:
+                      print(f'  - {f[\"Key\"]} ({f[\"Size\"]} bytes)');
+
+              if len(files) == 0:
+                  print('❌ No S3 backup files found for ${{ matrix.strategy_name }}');
+                  exit(1);
+              else:
+                  print('✅ S3 backup verification successful for ${{ matrix.strategy_name }}');
+          except Exception as e:
+              print(f'❌ S3 verification failed for ${{ matrix.strategy_name }}: {e}');
+              import traceback;
+              traceback.print_exc();
+              exit(1);
+          "
+
+      - name: Verify backup strategy behavior - ${{ matrix.strategy_name }}
+        run: |
+          echo "🔍 Verifying ${{ matrix.strategy_name }} backup strategy behavior..."
+          cd depictio/cli
+          source venv/bin/activate
+
+          # List backups and get the latest one
+          BACKUP_LIST=$(depictio-cli backup list --CLI-config-path admin_config.yaml)
+          echo "Available backups for ${{ matrix.strategy_name }}: $BACKUP_LIST"
+
+          # Validate backup integrity
+          BACKUP_ID=$(echo "$BACKUP_LIST" | grep -o '"backup_id": "[^"]*"' | head -1 | cut -d'"' -f4)
+          echo "Using backup ID for ${{ matrix.strategy_name }}: $BACKUP_ID"
+
+          if [ -n "$BACKUP_ID" ]; then
+            depictio-cli -v -vl DEBUG backup validate "$BACKUP_ID" --CLI-config-path admin_config.yaml
+            echo "✅ Backup validation successful for ${{ matrix.strategy_name }}"
+          else
+            echo "❌ No backup ID found for ${{ matrix.strategy_name }}"
+            exit 1
+          fi
+
+      - name: Test backup restoration - ${{ matrix.strategy_name }}
+        run: |
+          echo "♻️ Testing backup restoration for ${{ matrix.strategy_name }}..."
+          cd depictio/cli
+          source venv/bin/activate
+
+          # Drop some test data for restoration test
+          docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "
+            var dashboardCount = db.dashboards.countDocuments({});
+            print('Dashboards before deletion for ${{ matrix.strategy_name }}: ' + dashboardCount);
+            if (dashboardCount > 0) {
+              db.dashboards.deleteMany({});
+              print('Dashboards after deletion for ${{ matrix.strategy_name }}: ' + db.dashboards.countDocuments({}));
+            }
+          "
+
+          # Get backup ID and restore
+          BACKUP_LIST=$(depictio-cli backup list --CLI-config-path admin_config.yaml)
+          BACKUP_ID=$(echo "$BACKUP_LIST" | grep -o '"backup_id": "[^"]*"' | head -1 | cut -d'"' -f4)
+
+          if [ -n "$BACKUP_ID" ]; then
+            echo "🔄 Performing restore test for ${{ matrix.strategy_name }}..."
+            depictio-cli -v -vl DEBUG backup restore "$BACKUP_ID" \
+              --CLI-config-path admin_config.yaml \
+              --force
+
+            # Verify restoration
+            DASHBOARD_COUNT=$(docker compose exec -T mongo mongosh localhost:27018/depictioDB --eval "db.dashboards.countDocuments({})" --quiet)
+            echo "Dashboards after restore for ${{ matrix.strategy_name }}: $DASHBOARD_COUNT"
+
+            echo "✅ Backup restoration test completed for ${{ matrix.strategy_name }}"
+          else
+            echo "❌ No backup ID found for restoration test"
+            exit 1
+          fi
+
+      - name: Cleanup and summary - ${{ matrix.strategy_name }}
+        run: |
+          echo "🧹 Cleanup and summary for ${{ matrix.strategy_name }}..."
+
+          # Show final status
+          echo "📊 Final status for ${{ matrix.strategy_name }} backup strategy:"
+          echo "- Strategy: ${{ matrix.backup_strategy }}"
+          echo "- S3 Enabled: ${{ matrix.s3_enabled }}"
+          echo "- Expected Local Files: ${{ matrix.expected_local_files }}"
+          echo "- Expected S3 Files: ${{ matrix.expected_s3_files }}"
+
+          # Stop services for this iteration
+          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml -f docker-compose/docker-compose.backup-minio.yaml down
+          echo "✅ ${{ matrix.strategy_name }} backup strategy test completed successfully"
+
+      - name: Upload logs on failure
+        if: failure()
+        run: |
+          docker compose logs > backup-${{ matrix.backup_strategy }}-logs.txt
+          cd depictio/cli && ls -la >> ../backup-${{ matrix.backup_strategy }}-logs.txt
+        continue-on-error: true
+
+      - name: Upload artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backup-${{ matrix.backup_strategy }}-logs
+          path: backup-${{ matrix.backup_strategy }}-logs.txt
           retention-days: 7
 
   e2e-tests:

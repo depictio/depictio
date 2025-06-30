@@ -30,7 +30,15 @@ def api_login(yaml_config_path: str = "~/.depictio/CLI.yaml") -> dict:
     if response.status_code == 200:
         logger.info("Depictio CLI configuration is valid.")
         rich_print_checked_statement("Depictio CLI configuration is valid.", "success")
-        return {"success": True, "CLI_config": depictio_CLI_config}
+        response_data = response.json()
+        logger.debug(f"Response data: {response_data}")
+        return {
+            "success": True,
+            "CLI_config": depictio_CLI_config,
+            "is_admin": response_data.get("is_admin", False),
+            "user_id": response_data.get("user_id"),
+            "email": response_data.get("email"),
+        }
     else:
         logger.error(f"Depictio CLI configuration is invalid: {response.text}")
         rich_print_checked_statement(
@@ -406,3 +414,212 @@ def api_delete_deltatable(delta_table_id: str, CLI_config: CLIConfig) -> httpx.R
     url = f"{CLI_config.base_url}/depictio/api/v1/deltatables/delete/{delta_table_id}"
     response = httpx.delete(url, headers=generate_api_headers(CLI_config))
     return response
+
+
+@validate_call
+def api_create_backup_enhanced(
+    CLI_config: CLIConfig,
+    include_s3_data: bool = False,
+    s3_backup_prefix: str = "backup",
+    dry_run: bool = False,
+) -> dict:
+    """
+    Create an enhanced backup including optional S3 deltatable data.
+
+    DEPRECATED: This function is deprecated. Use api_create_backup instead.
+
+    Args:
+        CLI_config (CLIConfig): Configuration object containing API base URL and credentials.
+        include_s3_data (bool): Whether to include S3 deltatable files in backup.
+        s3_backup_prefix (str): Prefix for S3 backup location.
+        dry_run (bool): If True, simulate the backup without actually copying files.
+
+    Returns:
+        dict: Response containing backup status and metadata.
+    """
+    # Redirect to the unified api_create_backup function
+    return api_create_backup(CLI_config, include_s3_data, s3_backup_prefix, dry_run)
+
+
+def api_create_backup(
+    CLI_config: CLIConfig,
+    include_s3_data: bool = False,
+    s3_backup_prefix: str = "backup",
+    dry_run: bool = False,
+) -> dict:
+    """
+    Create a backup of the MongoDB database via API with optional S3 data.
+
+    Args:
+        CLI_config (CLIConfig): Configuration object containing API base URL and credentials.
+        include_s3_data (bool): Whether to include S3 deltatable files in backup.
+        s3_backup_prefix (str): Prefix for S3 backup location.
+        dry_run (bool): If True, simulate the backup without actually copying files.
+
+    Returns:
+        dict: Response containing backup status and metadata.
+    """
+    logger.info(f"Creating backup via API (S3: {include_s3_data}, dry_run: {dry_run})")
+
+    url = f"{CLI_config.base_url}/depictio/api/v1/backup/create"
+
+    try:
+        payload = {
+            "include_s3_data": include_s3_data,
+            "s3_backup_prefix": s3_backup_prefix,
+            "dry_run": dry_run,
+        }
+
+        response = httpx.post(
+            url,
+            headers=generate_api_headers(CLI_config),
+            json=payload,
+            timeout=600.0,  # 10 minutes timeout for S3 operations
+        )
+
+        if response.status_code == 200:
+            return response.json()
+        else:
+            logger.error(f"Backup creation failed: {response.text}")
+            return {
+                "success": False,
+                "message": f"API request failed with status {response.status_code}: {response.text}",
+            }
+    except httpx.TimeoutException:
+        logger.error("Backup creation timed out")
+        return {
+            "success": False,
+            "message": "Request timed out. The backup operation may still be running on the server.",
+        }
+    except Exception as e:
+        logger.error(f"Backup creation failed: {e}")
+        return {
+            "success": False,
+            "message": f"Request failed: {str(e)}",
+        }
+
+
+@validate_call
+def api_list_backups(CLI_config: CLIConfig) -> dict:
+    """
+    List available backups on the server.
+
+    Args:
+        CLI_config (CLIConfig): Configuration object containing API base URL and credentials.
+
+    Returns:
+        dict: Response containing list of backups.
+    """
+    logger.info("Listing server-side backups")
+
+    url = f"{CLI_config.base_url}/depictio/api/v1/backup/list"
+
+    try:
+        response = httpx.get(
+            url,
+            headers=generate_api_headers(CLI_config),
+        )
+
+        if response.status_code == 200:
+            return response.json()
+        else:
+            logger.error(f"Failed to list backups: {response.text}")
+            return {
+                "success": False,
+                "message": f"API request failed with status {response.status_code}: {response.text}",
+            }
+    except Exception as e:
+        return {"success": False, "message": f"Failed to list backups: {str(e)}"}
+
+
+@validate_call
+def api_validate_backup(CLI_config: CLIConfig, backup_id: str) -> dict:
+    """
+    Validate a backup on the server.
+
+    Args:
+        CLI_config (CLIConfig): Configuration object containing API base URL and credentials.
+        backup_id (str): ID of the backup to validate.
+
+    Returns:
+        dict: Response containing validation results.
+    """
+    logger.info(f"Validating backup: {backup_id}")
+
+    url = f"{CLI_config.base_url}/depictio/api/v1/backup/validate"
+    payload = {"backup_id": backup_id}
+
+    try:
+        response = httpx.post(
+            url,
+            json=payload,
+            headers=generate_api_headers(CLI_config),
+        )
+        logger.debug(f"Payload for backup validation: {payload}")
+        logger.debug(f"Response status code: {response.status_code}")
+        if response.status_code == 200:
+            logger.debug(f"Response JSON: {response.json()}")
+
+        if response.status_code == 200:
+            return response.json()
+        else:
+            logger.error(f"Backup validation failed: {response.text}")
+            return {
+                "success": False,
+                "message": f"API request failed with status {response.status_code}: {response.text}",
+            }
+    except Exception as e:
+        return {"success": False, "message": f"Backup validation failed: {str(e)}"}
+
+
+@validate_call
+def api_restore_backup(
+    CLI_config: CLIConfig, backup_id: str, dry_run: bool = True, collections: list | None = None
+) -> dict:
+    """
+    Restore from a backup on the server.
+
+    Args:
+        CLI_config (CLIConfig): Configuration object containing API base URL and credentials.
+        backup_id (str): ID of the backup to restore from.
+        dry_run (bool): If True, only simulate the restore without actually changing data.
+        collections (list): List of collection names to restore. If None, restore all collections.
+
+    Returns:
+        dict: Response containing restore operation results.
+    """
+    logger.info(f"Restoring from backup: {backup_id} (dry_run={dry_run})")
+
+    url = f"{CLI_config.base_url}/depictio/api/v1/backup/restore"
+    payload = {"backup_id": backup_id, "dry_run": dry_run}
+    if collections:
+        payload["collections"] = collections
+
+    try:
+        response = httpx.post(
+            url,
+            json=payload,
+            headers=generate_api_headers(CLI_config),
+            timeout=600.0,  # 10 minutes timeout for restore operations
+        )
+
+        logger.debug(
+            f"Restore API response: status={response.status_code}, body={response.text[:500]}"
+        )
+
+        if response.status_code == 200:
+            result = response.json()
+            logger.debug(f"Restore result: {result}")
+            return result
+        else:
+            logger.error(
+                f"Backup restore failed: status={response.status_code}, response={response.text}"
+            )
+            return {
+                "success": False,
+                "message": f"API request failed with status {response.status_code}: {response.text}",
+            }
+    except httpx.TimeoutException:
+        return {"success": False, "message": "Restore operation timed out"}
+    except Exception as e:
+        return {"success": False, "message": f"Backup restore failed: {str(e)}"}

@@ -5,6 +5,7 @@ os.environ["DEPICTIO_CONTEXT"] = "CLI"
 import typer
 from typer.main import get_command
 
+from depictio.cli.cli.commands.backup import app as backup
 from depictio.cli.cli.commands.config import app as config
 from depictio.cli.cli.commands.data import app as data
 from depictio.cli.cli.commands.run import register_run_command
@@ -41,8 +42,9 @@ def verbose_callback(
     setup_models_logging(verbose, verbose_level)
 
 
-app.add_typer(config, name="config")
-app.add_typer(data, name="data")
+app.add_typer(backup, name="backup", help="Backup commands")
+app.add_typer(config, name="config", help="Configuration commands")
+app.add_typer(data, name="data", help="Data management commands")
 depictiocli = get_command(app)
 
 

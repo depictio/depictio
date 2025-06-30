@@ -34,8 +34,8 @@ ruff format .
 # Lint code
 ruff check .
 
-# Type checking (limited scope)
-mypy depictio/models/ depictio/cli/
+# Type checking
+ty .
 ```
 
 ### Running the Application
