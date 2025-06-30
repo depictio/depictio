@@ -1,7 +1,6 @@
 import json
 import os
 import tempfile
-from datetime import datetime
 from unittest.mock import Mock, patch
 
 import pytest
@@ -25,19 +24,15 @@ def mock_cli_config():
             "email": "test@example.com",
             "is_admin": True,
             "id": "507f1f77bcf86cd799439011",
+            "groups": [],
             "token": {
-                "user_id": "507f1f77bcf86cd799439011",
+                "name": "test-token",
                 "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
-                "refresh_token": "refresh-token-example",
-                "token_type": "bearer",
-                "token_lifetime": "short-lived",
-                "expire_datetime": datetime(2025, 12, 31, 23, 59, 59),
-                "refresh_expire_datetime": datetime(2025, 12, 31, 23, 59, 59),
-                "logged_in": False,
+                "expire_datetime": "2025-12-31 23:59:59",
             },
         },
-        "base_url": "http://localhost:8000",
-        "s3": {
+        "api_base_url": "http://localhost:8000",
+        "s3_storage": {
             "service_name": "minio",
             "service_port": 9000,
             "external_host": "localhost",
