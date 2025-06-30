@@ -24,9 +24,8 @@ def mock_cli_config():
             "email": "test@example.com",
             "is_admin": True,
             "id": "507f1f77bcf86cd799439011",
-            "groups": [],
             "token": {
-                "name": "test-token",
+                "user_id": "507f1f77bcf86cd799439011",
                 "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
                 "refresh_token": "refresh-token-example",
                 "token_type": "bearer",
