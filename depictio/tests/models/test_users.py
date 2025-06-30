@@ -62,11 +62,12 @@ class TestTokenData:
 
         # Check that the error is related to pattern mismatch
         assert any(
-            error.get("type") == "string_pattern_mismatch" for error in exc_info.value.errors()
+            error.get("type") == "string_pattern_mismatch"
+            for error in exc_info.value.errors()  # type: ignore[unresolved-attribute]
         )
 
         # Optional: more detailed error checking
-        error_messages = [error.get("msg") for error in exc_info.value.errors()]
+        error_messages = [error.get("msg") for error in exc_info.value.errors()]  # type: ignore[unresolved-attribute]
         assert any("pattern" in msg for msg in error_messages)
 
     def test_token_data_invalid_type(self):
@@ -77,11 +78,12 @@ class TestTokenData:
 
         # Check that the error is related to pattern mismatch
         assert any(
-            error.get("type") == "string_pattern_mismatch" for error in exc_info.value.errors()
+            error.get("type") == "string_pattern_mismatch"
+            for error in exc_info.value.errors()  # type: ignore[unresolved-attribute]
         )
 
         # Optional: more detailed error checking
-        error_messages = [error.get("msg") for error in exc_info.value.errors()]
+        error_messages = [error.get("msg") for error in exc_info.value.errors()]  # type: ignore[unresolved-attribute]
         assert any("pattern" in msg for msg in error_messages)
 
 
@@ -1077,7 +1079,7 @@ class TestUserBaseCLIConfig:
         # Check that the error is related to missing field
         assert any(
             error.get("type") == "missing" and error.get("loc")[0] == "token"
-            for error in exc_info.value.errors()
+            for error in exc_info.value.errors()  # type: ignore[unresolved-attribute]
         )
 
     def test_user_base_cli_config_invalid_email(self):
@@ -1099,5 +1101,5 @@ class TestUserBaseCLIConfig:
         # Check that the error is related to email format
         assert any(
             error.get("type") == "value_error" and "email" in str(error.get("msg")).lower()
-            for error in exc_info.value.errors()
+            for error in exc_info.value.errors()  # type: ignore[unresolved-attribute]
         )
