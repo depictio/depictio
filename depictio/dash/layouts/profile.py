@@ -91,7 +91,7 @@ layout = dbc.Container(
                                             # color=colors["violet"],
                                         ),
                                     ],
-                                    position="apart",
+                                    justify="space-between",
                                 ),
                                 dmc.Divider(
                                     variant="dashed",
@@ -211,7 +211,7 @@ layout = dbc.Container(
                                         ),
                                     ],
                                     spacing="md",
-                                    position="left",
+                                    justify="flex-start",
                                     mt="lg",
                                 ),
                                 # Upgrade feedback area
@@ -284,7 +284,7 @@ layout = dbc.Container(
                                     color="blue",
                                 ),
                             ],
-                            position="right",
+                            justify="flex-end",
                             mt="md",
                         ),
                     ],
@@ -572,18 +572,18 @@ def register_profile_callbacks(app):
                             [
                                 dmc.Text(
                                     key,
-                                    weight=700,
+                                    fw=700,
                                     color=colors["black"],
                                     size="sm",
                                 ),
                                 dmc.Text(
                                     str(value),
                                     color=colors["black"],
-                                    weight=500,
+                                    fw=500,
                                     size="sm",
                                 ),
                             ],
-                            position="apart",
+                            justify="space-between",
                         )
                     ],
                     p="sm",

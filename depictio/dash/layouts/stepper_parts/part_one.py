@@ -96,7 +96,7 @@ def register_callbacks_stepper_part_one(app):
             # component_selected = html.Div(f"{component_selected}")
 
             # config_title = dmc.Title(
-            #     "Data collection config", order=3, align="left", weight=500
+            #     "Data collection config", order=3, align="left", fw=500
             # )
             # json_formatted = yaml.dump(dc_specs["config"], indent=2)
             # prism = dbc.Col(
@@ -113,7 +113,7 @@ def register_callbacks_stepper_part_one(app):
             #     width=6,
             # )
 
-            dc_main_info = dmc.Title("Data collection info", order=3, align="left", weight=500)
+            dc_main_info = dmc.Title("Data collection info", order=3, align="left", fw=500)
 
             main_info = html.Table(
                 [
@@ -251,18 +251,18 @@ def register_callbacks_stepper_part_one(app):
             #     if "depictio_run_id" in cols:
             #         run_nb = cols["depictio_run_id"]["specs"]["nunique"]
             #         run_nb_title = dmc.Title(
-            #             f"Run Nb : {run_nb}", order=3, align="left", weight=500
+            #             f"Run Nb : {run_nb}", order=3, align="left", fw=500
             #         )
             #     else:
             #         run_nb_title = dmc.Title(
-            #             "Run Nb : 0", order=3, align="left", weight=500
+            #             "Run Nb : 0", order=3, align="left", fw=500
             #         )
 
             #     data_previz_title = dmc.Title(
-            #         "Data previsualization", order=3, align="left", weight=500
+            #         "Data previsualization", order=3, align="left", fw=500
             #     )
             #     config_title = dmc.Title(
-            #         "Data collection configuration", order=3, align="left", weight=500
+            #         "Data collection configuration", order=3, align="left", fw=500
             #     )
             #     # print(df.head(20).to_dict("records"))
             #     # cellClicked, cellDoubleClicked, cellRendererData, cellValueChanged, className, columnDefs, columnSize, columnSizeOptions, columnState, csvExportParams, dangerously_allow_code, dashGridOptions, defaultColDef, deleteSelectedRows, deselectAll, detailCellRendererParams, enableEnterpriseModules, exportDataAsCsv, filterModel, getDetailRequest, getDetailResponse, getRowId, getRowStyle, getRowsRequest, getRowsResponse, id, licenseKey, masterDetail, paginationGoTo, paginationInfo, persisted_props, persistence, persistence_type, resetColumnState, rowClass, rowClassRules, rowData, rowModelType, rowStyle, rowTransaction, scrollTo, selectAll, selectedRows, style, suppressDragLeaveHidesColumns, updateColumnState, virtualRowData
@@ -327,7 +327,7 @@ def register_callbacks_stepper_part_one(app):
             #             )
             #         )
             #         template_title = dmc.Title(
-            #             "JBrowse template", order=3, align="left", weight=500
+            #             "JBrowse template", order=3, align="left", fw=500
             #         )
             #         prism_template = dbc.Col(
             #             [

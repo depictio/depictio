@@ -227,7 +227,7 @@ def register_callbacks_interactive_component(app):
                     width=300,
                     transition="pop",
                     transitionDuration=300,
-                    position="right",
+                    justify="flex-end",
                     withArrow=True,
                     openDelay=500,
                     closeDelay=500,

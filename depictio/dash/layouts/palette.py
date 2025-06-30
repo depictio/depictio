@@ -54,7 +54,7 @@ def create_color_palette_page():
                         children=[
                             dmc.Text(
                                 color_name.capitalize(),
-                                weight=500,
+                                fw=500,
                                 size="md",
                             ),
                             dmc.Text(
@@ -135,7 +135,7 @@ def create_color_palette_page():
 
         sequence_item = html.Div(
             [
-                dmc.Text(seq["name"], weight=500, size="md", style={"marginBottom": "8px"}),
+                dmc.Text(seq["name"], fw=500, size="md", style={"marginBottom": "8px"}),
                 color_strip,
             ],
             style={"marginBottom": "24px"},

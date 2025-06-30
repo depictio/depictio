@@ -54,7 +54,7 @@ def render_tokens_list(tokens):
                             dmc.Text(
                                 "No CLI Configurations Available",
                                 align="center",
-                                weight=700,
+                                fw=700,
                                 size="xl",
                                 style={"color": colors["blue"]},
                             ),
@@ -107,7 +107,7 @@ def render_tokens_list(tokens):
                                         [
                                             dmc.Text(
                                                 str(token["name"]),
-                                                weight=700,
+                                                fw=700,
                                                 size="lg",
                                                 style={"color": colors["blue"]},
                                             ),
@@ -142,7 +142,7 @@ def render_tokens_list(tokens):
                                 },
                             ),
                         ],
-                        position="apart",
+                        justify="space-between",
                         style={"width": "100%"},
                     ),
                 ],
@@ -193,7 +193,7 @@ layout = dbc.Container(
                                     ),
                                 ],
                                 spacing="xs",
-                                position="center",
+                                justify="center",
                             ),
                             # Description
                             dmc.Text(
@@ -252,7 +252,7 @@ layout = dbc.Container(
             withCloseButton=False,
             children=[
                 dmc.Group(
-                    position="left",
+                    justify="flex-start",
                     spacing="sm",
                     children=[
                         DashIconify(
@@ -316,7 +316,7 @@ layout = dbc.Container(
                             },
                         ),
                     ],
-                    position="right",
+                    justify="flex-end",
                     mt="xl",
                 ),
             ],
@@ -369,7 +369,7 @@ layout = dbc.Container(
                                     },
                                 ),
                             ],
-                            position="right",
+                            justify="flex-end",
                             mt="xl",
                         ),
                     ],
@@ -671,7 +671,7 @@ def register_tokens_management_callbacks(app):
                                         # ),
                                     ),
                                 ],
-                                position="right",
+                                justify="flex-end",
                             ),
                         ],
                         spacing="md",

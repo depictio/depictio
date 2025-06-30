@@ -221,7 +221,7 @@ def register_callbacks_dashboards_management(app):
                         ),
                     ],
                     align="center",
-                    position="apart",
+                    justify="space-between",
                     grow=False,
                     noWrap=False,
                     style={"width": "100%"},
@@ -260,7 +260,7 @@ def register_callbacks_dashboards_management(app):
                         children=[
                             # Header with icon and title
                             dmc.Group(
-                                position="left",
+                                justify="flex-start",
                                 spacing="sm",
                                 children=[
                                     DashIconify(
@@ -301,7 +301,7 @@ def register_callbacks_dashboards_management(app):
                             ),
                             # Buttons
                             dmc.Group(
-                                position="right",
+                                justify="flex-end",
                                 spacing="md",
                                 mt="md",
                                 children=[

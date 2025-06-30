@@ -69,7 +69,7 @@ def create_upgrade_modal():
                                 color="blue",
                             ),
                         ],
-                        position="right",
+                        justify="flex-end",
                         mt="md",
                     ),
                 ],
