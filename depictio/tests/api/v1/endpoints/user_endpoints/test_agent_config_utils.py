@@ -53,7 +53,7 @@ class TestGenerateAgentConfig:
         assert result.user.email == "test@example.com"
         assert result.user.is_admin is False
         assert result.user.token == token
-        assert "http://" in result.base_url
+        assert "http://" in result.api_base_url
 
     @beanie_setup(models=[TokenBeanie, UserBeanie])
     async def test_generate_agent_config_invalid_user(self):

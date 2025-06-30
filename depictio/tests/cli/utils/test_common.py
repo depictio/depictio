@@ -23,15 +23,21 @@ class TestCommon:
         """Sample CLI configuration dictionary"""
         return {
             "user": {
-                "token": {
-                    "name": "test_token",
-                    "access_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.EkN-DOsnsuRjRO6BxXemmJDm3HbxrbRzXglbN2S4sOkopdU4IsDxTI8jO19W_A4K8ZPJijNLis4EZsHeY559a4DFOd50_OqgHs3O2GWl5JQ6TyYHdMKoGNAHnm8l",
-                    "expire_datetime": "2025-12-31 23:59:59",
-                },
                 "email": "test@example.com",
                 "is_admin": False,
                 "id": "507f1f77bcf86cd799439011",
-                "groups": [],
+                "token": {
+                    "user_id": "507f1f77bcf86cd799439011",
+                    "access_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.EkN-DOsnsuRjRO6BxXemmJDm3HbxrbRzXglbN2S4sOkopdU4IsDxTI8jO19W_A4K8ZPJijNLis4EZsHeY559a4DFOd50_OqgHs3O2GWl5JQ6TyYHdMKoGNAHnm8l",
+                    "refresh_token": "refresh-token-example",
+                    "token_type": "bearer",
+                    "token_lifetime": "short-lived",
+                    "expire_datetime": "2025-12-31T23:59:59",
+                    "refresh_expire_datetime": "2025-12-31T23:59:59",
+                    "name": "test_token",
+                    "created_at": "2025-06-30T18:00:00",
+                    "logged_in": False,
+                },
             },
             "api_base_url": "https://api.depictio.dev",
             "s3_storage": {
@@ -126,15 +132,21 @@ class TestCommon:
             """Test successful loading of config file"""
             mock_config = {
                 "user": {
-                    "token": {
-                        "name": "test_token",
-                        "access_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.EkN-DOsnsuRjRO6BxXemmJDm3HbxrbRzXglbN2S4sOkopdU4IsDxTI8jO19W_A4K8ZPJijNLis4EZsHeY559a4DFOd50_OqgHs3O2GWl5JQ6TyYHdMKoGNAHnm8l",
-                        "expire_datetime": "2025-12-31 23:59:59",
-                    },
                     "email": "test@example.com",
                     "is_admin": False,
                     "id": "507f1f77bcf86cd799439011",
-                    "groups": [],
+                    "token": {
+                        "user_id": "507f1f77bcf86cd799439011",
+                        "access_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.EkN-DOsnsuRjRO6BxXemmJDm3HbxrbRzXglbN2S4sOkopdU4IsDxTI8jO19W_A4K8ZPJijNLis4EZsHeY559a4DFOd50_OqgHs3O2GWl5JQ6TyYHdMKoGNAHnm8l",
+                        "refresh_token": "refresh-token-example",
+                        "token_type": "bearer",
+                        "token_lifetime": "short-lived",
+                        "expire_datetime": "2025-12-31T23:59:59",
+                        "refresh_expire_datetime": "2025-12-31T23:59:59",
+                        "name": "test_token",
+                        "created_at": "2025-06-30T18:00:00",
+                        "logged_in": False,
+                    },
                 },
                 "api_base_url": "https://api.depictio.dev",
                 "s3_storage": {
