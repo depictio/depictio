@@ -11,7 +11,7 @@ from depictio.models.utils import get_config
 
 
 @validate_call(validate_return=True)
-def generate_api_headers(CLI_config: CLIConfig) -> dict:
+def generate_api_headers(CLI_config: CLIConfig | dict) -> dict:
     """
     Generate the API headers.
     """
@@ -53,8 +53,8 @@ def validate_depictio_cli_config(depictio_cli_config: dict) -> CLIConfig:
     # Map keys to match CLIConfig model expectations and create CLIConfig explicitly
     config = CLIConfig(
         user=depictio_cli_config["user"],
-        api_base_url=depictio_cli_config["base_url"],
-        s3_storage=depictio_cli_config["s3"],
+        api_base_url=depictio_cli_config.get("api_base_url", depictio_cli_config.get("base_url")),
+        s3_storage=depictio_cli_config.get("s3_storage", depictio_cli_config.get("s3")),
     )
     logger.info(f"Depictio CLI configuration validated: {config}")
     # config = convert_model_to_dict(config)

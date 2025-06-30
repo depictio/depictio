@@ -174,7 +174,7 @@ def convert_filter_model_to_metadata(filter_model):
 def load_deltatable_lite(
     workflow_id: ObjectId,
     data_collection_id: ObjectId,
-    metadata: dict | None = None,
+    metadata: list[dict] | None = None,
     TOKEN: str | None = None,
     limit_rows: int | None = None,
 ) -> pl.DataFrame:
@@ -184,8 +184,9 @@ def load_deltatable_lite(
     Args:
         workflow_id (ObjectId): The ID of the workflow.
         data_collection_id (ObjectId): The ID of the data collection.
-        metadata (Optional[dict], optional): Metadata for filtering the DataFrame. Defaults to None.
-        token (Optional[str], optional): Authorization token. Defaults to None.
+        metadata (Optional[list[dict]], optional): List of metadata dicts for filtering the DataFrame. Defaults to None.
+        TOKEN (Optional[str], optional): Authorization token. Defaults to None.
+        limit_rows (Optional[int], optional): Maximum number of rows to return. Defaults to None.
 
     Returns:
         pl.DataFrame: The loaded and optionally filtered DataFrame.

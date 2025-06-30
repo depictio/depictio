@@ -269,6 +269,26 @@ class PerformanceConfig(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_PERFORMANCE_")
 
 
+class BackupConfig(BaseSettings):
+    """Backup configuration for S3 data backup strategies."""
+
+    # Local backup path
+    backup_path: str = Field(default="/tmp/depictio-backups")
+
+    # S3 backup strategy: s3_to_s3, local, or both
+    s3_backup_strategy: str = Field(default="local")
+
+    # Enable backup to remote S3
+    backup_s3_enabled: bool = Field(default=False)
+    backup_s3_bucket: str = Field(default="depictio-backup-bucket")
+    backup_s3_endpoint_url: Optional[str] = Field(default=None)
+    backup_s3_region: str = Field(default="us-east-1")
+    backup_s3_access_key: Optional[str] = Field(default=None)
+    backup_s3_secret_key: Optional[str] = Field(default=None)
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_BACKUP_")
+
+
 class Settings(BaseSettings):
     context: str = Field(default="server")
     fastapi: FastAPIConfig = Field(default_factory=FastAPIConfig)
@@ -279,5 +299,6 @@ class Settings(BaseSettings):
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     jbrowse: JBrowseConfig = Field(default_factory=JBrowseConfig)
     performance: PerformanceConfig = Field(default_factory=PerformanceConfig)
+    backup: BackupConfig = Field(default_factory=BackupConfig)
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_")

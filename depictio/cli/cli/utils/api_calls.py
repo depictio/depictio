@@ -406,3 +406,81 @@ def api_delete_deltatable(delta_table_id: str, CLI_config: CLIConfig) -> httpx.R
     url = f"{CLI_config.api_base_url}/depictio/api/v1/deltatables/delete/{delta_table_id}"
     response = httpx.delete(url, headers=generate_api_headers(CLI_config))
     return response
+
+
+# Backup API functions
+@validate_call
+def api_create_backup(CLI_config: CLIConfig, backup_name: str = "") -> httpx.Response:
+    """
+    Create a backup using the server API.
+
+    Args:
+        CLI_config (CLIConfig): Configuration object containing API base URL and credentials.
+        backup_name (str): Optional name for the backup.
+
+    Returns:
+        httpx.Response: The response from the server.
+    """
+    logger.info(f"Creating backup: {backup_name}")
+
+    payload = {"backup_name": backup_name}
+    url = f"{CLI_config.api_base_url}/depictio/api/v1/backup/create"
+    response = httpx.post(url, json=payload, headers=generate_api_headers(CLI_config))
+    return response
+
+
+@validate_call
+def api_list_backups(CLI_config: CLIConfig) -> httpx.Response:
+    """
+    List available backups from the server.
+
+    Args:
+        CLI_config (CLIConfig): Configuration object containing API base URL and credentials.
+
+    Returns:
+        httpx.Response: The response from the server.
+    """
+    logger.info("Listing available backups")
+
+    url = f"{CLI_config.api_base_url}/depictio/api/v1/backup/list"
+    response = httpx.get(url, headers=generate_api_headers(CLI_config))
+    return response
+
+
+@validate_call
+def api_validate_backup(CLI_config: CLIConfig, backup_id: str) -> httpx.Response:
+    """
+    Validate a backup using the server API.
+
+    Args:
+        CLI_config (CLIConfig): Configuration object containing API base URL and credentials.
+        backup_id (str): ID of the backup to validate.
+
+    Returns:
+        httpx.Response: The response from the server.
+    """
+    logger.info(f"Validating backup: {backup_id}")
+
+    url = f"{CLI_config.api_base_url}/depictio/api/v1/backup/validate/{backup_id}"
+    response = httpx.get(url, headers=generate_api_headers(CLI_config))
+    return response
+
+
+@validate_call
+def api_restore_backup(CLI_config: CLIConfig, backup_id: str) -> httpx.Response:
+    """
+    Restore from a backup using the server API.
+
+    Args:
+        CLI_config (CLIConfig): Configuration object containing API base URL and credentials.
+        backup_id (str): ID of the backup to restore from.
+
+    Returns:
+        httpx.Response: The response from the server.
+    """
+    logger.info(f"Restoring from backup: {backup_id}")
+
+    payload = {"backup_id": backup_id}
+    url = f"{CLI_config.api_base_url}/depictio/api/v1/backup/restore"
+    response = httpx.post(url, json=payload, headers=generate_api_headers(CLI_config))
+    return response

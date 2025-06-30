@@ -263,8 +263,10 @@ class TestMongoModel:
         assert str(model.id) == id_str
 
     def test_create_with_invalid_id(self):
-        """Test that invalid ID raises ValueError."""
-        with pytest.raises(ValueError, match="Invalid ObjectId"):
+        """Test that invalid ID raises InvalidId."""
+        from bson.errors import InvalidId
+
+        with pytest.raises(InvalidId):
             MongoModel(id=PyObjectId("invalid_id"))  # type: ignore[invalid-argument-type]
 
     def test_id_serialization(self):

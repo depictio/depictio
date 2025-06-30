@@ -307,8 +307,8 @@ class TestAsyncFetchUserFromId:
             await _async_fetch_user_from_id(non_existent_id)
 
         # Verify the exception
-        assert exc_info.value.status_code == 404
-        assert exc_info.value.detail == "User not found"
+        assert exc_info.value.status_code == 404  # type: ignore[unresolved-attribute]
+        assert exc_info.value.detail == "User not found"  # type: ignore[unresolved-attribute]
 
 
 # ------------------------------------------------------
@@ -686,8 +686,8 @@ class TestListTokens:
             await _list_tokens(user_id, token_lifetime="invalid-lifetime")
 
         # Verify the exception
-        assert exc_info.value.status_code == 400
-        assert "Invalid token_lifetime" in exc_info.value.detail
+        assert exc_info.value.status_code == 400  # type: ignore[unresolved-attribute]
+        assert "Invalid token_lifetime" in exc_info.value.detail  # type: ignore[unresolved-attribute]
 
     @pytest.mark.asyncio
     @beanie_setup(models=[TokenBeanie])
@@ -1210,8 +1210,8 @@ class TestGetAnonymousUserSession:
             with pytest.raises(HTTPException) as exc_info:
                 await _get_anonymous_user_session()
 
-            assert exc_info.value.status_code == 404
-            assert "Anonymous user not found" in str(exc_info.value.detail)
+            assert exc_info.value.status_code == 404  # type: ignore[unresolved-attribute]
+            assert "Anonymous user not found" in str(exc_info.value.detail)  # type: ignore[unresolved-attribute]
 
     @pytest.mark.asyncio
     @beanie_setup(models=[UserBeanie, TokenBeanie])
@@ -1255,5 +1255,5 @@ class TestGetAnonymousUserSession:
             with pytest.raises(HTTPException) as exc_info:
                 await _get_anonymous_user_session()
 
-            assert exc_info.value.status_code == 404
-            assert "No permanent token found" in str(exc_info.value.detail)
+            assert exc_info.value.status_code == 404  # type: ignore[unresolved-attribute]
+            assert "No permanent token found" in str(exc_info.value.detail)  # type: ignore[unresolved-attribute]
