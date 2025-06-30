@@ -60,7 +60,7 @@ class TestGetCurrentUser:
         """Test with a None token value."""
         # Act & Assert
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_user(None)
+            await get_current_user(None)  # type: ignore[invalid-argument-type]
 
         # Verify the exception
         assert exc_info.value.status_code == 401

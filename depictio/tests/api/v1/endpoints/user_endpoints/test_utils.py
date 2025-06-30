@@ -18,6 +18,7 @@ from depictio.api.v1.endpoints.user_endpoints.utils import (
     _ensure_mongodb_connection,
     create_access_token,
 )
+from depictio.models.models.base import PyObjectId
 from depictio.models.models.users import TokenData, UserBeanie
 
 
@@ -30,7 +31,9 @@ class TestCreateAccessToken:
         """Test creating a short-lived access token."""
         # Arrange
         user_id = PydanticObjectId()
-        token_data = TokenData(sub=user_id, name="test_token", token_lifetime="short-lived")
+        token_data = TokenData(
+            sub=PyObjectId(str(user_id)), name="test_token", token_lifetime="short-lived"
+        )
 
         # Act
         with patch("depictio.api.v1.endpoints.user_endpoints.utils.jwt.encode") as mock_encode:
@@ -58,7 +61,9 @@ class TestCreateAccessToken:
         """Test creating a long-lived access token."""
         # Arrange
         user_id = PydanticObjectId()
-        token_data = TokenData(sub=user_id, name="long_token", token_lifetime="long-lived")
+        token_data = TokenData(
+            sub=PyObjectId(str(user_id)), name="long_token", token_lifetime="long-lived"
+        )
 
         # Act
         with patch("depictio.api.v1.endpoints.user_endpoints.utils.jwt.encode") as mock_encode:
@@ -82,14 +87,18 @@ class TestCreateAccessToken:
 
         # Act & Assert
         with pytest.raises(ValidationError):
-            TokenData(sub=user_id, name="invalid_token", token_lifetime="invalid-lifetime")
+            TokenData(
+                sub=PyObjectId(str(user_id)),
+                name="invalid_token",
+                token_lifetime="invalid-lifetime",
+            )
 
     @pytest.mark.asyncio
     async def test_create_access_token_expiry_hours(self):
         """Test creating a token with expiry in hours."""
         # Arrange
         user_id = PydanticObjectId()
-        token_data = TokenData(sub=user_id, name="hourly_token")
+        token_data = TokenData(sub=PyObjectId(str(user_id)), name="hourly_token")
 
         token_string, expire_datetime = await create_access_token(token_data, expiry_hours=3)
 

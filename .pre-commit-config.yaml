@@ -30,11 +30,11 @@ repos:
 -   repo: local
     hooks:
       - id: ty-check-models-api-dash-cli
-        name: ty check models, api, dash and cli
-        description: 'Run ty type checker on models, api, dash and cli folders (must pass)'
-        entry: bash -c 'source depictio-venv/bin/activate && ty check depictio/models/ depictio/api/ depictio/dash/ depictio/cli/'
+        name: ty check models, api, dash, cli and tests
+        description: 'Run ty type checker on models, api, dash, cli and tests folders (must pass)'
+        entry: bash -c 'source depictio-venv/bin/activate && ty check depictio/models/ depictio/api/ depictio/dash/ depictio/cli/ depictio/tests/'
         language: system
-        files: ^depictio/(models|api|dash|cli)/
+        files: ^depictio/(models|api|dash|cli|tests)/
         pass_filenames: false
 
 # Lint helm chart

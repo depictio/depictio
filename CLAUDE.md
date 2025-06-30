@@ -35,7 +35,7 @@ ruff format .
 ruff check .
 
 # Type checking with ty (Astral's fast type checker)
-ty check depictio/models/ depictio/api/ depictio/dash/ depictio/cli/  # All folders pass with zero errors
+ty check depictio/models/ depictio/api/ depictio/dash/ depictio/cli/ depictio/tests/  # All folders combined must pass CI
 
 # Type checking with mypy (limited scope)
 mypy depictio/models/ depictio/cli/
@@ -85,20 +85,20 @@ docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio
 
 ### Data Architecture
 
-**Database Layer**
+#### Database Layer
 
 - MongoDB for metadata and configuration storage
 - Collections: users, groups, projects, workflows, data_collections
 - GridFS for large file storage
 - Delta tables (Polars/PyArrow) for analytical data storage in S3/MinIO
 
-**Authentication & Authorization**
+#### Authentication & Authorization
 
 - JWT tokens with public/private key encryption
 - Role-based access control (users, groups, projects)
 - SAML/OAuth integration capabilities (see dev/ examples)
 
-**File Storage**
+#### File Storage
 
 - S3-compatible storage (MinIO for local dev, AWS S3 for production)
 - Delta Lake format for structured data
@@ -107,13 +107,13 @@ docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio
 
 ### Component Integration
 
-**Data Flow**
+#### Data Flow
 
 1. CLI ingests data → Validates and stores in Delta format → Registers in MongoDB
 2. API serves metadata and data access → Dash renders interactive visualizations
 3. User interactions in Dash → API updates → Real-time dashboard updates
 
-**Inter-Service Communication**
+#### Inter-Service Communication
 
 - FastAPI backend exposes REST endpoints at `/depictio/api/v1/`
 - Dash frontend calls API endpoints for data and authentication
@@ -121,19 +121,19 @@ docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio
 
 ### Development Patterns
 
-**Configuration Management**
+#### Configuration Management
 
 - Pydantic Settings for environment-based configuration
 - Different contexts: API, Dash, CLI (set via DEPICTIO_CONTEXT)
 - Environment files (.env) for secrets and deployment settings
 
-**Error Handling**
+#### Error Handling
 
 - Structured exceptions with proper HTTP status codes
 - Comprehensive logging with configurable levels
 - Input sanitization and validation at model level
 
-**Testing Strategy**
+#### Testing Strategy
 
 - Unit tests for models and utilities
 - Integration tests for API endpoints

@@ -766,12 +766,11 @@ class TestLoadDeltatablelite:
         mock_lazy_frame.collect.return_value = mock_df
         mock_scan_delta.return_value = mock_lazy_frame
 
-        metadata = [
-            {
-                "metadata": {"interactive_component_type": "Select", "column_name": "category"},
-                "value": ["A"],
-            }
-        ]
+        metadata = {
+            "interactive_component_type": "Select",
+            "column_name": "category",
+            "value": ["A"],
+        }
 
         # Act
         result = load_deltatable_lite(

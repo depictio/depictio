@@ -57,6 +57,7 @@ class TestRegex:
         ]
         config = Regex(pattern="^test.*$", wildcards=wildcards)
         assert config.pattern == "^test.*$"
+        assert config.wildcards is not None
         assert len(config.wildcards) == 2
         assert config.wildcards[0].name == "w1"
         assert config.wildcards[1].wildcard_regex == "^.*\\.csv$"
@@ -245,7 +246,9 @@ class TestDataCollectionConfig:
         """Test creating a valid DataCollectionConfig instance with table type."""
 
         dc_specific = {"format": "csv"}
-        scan_config = {"mode": "single", "scan_parameters": {"filename": "test.txt"}}
+        from depictio.models.models.data_collections import Scan, ScanSingle
+
+        scan_config = Scan(mode="single", scan_parameters=ScanSingle(filename="test.txt"))
 
         config = DataCollectionConfig(
             type="table",
@@ -263,7 +266,9 @@ class TestDataCollectionConfig:
         """Test creating a valid DataCollectionConfig instance with jbrowse2 type."""
         # Assuming DCJBrowse2Config has specific required fields
         dc_specific: dict[str, str] = {}  # Add required fields based on DCJBrowse2Config
-        scan_config = {"mode": "single", "scan_parameters": {"filename": "test.txt"}}
+        from depictio.models.models.data_collections import Scan, ScanSingle
+
+        scan_config = Scan(mode="single", scan_parameters=ScanSingle(filename="test.txt"))
 
         config = DataCollectionConfig(
             type="jbrowse2",
@@ -276,7 +281,9 @@ class TestDataCollectionConfig:
     def test_type_validation_case_insensitive(self):
         """Test that type validation is case insensitive."""
         dc_specific = {"format": "csv"}
-        scan_config = {"mode": "single", "scan_parameters": {"filename": "test.txt"}}
+        from depictio.models.models.data_collections import Scan, ScanSingle
+
+        scan_config = Scan(mode="single", scan_parameters=ScanSingle(filename="test.txt"))
 
         config = DataCollectionConfig(
             type="TABLE",
@@ -298,7 +305,9 @@ class TestDataCollectionConfig:
     def test_with_join_config(self):
         """Test creating a DataCollectionConfig instance with join configuration."""
         dc_specific = {"format": "csv"}
-        scan_config = {"mode": "single", "scan_parameters": {"filename": "test.txt"}}
+        from depictio.models.models.data_collections import Scan, ScanSingle
+
+        scan_config = Scan(mode="single", scan_parameters=ScanSingle(filename="test.txt"))
         join_config = {"on_columns": ["col1"], "how": "inner", "with_dc": ["dc1"]}
 
         config = DataCollectionConfig(

@@ -17,7 +17,7 @@ from depictio.api.v1.endpoints.projects_endpoints.utils import (
 )
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.projects import Project
-from depictio.models.models.users import Permission, UserBase
+from depictio.models.models.users import Permission, User
 
 
 # Fixtures available for all test classes
@@ -25,9 +25,10 @@ from depictio.models.models.users import Permission, UserBase
 def sample_user():
     """Create a sample user for testing."""
     user_id = PyObjectId()
-    return UserBase(
+    return User(
         id=user_id,
         email="test@example.com",
+        password="hashed_password",
         is_admin=True,
     )
 
@@ -36,9 +37,10 @@ def sample_user():
 def sample_viewer_user():
     """Create a sample viewer user for testing."""
     user_id = PyObjectId()
-    return UserBase(
+    return User(
         id=user_id,
         email="viewer@example.com",
+        password="hashed_password",
         is_admin=False,
     )
 
@@ -47,9 +49,10 @@ def sample_viewer_user():
 def sample_editor_user():
     """Create a sample editor user for testing."""
     user_id = PyObjectId()
-    return UserBase(
+    return User(
         id=user_id,
         email="editor@example.com",
+        password="hashed_password",
         is_admin=False,
     )
 
@@ -186,9 +189,8 @@ class TestGetAllProjects:
         owner_project_config["yaml_config_path"] = test_yaml_path
         owner_project_config["name"] = f"Owner Project - {ObjectId()}"
         owner_project_config["permissions"] = Permission(owners=[sample_user])
+        owner_project_config["id"] = PyObjectId(ObjectId())  # Set explicit id to avoid duplicates
         owner_project = Project(**owner_project_config)  # type: ignore[missing-argument]
-        # Set an explicit _id to avoid duplicates
-        owner_project.id = PyObjectId(ObjectId())  # type: ignore[invalid-assignment]
         mongo_doc = owner_project.mongo()
         mongo_doc["_id"] = owner_project.id
         mock_projects_collection.insert_one(mongo_doc)
@@ -200,8 +202,8 @@ class TestGetAllProjects:
         viewer_project_config["permissions"] = Permission(
             owners=[sample_viewer_user], viewers=[sample_user]
         )
+        viewer_project_config["id"] = PyObjectId(ObjectId())
         viewer_project = Project(**viewer_project_config)  # type: ignore[missing-argument]
-        viewer_project.id = PyObjectId(ObjectId())  # type: ignore[invalid-assignment]
         mongo_doc = viewer_project.mongo()
         mongo_doc["_id"] = viewer_project.id
         mock_projects_collection.insert_one(mongo_doc)
@@ -212,8 +214,8 @@ class TestGetAllProjects:
         public_project_config["name"] = f"Public Project - {ObjectId()}"
         public_project_config["permissions"] = Permission(owners=[sample_viewer_user])
         public_project_config["is_public"] = True
+        public_project_config["id"] = PyObjectId(ObjectId())
         public_project = Project(**public_project_config)  # type: ignore[missing-argument]
-        public_project.id = PyObjectId(ObjectId())  # type: ignore[invalid-assignment]
         mongo_doc = public_project.mongo()
         mongo_doc["_id"] = public_project.id
         mock_projects_collection.insert_one(mongo_doc)
@@ -232,8 +234,10 @@ class TestGetAllProjects:
         self, sample_user, mock_projects_collection, setup_multiple_projects
     ):
         """Test getting all projects for a regular user."""
-        current_user = UserBase(id=sample_user.id, email=sample_user.email, is_admin=False)
-        result = _async_get_all_projects(current_user, mock_projects_collection)  # type: ignore[invalid-argument-type]
+        current_user = User(
+            id=sample_user.id, email=sample_user.email, password="hashed_password", is_admin=False
+        )
+        result = _async_get_all_projects(current_user, mock_projects_collection)
 
         assert len(result) == 3  # owner, viewer, and public projects
         assert all(isinstance(p, Project) for p in result)
@@ -242,8 +246,10 @@ class TestGetAllProjects:
         self, sample_user, mock_projects_collection, setup_multiple_projects
     ):
         """Test getting all projects for an admin user."""
-        admin_user = UserBase(id=sample_user.id, email=sample_user.email, is_admin=True)
-        result = _async_get_all_projects(admin_user, mock_projects_collection)  # type: ignore[invalid-argument-type]
+        admin_user = User(
+            id=sample_user.id, email=sample_user.email, password="hashed_password", is_admin=True
+        )
+        result = _async_get_all_projects(admin_user, mock_projects_collection)
 
         assert len(result) == 3  # admin sees all projects
         assert all(isinstance(p, Project) for p in result)
@@ -263,20 +269,23 @@ class TestGetProjectFromId:
         project_config["yaml_config_path"] = test_yaml_path
         project_config["name"] = f"Test Project - {ObjectId()}"
         project_config["permissions"] = Permission(owners=[sample_user])
-        project = Project(**project_config)  # type: ignore[missing-argument]
         # Set an explicit _id
-        project.id = ObjectId()  # type: ignore[invalid-assignment]
+        project_id = ObjectId()
+        project_config["id"] = PyObjectId(project_id)
+        project = Project(**project_config)  # type: ignore[missing-argument]
         mongo_doc = project.mongo()
-        mongo_doc["_id"] = project.id
+        mongo_doc["_id"] = project_id
         mock_projects_collection.insert_one(mongo_doc)
-        return str(project.id)
+        return str(project_id)
 
     async def test_async_get_project_from_id_success(
         self, sample_user, mock_projects_collection, setup_single_project
     ):
         """Test getting a project by ID successfully."""
-        current_user = UserBase(id=sample_user.id, email=sample_user.email, is_admin=False)
-        result = _async_get_project_from_id(  # type: ignore[invalid-argument-type]
+        current_user = User(
+            id=sample_user.id, email=sample_user.email, password="hashed_password", is_admin=False
+        )
+        result = _async_get_project_from_id(
             setup_single_project, current_user, mock_projects_collection
         )
 
@@ -290,7 +299,9 @@ class TestGetProjectFromId:
         # Clear the collection first
         mock_projects_collection.delete_many({})
 
-        current_user = UserBase(id=sample_user.id, email=sample_user.email, is_admin=False)
+        current_user = User(
+            id=sample_user.id, email=sample_user.email, password="hashed_password", is_admin=False
+        )
         non_existent_id = str(ObjectId())
 
         with pytest.raises(HTTPException) as excinfo:
@@ -314,11 +325,12 @@ class TestGetProjectFromName:
         project_config["yaml_config_path"] = test_yaml_path
         project_config["name"] = f"Named Project - {ObjectId()}"
         project_config["permissions"] = Permission(owners=[sample_user])
-        project = Project(**project_config)  # type: ignore[missing-argument]
         # Set an explicit _id
-        project.id = ObjectId()  # type: ignore[invalid-assignment]
+        project_id = ObjectId()
+        project_config["id"] = PyObjectId(project_id)
+        project = Project(**project_config)  # type: ignore[missing-argument]
         mongo_doc = project.mongo()
-        mongo_doc["_id"] = project.id
+        mongo_doc["_id"] = project_id
         mock_projects_collection.insert_one(mongo_doc)
         return project.name
 
@@ -334,8 +346,10 @@ class TestGetProjectFromName:
         self, sample_user, mock_projects_collection, setup_named_project
     ):
         """Test getting a project by name successfully."""
-        current_user = UserBase(id=sample_user.id, email=sample_user.email, is_admin=False)
-        result = _async_get_project_from_name(  # type: ignore[invalid-argument-type]
+        current_user = User(
+            id=sample_user.id, email=sample_user.email, password="hashed_password", is_admin=False
+        )
+        result = _async_get_project_from_name(
             setup_named_project, current_user, mock_projects_collection
         )
 
@@ -351,10 +365,12 @@ class TestGetProjectFromName:
         # Clear the collection first
         mock_projects_collection.delete_many({})
 
-        current_user = UserBase(id=sample_user.id, email=sample_user.email, is_admin=False)
+        current_user = User(
+            id=sample_user.id, email=sample_user.email, password="hashed_password", is_admin=False
+        )
 
         with pytest.raises(HTTPException) as excinfo:
-            _async_get_project_from_name(  # type: ignore[invalid-argument-type]
+            _async_get_project_from_name(
                 "Non-existent Project", current_user, mock_projects_collection
             )
 
@@ -373,16 +389,19 @@ class TestGetProjectFromName:
         project_config["yaml_config_path"] = test_yaml_path
         project_config["name"] = f"Public Project - {ObjectId()}"
         project_config["permissions"] = Permission(owners=[sample_user], viewers=["*"])
-        project = Project(**project_config)  # type: ignore[missing-argument]
         # Set an explicit _id
-        project.id = ObjectId()  # type: ignore[invalid-assignment]
+        project_id = ObjectId()
+        project_config["id"] = PyObjectId(project_id)
+        project = Project(**project_config)  # type: ignore[missing-argument]
         mongo_doc = project.mongo()
-        mongo_doc["_id"] = project.id
+        mongo_doc["_id"] = project_id
         mock_projects_collection.insert_one(mongo_doc)
 
         # Create a different user
-        other_user = UserBase(id=str(ObjectId()), email="other@example.com", is_admin=False)
-        result = _async_get_project_from_name(project.name, other_user, mock_projects_collection)  # type: ignore[invalid-argument-type]
+        other_user = User(
+            id=PyObjectId(), email="other@example.com", password="hashed_password", is_admin=False
+        )
+        result = _async_get_project_from_name(project.name, other_user, mock_projects_collection)
 
         assert result is not None
         assert result["name"] == project.name
