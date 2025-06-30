@@ -31,8 +31,8 @@ def validate_project_config_and_check_S3_storage(CLI_config_path: str, project_c
         # Create CLIConfig explicitly with mapped keys
         CLI_config = CLIConfig(
             user=CLI_config_dict["user"],
-            api_base_url=CLI_config_dict["base_url"],
-            s3_storage=CLI_config_dict["s3"],
+            api_base_url=CLI_config_dict["api_base_url"],
+            s3_storage=CLI_config_dict["s3_storage"],
         )
         # Validate the project configuration
         response_validation = local_validate_project_config(CLI_config, project_config_path)
