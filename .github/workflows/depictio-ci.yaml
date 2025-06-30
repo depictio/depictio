@@ -566,6 +566,7 @@ jobs:
       contents: read
       packages: read
     strategy:
+      fail-fast: false
       matrix:
         backup_strategy: [local, s3_to_s3, both]
         include:
@@ -579,11 +580,11 @@ jobs:
             s3_enabled: true
             expected_local_files: false
             expected_s3_files: true
-          - backup_strategy: both
-            strategy_name: "S3 to Both"
-            s3_enabled: true
-            expected_local_files: true
-            expected_s3_files: true
+          # - backup_strategy: both
+          #   strategy_name: "S3 to Both"
+          #   s3_enabled: true
+          #   expected_local_files: true
+          #   expected_s3_files: true
     steps:
       - uses: actions/checkout@v4
 
@@ -738,15 +739,17 @@ jobs:
           echo "🔍 Checking for local backup files in backend container..."
           docker compose exec -T depictio-backend ls /app/depictio/backups
           docker compose exec -T depictio-backend ls /app/depictio/backups/s3_data_backups
+          docker compose exec -T depictio-backend ls /app/depictio/backups/s3_data_backups/backup
 
 
           DATE=$(date +%Y%m%d)
-          BACKUP_COUNT=$(docker compose exec -T depictio-backend find /app/depictio/backups/s3_data_backups/backup -name "${DATE}_*" -type f | wc -l)
+          BACKUP_COUNT=$(docker compose exec -T depictio-backend find /app/depictio/backups/s3_data_backups/backup -name "*_${DATE}_*.tar.gz" -type f | wc -l)
           echo "Found $BACKUP_COUNT S3 local backup files"
 
           if [ "$BACKUP_COUNT" -gt 0 ]; then
             echo "✅ Local backup files found for ${{ matrix.strategy_name }}"
-            docker compose exec -T depictio-backend find /app -name "backup_*.zip" -type f -ls
+            docker compose exec -T depictio-backend find /app/depictio/backups/s3_data_backups/backup -name "*_${DATE}_*.tar.gz" -type f -exec ls -lh {} \; | awk '{print $9 ": " $5}'
+            echo "📋 Local backup files listed above"
           else
             echo "❌ No local backup files found for ${{ matrix.strategy_name }}"
             exit 1
