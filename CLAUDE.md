@@ -21,7 +21,7 @@ pip install -e ".[dev]"
 
 ```bash
 # Run all tests
-pytest depictio/tests/api depictio/tests/cli depictio/tests/models -xvs -n auto
+pytest depictio/tests/ -xvs -n auto
 
 # Run E2E tests (requires Cypress setup)
 cd depictio/tests/e2e-tests && /Users/tweber/.nvm/versions/node/v20.16.0/bin/npx cypress run --config screenshotsFolder=cypress/screenshots,videosFolder=cypress/videos,trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true
