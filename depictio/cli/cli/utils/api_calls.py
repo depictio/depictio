@@ -24,7 +24,7 @@ def api_login(yaml_config_path: str = "~/.depictio/CLI.yaml") -> dict:
 
     # Connect to depictio API
     response = httpx.post(
-        f"{depictio_CLI_config['base_url']}/depictio/api/v1/cli/validate_cli_config",
+        f"{depictio_CLI_config['api_base_url']}/depictio/api/v1/cli/validate_cli_config",
         json=depictio_CLI_config,
     )
     if response.status_code == 200:
