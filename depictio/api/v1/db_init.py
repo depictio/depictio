@@ -20,7 +20,7 @@ from depictio.models.models.users import GroupBeanie, Permission, TokenBeanie, U
 from depictio.models.utils import get_config
 
 
-async def create_initial_project(admin_user: UserBeanie, token_payload: TokenBeanie) -> dict | None:
+async def create_initial_project(admin_user: UserBeanie, token_payload: dict | None) -> dict | None:
     # from depictio.models.models.projects import Project,
 
     project_yaml_path = os.path.join(
@@ -145,6 +145,7 @@ async def initialize_db(wipe: bool = False) -> UserBeanie | None:
         logger.debug(f"Created group: {format_pydantic(payload['group'])}")
 
     admin_user = None
+    token_payload = None
 
     # Create users
     for user_config in initial_config.get("users", []):
@@ -205,8 +206,12 @@ async def initialize_db(wipe: bool = False) -> UserBeanie | None:
         else:
             logger.warning("No admin user found in the database")
 
+    if admin_user is None or token_payload is None:
+        logger.error("Cannot proceed with project creation: admin_user or token_payload is None")
+        raise RuntimeError("Admin user and token are required for initialization")
+
     project_payload = await create_initial_project(
-        admin_user=admin_user, token_payload=token_beanie
+        admin_user=admin_user, token_payload=token_payload
     )
     logger.debug(f"Project payload: {project_payload}")
 

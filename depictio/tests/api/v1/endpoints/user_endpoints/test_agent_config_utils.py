@@ -6,7 +6,8 @@ from beanie import PydanticObjectId
 
 from depictio.api.v1.configs.custom_logging import format_pydantic
 from depictio.api.v1.endpoints.user_endpoints.agent_config_utils import _generate_agent_config
-from depictio.models.models.users import CLIConfig, TokenBeanie, UserBeanie
+from depictio.models.models.cli import CLIConfig
+from depictio.models.models.users import TokenBeanie, UserBeanie
 from depictio.tests.api.v1.endpoints.user_endpoints.conftest import beanie_setup
 
 

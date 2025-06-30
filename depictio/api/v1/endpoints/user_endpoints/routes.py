@@ -36,8 +36,8 @@ from depictio.api.v1.endpoints.user_endpoints.utils import (
     update_group_in_users_helper,
 )
 from depictio.models.models.base import convert_objectid_to_str
+from depictio.models.models.cli import CLIConfig
 from depictio.models.models.users import (
-    CLIConfig,
     GroupBeanie,
     RequestEditPassword,
     RequestUserRegistration,
