@@ -25,6 +25,11 @@ class TestGenerateAgentConfig:
         await user.save()
 
         # Create and save token
+        assert user.id is not None, "User ID should be set after saving"
+        # Convert to PydanticObjectId since TokenBeanie expects it
+        user_id = (
+            user.id if isinstance(user.id, PydanticObjectId) else PydanticObjectId(str(user.id))
+        )
         token = TokenBeanie(
             name="test_token",
             access_token="test_access_token",
@@ -32,7 +37,7 @@ class TestGenerateAgentConfig:
             refresh_token="test_refresh_token",
             refresh_expire_datetime=datetime.datetime.now() + datetime.timedelta(days=1),
             token_type="bearer",
-            user_id=user.id,
+            user_id=user_id,
             logged_in=True,
         )
         await token.save()

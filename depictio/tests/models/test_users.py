@@ -5,6 +5,7 @@ from beanie import PydanticObjectId, init_beanie
 from mongomock_motor import AsyncMongoMockClient
 from pydantic import ValidationError
 
+from depictio.models.models.base import PyObjectId
 from depictio.models.models.users import (  # UserBaseGroupLess,
     Group,
     GroupBeanie,
@@ -28,7 +29,7 @@ from depictio.models.models.users import (  # UserBaseGroupLess,
 class TestTokenData:
     def test_token_data_default_creation(self):
         """Test creating TokenData with default values."""
-        sub = PydanticObjectId()
+        sub = PyObjectId()
         token_data = TokenData(sub=sub)
 
         assert token_data.name is None
@@ -38,7 +39,7 @@ class TestTokenData:
 
     def test_token_data_custom_creation(self):
         """Test creating TokenData with custom values."""
-        sub = PydanticObjectId()
+        sub = PyObjectId()
         token_data = TokenData(
             name="Test User", token_lifetime="long-lived", token_type="custom", sub=sub
         )
@@ -49,13 +50,13 @@ class TestTokenData:
         assert str(token_data.sub) == str(sub)
 
     def test_token_data_permanent(self):
-        sub = PydanticObjectId()
+        sub = PyObjectId()
         token_data = TokenData(sub=sub, token_lifetime="permanent")
         assert token_data.token_lifetime == "permanent"
 
     def test_token_data_invalid_lifetime(self):
         """Test validation of token lifetime."""
-        sub = PydanticObjectId()
+        sub = PyObjectId()
         with pytest.raises(ValidationError) as exc_info:
             TokenData(sub=sub, token_lifetime="invalid-lifetime")
 
@@ -70,7 +71,7 @@ class TestTokenData:
 
     def test_token_data_invalid_type(self):
         """Test validation of token type."""
-        sub = PydanticObjectId()
+        sub = PyObjectId()
         with pytest.raises(ValidationError) as exc_info:
             TokenData(sub=sub, token_type="invalid-type")
 
@@ -92,7 +93,7 @@ class TestTokenData:
 class TestToken:
     def test_token_creation(self):
         """Test creating a complete Token instance."""
-        sub = PydanticObjectId()
+        sub = PyObjectId()
         future_time = datetime.now() + timedelta(hours=1)
 
         token = Token(access_token="ValidToken123", expire_datetime=future_time, sub=sub)
@@ -105,7 +106,7 @@ class TestToken:
 
     def test_token_invalid_expiration(self):
         """Test validation of token expiration."""
-        sub = PydanticObjectId()
+        sub = PyObjectId()
 
         # Past datetime
         past_time = datetime.now() - timedelta(hours=1)
@@ -114,7 +115,7 @@ class TestToken:
 
     def test_token_invalid_access_token(self):
         """Test validation of access token."""
-        sub = PydanticObjectId()
+        sub = PyObjectId()
         future_time = datetime.now() + timedelta(hours=1)
 
         # Token without mix of characters
@@ -130,7 +131,7 @@ class TestToken:
 
     def test_token_serialization(self):
         """Test serialization of Token model."""
-        sub = PydanticObjectId()
+        sub = PyObjectId()
         future_time = datetime.now() + timedelta(hours=1)
 
         token = Token(access_token="ValidToken123", expire_datetime=future_time, sub=sub)
@@ -145,7 +146,7 @@ class TestToken:
 
     def test_token_permanent_lifetime(self):
         """Tokens with permanent lifetime should allow max datetime."""
-        sub = PydanticObjectId()
+        sub = PyObjectId()
         token = Token(
             access_token="ValidToken123A1",
             expire_datetime=datetime.max,
@@ -821,9 +822,9 @@ class TestPermission:
         )
 
         # Add ID attributes to simulate DB objects
-        user1.id = "user1_id"  # type: ignore[invalid-assignment]
-        user2.id = "user2_id"  # type: ignore[invalid-assignment]
-        user3.id = "user3_id"  # type: ignore[invalid-assignment]
+        user1.id = PyObjectId()
+        user2.id = PyObjectId()
+        user3.id = PyObjectId()
 
         permission = Permission(owners=[user1], editors=[user2], viewers=[user3])
 
@@ -832,7 +833,10 @@ class TestPermission:
         assert len(permission.editors) == 1
         assert permission.editors[0].email == "editor@example.com"
         assert len(permission.viewers) == 1
-        assert permission.viewers[0].email == "viewer@example.com"
+        assert (
+            isinstance(permission.viewers[0], UserBase)
+            and permission.viewers[0].email == "viewer@example.com"
+        )
 
     def test_permission_with_wildcard_viewer(self):
         """Test Permission with wildcard viewer."""
@@ -841,7 +845,7 @@ class TestPermission:
             email="owner@example.com",
             is_admin=True,
         )
-        user1.id = "user1_id"  # type: ignore[invalid-assignment]
+        user1.id = PyObjectId()
 
         permission = Permission(
             owners=[user1],
@@ -860,21 +864,15 @@ class TestPermission:
     def test_permission_from_dict(self):
         """Test creating a Permission from dictionaries."""
         owner = UserBase(
-            **{
-                "id": PydanticObjectId(),
-                "email": "owner@example.com",
-                "is_admin": True,
-                # "groups": [{"name": "Admin"}],
-            }
+            id=PyObjectId(),
+            email="owner@example.com",
+            is_admin=True,
         )
 
         editor = UserBase(
-            **{
-                "id": PydanticObjectId(),
-                "email": "editor@example.com",
-                "is_admin": False,
-                # "groups": [{"name": "Editor"}],
-            }
+            id=PyObjectId(),
+            email="editor@example.com",
+            is_admin=False,
         )
 
         permission = Permission(owners=[owner], editors=[editor], viewers=["*"])
@@ -894,7 +892,7 @@ class TestPermission:
             email="user@example.com",
             is_admin=True,
         )
-        user.id = "same_id"  # type: ignore[invalid-assignment]
+        user.id = PyObjectId()
 
         # Test user in owners and editors
         with pytest.raises(ValidationError, match="A User cannot be both an owner and an editor"):
@@ -920,7 +918,7 @@ class TestPermission:
 
         # Test non-list input
         with pytest.raises(ValueError, match="Expected a list"):
-            Permission(owners="not_a_list")
+            Permission(owners="not_a_list")  # type: ignore[invalid-argument-type]
 
     def test_permission_dict_method(self):
         """Test the dict method for correct serialization."""
@@ -932,8 +930,8 @@ class TestPermission:
             email="editor@example.com",
             is_admin=False,
         )
-        user1.id = "user1_id"  # type: ignore[invalid-assignment]
-        user2.id = "user2_id"  # type: ignore[invalid-assignment]
+        user1.id = PyObjectId()
+        user2.id = PyObjectId()
 
         permission = Permission(owners=[user1], editors=[user2], viewers=["*"])
 

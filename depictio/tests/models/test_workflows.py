@@ -7,7 +7,13 @@ import yaml
 from pydantic import ValidationError
 
 from depictio.models.models.base import PyObjectId
-from depictio.models.models.data_collections import DataCollection
+from depictio.models.models.data_collections import (
+    DataCollection,
+    DataCollectionConfig,
+    Scan,
+    ScanSingle,
+)
+from depictio.models.models.data_collections_types.table import DCTableConfig
 from depictio.models.models.users import Permission, UserBase
 
 # Import all workflow models we need to test
@@ -383,14 +389,11 @@ class TestWorkflow:
         data_collections = [
             DataCollection(
                 data_collection_tag="dc1",
-                config={  # type: ignore[arg-type]
-                    "type": "table",
-                    "scan": {
-                        "mode": "single",
-                        "scan_parameters": {"filename": "test.txt"},
-                    },
-                    "dc_specific_properties": {"format": "csv"},
-                },
+                config=DataCollectionConfig(
+                    type="table",
+                    scan=Scan(mode="single", scan_parameters=ScanSingle(filename="test.txt")),
+                    dc_specific_properties=DCTableConfig(format="csv"),
+                ),
             )
         ]
 

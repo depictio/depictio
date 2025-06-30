@@ -30,15 +30,16 @@ def minio_config(minio_server):
     cfg = minio_server.get_config()
     # cfg["endpoint"] comes back as "localhost:XXXXX"
     host, port = cfg["endpoint"].split(":")
-    endpoint_url = f"http://{host}:{port}"
 
     return S3DepictioCLIConfig(
         service_name="minio",
-        endpoint_url=endpoint_url,
+        external_host=host,
+        external_port=int(port),
+        external_protocol="http",
         root_user=cfg["access_key"],
         root_password=cfg["secret_key"],
         bucket="depictio-bucket",
-        on_premise_service=False,
+        external_service=False,
     )
 
 
@@ -123,11 +124,13 @@ class TestMinIOManagerWithRealServer:
         # Create config with nonexistent bucket
         bad_config = S3DepictioCLIConfig(
             service_name=minio_config.service_name,
-            endpoint_url=minio_config.endpoint_url,
+            external_host=minio_config.external_host,
+            external_port=minio_config.external_port,
+            external_protocol=minio_config.external_protocol,
             root_user=minio_config.root_user,
             root_password=minio_config.root_password,
             bucket="nonexistent-bucket",
-            on_premise_service=False,
+            external_service=False,
         )
 
         manager = MinIOManager(bad_config)
@@ -150,11 +153,13 @@ class TestMinIOManagerWithRealServer:
         # Create config with bad credentials
         bad_config = S3DepictioCLIConfig(
             service_name=minio_config.service_name,
-            endpoint_url=minio_config.endpoint_url,
+            external_host=minio_config.external_host,
+            external_port=minio_config.external_port,
+            external_protocol=minio_config.external_protocol,
             root_user="wrong_user",
             root_password="wrong_password",
             bucket=minio_config.bucket,
-            on_premise_service=False,
+            external_service=False,
         )
 
         manager = MinIOManager(bad_config)

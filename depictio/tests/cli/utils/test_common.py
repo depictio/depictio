@@ -48,7 +48,7 @@ class TestCommon:
     @pytest.fixture
     def sample_cli_config_object(self, sample_cli_config):
         """Sample CLI configuration as a CLIConfig object"""
-        return CLIConfig(**sample_cli_config)
+        return CLIConfig(**sample_cli_config)  # type: ignore[missing-argument]
 
     class TestGenerateApiHeaders:
         """Tests for generate_api_headers function"""
@@ -149,7 +149,7 @@ class TestCommon:
                 patch("depictio.cli.cli.utils.common.rich_print_checked_statement"),
             ):
                 mock_get_config.return_value = mock_config
-                mock_validate.return_value = CLIConfig(**mock_config)
+                mock_validate.return_value = CLIConfig(**mock_config)  # type: ignore[missing-argument]
 
                 result = load_depictio_config()
 
