@@ -656,10 +656,10 @@ jobs:
           echo "DEPICTIO_BACKUP_S3_BACKUP_STRATEGY=${{ matrix.backup_strategy }}" >> .env
           echo "DEPICTIO_BACKUP_BACKUP_S3_ENABLED=${{ matrix.s3_enabled }}" >> .env
           echo "DEPICTIO_BACKUP_BACKUP_S3_BUCKET=depictio-backup-bucket" >> .env
-          echo "DEPICTIO_BACKUP_BACKUP_S3_ENDPOINT_URL=http://minio-backup:9000" >> .env
+          echo "DEPICTIO_BACKUP_BACKUP_S3_ENDPOINT_URL=http://minio-backup:9002" >> .env
           echo "DEPICTIO_BACKUP_BACKUP_S3_REGION=us-east-1" >> .env
-          echo "DEPICTIO_BACKUP_BACKUP_S3_ACCESS_KEY=\"backup_minio\"" >> .env
-          echo "DEPICTIO_BACKUP_BACKUP_S3_SECRET_KEY=\"backup_minio123\"" >> .env
+          echo "DEPICTIO_BACKUP_BACKUP_S3_ACCESS_KEY=backup_minio" >> .env
+          echo "DEPICTIO_BACKUP_BACKUP_S3_SECRET_KEY=backup_minio123" >> .env
 
           echo "📋 Complete backup configuration for ${{ matrix.strategy_name }}:"
           grep "DEPICTIO_BACKUP" .env || echo "❌ No DEPICTIO_BACKUP vars found!"
