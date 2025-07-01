@@ -338,7 +338,8 @@ def design_header(data, local_store):
         style=button_style,
         disabled=disabled,
         # leftIcon=DashIconify(icon="mdi:plus", width=16, color="white"),
-        sx=sx,
+        # FIXME: Add sx for hover effect
+        # sx=sx,
     )
 
     save_button = dmc.ActionIcon(
@@ -355,7 +356,8 @@ def design_header(data, local_store):
         n_clicks=0,
         disabled=disabled,
         style=button_style,
-        sx=sx,
+        # FIXME: Add sx for hover effect
+        # sx=sx,
         # leftIcon=DashIconify(icon="mdi:content-save", width=16, color="white"),
         # width of the button
         # style={"width": "120px", "fontFamily": "Virgil"},
@@ -436,7 +438,7 @@ def design_header(data, local_store):
                     value=f"{data['version']}",
                     label="Dashboard version",
                     style={"width": 150, "padding": "0 10px", "display": "none"},
-                    icon=DashIconify(
+                    leftSection=DashIconify(
                         icon="mdi:format-list-bulleted-square",
                         width=16,
                         color="blue.5",
@@ -552,7 +554,8 @@ def design_header(data, local_store):
         # variant="filled",
         variant="subtle",
         style=button_style,
-        sx=sx,
+        # FIXME: Add sx for hover effect
+        # sx=sx,
     )
 
     dummy_output = html.Div(id="dummy-output", style={"display": "none"})
