@@ -150,7 +150,7 @@ def handle_authenticated_user(pathname, local_data):
 def create_default_header(text):
     return dmc.Text(
         text,
-        fw=600,
+        fw="bold",
         size="xl",
         style={"fontSize": "28px", "fontFamily": "Virgil", "padding": "20px 10px"},
     )
@@ -173,7 +173,7 @@ def create_admin_header(text):
         size="sm",
         id="group-add-button",
         style={"display": "none"},
-        leftIcon=DashIconify(icon="mdi:plus-circle", width=16, color="white"),
+        leftSection=DashIconify(icon="mdi:plus-circle", width=16, color="white"),
     )
 
     text_group_input = dmc.TextInput(
@@ -193,112 +193,34 @@ def create_admin_header(text):
         opened=False,
     )
 
-    header = dmc.Header(
-        height=60,  # Height of the header
-        # padding="xs",  # Padding inside the header
+    # DMC 2.0+ AppShell system for proper navigation layout
+    header = dmc.AppShellHeader(
+        h=60,
         children=[
-            dmc.Container(
-                fluid=True,  # Make the container fluid (full-width)
+            dmc.Group(
+                justify="space-between",
+                align="center",
+                h="100%",
+                px="md",
                 children=[
+                    dmc.Title(
+                        text,
+                        order=3,
+                        size="h3",
+                        fw="bold",
+                        c="dark",
+                    ),
+                    # DMC 2.0+ navigation using ActionIcon and Group for header actions
                     dmc.Group(
-                        justify="space-between",  # Space between the title and tabs
-                        align="center",
-                        style={"height": "100%"},
+                        gap="sm",
                         children=[
-                            # Title Section
-                            # dmc.Title(
-                            #     text,
-                            #     order=3,  # Corresponds to h3
-                            #     size="h3",
-                            #     fw=700,
-                            #     color="dark",
-                            # ),
-                            # Navigation Tabs
-                            dmc.Tabs(
-                                value="users",  # Default active tab
-                                id="admin-tabs",  # ID for the tabs component
-                                # onTabChange=lambda value: dash.callback_context.triggered,  # Placeholder for callback
-                                children=dmc.TabsList(
-                                    [
-                                        dmc.Tab(
-                                            "Users",
-                                            icon=DashIconify(
-                                                icon="mdi:account",
-                                                width=20,
-                                                height=20,
-                                            ),
-                                            value="users",
-                                            # value="users",
-                                            # component=dcc.Link("Users", href="/admin/users", style={"textDecoration": "none", "color": "inherit"})
-                                        ),
-                                        dmc.Tab(
-                                            "Groups",
-                                            icon=DashIconify(
-                                                icon="mdi:account-group",
-                                                width=20,
-                                                height=20,
-                                            ),
-                                            value="groups",
-                                            # value="users",
-                                            # component=dcc.Link("Users", href="/admin/users", style={"textDecoration": "none", "color": "inherit"})
-                                        ),
-                                        dmc.Tab(
-                                            "Projects",
-                                            icon=DashIconify(
-                                                icon="mdi:jira",
-                                                width=20,
-                                                height=20,
-                                            ),
-                                            value="projects",
-                                            # value="projects",
-                                            # component=dcc.Link("Projects", href="/admin/projects", style={"textDecoration": "none", "color": "inherit"})
-                                        ),
-                                        dmc.Tab(
-                                            "Dashboards",
-                                            icon=DashIconify(
-                                                icon="mdi:view-dashboard",
-                                                width=20,
-                                                height=20,
-                                            ),
-                                            value="dashboards",
-                                            # value="dashboards",
-                                            # component=dcc.Link("Dashboards", href="/admin/dashboards", style={"textDecoration": "none", "color": "inherit"})
-                                        ),
-                                        dmc.TabsPanel(
-                                            value="users",
-                                            id="admin-tabs-users",
-                                        ),
-                                        # dmc.TabsPanel(
-                                        #     value="groups",
-                                        #     id="admin-tabs-groups",
-                                        # ),
-                                        dmc.TabsPanel(
-                                            value="projects",
-                                            id="admin-tabs-projects",
-                                        ),
-                                        dmc.TabsPanel(
-                                            value="dashboards",
-                                            id="admin-tabs-dashboards",
-                                        ),
-                                    ]
-                                ),
-                                # orientation="horizontal",
-                                radius="md",
-                                # variant="outline",
-                                # grow=True,
-                                # styles={
-                                #     "tab": {"fontSize": "14px", "padding": "8px 12px"},
-                                #     "tabActive": {"backgroundColor": "var(--mantine-color-blue-light)", "color": "var(--mantine-color-blue-dark)"},
-                                # }
-                            ),
                             add_group_button,
                             add_group_modal,
                         ],
-                    )
+                    ),
                 ],
             )
         ],
-        # fixed=True,  # Fix the header to the top
     )
     return header
 
@@ -388,14 +310,15 @@ def design_header_ui(data):
     Design the header of the dashboard
     """
 
-    header = dmc.Header(
+    # TODO: DMC 2.0+ - Header component no longer exists, need to replace with alternative
+    header = dmc.Container(
         id="header",
-        height=87,
+        style={"height": "87px", "backgroundColor": "#f8f9fa", "padding": "10px"},
         children=[
             dbc.Row(
                 [
                     dbc.Col(
-                        dmc.Title("", order=2, color="black"),
+                        dmc.Title("", order=2, c="gray"),
                         width=11,
                         align="center",
                         style={"textAlign": "left"},
@@ -415,84 +338,87 @@ def create_app_layout():
     navbar = render_sidebar("")
     header = design_header_ui(data=None)
 
-    return dmc.Container(
-        [
-            dcc.Location(id="url", refresh=False),
-            dcc.Store(
-                id="local-store",
-                storage_type="local",
-                # storage_type="memory",
-                data={"logged_in": False, "access_token": None},
-            ),
-            dcc.Store(
-                id="local-store-components-metadata",
-                data={},
-                storage_type="local",
-            ),
-            dcc.Store(id="current-edit-parent-index", storage_type="memory"),
-            dcc.Interval(id="interval-component", interval=60 * 60 * 1000, n_intervals=0),
-            navbar,
-            dmc.Drawer(
-                title="",
-                id="drawer-simple",
-                padding="md",
-                zIndex=10000,
-                size=200,
-                overlayOpacity=0.1,
-                children=[],
-            ),
-            dmc.Container(
-                [
-                    header,
-                    dmc.Container(
-                        [
-                            html.Div(
-                                id="page-content",
-                                # full width and height
-                                style={"width": "100%", "height": "100%"},
-                            )
-                        ],
-                        id="page-container",
-                        p=0,
-                        fluid=True,
-                        style={
-                            "width": "100%",
-                            "height": "100%",
-                            "overflowY": "auto",  # Allow vertical scrolling
-                            "flexGrow": "1",
-                        },
-                    ),
-                ],
-                fluid=True,
-                size="100%",
-                p=0,
-                m=0,
-                style={
-                    "display": "flex",
-                    "maxWidth": "100%",
-                    "flexGrow": "1",
-                    "maxHeight": "100%",
-                    "flexDirection": "column",
-                    "overflow": "hidden",
-                },
-                id="content-container",
-            ),
-        ],
-        # size="100%",
-        fluid=True,
-        p=0,
-        m=0,
-        style={
-            "display": "flex",
-            "maxWidth": "100%",
-            "maxHeight": "100%",
-            "flexGrow": "1",
-            "position": "absolute",
-            "top": 0,
-            "left": 0,
-            "width": "100%",
-            "height": "100%",
-            "overflow": "hidden",  # Hide overflow content
-        },
-        id="overall-container",
+    return dmc.MantineProvider(
+        dmc.Container(
+            [
+                dcc.Location(id="url", refresh=False),
+                dcc.Store(
+                    id="local-store",
+                    storage_type="local",
+                    # storage_type="memory",
+                    data={"logged_in": False, "access_token": None},
+                ),
+                dcc.Store(
+                    id="local-store-components-metadata",
+                    data={},
+                    storage_type="local",
+                ),
+                dcc.Store(id="current-edit-parent-index", storage_type="memory"),
+                dcc.Interval(id="interval-component", interval=60 * 60 * 1000, n_intervals=0),
+                navbar,
+                dmc.Drawer(
+                    title="",
+                    id="drawer-simple",
+                    padding="md",
+                    zIndex=10000,
+                    size="xl",
+                    # overlayOpacity=0.1,
+                    overlayProps={"overlayOpacity": 0.1},
+                    children=[],
+                ),
+                dmc.Container(
+                    [
+                        header,
+                        dmc.Container(
+                            [
+                                html.Div(
+                                    id="page-content",
+                                    # full width and height
+                                    style={"width": "100%", "height": "100%"},
+                                )
+                            ],
+                            id="page-container",
+                            p=0,
+                            fluid=True,
+                            style={
+                                "width": "100%",
+                                "height": "100%",
+                                "overflowY": "auto",  # Allow vertical scrolling
+                                "flexGrow": "1",
+                            },
+                        ),
+                    ],
+                    fluid=True,
+                    size="100%",
+                    p=0,
+                    m=0,
+                    style={
+                        "display": "flex",
+                        "maxWidth": "100%",
+                        "flexGrow": "1",
+                        "maxHeight": "100%",
+                        "flexDirection": "column",
+                        "overflow": "hidden",
+                    },
+                    id="content-container",
+                ),
+            ],
+            # size="100%",
+            fluid=True,
+            p=0,
+            m=0,
+            style={
+                "display": "flex",
+                "maxWidth": "100%",
+                "maxHeight": "100%",
+                "flexGrow": "1",
+                "position": "absolute",
+                "top": 0,
+                "left": 0,
+                "width": "100%",
+                "height": "100%",
+                "overflow": "hidden",  # Hide overflow content
+            },
+            id="overall-container",
+        )
     )

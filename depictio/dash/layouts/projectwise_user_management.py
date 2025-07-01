@@ -174,7 +174,7 @@ def create_project_header(project_name, project_id, is_public, is_admin=False, i
     details = dmc.Text(
         f"Project ID: {project_id}",
         size="sm",
-        color="gray",
+        c="gray",
         id="permissions-manager-project-details",
     )
     return dmc.Paper(
@@ -256,7 +256,7 @@ user_permissions_store = dcc.Store(
     id="permissions-manager-user-permissions", data=None, storage_type="memory"
 )
 
-text_table_header = dmc.Text("Project Permissions", size="xl", fw="bold", color="black")
+text_table_header = dmc.Text("Project Permissions", size="xl", fw="bold", c="black")
 
 # -----------------------------------------------------------------------------
 # Main Layout Definition
@@ -306,7 +306,7 @@ layout = dmc.Container(
                 dmc.Grid(
                     [
                         dmc.Title("Add permissions section", order=3),
-                        dmc.Col(
+                        dmc.GridCol(
                             [
                                 html.Div(
                                     [
@@ -329,7 +329,7 @@ layout = dmc.Container(
                                                     value="Viewer",
                                                 ),
                                             ],
-                                            spacing="md",
+                                            gap="md",
                                         ),
                                     ]
                                 )
@@ -365,7 +365,7 @@ layout = dmc.Container(
                         #     ],
                         #     span=12,
                         # ),
-                        dmc.Col(
+                        dmc.GridCol(
                             [
                                 dmc.Group(
                                     [
@@ -376,7 +376,7 @@ layout = dmc.Container(
                                             data=[],  # Updated via callback
                                             searchable=True,
                                             clearable=True,
-                                            nothingFound="No users found",
+                                            nothingFoundMessage="No users found",
                                             style={"width": "400px"},
                                         ),
                                         dmc.Button(

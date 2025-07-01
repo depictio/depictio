@@ -116,7 +116,7 @@ app.layout = dmc.Container(
                         ),
                         dmc.Col(
                             [
-                                dmc.Text("Permissions", fw=500, mb=10),
+                                dmc.Text("Permissions", fw="medium", mb=10),
                                 dmc.CheckboxGroup(
                                     id="input-permissions",
                                     orientation="horizontal",
