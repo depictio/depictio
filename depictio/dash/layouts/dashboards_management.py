@@ -179,7 +179,14 @@ def render_welcome_section(email, is_anonymous=False):
 
 
 def render_dashboard_list_section(email):
-    return html.Div(id={"type": "dashboard-list", "index": email}, style={"padding": "20px"})
+    return html.Div(
+        id={"type": "dashboard-list", "index": email},
+        style={
+            "padding": "30px",  # Consistent padding with header
+            "backgroundColor": "#ffffff",  # White background for content area
+            "minHeight": "calc(100vh - 80px)",  # Full height minus header (80px)
+        },
+    )
 
 
 def register_callbacks_dashboards_management(app):
@@ -747,7 +754,7 @@ def register_callbacks_dashboards_management(app):
                 dmc.Space(h=10),
                 accessed_dashboards_view,
             ],
-            style={"width": "100%", "padding": "0 20px"},
+            style={"width": "100%"},
         )
 
     @app.callback(

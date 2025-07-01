@@ -1,5 +1,6 @@
 import dash
-import dash_bootstrap_components as dbc
+
+# import dash_bootstrap_components as dbc  # Not needed for AppShell layout
 import dash_mantine_components as dmc
 from dash import dcc, html
 from dash_iconify import DashIconify
@@ -37,8 +38,11 @@ def return_create_dashboard_button(email, is_anonymous=False):
         id={"type": "create-dashboard-button", "index": email},
         n_clicks=0,
         color=button_color,
-        style={"fontFamily": "Virgil", "marginRight": "10px"},
-        size="xl",
+        style={
+            "fontFamily": "Virgil",
+            "marginRight": "10px",
+        },
+        size="lg",  # Changed from xl to lg for better proportions
         radius="md",
         disabled=False,  # Always enabled - behavior changes based on user type
     )
@@ -150,9 +154,12 @@ def handle_authenticated_user(pathname, local_data):
 def create_default_header(text):
     return dmc.Text(
         text,
-        fw="bold",
+        fw="bold",  # DMC 2.0+ equivalent of weight=600
         size="xl",
-        style={"fontSize": "28px", "fontFamily": "Virgil", "padding": "20px 10px"},
+        style={
+            "fontSize": "28px",
+            "fontFamily": "Virgil",
+        },
     )
 
 
@@ -193,9 +200,16 @@ def create_admin_header(text):
         opened=False,
     )
 
-    # DMC 2.0+ AppShell system for proper navigation layout
-    header = dmc.AppShellHeader(
-        h=60,
+    # DMC 2.0+ - Use Container for standalone header
+    header = dmc.Container(
+        fluid=True,
+        style={
+            "backgroundColor": "#ffffff",
+            "height": "60px",
+            "width": "100%",
+            "margin": 0,
+            "padding": 0,
+        },
         children=[
             dmc.Group(
                 justify="space-between",
@@ -226,14 +240,18 @@ def create_admin_header(text):
 
 
 def create_header_with_button(text, button):
+    # Return content for AppShellHeader - DMC 2.0+ equivalent of original Group with position="apart"
     return dmc.Group(
         [
             create_default_header(text),
             button,
         ],
-        justify="space-between",
+        justify="space-between",  # DMC 2.0+ equivalent of position="apart"
         align="center",
-        style={"backgroundColor": "#fff"},
+        style={
+            "padding": "0 20px",
+            "height": "100%",
+        },
     )
 
 
@@ -305,120 +323,64 @@ def create_dashboard_layout(depictio_dash_data=None, dashboard_id: str = "", loc
     )
 
 
-def design_header_ui(data):
-    """
-    Design the header of the dashboard
-    """
-
-    # TODO: DMC 2.0+ - Header component no longer exists, need to replace with alternative
-    header = dmc.Container(
-        id="header",
-        style={"height": "87px", "backgroundColor": "#f8f9fa", "padding": "10px"},
-        children=[
-            dbc.Row(
-                [
-                    dbc.Col(
-                        dmc.Title("", order=2, c="gray"),
-                        width=11,
-                        align="center",
-                        style={"textAlign": "left"},
-                    ),
-                ],
-                style={"height": "100%"},
-            ),
-        ],
-    )
-
-    return header
+# design_header_ui function removed - now using AppShell structure
 
 
 def create_app_layout():
-    from depictio.dash.layouts.sidebar import render_sidebar
-
-    navbar = render_sidebar("")
-    header = design_header_ui(data=None)
+    from depictio.dash.layouts.sidebar import render_sidebar_content
 
     return dmc.MantineProvider(
-        dmc.Container(
-            [
-                dcc.Location(id="url", refresh=False),
-                dcc.Store(
-                    id="local-store",
-                    storage_type="local",
-                    # storage_type="memory",
-                    data={"logged_in": False, "access_token": None},
-                ),
-                dcc.Store(
-                    id="local-store-components-metadata",
-                    data={},
-                    storage_type="local",
-                ),
-                dcc.Store(id="current-edit-parent-index", storage_type="memory"),
-                dcc.Interval(id="interval-component", interval=60 * 60 * 1000, n_intervals=0),
-                navbar,
-                dmc.Drawer(
-                    title="",
-                    id="drawer-simple",
-                    padding="md",
-                    zIndex=10000,
-                    size="xl",
-                    # overlayOpacity=0.1,
-                    overlayProps={"overlayOpacity": 0.1},
-                    children=[],
-                ),
-                dmc.Container(
-                    [
-                        header,
-                        dmc.Container(
-                            [
-                                html.Div(
-                                    id="page-content",
-                                    # full width and height
-                                    style={"width": "100%", "height": "100%"},
-                                )
-                            ],
-                            id="page-container",
-                            p=0,
-                            fluid=True,
-                            style={
-                                "width": "100%",
-                                "height": "100%",
-                                "overflowY": "auto",  # Allow vertical scrolling
-                                "flexGrow": "1",
-                            },
+        children=[
+            dcc.Location(id="url", refresh=False),
+            dcc.Store(
+                id="local-store",
+                storage_type="local",
+                data={"logged_in": False, "access_token": None},
+            ),
+            dcc.Store(
+                id="local-store-components-metadata",
+                data={},
+                storage_type="local",
+            ),
+            dcc.Store(id="current-edit-parent-index", storage_type="memory"),
+            dcc.Interval(id="interval-component", interval=60 * 60 * 1000, n_intervals=0),
+            dmc.Drawer(
+                title="",
+                id="drawer-simple",
+                padding="md",
+                zIndex=10000,
+                size="xl",
+                overlayProps={"overlayOpacity": 0.1},
+                children=[],
+            ),
+            dmc.AppShell(
+                navbar={
+                    "width": 220,
+                    "breakpoint": "sm",
+                    "collapsed": {"mobile": True, "desktop": False},
+                },
+                header={"height": 87},
+                layout="alt",  # Use alternative layout where header stops at navbar
+                style={
+                    "height": "100vh",
+                    "overflow": "hidden",
+                },
+                children=[
+                    dmc.AppShellNavbar(
+                        children=render_sidebar_content(""),
+                        id="sidebar",
+                    ),
+                    dmc.AppShellHeader(
+                        children=[],  # Will be populated by callback
+                        id="header-content",
+                    ),
+                    dmc.AppShellMain(
+                        html.Div(
+                            id="page-content",
+                            style={"padding": "1rem"},
                         ),
-                    ],
-                    fluid=True,
-                    size="100%",
-                    p=0,
-                    m=0,
-                    style={
-                        "display": "flex",
-                        "maxWidth": "100%",
-                        "flexGrow": "1",
-                        "maxHeight": "100%",
-                        "flexDirection": "column",
-                        "overflow": "hidden",
-                    },
-                    id="content-container",
-                ),
-            ],
-            # size="100%",
-            fluid=True,
-            p=0,
-            m=0,
-            style={
-                "display": "flex",
-                "maxWidth": "100%",
-                "maxHeight": "100%",
-                "flexGrow": "1",
-                "position": "absolute",
-                "top": 0,
-                "left": 0,
-                "width": "100%",
-                "height": "100%",
-                "overflow": "hidden",  # Hide overflow content
-            },
-            id="overall-container",
-        )
+                    ),
+                ],
+            ),
+        ],
     )

@@ -119,7 +119,7 @@ def register_sidebar_callbacks(app):
                         "Server offline",
                         variant="dot",
                         color="red",
-                        size=14,
+                        size="sm",
                         style={"padding": "5px 5px"},
                     ),
                     span="content",
@@ -134,7 +134,7 @@ def register_sidebar_callbacks(app):
                             f"Server online - {response.json()['version']}",
                             variant="dot",
                             color="green",
-                            size=14,
+                            size="sm",
                         ),
                         span="content",
                     )
@@ -146,7 +146,7 @@ def register_sidebar_callbacks(app):
                             "Server offline",
                             variant="outline",
                             color="red",
-                            size=14,
+                            size="sm",
                             style={"padding": "5px 5px"},
                         ),
                         span="content",
@@ -160,7 +160,7 @@ def register_sidebar_callbacks(app):
                     "Server offline",
                     variant="outline",
                     color="red",
-                    size=14,
+                    size="sm",
                     style={"padding": "5px 5px"},
                 ),
                 span="content",
@@ -282,10 +282,102 @@ def render_sidebar(email):
             "transition": "width 0.3s ease-in-out",
             "display": "flex",
             "flexDirection": "column",
-            "backgroundColor": "#f8f9fa",
+            "backgroundColor": "#ffffff",
             "borderRight": "1px solid #dee2e6",
         },
         children=[dmc.Center([depictio_logo]), sidebar_links, sidebar_footer],
     )
 
     return navbar
+
+
+def render_sidebar_content(email):
+    """Render just the navbar content for use in AppShellNavbar"""
+    # name = email.split("@")[0]
+
+    depictio_logo = dcc.Link(
+        html.Img(src=dash.get_asset_url("logo.png"), height=45),
+        href="/",
+        style={"alignItems": "center", "justifyContent": "center", "display": "flex"},
+    )
+
+    sidebar_links = html.Div(
+        id="sidebar-content",
+        children=[
+            dmc.NavLink(
+                id={"type": "sidebar-link", "index": "dashboards"},
+                label=dmc.Text("Dashboards", size="lg", style={"fontSize": "16px"}),
+                leftSection=DashIconify(icon="material-symbols:dashboard", height=25),
+                href="/dashboards",
+                style={"padding": "20px"},
+            ),
+            dmc.NavLink(
+                id={"type": "sidebar-link", "index": "projects"},
+                label=dmc.Text("Projects", size="lg", style={"fontSize": "16px"}),
+                leftSection=DashIconify(icon="mdi:jira", height=25),
+                href="/projects",
+                style={"padding": "20px"},
+            ),
+            dmc.NavLink(
+                id={"type": "sidebar-link", "index": "administration"},
+                label=dmc.Text("Administration", size="lg", style={"fontSize": "16px"}),
+                leftSection=DashIconify(icon="material-symbols:settings", height=25),
+                href="/admin",
+                style={"padding": "20px", "display": "none"},
+            ),
+            dmc.NavLink(
+                id={"type": "sidebar-link", "index": "about"},
+                label=dmc.Text("About", size="lg", style={"fontSize": "16px"}),
+                leftSection=DashIconify(icon="mingcute:question-line", height=25),
+                href="/about",
+                style={"padding": "20px"},
+            ),
+        ],
+        style={
+            "white-space": "nowrap",
+            "flex": "1",  # Take available space in Stack
+            "overflowY": "auto",
+        },
+    )
+
+    sidebar_footer = html.Div(
+        id="sidebar-footer",
+        children=[
+            dmc.Grid(
+                id="sidebar-footer-server-status",
+                align="center",
+                justify="center",
+            ),
+            html.Hr(),
+            html.Div(
+                id="avatar-container",
+                style={
+                    "textAlign": "center",
+                    "justifyContent": "center",
+                    "display": "flex",
+                    "alignItems": "center",
+                    "flexDirection": "row",
+                },
+            ),
+        ],
+        style={
+            "flexShrink": 0,
+        },
+    )
+
+    # Return content for AppShellNavbar - structured for full height
+    return [
+        dmc.Stack(
+            [
+                dmc.Center([depictio_logo]),
+                sidebar_links,
+                sidebar_footer,
+            ],
+            justify="space-between",
+            h="100%",
+            style={
+                "padding": "16px",
+                "height": "100%",
+            },
+        )
+    ]

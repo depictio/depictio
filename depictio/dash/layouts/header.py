@@ -313,13 +313,6 @@ def design_header(data, local_store):
     # title_style = {"fontWeight": "bold", "fontSize": "24px", "color": "#333"}
     button_style = {"margin": "0 0px", "fontFamily": "Virgil", "marginTop": "5px"}
 
-    sx = {
-        ":hover": {
-            "backgroundColor": "#d0d0d0",  # Replace with your desired darker color
-            "cursor": "pointer",  # Ensures the cursor changes to pointer on hover
-        }
-    }
-
     # Right side of the header - Edit dashboard mode button
     # if data:
 
@@ -615,69 +608,64 @@ def design_header(data, local_store):
         ]
     )
 
-    # TODO: DMC 2.0+ - Header and Col components no longer exist, replaced with Container and Grid
-    # title_style = {"fontWeight": "bold", "fontSize": "24px", "color": "#333"}
-    header = dmc.Container(
-        [
-            offcanvas_parameters,
-            modal_save_button,
-            dummy_output,
-            dummy_output2,
-            stepper_output,
-            html.Div(children=stores_add_edit),
-            dmc.Grid(
-                [
-                    dmc.GridCol(
-                        [
-                            dmc.Group([button_menu, card_section], gap="xs"),
-                        ],
-                        span=3,
-                        style={"justifyContent": "start"},
-                    ),
-                    dmc.GridCol(
-                        [
-                            dmc.Center(
-                                dmc.Title(
-                                    f"{data['title']}",
-                                    order=1,  # Increase to order=1 for larger font size
-                                    style={
-                                        "color": "#333",  # Darker color for more emphasis
-                                        "fontWeight": "bold",  # Make the text bold
-                                        "fontSize": "24px",  # Increase font size
-                                        # "fontFamily": "Open Sans",  # Change the font family
-                                    },
-                                )
-                            ),
-                        ],
-                        span=7,
-                    ),
-                    dmc.GridCol(
-                        [
-                            html.Div(
-                                children=[
-                                    dmc.Group(
-                                        [
-                                            add_new_component_button,
-                                            save_button,
-                                            open_offcanvas_parameters_button,
-                                        ],
-                                        gap="xs",
-                                        justify="flex-end",  # Aligns items to the right
-                                        style={"paddingTop": "5px"},
-                                    ),
-                                ],
-                            ),
-                        ],
-                        span=2,
-                    ),
-                ],
-                # justify="between",
-                # align="center",  # Ensure all elements are vertically centered
-                align="center",
-            ),
-        ],
-        style={"height": "80px", "width": "100%", "backgroundColor": "#f8f9fa", "padding": "10px"},
-        fluid=True,
-    )
+    # DMC 2.0+ - Return content for AppShellHeader instead of Container
+    # Remove Container wrapper and return direct content for AppShell
+    header = [
+        offcanvas_parameters,
+        modal_save_button,
+        dummy_output,
+        dummy_output2,
+        stepper_output,
+        html.Div(children=stores_add_edit),
+        dmc.Grid(
+            [
+                dmc.GridCol(
+                    [
+                        dmc.Group([button_menu, card_section], gap="xs"),
+                    ],
+                    span=3,
+                    style={"justifyContent": "start"},
+                ),
+                dmc.GridCol(
+                    [
+                        dmc.Center(
+                            dmc.Title(
+                                f"{data['title']}",
+                                order=1,  # Increase to order=1 for larger font size
+                                style={
+                                    "color": "#333",  # Darker color for more emphasis
+                                    "fontWeight": "bold",  # Make the text bold
+                                    "fontSize": "24px",  # Increase font size
+                                    # "fontFamily": "Open Sans",  # Change the font family
+                                },
+                            )
+                        ),
+                    ],
+                    span=7,
+                ),
+                dmc.GridCol(
+                    [
+                        html.Div(
+                            children=[
+                                dmc.Group(
+                                    [
+                                        add_new_component_button,
+                                        save_button,
+                                        open_offcanvas_parameters_button,
+                                    ],
+                                    gap="xs",
+                                    justify="flex-end",  # Aligns items to the right
+                                    style={"paddingTop": "5px"},
+                                ),
+                            ],
+                        ),
+                    ],
+                    span=2,
+                ),
+            ],
+            align="center",
+            style={"height": "100%", "backgroundColor": "#f8f9fa", "padding": "10px"},
+        ),
+    ]
 
     return header, backend_components

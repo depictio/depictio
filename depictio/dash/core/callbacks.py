@@ -18,7 +18,7 @@ def register_main_callback(app):
 
     @app.callback(
         Output("page-content", "children"),
-        Output("header", "children"),
+        Output("header-content", "children"),
         Output("url", "pathname"),
         Output("local-store", "data", allow_duplicate=True),
         [Input("url", "pathname"), Input("local-store", "data")],
