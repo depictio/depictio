@@ -86,7 +86,7 @@ def design_jbrowse(id):
                     style=UNSELECTED_STYLE,
                     size="xl",
                     color="yellow",
-                    leftIcon=DashIconify(
+                    leftSection=DashIconify(
                         icon="material-symbols:table-rows-narrow-rounded", color="white"
                     ),
                 ),
@@ -127,7 +127,7 @@ def create_stepper_jbrowse_button(n, disabled=False):
             style=UNSELECTED_STYLE,
             size="xl",
             color="yellow",
-            leftIcon=DashIconify(icon="material-symbols:table-rows-narrow-rounded", color="white"),
+            leftSection=DashIconify(icon="material-symbols:table-rows-narrow-rounded", color="white"),
             # disabled=True,
         )
     )

@@ -73,15 +73,18 @@ def handle_authenticated_user(pathname, local_data):
         dashboard_id = pathname.split("/")[-1]
         depictio_dash_data = load_depictio_data(dashboard_id, local_data)
         # logger.info(f"Depictio dash data: {depictio_dash_data}")
-        header = design_header(data=depictio_dash_data, local_store=local_data)
+        header_content, backend_components = design_header(
+            data=depictio_dash_data, local_store=local_data
+        )
         dashboard_id = pathname.split("/")[-1]
         return (
             create_dashboard_layout(
                 depictio_dash_data=depictio_dash_data,
                 dashboard_id=dashboard_id,
                 local_data=local_data,
+                backend_components=backend_components,
             ),
-            header,
+            header_content,
             pathname,
             local_data,
         )
@@ -200,41 +203,116 @@ def create_admin_header(text):
         opened=False,
     )
 
-    # DMC 2.0+ - Use Container for standalone header
-    header = dmc.Container(
-        fluid=True,
-        style={
-            "backgroundColor": "#ffffff",
-            "height": "60px",
-            "width": "100%",
-            "margin": 0,
-            "padding": 0,
-        },
+    header = dmc.AppShellHeader(
+        h=60,  # Height of the header
+        # padding="xs",  # Padding inside the header
         children=[
-            dmc.Group(
-                justify="space-between",
-                align="center",
-                h="100%",
-                px="md",
+            dmc.Container(
+                fluid=True,  # Make the container fluid (full-width)
                 children=[
-                    dmc.Title(
-                        text,
-                        order=3,
-                        size="h3",
-                        fw="bold",
-                        c="dark",
-                    ),
-                    # DMC 2.0+ navigation using ActionIcon and Group for header actions
                     dmc.Group(
-                        gap="sm",
+                        ta="apart",  # Space between the title and tabs
+                        align="center",
+                        style={"height": "100%"},
                         children=[
+                            # Title Section
+                            # dmc.Title(
+                            #     text,
+                            #     order=3,  # Corresponds to h3
+                            #     size="h3",
+                            #     weight=700,
+                            #     color="dark",
+                            # ),
+                            # Navigation Tabs
+                            dmc.Tabs(
+                                value="users",  # Default active tab
+                                id="admin-tabs",  # ID for the tabs component
+                                # onTabChange=lambda value: dash.callback_context.triggered,  # Placeholder for callback
+                                children=dmc.TabsList(
+                                    [
+                                        dmc.TabsTab(
+                                            "Users",
+                                            leftSection=DashIconify(
+                                                icon="mdi:account",
+                                                width=20,
+                                                height=20,
+                                            ),
+                                            value="users",
+                                            # value="users",
+                                            # component=dcc.Link("Users", href="/admin/users", style={"textDecoration": "none", "color": "inherit"})
+                                        ),
+                                        dmc.TabsTab(
+                                            "Groups",
+                                            leftSection=DashIconify(
+                                                icon="mdi:account-group",
+                                                width=20,
+                                                height=20,
+                                            ),
+                                            value="groups",
+                                            # value="users",
+                                            # component=dcc.Link("Users", href="/admin/users", style={"textDecoration": "none", "color": "inherit"})
+                                        ),
+                                        dmc.TabsTab(
+                                            "Projects",
+                                            leftSection=DashIconify(
+                                                icon="mdi:jira",
+                                                width=20,
+                                                height=20,
+                                            ),
+                                            value="projects",
+                                            # value="projects",
+                                            # component=dcc.Link("Projects", href="/admin/projects", style={"textDecoration": "none", "color": "inherit"})
+                                        ),
+                                        dmc.TabsTab(
+                                            "Dashboards",
+                                            leftSection=DashIconify(
+                                                icon="mdi:view-dashboard",
+                                                width=20,
+                                                height=20,
+                                            ),
+                                            value="dashboards",
+                                            # value="dashboards",
+                                            # component=dcc.Link("Dashboards", href="/admin/dashboards", style={"textDecoration": "none", "color": "inherit"})
+                                        ),
+                                        dmc.TabsPanel(
+                                            children=[],
+                                            value="users",
+                                            id="admin-tabs-users",
+                                        ),
+                                        # dmc.TabsPanel(
+                                        # children=[],
+                                        #     value="groups",
+                                        #     id="admin-tabs-groups",
+                                        # ),
+                                        dmc.TabsPanel(
+                                            children=[],
+                                            value="projects",
+                                            id="admin-tabs-projects",
+                                        ),
+                                        dmc.TabsPanel(
+                                            children=[],
+                                            value="dashboards",
+                                            id="admin-tabs-dashboards",
+                                        ),
+                                    ]
+                                ),
+                                # orientation="horizontal",
+                                radius="md",
+                                # variant="outline",
+                                # grow=True,
+                                # styles={
+                                #     "tab": {"fontSize": "14px", "padding": "8px 12px"},
+                                #     "tabActive": {"backgroundColor": "var(--mantine-color-blue-light)", "color": "var(--mantine-color-blue-dark)"},
+                                # }
+                            ),
                             add_group_button,
                             add_group_modal,
                         ],
-                    ),
+                    )
                 ],
             )
         ],
+        # fixed=True,  # Fix the header to the top
     )
     return header
 
@@ -271,7 +349,9 @@ def create_tokens_management_layout():
     return tokens_management_layout
 
 
-def create_dashboard_layout(depictio_dash_data=None, dashboard_id: str = "", local_data=None):
+def create_dashboard_layout(
+    depictio_dash_data=None, dashboard_id: str = "", local_data=None, backend_components=None
+):
     # Init layout and children if depictio_dash_data is available, else set to empty
     if depictio_dash_data and isinstance(depictio_dash_data, dict):
         # logger.info(f"Depictio dash data: {depictio_dash_data}")
@@ -297,11 +377,10 @@ def create_dashboard_layout(depictio_dash_data=None, dashboard_id: str = "", loc
 
     return dmc.Container(
         [
+            # Include backend components (Store components)
+            backend_components if backend_components else html.Div(),
             html.Div(
                 [
-                    # Backend components & header
-                    # backend_components,
-                    # header,
                     # Draggable layout
                     core,
                 ],

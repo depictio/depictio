@@ -9,6 +9,7 @@ from dash import Input, Output, State, dcc, html
 from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import api_call_fetch_user_from_token, api_call_get_dashboard
+from depictio.dash.colors import colors  # Import Depictio color palette
 
 current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -396,19 +397,19 @@ def design_header(data, local_store):
                     # [
                     dmc.Badge(
                         f"Project: {project_name}",
-                        color="green",
-                        leftSection=DashIconify(icon="mdi:jira", width=16, color="gray"),
+                        color=colors["teal"],  # Use Depictio teal
+                        leftSection=DashIconify(icon="mdi:jira", width=16, color="white"),
                     ),
                     dmc.Badge(
                         f"Owner: {data['permissions']['owners'][0]['email']}",
-                        color="blue",
-                        leftSection=DashIconify(icon="mdi:account", width=16, color="gray"),
+                        color=colors["blue"],  # Use Depictio blue
+                        leftSection=DashIconify(icon="mdi:account", width=16, color="white"),
                     ),
                     dmc.Badge(
                         f"Last saved: {formated_ts}",
-                        color="violet",
+                        color=colors["purple"],  # Use Depictio purple
                         leftSection=DashIconify(
-                            icon="mdi:clock-time-four-outline", width=16, color="gray"
+                            icon="mdi:clock-time-four-outline", width=16, color="white"
                         ),
                     ),
                     # ]
@@ -664,7 +665,7 @@ def design_header(data, local_store):
                 ),
             ],
             align="center",
-            style={"height": "100%", "backgroundColor": "#f8f9fa", "padding": "10px"},
+            style={"height": "100%", "backgroundColor": "#ffffff", "padding": "10px"},
         ),
     ]
 

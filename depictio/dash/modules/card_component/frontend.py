@@ -211,9 +211,13 @@ def register_callbacks_card_component(app):
                         "description"
                     ],
                     multiline=True,
-                    width=300,
-                    transition="pop",
-                    transitionDuration=300,
+                    w=300,
+                    # transition="pop",
+                    # transitionDuration=300,
+                    transitionProps={
+                        "name": "pop",
+                        "duration": 300,
+                    },
                     justify="flex-end",
                     withArrow=True,
                     openDelay=500,
@@ -383,7 +387,7 @@ def create_stepper_card_button(n, disabled=False):
             style=UNSELECTED_STYLE,
             size="xl",
             color="violet",
-            leftIcon=DashIconify(icon="formkit:number", color="white"),
+            leftSection=DashIconify(icon="formkit:number", color="white"),
             disabled=disabled,
         )
     )

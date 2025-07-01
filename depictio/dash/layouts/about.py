@@ -6,12 +6,10 @@ from dash_iconify import DashIconify
 from depictio.dash.colors import colors  # Import our color palette
 
 # Create a Stack to vertically arrange all elements with proper spacing
-layout = html.Div(
-    [
-        dmc.Container(
-            dmc.Stack(
-                gap="xl",  # Extra large spacing between stack items
-                children=[
+layout = dmc.Container(
+    dmc.Stack(
+        gap="xl",  # Extra large spacing between stack items
+        children=[
                     # First section: Main cards (GitHub and Documentation)
                     dmc.Paper(
                         p="xl",  # Extra large padding
@@ -30,15 +28,14 @@ layout = html.Div(
                             ),
                             # Main cards in a 2-column grid
                             dmc.SimpleGrid(
-                                cols=2,  # Number of columns in the grid
+                                # cols=2,  # Number of columns in the grid
                                 spacing="xl",  # Space between the cards
-                                breakpoints=[
-                                    {
-                                        "maxWidth": 980,
-                                        "cols": 1,
-                                        "spacing": "md",
-                                    },  # Responsive design: 1 column on smaller screens
-                                ],
+                                cols={
+                                    "base": 1,
+                                    "sm": 2,
+                                    "lg": 2
+                                    # "xl": 4,  # Back to original responsive sizing
+                                },  # Responsive columns: 1 on mobile, 2 on small, 3 on large, 4 on xl
                                 children=[
                                     # Github Repository Card
                                     dmc.Card(
@@ -50,7 +47,7 @@ layout = html.Div(
                                             "textAlign": "center",
                                             "display": "flex",
                                             "flexDirection": "column",
-                                            "height": "100%",
+                                            "minHeight": "300px",  # Use minHeight instead of fixed height
                                         },  # Center-align text and elements
                                         children=[
                                             # Card content wrapper
@@ -127,7 +124,7 @@ layout = html.Div(
                                             "textAlign": "center",
                                             "display": "flex",
                                             "flexDirection": "column",
-                                            "height": "100%",
+                                            "minHeight": "300px",  # Use minHeight instead of fixed height
                                         },
                                         children=[
                                             # Card content wrapper
@@ -216,13 +213,19 @@ layout = html.Div(
                             ),
                             # Funding & Partners cards in a 3-column grid
                             dmc.SimpleGrid(
-                                cols=3,  # Three columns for the three partner cards
+                                # cols=3,  # Three columns for the three partner cards
+                                cols={
+                                    "base": 1,
+                                    "sm": 2,
+                                    "lg": 3,
+                                    # "xl": 4,  # Back to original responsive sizing
+                                },  # Responsive columns: 1 on mobile, 2 on small, 3 on large, 4 on xl
                                 spacing="xl",  # Space between cards
-                                breakpoints=[
-                                    {"maxWidth": 1200, "cols": 3, "spacing": "md"},
-                                    {"maxWidth": 980, "cols": 2, "spacing": "md"},
-                                    {"maxWidth": 755, "cols": 1, "spacing": "md"},
-                                ],  # Responsive design
+                                # breakpoints=[
+                                #     {"maxWidth": 1200, "cols": 3, "spacing": "md"},
+                                #     {"maxWidth": 980, "cols": 2, "spacing": "md"},
+                                #     {"maxWidth": 755, "cols": 1, "spacing": "md"},
+                                # ],  # Responsive design
                                 children=[
                                     # Marie Skłodowska-Curie grant Card
                                     dmc.Card(
@@ -234,7 +237,7 @@ layout = html.Div(
                                             "textAlign": "center",
                                             "display": "flex",
                                             "flexDirection": "column",
-                                            "height": "100%",
+                                            "minHeight": "350px",  # Use minHeight instead of fixed height
                                         },
                                         children=[
                                             # Card content wrapper
@@ -305,7 +308,7 @@ layout = html.Div(
                                             "textAlign": "center",
                                             "display": "flex",
                                             "flexDirection": "column",
-                                            "height": "100%",
+                                            "minHeight": "350px",  # Use minHeight instead of fixed height
                                         },
                                         children=[
                                             # Card content wrapper
@@ -376,7 +379,7 @@ layout = html.Div(
                                             "textAlign": "center",
                                             "display": "flex",
                                             "flexDirection": "column",
-                                            "height": "100%",
+                                            "minHeight": "350px",  # Use minHeight instead of fixed height
                                         },
                                         children=[
                                             # Card content wrapper
@@ -470,7 +473,7 @@ layout = html.Div(
                                         "width": "100%",
                                         "display": "flex",
                                         "flexDirection": "column",
-                                        "height": "100%",
+                                        "minHeight": "300px",  # Use minHeight instead of fixed height
                                     },
                                     children=[
                                         # Card content wrapper
@@ -562,7 +565,7 @@ layout = html.Div(
                                         "width": "100%",
                                         "display": "flex",
                                         "flexDirection": "column",
-                                        "height": "100%",
+                                        "minHeight": "400px",  # Use minHeight instead of fixed height
                                     },
                                     children=[
                                         # Card content wrapper
@@ -668,10 +671,8 @@ layout = html.Div(
                         mt="xl",
                         mb="xl",  # Add margin bottom to ensure space at page end
                     ),
-                ],
-            ),
-            size="xl",  # Extra large container for content
-            py="xl",  # Padding top and bottom
-        ),
-    ]
+        ],
+    ),
+    size="xl",  # Extra large container for content
+    py="xl",  # Padding top and bottom
 )

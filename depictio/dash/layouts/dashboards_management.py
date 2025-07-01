@@ -13,6 +13,7 @@ from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.custom_logging import format_pydantic
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import api_call_fetch_user_from_token, api_get_project_from_id
+from depictio.dash.colors import colors  # Import Depictio color palette
 from depictio.dash.layouts.layouts_toolbox import (
     create_dashboard_modal,
     create_delete_confirmation_modal,
@@ -351,7 +352,7 @@ def register_callbacks_dashboards_management(app):
             public = dashboard["is_public"]
 
             if str(user_id) in [str(owner["_id"]) for owner in dashboard["permissions"]["owners"]]:
-                color_badge_ownership = "blue"
+                color_badge_ownership = colors["blue"]  # Use Depictio blue
             else:
                 color_badge_ownership = "gray"
             badge_icon = "material-symbols:public" if public else "material-symbols:lock"
@@ -360,7 +361,7 @@ def register_callbacks_dashboards_management(app):
                 f"Owner: {dashboard['permissions']['owners'][0]['email']}",
                 # f"Owner: {dashboard['permissions']['owners'][0]['email']} - {str(dashboard['permissions']['owners'][0]['_id'])}",
                 color=color_badge_ownership,
-                leftSection=DashIconify(icon="mdi:account", width=16, color="gray"),
+                leftSection=DashIconify(icon="mdi:account", width=16, color="white"),
             )
 
             response = api_get_project_from_id(project_id=dashboard["project_id"], token=token)
@@ -374,13 +375,19 @@ def register_callbacks_dashboards_management(app):
 
             badge_project = dmc.Badge(
                 f"Project: {project_name}",
-                color="green",
-                leftSection=DashIconify(icon="mdi:jira", width=16, color="gray"),
+                color=colors["teal"],  # Use Depictio teal instead of green
+                leftSection=DashIconify(icon="mdi:jira", width=16, color="white"),
+                style={
+                    "maxWidth": "100%",
+                    "overflow": "visible",
+                    "whiteSpace": "normal",
+                    "wordWrap": "break-word",
+                },  # Allow text wrapping for long project names
             )
             badge_status = dmc.Badge(
                 "Public" if public else "Private",
-                color="green" if public else "violet",
-                leftSection=DashIconify(icon=badge_icon, width=16, color="gray"),
+                color=colors["green"] if public else colors["purple"],  # Use Depictio colors
+                leftSection=DashIconify(icon=badge_icon, width=16, color="white"),
             )
 
             # badge_tooltip_additional_info = dmc.HoverCard(
@@ -409,6 +416,7 @@ def register_callbacks_dashboards_management(app):
 
             group = html.Div(
                 [
+                    dmc.Space(h=10),
                     dmc.Group(
                         [
                             html.Div(
@@ -416,7 +424,14 @@ def register_callbacks_dashboards_management(app):
                                     dmc.Title(
                                         f"{dashboard['title']}",
                                         # f"{dashboard['title']} - {str(dashboard['dashboard_id'])}",
-                                        order=5,
+                                        order=4,  # Slightly smaller title (order=4 instead of 3)
+                                        style={
+                                            "maxWidth": "100%",
+                                            "overflow": "visible",
+                                            "whiteSpace": "normal",
+                                            "wordWrap": "break-word",
+                                        },  # Allow title wrapping
+                                        # ta="center",  # Center align the title
                                     ),
                                     # dmc.Title(dashboard["title"], order=5),
                                     # dmc.Text(f"Last Modified: {dashboard['last_modified']}"),
@@ -461,7 +476,9 @@ def register_callbacks_dashboards_management(app):
             public = dashboard["is_public"]
             # public = True if "*" in [e for e in dashboard["permissions"]["viewers"]] else False
             privacy_button_title = "Make private" if public else "Make public"
-            color_privacy_button = "violet" if public else "green"
+            color_privacy_button = (
+                colors["purple"] if public else colors["green"]
+            )  # Use Depictio colors
 
             group = html.Div(
                 [
@@ -562,6 +579,9 @@ def register_callbacks_dashboards_management(app):
             # URL path for the Image src
             thumbnail_url = f"/static/screenshots/{filename}"
 
+            # Simple responsive thumbnail styling for 1920x1080 images
+            # Using fixed height with proper object-fit to avoid crushing
+
             # Check if the thumbnail exists in the static/screenshots folder
             if not os.path.exists(thumbnail_fs_path):
                 logger.warning(f"Thumbnail not found at path: {thumbnail_fs_path}")
@@ -572,32 +592,64 @@ def register_callbacks_dashboards_management(app):
                     [
                         html.A(
                             dmc.CardSection(
-                                [
-                                    dmc.Center(
+                                html.Div(
+                                    [
                                         dmc.Image(
                                             src=default_thumbnail_url,
-                                            h=220,
-                                            w=220,
-                                            style={"padding": "0px 0px"},
-                                        )
-                                    )
-                                ]
+                                            style={
+                                                "width": "80px",
+                                                "height": "80px",
+                                                "objectFit": "contain",
+                                            },
+                                            alt="Default dashboard thumbnail",
+                                        ),
+                                        dmc.Text(
+                                            "No thumbnail available",
+                                            size="sm",
+                                            ta="center",
+                                            c="gray",
+                                            style={"marginTop": "12px", "fontSize": "13px"},
+                                        ),
+                                    ],
+                                    style={
+                                        "width": "100%",
+                                        "height": "180px",  # Match optimized thumbnail height
+                                        "display": "flex",
+                                        "flexDirection": "column",
+                                        "alignItems": "center",
+                                        "justifyContent": "center",
+                                        "backgroundColor": "#f8f9fa",
+                                        "borderRadius": "8px 8px 0 0",
+                                    },
+                                ),
+                                withBorder=True,
                             ),
                             href=f"/dashboard/{dashboard['dashboard_id']}",
-                        ),
-                        dmc.Text(
-                            "No thumbnail available yet",
-                            size="lg",
-                            ta="center",
-                            c="gray",
-                            style={"fontFamily": "Virgil"},
+                            style={"textDecoration": "none"},
                         ),
                     ]
                 )
             else:
+                # Better thumbnail display for 1920x1080 (16:9) aspect ratio
+                # Use object-fit: cover to fill the container and crop if needed
                 thumbnail = html.A(
-                    dmc.CardSection(dmc.Image(src=thumbnail_url, h=225, w=400, fit="contain")),
+                    dmc.CardSection(
+                        dmc.Image(
+                            src=thumbnail_url,
+                            style={
+                                "width": "100%",
+                                "height": "180px",  # Optimized height for 3-column layout
+                                "objectFit": "cover",  # Fill container completely
+                                "objectPosition": "center center",  # Center the image content
+                                "borderRadius": "8px 8px 0 0",
+                                "display": "block",  # Ensure proper display
+                            },
+                            alt=f"Thumbnail for {dashboard['title']}",
+                        ),
+                        withBorder=True,
+                    ),
                     href=f"/dashboard/{dashboard['dashboard_id']}",
+                    style={"textDecoration": "none"},
                 )
 
             return thumbnail
@@ -623,46 +675,45 @@ def register_callbacks_dashboards_management(app):
                                 dmc.AccordionControl(
                                     dmc.Group(
                                         [
-                                            # Reduce padding and margins for a smaller look
                                             DashIconify(
-                                                icon="mdi:interaction-double-tap",
-                                                width=20,
-                                                color="gray",
+                                                icon="mdi:cog-outline",
+                                                width=12,  # Even smaller icon
+                                                color="#6c757d",  # Subtle gray
                                             ),
                                             dmc.Text(
-                                                "Dashboard Actions",
+                                                "Actions",
                                                 style={
-                                                    "fontSize": "12px",  # Smaller font size
-                                                    "padding": "2px 4px",  # Reduce padding
+                                                    "fontSize": "12px",  # Even smaller font
+                                                    "fontWeight": "400",
+                                                    "color": "#6c757d",
                                                 },
                                             ),
                                         ],
-                                        style={
-                                            "gap": "4px",  # Smaller gap between components
-                                        },
+                                        gap="xs",
                                     ),
-                                    style={
-                                        "padding": "4px",  # Smaller control padding
-                                        "fontSize": "12px",  # Smaller font for control
-                                    },
+                                    # style={
+                                    #     "minHeight": "24px",  # Very compact height
+                                    #     "padding": "2px 6px",  # Minimal padding
+                                    # },
                                 ),
                                 dmc.AccordionPanel(
                                     buttons,
-                                    style={
-                                        "padding": "4px",  # Smaller padding for the panel
-                                        "fontSize": "12px",  # Smaller font for the panel
-                                    },
+                                    # style={
+                                    #     "padding": "4px 6px",  # Very compact padding
+                                    # },
                                 ),
                             ],
                         ),
                     ],
-                    style={
-                        "width": "100%",  # Adjust width as needed
-                        "padding": "4px",  # Smaller padding for the accordion
-                        "fontSize": "12px",  # Reduce overall font size
-                    },
-                    # variant="separated",
-                    chevronPosition="left",
+                    variant="default",
+                    # radius="sm",
+                    # style={
+                    #     "width": "100%",
+                    #     "margin": "2px 0",  # Minimal margin
+                    #     "border": "1px solid #e9ecef",  # Subtle border only
+                    #     # Remove backgroundColor completely
+                    # },
+                    # chevronPosition="right",
                 )
 
                 thumbnail = return_thumbnail(user_id, dashboard)
@@ -681,6 +732,7 @@ def register_callbacks_dashboards_management(app):
                         },
                         children=[
                             thumbnail,
+                            dmc.Space(h=15),  # Add space between image and title
                             dashboard_header,
                             buttons,
                             delete_modal,
@@ -714,7 +766,7 @@ def register_callbacks_dashboards_management(app):
             cols={
                 "base": 1,
                 "sm": 2,
-                "lg": 3,
+                "lg": 3,  # Back to 3 columns as requested
             },  # Responsive columns: 1 on mobile, 2 on small, 3 on large
             spacing="xl",
             verticalSpacing="xl",
@@ -734,7 +786,8 @@ def register_callbacks_dashboards_management(app):
                 "base": 1,
                 "sm": 2,
                 "lg": 3,
-            },  # Responsive columns: 1 on mobile, 2 on small, 3 on large
+                "xl": 4,  # Back to original responsive sizing
+            },  # Responsive columns: 1 on mobile, 2 on small, 3 on large, 4 on xl
             spacing="xl",
             verticalSpacing="xl",
             style={"width": "100%"},
@@ -759,28 +812,45 @@ def register_callbacks_dashboards_management(app):
 
     @app.callback(
         Output("dashboard-projects", "data"),
-        Input({"type": "create-dashboard-button", "index": ALL}, "n_clicks"),
+        Input("dashboard-modal", "opened"),
         State("local-store", "data"),
         prevent_initial_call=True,
     )
-    def load_projects(n_clicks, user_data):
-        response = httpx.get(
-            f"{API_BASE_URL}/depictio/api/v1/projects/get/all",
-            headers={"Authorization": f"Bearer {user_data['access_token']}"},
-        )
-        if response.status_code == 200:
-            projects = response.json()
-            projects_multiselect_options = [
-                {
-                    "label": f"{project['name']} ({str(project['id'])})",
-                    "value": project["id"],
-                }
-                for project in projects
-            ]
-            return projects_multiselect_options
+    def load_projects(modal_opened, user_data):
+        # Only load projects when modal is opened
+        if not modal_opened:
+            logger.info("Modal not opened, returning empty list")
+            return []
 
-        else:
-            logger.error(f"Failed to load projects. Error: {response.text}")
+        # Check if user data is valid
+        if not user_data or "access_token" not in user_data:
+            logger.warning("No valid user data or access token")
+            return []
+
+        try:
+            logger.info("Making API call to fetch projects...")
+            response = httpx.get(
+                f"{API_BASE_URL}/depictio/api/v1/projects/get/all",
+                headers={"Authorization": f"Bearer {user_data['access_token']}"},
+                timeout=settings.performance.api_request_timeout,
+            )
+
+            if response.status_code == 200:
+                projects = response.json()
+                projects_multiselect_options = [
+                    {
+                        "label": f"{project['name']} ({str(project['id'])})",
+                        "value": project["id"],
+                    }
+                    for project in projects
+                ]
+                return projects_multiselect_options
+            else:
+                logger.error(f"API Error: {response.status_code} - {response.text}")
+                return []
+
+        except Exception as e:
+            logger.error(f"Exception in load_projects: {e}")
             return []
 
     @app.callback(
@@ -1142,6 +1212,14 @@ def register_callbacks_dashboards_management(app):
         project,
     ):
         data = {"title": "", "project_id": ""}
+
+        logger.debug(
+            f"Create dashboard n_clicks: {n_clicks_create}, {n_clicks_submit}, {n_clicks_cancel}"
+        )
+        logger.debug(f"Title: {title}, Opened: {opened}")
+        logger.debug(f"User data: {user_data}")
+        logger.debug(f"Init create dashboard button: {init_create_dashboard_button}")
+        logger.debug(f"Project selected: {project}")
 
         if not init_create_dashboard_button:
             logger.info("Init create dashboard button")

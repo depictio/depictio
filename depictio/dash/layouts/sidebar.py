@@ -26,31 +26,27 @@ def register_sidebar_callbacks(app):
         prevent_initial_call=True,
     )
 
-    # Callback to toggle sidebar
+    # Callback to toggle sidebar - simplified for AppShell
     @app.callback(
-        Output("sidebar", "style"),
-        Output("header", "height"),
         Output("sidebar-icon", "icon"),
         Output("initialized-navbar-button", "data"),
         Input("sidebar-button", "n_clicks"),
-        State("sidebar", "style"),
-        State("header", "height"),
         State("sidebar-icon", "icon"),
         State("initialized-navbar-button", "data"),
         prevent_initial_call=True,
     )
-    def toggle_sidebar(n_clicks, sidebar_style, header_height, icon, initialized):
+    def toggle_sidebar(n_clicks, icon, initialized):
         if not initialized:
-            return sidebar_style, header_height, icon, True
+            return icon, True
 
-        if sidebar_style.get("display") == "none":
-            sidebar_style["display"] = "flex"
-            icon = "ep:d-arrow-left"
-            return sidebar_style, header_height, icon, initialized
-        else:
+        # AppShell handles sidebar toggle automatically on mobile
+        # Just toggle the icon direction
+        if icon == "ep:d-arrow-left":
             icon = "ep:d-arrow-right"
-            sidebar_style["display"] = "none"
-            return sidebar_style, header_height, icon, initialized
+        else:
+            icon = "ep:d-arrow-left"
+
+        return icon, initialized
 
     # Callback to update sidebar-link active state
     @app.callback(

@@ -10,6 +10,7 @@ from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.logging_init import logger
+from depictio.dash.colors import colors  # Import Depictio color palette
 from depictio.api.v1.endpoints.user_endpoints.core_functions import _verify_password
 from depictio.api.v1.endpoints.user_endpoints.utils import login_user
 from depictio.dash.api_calls import (
@@ -80,13 +81,19 @@ def render_login_form():
             dmc.Space(h=20),
             dmc.Group(
                 [
-                    dmc.Button("Login", radius="md", id="login-button", fullWidth=True),
+                    dmc.Button(
+                        "Login", 
+                        radius="md", 
+                        id="login-button", 
+                        color=colors["blue"],
+                        style={"width": "120px"}
+                    ),
                     dmc.Button(
                         "",
                         radius="md",
                         id="register-button",
-                        fullWidth=True,
-                        style={"display": "none"},
+                        color=colors["blue"],
+                        style={"display": "none", "width": "120px"},
                     ),
                     # dmc.Button("", radius="md", id="logout-button", fullWidth=True, style={"display": "none"}),
                     html.A(
@@ -94,9 +101,9 @@ def render_login_form():
                             "Register",
                             radius="md",
                             variant="outline",
-                            color="gray",
-                            fullWidth=True,
+                            color=colors["blue"],
                             disabled=settings.auth.unauthenticated_mode,
+                            style={"width": "120px"}
                         ),
                         id="open-register-form",
                     ),
@@ -105,8 +112,8 @@ def render_login_form():
                             "",
                             radius="md",
                             variant="outline",
-                            color="gray",
-                            fullWidth=True,
+                            color=colors["blue"],
+                            style={"width": "120px"},
                         ),
                         id="open-login-form",
                         style={"display": "none"},
@@ -214,18 +221,24 @@ def render_register_form():
                         "",
                         radius="md",
                         id="login-button",
-                        fullWidth=True,
-                        style={"display": "none"},
+                        color=colors["blue"],
+                        style={"display": "none", "width": "120px"},
                     ),
                     # dmc.Button("", radius="md", id="logout-button", fullWidth=True, style={"display": "none"}),
-                    dmc.Button("Register", radius="md", id="register-button", fullWidth=True),
+                    dmc.Button(
+                        "Register", 
+                        radius="md", 
+                        id="register-button", 
+                        color=colors["blue"],
+                        style={"width": "140px"}
+                    ),
                     html.A(
                         dmc.Button(
                             "",
                             radius="md",
                             variant="outline",
-                            color="gray",
-                            fullWidth=True,
+                            color=colors["blue"],
+                            style={"width": "120px"},
                         ),
                         id="open-register-form",
                         style={"display": "none"},
@@ -236,8 +249,8 @@ def render_register_form():
                             id="back-to-login-button",
                             radius="md",
                             variant="outline",
-                            color="gray",
-                            fullWidth=True,
+                            color=colors["blue"],
+                            style={"width": "140px"}
                         ),
                         id="open-login-form",
                     ),
@@ -330,6 +343,61 @@ def handle_registration(register_email, register_password, register_confirm_pass
 
 layout = html.Div(
     [
+        # Triangle particles background - white with colored triangles
+        html.Div(
+            id="auth-background",
+            style={
+                "position": "fixed",
+                "top": "0",
+                "left": "0",
+                "width": "100vw",
+                "height": "100vh",
+                "zIndex": "9998",
+                "background": "#ffffff",  # White background
+                "overflow": "hidden",
+            },
+            children=[
+                # Triangle particles container
+                html.Div(
+                    id="triangle-particles",
+                    style={
+                        "position": "absolute",
+                        "width": "100%",
+                        "height": "100%",
+                    },
+                    children=[
+                        # Create multiple triangle particles with random distribution and Depictio-style shape
+                        html.Div(
+                            className="triangle-particle",
+                            style={
+                                "position": "absolute",
+                                "width": "18px",
+                                "height": "18px",
+                                # Improved random distribution to prevent clustering
+                                "left": f"{((i * 37 + i * i * 13 + i * i * i * 5) % 90) + 5}%",
+                                "top": f"{((i * 41 + i * i * 19 + i * i * i * 7) % 85) + 7}%",
+                                # Depictio-style triangle: 2:1 ratio (equal sides : short side)
+                                # Short side = 8 units (from x=4 to x=12), Equal sides ≈ 16 units each
+                                "background": f"""
+                                    url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M10 2 L16 18 Q10 19 4 18 Z' fill='{[colors["purple"], colors["violet"], colors["blue"], colors["teal"], colors["green"], colors["yellow"], colors["orange"], colors["pink"], colors["red"]][i % 9].replace("#", "%23")}' /%3E%3C/svg%3E")
+                                """,
+                                "backgroundSize": "contain",
+                                "backgroundRepeat": "no-repeat",
+                                "opacity": "0.4",
+                                # Random initial rotation (0-360 degrees) so triangles start in different directions
+                                "transform": f"rotate({(i * 73) % 360}deg)",
+                                # Use CSS animations from assets/app.css
+                                "animationName": f"triangleParticle{i % 6}",
+                                "animationDuration": f"{10 + (i * 3) % 30}s",
+                                "animationIterationCount": "infinite",
+                                "animationTimingFunction": "ease-in-out",
+                                "animationDelay": f"{(i * 0.7) % 15}s",
+                            }
+                        ) for i in range(50)  # Increased to 50 triangle particles
+                    ]
+                ),
+            ]
+        ),
         dcc.Store(
             id="modal-state-store", data="login"
         ),  # Store to control modal content state (login or register)
@@ -339,7 +407,23 @@ layout = html.Div(
             opened=False,
             centered=True,
             children=EventListener(
-                [dmc.Center(id="modal-content")],
+                [
+                    dmc.Paper(
+                        id="modal-content",
+                        className="auth-modal-content",
+                        shadow="xl",
+                        radius="lg",
+                        p="xl",
+                        style={
+                            "position": "relative",
+                            "zIndex": "10001",
+                            "backdropFilter": "blur(10px)",
+                            "background": "rgba(255, 255, 255, 0.95)",
+                            "border": "1px solid rgba(255, 255, 255, 0.3)",
+                            "boxShadow": "0 8px 32px rgba(0, 0, 0, 0.1)",
+                        }
+                    )
+                ],
                 events=[event],
                 logging=True,
                 id="auth-modal-listener",
@@ -348,6 +432,12 @@ layout = html.Div(
             closeOnEscape=False,
             closeOnClickOutside=False,
             size="lg",
+            overlayProps={
+                "opacity": 0,  # Make overlay transparent so we can see our custom background
+                "blur": 0,
+            },
+            # Ensure modal content is visible above background
+            zIndex=10000,
         ),
         # html.Div(id="landing-page-content"),
         # Hidden buttons for switching forms to ensure they exist in the layout
