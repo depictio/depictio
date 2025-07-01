@@ -434,10 +434,10 @@ def build_interactive(**kwargs):
             multiselect_kwargs = {
                 "searchable": True,
                 "clearable": True,
-                "clearSearchOnChange": False,
+                # "clearSearchOnChange": False,
                 "persistence_type": "local",
-                "dropdownPosition": "bottom",
-                "zIndex": 1000,
+                # "dropdownPosition": "bottom",
+                # "zIndex": 1000,
                 # "position": "relative",
             }
             # Merge with existing component_kwargs that already includes the preserved value
