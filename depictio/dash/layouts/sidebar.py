@@ -114,7 +114,7 @@ def register_sidebar_callbacks(app):
                 timeout=settings.performance.api_request_timeout,
             )
             if response.status_code != 200:
-                server_status_badge = dmc.Col(
+                server_status_badge = dmc.GridCol(
                     dmc.Badge(
                         "Server offline",
                         variant="dot",
@@ -129,7 +129,7 @@ def register_sidebar_callbacks(app):
                 logger.info(f"Server status: {response.json()}")
                 server_status = response.json()["status"]
                 if server_status == "online":
-                    server_status_badge = dmc.Col(
+                    server_status_badge = dmc.GridCol(
                         dmc.Badge(
                             f"Server online - {response.json()['version']}",
                             variant="dot",
@@ -141,7 +141,7 @@ def register_sidebar_callbacks(app):
 
                     return [dmc.Group([server_status_badge], justify="space-between")]
                 else:
-                    server_status_badge = dmc.Col(
+                    server_status_badge = dmc.GridCol(
                         dmc.Badge(
                             "Server offline",
                             variant="outline",
@@ -155,7 +155,7 @@ def register_sidebar_callbacks(app):
 
         except Exception as e:
             logger.error(f"Error fetching server status: {e}")
-            server_status_badge = dmc.Col(
+            server_status_badge = dmc.GridCol(
                 dmc.Badge(
                     "Server offline",
                     variant="outline",
@@ -205,7 +205,7 @@ def render_sidebar(email):
                 label=dmc.Text(
                     "Dashboards", size="lg", style={"fontSize": "16px"}
                 ),  # Using dmc.Text to set the font size
-                icon=DashIconify(icon="material-symbols:dashboard", height=25),
+                leftSection=DashIconify(icon="material-symbols:dashboard", height=25),
                 href="/dashboards",
                 style={"padding": "20px"},
             ),
@@ -214,7 +214,7 @@ def render_sidebar(email):
                 label=dmc.Text(
                     "Projects", size="lg", style={"fontSize": "16px"}
                 ),  # Using dmc.Text to set the font size
-                icon=DashIconify(icon="mdi:jira", height=25),
+                leftSection=DashIconify(icon="mdi:jira", height=25),
                 href="/projects",
                 style={"padding": "20px"},
             ),
@@ -223,7 +223,7 @@ def render_sidebar(email):
                 label=dmc.Text(
                     "Administration", size="lg", style={"fontSize": "16px"}
                 ),  # Using dmc.Text to set the font size
-                icon=DashIconify(icon="material-symbols:settings", height=25),
+                leftSection=DashIconify(icon="material-symbols:settings", height=25),
                 href="/admin",
                 style={"padding": "20px", "display": "none"},
             ),
@@ -232,7 +232,7 @@ def render_sidebar(email):
                 label=dmc.Text(
                     "About", size="lg", style={"fontSize": "16px"}
                 ),  # Using dmc.Text to set the font size
-                icon=DashIconify(icon="mingcute:question-line", height=25),
+                leftSection=DashIconify(icon="mingcute:question-line", height=25),
                 href="/about",
                 style={"padding": "20px"},
             ),
@@ -271,20 +271,19 @@ def render_sidebar(email):
         },
     )
 
-    navbar = dmc.Navbar(
+    # TODO: DMC 2.0+ - Navbar component no longer exists, replaced with Container
+    navbar = dmc.Container(
         p="md",
-        fixed=False,
-        width={"base": 220},
-        hidden=True,
-        hiddenBreakpoint="md",
-        position="right",
-        height="100vh",
         id="sidebar",
         style={
+            "width": "220px",
+            "height": "100vh",
             "overflow": "hidden",
             "transition": "width 0.3s ease-in-out",
             "display": "flex",
             "flexDirection": "column",
+            "backgroundColor": "#f8f9fa",
+            "borderRight": "1px solid #dee2e6",
         },
         children=[dmc.Center([depictio_logo]), sidebar_links, sidebar_footer],
     )

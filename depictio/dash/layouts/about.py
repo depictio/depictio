@@ -10,7 +10,7 @@ layout = html.Div(
     [
         dmc.Container(
             dmc.Stack(
-                spacing="xl",  # Extra large spacing between stack items
+                gap="xl",  # Extra large spacing between stack items
                 children=[
                     # First section: Main cards (GitHub and Documentation)
                     dmc.Paper(
@@ -24,8 +24,8 @@ layout = html.Div(
                             dmc.Text(
                                 "Resources",
                                 size="xl",
-                                fw=700,
-                                align="center",
+                                fw="bold",
+                                ta="center",
                                 mb="md",
                             ),
                             # Main cards in a 2-column grid
@@ -64,7 +64,7 @@ layout = html.Div(
                                                     # Icon and Title
                                                     dmc.Group(
                                                         justify="center",
-                                                        spacing="sm",
+                                                        gap="sm",
                                                         children=[
                                                             DashIconify(
                                                                 icon="mdi:github",
@@ -74,7 +74,7 @@ layout = html.Div(
                                                             dmc.Text(
                                                                 "GitHub Repository",
                                                                 size="xl",
-                                                                fw=700,  # Bold text
+                                                                fw="bold",  # Bold text
                                                             ),
                                                         ],
                                                     ),
@@ -82,7 +82,7 @@ layout = html.Div(
                                                     dmc.Text(
                                                         "Explore the source code of Depictio on GitHub.",
                                                         size="md",
-                                                        color="dimmed",
+                                                        c="gray",
                                                         mt="sm",  # Margin top for spacing
                                                         style={"flex": "1"},  # Fill available space
                                                     ),
@@ -98,7 +98,7 @@ layout = html.Div(
                                                     size="md",
                                                     radius="md",
                                                     mt="md",  # Margin top for spacing
-                                                    leftIcon=DashIconify(
+                                                    leftSection=DashIconify(
                                                         icon="mdi:github-circle",
                                                         width=20,
                                                     ),
@@ -141,7 +141,7 @@ layout = html.Div(
                                                     # Icon and Title
                                                     dmc.Group(
                                                         justify="center",
-                                                        spacing="sm",
+                                                        gap="sm",
                                                         children=[
                                                             DashIconify(
                                                                 icon="mdi:file-document",
@@ -151,7 +151,7 @@ layout = html.Div(
                                                             dmc.Text(
                                                                 "Documentation",
                                                                 size="xl",
-                                                                fw=700,
+                                                                fw="bold",
                                                             ),
                                                         ],
                                                     ),
@@ -159,7 +159,7 @@ layout = html.Div(
                                                     dmc.Text(
                                                         "Learn how to use Depictio with our comprehensive documentation.",
                                                         size="md",
-                                                        color="dimmed",
+                                                        c="gray",
                                                         mt="sm",
                                                         style={"flex": "1"},  # Fill available space
                                                     ),
@@ -175,7 +175,7 @@ layout = html.Div(
                                                     size="md",
                                                     radius="md",
                                                     mt="md",
-                                                    leftIcon=DashIconify(
+                                                    leftSection=DashIconify(
                                                         icon="mdi:file-document-box",
                                                         width=20,
                                                     ),
@@ -210,8 +210,8 @@ layout = html.Div(
                             dmc.Text(
                                 "Funding",
                                 size="xl",
-                                fw=700,
-                                align="center",
+                                fw="bold",
+                                ta="center",
                                 mb="xl",  # Margin bottom (increased spacing)
                             ),
                             # Funding & Partners cards in a 3-column grid
@@ -260,13 +260,13 @@ layout = html.Div(
                                                     dmc.Text(
                                                         "Marie Skłodowska-Curie Grant",
                                                         size="lg",
-                                                        fw=700,
+                                                        fw="bold",
                                                     ),
                                                     # Description
                                                     dmc.Text(
                                                         "This project has received funding from the European Union's Horizon 2020 research and innovation programme under the Marie Skłodowska-Curie grant agreement No 945405",
                                                         size="sm",
-                                                        color="dimmed",
+                                                        c="gray",
                                                         mt="sm",
                                                         style={"flex": "1"},  # Fill available space
                                                     ),
@@ -331,13 +331,13 @@ layout = html.Div(
                                                     dmc.Text(
                                                         "ARISE Programme",
                                                         size="lg",
-                                                        fw=700,
+                                                        fw="bold",
                                                     ),
                                                     # Description
                                                     dmc.Text(
                                                         "ARISE is a postdoctoral research programme for technology developers, hosted at EMBL.",
                                                         size="sm",
-                                                        color="dimmed",
+                                                        c="gray",
                                                         mt="sm",
                                                         style={"flex": "1"},  # Fill available space
                                                     ),
@@ -402,13 +402,13 @@ layout = html.Div(
                                                     dmc.Text(
                                                         "EMBL",
                                                         size="lg",
-                                                        fw=700,
+                                                        fw="bold",
                                                     ),
                                                     # Description
                                                     dmc.Text(
                                                         "The European Molecular Biology Laboratory is Europe's flagship laboratory for the life sciences.",
                                                         size="sm",
-                                                        color="dimmed",
+                                                        c="gray",
                                                         mt="sm",
                                                         style={"flex": "1"},  # Fill available space
                                                     ),
@@ -453,8 +453,8 @@ layout = html.Div(
                             dmc.Text(
                                 "Academic Partners",
                                 size="xl",
-                                fw=700,
-                                align="center",
+                                fw="bold",
+                                ta="center",
                                 mb="xl",
                             ),
                             # Academic Partners card centered
@@ -496,14 +496,14 @@ layout = html.Div(
                                                 dmc.Text(
                                                     "SciLifeLab Data Centre",
                                                     size="lg",
-                                                    fw=700,
+                                                    fw="bold",
                                                     # style={"color": colors["blue"]},
                                                 ),
                                                 # Description
                                                 dmc.Text(
                                                     "SciLifeLab Data Centre provides data-driven life science research infrastructure and expertise to accelerate open science in Sweden and beyond.",
                                                     size="md",
-                                                    color="dimmed",
+                                                    c="gray",
                                                     mt="sm",
                                                     style={"flex": "1"},  # Fill available space
                                                 ),
@@ -545,8 +545,8 @@ layout = html.Div(
                             dmc.Text(
                                 "Additional Resources",
                                 size="xl",
-                                fw=700,
-                                align="center",
+                                fw="bold",
+                                ta="center",
                                 mb="xl",
                             ),
                             # Color Palette Card centered
@@ -576,7 +576,7 @@ layout = html.Div(
                                                 # Icon and Title
                                                 dmc.Group(
                                                     justify="center",
-                                                    spacing="sm",
+                                                    gap="sm",
                                                     children=[
                                                         DashIconify(
                                                             icon="mdi:palette",
@@ -586,7 +586,7 @@ layout = html.Div(
                                                         dmc.Text(
                                                             "Depictio Color Palette",
                                                             size="xl",
-                                                            fw=700,
+                                                            fw="bold",
                                                             style={"color": colors["purple"]},
                                                         ),
                                                     ],
@@ -595,7 +595,7 @@ layout = html.Div(
                                                 dmc.Text(
                                                     "Explore Depictio's brand colors for consistent design across your applications.",
                                                     size="md",
-                                                    color="dimmed",
+                                                    c="gray",
                                                     mt="sm",
                                                 ),
                                                 # Color preview strip
@@ -619,7 +619,7 @@ layout = html.Div(
                                                         ]
                                                     ],
                                                     grow=True,
-                                                    spacing=0,
+                                                    gap=0,
                                                     style={
                                                         "borderRadius": "8px",
                                                         "overflow": "hidden",
@@ -637,7 +637,7 @@ layout = html.Div(
                                                 variant="filled",
                                                 size="md",
                                                 radius="md",
-                                                leftIcon=DashIconify(
+                                                leftSection=DashIconify(
                                                     icon="mdi:palette-outline",
                                                     width=20,
                                                 ),
@@ -663,8 +663,8 @@ layout = html.Div(
                     dmc.Text(
                         "© 2025 Depictio. Developed by Thomas Weber. All rights reserved.",
                         size="xs",
-                        color="dimmed",
-                        align="center",
+                        c="gray",
+                        ta="center",
                         mt="xl",
                         mb="xl",  # Add margin bottom to ensure space at page end
                     ),
