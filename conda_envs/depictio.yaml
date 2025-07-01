@@ -28,7 +28,8 @@ dependencies:
   - numpy==2.2.3
   - pandas==2.2.3
   - playwright==1.50.1
-  - plotly_express=0.4.1
+  - plotly_express
+  # - plotly_express=0.4.1
   - polars==1.22.0
   - pydantic==2.10.6
   - pydantic-settings==2.7.1

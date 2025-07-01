@@ -537,6 +537,7 @@ def design_header(data, local_store):
         placement="end",
         backdrop=True,
         children=[toggle_switches_group, buttons_group],
+        class_name="dashboard-offcanvas",  # Add class for theme targeting
     )
 
     open_offcanvas_parameters_button = dmc.ActionIcon(
@@ -633,8 +634,8 @@ def design_header(data, local_store):
                             dmc.Title(
                                 f"{data['title']}",
                                 order=1,  # Increase to order=1 for larger font size
+                                id="dashboard-title",  # Add ID for theme targeting
                                 style={
-                                    "color": "#333",  # Darker color for more emphasis
                                     "fontWeight": "bold",  # Make the text bold
                                     "fontSize": "24px",  # Increase font size
                                     # "fontFamily": "Open Sans",  # Change the font family
@@ -665,7 +666,7 @@ def design_header(data, local_store):
                 ),
             ],
             align="center",
-            style={"height": "100%", "backgroundColor": "#ffffff", "padding": "10px"},
+            style={"height": "100%", "padding": "10px"},
         ),
     ]
 

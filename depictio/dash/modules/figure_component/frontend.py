@@ -492,13 +492,12 @@ def register_callbacks_figure_component(app):
             State("current-edit-parent-index", "data"),  # Retrieve parent_index
             State("local-store", "data"),
             State("url", "pathname"),
-            State("theme-store", "data"),  # Add theme store
+            State("theme-store", "data"),  # Keep as State
         ],
         prevent_initial_call=True,
     )
     def update_figure(*args):
         dict_kwargs = args[0]
-
         visu_type = args[1]
         workflow_id = args[2]
         data_collection_id = args[3]
@@ -506,7 +505,7 @@ def register_callbacks_figure_component(app):
         parent_index = args[5]
         local_data = args[6]
         pathname = args[7]
-        theme_data = args[8]
+        theme_data = args[8]  # theme_data is back to being the last argument (State)
 
         if not local_data:
             raise dash.exceptions.PreventUpdate
@@ -582,8 +581,20 @@ def register_callbacks_figure_component(app):
         if dict_kwargs:
             # Extract theme from theme_data
             theme = "light"
-            if theme_data and isinstance(theme_data, dict):
-                theme = theme_data.get("colorScheme", "light")
+            if theme_data:
+                if isinstance(theme_data, dict):
+                    theme = theme_data.get("colorScheme", "light")
+                elif isinstance(theme_data, str):
+                    theme = theme_data  # theme_data is directly the theme string
+
+            logger.info("=== FRONTEND THEME DEBUG ===")
+            logger.info(f"Raw theme_data: {theme_data}")
+            logger.info(f"Theme data type: {type(theme_data)}")
+            logger.info(f"Is theme_data truthy: {bool(theme_data)}")
+            logger.info(f"Final extracted theme: {theme}")
+
+            # If theme_data is empty/None, it means the store hasn't been initialized yet
+            # In this case, we can't get the theme server-side, so rely on client-side updates
 
             figure_kwargs = {
                 "index": id["index"],

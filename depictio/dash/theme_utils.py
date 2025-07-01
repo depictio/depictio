@@ -20,16 +20,19 @@ def create_theme_switch():
 def register_theme_callbacks(app):
     """Register theme-related callbacks"""
 
+    # Add Mantine figure templates for Plotly when theme system initializes
+    dmc.add_figure_templates()
+
     # Initialize theme based on system preference (following DMC demo pattern)
     app.clientside_callback(
         """
         function(pathname) {
             // Manage page classes for FOUC prevention
             const body = document.body;
-            
+
             // Check if this is an auth page
             const isAuthPage = pathname === '/auth' || document.getElementById('auth-background');
-            
+
             if (isAuthPage) {
                 body.classList.add('auth-page');
                 body.classList.remove('page-loaded');
@@ -40,13 +43,13 @@ def register_theme_callbacks(app):
                     body.classList.add('page-loaded');
                 }, 50);
             }
-            
+
             // Check for saved theme preference first
             const savedTheme = localStorage.getItem('depictio-theme');
             if (savedTheme) {
                 return savedTheme;
             }
-            
+
             // Otherwise check system preference
             const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
             return prefersDark ? 'dark' : 'light';
@@ -71,12 +74,17 @@ def register_theme_callbacks(app):
         """
         function(checked) {
             const theme = checked ? 'dark' : 'light';
-            
+
+            console.log('=== THEME SWITCH DEBUG ===');
+            console.log('Switch checked:', checked);
             console.log('Theme switch clicked! New theme:', theme);
-            
+            console.log('Storing in localStorage:', theme);
+
             // Store theme preference
             localStorage.setItem('depictio-theme', theme);
-            
+
+            console.log('localStorage after set:', localStorage.getItem('depictio-theme'));
+
             return theme;
         }
         """,
@@ -111,19 +119,19 @@ def register_theme_callbacks(app):
         function(theme_data) {
             const theme = theme_data || 'light';
             const logoSrc = theme === 'dark' ? '/assets/logo_white.svg' : '/assets/logo_black.svg';
-            
+
             // Update login logo if it exists
             const loginLogo = document.getElementById('auth-modal-logo-login');
             if (loginLogo) {
                 loginLogo.src = logoSrc;
             }
-            
+
             // Update register logo if it exists
             const registerLogo = document.getElementById('auth-modal-logo-register');
             if (registerLogo) {
                 registerLogo.src = logoSrc;
             }
-            
+
             return window.dash_clientside.no_update;
         }
         """,
@@ -132,69 +140,87 @@ def register_theme_callbacks(app):
         prevent_initial_call=True,
     )
 
-    # Update all figure templates based on theme using client-side callback
+    # Update Plotly figure templates when theme changes
     app.clientside_callback(
         """
         function(theme_data) {
-            console.log('=== PLOTLY THEME UPDATE START ===');
-            
+            console.log('=== PLOTLY THEME UPDATE ===');
+            console.log('Theme data received:', theme_data);
+
             const theme = theme_data || 'light';
             const template = theme === 'dark' ? 'plotly_dark' : 'plotly_white';
-            
-            console.log('Plotly theme:', theme, 'template:', template);
-            
-            // Find all Plotly graphs and update their templates
-            // Try multiple selectors to find graphs
-            const selectors = [
-                '.js-plotly-plot',
-                '[data-testid="graph"]',
-                '.dash-graph',
-                '[id*="graph"]'
-            ];
-            
-            let graphs = [];
-            selectors.forEach(selector => {
-                const found = document.querySelectorAll(selector);
-                console.log(`Selector "${selector}" found:`, found.length, 'graphs');
-                graphs = graphs.concat(Array.from(found));
-            });
-            
-            // Remove duplicates
-            graphs = [...new Set(graphs)];
-            console.log('Total unique Plotly graphs found:', graphs.length);
-            
-            // Wait a bit for graphs to fully load, then try again if none found
-            if (graphs.length === 0) {
-                console.log('No graphs found immediately, waiting 500ms and trying again...');
-                setTimeout(() => {
-                    const retryGraphs = document.querySelectorAll('.js-plotly-plot, .dash-graph, [id*="graph"]');
-                    console.log('Retry found:', retryGraphs.length, 'graphs');
-                    retryGraphs.forEach((graph, index) => {
-                        if (graph && window.Plotly) {
-                            console.log('Retry updating graph', index, 'template to', template);
-                            const update = { 'template': template };
-                            window.Plotly.relayout(graph, update).catch(err => {
-                                console.log('Retry Plotly relayout error for graph', index, ':', err);
-                            });
-                        }
-                    });
-                }, 500);
-            } else {
-                graphs.forEach((graph, index) => {
-                    if (window.Plotly && graph) {
-                        console.log('Updating graph', index, 'template to', template);
-                        console.log('Graph element:', graph);
-                        console.log('Graph has layout:', !!graph.layout);
+            console.log('Using template:', template);
+
+            // Check if Plotly is available
+            if (!window.Plotly) {
+                console.log('Plotly not available, skipping update');
+                return window.dash_clientside.no_update;
+            }
+
+            console.log('Plotly available, proceeding with update');
+
+            // Find graphs and force complete redraw
+            const graphs = document.querySelectorAll('.js-plotly-plot');
+            console.log('Found', graphs.length, 'Plotly graphs');
+
+            // Use longer delay to ensure graphs are fully loaded
+            const delay = 500;
+
+            setTimeout(() => {
+                graphs.forEach(async (graph, index) => {
+                    console.log('Processing graph', index);
+
+                    try {
+                        // Force a complete purge and redraw
+                        console.log('Purging and redrawing graph', index);
                         
-                        if (window.Plotly && graph.layout) {
-                            window.Plotly.relayout(graph, {'template': template});
+                        // Get current data and create new layout with template
+                        const currentData = graph.data || [];
+                        const currentLayout = graph.layout || {};
+                        
+                        // Create completely new layout object with template
+                        const newLayout = {
+                            ...currentLayout,
+                            template: template,
+                            // Force background colors based on template
+                            paper_bgcolor: theme === 'dark' ? '#1f2937' : '#ffffff',
+                            plot_bgcolor: theme === 'dark' ? '#374151' : '#ffffff'
+                        };
+
+                        console.log('New layout for graph', index, ':', newLayout);
+
+                        // Use newPlot for complete recreation
+                        const result = await window.Plotly.newPlot(graph, currentData, newLayout, {
+                            responsive: true,
+                            displayModeBar: true
+                        });
+                        
+                        console.log('Plotly.newPlot completed for graph', index);
+
+                        // Verify the update worked
+                        console.log('Final layout template:', graph.layout?.template);
+                        console.log('Final layout paper_bgcolor:', graph.layout?.paper_bgcolor);
+                        console.log('Final layout plot_bgcolor:', graph.layout?.plot_bgcolor);
+
+                    } catch (err) {
+                        console.error('Error updating graph', index, ':', err);
+                        
+                        // Fallback: try simpler relayout approach
+                        try {
+                            console.log('Trying fallback relayout for graph', index);
+                            await window.Plotly.relayout(graph, {
+                                'template': template,
+                                'paper_bgcolor': theme === 'dark' ? '#1f2937' : '#ffffff',
+                                'plot_bgcolor': theme === 'dark' ? '#374151' : '#ffffff'
+                            });
+                            console.log('Fallback relayout completed for graph', index);
+                        } catch (fallbackErr) {
+                            console.error('Fallback also failed for graph', index, ':', fallbackErr);
                         }
                     }
                 });
-            }
-            
-            console.log('=== PLOTLY THEME UPDATE END ===');
-            
+            }, delay);
+
             return window.dash_clientside.no_update;
         }
         """,
@@ -209,15 +235,15 @@ def register_theme_callbacks(app):
         function(theme_data) {
             console.log('=== THEME CALLBACK START ===');
             console.log('Input theme_data:', theme_data);
-            
+
             const theme = theme_data || 'light';
             console.log('Resolved theme:', theme);
-            
+
             const textColor = theme === 'dark' ? '#ffffff' : '#000000';
             const backgroundColor = theme === 'dark' ? '#1a1b1e' : '#ffffff';
-            
+
             console.log('Colors - text:', textColor, 'background:', backgroundColor);
-            
+
             // Force update page-content with direct styles
             const pageContent = document.getElementById('page-content');
             console.log('Page content element found:', !!pageContent);
@@ -226,7 +252,7 @@ def register_theme_callbacks(app):
                 pageContent.style.color = textColor + ' !important';
                 console.log('Applied styles to page-content');
             }
-            
+
             // Update all possible title elements with stronger CSS override
             const allTitles = document.querySelectorAll('h1, h2, h3, h4, h5, h6, [data-mantine="Title"]');
             console.log('Found title elements:', allTitles.length);
@@ -235,32 +261,32 @@ def register_theme_callbacks(app):
                 title.style.setProperty('fill', textColor, 'important');
                 console.log('Updated title', index, 'current color:', window.getComputedStyle(title).color);
             });
-            
+
             console.log('Theme callback executing with theme:', theme);
-            
+
             // Try broader selectors for NavLinks
             const navLinkSelectors = [
                 '[data-mantine="NavLink"]',
-                '.mantine-NavLink-root', 
+                '.mantine-NavLink-root',
                 '[class*="NavLink"]',
                 '#sidebar a',
                 '#sidebar-content *'
             ];
-            
+
             let foundNavLinks = [];
             navLinkSelectors.forEach(selector => {
                 const elements = document.querySelectorAll(selector);
                 console.log(`Selector "${selector}" found:`, elements.length);
                 foundNavLinks = foundNavLinks.concat(Array.from(elements));
             });
-            
+
             // Update all NavLink-related elements
             foundNavLinks.forEach((link, index) => {
                 console.log(`Processing NavLink ${index}:`, link.tagName, link.className);
-                
+
                 // Update the link itself
                 link.style.color = textColor + ' !important';
-                
+
                 // Find and update all text content within
                 const textElements = link.querySelectorAll('*');
                 textElements.forEach(el => {
@@ -268,7 +294,7 @@ def register_theme_callbacks(app):
                         el.style.color = textColor + ' !important';
                     }
                 });
-                
+
                 // Update icons within the link
                 const icons = link.querySelectorAll('svg, [class*="iconify"], [class*="icon"]');
                 icons.forEach(icon => {
@@ -278,7 +304,7 @@ def register_theme_callbacks(app):
                     }
                 });
             });
-            
+
             // Try broader selectors for Text elements
             const textSelectors = [
                 '[data-mantine="Text"]',
@@ -287,7 +313,7 @@ def register_theme_callbacks(app):
                 '#sidebar span',
                 '#sidebar div'
             ];
-            
+
             textSelectors.forEach(selector => {
                 const elements = document.querySelectorAll(selector);
                 console.log(`Text selector "${selector}" found:`, elements.length);
@@ -298,18 +324,18 @@ def register_theme_callbacks(app):
                     }
                 });
             });
-            
+
             // Simple header update
             const headerContent = document.getElementById('header-content');
             if (headerContent) {
                 headerContent.style.setProperty('background-color', backgroundColor, 'important');
             }
-            
+
             const appShellHeaders = document.querySelectorAll('.mantine-AppShell-header');
             appShellHeaders.forEach(header => {
                 header.style.setProperty('background-color', backgroundColor, 'important');
             });
-            
+
             // Inject CSS styles for stronger overrides
             let themeStyleElement = document.getElementById('dynamic-theme-styles');
             if (!themeStyleElement) {
@@ -317,21 +343,21 @@ def register_theme_callbacks(app):
                 themeStyleElement.id = 'dynamic-theme-styles';
                 document.head.appendChild(themeStyleElement);
             }
-            
+
             const themeCSS = `
                 /* Core theme elements */
                 #page-content {
                     background-color: ${backgroundColor} !important;
                     color: ${textColor} !important;
                 }
-                
+
                 /* Headers - fix visibility in dark mode */
                 #header-content,
                 .mantine-AppShell-header {
                     background-color: ${theme === 'dark' ? '#25262b' : '#ffffff'} !important;
                     color: ${textColor} !important;
                 }
-                
+
                 /* Header text elements */
                 #header-content .mantine-Text-root,
                 #header-content [data-mantine="Text"],
@@ -339,31 +365,57 @@ def register_theme_callbacks(app):
                 .mantine-AppShell-header [data-mantine="Text"] {
                     color: ${textColor} !important;
                 }
-                
+
+                /* Dashboard header grid */
+                #header-content .mantine-Grid-root,
+                .mantine-AppShell-header .mantine-Grid-root {
+                    background-color: ${theme === 'dark' ? '#25262b' : '#ffffff'} !important;
+                }
+
+                /* Dashboard title */
+                #dashboard-title,
+                #header-content [data-mantine="Title"],
+                .mantine-AppShell-header [data-mantine="Title"] {
+                    color: ${textColor} !important;
+                }
+
+                /* Dashboard header text (not badges - they keep their colors) */
+                #header-content .mantine-Text-root,
+                .mantine-AppShell-header .mantine-Text-root {
+                    color: ${textColor} !important;
+                }
+
+                /* Dashboard header badges - keep their original colors, don't force theme colors */
+                #header-content .mantine-Badge-root,
+                .mantine-AppShell-header .mantine-Badge-root {
+                    /* Badges keep their original colored backgrounds and white text */
+                }
+
                 /* Sidebar */
                 #sidebar,
                 .mantine-AppShell-navbar {
                     background-color: ${theme === 'dark' ? '#25262b' : '#ffffff'} !important;
                 }
-                
-                /* NavLinks - fix non-selected visibility in dark mode */
+
+                /* NavLinks - only fix dark mode visibility, preserve colors in light mode */
+                ${theme === 'dark' ? `
                 #sidebar .mantine-NavLink-root,
                 #sidebar [data-mantine="NavLink"],
                 .mantine-AppShell-navbar .mantine-NavLink-root,
                 .mantine-AppShell-navbar [data-mantine="NavLink"] {
-                    color: ${textColor} !important;
+                    /* Only override in dark mode for visibility */
                 }
-                
-                /* NavLink labels and icons */
+
+                /* NavLink labels - only fix dark mode visibility */
                 #sidebar .mantine-NavLink-label,
                 #sidebar .mantine-NavLink-root .mantine-Text-root,
                 #sidebar [data-mantine="NavLink"] .mantine-Text-root,
                 .mantine-AppShell-navbar .mantine-NavLink-label,
                 .mantine-AppShell-navbar .mantine-NavLink-root .mantine-Text-root,
                 .mantine-AppShell-navbar [data-mantine="NavLink"] .mantine-Text-root {
-                    color: ${textColor} !important;
-                }
-                
+                    color: #C1C2C5 !important;
+                }` : ''}
+
                 /* Avatar container text - fix visibility in dark mode */
                 #sidebar .mantine-Avatar-root + *,
                 #sidebar .mantine-Avatar-root ~ *,
@@ -371,7 +423,7 @@ def register_theme_callbacks(app):
                 .mantine-AppShell-navbar .mantine-Avatar-root ~ * {
                     color: ${textColor} !important;
                 }
-                
+
                 /* Avatar text containers */
                 #sidebar [id*="avatar"] .mantine-Text-root,
                 #sidebar [class*="avatar"] .mantine-Text-root,
@@ -379,28 +431,90 @@ def register_theme_callbacks(app):
                 .mantine-AppShell-navbar [class*="avatar"] .mantine-Text-root {
                     color: ${textColor} !important;
                 }
-                
-                /* Draggable cards */
+
+                /* Draggable boxes - ResponsiveGridLayout items */
+                .react-grid-item,
                 .react-grid-item .card,
-                .react-grid-item [data-mantine="Card"] {
+                .react-grid-item [data-mantine="Card"],
+                #draggable .react-grid-item,
+                #draggable .react-grid-item > *,
+                #draggable .react-grid-item [class*="Card"] {
                     background-color: ${theme === 'dark' ? '#25262b' : '#ffffff'} !important;
+                    color: ${textColor} !important;
                 }
-                
+
+                /* Draggable box content */
+                .react-grid-item .mantine-Text-root,
+                .react-grid-item [data-mantine="Text"],
+                #draggable .react-grid-item .mantine-Text-root,
+                #draggable .react-grid-item [data-mantine="Text"] {
+                    color: ${textColor} !important;
+                }
+
+                /* Bootstrap card components in draggable items */
+                .react-grid-item .card-body,
+                .react-grid-item .card-header,
+                #draggable .card,
+                #draggable .card-body,
+                #draggable .card-header {
+                    background-color: ${theme === 'dark' ? '#25262b' : '#ffffff'} !important;
+                    color: ${textColor} !important;
+                }
+
                 /* Profile text */
                 #user-info-placeholder .mantine-Text-root {
                     color: ${textColor} !important;
                 }
+
+                /* Dashboard offcanvas - Bootstrap component theming */
+                #offcanvas-parameters,
+                .dashboard-offcanvas,
+                .offcanvas {
+                    background-color: ${theme === 'dark' ? '#25262b' : '#ffffff'} !important;
+                    color: ${textColor} !important;
+                }
+
+                /* Offcanvas header */
+                #offcanvas-parameters .offcanvas-header,
+                .dashboard-offcanvas .offcanvas-header,
+                .offcanvas .offcanvas-header {
+                    background-color: ${theme === 'dark' ? '#25262b' : '#ffffff'} !important;
+                    color: ${textColor} !important;
+                    border-bottom: 1px solid ${theme === 'dark' ? '#373A40' : '#dee2e6'} !important;
+                }
+
+                /* Offcanvas body */
+                #offcanvas-parameters .offcanvas-body,
+                .dashboard-offcanvas .offcanvas-body,
+                .offcanvas .offcanvas-body {
+                    background-color: ${theme === 'dark' ? '#25262b' : '#ffffff'} !important;
+                    color: ${textColor} !important;
+                }
+
+                /* Offcanvas title */
+                #offcanvas-parameters .offcanvas-title,
+                .dashboard-offcanvas .offcanvas-title,
+                .offcanvas .offcanvas-title {
+                    color: ${textColor} !important;
+                }
+
+                /* Offcanvas close button */
+                #offcanvas-parameters .btn-close,
+                .dashboard-offcanvas .btn-close,
+                .offcanvas .btn-close {
+                    filter: ${theme === 'dark' ? 'invert(1) grayscale(100%) brightness(200%)' : 'none'} !important;
+                }
             `;
-            
+
             themeStyleElement.textContent = themeCSS;
             console.log('Injected dynamic CSS styles');
-            
+
             // Set CSS custom properties for broader coverage
             document.documentElement.style.setProperty('--app-bg-color', backgroundColor);
             document.documentElement.style.setProperty('--app-text-color', textColor);
-            
+
             console.log('=== THEME CALLBACK END ===');
-            
+
             // Return the new background color for page-content
             return {
                 'background-color': backgroundColor + ' !important',
@@ -414,5 +528,6 @@ def register_theme_callbacks(app):
     )
 
 
-# Note: DMC figure templates are available via plotly.io.templates
-# They can be accessed as "mantine_light" and "mantine_dark"
+# Note: DMC figure templates are now loaded via dmc.add_figure_templates()
+# They are applied both during figure creation and via client-side updates
+# Templates used: "mantine_light" and "mantine_dark"

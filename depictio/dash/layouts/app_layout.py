@@ -449,7 +449,9 @@ def create_app_layout():
             ),
             dcc.Store(id="current-edit-parent-index", storage_type="memory"),
             dcc.Interval(id="interval-component", interval=60 * 60 * 1000, n_intervals=0),
-            html.Div(id="dummy-plotly-output", style={"display": "none"}),  # Hidden output for Plotly theme callback
+            html.Div(
+                id="dummy-plotly-output", style={"display": "none"}
+            ),  # Hidden output for Plotly theme callback
             dmc.Drawer(
                 title="",
                 id="drawer-simple",
