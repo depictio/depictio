@@ -461,7 +461,7 @@ def api_create_backup(
     """
     logger.info(f"Creating backup via API (S3: {include_s3_data}, dry_run: {dry_run})")
 
-    url = f"{CLI_config.base_url}/depictio/api/v1/backup/create"
+    url = f"{CLI_config.api_base_url}/depictio/api/v1/backup/create"
 
     try:
         payload = {
@@ -512,7 +512,7 @@ def api_list_backups(CLI_config: CLIConfig) -> dict:
     """
     logger.info("Listing server-side backups")
 
-    url = f"{CLI_config.base_url}/depictio/api/v1/backup/list"
+    url = f"{CLI_config.api_base_url}/depictio/api/v1/backup/list"
 
     try:
         response = httpx.get(
@@ -546,7 +546,7 @@ def api_validate_backup(CLI_config: CLIConfig, backup_id: str) -> dict:
     """
     logger.info(f"Validating backup: {backup_id}")
 
-    url = f"{CLI_config.base_url}/depictio/api/v1/backup/validate"
+    url = f"{CLI_config.api_base_url}/depictio/api/v1/backup/validate"
     payload = {"backup_id": backup_id}
 
     try:
@@ -590,7 +590,7 @@ def api_restore_backup(
     """
     logger.info(f"Restoring from backup: {backup_id} (dry_run={dry_run})")
 
-    url = f"{CLI_config.base_url}/depictio/api/v1/backup/restore"
+    url = f"{CLI_config.api_base_url}/depictio/api/v1/backup/restore"
     payload = {"backup_id": backup_id, "dry_run": dry_run}
     if collections:
         payload["collections"] = collections
