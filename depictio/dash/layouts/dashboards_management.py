@@ -569,8 +569,8 @@ def register_callbacks_dashboards_management(app):
                                     dmc.Center(
                                         dmc.Image(
                                             src=default_thumbnail_url,
-                                            height=220,
-                                            width=220,
+                                            h=220,
+                                            w=220,
                                             style={"padding": "0px 0px"},
                                         )
                                     )
@@ -589,9 +589,7 @@ def register_callbacks_dashboards_management(app):
                 )
             else:
                 thumbnail = html.A(
-                    dmc.CardSection(
-                        dmc.Image(src=thumbnail_url, height=225, width=400, fit="contain")
-                    ),
+                    dmc.CardSection(dmc.Image(src=thumbnail_url, h=225, w=400, fit="contain")),
                     href=f"/dashboard/{dashboard['dashboard_id']}",
                 )
 
@@ -706,14 +704,13 @@ def register_callbacks_dashboards_management(app):
         )
         owned_dashboards_view = dmc.SimpleGrid(
             loop_over_dashboards(user_id, owned_dashboards, token, current_user),
-            cols=3,  # Default number of columns
+            cols={
+                "base": 1,
+                "sm": 2,
+                "lg": 3,
+            },  # Responsive columns: 1 on mobile, 2 on small, 3 on large
             spacing="xl",
             verticalSpacing="xl",
-            breakpoints=[
-                {"maxWidth": 1600, "cols": 3},  # Large screens
-                {"maxWidth": 1200, "cols": 2},  # Medium screens
-                {"maxWidth": 768, "cols": 1},  # Small screens
-            ],
             style={"width": "100%"},
         )
         accessed_dashboards_section_header = dmc.Title(
@@ -726,14 +723,13 @@ def register_callbacks_dashboards_management(app):
 
         accessed_dashboards_view = dmc.SimpleGrid(
             loop_over_dashboards(user_id, accessed_dashboards, token, current_user),
-            cols=3,  # Default number of columns
+            cols={
+                "base": 1,
+                "sm": 2,
+                "lg": 3,
+            },  # Responsive columns: 1 on mobile, 2 on small, 3 on large
             spacing="xl",
             verticalSpacing="xl",
-            breakpoints=[
-                {"maxWidth": 1600, "cols": 3},  # Large screens
-                {"maxWidth": 1200, "cols": 2},  # Medium screens
-                {"maxWidth": 768, "cols": 1},  # Small screens
-            ],
             style={"width": "100%"},
         )
 
