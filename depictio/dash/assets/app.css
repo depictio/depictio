@@ -10,3 +10,71 @@
     font-family: 'Virgil' !important; /* Override any existing font styles */
     font-size: '20px' !important; /* Add font size */
 }
+
+/* Triangle particle animations for auth background */
+@keyframes triangleParticle0 {
+    0% { transform: translate(0, 0) rotate(0deg); }
+    25% { transform: translate(20px, -30px) rotate(90deg); }
+    50% { transform: translate(-10px, -60px) rotate(180deg); }
+    75% { transform: translate(-30px, -30px) rotate(270deg); }
+    100% { transform: translate(0, 0) rotate(360deg); }
+}
+
+@keyframes triangleParticle1 {
+    0% { transform: translate(0, 0) rotate(0deg); }
+    25% { transform: translate(-25px, 15px) rotate(-90deg); }
+    50% { transform: translate(10px, 40px) rotate(-180deg); }
+    75% { transform: translate(35px, 10px) rotate(-270deg); }
+    100% { transform: translate(0, 0) rotate(-360deg); }
+}
+
+@keyframes triangleParticle2 {
+    0% { transform: translate(0, 0) rotate(0deg); }
+    25% { transform: translate(15px, 25px) rotate(45deg); }
+    50% { transform: translate(-20px, 50px) rotate(90deg); }
+    75% { transform: translate(-35px, 25px) rotate(135deg); }
+    100% { transform: translate(0, 0) rotate(180deg); }
+}
+
+@keyframes triangleParticle3 {
+    0% { transform: translate(0, 0) rotate(0deg); }
+    25% { transform: translate(30px, -15px) rotate(-45deg); }
+    50% { transform: translate(60px, 10px) rotate(-90deg); }
+    75% { transform: translate(30px, 35px) rotate(-135deg); }
+    100% { transform: translate(0, 0) rotate(-180deg); }
+}
+
+@keyframes triangleParticle4 {
+    0% { transform: translate(0, 0) rotate(0deg); }
+    25% { transform: translate(-15px, -25px) rotate(120deg); }
+    50% { transform: translate(5px, -50px) rotate(240deg); }
+    75% { transform: translate(25px, -25px) rotate(360deg); }
+    100% { transform: translate(0, 0) rotate(480deg); }
+}
+
+@keyframes triangleParticle5 {
+    0% { transform: translate(0, 0) rotate(0deg); }
+    25% { transform: translate(-10px, 20px) rotate(-60deg); }
+    50% { transform: translate(-30px, -10px) rotate(-120deg); }
+    75% { transform: translate(-10px, -40px) rotate(-180deg); }
+    100% { transform: translate(0, 0) rotate(-240deg); }
+}
+
+.triangle-particle {
+    animation-timing-function: ease-in-out;
+    animation-iteration-count: infinite;
+}
+
+.auth-modal-content {
+    position: relative;
+    z-index: 10000;
+    backdrop-filter: blur(10px);
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+/* Dash debug menu styling - no interference with functionality */
+.dash-debug-menu__outer {
+    /* Let Dash handle the debug menu behavior naturally */
+}

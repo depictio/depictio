@@ -456,7 +456,7 @@ def create_stepper_output(n, active):
             dbc.Row(
                 [
                     dbc.Col(
-                        dmc.Title("Component selected:", order=3, align="left", fw="normal"),
+                        dmc.Title("Component selected:", order=3, ta="left", fw="normal"),
                         width=4,
                     ),
                     dbc.Col(
@@ -598,7 +598,7 @@ def create_stepper_output(n, active):
         id={"type": "stepper-basic-usage", "index": n},
         active=active,
         # color="green",
-        breakpoint="sm",
+        # breakpoint="sm",
         children=steps,
     )
 

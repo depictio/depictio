@@ -42,13 +42,14 @@ def create_dashboard_modal(
         },
         shadow="xl",
         radius="md",
-        size="xl",
-        # size=2000,
+        # size="xl",
+        size=1500,
         zIndex=10000,
         styles={
             "modal": {
                 "padding": "28px",
-            }
+            },
+            # "height": "80vh",  # Set a fixed height for the modal
         },
         children=[
             # dmc.Grid(
@@ -101,18 +102,20 @@ def create_dashboard_modal(
                                 icon=DashIconify(icon="mdi:alert"),
                                 style={"display": "none"},
                             ),
-                            # Project dropdown
+                            # Project dropdown - simplified for debugging
                             dmc.Select(
                                 label="Project",
                                 description="Select the project this dashboard belongs to",
-                                data=projects,
-                                value=selected_project,
+                                data=[],  # Start empty, will be populated by callback
                                 id=f"{id_prefix}-projects",
-                                searchable=True,
-                                clearable=True,
-                                leftSection=DashIconify(icon="mdi:jira"),
+                                placeholder="Loading projects...",
                                 style={"width": "100%"},
+                                searchable=False,  # Disable search for now
+                                clearable=False,  # Disable clear for now
+                                # comboboxProps={"zIndex": 1000},
+                                comboboxProps={"withinPortal": False},
                             ),
+
                             # Available templates dropdown
                             # dmc.Select(
                             #     label="Available templates",
