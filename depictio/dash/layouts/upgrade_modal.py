@@ -25,15 +25,15 @@ def create_upgrade_modal():
                     dmc.Group(
                         [
                             DashIconify(icon="mdi:account-arrow-up", width=30, color="blue"),
-                            dmc.Title("Upgrade to Interactive Mode", order=3, color="blue"),
+                            dmc.Title("Upgrade to Interactive Mode", order=3, c="blue"),
                         ],
-                        spacing="sm",
+                        gap="sm",
                     ),
                     dmc.Text(
                         "To duplicate or modify dashboards, you need an interactive session. "
                         "This will create a temporary account that expires in 24 hours.",
                         size="sm",
-                        color="dimmed",
+                        c="gray",
                     ),
                     dmc.Alert(
                         title="What you'll get:",
@@ -69,11 +69,11 @@ def create_upgrade_modal():
                                 color="blue",
                             ),
                         ],
-                        position="right",
+                        justify="flex-end",
                         mt="md",
                     ),
                 ],
-                spacing="md",
+                gap="md",
             ),
         ],
         opened=False,

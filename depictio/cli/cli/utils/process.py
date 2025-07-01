@@ -4,7 +4,7 @@ from depictio.cli.cli.utils.rich_utils import (
     rich_print_checked_statement,
 )
 from depictio.cli.cli_logging import logger
-from depictio.models.models.users import CLIConfig
+from depictio.models.models.cli import CLIConfig
 
 
 def process_project_data_collections(
@@ -134,7 +134,7 @@ def process_single_data_collection(
             CLI_config=CLI_config,
             wf=workflow,
             dc_id=str(data_collection.id),
-            command_parameters=command_parameters,
+            command_parameters=command_parameters or {},
             mode="process",
         )
 

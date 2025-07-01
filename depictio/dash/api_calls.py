@@ -259,7 +259,7 @@ def api_call_cleanup_expired_temporary_users() -> dict[str, Any] | None:
 
 
 def api_call_upgrade_to_temporary_user(
-    access_token: str, expiry_hours: int = 24, expiry_minutes: int = 0
+    access_token: str, expiry_hours: int = 24
 ) -> dict[str, Any] | None:
     """
     Upgrade from anonymous user to temporary user for interactive features.
@@ -267,23 +267,16 @@ def api_call_upgrade_to_temporary_user(
     Args:
         access_token: Current user's access token
         expiry_hours: Number of hours until the temporary user expires (default: 24)
-        expiry_minutes: Number of additional minutes until the temporary user expires (default: 0)
 
     Returns:
         Session data for the new temporary user or None if failed
     """
     try:
-        logger.info(
-            f"Upgrading to temporary user with expiry: {expiry_hours} hours, {expiry_minutes} minutes"
-        )
-
-        params = {"expiry_hours": expiry_hours}
-        if expiry_minutes > 0:
-            params["expiry_minutes"] = expiry_minutes
+        logger.info(f"Upgrading to temporary user with expiry: {expiry_hours} hours")
 
         response = httpx.post(
             f"{API_BASE_URL}/depictio/api/v1/auth/upgrade_to_temporary_user",
-            params=params,
+            params={"expiry_hours": expiry_hours},
             headers={"Authorization": f"Bearer {access_token}"},
             timeout=30.0,
         )
@@ -541,7 +534,7 @@ def api_call_generate_agent_config(token: TokenData, current_token: str) -> dict
         return None
 
 
-@validate_call(config=dict(arbitrary_types_allowed=True), validate_return=True)
+@validate_call(config=dict(arbitrary_types_allowed=True), validate_return=True)  # type: ignore[invalid-argument-type]
 def api_get_project_from_id(project_id: PyObjectId, token: str) -> httpx.Response:
     """
     Get a project from the server using the project ID.

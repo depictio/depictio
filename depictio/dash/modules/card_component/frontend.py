@@ -203,7 +203,7 @@ def register_callbacks_card_component(app):
                 dmc.Tooltip(
                     children=dmc.Badge(
                         children="Aggregation description",
-                        leftSection=DashIconify(icon="mdi:information", color="grey", width=20),
+                        leftSection=DashIconify(icon="mdi:information", color="gray", width=20),
                         color="gray",
                         radius="lg",
                     ),
@@ -214,7 +214,7 @@ def register_callbacks_card_component(app):
                     width=300,
                     transition="pop",
                     transitionDuration=300,
-                    position="right",
+                    justify="flex-end",
                     withArrow=True,
                     openDelay=500,
                     closeDelay=500,

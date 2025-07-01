@@ -768,7 +768,8 @@ class TestLoadDeltatablelite:
 
         metadata = [
             {
-                "metadata": {"interactive_component_type": "Select", "column_name": "category"},
+                "interactive_component_type": "Select",
+                "column_name": "category",
                 "value": ["A"],
             }
         ]

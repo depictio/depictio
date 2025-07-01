@@ -132,7 +132,7 @@ def _resolve_key_paths(
     return priv_path, pub_path
 
 
-@validate_call(config={"arbitrary_types_allowed": True})
+@validate_call(config={"arbitrary_types_allowed": True})  # type: ignore[invalid-argument-type]
 def _generate_rsa_private_key(key_size: int = 2048) -> RSAPrivateKey:
     """Generate an RSA private key with the specified key size.
 
@@ -149,7 +149,7 @@ def _generate_rsa_private_key(key_size: int = 2048) -> RSAPrivateKey:
     )
 
 
-@validate_call(config={"arbitrary_types_allowed": True})
+@validate_call(config={"arbitrary_types_allowed": True})  # type: ignore[invalid-argument-type]
 def _save_private_key(private_key: PrivateKeyT, path: str) -> None:
     """Save private key to file.
 
@@ -167,7 +167,7 @@ def _save_private_key(private_key: PrivateKeyT, path: str) -> None:
         )
 
 
-@validate_call(config={"arbitrary_types_allowed": True})
+@validate_call(config={"arbitrary_types_allowed": True})  # type: ignore[invalid-argument-type]
 def _save_public_key(public_key: PublicKeyT, path: str) -> None:
     """Save public key to file.
 
@@ -264,7 +264,7 @@ def generate_keys(
         raise KeyGenerationError(f"Failed to generate keys: {e}") from e
 
 
-@validate_call(validate_return=True, config={"arbitrary_types_allowed": True})
+@validate_call(validate_return=True, config={"arbitrary_types_allowed": True})  # type: ignore[invalid-argument-type]
 def check_and_generate_keys(
     private_key_path: str | None = None,
     public_key_path: str | None = None,
@@ -294,7 +294,7 @@ def check_and_generate_keys(
     # Check if key files exist, generate if they don't
     if not os.path.exists(private_key_path) or not os.path.exists(public_key_path):
         logger.warning("Key files not found. Generating new keys.")
-        return generate_keys(private_key_path, public_key_path, keys_dir, algorithm)
+        return generate_keys(private_key_path, public_key_path, keys_dir, algorithm)  # type: ignore[invalid-argument-type]
 
     logger.debug("Key files already exist. No need to generate new keys.")
     logger.debug(f"Private key path: {private_key_path}")
@@ -302,7 +302,7 @@ def check_and_generate_keys(
     return private_key_path, public_key_path
 
 
-@validate_call(validate_return=True, config={"arbitrary_types_allowed": True})
+@validate_call(validate_return=True, config={"arbitrary_types_allowed": True})  # type: ignore[invalid-argument-type]
 def load_private_key(private_key_path: Path) -> RSAPrivateKey:
     """Load a private key from a file.
 
@@ -330,7 +330,7 @@ def load_private_key(private_key_path: Path) -> RSAPrivateKey:
         raise
 
 
-@validate_call(validate_return=True, config={"arbitrary_types_allowed": True})
+@validate_call(validate_return=True, config={"arbitrary_types_allowed": True})  # type: ignore[invalid-argument-type]
 def load_public_key(public_key_path: Path) -> RSAPublicKey:
     """Load a public key from a file.
 

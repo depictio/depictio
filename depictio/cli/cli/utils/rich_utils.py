@@ -245,14 +245,14 @@ def print_polars_head_tail_with_rich(
     print_polars_with_rich(
         head_df, title=f"Head ({n} rows)", console=head_console, show_dtypes=False
     )
-    head_output = head_console.file.getvalue()
+    head_output = head_console.file.getvalue()  # type: ignore[unresolved-attribute]
 
     # Capture tail table
     tail_console = Console(file=StringIO(), width=60)
     print_polars_with_rich(
         tail_df, title=f"Tail ({n} rows)", console=tail_console, show_dtypes=False
     )
-    tail_output = tail_console.file.getvalue()
+    tail_output = tail_console.file.getvalue()  # type: ignore[unresolved-attribute]
 
     # Print side by side using columns
     from rich.columns import Columns
@@ -287,10 +287,10 @@ def add_rich_display_to_polars():
         print_polars_head_tail_with_rich(self, n=n, console=console)
 
     # Add methods to Polars DataFrame
-    pl.DataFrame.rich_print = rich_print
-    pl.DataFrame.rich_info = rich_info
-    pl.DataFrame.rich_describe = rich_describe
-    pl.DataFrame.rich_head_tail = rich_head_tail
+    pl.DataFrame.rich_print = rich_print  # type: ignore[unresolved-attribute]
+    pl.DataFrame.rich_info = rich_info  # type: ignore[unresolved-attribute]
+    pl.DataFrame.rich_describe = rich_describe  # type: ignore[unresolved-attribute]
+    pl.DataFrame.rich_head_tail = rich_head_tail  # type: ignore[unresolved-attribute]
 
 
 # # Example usage

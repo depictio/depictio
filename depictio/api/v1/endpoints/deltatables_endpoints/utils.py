@@ -75,7 +75,7 @@ def read_table_for_DC_table(file_info, data_collection_config_raw, deltaTable):
         df = pl.read_parquet(file_path, **dict(data_collection_config["polars_kwargs"]))
 
     elif data_collection_config["format"].lower() in ["feather"]:
-        df = pl.read_feather(file_path, **dict(data_collection_config["polars_kwargs"]))
+        df = pl.read_feather(file_path, **dict(data_collection_config["polars_kwargs"]))  # type: ignore[unresolved-attribute]
 
     elif data_collection_config["format"].lower() in ["xls", "xlsx"]:
         df = pl.read_excel(file_path, **dict(data_collection_config["polars_kwargs"]))
@@ -134,7 +134,7 @@ def precompute_columns_specs(aggregated_df: pl.DataFrame, agg_functions: dict, d
     Aggregate dataframes and return a list of dictionaries with column names, types and specs.
     """
     # TODO: performance improvement: use polars instead of pandas
-    aggregated_df = aggregated_df.to_pandas()
+    aggregated_df = aggregated_df.to_pandas()  # type: ignore[invalid-assignment]
 
     results = list()
     # For each column in the DataFrame

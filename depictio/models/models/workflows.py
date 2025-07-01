@@ -48,7 +48,7 @@ class WorkflowDataLocation(MongoModel):
                 expanded_paths.append(location)
 
             # Validate the expanded paths if in CLI context
-            return [DirectoryPath(path=Path(location)).path for location in expanded_paths]
+            return [DirectoryPath(path=str(Path(location))).path for location in expanded_paths]
         else:
             return value
 
@@ -116,7 +116,7 @@ class WorkflowRun(MongoModel):
             expanded_paths.append(location)
 
             # Validate the expanded paths if in CLI context
-            return DirectoryPath(path=Path(location)).path
+            return DirectoryPath(path=str(Path(location))).path
         else:
             return value
 

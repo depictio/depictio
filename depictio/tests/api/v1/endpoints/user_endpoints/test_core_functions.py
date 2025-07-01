@@ -24,6 +24,7 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     _list_tokens,
     _purge_expired_tokens,
 )
+from depictio.models.models.base import PyObjectId
 from depictio.models.models.users import TokenBase, TokenBeanie, TokenData, UserBase, UserBeanie
 from depictio.tests.api.v1.endpoints.user_endpoints.conftest import beanie_setup
 
@@ -278,7 +279,7 @@ class TestAsyncFetchUserFromId:
 
         # Create a real user object
         real_user = UserBeanie(
-            id=test_user_id,
+            id=PyObjectId(str(test_user_id)),
             email="test_id@example.com",
             password=hash_password,
             # Add any other required fields
@@ -306,8 +307,8 @@ class TestAsyncFetchUserFromId:
             await _async_fetch_user_from_id(non_existent_id)
 
         # Verify the exception
-        assert exc_info.value.status_code == 404
-        assert exc_info.value.detail == "User not found"
+        assert exc_info.value.status_code == 404  # type: ignore[unresolved-attribute]
+        assert exc_info.value.detail == "User not found"  # type: ignore[unresolved-attribute]
 
 
 # ------------------------------------------------------
@@ -353,7 +354,7 @@ class TestPurgeExpiredTokensFromUser:
 
         # Act
         result = await _purge_expired_tokens(
-            user=UserBase(id=user_id, email="test_email@example.com")
+            user=UserBase(id=PyObjectId(str(user_id)), email="test_email@example.com")
         )
 
         # Assert
@@ -393,7 +394,7 @@ class TestPurgeExpiredTokensFromUser:
 
         # Act
         result = await _purge_expired_tokens(
-            user=UserBase(id=user_id, email="test_email@example.com")
+            user=UserBase(id=PyObjectId(str(user_id)), email="test_email@example.com")
         )
 
         # Assert
@@ -412,7 +413,7 @@ class TestPurgeExpiredTokensFromUser:
 
         # Act
         result = await _purge_expired_tokens(
-            user=UserBase(id=PydanticObjectId(), email="test_email@example.com")
+            user=UserBase(id=PyObjectId(), email="test_email@example.com")
         )
 
         # Assert
@@ -685,8 +686,8 @@ class TestListTokens:
             await _list_tokens(user_id, token_lifetime="invalid-lifetime")
 
         # Verify the exception
-        assert exc_info.value.status_code == 400
-        assert "Invalid token_lifetime" in exc_info.value.detail
+        assert exc_info.value.status_code == 400  # type: ignore[unresolved-attribute]
+        assert "Invalid token_lifetime" in exc_info.value.detail  # type: ignore[unresolved-attribute]
 
     @pytest.mark.asyncio
     @beanie_setup(models=[TokenBeanie])
@@ -768,7 +769,7 @@ class TestEditPassword:
 
         # Create test user
         test_user = UserBeanie(
-            id=user_id,
+            id=PyObjectId(str(user_id)),
             email="test@example.com",
             password=generate_hashed_password("old_password123"),
         )
@@ -813,10 +814,9 @@ class TestAddToken:
         # Arrange
         user_id = PydanticObjectId()
         token_data = TokenData(
-            sub=user_id,
+            sub=PyObjectId(str(user_id)),
             name="Test Token",
             token_lifetime="short-lived",
-            exp=datetime.now() + timedelta(hours=1),
         )
 
         # Act
@@ -855,10 +855,9 @@ class TestAddToken:
         # Arrange
         user_id = PydanticObjectId()
         token_data = TokenData(
-            sub=user_id,
+            sub=PyObjectId(str(user_id)),
             name="Test Token",
             token_lifetime="short-lived",
-            exp=datetime.now() + timedelta(hours=1),
         )
 
         # We need to patch the TokenBeanie.save method
@@ -881,10 +880,9 @@ class TestAddToken:
 
         for lifetime in lifetimes:
             token_data = TokenData(
-                sub=user_id,
+                sub=PyObjectId(str(user_id)),
                 name=f"Test Token {lifetime}",
                 token_lifetime=lifetime,
-                exp=datetime.now() + timedelta(hours=1),
             )
 
             # Act
@@ -1068,8 +1066,14 @@ class TestCleanupExpiredTemporaryUsers:
         await valid_user.create()
 
         # Create token for expired user
+        assert expired_user.id is not None, "Expired user ID should be set after creation"
+        user_id = (
+            expired_user.id
+            if isinstance(expired_user.id, PydanticObjectId)
+            else PydanticObjectId(str(expired_user.id))
+        )
         token = TokenBeanie(
-            user_id=expired_user.id,
+            user_id=user_id,
             access_token="expired_token",
             refresh_token="expired_refresh_token",
             expire_datetime=current_time + timedelta(hours=1),
@@ -1156,8 +1160,14 @@ class TestGetAnonymousUserSession:
         await anon_user.create()
 
         # Create permanent token
+        assert anon_user.id is not None, "Anonymous user ID should be set after creation"
+        user_id_pydantic = (
+            anon_user.id
+            if isinstance(anon_user.id, PydanticObjectId)
+            else PydanticObjectId(str(anon_user.id))
+        )
         permanent_token = TokenBeanie(
-            user_id=anon_user.id,
+            user_id=user_id_pydantic,
             access_token="permanent_access_token",
             refresh_token="permanent_refresh_token",
             expire_datetime=datetime.max,
@@ -1200,8 +1210,8 @@ class TestGetAnonymousUserSession:
             with pytest.raises(HTTPException) as exc_info:
                 await _get_anonymous_user_session()
 
-            assert exc_info.value.status_code == 404
-            assert "Anonymous user not found" in str(exc_info.value.detail)
+            assert exc_info.value.status_code == 404  # type: ignore[unresolved-attribute]
+            assert "Anonymous user not found" in str(exc_info.value.detail)  # type: ignore[unresolved-attribute]
 
     @pytest.mark.asyncio
     @beanie_setup(models=[UserBeanie, TokenBeanie])
@@ -1219,8 +1229,14 @@ class TestGetAnonymousUserSession:
         await anon_user.create()
 
         # Create only short-lived token (not permanent)
+        assert anon_user.id is not None, "Anonymous user ID should be set after creation"
+        user_id_pydantic = (
+            anon_user.id
+            if isinstance(anon_user.id, PydanticObjectId)
+            else PydanticObjectId(str(anon_user.id))
+        )
         short_token = TokenBeanie(
-            user_id=anon_user.id,
+            user_id=user_id_pydantic,
             access_token="short_lived_token",
             refresh_token="short_lived_refresh_token",
             expire_datetime=datetime.now() + timedelta(hours=1),
@@ -1239,5 +1255,5 @@ class TestGetAnonymousUserSession:
             with pytest.raises(HTTPException) as exc_info:
                 await _get_anonymous_user_session()
 
-            assert exc_info.value.status_code == 404
-            assert "No permanent token found" in str(exc_info.value.detail)
+            assert exc_info.value.status_code == 404  # type: ignore[unresolved-attribute]
+            assert "No permanent token found" in str(exc_info.value.detail)  # type: ignore[unresolved-attribute]

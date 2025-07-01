@@ -40,12 +40,12 @@ async def create_bucket_endpoint(current_user=Depends(get_current_user)):
 
     response = create_bucket(current_user)
 
-    if response.status_code == 200:
-        logger.info(response.detail)
+    if response.status_code == 200:  # type: ignore[unresolved-attribute]
+        logger.info(response.detail)  # type: ignore[unresolved-attribute]
         return response
     else:
-        logger.error(response.detail)
-        raise HTTPException(status_code=response.status_code, detail=response.detail)
+        logger.error(response.detail)  # type: ignore[unresolved-attribute]
+        raise HTTPException(status_code=response.status_code, detail=response.detail)  # type: ignore[unresolved-attribute]
 
 
 # TODO - remove this endpoint - only for testing purposes in order to drop the S3 bucket content & the DB collections
@@ -133,7 +133,7 @@ async def process_initial_data_collections_endpoint(
 
 
 async def check_service_readiness(
-    url: str, max_retries: int = None, delay: int = None, timeout: int = None
+    url: str, max_retries: int | None = None, delay: int | None = None, timeout: int | None = None
 ) -> bool:
     """
     Check if a service is ready to serve requests with retry logic.
@@ -147,7 +147,7 @@ async def check_service_readiness(
     delay = delay or settings.performance.service_readiness_delay
     timeout_val = timeout or settings.performance.service_readiness_timeout
 
-    timeout = httpx.Timeout(float(timeout_val))
+    timeout_obj = httpx.Timeout(float(timeout_val))  # type: ignore[invalid-assignment]
 
     logger.info(
         f"🔍 Service readiness check starting for {url} (retries: {max_retries}, delay: {delay}s, timeout: {timeout_val}s)"
@@ -155,7 +155,7 @@ async def check_service_readiness(
 
     for attempt in range(max_retries):
         try:
-            async with httpx.AsyncClient(timeout=timeout, verify=False) as client:
+            async with httpx.AsyncClient(timeout=timeout_obj, verify=False) as client:
                 response = await client.get(url)
                 logger.info(
                     f"🔍 Service readiness check attempt {attempt + 1}: {url} -> {response.status_code}"

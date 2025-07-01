@@ -60,7 +60,7 @@ class TestDCTableConfig:
     def test_polars_kwargs_invalid_value(self):
         """Test polars_kwargs field validation with invalid value."""
         with pytest.raises(Exception, match="Input should be a valid dictionary"):
-            DCTableConfig(format="csv", polars_kwargs="not a dict")
+            DCTableConfig(format="csv", polars_kwargs="not a dict")  # type: ignore[invalid-argument-type]
 
     def test_keep_columns_valid_list(self):
         """Test keep_columns field validation with valid list."""
@@ -75,7 +75,7 @@ class TestDCTableConfig:
     def test_keep_columns_invalid_value(self):
         """Test keep_columns field validation with invalid value."""
         with pytest.raises(Exception, match="Input should be a valid list"):
-            DCTableConfig(format="csv", keep_columns="not a list")
+            DCTableConfig(format="csv", keep_columns="not a list")  # type: ignore[invalid-argument-type]
 
     def test_columns_description_valid_dictionary(self):
         """Test columns_description field with valid dictionary."""
@@ -101,7 +101,7 @@ class TestDCTableConfig:
     def test_extra_fields_forbidden(self):
         """Test that extra fields are not allowed."""
         with pytest.raises(ValidationError) as exc_info:
-            DCTableConfig(format="csv", extra_field="should not work")
+            DCTableConfig(format="csv", extra_field="should not work")  # type: ignore[unknown-argument]
         assert "extra" in str(exc_info.value) or "unexpected" in str(exc_info.value)
 
     def test_optional_fields_default_values(self):

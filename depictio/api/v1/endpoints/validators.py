@@ -98,7 +98,7 @@ def validate_workflow_and_collection(
 
     # Convert the workflow to a Workflow object
     workflow = convert_objectid_to_str(workflow)
-    workflow = Workflow(**workflow)
+    workflow = Workflow(**workflow)  # type: ignore[missing-argument]
 
     # If no data collection id is provided, return the workflow and user_oid
     if not data_collection_id:
@@ -137,7 +137,7 @@ def validate_workflow_and_collection(
         logger.debug(f"Data collection: {data_collection}")
 
         data_collection = convert_objectid_to_str(data_collection)
-        data_collection = DataCollection(**data_collection)
+        data_collection = DataCollection(**data_collection)  # type: ignore[missing-argument]
 
         # Check if the data collection exists
         if not data_collection:

@@ -4,7 +4,6 @@ from beanie import Document, Link, PydanticObjectId
 from pydantic import BaseModel, EmailStr, Field, field_serializer, field_validator, model_validator
 
 # from depictio.models.models.s3 import S3DepictioCLIConfig
-from depictio.api.v1.configs.settings_models import S3DepictioCLIConfig
 from depictio.models.models.base import MongoModel, PyObjectId
 
 
@@ -162,18 +161,8 @@ class UserBase(MongoModel):
     expiration_time: datetime | None = None
 
 
-class UserBaseCLIConfig(UserBase):
-    token: TokenBase
-
-
 class GroupUI(Group):
     users: list[UserBase] = []
-
-
-class CLIConfig(BaseModel):
-    user: UserBaseCLIConfig
-    base_url: str
-    s3: S3DepictioCLIConfig
 
 
 class UserBaseUI(UserBase):

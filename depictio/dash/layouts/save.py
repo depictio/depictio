@@ -20,7 +20,7 @@ def register_callbacks_save(app):
         State(
             {
                 "type": "stored-metadata-component",
-                "index": dash.dependencies.ALL,
+                "index": ALL,
             },
             "data",
         ),

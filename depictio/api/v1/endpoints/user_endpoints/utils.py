@@ -41,7 +41,7 @@ def _ensure_mongodb_connection(max_attempts: int = 5, sleep_interval: int = 5) -
         try:
             info = client.server_info()
             logger.debug(f"Successfully connected to MongoDB (Attempt {attempt})")
-            return info
+            return info  # type: ignore[invalid-return-type]
         except Exception as e:
             if attempt == max_attempts:
                 logger.error(f"Failed to connect to MongoDB after {max_attempts} attempts")
@@ -182,7 +182,7 @@ def delete_group_helper(group_id: PyObjectId) -> dict[str, bool | str]:
 @validate_call(validate_return=True)
 async def create_access_token(
     token_data: TokenData,
-    expiry_hours: int = None,
+    expiry_hours: int = None,  # type: ignore[invalid-parameter-default]
 ) -> tuple[str, datetime]:
     token_lifetime = token_data.token_lifetime
 
@@ -245,7 +245,7 @@ def delete_user_from_db(
         logger.info(f"User ID resolved from email: {user_id}")
     # If user_id is provided, find the user by user_id
     else:
-        user_id = ObjectId(user_id)
+        user_id = ObjectId(user_id)  # type: ignore[invalid-assignment]
         logger.info(f"User ID provided: {user_id}")
 
     if not user:
@@ -296,7 +296,7 @@ def update_group_in_users_helper(group_id: ObjectId, group_users: list[UserBase]
     # Create complete group info to add to users
 
     group_info = Group(
-        id=ObjectId(group_id),
+        id=ObjectId(group_id),  # type: ignore[invalid-argument-type]
         name=group_str["name"],
     )
     group_info = group_info.mongo()

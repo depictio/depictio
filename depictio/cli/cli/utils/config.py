@@ -7,8 +7,8 @@ from pydantic import validate_call
 from depictio.cli.cli.utils.api_calls import api_get_project_from_name, api_login
 from depictio.cli.cli_logging import logger
 from depictio.models.models.base import convert_objectid_to_str
+from depictio.models.models.cli import CLIConfig
 from depictio.models.models.projects import Project
-from depictio.models.models.users import CLIConfig
 from depictio.models.utils import get_config, validate_model_config
 
 
@@ -24,11 +24,16 @@ def validate_project_config_and_check_S3_storage(CLI_config_path: str, project_c
     logger.info(response)
 
     if response["success"]:
-        CLI_config = response["CLI_config"]
+        CLI_config_dict = response["CLI_config"]
         # Check S3 accessibility
-        # S3_storage_checks(CLI_config.s3)
+        # S3_storage_checks(CLI_config_dict["s3"])
 
-        CLI_config = CLIConfig(**CLI_config)
+        # Create CLIConfig explicitly with mapped keys
+        CLI_config = CLIConfig(
+            user=CLI_config_dict["user"],
+            api_base_url=CLI_config_dict["api_base_url"],
+            s3_storage=CLI_config_dict["s3_storage"],
+        )
         # Validate the project configuration
         response_validation = local_validate_project_config(CLI_config, project_config_path)
         return CLI_config, response_validation

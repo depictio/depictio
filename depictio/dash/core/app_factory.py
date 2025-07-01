@@ -51,13 +51,13 @@ def create_dash_app():
 
     # Configure Flask's logger to use custom logging settings
     server = app.server
-    server.logger.handlers = logger.handlers
-    server.logger.setLevel(logger.level)
+    server.logger.handlers = logger.handlers  # type: ignore[possibly-unbound-attribute]
+    server.logger.setLevel(logger.level)  # type: ignore[possibly-unbound-attribute]
 
     # Configure static folder for Flask server
     # This is separate from Dash's assets folder
     static_folder = os.path.join(dash_root_path, "static")
-    server.static_folder = static_folder
-    server.static_url_path = "/static"
+    server.static_folder = static_folder  # type: ignore[invalid-assignment]
+    server.static_url_path = "/static"  # type: ignore[invalid-assignment]
 
     return app, dev_mode

@@ -6,7 +6,8 @@ from beanie import PydanticObjectId
 
 from depictio.api.v1.configs.custom_logging import format_pydantic
 from depictio.api.v1.endpoints.user_endpoints.agent_config_utils import _generate_agent_config
-from depictio.models.models.users import CLIConfig, TokenBeanie, UserBeanie
+from depictio.models.models.cli import CLIConfig
+from depictio.models.models.users import TokenBeanie, UserBeanie
 from depictio.tests.api.v1.endpoints.user_endpoints.conftest import beanie_setup
 
 
@@ -25,6 +26,11 @@ class TestGenerateAgentConfig:
         await user.save()
 
         # Create and save token
+        assert user.id is not None, "User ID should be set after saving"
+        # Convert to PydanticObjectId since TokenBeanie expects it
+        user_id = (
+            user.id if isinstance(user.id, PydanticObjectId) else PydanticObjectId(str(user.id))
+        )
         token = TokenBeanie(
             name="test_token",
             access_token="test_access_token",
@@ -32,7 +38,7 @@ class TestGenerateAgentConfig:
             refresh_token="test_refresh_token",
             refresh_expire_datetime=datetime.datetime.now() + datetime.timedelta(days=1),
             token_type="bearer",
-            user_id=user.id,
+            user_id=user_id,
             logged_in=True,
         )
         await token.save()
@@ -47,7 +53,7 @@ class TestGenerateAgentConfig:
         assert result.user.email == "test@example.com"
         assert result.user.is_admin is False
         assert result.user.token == token
-        assert "http://" in result.base_url
+        assert "http://" in result.api_base_url
 
     @beanie_setup(models=[TokenBeanie, UserBeanie])
     async def test_generate_agent_config_invalid_user(self):

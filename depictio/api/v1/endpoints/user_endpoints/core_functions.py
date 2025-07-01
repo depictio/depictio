@@ -15,7 +15,9 @@ from depictio.models.models.users import TokenBase, TokenBeanie, TokenData, User
 async def _create_permanent_token(user: UserBeanie) -> TokenBeanie:
     """Create a permanent token for a user."""
     token_data = TokenData(
-        sub=user.id, name="anonymous_permanent_token", token_lifetime="permanent"
+        sub=user.id,  # type: ignore[invalid-argument-type]
+        name="anonymous_permanent_token",
+        token_lifetime="permanent",  # type: ignore[invalid-argument-type]
     )
     access_token, _ = await create_access_token(token_data, expiry_hours=24 * 365)
     token = TokenBeanie(
@@ -25,7 +27,7 @@ async def _create_permanent_token(user: UserBeanie) -> TokenBeanie:
         refresh_expire_datetime=datetime.max,
         name=token_data.name,
         token_lifetime="permanent",
-        user_id=user.id,
+        user_id=user.id,  # type: ignore[invalid-argument-type]
         logged_in=True,
     )
     await token.save()
@@ -43,7 +45,7 @@ async def _create_anonymous_user() -> UserBeanie:
         is_admin=False,
         is_anonymous=True,
     )
-    return payload["user"] if payload else None
+    return payload["user"] if payload else None  # type: ignore[invalid-return-type]
 
 
 async def _create_temporary_user(
@@ -108,7 +110,9 @@ async def _create_temporary_user_session(temp_user: UserBeanie) -> dict:
     """
     # Create a temporary token with same expiration as user
     token_data = TokenData(
-        sub=temp_user.id, name=f"temp_session_{temp_user.id}", token_lifetime="long-lived"
+        sub=temp_user.id,  # type: ignore[invalid-argument-type]
+        name=f"temp_session_{temp_user.id}",
+        token_lifetime="long-lived",  # type: ignore[invalid-argument-type]
     )
 
     # Calculate hours until expiration
@@ -128,7 +132,7 @@ async def _create_temporary_user_session(temp_user: UserBeanie) -> dict:
         refresh_expire_datetime=expire_datetime,
         name=token_data.name,
         token_lifetime="long-lived",
-        user_id=temp_user.id,
+        user_id=temp_user.id,  # type: ignore[invalid-argument-type]
         logged_in=True,
     )
     await token.save()
@@ -541,19 +545,19 @@ async def _add_token(token_data: TokenData) -> TokenBeanie:
     token = TokenBeanie(
         access_token=access_token,
         refresh_token=refresh_token,
-        expire_datetime=(
+        expire_datetime=(  # type: ignore[invalid-argument-type]
             expire.strftime("%Y-%m-%d %H:%M:%S")
             if isinstance(expire, datetime) and expire != datetime.max
             else datetime.max
         ),
-        refresh_expire_datetime=(
+        refresh_expire_datetime=(  # type: ignore[invalid-argument-type]
             expire_refresh.strftime("%Y-%m-%d %H:%M:%S")
             if isinstance(expire_refresh, datetime) and expire_refresh != datetime.max
             else datetime.max
         ),
         name=token_data.name,
         token_lifetime=token_data.token_lifetime,
-        user_id=token_data.sub,
+        user_id=token_data.sub,  # type: ignore[invalid-argument-type]
     )
 
     await TokenBeanie.save(token)
@@ -604,7 +608,7 @@ async def _create_user_in_db(
     password: str,
     is_admin: bool = False,
     is_anonymous: bool = False,
-    id: PyObjectId = None,
+    id: PyObjectId = None,  # type: ignore[invalid-parameter-default]
     group: str | None = None,
 ) -> dict[str, bool | str | UserBeanie | None] | None:
     """

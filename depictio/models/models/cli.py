@@ -5,7 +5,7 @@ from pydantic import BaseModel, field_validator
 
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.s3 import S3DepictioCLIConfig
-from depictio.models.models.users import Group
+from depictio.models.models.users import Group, TokenBase, UserBase
 
 
 class TokenData(BaseModel):
@@ -76,9 +76,13 @@ class UserCLIConfig(BaseModel):
         return v
 
 
+class UserBaseCLIConfig(UserBase):
+    token: TokenBase
+
+
 class CLIConfig(BaseModel):
     api_base_url: str
-    user: UserCLIConfig
+    user: UserBaseCLIConfig
     s3_storage: S3DepictioCLIConfig
 
     class ConfigDict:

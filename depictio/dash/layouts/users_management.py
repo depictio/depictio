@@ -37,7 +37,7 @@ def render_login_form():
                     "Welcome to Depictio :",
                     order=2,
                     style={"fontFamily": "Virgil"},
-                    align="center",
+                    ta="center",
                 )
             ),
             dmc.Space(h=10),
@@ -112,7 +112,7 @@ def render_login_form():
                         style={"display": "none"},
                     ),
                 ],
-                position="center",
+                justify="center",
                 mt="1rem",
             ),
             # Google OAuth Section
@@ -148,11 +148,11 @@ def render_login_form():
                         },
                     ),
                 ],
-                spacing="0.5rem",
+                gap="0.5rem",
                 style={"display": "block" if settings.auth.google_oauth_enabled else "none"},
             ),
         ],
-        spacing="1rem",
+        gap="1rem",
         style={"width": "100%"},
     )
 
@@ -172,7 +172,7 @@ def render_register_form():
                     "Please register :",
                     order=2,
                     style={"fontFamily": "Virgil"},
-                    align="center",
+                    ta="center",
                 )
             ),
             dmc.Space(h=10),
@@ -242,11 +242,11 @@ def render_register_form():
                         id="open-login-form",
                     ),
                 ],
-                position="center",
+                justify="center",
                 mt="1rem",
             ),
         ],
-        spacing="1rem",
+        gap="1rem",
         style={"width": "100%"},
     )
 
@@ -552,7 +552,7 @@ def register_callbacks_users_management(app):
                 dmc.Text(
                     feedback_message,
                     id="user-feedback-message-login",
-                    color="red" if modal_open_new else "green",
+                    c="red" if modal_open_new else "green",
                 ),
                 current_state,
                 modal_open_new,
@@ -571,7 +571,7 @@ def register_callbacks_users_management(app):
                     content,
                     dmc.Text(
                         feedback_message,
-                        color="red",
+                        c="red",
                         id="user-feedback-message-register",
                     ),
                     dash.no_update,
@@ -600,7 +600,7 @@ def register_callbacks_users_management(app):
                 content,
                 dmc.Text(
                     feedback_message,
-                    color="red" if modal_open_new else "green",
+                    c="red" if modal_open_new else "green",
                     id="user-feedback-message-register",
                 ),
                 dash.no_update,

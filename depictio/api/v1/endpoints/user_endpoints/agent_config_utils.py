@@ -5,7 +5,8 @@ from pydantic import validate_call
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
-from depictio.models.models.users import CLIConfig, TokenBeanie, UserBaseCLIConfig, UserBeanie
+from depictio.models.models.cli import CLIConfig, UserBaseCLIConfig
+from depictio.models.models.users import TokenBeanie, UserBeanie
 from depictio.models.utils import make_json_serializable
 
 
@@ -25,14 +26,17 @@ async def _generate_agent_config(user: UserBeanie, token: TokenBeanie) -> CLICon
 
     # Create the user CLI config
     user_cli_config = UserBaseCLIConfig(
-        id=user.id, email=user.email, is_admin=user.is_admin, token=token
+        id=user.id,  # type: ignore[invalid-argument-type]
+        email=user.email,
+        is_admin=user.is_admin,
+        token=token,  # type: ignore[invalid-argument-type]
     )
 
     # Create the complete CLI config
     cli_config = CLIConfig(
         user=user_cli_config,
-        base_url=settings.fastapi.external_url,  # Always use external URL for CLI
-        s3=settings.minio,
+        api_base_url=settings.fastapi.external_url,  # Always use external URL for CLI
+        s3_storage=settings.minio,
     )
 
     logger.debug(f"Generated CLI config for user: {user.email}")
@@ -53,7 +57,7 @@ async def export_agent_config(cli_config: CLIConfig, email: str, wipe: bool = Fa
     """
     # Make the config serializable
     serializable_config = make_json_serializable(cli_config.model_dump())
-    serializable_config["base_url"] = str(cli_config.base_url)
+    serializable_config["api_base_url"] = str(cli_config.api_base_url)
 
     # Convert to YAML
     agent_config_yaml = yaml.dump(serializable_config, default_flow_style=False)

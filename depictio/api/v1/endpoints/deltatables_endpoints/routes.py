@@ -54,7 +54,7 @@ async def upsert_deltatable(
     # Construct the query to look into the projects_collection if the user is an admin or has permissions over the project by looking at the data_collection id
     query = {
         "$or": [
-            {"permissions.owners._id": current_user.id},
+            {"permissions.owners._id": current_user.id},  # type: ignore[possibly-unbound-attribute]
             {"permissions.is_admin": True},
         ],
         "workflows.data_collections._id": data_collection_oid,
@@ -83,14 +83,14 @@ async def upsert_deltatable(
             if dc_config:  # Stop if found
                 break
             else:
-                dc_config = dc_config.get("config", None)
+                dc_config = dc_config.get("config", None)  # type: ignore[possibly-unbound-attribute]
 
     # read deltatable using polars
     df = pl.read_delta(payload.delta_table_location, storage_options=polars_s3_config)
     logger.info(f"DeltaTableAggregated read from MinIO at location: {payload.delta_table_location}")
 
     # Precompute columns specs
-    results = precompute_columns_specs(df, agg_functions, dc_config)
+    results = precompute_columns_specs(df, agg_functions, dc_config)  # type: ignore[invalid-argument-type]
 
     # 6. Compute hash
     # Compute hash rows (returns a Polars Series)
@@ -127,7 +127,7 @@ async def upsert_deltatable(
 
     logger.info(f"DeltaTableAggregated: {format_pydantic(deltatable)}")
 
-    user = User.from_mongo(users_collection.find_one({"_id": ObjectId(current_user.id)}))
+    user = User.from_mongo(users_collection.find_one({"_id": ObjectId(current_user.id)}))  # type: ignore[invalid-argument-type]
 
     userbase = user.turn_to_userbase()
     logger.info(f"UserBase: {userbase}")
@@ -196,8 +196,8 @@ async def get_deltatable(
             "$match": {
                 "workflows.data_collections._id": ObjectId(data_collection_id),
                 "$or": [
-                    {"permissions.owners._id": current_user.id},
-                    {"permissions.viewers._id": current_user.id},
+                    {"permissions.owners._id": current_user.id},  # type: ignore[possibly-unbound-attribute]
+                    {"permissions.viewers._id": current_user.id},  # type: ignore[possibly-unbound-attribute]
                     {"permissions.viewers": "*"},
                     {"is_public": True},
                 ],
@@ -254,8 +254,8 @@ async def specs(
             "$match": {
                 "workflows.data_collections._id": ObjectId(data_collection_id),
                 "$or": [
-                    {"permissions.owners._id": current_user.id},
-                    {"permissions.viewers._id": current_user.id},
+                    {"permissions.owners._id": current_user.id},  # type: ignore[possibly-unbound-attribute]
+                    {"permissions.viewers._id": current_user.id},  # type: ignore[possibly-unbound-attribute]
                     {"permissions.viewers": "*"},
                     {"is_public": True},
                 ],
@@ -333,9 +333,9 @@ async def delete_deltatable(
     # Initialize S3 client
     s3_client = boto3.client(
         "s3",
-        endpoint_url=settings.minio.endpoint,  # Ensure MinIO endpoint is used
-        aws_access_key_id=settings.minio.access_key,
-        aws_secret_access_key=settings.minio.secret_key,
+        endpoint_url=settings.minio.endpoint,  # Ensure MinIO endpoint is used  # type: ignore[possibly-unbound-attribute]
+        aws_access_key_id=settings.minio.access_key,  # type: ignore[possibly-unbound-attribute]
+        aws_secret_access_key=settings.minio.secret_key,  # type: ignore[possibly-unbound-attribute]
         region_name="us-east-1",  # MinIO default region
     )
 

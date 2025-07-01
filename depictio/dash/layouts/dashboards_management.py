@@ -133,7 +133,7 @@ def render_welcome_section(email, is_anonymous=False):
 
     return dmc.Grid(
         children=[
-            dmc.Col(
+            dmc.GridCol(
                 dcc.Link(
                     dmc.Tooltip(
                         dmc.Avatar(
@@ -146,11 +146,13 @@ def render_welcome_section(email, is_anonymous=False):
                     ),
                     href="/profile",
                 ),
-                span="content",
+                span="auto",
             ),
-            dmc.Col(
+            dmc.GridCol(
                 [
-                    dmc.Title(f"Welcome, {email}!", order=2, align="center"),
+                    dmc.Title(
+                        f"Welcome, {email}!", order=2, ta="center"
+                    ),  # align -> ta in DMC 2.0+
                     dmc.Center(
                         dmc.Button(
                             button_text,
@@ -168,7 +170,8 @@ def render_welcome_section(email, is_anonymous=False):
                     dmc.Title("Your Dashboards", order=3),
                     dmc.Divider(style={"margin": "20px 0"}),
                 ],
-                span=10,
+                span="auto",
+                style={"flex": "1"},
             ),
         ],
         gutter="xl",
@@ -221,7 +224,7 @@ def register_callbacks_dashboards_management(app):
                         ),
                     ],
                     align="center",
-                    position="apart",
+                    justify="space-between",
                     grow=False,
                     noWrap=False,
                     style={"width": "100%"},
@@ -243,8 +246,12 @@ def register_callbacks_dashboards_management(app):
                 opened=False,
                 centered=True,
                 withCloseButton=False,
-                overlayOpacity=0.55,
-                overlayBlur=3,
+                # overlayOpacity=0.55,
+                # overlayBlur=3,
+                overlayProps={
+                    "overlayOpacity": 0.55,
+                    "overlayBlur": 3,
+                },
                 shadow="xl",
                 radius="md",
                 size="md",
@@ -256,12 +263,12 @@ def register_callbacks_dashboards_management(app):
                 },
                 children=[
                     dmc.Stack(
-                        spacing="lg",
+                        gap="lg",
                         children=[
                             # Header with icon and title
                             dmc.Group(
-                                position="left",
-                                spacing="sm",
+                                justify="flex-start",
+                                gap="sm",
                                 children=[
                                     DashIconify(
                                         icon="mdi:rename-box",
@@ -295,14 +302,14 @@ def register_callbacks_dashboards_management(app):
                                     "type": "message-edit-name-dashboard",
                                     "index": dashboard["dashboard_id"],
                                 },
-                                color="red",
+                                c="red",
                                 size="sm",
                                 style={"display": "none"},
                             ),
                             # Buttons
                             dmc.Group(
-                                position="right",
-                                spacing="md",
+                                justify="flex-end",
+                                gap="md",
                                 mt="md",
                                 children=[
                                     dmc.Button(
@@ -323,7 +330,7 @@ def register_callbacks_dashboards_management(app):
                                         },
                                         color="blue",
                                         radius="md",
-                                        leftIcon=DashIconify(icon="mdi:content-save", width=16),
+                                        leftSection=DashIconify(icon="mdi:content-save", width=16),
                                     ),
                                 ],
                             ),
@@ -346,7 +353,7 @@ def register_callbacks_dashboards_management(app):
                 f"Owner: {dashboard['permissions']['owners'][0]['email']}",
                 # f"Owner: {dashboard['permissions']['owners'][0]['email']} - {str(dashboard['permissions']['owners'][0]['_id'])}",
                 color=color_badge_ownership,
-                leftSection=DashIconify(icon="mdi:account", width=16, color="grey"),
+                leftSection=DashIconify(icon="mdi:account", width=16, color="gray"),
             )
 
             response = api_get_project_from_id(project_id=dashboard["project_id"], token=token)
@@ -361,12 +368,12 @@ def register_callbacks_dashboards_management(app):
             badge_project = dmc.Badge(
                 f"Project: {project_name}",
                 color="green",
-                leftSection=DashIconify(icon="mdi:jira", width=16, color="grey"),
+                leftSection=DashIconify(icon="mdi:jira", width=16, color="gray"),
             )
             badge_status = dmc.Badge(
                 "Public" if public else "Private",
                 color="green" if public else "violet",
-                leftSection=DashIconify(icon=badge_icon, width=16, color="grey"),
+                leftSection=DashIconify(icon=badge_icon, width=16, color="gray"),
             )
 
             # badge_tooltip_additional_info = dmc.HoverCard(
@@ -378,7 +385,7 @@ def register_callbacks_dashboards_management(app):
             #                 leftSection=DashIconify(
             #                     icon="material-symbols:info-outline",
             #                     width=16,
-            #                     color="grey",
+            #                     color="gray",
             #                 ),
             #             )
             #         ),
@@ -562,8 +569,8 @@ def register_callbacks_dashboards_management(app):
                                     dmc.Center(
                                         dmc.Image(
                                             src=default_thumbnail_url,
-                                            height=220,
-                                            width=220,
+                                            h=220,
+                                            w=220,
                                             style={"padding": "0px 0px"},
                                         )
                                     )
@@ -573,18 +580,16 @@ def register_callbacks_dashboards_management(app):
                         ),
                         dmc.Text(
                             "No thumbnail available yet",
-                            size=18,
-                            align="center",
-                            color="gray",
+                            size="lg",
+                            ta="center",
+                            c="gray",
                             style={"fontFamily": "Virgil"},
                         ),
                     ]
                 )
             else:
                 thumbnail = html.A(
-                    dmc.CardSection(
-                        dmc.Image(src=thumbnail_url, height=225, width=400, fit="contain")
-                    ),
+                    dmc.CardSection(dmc.Image(src=thumbnail_url, h=225, w=400, fit="contain")),
                     href=f"/dashboard/{dashboard['dashboard_id']}",
                 )
 
@@ -699,14 +704,13 @@ def register_callbacks_dashboards_management(app):
         )
         owned_dashboards_view = dmc.SimpleGrid(
             loop_over_dashboards(user_id, owned_dashboards, token, current_user),
-            cols=3,  # Default number of columns
+            cols={
+                "base": 1,
+                "sm": 2,
+                "lg": 3,
+            },  # Responsive columns: 1 on mobile, 2 on small, 3 on large
             spacing="xl",
             verticalSpacing="xl",
-            breakpoints=[
-                {"maxWidth": 1600, "cols": 3},  # Large screens
-                {"maxWidth": 1200, "cols": 2},  # Medium screens
-                {"maxWidth": 768, "cols": 1},  # Small screens
-            ],
             style={"width": "100%"},
         )
         accessed_dashboards_section_header = dmc.Title(
@@ -719,14 +723,13 @@ def register_callbacks_dashboards_management(app):
 
         accessed_dashboards_view = dmc.SimpleGrid(
             loop_over_dashboards(user_id, accessed_dashboards, token, current_user),
-            cols=3,  # Default number of columns
+            cols={
+                "base": 1,
+                "sm": 2,
+                "lg": 3,
+            },  # Responsive columns: 1 on mobile, 2 on small, 3 on large
             spacing="xl",
             verticalSpacing="xl",
-            breakpoints=[
-                {"maxWidth": 1600, "cols": 3},  # Large screens
-                {"maxWidth": 1200, "cols": 2},  # Medium screens
-                {"maxWidth": 768, "cols": 1},  # Small screens
-            ],
             style={"width": "100%"},
         )
 
@@ -915,7 +918,7 @@ def register_callbacks_dashboards_management(app):
         if modal_data.get("title"):
             logger.info("Creating new dashboard")
 
-            dashboard_id = ObjectId()
+            dashboard_id = PyObjectId()
             # dashboard_id = generate_unique_index()
 
             new_dashboard = DashboardData(
@@ -1198,7 +1201,7 @@ def register_callbacks_dashboards_management(app):
                         dmc.Badge(
                             children="Title already exists",
                             color="red",
-                            size=20,
+                            size="xl",
                             id="unique-title-warning-badge",
                         ),
                         dash.no_update,
@@ -1214,7 +1217,7 @@ def register_callbacks_dashboards_management(app):
                         dmc.Badge(
                             children="Title cannot be empty",
                             color="red",
-                            size=20,
+                            size="xl",
                             id="unique-title-warning-badge",
                         ),
                         dash.no_update,
@@ -1229,7 +1232,7 @@ def register_callbacks_dashboards_management(app):
                     dmc.Badge(
                         children="Project not selected",
                         color="red",
-                        size=20,
+                        size="xl",
                         id="unique-title-warning-badge",
                     ),
                     dash.no_update,

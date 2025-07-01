@@ -69,10 +69,10 @@ def regex_match(root, file, full_regex, data_collection):
     # Normalize the regex pattern to match both types of path separators
     normalized_regex = full_regex.replace("/", "\\/")
     logger.debug(
-        f"Root: {root}, File: {file}, Full Regex: {full_regex}, Data Collection type: {data_collection.config.regex.type.lower()}"
+        f"Root: {root}, File: {file}, Full Regex: {full_regex}, Data Collection type: {data_collection.config.regex.type.lower()}"  # type: ignore[unresolved-attribute]
     )
     # If regex pattern is file-based, match the file name directly
-    if data_collection.config.regex.type.lower() == "file-based":
+    if data_collection.config.regex.type.lower() == "file-based":  # type: ignore[unresolved-attribute]
         if re.match(normalized_regex, file):
             logger.debug(f"Matched file - file-based: {file}")
             return True, re.match(normalized_regex, file)
@@ -100,17 +100,18 @@ def scan_files(run_location: str, run_id: str, data_collection: DataCollection) 
     file_list = list()
 
     logger.debug(f"Data Collection: {data_collection}")
-    logger.debug(f"Regex Pattern: {data_collection.config.regex.pattern}")
-    logger.debug(f"Wildcards: {data_collection.config.regex.wildcards}")
+    logger.debug(f"Regex Pattern: {data_collection.config.regex.pattern}")  # type: ignore[unresolved-attribute]
+    logger.debug(f"Wildcards: {data_collection.config.regex.wildcards}")  # type: ignore[unresolved-attribute]
 
     # Construct the full regex using the wildcards defined in the config
     full_regex = None
-    if data_collection.config.regex.wildcards:
+    if data_collection.config.regex.wildcards:  # type: ignore[unresolved-attribute]
         full_regex = construct_full_regex(
-            data_collection.config.regex.pattern, data_collection.config.regex
+            data_collection.config.regex.pattern,  # type: ignore[unresolved-attribute]
+            data_collection.config.regex,  # type: ignore[unresolved-attribute]
         )
     else:
-        full_regex = data_collection.config.regex.pattern
+        full_regex = data_collection.config.regex.pattern  # type: ignore[unresolved-attribute]
 
     logger.debug(f"Full Regex: {full_regex}")
 
@@ -132,22 +133,22 @@ def scan_files(run_location: str, run_id: str, data_collection: DataCollection) 
                 creation_time_iso = creation_time_dt.strftime("%Y-%m-%d %H:%M:%S")
                 modification_time_iso = modification_time_dt.strftime("%Y-%m-%d %H:%M:%S")
 
-                file_instance = File(
+                file_instance = File(  # type: ignore[unknown-argument]
                     filename=filename,
                     file_location=file_location,
                     creation_time=creation_time_iso,
                     modification_time=modification_time_iso,
-                    data_collection=data_collection,
+                    data_collection=data_collection,  # type: ignore[unknown-argument]
                     run_id=run_id,
                 )
                 logger.debug(f"File Instance: {file_instance}")
 
                 if (
-                    data_collection.config.regex.wildcards
+                    data_collection.config.regex.wildcards  # type: ignore[unresolved-attribute]
                     and data_collection.config.type == "JBrowse2"
                 ):
                     wildcards_list = list()
-                    for j, wildcard in enumerate(data_collection.config.regex.wildcards, start=1):
+                    for j, wildcard in enumerate(data_collection.config.regex.wildcards, start=1):  # type: ignore[unresolved-attribute]
                         wildcards_list.append(
                             {
                                 "name": wildcard.name,
@@ -155,7 +156,7 @@ def scan_files(run_location: str, run_id: str, data_collection: DataCollection) 
                                 "wildcard_regex": wildcard.wildcard_regex,
                             }
                         )
-                    file_instance.wildcards = wildcards_list
+                    file_instance.wildcards = wildcards_list  # type: ignore[unresolved-attribute]
 
                 file_list.append(file_instance)
 
@@ -182,7 +183,7 @@ def scan_runs(
 
     for run in os.listdir(parent_runs_location):
         if os.path.isdir(os.path.join(parent_runs_location, run)):
-            if re.match(workflow_config.runs_regex, run):
+            if re.match(workflow_config.runs_regex, run):  # type: ignore[unresolved-attribute]
                 run_location = os.path.join(parent_runs_location, run)
                 files = scan_files(
                     run_location=run_location,
@@ -191,14 +192,14 @@ def scan_runs(
                 )
                 execution_time = datetime.fromtimestamp(os.path.getctime(run_location))
 
-                workflow_run = WorkflowRun(
-                    workflow_id=workflow_id,
+                workflow_run = WorkflowRun(  # type: ignore[missing-argument,invalid-argument-type,unknown-argument]
+                    workflow_id=workflow_id,  # type: ignore[invalid-argument-type]
                     run_tag=run,
-                    files=files,
-                    workflow_config=workflow_config,
+                    files=files,  # type: ignore[unknown-argument]
+                    workflow_config=workflow_config,  # type: ignore[unknown-argument]
                     run_location=run_location,
-                    execution_time=execution_time,
-                    execution_profile=None,
+                    execution_time=execution_time,  # type: ignore[unknown-argument]
+                    execution_profile=None,  # type: ignore[unknown-argument]
                 )
                 runs.append(workflow_run)
     return runs

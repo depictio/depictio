@@ -2,7 +2,7 @@ import dash
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import yaml
-from dash import ctx, dcc
+from dash import ALL, ctx, dcc
 from dash.exceptions import PreventUpdate
 from dash_extensions.enrich import Input, Output, State, html
 from dash_iconify import DashIconify
@@ -17,7 +17,8 @@ from depictio.dash.api_calls import (
     api_call_list_tokens,
 )
 from depictio.dash.colors import colors
-from depictio.models.models.users import TokenBase, TokenData
+from depictio.models.models.base import PyObjectId
+from depictio.models.models.users import TokenData
 
 # Define consistent theme elements
 CARD_SHADOW = "md"
@@ -53,20 +54,20 @@ def render_tokens_list(tokens):
                             ),
                             dmc.Text(
                                 "No CLI Configurations Available",
-                                align="center",
-                                weight=700,
+                                ta="center",
+                                fw="bold",
                                 size="xl",
                                 style={"color": colors["blue"]},
                             ),
                             dmc.Text(
                                 "Add a new configuration to access Depictio via the command line interface.",
-                                align="center",
-                                color="dimmed",
+                                ta="center",
+                                c="gray",
                                 size="sm",
                             ),
                         ],
                         align="center",
-                        spacing="sm",
+                        gap="sm",
                     )
                 ],
                 shadow="sm",
@@ -107,20 +108,20 @@ def render_tokens_list(tokens):
                                         [
                                             dmc.Text(
                                                 str(token["name"]),
-                                                weight=700,
+                                                fw="bold",
                                                 size="lg",
                                                 style={"color": colors["blue"]},
                                             ),
                                             dmc.Text(
                                                 f"Expires: {expiration}",
                                                 size="xs",
-                                                color="dimmed",
+                                                c="gray",
                                             ),
                                         ],
-                                        spacing=0,
+                                        gap=None,
                                     ),
                                 ],
-                                spacing="sm",
+                                gap="sm",
                             ),
                             # Delete button
                             dmc.Button(
@@ -128,7 +129,7 @@ def render_tokens_list(tokens):
                                 id={"type": "delete-token", "index": str(token["_id"])},
                                 variant="subtle",
                                 radius="md",
-                                leftIcon=DashIconify(
+                                leftSection=DashIconify(
                                     icon="mdi:delete",
                                     width=16,
                                 ),
@@ -142,7 +143,7 @@ def render_tokens_list(tokens):
                                 },
                             ),
                         ],
-                        position="apart",
+                        justify="space-between",
                         style={"width": "100%"},
                     ),
                 ],
@@ -189,24 +190,25 @@ layout = dbc.Container(
                                     dmc.Title(
                                         "Depictio-CLI Configurations",
                                         order=2,
-                                        style={"color": colors["green"]},
+                                        # style={"color": colors["green"]},
+                                        c=colors["green"],
                                     ),
                                 ],
-                                spacing="xs",
-                                position="center",
+                                gap="xs",
+                                justify="center",
                             ),
                             # Description
                             dmc.Text(
                                 "Security configurations to access Depictio via the command line interface.",
-                                align="center",
-                                color="dimmed",
+                                ta="center",
+                                c="gray",
                                 size="sm",
                             ),
                             # Add new config button with improved styling
                             dmc.Button(
                                 "Add New Configuration",
                                 id="add-token-button",
-                                leftIcon=DashIconify(
+                                leftSection=DashIconify(
                                     icon="mdi:plus-circle",
                                     width=20,
                                     style={"color": "white"},
@@ -227,7 +229,7 @@ layout = dbc.Container(
                             ),
                         ],
                         align="center",
-                        spacing="xs",
+                        gap="xs",
                     ),
                 ],
                 shadow="xs",
@@ -252,8 +254,8 @@ layout = dbc.Container(
             withCloseButton=False,
             children=[
                 dmc.Group(
-                    position="left",
-                    spacing="sm",
+                    justify="flex-start",
+                    gap="sm",
                     children=[
                         DashIconify(
                             icon="mdi:console-line",
@@ -265,7 +267,8 @@ layout = dbc.Container(
                             "Name Your Configuration",
                             order=4,
                             style={"margin": 0},
-                            color=colors["green"],
+                            # color=colors["green"],
+                            c=colors["green"],
                         ),
                     ],
                     style={
@@ -316,7 +319,7 @@ layout = dbc.Container(
                             },
                         ),
                     ],
-                    position="right",
+                    justify="flex-end",
                     mt="xl",
                 ),
             ],
@@ -338,13 +341,13 @@ layout = dbc.Container(
                         dmc.Text(
                             "Are you sure you want to delete this configuration? This action cannot be undone.",
                             size="sm",
-                            color="dimmed",
+                            c="gray",
                         ),
                         dmc.TextInput(
                             id="delete-confirm-input",
                             label="Type 'delete' to confirm",
                             required=True,
-                            icon=DashIconify(icon="mdi:delete-alert", width=20),
+                            leftSection=DashIconify(icon="mdi:delete-alert", width=20),
                         ),
                         dmc.Group(
                             [
@@ -369,11 +372,11 @@ layout = dbc.Container(
                                     },
                                 ),
                             ],
-                            position="right",
+                            justify="flex-end",
                             mt="xl",
                         ),
                     ],
-                    spacing="md",
+                    gap="md",
                 ),
             ],
         ),
@@ -427,10 +430,10 @@ def register_tokens_management_callbacks(app):
         Input("confirm-delete-button", "n_clicks"),
         Input("cancel-token-modal", "n_clicks"),
         Input("cancel-delete-modal", "n_clicks"),
-        Input({"type": "delete-token", "index": dash.dependencies.ALL}, "n_clicks"),
+        Input({"type": "delete-token", "index": ALL}, "n_clicks"),
         State("token-name-input", "value"),
         State("delete-confirm-input", "value"),
-        State({"type": "delete-token", "index": dash.dependencies.ALL}, "id"),
+        State({"type": "delete-token", "index": ALL}, "id"),
         State("local-store", "data"),
         State("delete-token-id-store", "data"),
     )
@@ -505,7 +508,7 @@ def register_tokens_management_callbacks(app):
         elif triggered == "save-token-name" and save_clicks > 0 and token_name:
             logger.info(f"Token name: {token_name}")
 
-            if not token_name or token_name in [t["name"] for t in tokens]:
+            if not token_name or (tokens and token_name in [t["name"] for t in tokens]):
                 return (
                     True,
                     False,
@@ -559,10 +562,16 @@ def register_tokens_management_callbacks(app):
                 )
 
             # logger.info(f"Token generated: {token_generated}")
-            token_generated = TokenBase(**token_generated)
-            # logger.info(f"Token generated: {format_pydantic(token_generated)}")
+            # Create TokenData for agent config generation
+            token_data = TokenData(
+                name=token_generated.get("name"),
+                token_lifetime=token_generated.get("token_lifetime", "short-lived"),
+                token_type=token_generated.get("token_type", "bearer"),
+                sub=PyObjectId(token_generated.get("user_id")),
+            )
+            # logger.info(f"Token generated: {format_pydantic(token_data)}")
             agent_config = api_call_generate_agent_config(
-                token=token_generated, current_token=local_store["access_token"]
+                token=token_data, current_token=local_store["access_token"]
             )
             # logger.info(f"Config: {agent_config}")
 
@@ -595,10 +604,11 @@ def register_tokens_management_callbacks(app):
                                         id="config-created-success",
                                         children="Configuration Created Successfully",
                                         order=3,
-                                        style={"color": colors["green"]},
+                                        # style={"color": colors["green"]},
+                                        c=colors["green"],
                                     ),
                                 ],
-                                spacing="sm",
+                                gap="sm",
                             ),
                             dmc.Alert(
                                 title="Important",
@@ -665,10 +675,10 @@ def register_tokens_management_callbacks(app):
                                         # ),
                                     ),
                                 ],
-                                position="right",
+                                justify="flex-end",
                             ),
                         ],
-                        spacing="md",
+                        gap="md",
                     ),
                 ]
             )
@@ -707,7 +717,7 @@ def register_tokens_management_callbacks(app):
         ):
             logger.info(f"Deleting config {delete_token_id}")
             # logger.info(f"tokens: {tokens}")
-            if delete_token_id in [str(t["_id"]) for t in tokens]:
+            if tokens and delete_token_id in [str(t["_id"]) for t in tokens]:
                 # logger.info(f"Deleting token {delete_token_id}")
                 api_call_delete_token(token_id=delete_token_id)
                 tokens = [e for e in tokens if str(e["_id"]) != delete_token_id]

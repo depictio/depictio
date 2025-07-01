@@ -95,7 +95,7 @@ async def sync_dashboard_permissions_with_projects(
 
 
 # Utility functions for project-based permission inheritance
-def get_project_permissions_for_dashboard(dashboard_id: PyObjectId) -> dict:
+def get_project_permissions_for_dashboard(dashboard_id: PyObjectId) -> dict | None:
     """
     Get project permissions for a dashboard by looking up the project_id.
 

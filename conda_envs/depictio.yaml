@@ -14,8 +14,8 @@ dependencies:
   - dash-bootstrap-components==1.7.1
   - dash-extensions==1.0.1
   - dash-iconify==0.1.2
-  - dash-mantine-components==0.12.1
-  - dash==2.14.2
+  - dash-mantine-components>=2.0.0
+  - dash>=3.0.0
   - deltalake==0.24.0
   - devtools
   - fastapi==0.115.8

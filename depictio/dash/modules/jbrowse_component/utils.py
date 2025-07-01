@@ -199,7 +199,7 @@ def build_jbrowse(**kwargs):
         },
         id={"type": "iframe-jbrowse", "index": index},
     )
-    store_index = index.replace("-tmp", "")
+    store_index = index.replace("-tmp", "") if index else "unknown"
 
     store_component = dcc.Store(
         id={"type": "stored-metadata-component", "index": store_index},

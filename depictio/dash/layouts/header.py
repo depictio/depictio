@@ -283,7 +283,7 @@ def design_header(data, local_store):
     #                     type="text",
     #                     value="https://depict.io/dashboard/1",
     #                     style={"width": "100%"},
-    #                     icon=DashIconify(icon="mdi:link", width=16, color="grey"),
+    #                     icon=DashIconify(icon="mdi:link", width=16, color="gray"),
     #                 ),
     #             ],
     #             style={"background-color": "#F0F8FF"},
@@ -338,7 +338,8 @@ def design_header(data, local_store):
         style=button_style,
         disabled=disabled,
         # leftIcon=DashIconify(icon="mdi:plus", width=16, color="white"),
-        sx=sx,
+        # FIXME: Add sx for hover effect
+        # sx=sx,
     )
 
     save_button = dmc.ActionIcon(
@@ -355,7 +356,8 @@ def design_header(data, local_store):
         n_clicks=0,
         disabled=disabled,
         style=button_style,
-        sx=sx,
+        # FIXME: Add sx for hover effect
+        # sx=sx,
         # leftIcon=DashIconify(icon="mdi:content-save", width=16, color="white"),
         # width of the button
         # style={"width": "120px", "fontFamily": "Virgil"},
@@ -364,7 +366,7 @@ def design_header(data, local_store):
     remove_all_components_button = dmc.Button(
         "Remove all components",
         id="remove-all-components-button",
-        leftIcon=DashIconify(icon="mdi:trash-can-outline", width=16, color="white"),
+        leftSection=DashIconify(icon="mdi:trash-can-outline", width=16, color="white"),
         size="md",
         radius="xl",
         variant="gradient",
@@ -402,18 +404,18 @@ def design_header(data, local_store):
                     dmc.Badge(
                         f"Project: {project_name}",
                         color="green",
-                        leftSection=DashIconify(icon="mdi:jira", width=16, color="grey"),
+                        leftSection=DashIconify(icon="mdi:jira", width=16, color="gray"),
                     ),
                     dmc.Badge(
                         f"Owner: {data['permissions']['owners'][0]['email']}",
                         color="blue",
-                        leftSection=DashIconify(icon="mdi:account", width=16, color="grey"),
+                        leftSection=DashIconify(icon="mdi:account", width=16, color="gray"),
                     ),
                     dmc.Badge(
                         f"Last saved: {formated_ts}",
                         color="violet",
                         leftSection=DashIconify(
-                            icon="mdi:clock-time-four-outline", width=16, color="grey"
+                            icon="mdi:clock-time-four-outline", width=16, color="gray"
                         ),
                     ),
                     # ]
@@ -421,7 +423,7 @@ def design_header(data, local_store):
                 ],
                 justify="center",
                 align="flex-start",
-                spacing=5,
+                gap=5,
             ),
         ],
     )
@@ -436,10 +438,10 @@ def design_header(data, local_store):
                     value=f"{data['version']}",
                     label="Dashboard version",
                     style={"width": 150, "padding": "0 10px", "display": "none"},
-                    icon=DashIconify(
+                    leftSection=DashIconify(
                         icon="mdi:format-list-bulleted-square",
                         width=16,
-                        color=dmc.theme.DEFAULT_COLORS["blue"][5],
+                        color="blue.5",
                     ),
                     # rightSection=DashIconify(icon="radix-icons:chevron-down"),
                 )
@@ -455,7 +457,7 @@ def design_header(data, local_store):
                     dmc.Text("Edit dashboard layout", style={"fontFamily": "default"}),
                 ],
                 align="center",
-                spacing="sm",
+                gap="sm",
                 style={"padding": "10px", "margin": "10px 0"},
             ),
             dmc.Group(
@@ -469,7 +471,7 @@ def design_header(data, local_store):
                     dmc.Text("Display components options", style={"fontFamily": "default"}),
                 ],
                 align="center",
-                spacing="sm",
+                gap="sm",
                 style={"padding": "10px", "margin": "10px 0"},
             ),
             dmc.Group(
@@ -482,7 +484,7 @@ def design_header(data, local_store):
                     dmc.Text("Toggle interactivity", style={"fontFamily": "default"}),
                 ],
                 align="center",
-                spacing="sm",
+                gap="sm",
                 style={"padding": "10px", "margin": "10px 0"},
             ),
         ]
@@ -494,7 +496,7 @@ def design_header(data, local_store):
             dmc.Group(
                 [remove_all_components_button],
                 align="center",
-                spacing="sm",
+                gap="sm",
                 style={"padding": "10px", "margin": "10px 0"},
             ),
             dmc.Group(
@@ -502,7 +504,7 @@ def design_header(data, local_store):
                     dmc.Button(
                         "Reset all filters",
                         id="reset-all-filters-button",
-                        leftIcon=DashIconify(icon="bx:reset", width=16, color="white"),
+                        leftSection=DashIconify(icon="bx:reset", width=16, color="white"),
                         size="md",
                         radius="xl",
                         variant="gradient",
@@ -521,7 +523,7 @@ def design_header(data, local_store):
                     dmc.ActionIcon(
                         DashIconify(icon="mdi:share-variant", width=20, color="white"),
                         id="share-button",
-                        color="grey",
+                        color="gray",
                         variant="filled",
                         disabled=disabled,
                         n_clicks=0,
@@ -529,7 +531,7 @@ def design_header(data, local_store):
                     dmc.Text("Share", style={"fontFamily": "default"}),
                 ],
                 align="center",
-                spacing="sm",
+                gap="sm",
                 style={"padding": "10px", "margin": "10px 0", "display": "none"},
             ),
         ]
@@ -552,7 +554,8 @@ def design_header(data, local_store):
         # variant="filled",
         variant="subtle",
         style=button_style,
-        sx=sx,
+        # FIXME: Add sx for hover effect
+        # sx=sx,
     )
 
     dummy_output = html.Div(id="dummy-output", style={"display": "none"})
@@ -592,29 +595,29 @@ def design_header(data, local_store):
                 storage_type="memory",
                 data=False,
             ),
-            dmc.MediaQuery(
-                [
-                    dmc.ActionIcon(
-                        DashIconify(
-                            id="sidebar-icon",
-                            icon="ep:d-arrow-left",
-                            width=34,
-                            height=34,
-                            color="#c2c7d0",
-                        ),
-                        variant="subtle",
-                        p=1,
-                        id="sidebar-button",
-                    )
-                ],
-                smallerThan="md",
-                styles={"display": "none"},
+            dmc.ActionIcon(
+                DashIconify(
+                    id="sidebar-icon",
+                    icon="ep:d-arrow-left",
+                    width=34,
+                    height=34,
+                    color="#c2c7d0",
+                ),
+                variant="subtle",
+                p=1,
+                id="sidebar-button",
+                # In DMC 2.0+, use responsive styles instead of MediaQuery
+                style={
+                    "@media (max-width: 768px)": {"display": "block"},  # Show on mobile
+                    "@media (min-width: 769px)": {"display": "none"},  # Hide on desktop
+                },
             ),
         ]
     )
 
+    # TODO: DMC 2.0+ - Header and Col components no longer exist, replaced with Container and Grid
     # title_style = {"fontWeight": "bold", "fontSize": "24px", "color": "#333"}
-    header = dmc.Header(
+    header = dmc.Container(
         [
             offcanvas_parameters,
             modal_save_button,
@@ -624,21 +627,14 @@ def design_header(data, local_store):
             html.Div(children=stores_add_edit),
             dmc.Grid(
                 [
-                    # dmc.Col(
-                    #     [button_menu],
-                    #     # align="center",
-                    #     style={"paddingLeft": "20px"},
-                    #     span="content",
-                    # ),
-                    dmc.Col(
+                    dmc.GridCol(
                         [
-                            dmc.Group([button_menu, card_section], noWrap=True),
+                            dmc.Group([button_menu, card_section], gap="xs"),
                         ],
-                        style={"justify": "start"},
-                        span=12,
-                        md=3,
+                        span=3,
+                        style={"justifyContent": "start"},
                     ),
-                    dmc.Col(
+                    dmc.GridCol(
                         [
                             dmc.Center(
                                 dmc.Title(
@@ -653,10 +649,9 @@ def design_header(data, local_store):
                                 )
                             ),
                         ],
-                        span=12,
-                        md=7,  # Adjusted to span more columns on larger screens
+                        span=7,
                     ),
-                    dmc.Col(
+                    dmc.GridCol(
                         [
                             html.Div(
                                 children=[
@@ -666,19 +661,14 @@ def design_header(data, local_store):
                                             save_button,
                                             open_offcanvas_parameters_button,
                                         ],
-                                        # justify="flex-end",
-                                        # align="stretch",
-                                        # style={"paddingTop": "5px"},
-                                        spacing="xs",
-                                        position="right",  # Aligns items to the right
+                                        gap="xs",
+                                        justify="flex-end",  # Aligns items to the right
                                         style={"paddingTop": "5px"},
                                     ),
                                 ],
                             ),
                         ],
-                        span=12,
-                        md=2,  # Adjusted to span fewer columns on larger screens
-                        # offset=1
+                        span=2,
                     ),
                 ],
                 # justify="between",
@@ -686,9 +676,8 @@ def design_header(data, local_store):
                 align="center",
             ),
         ],
-        height=80,
-        style={"width": "100%"},
-        withBorder=False,
+        style={"height": "80px", "width": "100%", "backgroundColor": "#f8f9fa", "padding": "10px"},
+        fluid=True,
     )
 
     return header, backend_components

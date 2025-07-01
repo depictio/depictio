@@ -36,7 +36,7 @@ def get_temporary_user_session(expiry_hours: int = 24, expiry_minutes: int = 0):
     """
     session_data = api_call_create_temporary_user(
         expiry_hours=expiry_hours,
-        expiry_minutes=expiry_minutes,
+        expiry_minutes=expiry_minutes,  # type: ignore[unknown-argument]
     )
     if not session_data:
         raise Exception("Failed to create temporary user session via API")
@@ -126,8 +126,30 @@ def process_authentication(pathname, local_data):
         return handle_unauthenticated_user(pathname)
 
     try:
+        from datetime import datetime
         # Create token object and validate
-        token = TokenBase(**local_data)
+        # We've already validated that all required fields are present above
+
+        # Convert datetime fields if they are strings
+        expire_datetime = local_data["expire_datetime"]
+        if isinstance(expire_datetime, str):
+            expire_datetime = datetime.fromisoformat(expire_datetime.replace("Z", "+00:00"))
+
+        refresh_expire_datetime = local_data["refresh_expire_datetime"]
+        if isinstance(refresh_expire_datetime, str):
+            refresh_expire_datetime = datetime.fromisoformat(
+                refresh_expire_datetime.replace("Z", "+00:00")
+            )
+
+        # Create token with explicit field assignment
+        token = TokenBase(
+            user_id=local_data["user_id"],
+            access_token=local_data["access_token"],
+            refresh_token=local_data["refresh_token"],
+            expire_datetime=expire_datetime,
+            refresh_expire_datetime=refresh_expire_datetime,
+            **{k: v for k, v in local_data.items() if k not in required_fields},
+        )
         validation_result = check_token_validity(token)
 
         logger.debug(f"Token validation result: {validation_result}")

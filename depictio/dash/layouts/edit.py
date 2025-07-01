@@ -106,21 +106,23 @@ def enable_box_edit_mode(
     )
 
     if switch_state:
-        # buttons = dmc.Group([remove_button, category_button], grow=False, spacing="xl", style={"margin-left": "12px"})
+        # buttons = dmc.Group([remove_button, category_button], grow=False, gap="xl", style={"margin-left": "12px"})
         # if component_type:
         #     if component_type != "table":
         buttons = dmc.Group(
             [remove_button, edit_button, duplicate_button],
             grow=False,
-            spacing="xs",
+            gap="xs",
             style={"margin-left": "12px"},
         )
         # logger.info(f"ENABLE BOX EDIT MODE - component_type: {component_type}")
 
         if component_type:
+            visu_type = component_data.get("visu_type", None)
             if (
                 component_type == "figure"
-                and component_data.get("visu_type", None).lower() == "scatter"
+                and visu_type is not None
+                and visu_type.lower() == "scatter"
             ):
                 buttons = dmc.Group(
                     [
@@ -130,7 +132,7 @@ def enable_box_edit_mode(
                         reset_selection_button,
                     ],
                     grow=False,
-                    spacing="xs",
+                    gap="xs",
                     style={"margin-left": "12px"},
                 )
 
@@ -138,19 +140,19 @@ def enable_box_edit_mode(
                 buttons = dmc.Group(
                     [remove_button, duplicate_button],
                     grow=False,
-                    spacing="xs",
+                    gap="xs",
                     style={"margin-left": "12px"},
                 )
         else:
             buttons = dmc.Group(
                 [remove_button, duplicate_button],
                 grow=False,
-                spacing="xs",
+                gap="xs",
                 style={"margin-left": "12px"},
             )
         # if fresh:
-        #     buttons = dmc.Group([remove_button], grow=False, spacing="xl", style={"margin-left": "12px"})
-        box_components_list = dmc.Stack([buttons, box], spacing="md")
+        #     buttons = dmc.Group([remove_button], grow=False, gap="xl", style={"margin-left": "12px"})
+        box_components_list = dmc.Stack([buttons, box], gap="md")
 
     else:
         box_components_list = [box]

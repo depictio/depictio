@@ -113,7 +113,7 @@ def update_jbrowse_config(config_path, new_tracks=[]):
     config["tracks"] = [
         track
         for track in config["tracks"]
-        if f"{settings.minio.endpoint_url}{settings.minio.port}:/{settings.minio.bucket_name}"
+        if f"{settings.minio.endpoint_url}{settings.minio.port}:/{settings.minio.bucket_name}"  # type: ignore[possibly-unbound-attribute]
         not in track["trackId"]
     ]
 
@@ -190,7 +190,7 @@ def handle_jbrowse_tracks(file, user_id, workflow_id, data_collection):
     logger.debug(f"Handling JBrowse tracks for file: {file}")
 
     # endpoint_url = "http://0.0.0.0"
-    endpoint_url = settings.minio.external_endpoint
+    endpoint_url = settings.minio.external_endpoint  # type: ignore[possibly-unbound-attribute]
     port = settings.minio.port
     bucket_name = settings.minio.bucket
 
@@ -201,7 +201,7 @@ def handle_jbrowse_tracks(file, user_id, workflow_id, data_collection):
     path_suffix = file_location.split(f"{run_id}/")[1]
 
     # Get workflow tag from workflow_id
-    wf_tag = workflows_collection.find_one({"_id": ObjectId(workflow_id)})["workflow_tag"]
+    wf_tag = workflows_collection.find_one({"_id": ObjectId(workflow_id)})["workflow_tag"]  # type: ignore[non-subscriptable]
 
     # Construct the S3 key respecting the structure
     s3_key = f"{user_id}/{workflow_id}/{data_collection.id}/{run_id}/{path_suffix}"
@@ -300,7 +300,7 @@ async def create_trackset(
 ):
     workflow_oid = ObjectId(workflow_id)
     data_collection_oid = ObjectId(data_collection_id)
-    user_oid = ObjectId(current_user.id)
+    user_oid = ObjectId(current_user.id)  # type: ignore[possibly-unbound-attribute]
     assert isinstance(workflow_oid, ObjectId)
     assert isinstance(data_collection_oid, ObjectId)
     assert isinstance(user_oid, ObjectId)
@@ -313,7 +313,7 @@ async def create_trackset(
         user_oid,
     ) = validate_workflow_and_collection(
         workflows_collection,
-        current_user.id,
+        current_user.id,  # type: ignore[possibly-unbound-attribute]
         workflow_id,
         data_collection_id,
     )
@@ -328,16 +328,16 @@ async def create_trackset(
     new_tracks = list()
 
     for file in files:
-        file = File(**file)
+        file = File(**file)  # type: ignore[missing-argument]
 
-        track_config = handle_jbrowse_tracks(file, current_user.id, workflow_id, data_collection)
+        track_config = handle_jbrowse_tracks(file, current_user.id, workflow_id, data_collection)  # type: ignore[possibly-unbound-attribute]
         if track_config:
             new_tracks.append(track_config)
 
     # Update the JBrowse configuration
-    jbrowse_config_dir = settings.jbrowse.config_dir
+    jbrowse_config_dir = settings.jbrowse.config_dir  # type: ignore[possibly-unbound-attribute]
 
-    config_path = os.path.join(jbrowse_config_dir, f"{current_user.id}_{data_collection_oid}.json")
+    config_path = os.path.join(jbrowse_config_dir, f"{current_user.id}_{data_collection_oid}.json")  # type: ignore[possibly-unbound-attribute]
 
     payload = update_jbrowse_config(config_path, new_tracks)
     if payload["type"] == "error":
@@ -406,9 +406,11 @@ async def log_message(log_data: LogData):
     # Update or insert the message into the database
     if jbrowse_collection.find_one():
         document = jbrowse_collection.find_one({"dashboard_id": "1"})
-        document.update(dict_jbrowse_url_args)
+        document.update(dict_jbrowse_url_args)  # type: ignore[union-attr]
         jbrowse_collection.update_one(
-            {"_id": ObjectId(document["_id"])}, {"$set": document}, upsert=True
+            {"_id": ObjectId(document["_id"])},  # type: ignore[non-subscriptable]
+            {"$set": document},
+            upsert=True,  # type: ignore[non-subscriptable]
         )
 
     else:
@@ -445,7 +447,7 @@ async def get_jbrowse_logs():
     # else:
     if jbrowse_collection.find_one():
         log = jbrowse_collection.find_one()
-        log.pop("_id", None)
+        log.pop("_id", None)  # type: ignore[possibly-unbound-attribute]
         return log
     else:
         return {"message": "No logs available."}
@@ -488,11 +490,12 @@ async def filter_config(
     tracks = filter_params.get("tracks", [])
     logger.debug(f"Filtering tracks: {tracks}")
     # Update the JBrowse configuration
-    jbrowse_config_dir = settings.jbrowse.config_dir
+    jbrowse_config_dir = settings.jbrowse.config_dir  # type: ignore[possibly-unbound-attribute]
     data_collection_oid = filter_params.get("data_collection_id")
 
     default_config_path = os.path.join(
-        jbrowse_config_dir, f"{current_user.id}_{data_collection_oid}.json"
+        jbrowse_config_dir,
+        f"{current_user.id}_{data_collection_oid}.json",  # type: ignore[possibly-unbound-attribute]
     )
     # lite_config_path = default_config_path.replace(".json", "_lite.json")
     dashboard_id = filter_params.get("dashboard_id")
@@ -500,7 +503,7 @@ async def filter_config(
     logger.debug(f"Filtering tracks: {tracks}")
     logger.debug(f"Default config path: {default_config_path}")
     logger.debug(f"Dashboard ID: {dashboard_id}")
-    logger.debug(f"Current user: {current_user.id}")
+    logger.debug(f"Current user: {current_user.id}")  # type: ignore[possibly-unbound-attribute]
     logger.debug(f"Len tracks: {len(tracks)}")
 
     if not tracks:
@@ -531,7 +534,7 @@ async def filter_config(
     output_path = default_config_path.replace(".json", f"_filtered_{dashboard_id}.json")
     logger.debug(f"Output path: {output_path}")
 
-    output_return_path = output_path.replace(f"{settings.jbrowse.config_dir}/", "")
+    output_return_path = output_path.replace(f"{settings.jbrowse.config_dir}/", "")  # type: ignore[possibly-unbound-attribute]
 
     with open(output_path, "w") as file:
         json.dump(config, file, indent=4)

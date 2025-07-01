@@ -297,7 +297,7 @@ async def create_workflow(workflow: dict, current_user: str = Depends(get_curren
         )
 
     # Correctly update the owners list in the permissions attribute
-    new_owner = UserBase(id=current_user.id, email=current_user.email, groups=current_user.groups)
+    new_owner = UserBase(id=current_user.id, email=current_user.email, groups=current_user.groups)  # type: ignore[unknown-argument]
     logger.debug(f"new_owner: {new_owner}")
     # new_owner = convert_objectid_to_str(new_owner.mongo())
     # logger.debug(f"new_owner: {new_owner}")
@@ -308,41 +308,41 @@ async def create_workflow(workflow: dict, current_user: str = Depends(get_curren
     logger.debug(f"workflow: {workflow}")
 
     # Convert the workflow to a Workflow object
-    workflow = Workflow(**workflow)
+    workflow = Workflow(**workflow)  # type: ignore[invalid-assignment,missing-argument]
 
     logger.debug(f"workflow: {workflow}")
 
     # Add the new owner to the permissions
-    workflow.permissions.owners.append(new_owner)
+    workflow.permissions.owners.append(new_owner)  # type: ignore[unresolved-attribute]
 
     logger.debug(f"workflow: {workflow}")
 
     # Assign PyObjectId to workflow ID and data collection IDs
-    workflow.id = ObjectId()
+    workflow.id = ObjectId()  # type: ignore[unresolved-attribute]
 
     logger.debug(f"workflow: {workflow}")
 
-    for data_collection in workflow.data_collections:
-        data_collection.id = ObjectId()
-    assert isinstance(workflow.id, ObjectId)
+    for data_collection in workflow.data_collections:  # type: ignore[unresolved-attribute]
+        data_collection.id = ObjectId()  # type: ignore[invalid-assignment]
+    assert isinstance(workflow.id, ObjectId)  # type: ignore[unresolved-attribute]
 
     logger.debug(f"Workflow: {workflow}")
 
-    res = workflows_collection.insert_one(workflow.mongo())
-    assert res.inserted_id == workflow.id
+    res = workflows_collection.insert_one(workflow.mongo())  # type: ignore[unresolved-attribute]
+    assert res.inserted_id == workflow.id  # type: ignore[unresolved-attribute]
 
     logger.debug(f"res: {res}")
 
     # check if the workflow was created in the DB
-    res = workflows_collection.find_one({"_id": workflow.id})
+    res = workflows_collection.find_one({"_id": workflow.id})  # type: ignore[unresolved-attribute]
     logger.debug(f"res query : {res}")
 
     # check if the workflow was created in the DB using the workflow_tag
-    res = workflows_collection.find_one({"workflow_tag": workflow.workflow_tag})
+    res = workflows_collection.find_one({"workflow_tag": workflow.workflow_tag})  # type: ignore[unresolved-attribute]
     logger.debug(f"res query tag : {res}")
 
     return_dict = {
-        str(workflow.id): [str(data_collection.id) for data_collection in workflow.data_collections]
+        str(workflow.id): [str(data_collection.id) for data_collection in workflow.data_collections]  # type: ignore[unresolved-attribute]
     }
 
     return_dict = convert_objectid_to_str(workflow)
@@ -426,7 +426,7 @@ async def delete_workflow(workflow_id: str, current_user: str = Depends(get_curr
     # data_collections = existing_workflow["data_collections"]
 
     # Ensure that the current user is authorized to update the workflow
-    user_id = current_user.id
+    user_id = current_user.id  # type: ignore[possibly-unbound-attribute]
     logger.debug(
         user_id,
         type(user_id),
@@ -469,7 +469,7 @@ async def compare_models_endpoint(
             detail="Both new and existing workflows are required to compare them.",
         )
 
-    result = compare_models(new_workflow, existing_workflow)
+    result = compare_models(new_workflow, existing_workflow)  # type: ignore[invalid-argument-type]
 
     return {
         "exists": True,

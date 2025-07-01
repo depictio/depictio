@@ -110,7 +110,7 @@ class TestCryptoUtils:
         with open(path, "rb") as f:
             # Use the serialization module instead of calling the method on the backend
             loaded_key = serialization.load_pem_public_key(
-                data=f.read(),  # type: ignore
+                data=f.read(),  # type: ignore[call-arg]
                 backend=default_backend(),
             )
             assert isinstance(loaded_key, RSAPublicKey)
@@ -150,7 +150,7 @@ class TestCryptoUtils:
             generate_keys(
                 private_key_path=str(temp_dir / "private.pem"),
                 public_key_path=str(temp_dir / "public.pem"),
-                algorithm="UNSUPPORTED",  # type: ignore
+                algorithm="UNSUPPORTED",  # type: ignore[arg-type]
             )
 
     def test_generate_keys_unimplemented_algorithm(self, temp_dir):

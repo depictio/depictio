@@ -12,7 +12,7 @@ from depictio.cli.cli.utils.common import (
     load_depictio_config,
     validate_depictio_cli_config,
 )
-from depictio.models.models.users import CLIConfig
+from depictio.models.models.cli import CLIConfig
 
 
 class TestCommon:
@@ -23,22 +23,29 @@ class TestCommon:
         """Sample CLI configuration dictionary"""
         return {
             "user": {
+                "email": "test@example.com",
+                "is_admin": False,
+                "id": "507f1f77bcf86cd799439011",
                 "token": {
                     "user_id": "507f1f77bcf86cd799439011",
-                    "access_token": "test_token_123",
-                    "refresh_token": "test_refresh_token_456",
+                    "access_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.EkN-DOsnsuRjRO6BxXemmJDm3HbxrbRzXglbN2S4sOkopdU4IsDxTI8jO19W_A4K8ZPJijNLis4EZsHeY559a4DFOd50_OqgHs3O2GWl5JQ6TyYHdMKoGNAHnm8l",
+                    "refresh_token": "refresh-token-example",
                     "token_type": "bearer",
                     "token_lifetime": "short-lived",
-                    "expire_datetime": datetime(2023, 12, 31, 23, 59, 59),
-                    "refresh_expire_datetime": datetime(2024, 1, 31, 23, 59, 59),
-                    "created_at": datetime(2023, 1, 1, 0, 0, 0),
-                    "logged_in": True,
+                    "expire_datetime": "2025-12-31T23:59:59",
+                    "refresh_expire_datetime": "2025-12-31T23:59:59",
+                    "name": "test_token",
+                    "created_at": "2025-06-30T18:00:00",
+                    "logged_in": False,
                 },
-                "email": "test@example.com",
             },
-            "base_url": "https://api.depictio.dev",
-            "s3": {
-                "public_url": "http://localhost:9000",
+            "api_base_url": "https://api.depictio.dev",
+            "s3_storage": {
+                "service_name": "minio",
+                "service_port": 9000,
+                "external_host": "localhost",
+                "external_port": 9000,
+                "external_protocol": "http",
                 "root_user": "minio",
                 "root_password": "minio123",
                 "bucket": "depictio-bucket",
@@ -48,7 +55,7 @@ class TestCommon:
     @pytest.fixture
     def sample_cli_config_object(self, sample_cli_config):
         """Sample CLI configuration as a CLIConfig object"""
-        return CLIConfig(**sample_cli_config)
+        return CLIConfig(**sample_cli_config)  # type: ignore[missing-argument]
 
     class TestGenerateApiHeaders:
         """Tests for generate_api_headers function"""
@@ -56,14 +63,18 @@ class TestCommon:
         def test_with_dict(self, sample_cli_config):
             """Test generate_api_headers with dictionary input"""
             headers = generate_api_headers(sample_cli_config)
-            assert headers == {"Authorization": "Bearer test_token_123"}
+            assert headers == {
+                "Authorization": "Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.EkN-DOsnsuRjRO6BxXemmJDm3HbxrbRzXglbN2S4sOkopdU4IsDxTI8jO19W_A4K8ZPJijNLis4EZsHeY559a4DFOd50_OqgHs3O2GWl5JQ6TyYHdMKoGNAHnm8l"
+            }
             assert len(headers) == 1
             assert "Authorization" in headers
 
         def test_with_object(self, sample_cli_config_object):
             """Test generate_api_headers with CLIConfig object input"""
             headers = generate_api_headers(sample_cli_config_object)
-            assert headers == {"Authorization": "Bearer test_token_123"}
+            assert headers == {
+                "Authorization": "Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.EkN-DOsnsuRjRO6BxXemmJDm3HbxrbRzXglbN2S4sOkopdU4IsDxTI8jO19W_A4K8ZPJijNLis4EZsHeY559a4DFOd50_OqgHs3O2GWl5JQ6TyYHdMKoGNAHnm8l"
+            }
 
         def test_with_invalid_input(self):
             """Test generate_api_headers with invalid input type"""
@@ -102,9 +113,12 @@ class TestCommon:
                 result = validate_depictio_cli_config(sample_cli_config)
                 assert isinstance(result, CLIConfig)
                 config_dict = result.model_dump()
-                assert config_dict["user"]["token"]["access_token"] == "test_token_123"
-                assert config_dict["base_url"] == "https://api.depictio.dev"
-                assert config_dict["s3"]["bucket"] == "depictio-bucket"
+                assert (
+                    config_dict["user"]["token"]["access_token"]
+                    == "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.EkN-DOsnsuRjRO6BxXemmJDm3HbxrbRzXglbN2S4sOkopdU4IsDxTI8jO19W_A4K8ZPJijNLis4EZsHeY559a4DFOd50_OqgHs3O2GWl5JQ6TyYHdMKoGNAHnm8l"
+                )
+                assert config_dict["api_base_url"] == "https://api.depictio.dev"
+                assert config_dict["s3_storage"]["bucket"] == "depictio-bucket"
 
         def test_invalid_config(self):
             """Test validate_depictio_cli_config with invalid config"""
@@ -118,22 +132,29 @@ class TestCommon:
             """Test successful loading of config file"""
             mock_config = {
                 "user": {
+                    "email": "test@example.com",
+                    "is_admin": False,
+                    "id": "507f1f77bcf86cd799439011",
                     "token": {
                         "user_id": "507f1f77bcf86cd799439011",
-                        "access_token": "test_token_123",
-                        "refresh_token": "test_refresh_token_456",
+                        "access_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.EkN-DOsnsuRjRO6BxXemmJDm3HbxrbRzXglbN2S4sOkopdU4IsDxTI8jO19W_A4K8ZPJijNLis4EZsHeY559a4DFOd50_OqgHs3O2GWl5JQ6TyYHdMKoGNAHnm8l",
+                        "refresh_token": "refresh-token-example",
                         "token_type": "bearer",
                         "token_lifetime": "short-lived",
-                        "expire_datetime": datetime(2023, 12, 31, 23, 59, 59),
-                        "refresh_expire_datetime": datetime(2024, 1, 31, 23, 59, 59),
-                        "created_at": datetime(2023, 1, 1, 0, 0, 0),
-                        "logged_in": True,
+                        "expire_datetime": "2025-12-31T23:59:59",
+                        "refresh_expire_datetime": "2025-12-31T23:59:59",
+                        "name": "test_token",
+                        "created_at": "2025-06-30T18:00:00",
+                        "logged_in": False,
                     },
-                    "email": "test@example.com",
                 },
-                "base_url": "https://api.depictio.dev",
-                "s3": {
-                    "public_url": "http://localhost:9000",
+                "api_base_url": "https://api.depictio.dev",
+                "s3_storage": {
+                    "service_name": "minio",
+                    "service_port": 9000,
+                    "external_host": "localhost",
+                    "external_port": 9000,
+                    "external_protocol": "http",
                     "root_user": "minio",
                     "root_password": "minio123",
                     "bucket": "depictio-bucket",
@@ -149,7 +170,11 @@ class TestCommon:
                 patch("depictio.cli.cli.utils.common.rich_print_checked_statement"),
             ):
                 mock_get_config.return_value = mock_config
-                mock_validate.return_value = CLIConfig(**mock_config)
+                mock_validate.return_value = CLIConfig(
+                    api_base_url=mock_config["api_base_url"],
+                    user=mock_config["user"],
+                    s3_storage=mock_config["s3_storage"],
+                )
 
                 result = load_depictio_config()
 

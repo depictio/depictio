@@ -17,7 +17,7 @@ app.layout = html.Div(
                     children=[
                         dmc.Group(
                             grow=True,
-                            spacing="xl",
+                            gap="xl",
                             children=[
                                 dmc.List(
                                     center=True,

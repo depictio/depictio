@@ -213,7 +213,7 @@ def register_callbacks_interactive_component(app):
                             dmc.Badge(
                                 children="Interactive component description",
                                 leftSection=DashIconify(
-                                    icon="mdi:information", color="grey", width=20
+                                    icon="mdi:information", color="gray", width=20
                                 ),
                                 color="gray",
                                 radius="lg",
@@ -227,7 +227,7 @@ def register_callbacks_interactive_component(app):
                     width=300,
                     transition="pop",
                     transitionDuration=300,
-                    position="right",
+                    justify="flex-end",
                     withArrow=True,
                     openDelay=500,
                     closeDelay=500,
