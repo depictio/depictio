@@ -246,7 +246,7 @@ layout = dbc.Container(
                             "This will create a temporary account that expires in 24 hours, "
                             "allowing you to duplicate and modify dashboards.",
                             size="sm",
-                            c="dimmed",
+                            c="gray",
                         ),
                         dmc.Alert(
                             title="What you'll get:",
