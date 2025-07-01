@@ -184,7 +184,6 @@ def render_dashboard_list_section(email):
         id={"type": "dashboard-list", "index": email},
         style={
             "padding": "30px",  # Consistent padding with header
-            "backgroundColor": "#ffffff",  # White background for content area
             "minHeight": "calc(100vh - 80px)",  # Full height minus header (80px)
         },
     )
@@ -618,7 +617,6 @@ def register_callbacks_dashboards_management(app):
                                         "flexDirection": "column",
                                         "alignItems": "center",
                                         "justifyContent": "center",
-                                        "backgroundColor": "#f8f9fa",
                                         "borderRadius": "8px 8px 0 0",
                                     },
                                 ),

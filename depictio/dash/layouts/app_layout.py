@@ -155,13 +155,24 @@ def handle_authenticated_user(pathname, local_data):
 
 
 def create_default_header(text):
-    return dmc.Text(
-        text,
-        fw="bold",  # DMC 2.0+ equivalent of weight=600
-        size="xl",
+    # Return content for AppShellHeader - DMC 2.0+ equivalent with proper alignment and padding
+    return dmc.Group(
+        [
+            dmc.Text(
+                text,
+                fw="bold",  # DMC 2.0+ equivalent of weight=600
+                size="xl",
+                style={
+                    "fontSize": "28px",
+                    "fontFamily": "Virgil",
+                },
+            ),
+        ],
+        justify="flex-start",  # Align to the left
+        align="center",
         style={
-            "fontSize": "28px",
-            "fontFamily": "Virgil",
+            "padding": "0 20px",
+            "height": "100%",
         },
     )
 
@@ -321,7 +332,15 @@ def create_header_with_button(text, button):
     # Return content for AppShellHeader - DMC 2.0+ equivalent of original Group with position="apart"
     return dmc.Group(
         [
-            create_default_header(text),
+            dmc.Text(
+                text,
+                fw="bold",  # DMC 2.0+ equivalent of weight=600
+                size="xl",
+                style={
+                    "fontSize": "28px",
+                    "fontFamily": "Virgil",
+                },
+            ),
             button,
         ],
         justify="space-between",  # DMC 2.0+ equivalent of position="apart"
@@ -409,6 +428,8 @@ def create_app_layout():
     from depictio.dash.layouts.sidebar import render_sidebar_content
 
     return dmc.MantineProvider(
+        id="mantine-provider",
+        forceColorScheme="light",  # Default to light, will be updated by callback
         children=[
             dcc.Location(id="url", refresh=False),
             dcc.Store(
@@ -417,12 +438,18 @@ def create_app_layout():
                 data={"logged_in": False, "access_token": None},
             ),
             dcc.Store(
+                id="theme-store",
+                storage_type="local",
+                data={},  # Start empty, will be populated by clientside callback
+            ),
+            dcc.Store(
                 id="local-store-components-metadata",
                 data={},
                 storage_type="local",
             ),
             dcc.Store(id="current-edit-parent-index", storage_type="memory"),
             dcc.Interval(id="interval-component", interval=60 * 60 * 1000, n_intervals=0),
+            html.Div(id="dummy-plotly-output", style={"display": "none"}),  # Hidden output for Plotly theme callback
             dmc.Drawer(
                 title="",
                 id="drawer-simple",

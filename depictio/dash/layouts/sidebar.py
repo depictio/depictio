@@ -8,6 +8,7 @@ from dash_iconify import DashIconify
 from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import api_call_fetch_user_from_token
+from depictio.dash.theme_utils import create_theme_switch
 
 
 def register_sidebar_callbacks(app):
@@ -187,8 +188,7 @@ def render_sidebar(email):
     # name = email.split("@")[0]
 
     depictio_logo = dcc.Link(
-        html.Img(src=dash.get_asset_url("logo.png"), height=45),
-        # html.Img(src=dash.get_asset_url("logo_icon.png"), height=40, style={"margin-left": "0px"}),
+        html.Img(id="navbar-logo", src=dash.get_asset_url("logo_black.svg"), height=45),
         href="/",
         style={"alignItems": "center", "justifyContent": "center", "display": "flex"},
     )
@@ -199,43 +199,50 @@ def render_sidebar(email):
             dmc.NavLink(
                 id={"type": "sidebar-link", "index": "dashboards"},
                 label=dmc.Text(
-                    "Dashboards", size="lg", style={"fontSize": "16px"}
-                ),  # Using dmc.Text to set the font size
+                    "Dashboards", size="lg", style={"fontSize": "16px"}, className="section-accent"
+                ),
                 leftSection=DashIconify(icon="material-symbols:dashboard", height=25),
                 href="/dashboards",
                 style={"padding": "20px"},
+                color="orange",
             ),
             dmc.NavLink(
                 id={"type": "sidebar-link", "index": "projects"},
                 label=dmc.Text(
-                    "Projects", size="lg", style={"fontSize": "16px"}
-                ),  # Using dmc.Text to set the font size
+                    "Projects", size="lg", style={"fontSize": "16px"}, className="section-accent"
+                ),
                 leftSection=DashIconify(icon="mdi:jira", height=25),
                 href="/projects",
                 style={"padding": "20px"},
+                color="teal",
             ),
             dmc.NavLink(
                 id={"type": "sidebar-link", "index": "administration"},
                 label=dmc.Text(
-                    "Administration", size="lg", style={"fontSize": "16px"}
-                ),  # Using dmc.Text to set the font size
+                    "Administration",
+                    size="lg",
+                    style={"fontSize": "16px"},
+                    className="section-accent",
+                ),
                 leftSection=DashIconify(icon="material-symbols:settings", height=25),
                 href="/admin",
                 style={"padding": "20px", "display": "none"},
+                color="blue",
             ),
             dmc.NavLink(
                 id={"type": "sidebar-link", "index": "about"},
                 label=dmc.Text(
-                    "About", size="lg", style={"fontSize": "16px"}
-                ),  # Using dmc.Text to set the font size
+                    "About", size="lg", style={"fontSize": "16px"}, className="section-accent"
+                ),
                 leftSection=DashIconify(icon="mingcute:question-line", height=25),
                 href="/about",
                 style={"padding": "20px"},
+                color="gray",
             ),
         ],
         style={
-            "white-space": "nowrap",
-            "margin-top": "20px",
+            "whiteSpace": "nowrap",
+            "marginTop": "20px",
             "flexGrow": "1",
             "overflowY": "auto",
         },
@@ -245,6 +252,7 @@ def render_sidebar(email):
         id="sidebar-footer",
         # className="mt-auto",
         children=[
+            dmc.Center(create_theme_switch()),
             dmc.Grid(
                 id="sidebar-footer-server-status",
                 align="center",
@@ -292,7 +300,7 @@ def render_sidebar_content(email):
     # name = email.split("@")[0]
 
     depictio_logo = dcc.Link(
-        html.Img(src=dash.get_asset_url("logo.png"), height=45),
+        html.Img(id="navbar-logo-content", src=dash.get_asset_url("logo_black.svg"), height=45),
         href="/",
         style={"alignItems": "center", "justifyContent": "center", "display": "flex"},
     )
@@ -302,35 +310,50 @@ def render_sidebar_content(email):
         children=[
             dmc.NavLink(
                 id={"type": "sidebar-link", "index": "dashboards"},
-                label=dmc.Text("Dashboards", size="lg", style={"fontSize": "16px"}),
+                label=dmc.Text(
+                    "Dashboards", size="lg", style={"fontSize": "16px"}, className="section-accent"
+                ),
                 leftSection=DashIconify(icon="material-symbols:dashboard", height=25),
                 href="/dashboards",
                 style={"padding": "20px"},
+                color="orange",
             ),
             dmc.NavLink(
                 id={"type": "sidebar-link", "index": "projects"},
-                label=dmc.Text("Projects", size="lg", style={"fontSize": "16px"}),
+                label=dmc.Text(
+                    "Projects", size="lg", style={"fontSize": "16px"}, className="section-accent"
+                ),
                 leftSection=DashIconify(icon="mdi:jira", height=25),
                 href="/projects",
                 style={"padding": "20px"},
+                color="teal",
             ),
             dmc.NavLink(
                 id={"type": "sidebar-link", "index": "administration"},
-                label=dmc.Text("Administration", size="lg", style={"fontSize": "16px"}),
+                label=dmc.Text(
+                    "Administration",
+                    size="lg",
+                    style={"fontSize": "16px"},
+                    className="section-accent",
+                ),
                 leftSection=DashIconify(icon="material-symbols:settings", height=25),
                 href="/admin",
                 style={"padding": "20px", "display": "none"},
+                color="blue",
             ),
             dmc.NavLink(
                 id={"type": "sidebar-link", "index": "about"},
-                label=dmc.Text("About", size="lg", style={"fontSize": "16px"}),
+                label=dmc.Text(
+                    "About", size="lg", style={"fontSize": "16px"}, className="section-accent"
+                ),
                 leftSection=DashIconify(icon="mingcute:question-line", height=25),
                 href="/about",
                 style={"padding": "20px"},
+                color="gray",
             ),
         ],
         style={
-            "white-space": "nowrap",
+            "whiteSpace": "nowrap",
             "flex": "1",  # Take available space in Stack
             "overflowY": "auto",
         },
@@ -339,6 +362,7 @@ def render_sidebar_content(email):
     sidebar_footer = html.Div(
         id="sidebar-footer",
         children=[
+            dmc.Center(create_theme_switch()),
             dmc.Grid(
                 id="sidebar-footer-server-status",
                 align="center",
