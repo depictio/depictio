@@ -256,7 +256,7 @@ def build_figure(**kwargs):
             dmc.Group(
                 [partial_data_badge, filter_badge],
                 grow=False,
-                spacing="xl",
+                gap="xl",
                 style={"margin-left": "12px"},
             )
         )

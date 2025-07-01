@@ -10,7 +10,7 @@ from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.logging_init import format_pydantic, logger
 from depictio.api.v1.endpoints.user_endpoints.core_functions import _hash_password
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
-from depictio.models.models.users import TokenBase, TokenData, UserBaseUI
+from depictio.models.models.users import TokenBase, TokenData, User
 from depictio.models.utils import convert_model_to_dict
 
 # Check if running in a test environment
@@ -68,7 +68,7 @@ def api_call_register_user(
 
 
 @validate_call(validate_return=True)
-def api_call_fetch_user_from_token(token: str) -> UserBaseUI | None:
+def api_call_fetch_user_from_token(token: str) -> User | None:
     """
     Fetch a user from the authentication service using a token.
     Synchronous version for Dash compatibility with caching to reduce redundant API calls.
@@ -103,31 +103,10 @@ def api_call_fetch_user_from_token(token: str) -> UserBaseUI | None:
     user_data = response.json()
     logger.debug(f"User data fetched from API: {user_data.get('email', 'No email found')}")
 
-    if not user_data or "email" not in user_data:
+    if not user_data:
         return None
 
-    # Ensure all required fields are present with defaults
-    user = UserBaseUI(
-        email=user_data["email"],
-        is_admin=user_data.get("is_admin", False),
-        is_active=user_data.get("is_active", True),
-        is_verified=user_data.get("is_verified", False),
-        last_login=user_data.get("last_login"),
-        registration_date=user_data.get("registration_date"),
-        **{
-            k: v
-            for k, v in user_data.items()
-            if k
-            not in [
-                "email",
-                "is_admin",
-                "is_active",
-                "is_verified",
-                "last_login",
-                "registration_date",
-            ]
-        },
-    )
+    user = User(**user_data)
 
     # Cache the result
     _user_cache[cache_key] = (user, current_time)
@@ -141,7 +120,7 @@ def api_call_fetch_user_from_token(token: str) -> UserBaseUI | None:
 
 
 @validate_call(validate_return=True)
-def api_call_fetch_user_from_email(email: EmailStr) -> UserBaseUI | None:
+def api_call_fetch_user_from_email(email: EmailStr) -> User | None:
     """
     Fetch a user from the authentication service using an email.
     Synchronous version for Dash compatibility.
@@ -169,31 +148,10 @@ def api_call_fetch_user_from_email(email: EmailStr) -> UserBaseUI | None:
         f"User data fetched: {user_data.get('email', 'No email found')} with ID {user_data.get('_id', 'No ID found')}"
     )
 
-    if not user_data or "email" not in user_data:
+    if not user_data:
         return None
 
-    # Ensure all required fields are present with defaults
-    user = UserBaseUI(
-        email=user_data["email"],
-        is_admin=user_data.get("is_admin", False),
-        is_active=user_data.get("is_active", True),
-        is_verified=user_data.get("is_verified", False),
-        last_login=user_data.get("last_login"),
-        registration_date=user_data.get("registration_date"),
-        **{
-            k: v
-            for k, v in user_data.items()
-            if k
-            not in [
-                "email",
-                "is_admin",
-                "is_active",
-                "is_verified",
-                "last_login",
-                "registration_date",
-            ]
-        },
-    )
+    user = User(**user_data)
 
     return user
 
@@ -301,7 +259,7 @@ def api_call_cleanup_expired_temporary_users() -> dict[str, Any] | None:
 
 
 def api_call_upgrade_to_temporary_user(
-    access_token: str, expiry_hours: int = 24, expiry_minutes: int = 0
+    access_token: str, expiry_hours: int = 24
 ) -> dict[str, Any] | None:
     """
     Upgrade from anonymous user to temporary user for interactive features.
@@ -309,23 +267,16 @@ def api_call_upgrade_to_temporary_user(
     Args:
         access_token: Current user's access token
         expiry_hours: Number of hours until the temporary user expires (default: 24)
-        expiry_minutes: Number of additional minutes until the temporary user expires (default: 0)
 
     Returns:
         Session data for the new temporary user or None if failed
     """
     try:
-        logger.info(
-            f"Upgrading to temporary user with expiry: {expiry_hours} hours, {expiry_minutes} minutes"
-        )
-
-        params = {"expiry_hours": expiry_hours}
-        if expiry_minutes > 0:
-            params["expiry_minutes"] = expiry_minutes
+        logger.info(f"Upgrading to temporary user with expiry: {expiry_hours} hours")
 
         response = httpx.post(
             f"{API_BASE_URL}/depictio/api/v1/auth/upgrade_to_temporary_user",
-            params=params,
+            params={"expiry_hours": expiry_hours},
             headers={"Authorization": f"Bearer {access_token}"},
             timeout=30.0,
         )
