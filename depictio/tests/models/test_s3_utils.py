@@ -258,4 +258,4 @@ class TestS3Utils:
 
             # Try calling with an invalid type
             with pytest.raises(ValidationError):
-                turn_S3_config_into_polars_storage_options("not_a_config")
+                turn_S3_config_into_polars_storage_options("not_a_config")  # type: ignore[invalid-argument-type]

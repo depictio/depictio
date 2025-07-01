@@ -1,7 +1,6 @@
 import json
 import os
 import tempfile
-from datetime import datetime
 from unittest.mock import Mock, patch
 
 import pytest
@@ -31,13 +30,15 @@ def mock_cli_config():
                 "refresh_token": "refresh-token-example",
                 "token_type": "bearer",
                 "token_lifetime": "short-lived",
-                "expire_datetime": datetime(2025, 12, 31, 23, 59, 59),
-                "refresh_expire_datetime": datetime(2025, 12, 31, 23, 59, 59),
+                "expire_datetime": "2025-12-31T23:59:59",
+                "refresh_expire_datetime": "2025-12-31T23:59:59",
+                "name": "test-token",
+                "created_at": "2025-06-30T18:00:00",
                 "logged_in": False,
             },
         },
-        "base_url": "http://localhost:8000",
-        "s3": {
+        "api_base_url": "http://localhost:8000",
+        "s3_storage": {
             "service_name": "minio",
             "service_port": 9000,
             "external_host": "localhost",

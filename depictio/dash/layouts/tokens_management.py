@@ -2,7 +2,7 @@ import dash
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import yaml
-from dash import ctx, dcc
+from dash import ALL, ctx, dcc
 from dash.exceptions import PreventUpdate
 from dash_extensions.enrich import Input, Output, State, html
 from dash_iconify import DashIconify
@@ -427,10 +427,10 @@ def register_tokens_management_callbacks(app):
         Input("confirm-delete-button", "n_clicks"),
         Input("cancel-token-modal", "n_clicks"),
         Input("cancel-delete-modal", "n_clicks"),
-        Input({"type": "delete-token", "index": dash.dependencies.ALL}, "n_clicks"),
+        Input({"type": "delete-token", "index": ALL}, "n_clicks"),
         State("token-name-input", "value"),
         State("delete-confirm-input", "value"),
-        State({"type": "delete-token", "index": dash.dependencies.ALL}, "id"),
+        State({"type": "delete-token", "index": ALL}, "id"),
         State("local-store", "data"),
         State("delete-token-id-store", "data"),
     )
@@ -505,7 +505,7 @@ def register_tokens_management_callbacks(app):
         elif triggered == "save-token-name" and save_clicks > 0 and token_name:
             logger.info(f"Token name: {token_name}")
 
-            if not token_name or token_name in [t["name"] for t in tokens]:
+            if not token_name or (tokens and token_name in [t["name"] for t in tokens]):
                 return (
                     True,
                     False,
@@ -559,7 +559,13 @@ def register_tokens_management_callbacks(app):
                 )
 
             # logger.info(f"Token generated: {token_generated}")
-            token_generated = TokenBase(**token_generated)
+            token_generated = TokenBase(
+                user_id=token_generated["user_id"],
+                access_token=token_generated["access_token"],
+                refresh_token=token_generated["refresh_token"],
+                expire_datetime=token_generated["expire_datetime"],
+                refresh_expire_datetime=token_generated["refresh_expire_datetime"],
+            )
             # logger.info(f"Token generated: {format_pydantic(token_generated)}")
             agent_config = api_call_generate_agent_config(
                 token=token_generated, current_token=local_store["access_token"]
@@ -707,7 +713,7 @@ def register_tokens_management_callbacks(app):
         ):
             logger.info(f"Deleting config {delete_token_id}")
             # logger.info(f"tokens: {tokens}")
-            if delete_token_id in [str(t["_id"]) for t in tokens]:
+            if tokens and delete_token_id in [str(t["_id"]) for t in tokens]:
                 # logger.info(f"Deleting token {delete_token_id}")
                 api_call_delete_token(token_id=delete_token_id)
                 tokens = [e for e in tokens if str(e["_id"]) != delete_token_id]

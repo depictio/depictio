@@ -23,6 +23,7 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     _create_permanent_token,
     _hash_password,
 )
+from depictio.models.models.base import PyObjectId
 from depictio.models.models.users import (
     TokenBeanie,
     TokenData,
@@ -190,7 +191,7 @@ class TestPermanentTokenCreation:
         from bson import ObjectId
 
         token_data = TokenData(
-            sub=ObjectId(), name="test_permanent_token", token_lifetime="permanent"
+            sub=PyObjectId(str(ObjectId())), name="test_permanent_token", token_lifetime="permanent"
         )
 
         with patch(
@@ -281,9 +282,9 @@ class TestDisabledFeatures:
             with pytest.raises(HTTPException) as exc_info:
                 await register(request)
 
-            assert exc_info.value.status_code == 403
+            assert exc_info.value.status_code == 403  # type: ignore[unresolved-attribute]
             assert "User registration disabled in unauthenticated mode" in str(
-                exc_info.value.detail
+                exc_info.value.detail  # type: ignore[unresolved-attribute]
             )
 
     @pytest.mark.asyncio
@@ -303,9 +304,9 @@ class TestDisabledFeatures:
             with pytest.raises(HTTPException) as exc_info:
                 await generate_agent_config_endpoint(mock_token, mock_user)
 
-            assert exc_info.value.status_code == 403
+            assert exc_info.value.status_code == 403  # type: ignore[unresolved-attribute]
             assert "CLI agent generation disabled in unauthenticated mode" in str(
-                exc_info.value.detail
+                exc_info.value.detail  # type: ignore[unresolved-attribute]
             )
 
 
@@ -317,7 +318,10 @@ class TestTokenValidation:
         from bson import ObjectId
 
         token_data = TokenData(
-            name="test_token", token_lifetime="permanent", token_type="bearer", sub=ObjectId()
+            name="test_token",
+            token_lifetime="permanent",
+            token_type="bearer",
+            sub=PyObjectId(str(ObjectId())),
         )
 
         # Should not raise validation error
@@ -333,7 +337,7 @@ class TestTokenValidation:
             name="test_token",
             token_lifetime="permanent",
             token_type="bearer",
-            sub=ObjectId(),
+            sub=PyObjectId(str(ObjectId())),
             access_token="Test123Token456",
             expire_datetime=datetime.max,
         )

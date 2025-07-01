@@ -15,18 +15,21 @@ from depictio.api.v1.endpoints.projects_endpoints.utils import (
     _helper_create_project_beanie,
     validate_workflow_uniqueness_in_project,
 )
+from depictio.api.v1.endpoints.user_endpoints.core_functions import _hash_password
+from depictio.models.models.base import PyObjectId
 from depictio.models.models.projects import Project
-from depictio.models.models.users import Permission, UserBase
+from depictio.models.models.users import Permission, User
 
 
 # Fixtures available for all test classes
 @pytest.fixture
 def sample_user():
     """Create a sample user for testing."""
-    user_id = str(ObjectId())
-    return UserBase(
+    user_id = PyObjectId()
+    return User(
         id=user_id,
         email="test@example.com",
+        password=_hash_password("test_password"),
         is_admin=True,
     )
 
@@ -34,10 +37,11 @@ def sample_user():
 @pytest.fixture
 def sample_viewer_user():
     """Create a sample viewer user for testing."""
-    user_id = str(ObjectId())
-    return UserBase(
+    user_id = PyObjectId()
+    return User(
         id=user_id,
         email="viewer@example.com",
+        password=_hash_password("viewer_password"),
         is_admin=False,
     )
 
@@ -45,10 +49,11 @@ def sample_viewer_user():
 @pytest.fixture
 def sample_editor_user():
     """Create a sample editor user for testing."""
-    user_id = str(ObjectId())
-    return UserBase(
+    user_id = PyObjectId()
+    return User(
         id=user_id,
         email="editor@example.com",
+        password=_hash_password("editor_password"),
         is_admin=False,
     )
 
@@ -131,7 +136,7 @@ class TestProjectCreation:
     ):
         """Test successful project creation."""
 
-        sample_project = Project(**sample_project_config)
+        sample_project = Project(**sample_project_config)  # type: ignore[missing-argument]
         print(f"Sample project object: {format_pydantic(sample_project)}")
 
         result = await _helper_create_project_beanie(sample_project)
@@ -154,15 +159,15 @@ class TestProjectCreation:
         self, sample_project_config, mock_projects_collection
     ):
         """Test project creation with duplicate name."""
-        sample_project = Project(**sample_project_config)
+        sample_project = Project(**sample_project_config)  # type: ignore[missing-argument]
 
         await _helper_create_project_beanie(sample_project)
 
         with pytest.raises(HTTPException) as excinfo:
             await _helper_create_project_beanie(sample_project)
 
-        assert excinfo.value.status_code == 400
-        assert f"Project with name '{sample_project.name}' already exists" in excinfo.value.detail
+        assert excinfo.value.status_code == 400  # type: ignore[unresolved-attribute]
+        assert f"Project with name '{sample_project.name}' already exists" in excinfo.value.detail  # type: ignore[unresolved-attribute]
 
 
 @pytest.mark.asyncio
@@ -185,9 +190,8 @@ class TestGetAllProjects:
         owner_project_config["yaml_config_path"] = test_yaml_path
         owner_project_config["name"] = f"Owner Project - {ObjectId()}"
         owner_project_config["permissions"] = Permission(owners=[sample_user])
-        owner_project = Project(**owner_project_config)
-        # Set an explicit _id to avoid duplicates
-        owner_project.id = ObjectId()
+        owner_project_config["id"] = PyObjectId(ObjectId())  # Set explicit id to avoid duplicates
+        owner_project = Project(**owner_project_config)  # type: ignore[missing-argument]
         mongo_doc = owner_project.mongo()
         mongo_doc["_id"] = owner_project.id
         mock_projects_collection.insert_one(mongo_doc)
@@ -199,8 +203,8 @@ class TestGetAllProjects:
         viewer_project_config["permissions"] = Permission(
             owners=[sample_viewer_user], viewers=[sample_user]
         )
-        viewer_project = Project(**viewer_project_config)
-        viewer_project.id = ObjectId()
+        viewer_project_config["id"] = PyObjectId(ObjectId())
+        viewer_project = Project(**viewer_project_config)  # type: ignore[missing-argument]
         mongo_doc = viewer_project.mongo()
         mongo_doc["_id"] = viewer_project.id
         mock_projects_collection.insert_one(mongo_doc)
@@ -211,8 +215,8 @@ class TestGetAllProjects:
         public_project_config["name"] = f"Public Project - {ObjectId()}"
         public_project_config["permissions"] = Permission(owners=[sample_viewer_user])
         public_project_config["is_public"] = True
-        public_project = Project(**public_project_config)
-        public_project.id = ObjectId()
+        public_project_config["id"] = PyObjectId(ObjectId())
+        public_project = Project(**public_project_config)  # type: ignore[missing-argument]
         mongo_doc = public_project.mongo()
         mongo_doc["_id"] = public_project.id
         mock_projects_collection.insert_one(mongo_doc)
@@ -231,7 +235,12 @@ class TestGetAllProjects:
         self, sample_user, mock_projects_collection, setup_multiple_projects
     ):
         """Test getting all projects for a regular user."""
-        current_user = UserBase(id=sample_user.id, email=sample_user.email, is_admin=False)
+        current_user = User(
+            id=sample_user.id,
+            email=sample_user.email,
+            password=_hash_password("user_password"),
+            is_admin=False,
+        )
         result = _async_get_all_projects(current_user, mock_projects_collection)
 
         assert len(result) == 3  # owner, viewer, and public projects
@@ -241,7 +250,12 @@ class TestGetAllProjects:
         self, sample_user, mock_projects_collection, setup_multiple_projects
     ):
         """Test getting all projects for an admin user."""
-        admin_user = UserBase(id=sample_user.id, email=sample_user.email, is_admin=True)
+        admin_user = User(
+            id=sample_user.id,
+            email=sample_user.email,
+            password=_hash_password("admin_password"),
+            is_admin=True,
+        )
         result = _async_get_all_projects(admin_user, mock_projects_collection)
 
         assert len(result) == 3  # admin sees all projects
@@ -262,19 +276,25 @@ class TestGetProjectFromId:
         project_config["yaml_config_path"] = test_yaml_path
         project_config["name"] = f"Test Project - {ObjectId()}"
         project_config["permissions"] = Permission(owners=[sample_user])
-        project = Project(**project_config)
         # Set an explicit _id
-        project.id = ObjectId()
+        project_id = ObjectId()
+        project_config["id"] = PyObjectId(project_id)
+        project = Project(**project_config)  # type: ignore[missing-argument]
         mongo_doc = project.mongo()
-        mongo_doc["_id"] = project.id
+        mongo_doc["_id"] = project_id
         mock_projects_collection.insert_one(mongo_doc)
-        return str(project.id)
+        return str(project_id)
 
     async def test_async_get_project_from_id_success(
         self, sample_user, mock_projects_collection, setup_single_project
     ):
         """Test getting a project by ID successfully."""
-        current_user = UserBase(id=sample_user.id, email=sample_user.email, is_admin=False)
+        current_user = User(
+            id=sample_user.id,
+            email=sample_user.email,
+            password=_hash_password("user_password"),
+            is_admin=False,
+        )
         result = _async_get_project_from_id(
             setup_single_project, current_user, mock_projects_collection
         )
@@ -289,14 +309,19 @@ class TestGetProjectFromId:
         # Clear the collection first
         mock_projects_collection.delete_many({})
 
-        current_user = UserBase(id=sample_user.id, email=sample_user.email, is_admin=False)
+        current_user = User(
+            id=sample_user.id,
+            email=sample_user.email,
+            password=_hash_password("user_password"),
+            is_admin=False,
+        )
         non_existent_id = str(ObjectId())
 
         with pytest.raises(HTTPException) as excinfo:
-            _async_get_project_from_id(non_existent_id, current_user, mock_projects_collection)
+            _async_get_project_from_id(non_existent_id, current_user, mock_projects_collection)  # type: ignore[invalid-argument-type]
 
-        assert excinfo.value.status_code == 404
-        assert "Project not found" in excinfo.value.detail
+        assert excinfo.value.status_code == 404  # type: ignore[unresolved-attribute]
+        assert "Project not found" in excinfo.value.detail  # type: ignore[unresolved-attribute]
 
 
 @pytest.mark.asyncio
@@ -313,11 +338,12 @@ class TestGetProjectFromName:
         project_config["yaml_config_path"] = test_yaml_path
         project_config["name"] = f"Named Project - {ObjectId()}"
         project_config["permissions"] = Permission(owners=[sample_user])
-        project = Project(**project_config)
         # Set an explicit _id
-        project.id = ObjectId()
+        project_id = ObjectId()
+        project_config["id"] = PyObjectId(project_id)
+        project = Project(**project_config)  # type: ignore[missing-argument]
         mongo_doc = project.mongo()
-        mongo_doc["_id"] = project.id
+        mongo_doc["_id"] = project_id
         mock_projects_collection.insert_one(mongo_doc)
         return project.name
 
@@ -333,7 +359,12 @@ class TestGetProjectFromName:
         self, sample_user, mock_projects_collection, setup_named_project
     ):
         """Test getting a project by name successfully."""
-        current_user = UserBase(id=sample_user.id, email=sample_user.email, is_admin=False)
+        current_user = User(
+            id=sample_user.id,
+            email=sample_user.email,
+            password=_hash_password("user_password"),
+            is_admin=False,
+        )
         result = _async_get_project_from_name(
             setup_named_project, current_user, mock_projects_collection
         )
@@ -350,15 +381,20 @@ class TestGetProjectFromName:
         # Clear the collection first
         mock_projects_collection.delete_many({})
 
-        current_user = UserBase(id=sample_user.id, email=sample_user.email, is_admin=False)
+        current_user = User(
+            id=sample_user.id,
+            email=sample_user.email,
+            password=_hash_password("user_password"),
+            is_admin=False,
+        )
 
         with pytest.raises(HTTPException) as excinfo:
             _async_get_project_from_name(
                 "Non-existent Project", current_user, mock_projects_collection
             )
 
-        assert excinfo.value.status_code == 404
-        assert "Project not found" in excinfo.value.detail
+        assert excinfo.value.status_code == 404  # type: ignore[unresolved-attribute]
+        assert "Project not found" in excinfo.value.detail  # type: ignore[unresolved-attribute]
 
     async def test_async_get_project_from_name_public_access(
         self, sample_user, yaml_config, test_yaml_path, mock_projects_collection
@@ -372,15 +408,21 @@ class TestGetProjectFromName:
         project_config["yaml_config_path"] = test_yaml_path
         project_config["name"] = f"Public Project - {ObjectId()}"
         project_config["permissions"] = Permission(owners=[sample_user], viewers=["*"])
-        project = Project(**project_config)
         # Set an explicit _id
-        project.id = ObjectId()
+        project_id = ObjectId()
+        project_config["id"] = PyObjectId(project_id)
+        project = Project(**project_config)  # type: ignore[missing-argument]
         mongo_doc = project.mongo()
-        mongo_doc["_id"] = project.id
+        mongo_doc["_id"] = project_id
         mock_projects_collection.insert_one(mongo_doc)
 
         # Create a different user
-        other_user = UserBase(id=str(ObjectId()), email="other@example.com", is_admin=False)
+        other_user = User(
+            id=PyObjectId(),
+            email="other@example.com",
+            password=_hash_password("other_password"),
+            is_admin=False,
+        )
         result = _async_get_project_from_name(project.name, other_user, mock_projects_collection)
 
         assert result is not None
@@ -409,7 +451,7 @@ class TestWorkflowUniquenessValidation:
         for i, workflow in enumerate(project_config["workflows"]):
             workflow["workflow_tag"] = f"unique_workflow_{i}"
 
-        return Project(**project_config)
+        return Project(**project_config)  # type: ignore[missing-argument]
 
     @pytest.fixture
     def sample_project_with_duplicate_workflows(self, sample_user, test_yaml_path, yaml_config):
@@ -429,7 +471,7 @@ class TestWorkflowUniquenessValidation:
         # Keep the same name and engine so the same workflow_tag gets generated
         project_config["workflows"].append(duplicate_workflow)
 
-        return Project(**project_config)
+        return Project(**project_config)  # type: ignore[missing-argument]
 
     def test_validate_workflow_uniqueness_success(self, sample_project_with_unique_workflows):
         """Test workflow uniqueness validation passes with unique workflow tags."""
@@ -441,10 +483,10 @@ class TestWorkflowUniquenessValidation:
         with pytest.raises(HTTPException) as excinfo:
             validate_workflow_uniqueness_in_project(sample_project_with_duplicate_workflows)
 
-        assert excinfo.value.status_code == 400
-        assert "Duplicate workflow_tag(s) found within project" in excinfo.value.detail
-        assert "iris_workflow" in excinfo.value.detail  # The actual generated workflow_tag
-        assert "Each workflow_tag must be unique within a project" in excinfo.value.detail
+        assert excinfo.value.status_code == 400  # type: ignore[unresolved-attribute]
+        assert "Duplicate workflow_tag(s) found within project" in excinfo.value.detail  # type: ignore[unresolved-attribute]
+        assert "iris_workflow" in excinfo.value.detail  # type: ignore[unresolved-attribute]  # The actual generated workflow_tag
+        assert "Each workflow_tag must be unique within a project" in excinfo.value.detail  # type: ignore[unresolved-attribute]
 
     def test_validate_workflow_uniqueness_empty_project(self, sample_user, test_yaml_path):
         """Test workflow uniqueness validation with a project that has no workflows."""
@@ -455,7 +497,7 @@ class TestWorkflowUniquenessValidation:
             "permissions": permission,
             "workflows": [],  # Empty workflows list
         }
-        project = Project(**project_config)
+        project = Project(**project_config)  # type: ignore[missing-argument]
 
         # Should not raise any exception
         validate_workflow_uniqueness_in_project(project)

@@ -19,7 +19,7 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 
 
-async def test_dns_resolution() -> Dict[str, any]:
+async def test_dns_resolution() -> Dict[str, any]:  # type: ignore[invalid-type-form]
     """Test DNS resolution performance for internal services."""
     dns_results = {}
 
@@ -67,7 +67,7 @@ async def test_dns_resolution() -> Dict[str, any]:
     return dns_results
 
 
-async def test_network_latency() -> Dict[str, any]:
+async def test_network_latency() -> Dict[str, any]:  # type: ignore[invalid-type-form]
     """Test network latency to internal services."""
     latency_results = {}
 
@@ -117,7 +117,7 @@ async def test_network_latency() -> Dict[str, any]:
     return latency_results
 
 
-async def test_browser_performance() -> Dict[str, any]:
+async def test_browser_performance() -> Dict[str, any]:  # type: ignore[invalid-type-form]
     """Test browser startup and basic performance in the container environment."""
     browser_results = {}
 
@@ -175,7 +175,7 @@ async def test_browser_performance() -> Dict[str, any]:
     return browser_results
 
 
-async def test_resource_constraints() -> Dict[str, any]:
+async def test_resource_constraints() -> Dict[str, any]:  # type: ignore[invalid-type-form]
     """Test system resource availability and constraints."""
     resource_results = {}
 
@@ -274,7 +274,7 @@ async def test_resource_constraints() -> Dict[str, any]:
     return resource_results
 
 
-async def test_storage_performance() -> Dict[str, any]:
+async def test_storage_performance() -> Dict[str, any]:  # type: ignore[invalid-type-form]
     """Test storage I/O performance for screenshot operations."""
     storage_results = {}
 
@@ -318,7 +318,7 @@ async def test_storage_performance() -> Dict[str, any]:
     return storage_results
 
 
-async def run_comprehensive_diagnostics() -> Dict[str, any]:
+async def run_comprehensive_diagnostics() -> Dict[str, any]:  # type: ignore[invalid-type-form]
     """Run all diagnostic tests and return comprehensive results."""
     logger.info("🚀 Starting comprehensive infrastructure diagnostics...")
 

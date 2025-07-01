@@ -468,7 +468,7 @@ def register_callbacks_draggable(app):
             if triggered_input == "btn-done":
                 logger.info("Done button clicked")
 
-                triggered_index = triggered_input_dict["index"]
+                triggered_index = triggered_input_dict["index"]  # type: ignore[non-subscriptable]
 
                 tmp_stored_metadata = [
                     e for e in stored_metadata if f"{e['index']}-tmp" == f"{triggered_index}"
@@ -972,6 +972,19 @@ def register_callbacks_draggable(app):
                         metadata = metadata_child
                         logger.info(f"Metadata found: {metadata}")
                         break
+
+                if metadata is None:
+                    logger.warning(f"No metadata found for index {triggered_index}")
+                    return (
+                        dash.no_update,
+                        dash.no_update,
+                        dash.no_update,
+                        dash.no_update,
+                        dash.no_update,
+                    )
+
+                # metadata is guaranteed to be not None at this point
+                assert metadata is not None
                 metadata["index"] = new_index
                 new_store = dcc.Store(
                     id={"type": "stored-metadata-component", "index": new_index},

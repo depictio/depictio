@@ -109,7 +109,7 @@ def load_depictio_data_mongo(dashboard_id: str, TOKEN: str):
         return None
 
 
-def return_user_from_token(token: str) -> dict:
+def return_user_from_token(token: str) -> dict | None:
     # call API to get user from token without using PUBLIC KEY
     response = httpx.get(
         f"{API_BASE_URL}/depictio/api/v1/auth/fetch_user/from_token",

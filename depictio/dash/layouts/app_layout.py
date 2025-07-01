@@ -331,9 +331,9 @@ def create_tokens_management_layout():
     return tokens_management_layout
 
 
-def create_dashboard_layout(depictio_dash_data=dict, dashboard_id=str, local_data=dict):
+def create_dashboard_layout(depictio_dash_data=None, dashboard_id: str = "", local_data=None):
     # Init layout and children if depictio_dash_data is available, else set to empty
-    if depictio_dash_data:
+    if depictio_dash_data and isinstance(depictio_dash_data, dict):
         # logger.info(f"Depictio dash data: {depictio_dash_data}")
         if "stored_layout_data" in depictio_dash_data:
             init_layout = depictio_dash_data["stored_layout_data"]
@@ -343,11 +343,16 @@ def create_dashboard_layout(depictio_dash_data=dict, dashboard_id=str, local_dat
             init_children = depictio_dash_data["stored_children_data"]
         else:
             init_children = list()
+    else:
+        init_layout = {}
+        init_children = list()
 
     # logger.info(f"Loaded depictio init_layout: {init_layout}")
     # header, backend_components = design_header(depictio_dash_data)
 
     # Generate draggable layout
+    # Ensure local_data is a dict
+    local_data = local_data or {}
     core = design_draggable(init_layout, init_children, dashboard_id, local_data)
 
     return dmc.Container(

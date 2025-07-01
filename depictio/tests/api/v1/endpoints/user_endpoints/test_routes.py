@@ -60,11 +60,11 @@ class TestGetCurrentUser:
         """Test with a None token value."""
         # Act & Assert
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_user(None)
+            await get_current_user(None)  # type: ignore[invalid-argument-type]
 
         # Verify the exception
-        assert exc_info.value.status_code == 401
-        assert exc_info.value.detail == "Invalid token"
+        assert exc_info.value.status_code == 401  # type: ignore[unresolved-attribute]
+        assert exc_info.value.detail == "Invalid token"  # type: ignore[unresolved-attribute]
         self.mock_token_find_one.assert_not_called()
 
     @pytest.mark.asyncio
@@ -78,8 +78,8 @@ class TestGetCurrentUser:
             await get_current_user(self.test_token)
 
         # Verify the exception
-        assert exc_info.value.status_code == 401
-        assert exc_info.value.detail == "Invalid token"
+        assert exc_info.value.status_code == 401  # type: ignore[unresolved-attribute]
+        assert exc_info.value.detail == "Invalid token"  # type: ignore[unresolved-attribute]
         self.mock_token_find_one.assert_called_once()
         self.mock_user_get.assert_not_called()
 
@@ -97,8 +97,8 @@ class TestGetCurrentUser:
             await get_current_user(self.test_token)
 
         # Verify the exception
-        assert exc_info.value.status_code == 401
-        assert exc_info.value.detail == "Invalid token"
+        assert exc_info.value.status_code == 401  # type: ignore[unresolved-attribute]
+        assert exc_info.value.detail == "Invalid token"  # type: ignore[unresolved-attribute]
         self.mock_token_find_one.assert_called_once()
         self.mock_user_get.assert_called_once()
 
@@ -248,8 +248,8 @@ class TestGetUserOrAnonymous:
         with pytest.raises(HTTPException) as exc_info:
             await get_user_or_anonymous(token=None)
 
-        assert exc_info.value.status_code == 401
-        assert exc_info.value.detail == "Invalid token"
+        assert exc_info.value.status_code == 401  # type: ignore[unresolved-attribute]
+        assert exc_info.value.detail == "Invalid token"  # type: ignore[unresolved-attribute]
         # get_current_user should not be called when token is None
         self.mock_get_current_user.assert_not_called()
         self.mock_user_find_one.assert_not_called()

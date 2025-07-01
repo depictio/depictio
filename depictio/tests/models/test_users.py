@@ -5,6 +5,8 @@ from beanie import PydanticObjectId, init_beanie
 from mongomock_motor import AsyncMongoMockClient
 from pydantic import ValidationError
 
+from depictio.models.models.base import PyObjectId
+from depictio.models.models.cli import UserBaseCLIConfig
 from depictio.models.models.users import (  # UserBaseGroupLess,
     Group,
     GroupBeanie,
@@ -16,7 +18,6 @@ from depictio.models.models.users import (  # UserBaseGroupLess,
     TokenData,
     User,
     UserBase,
-    UserBaseCLIConfig,
     UserBeanie,
 )
 
@@ -28,7 +29,7 @@ from depictio.models.models.users import (  # UserBaseGroupLess,
 class TestTokenData:
     def test_token_data_default_creation(self):
         """Test creating TokenData with default values."""
-        sub = PydanticObjectId()
+        sub = PyObjectId()
         token_data = TokenData(sub=sub)
 
         assert token_data.name is None
@@ -38,7 +39,7 @@ class TestTokenData:
 
     def test_token_data_custom_creation(self):
         """Test creating TokenData with custom values."""
-        sub = PydanticObjectId()
+        sub = PyObjectId()
         token_data = TokenData(
             name="Test User", token_lifetime="long-lived", token_type="custom", sub=sub
         )
@@ -49,38 +50,40 @@ class TestTokenData:
         assert str(token_data.sub) == str(sub)
 
     def test_token_data_permanent(self):
-        sub = PydanticObjectId()
+        sub = PyObjectId()
         token_data = TokenData(sub=sub, token_lifetime="permanent")
         assert token_data.token_lifetime == "permanent"
 
     def test_token_data_invalid_lifetime(self):
         """Test validation of token lifetime."""
-        sub = PydanticObjectId()
+        sub = PyObjectId()
         with pytest.raises(ValidationError) as exc_info:
             TokenData(sub=sub, token_lifetime="invalid-lifetime")
 
         # Check that the error is related to pattern mismatch
         assert any(
-            error.get("type") == "string_pattern_mismatch" for error in exc_info.value.errors()
+            error.get("type") == "string_pattern_mismatch"
+            for error in exc_info.value.errors()  # type: ignore[unresolved-attribute]
         )
 
         # Optional: more detailed error checking
-        error_messages = [error.get("msg") for error in exc_info.value.errors()]
+        error_messages = [error.get("msg") for error in exc_info.value.errors()]  # type: ignore[unresolved-attribute]
         assert any("pattern" in msg for msg in error_messages)
 
     def test_token_data_invalid_type(self):
         """Test validation of token type."""
-        sub = PydanticObjectId()
+        sub = PyObjectId()
         with pytest.raises(ValidationError) as exc_info:
             TokenData(sub=sub, token_type="invalid-type")
 
         # Check that the error is related to pattern mismatch
         assert any(
-            error.get("type") == "string_pattern_mismatch" for error in exc_info.value.errors()
+            error.get("type") == "string_pattern_mismatch"
+            for error in exc_info.value.errors()  # type: ignore[unresolved-attribute]
         )
 
         # Optional: more detailed error checking
-        error_messages = [error.get("msg") for error in exc_info.value.errors()]
+        error_messages = [error.get("msg") for error in exc_info.value.errors()]  # type: ignore[unresolved-attribute]
         assert any("pattern" in msg for msg in error_messages)
 
 
@@ -92,7 +95,7 @@ class TestTokenData:
 class TestToken:
     def test_token_creation(self):
         """Test creating a complete Token instance."""
-        sub = PydanticObjectId()
+        sub = PyObjectId()
         future_time = datetime.now() + timedelta(hours=1)
 
         token = Token(access_token="ValidToken123", expire_datetime=future_time, sub=sub)
@@ -105,7 +108,7 @@ class TestToken:
 
     def test_token_invalid_expiration(self):
         """Test validation of token expiration."""
-        sub = PydanticObjectId()
+        sub = PyObjectId()
 
         # Past datetime
         past_time = datetime.now() - timedelta(hours=1)
@@ -114,7 +117,7 @@ class TestToken:
 
     def test_token_invalid_access_token(self):
         """Test validation of access token."""
-        sub = PydanticObjectId()
+        sub = PyObjectId()
         future_time = datetime.now() + timedelta(hours=1)
 
         # Token without mix of characters
@@ -130,7 +133,7 @@ class TestToken:
 
     def test_token_serialization(self):
         """Test serialization of Token model."""
-        sub = PydanticObjectId()
+        sub = PyObjectId()
         future_time = datetime.now() + timedelta(hours=1)
 
         token = Token(access_token="ValidToken123", expire_datetime=future_time, sub=sub)
@@ -145,7 +148,7 @@ class TestToken:
 
     def test_token_permanent_lifetime(self):
         """Tokens with permanent lifetime should allow max datetime."""
-        sub = PydanticObjectId()
+        sub = PyObjectId()
         token = Token(
             access_token="ValidToken123A1",
             expire_datetime=datetime.max,
@@ -821,9 +824,9 @@ class TestPermission:
         )
 
         # Add ID attributes to simulate DB objects
-        user1.id = "user1_id"
-        user2.id = "user2_id"
-        user3.id = "user3_id"
+        user1.id = PyObjectId()
+        user2.id = PyObjectId()
+        user3.id = PyObjectId()
 
         permission = Permission(owners=[user1], editors=[user2], viewers=[user3])
 
@@ -832,7 +835,10 @@ class TestPermission:
         assert len(permission.editors) == 1
         assert permission.editors[0].email == "editor@example.com"
         assert len(permission.viewers) == 1
-        assert permission.viewers[0].email == "viewer@example.com"
+        assert (
+            isinstance(permission.viewers[0], UserBase)
+            and permission.viewers[0].email == "viewer@example.com"
+        )
 
     def test_permission_with_wildcard_viewer(self):
         """Test Permission with wildcard viewer."""
@@ -841,7 +847,7 @@ class TestPermission:
             email="owner@example.com",
             is_admin=True,
         )
-        user1.id = "user1_id"
+        user1.id = PyObjectId()
 
         permission = Permission(
             owners=[user1],
@@ -860,21 +866,15 @@ class TestPermission:
     def test_permission_from_dict(self):
         """Test creating a Permission from dictionaries."""
         owner = UserBase(
-            **{
-                "id": PydanticObjectId(),
-                "email": "owner@example.com",
-                "is_admin": True,
-                # "groups": [{"name": "Admin"}],
-            }
+            id=PyObjectId(),
+            email="owner@example.com",
+            is_admin=True,
         )
 
         editor = UserBase(
-            **{
-                "id": PydanticObjectId(),
-                "email": "editor@example.com",
-                "is_admin": False,
-                # "groups": [{"name": "Editor"}],
-            }
+            id=PyObjectId(),
+            email="editor@example.com",
+            is_admin=False,
         )
 
         permission = Permission(owners=[owner], editors=[editor], viewers=["*"])
@@ -894,7 +894,7 @@ class TestPermission:
             email="user@example.com",
             is_admin=True,
         )
-        user.id = "same_id"
+        user.id = PyObjectId()
 
         # Test user in owners and editors
         with pytest.raises(ValidationError, match="A User cannot be both an owner and an editor"):
@@ -920,7 +920,7 @@ class TestPermission:
 
         # Test non-list input
         with pytest.raises(ValueError, match="Expected a list"):
-            Permission(owners="not_a_list")
+            Permission(owners="not_a_list")  # type: ignore[invalid-argument-type]
 
     def test_permission_dict_method(self):
         """Test the dict method for correct serialization."""
@@ -932,8 +932,8 @@ class TestPermission:
             email="editor@example.com",
             is_admin=False,
         )
-        user1.id = "user1_id"
-        user2.id = "user2_id"
+        user1.id = PyObjectId()
+        user2.id = PyObjectId()
 
         permission = Permission(owners=[user1], editors=[user2], viewers=["*"])
 
@@ -955,13 +955,13 @@ class TestPermission:
         """Test creating a Permission with existing user IDs."""
         user1_id = PydanticObjectId()
         user1 = UserBase(
-            id=user1_id,
+            id=user1_id,  # type: ignore[invalid-argument-type]
             email="user1@example.com",
             is_admin=True,
         )
         user2_id = PydanticObjectId()
         user2 = UserBase(
-            id=user2_id,
+            id=user2_id,  # type: ignore[invalid-argument-type]
             email="user2@example.com",
             is_admin=False,
         )
@@ -997,7 +997,7 @@ class TestRequestEditPassword:
             "new_password": "newplainpassword123",
         }
 
-        model = RequestEditPassword(**valid_data)
+        model = RequestEditPassword(**valid_data)  # type: ignore[missing-argument]
         assert model.old_password == "$2b$12$validhashedpassword"
         assert model.new_password == "newplainpassword123"
 
@@ -1009,7 +1009,7 @@ class TestRequestEditPassword:
         }
 
         with pytest.raises(ValidationError) as exc_info:
-            RequestEditPassword(**invalid_data)
+            RequestEditPassword(**invalid_data)  # type: ignore[missing-argument]
 
         # Check that the error message mentions hashing
         error_details = str(exc_info.value)
@@ -1023,7 +1023,7 @@ class TestRequestEditPassword:
         }
 
         with pytest.raises(ValidationError) as exc_info:
-            RequestEditPassword(**invalid_data)
+            RequestEditPassword(**invalid_data)  # type: ignore[missing-argument]
 
         # Check that the error message mentions already hashed
         error_details = str(exc_info.value)
@@ -1033,15 +1033,15 @@ class TestRequestEditPassword:
         """Test that missing required fields raise validation errors."""
         # Missing old_password
         with pytest.raises(ValidationError):
-            RequestEditPassword(new_password="newpassword123")
+            RequestEditPassword(new_password="newpassword123")  # type: ignore[missing-argument]
 
         # Missing new_password
         with pytest.raises(ValidationError):
-            RequestEditPassword(old_password="$2b$12$validhashedpassword")
+            RequestEditPassword(old_password="$2b$12$validhashedpassword")  # type: ignore[missing-argument]
 
         # Empty dict (missing both)
         with pytest.raises(ValidationError):
-            RequestEditPassword()
+            RequestEditPassword()  # type: ignore[missing-argument]
 
 
 # ---------------------------------
@@ -1072,14 +1072,14 @@ class TestUserBaseCLIConfig:
     def test_user_base_cli_config_missing_token(self):
         """Test validation when token is missing."""
         with pytest.raises(ValidationError) as exc_info:
-            UserBaseCLIConfig(
+            UserBaseCLIConfig(  # type: ignore[missing-argument]
                 email="test@example.com",
             )
 
         # Check that the error is related to missing field
         assert any(
             error.get("type") == "missing" and error.get("loc")[0] == "token"
-            for error in exc_info.value.errors()
+            for error in exc_info.value.errors()  # type: ignore[unresolved-attribute]
         )
 
     def test_user_base_cli_config_invalid_email(self):
@@ -1101,5 +1101,5 @@ class TestUserBaseCLIConfig:
         # Check that the error is related to email format
         assert any(
             error.get("type") == "value_error" and "email" in str(error.get("msg")).lower()
-            for error in exc_info.value.errors()
+            for error in exc_info.value.errors()  # type: ignore[unresolved-attribute]
         )

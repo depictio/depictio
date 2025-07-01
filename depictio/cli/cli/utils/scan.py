@@ -25,9 +25,11 @@ from depictio.cli.cli.utils.scan_utils import (
     regex_match,
 )
 from depictio.cli.cli_logging import logger
+from depictio.models.models.base import PyObjectId
+from depictio.models.models.cli import CLIConfig
 from depictio.models.models.data_collections import DataCollection
 from depictio.models.models.files import File, FileScanResult
-from depictio.models.models.users import CLIConfig, Permission, UserBase
+from depictio.models.models.users import Permission, UserBase
 from depictio.models.models.workflows import (
     Workflow,
     WorkflowConfig,
@@ -115,7 +117,7 @@ def scan_single_file(
 
     # Create the File instance.
     file_instance = File(
-        id=file_id if file_id else ObjectId(),
+        id=PyObjectId(file_id) if file_id else PyObjectId(),
         filename=file_name,
         file_location=file_location,
         creation_time=creation_time_iso,
@@ -178,12 +180,12 @@ def process_files(
 
     # For recursive scans, build the regex from configuration.
     full_regex = None
-    if not skip_regex:
+    if not skip_regex and hasattr(data_collection.config.scan.scan_parameters, "regex_config"):
         regex_config = data_collection.config.scan.scan_parameters.regex_config
         full_regex = (
-            construct_full_regex(regex=regex_config)
+            construct_full_regex(regex=regex_config)  # type: ignore[invalid-argument-type]
             if getattr(regex_config, "wildcards", False)
-            else regex_config.pattern
+            else regex_config.pattern  # type: ignore[unresolved-attribute]
         )
         logger.debug(f"Full Regex: {full_regex}")
 
@@ -259,7 +261,7 @@ def scan_run_for_multiple_data_collections(
             return None
     else:
         workflow_run = WorkflowRun(
-            workflow_id=workflow_id,
+            workflow_id=PyObjectId(workflow_id),
             run_tag=run_tag,
             files_id=[],
             workflow_config_id=workflow_config.id,
@@ -296,12 +298,18 @@ def scan_run_for_multiple_data_collections(
             f"Existing files for DC {dc.data_collection_tag}: {len(existing_files_for_dc)}"
         )
 
-        # Build regex for this data collection
+        # Build regex for this data collection (only for recursive scans)
+        if not hasattr(dc.config.scan.scan_parameters, "regex_config"):
+            logger.warning(
+                f"Data collection {dc.data_collection_tag} does not have regex_config (likely single-file scan)"
+            )
+            continue
+
         regex_config = dc.config.scan.scan_parameters.regex_config
         full_regex = (
-            construct_full_regex(regex=regex_config)
+            construct_full_regex(regex=regex_config)  # type: ignore[invalid-argument-type]
             if getattr(regex_config, "wildcards", False)
-            else regex_config.pattern
+            else regex_config.pattern  # type: ignore[unresolved-attribute]
         )
         logger.debug(f"Regex for DC {dc.data_collection_tag}: {full_regex}")
 
@@ -320,7 +328,7 @@ def scan_run_for_multiple_data_collections(
             # Create a temporary run for this DC (needed for file association)
             temp_run = WorkflowRun(
                 id=workflow_run.id,
-                workflow_id=workflow_id,
+                workflow_id=PyObjectId(workflow_id),
                 run_tag=run_tag,
                 files_id=[],
                 workflow_config_id=workflow_config.id,
@@ -484,6 +492,8 @@ def scan_run_for_multiple_data_collections(
 
     logger.debug(f"Storing dc_stats for display on run {run_tag}: {dc_stats}")
 
+    if workflow_run.scan_results is None:
+        workflow_run.scan_results = []
     workflow_run.scan_results.append(scan_result)
 
     # Generate the hash for the run
@@ -579,6 +589,10 @@ def scan_files_for_workflow(
                 logger.debug(f"Skipping existing run {run_tag}.")
                 continue
 
+            if workflow.config is None:
+                logger.error(f"Workflow config is None for workflow {workflow_id}")
+                continue
+
             workflow_run = scan_run_for_multiple_data_collections(
                 run_location=location,
                 run_tag=run_tag,
@@ -597,11 +611,20 @@ def scan_files_for_workflow(
 
         elif workflow.data_location.structure == "sequencing-runs":
             # Each subdirectory that matches the regex is a run
+            runs_regex = workflow.data_location.runs_regex
+            if not runs_regex:
+                logger.error("runs_regex is required for sequencing-runs structure but was None")
+                continue
+
             for run in sorted(os.listdir(location)):
                 run_path = os.path.join(location, run)
-                if os.path.isdir(run_path) and re.match(workflow.data_location.runs_regex, run):
+                if os.path.isdir(run_path) and re.match(runs_regex, run):
                     if run in existing_runs_reformated and not rescan_folders:
                         logger.debug(f"Skipping existing run {run}.")
+                        continue
+
+                    if workflow.config is None:
+                        logger.error(f"Workflow config is None for workflow {workflow_id}")
                         continue
 
                     workflow_run = scan_run_for_multiple_data_collections(
@@ -718,11 +741,15 @@ def scan_files_for_data_collection(
     # Single file scan logic (unchanged)
     file_path = data_collection.config.scan.scan_parameters.filename
 
+    workflow_config_id = (
+        PyObjectId(workflow.config.id) if workflow.config and workflow.config.id else PyObjectId()
+    )
+
     workflow_run = WorkflowRun(
-        workflow_id=workflow_id,
+        workflow_id=PyObjectId(workflow_id),
         run_tag=f"{data_collection.data_collection_tag}-single-file-scan",
         files_id=[],
-        workflow_config_id=workflow.config.id,
+        workflow_config_id=workflow_config_id,
         run_location=os.path.dirname(file_path),
         creation_time=format_timestamp(os.path.getctime(file_path)),
         last_modification_time=format_timestamp(os.path.getmtime(file_path)),
@@ -941,12 +968,13 @@ def scan_parent_folder(
     )
 
     # Create a temporary workflow object to use the new function
-    from depictio.models.models.workflows import Workflow
+    from depictio.models.models.base import PyObjectId
+    from depictio.models.models.workflows import Workflow, WorkflowEngine
 
     temp_workflow = Workflow(
-        id=workflow_id,
+        id=PyObjectId(workflow_id),
         name="temp",
-        engine={"name": "temp"},
+        engine=WorkflowEngine(name="temp"),
         data_collections=[data_collection],
         data_location=data_location,
         config=workflow_config,

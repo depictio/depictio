@@ -9,13 +9,13 @@ from depictio.models.models.files import File
 from depictio.models.models.workflows import WorkflowRun
 
 
-def regex_match(file: File, full_regex: str):
+def regex_match(file_name: str, full_regex: str):
     # Normalize the regex pattern to match both types of path separators
     normalized_regex = full_regex.replace("/", "\\/")
-    # logger.debug(f"File: {file}, Full Regex: {full_regex}")
-    if re.match(normalized_regex, file):
-        logger.debug(f"Matched file - file-based: {file}")
-        return True, re.match(normalized_regex, file)
+    # logger.debug(f"File: {file_name}, Full Regex: {full_regex}")
+    if re.match(normalized_regex, file_name):
+        logger.debug(f"Matched file - file-based: {file_name}")
+        return True, re.match(normalized_regex, file_name)
     return False, None
 
 

@@ -118,9 +118,11 @@ def enable_box_edit_mode(
         # logger.info(f"ENABLE BOX EDIT MODE - component_type: {component_type}")
 
         if component_type:
+            visu_type = component_data.get("visu_type", None)
             if (
                 component_type == "figure"
-                and component_data.get("visu_type", None).lower() == "scatter"
+                and visu_type is not None
+                and visu_type.lower() == "scatter"
             ):
                 buttons = dmc.Group(
                     [

@@ -103,10 +103,12 @@ def api_call_fetch_user_from_token(token: str) -> User | None:
     user_data = response.json()
     logger.debug(f"User data fetched from API: {user_data.get('email', 'No email found')}")
 
-    if not user_data:
+    if not user_data or "email" not in user_data:
         return None
 
-    user = User(**user_data)
+    # Add default password since frontend doesn't receive actual password
+    # user_data_with_password = {**user_data, "password": "$2b$12$dummy"}
+    user = User(**user_data)  # type: ignore[misc]
 
     # Cache the result
     _user_cache[cache_key] = (user, current_time)
@@ -148,10 +150,12 @@ def api_call_fetch_user_from_email(email: EmailStr) -> User | None:
         f"User data fetched: {user_data.get('email', 'No email found')} with ID {user_data.get('_id', 'No ID found')}"
     )
 
-    if not user_data:
+    if not user_data or "email" not in user_data:
         return None
 
-    user = User(**user_data)
+    # Add default password since frontend doesn't receive actual password
+    # user_data_with_password = {**user_data, "password": "$2b$12$dummy"}
+    user = User(**user_data)  # type: ignore[misc]
 
     return user
 
@@ -516,7 +520,7 @@ def api_call_list_tokens(
         return None
 
 
-def api_call_generate_agent_config(token: TokenData, current_token: str) -> dict[str, Any] | None:
+def api_call_generate_agent_config(token: TokenBase, current_token: str) -> dict[str, Any] | None:
     """
     Generate an agent configuration for a user with the given token.
 
@@ -527,7 +531,7 @@ def api_call_generate_agent_config(token: TokenData, current_token: str) -> dict
     Returns:
         Response from the agent config generation or None if failed
     """
-    logger.info("Generating agent config")
+    logger.info("Generating CLI config")
     response = httpx.post(
         f"{API_BASE_URL}/depictio/api/v1/auth/generate_agent_config",
         json=convert_model_to_dict(token),
@@ -537,11 +541,11 @@ def api_call_generate_agent_config(token: TokenData, current_token: str) -> dict
         logger.info("Agent config generated successfully.")
         return dict(response.json())
     else:
-        logger.error(f"Error generating agent config: {response.text}")
+        logger.error(f"Error generating CLI config: {response.text}")
         return None
 
 
-@validate_call(config=dict(arbitrary_types_allowed=True), validate_return=True)
+@validate_call(config=dict(arbitrary_types_allowed=True), validate_return=True)  # type: ignore[invalid-argument-type]
 def api_get_project_from_id(project_id: PyObjectId, token: str) -> httpx.Response:
     """
     Get a project from the server using the project ID.

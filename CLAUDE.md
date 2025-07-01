@@ -7,19 +7,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Environment Setup
 
 ```bash
-# Install dependencies with uv (recommended)
+# Install dependencies with uv (recommended) - Python 3.12
 uv sync
 
 # Or with pip
 pip install -e .
 pip install -e ".[dev]"
+
+# Note: The project uses Python 3.12 in CI to ensure consistent type checking behavior
 ```
 
 ### Testing
 
 ```bash
 # Run all tests
-pytest depictio/tests/api depictio/tests/cli depictio/tests/models -xvs -n auto
+pytest depictio/tests/ -xvs -n auto
 
 # Run E2E tests (requires Cypress setup)
 cd depictio/tests/e2e-tests && /Users/tweber/.nvm/versions/node/v20.16.0/bin/npx cypress run --config screenshotsFolder=cypress/screenshots,videosFolder=cypress/videos,trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true
@@ -34,8 +36,25 @@ ruff format .
 # Lint code
 ruff check .
 
-# Type checking
-ty .
+# Type checking with ty (Astral's fast type checker)
+ty check depictio/
+
+# Run pre-commit hooks
+pre-commit run --all-files
+```
+
+### Local CI Testing with Act
+
+```bash
+# Test GitHub Actions workflow locally using act
+# Requires Docker and act (https://github.com/nektos/act)
+act --workflows .github/workflows/depictio-ci.yaml -j quality -P ubuntu-22.04=catthehacker/ubuntu:full-22.04 --container-architecture linux/amd64 --container-options "--privileged" --reuse --action-offline-mode
+
+# Run specific job only
+act --workflows .github/workflows/depictio-ci.yaml -j quality
+
+# List available jobs
+act --workflows .github/workflows/depictio-ci.yaml --list
 ```
 
 ### Running the Application
@@ -46,7 +65,6 @@ ty .
 # Start all services in development mode
 docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml --env-file docker-compose/.env up
 ```
-
 
 ## Architecture Overview
 
@@ -83,20 +101,20 @@ docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio
 
 ### Data Architecture
 
-**Database Layer**
+#### Database Layer
 
 - MongoDB for metadata and configuration storage
 - Collections: users, groups, projects, workflows, data_collections
 - GridFS for large file storage
 - Delta tables (Polars/PyArrow) for analytical data storage in S3/MinIO
 
-**Authentication & Authorization**
+#### Authentication & Authorization
 
 - JWT tokens with public/private key encryption
 - Role-based access control (users, groups, projects)
 - SAML/OAuth integration capabilities (see dev/ examples)
 
-**File Storage**
+#### File Storage
 
 - S3-compatible storage (MinIO for local dev, AWS S3 for production)
 - Delta Lake format for structured data
@@ -105,13 +123,13 @@ docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio
 
 ### Component Integration
 
-**Data Flow**
+#### Data Flow
 
 1. CLI ingests data → Validates and stores in Delta format → Registers in MongoDB
 2. API serves metadata and data access → Dash renders interactive visualizations
 3. User interactions in Dash → API updates → Real-time dashboard updates
 
-**Inter-Service Communication**
+#### Inter-Service Communication
 
 - FastAPI backend exposes REST endpoints at `/depictio/api/v1/`
 - Dash frontend calls API endpoints for data and authentication
@@ -119,24 +137,37 @@ docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio
 
 ### Development Patterns
 
-**Configuration Management**
+#### Configuration Management
 
 - Pydantic Settings for environment-based configuration
 - Different contexts: API, Dash, CLI (set via DEPICTIO_CONTEXT)
 - Environment files (.env) for secrets and deployment settings
 
-**Error Handling**
+#### Error Handling
 
 - Structured exceptions with proper HTTP status codes
 - Comprehensive logging with configurable levels
 - Input sanitization and validation at model level
 
-**Testing Strategy**
+#### Testing Strategy
 
 - Unit tests for models and utilities
 - Integration tests for API endpoints
 - E2E tests with Cypress for full user workflows
 - Docker-based integration testing with real databases
+
+### Type Checking with ty
+
+The codebase uses Astral's `ty` type checker for static type analysis and maintains perfect type safety:
+
+- Run `ty check depictio/models/ depictio/api/ depictio/dash/` - All folders MUST pass with zero errors
+- Type checking is enforced in CI/CD pipeline for all pull requests and commits
+- The codebase achieves complete type safety without using `# type: ignore` comments
+- Type-safe patterns used:
+  - Explicit field validation for Pydantic model instantiation
+  - Proper ObjectId/PyObjectId type conversions
+  - Defensive programming with None checks and validation
+  - Type guards for Union types and optional fields
 
 ## Key Dependencies
 
@@ -160,3 +191,66 @@ docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio
 - `docker-compose.yaml`: Local development environment
 - `helm-charts/depictio/`: Kubernetes deployment manifests
 - `.env`: Environment variables (create from examples in dev/)
+
+## Documentation Workflow
+
+When finishing a PR that adds new features or makes significant changes:
+
+### 1. Update depictio-docs (VS Code workspace)
+
+- **Required**: Update relevant documentation files in the depictio-docs repository
+- Document new features, API changes, configuration options, and user-facing functionality
+- Include code examples, usage patterns, and integration guides
+- Update README files, installation guides, and user documentation as needed
+
+### 2. Update Obsidian Notes (Core Developer Documentation)
+
+- **Required**: Extend corresponding Obsidian notes with detailed technical information
+- **Location**: Obsidian vault accessible via MCP integration (`mcp-obsidian`)
+- **Access**: Use MCP tools to read/write notes directly from Claude Code
+- **Focus areas**:
+  - Technical implementation details not suitable for public docs
+  - Architecture decisions and trade-offs
+  - Internal APIs and developer-specific patterns
+  - Performance considerations and optimization notes
+  - Debugging strategies and troubleshooting for developers
+  - Database schema changes and migration notes
+  - Security considerations and implementation details
+  - Testing strategies and coverage gaps
+  - Future refactoring opportunities and technical debt
+
+### Documentation Guidelines
+
+**depictio-docs (Public Documentation)**:
+
+- User-focused content
+- Clear examples and tutorials
+- Installation and deployment guides
+- API reference documentation
+- Best practices for end users
+
+**Obsidian Notes (Internal Documentation)**:
+
+- Developer-focused technical details
+- Implementation specifics and edge cases
+- Performance benchmarks and profiling results
+- Code review insights and lessons learned
+- Integration challenges and solutions
+- Monitoring and observability setup
+- Development environment quirks and fixes
+
+## Code Quality Enforcement
+
+**CRITICAL REQUIREMENT**: After every code operation (creating, editing, or deleting files), you MUST:
+
+1. **Run pre-commit hooks**: `pre-commit run --all-files`
+2. **Fix any failures** before considering the task complete
+3. **Re-run pre-commit** until all checks pass
+
+This ensures all code changes comply with project standards including:
+- Code formatting (ruff format)
+- Linting rules (ruff check)
+- Type checking (ty check)
+- Import sorting and other quality checks
+
+**No exceptions** - pre-commit compliance is mandatory for all code changes.

@@ -66,7 +66,7 @@ async def check_and_set_initialization():
         )
         print(f"Worker {os.getpid()}: Acquired initialization lock")
         return True  # This worker should do initialization
-    except pymongo.errors.DuplicateKeyError:
+    except pymongo.errors.DuplicateKeyError:  # type: ignore[unresolved-attribute]
         # Another worker already started initialization
         print(f"Worker {os.getpid()}: Another worker is handling initialization")
         return False

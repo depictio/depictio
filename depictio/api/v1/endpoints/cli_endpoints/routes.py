@@ -5,7 +5,8 @@ from pydantic import BaseModel
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.endpoints.user_endpoints.core_functions import _async_fetch_user_from_id
-from depictio.models.models.users import CLIConfig, TokenBeanie
+from depictio.models.models.cli import CLIConfig
+from depictio.models.models.users import TokenBeanie
 
 
 class CLIValidationResponse(BaseModel):
@@ -14,8 +15,8 @@ class CLIValidationResponse(BaseModel):
     success: bool
     message: str
     is_admin: bool = False
-    user_id: str = None
-    email: str = None
+    user_id: str | None = None
+    email: str | None = None
 
 
 cli_endpoint_router = APIRouter()
@@ -28,9 +29,10 @@ async def validate_cli_config_endpoint(cli_config: CLIConfig):
     token = cli_config.user.token
     logger.info(f"Token: {token}")
 
+    # Find token by access_token since TokenData doesn't have id
     _token_check = await TokenBeanie.find_one(
         {
-            "_id": token.id,
+            "access_token": token.access_token,
             # check expire datetime is greater than now
             "expire_datetime": {"$gt": datetime.now()},
         }
@@ -40,8 +42,8 @@ async def validate_cli_config_endpoint(cli_config: CLIConfig):
         logger.error("Token expired or not found.")
         return CLIValidationResponse(success=False, message="Token expired or not found.")
     logger.debug(f"Token check: {_token_check}")
-    # Check if the user exists in the database
-    user = await _async_fetch_user_from_id(token.user_id)
+    # Check if the user exists in the database using user_id from the found token
+    user = await _async_fetch_user_from_id(_token_check.user_id)
     logger.debug(f"User fetched: {user}")
     if not user:
         logger.error("User not found.")

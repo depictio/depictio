@@ -46,8 +46,8 @@ async def specs(
             "$match": {
                 "workflows.data_collections._id": data_collection_oid,
                 "$or": [
-                    {"permissions.owners._id": current_user.id},
-                    {"permissions.viewers._id": current_user.id},
+                    {"permissions.owners._id": current_user.id},  # type: ignore[possibly-unbound-attribute]
+                    {"permissions.viewers._id": current_user.id},  # type: ignore[possibly-unbound-attribute]
                     {"permissions.viewers": "*"},
                     {"is_public": True},
                 ],
@@ -85,7 +85,7 @@ async def delete_datacollection(
         user_oid,
     ) = validate_workflow_and_collection(
         workflows_collection,
-        current_user.id,
+        current_user.id,  # type: ignore[possibly-unbound-attribute]
         workflow_id,
         data_collection_id,
     )
@@ -126,7 +126,7 @@ async def get_join_tables(
             join_config = dc["config"]["join"]
             zip_ids_list = [
                 return_mongoid(
-                    workflow_id=workflow_id,
+                    workflow_id=ObjectId(workflow_id),
                     data_collection_tag=dc_tag,
                     workflows=workflows,
                 )[1]
@@ -142,9 +142,9 @@ async def get_join_tables(
     join_details_map = normalize_join_details(join_details_map)
     # Map the IDs back to tags
     for dc_id in join_details_map:
-        TOKEN = current_user["access_token"]
+        TOKEN = current_user["access_token"]  # type: ignore[call-non-callable]
         join_details_map[dc_id]["with_dc"] = [
-            return_dc_tag_from_id(dc_id, workflows, TOKEN)
+            return_dc_tag_from_id(dc_id, workflows, TOKEN)  # type: ignore[too-many-positional-arguments]
             for dc_id in join_details_map[dc_id]["with_dc_id"]
         ]
 
@@ -188,8 +188,8 @@ async def get_tag_from_id(
             "$match": {
                 "workflows.data_collections._id": data_collection_oid,
                 "$or": [
-                    {"permissions.owners._id": current_user.id},
-                    {"permissions.viewers._id": current_user.id},
+                    {"permissions.owners._id": current_user.id},  # type: ignore[possibly-unbound-attribute]
+                    {"permissions.viewers._id": current_user.id},  # type: ignore[possibly-unbound-attribute]
                     {"permissions.viewers": "*"},
                     {"is_public": True},
                 ],

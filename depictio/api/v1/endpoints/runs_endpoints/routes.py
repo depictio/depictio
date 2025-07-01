@@ -47,7 +47,9 @@ async def get_run(run_id: PyObjectId, current_user: str = Depends(get_current_us
     query = {
         "_id": run_id,
         "$or": [
-            {"permissions.owners._id": current_user.id},  # User is an owner
+            {
+                "permissions.owners._id": current_user.id  # type: ignore[possibly-unbound-attribute]
+            },  # User is an owner
             {"permissions.owners.is_admin": True},  # User is an admin
         ],
     }
