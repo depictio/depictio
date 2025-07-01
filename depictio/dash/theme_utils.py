@@ -163,8 +163,8 @@ def register_theme_callbacks(app):
             const graphs = document.querySelectorAll('.js-plotly-plot');
             console.log('Found', graphs.length, 'Plotly graphs');
 
-            // Use longer delay to ensure graphs are fully loaded
-            const delay = 500;
+            // Use minimal delay to ensure graphs are ready but keep it responsive
+            const delay = 1;
 
             setTimeout(() => {
                 graphs.forEach(async (graph, index) => {
@@ -182,9 +182,9 @@ def register_theme_callbacks(app):
                         const newLayout = {
                             ...currentLayout,
                             template: template,
-                            // Force background colors based on template
-                            paper_bgcolor: theme === 'dark' ? '#1f2937' : '#ffffff',
-                            plot_bgcolor: theme === 'dark' ? '#374151' : '#ffffff'
+                            // Force background colors that match Plotly dark theme
+                            paper_bgcolor: theme === 'dark' ? '#111111' : '#ffffff',
+                            plot_bgcolor: theme === 'dark' ? '#111111' : '#ffffff'
                         };
 
                         console.log('New layout for graph', index, ':', newLayout);
@@ -210,8 +210,8 @@ def register_theme_callbacks(app):
                             console.log('Trying fallback relayout for graph', index);
                             await window.Plotly.relayout(graph, {
                                 'template': template,
-                                'paper_bgcolor': theme === 'dark' ? '#1f2937' : '#ffffff',
-                                'plot_bgcolor': theme === 'dark' ? '#374151' : '#ffffff'
+                                'paper_bgcolor': theme === 'dark' ? '#111111' : '#ffffff',
+                                'plot_bgcolor': theme === 'dark' ? '#111111' : '#ffffff'
                             });
                             console.log('Fallback relayout completed for graph', index);
                         } catch (fallbackErr) {
