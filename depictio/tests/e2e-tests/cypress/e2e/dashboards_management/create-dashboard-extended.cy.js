@@ -80,6 +80,7 @@ describe('Create and manage dashboard', () => {
                         // const newTitle = `Edited ${duplicateTitle} ${new Date().getTime()}`;
                         // editDashboardName(duplicateTitle, duplicateDashboardId, newTitle).then(() => {
                         // Toggle privacy settings
+                        //NOTE: The togglePrivacyAndVerify function is currently disabled due to changes in #558
                         // togglePrivacyAndVerify(uniqueTitle, duplicateDashboardId).then(() => {
                         // Delete both dashboards
                         deleteAndVerify(duplicateTitle, duplicateDashboardId);
@@ -177,7 +178,7 @@ describe('Create and manage dashboard', () => {
         });
     }
 
-    # NOTE : The togglePrivacyAndVerify function is designed to toggle the privacy settings of a dashboard and verify the changes. DISABLED following changes in #558
+    // NOTE : The togglePrivacyAndVerify function is designed to toggle the privacy settings of a dashboard and verify the changes. DISABLED following changes in #558
     function togglePrivacyAndVerify(title, id) {
         // This function will toggle privacy settings and return a promise
         return new Cypress.Promise((resolve) => {
