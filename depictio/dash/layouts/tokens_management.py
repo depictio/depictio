@@ -17,8 +17,7 @@ from depictio.dash.api_calls import (
     api_call_list_tokens,
 )
 from depictio.dash.colors import colors
-from depictio.models.models.base import PyObjectId
-from depictio.models.models.users import TokenData
+from depictio.models.models.users import TokenBase, TokenData
 
 # Define consistent theme elements
 CARD_SHADOW = "md"
@@ -560,16 +559,16 @@ def register_tokens_management_callbacks(app):
                 )
 
             # logger.info(f"Token generated: {token_generated}")
-            # Create TokenData for agent config generation
-            token_data = TokenData(
-                name=token_generated.get("name"),
-                token_lifetime=token_generated.get("token_lifetime", "short-lived"),
-                token_type=token_generated.get("token_type", "bearer"),
-                sub=PyObjectId(token_generated.get("user_id")),
+            token_generated = TokenBase(
+                user_id=token_generated["user_id"],
+                access_token=token_generated["access_token"],
+                refresh_token=token_generated["refresh_token"],
+                expire_datetime=token_generated["expire_datetime"],
+                refresh_expire_datetime=token_generated["refresh_expire_datetime"],
             )
-            # logger.info(f"Token generated: {format_pydantic(token_data)}")
+            # logger.info(f"Token generated: {format_pydantic(token_generated)}")
             agent_config = api_call_generate_agent_config(
-                token=token_data, current_token=local_store["access_token"]
+                token=token_generated, current_token=local_store["access_token"]
             )
             # logger.info(f"Config: {agent_config}")
 

@@ -16,7 +16,7 @@ from depictio.dash.layouts.layouts_toolbox import create_delete_confirmation_mod
 from depictio.dash.layouts.projects import render_project_item
 from depictio.models.models.dashboards import DashboardData
 from depictio.models.models.projects import Project
-from depictio.models.models.users import GroupUI, User, UserBase
+from depictio.models.models.users import GroupUI, UserBase, UserBaseUI
 
 # Define styles and colors
 card_styles = {
@@ -380,7 +380,7 @@ def render_groupwise_layout(group: GroupUI, all_users: list) -> dmc.Accordion:
 
 
 @validate_call
-def render_userwise_layout(user: User) -> dmc.Accordion:
+def render_userwise_layout(user: UserBaseUI) -> dmc.Accordion:
     """
     Render the layout for a user.
 
@@ -851,7 +851,9 @@ def register_admin_callbacks(app):
             if response.status_code == 200:
                 users = response.json()
                 logger.info(f"Users: {users}")
-                userwise_layouts = [render_userwise_layout(User.from_mongo(user)) for user in users]
+                userwise_layouts = [
+                    render_userwise_layout(UserBaseUI.from_mongo(user)) for user in users
+                ]
                 content = html.Div(userwise_layouts)
             else:
                 logger.error(f"Error fetching users: {response.json()}")
