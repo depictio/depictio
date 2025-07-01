@@ -492,6 +492,7 @@ def register_callbacks_figure_component(app):
             State("current-edit-parent-index", "data"),  # Retrieve parent_index
             State("local-store", "data"),
             State("url", "pathname"),
+            State("theme-store", "data"),  # Add theme store
         ],
         prevent_initial_call=True,
     )
@@ -505,6 +506,7 @@ def register_callbacks_figure_component(app):
         parent_index = args[5]
         local_data = args[6]
         pathname = args[7]
+        theme_data = args[8]
 
         if not local_data:
             raise dash.exceptions.PreventUpdate
@@ -578,6 +580,11 @@ def register_callbacks_figure_component(app):
         logger.info(f"visu_type: {visu_type}")
 
         if dict_kwargs:
+            # Extract theme from theme_data
+            theme = "light"
+            if theme_data and isinstance(theme_data, dict):
+                theme = theme_data.get("colorScheme", "light")
+
             figure_kwargs = {
                 "index": id["index"],
                 "dict_kwargs": dict_kwargs,
@@ -586,6 +593,7 @@ def register_callbacks_figure_component(app):
                 "dc_id": data_collection_id,
                 "dc_config": dc_specs["config"],
                 "access_token": TOKEN,
+                "theme": theme,  # Pass theme to build_figure
             }
 
             if parent_index:

@@ -10,7 +10,6 @@ from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.logging_init import logger
-from depictio.dash.colors import colors  # Import Depictio color palette
 from depictio.api.v1.endpoints.user_endpoints.core_functions import _verify_password
 from depictio.api.v1.endpoints.user_endpoints.utils import login_user
 from depictio.dash.api_calls import (
@@ -19,6 +18,7 @@ from depictio.dash.api_calls import (
     api_call_handle_google_oauth_callback,
     api_call_register_user,
 )
+from depictio.dash.colors import colors  # Import Depictio color palette
 
 event = {"event": "keydown", "props": ["key"]}
 
@@ -28,7 +28,8 @@ def render_login_form():
         [
             dmc.Center(
                 html.Img(
-                    src=dash.get_asset_url("logo.png"),
+                    id="auth-modal-logo-login",
+                    src=dash.get_asset_url("logo_black.svg"),
                     height=60,
                     style={"margin-left": "0px"},
                 )
@@ -39,6 +40,7 @@ def render_login_form():
                     order=2,
                     style={"fontFamily": "Virgil"},
                     ta="center",
+                    c="dimmed",  # Use theme-aware color
                 )
             ),
             dmc.Space(h=10),
@@ -82,11 +84,11 @@ def render_login_form():
             dmc.Group(
                 [
                     dmc.Button(
-                        "Login", 
-                        radius="md", 
-                        id="login-button", 
+                        "Login",
+                        radius="md",
+                        id="login-button",
                         color=colors["blue"],
-                        style={"width": "120px"}
+                        style={"width": "120px"},
                     ),
                     dmc.Button(
                         "",
@@ -103,7 +105,7 @@ def render_login_form():
                             variant="outline",
                             color=colors["blue"],
                             disabled=settings.auth.unauthenticated_mode,
-                            style={"width": "120px"}
+                            style={"width": "120px"},
                         ),
                         id="open-register-form",
                     ),
@@ -150,8 +152,6 @@ def render_login_form():
                         fullWidth=True,
                         style={
                             "display": "block" if settings.auth.google_oauth_enabled else "none",
-                            "border": "1px solid #db4437",
-                            "color": "#db4437",
                         },
                     ),
                 ],
@@ -169,7 +169,8 @@ def render_register_form():
         [
             dmc.Center(
                 html.Img(
-                    src=dash.get_asset_url("logo.png"),
+                    id="auth-modal-logo-register",
+                    src=dash.get_asset_url("logo_black.svg"),
                     height=60,
                     style={"margin-left": "0px"},
                 )
@@ -180,6 +181,7 @@ def render_register_form():
                     order=2,
                     style={"fontFamily": "Virgil"},
                     ta="center",
+                    c="dimmed",  # Use theme-aware color
                 )
             ),
             dmc.Space(h=10),
@@ -226,11 +228,11 @@ def render_register_form():
                     ),
                     # dmc.Button("", radius="md", id="logout-button", fullWidth=True, style={"display": "none"}),
                     dmc.Button(
-                        "Register", 
-                        radius="md", 
-                        id="register-button", 
+                        "Register",
+                        radius="md",
+                        id="register-button",
                         color=colors["blue"],
-                        style={"width": "140px"}
+                        style={"width": "140px"},
                     ),
                     html.A(
                         dmc.Button(
@@ -250,7 +252,7 @@ def render_register_form():
                             radius="md",
                             variant="outline",
                             color=colors["blue"],
-                            style={"width": "140px"}
+                            style={"width": "140px"},
                         ),
                         id="open-login-form",
                     ),
@@ -353,7 +355,6 @@ layout = html.Div(
                 "width": "100vw",
                 "height": "100vh",
                 "zIndex": "9998",
-                "background": "#ffffff",  # White background
                 "overflow": "hidden",
             },
             children=[
@@ -392,11 +393,12 @@ layout = html.Div(
                                 "animationIterationCount": "infinite",
                                 "animationTimingFunction": "ease-in-out",
                                 "animationDelay": f"{(i * 0.7) % 15}s",
-                            }
-                        ) for i in range(50)  # Increased to 50 triangle particles
-                    ]
+                            },
+                        )
+                        for i in range(50)  # Increased to 50 triangle particles
+                    ],
                 ),
-            ]
+            ],
         ),
         dcc.Store(
             id="modal-state-store", data="login"
@@ -418,10 +420,7 @@ layout = html.Div(
                             "position": "relative",
                             "zIndex": "10001",
                             "backdropFilter": "blur(10px)",
-                            "background": "rgba(255, 255, 255, 0.95)",
-                            "border": "1px solid rgba(255, 255, 255, 0.3)",
-                            "boxShadow": "0 8px 32px rgba(0, 0, 0, 0.1)",
-                        }
+                        },
                     )
                 ],
                 events=[event],

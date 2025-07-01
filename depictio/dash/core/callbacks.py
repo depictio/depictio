@@ -77,6 +77,7 @@ def register_layout_callbacks(app):
     from depictio.dash.layouts.stepper_parts.part_one import register_callbacks_stepper_part_one
     from depictio.dash.layouts.stepper_parts.part_three import register_callbacks_stepper_part_three
     from depictio.dash.layouts.stepper_parts.part_two import register_callbacks_stepper_part_two
+    from depictio.dash.theme_utils import register_theme_callbacks
 
     # Register layout callbacks
     register_callbacks_stepper(app)
@@ -87,6 +88,7 @@ def register_layout_callbacks(app):
     register_callbacks_draggable(app)
     register_sidebar_callbacks(app)
     register_callbacks_save(app)
+    register_theme_callbacks(app)
 
 
 def register_component_callbacks(app):

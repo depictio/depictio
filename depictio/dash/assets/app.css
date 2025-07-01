@@ -78,3 +78,60 @@
 .dash-debug-menu__outer {
     /* Let Dash handle the debug menu behavior naturally */
 }
+
+/* Theme-aware page content */
+#page-content {
+    transition: background-color 0.2s ease, color 0.2s ease;
+    background-color: var(--app-bg-color, var(--mantine-color-white)) !important;
+    color: var(--app-text-color, var(--mantine-color-black)) !important;
+}
+
+/* Theme-aware titles */
+[data-mantine="Title"] {
+    transition: color 0.2s ease;
+    color: var(--app-text-color, var(--mantine-color-black)) !important;
+}
+
+/* Theme support for main containers */
+.mantine-AppShell-main,
+.mantine-Container-root {
+    background-color: var(--app-bg-color, var(--mantine-color-white)) !important;
+    color: var(--app-text-color, var(--mantine-color-black)) !important;
+}
+
+/* Aggressive FOUC prevention - hide header/navbar by default on initial load */
+#header-content,
+#sidebar,
+.mantine-AppShell-navbar,
+.mantine-AppShell-header {
+    opacity: 0 !important;
+    transition: opacity 0.1s ease !important;
+}
+
+/* Show header/navbar only when page is fully loaded and NOT auth page */
+body.page-loaded:not(.auth-page) #header-content,
+body.page-loaded:not(.auth-page) #sidebar,
+body.page-loaded:not(.auth-page) .mantine-AppShell-navbar,
+body.page-loaded:not(.auth-page) .mantine-AppShell-header {
+    opacity: 1 !important;
+}
+
+/* Hide definitively on auth pages */
+body.auth-page #header-content,
+body.auth-page #sidebar,
+body.auth-page .mantine-AppShell-navbar,
+body.auth-page .mantine-AppShell-header {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+}
+
+/* Ensure auth background is immediately visible */
+#auth-background {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    z-index: 9998 !important;
+}

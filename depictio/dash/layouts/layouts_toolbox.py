@@ -115,7 +115,6 @@ def create_dashboard_modal(
                                 # comboboxProps={"zIndex": 1000},
                                 comboboxProps={"withinPortal": False},
                             ),
-
                             # Available templates dropdown
                             # dmc.Select(
                             #     label="Available templates",
