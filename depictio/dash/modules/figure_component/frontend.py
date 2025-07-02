@@ -488,33 +488,6 @@ def register_callbacks_figure_component(app):
                 ]
             )
 
-    # Callback to handle refresh button
-    @app.callback(
-        Output({"type": "figure-body", "index": MATCH}, "children", allow_duplicate=True),
-        [
-            Input({"type": "refresh-button", "index": MATCH}, "n_clicks"),
-        ],
-        [
-            State({"type": "dict_kwargs", "index": MATCH}, "data"),
-            State({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
-            State({"type": "workflow-selection-label", "index": MATCH}, "value"),
-            State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
-            State({"type": "segmented-control-visu-graph", "index": MATCH}, "id"),
-            State("current-edit-parent-index", "data"),
-            State("local-store", "data"),
-            State("url", "pathname"),
-            State("theme-store", "data"),
-        ],
-        prevent_initial_call=True,
-    )
-    def refresh_figure(refresh_clicks, *args):
-        """Handle refresh button clicks by rebuilding the figure."""
-        if not refresh_clicks:
-            raise dash.exceptions.PreventUpdate
-
-        # Use the same logic as update_figure but force data refresh
-        return update_figure(*args)
-
     # Callback to initialize figure with default visualization when component is first created
     @app.callback(
         Output({"type": "dict_kwargs", "index": MATCH}, "data", allow_duplicate=True),
@@ -529,10 +502,12 @@ def register_callbacks_figure_component(app):
         ],
         prevent_initial_call=True,
     )
-    def initialize_default_parameters(visu_type_label, current_kwargs, workflow_id, data_collection_id, local_data):
+    def initialize_default_parameters(
+        visu_type_label, current_kwargs, workflow_id, data_collection_id, local_data
+    ):
         """Initialize default parameters when visualization type is first selected."""
-        # Only trigger if we have empty or null kwargs
-        if current_kwargs and current_kwargs != {"x": None, "y": None}:
+        # Only trigger if we have empty kwargs or need to set defaults
+        if current_kwargs and current_kwargs not in [{}, {"x": None, "y": None}]:
             raise dash.exceptions.PreventUpdate
 
         if not local_data or not workflow_id or not data_collection_id:
@@ -556,13 +531,61 @@ def register_callbacks_figure_component(app):
 
             # Get default parameters for this visualization type
             default_params = _get_default_parameters(visu_type, columns_specs_reformatted)
-            
+
             logger.info(f"Initializing default parameters for {visu_type}: {default_params}")
             return default_params if default_params else {"x": None, "y": None}
 
         except Exception as e:
             logger.error(f"Error initializing default parameters: {e}")
             return {"x": None, "y": None}
+
+    # Callback to automatically initialize figure when component loads
+    @app.callback(
+        Output({"type": "dict_kwargs", "index": MATCH}, "data", allow_duplicate=True),
+        [
+            Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
+            Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+        ],
+        [
+            State({"type": "dict_kwargs", "index": MATCH}, "data"),
+            State({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
+            State("local-store", "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def auto_initialize_on_load(
+        workflow_id, data_collection_id, current_kwargs, visu_type_label, local_data
+    ):
+        """Auto-initialize default parameters when workflow/datacollection are set."""
+        # Only trigger if we have empty kwargs and all required data
+        if current_kwargs or not workflow_id or not data_collection_id or not local_data:
+            raise dash.exceptions.PreventUpdate
+
+        try:
+            # Get column information for defaults
+            TOKEN = local_data["access_token"]
+            columns_json = get_columns_from_data_collection(workflow_id, data_collection_id, TOKEN)
+            columns_specs_reformatted = defaultdict(list)
+            {columns_specs_reformatted[v["type"]].append(k) for k, v in columns_json.items()}
+
+            # Convert visualization label to name (default to scatter)
+            visu_type = "scatter"
+            if visu_type_label:
+                available_vizs = get_available_visualizations()
+                for viz in available_vizs:
+                    if viz.label == visu_type_label:
+                        visu_type = viz.name
+                        break
+
+            # Get default parameters for this visualization type
+            default_params = _get_default_parameters(visu_type, columns_specs_reformatted)
+
+            logger.info(f"Auto-initializing default parameters for {visu_type}: {default_params}")
+            return default_params if default_params else {}
+
+        except Exception as e:
+            logger.error(f"Error auto-initializing default parameters: {e}")
+            return {}
 
 
 def design_figure(id, component_data=None):
@@ -588,25 +611,6 @@ def design_figure(id, component_data=None):
                 break
 
     figure_row = [
-        dbc.Row(
-            [
-                html.H5("Select your visualisation type"),
-                dmc.Select(
-                    data=viz_options,
-                    value=default_value,
-                    id={
-                        "type": "segmented-control-visu-graph",  # Keep same ID for compatibility
-                        "index": id["index"],
-                    },
-                    placeholder="Choose a visualization type...",
-                    clearable=False,
-                    searchable=True,
-                    style={"marginBottom": "10px"},
-                    comboboxProps={"withinPortal": False},
-                ),
-            ],
-            style={"height": "5%"},
-        ),
         html.Br(),
         dbc.Row(
             [
@@ -620,7 +624,7 @@ def design_figure(id, component_data=None):
                             },
                         ),
                     ],
-                    width=8,  # Fixed width for figure
+                    width=6,  # Reduced from 8 to give more space to controls
                     style={"paddingRight": "15px"},
                 ),
                 dbc.Col(
@@ -628,49 +632,60 @@ def design_figure(id, component_data=None):
                         html.Br(),
                         html.Div(
                             children=[
-                                dbc.Row(
-                                    children=[
-                                        dbc.Col(
+                                # Visualization type selector
+                                dmc.Group(
+                                    [
+                                        html.H6(
+                                            "Visualization:",
+                                            style={"marginBottom": "5px", "marginRight": "10px"},
+                                        ),
+                                        dmc.Select(
+                                            data=viz_options,
+                                            value=default_value,
+                                            id={
+                                                "type": "segmented-control-visu-graph",  # Keep same ID for compatibility
+                                                "index": id["index"],
+                                            },
+                                            placeholder="Choose type...",
+                                            clearable=False,
+                                            searchable=True,
+                                            size="sm",
+                                            style={"width": "200px"},
+                                            comboboxProps={"withinPortal": False},
+                                        ),
+                                        # Edit button
+                                        dmc.Center(
                                             dmc.Button(
-                                                "Edit figure",
+                                                "Edit Figure",
                                                 id={
                                                     "type": "edit-button",
                                                     "index": id["index"],
                                                 },
                                                 n_clicks=0,
-                                                size="sm",
-                                                style={"width": "100%", "marginBottom": "10px"},
+                                                size="md",
+                                                leftSection=DashIconify(icon="mdi:cog", width=20),
+                                                style={"marginBottom": "15px"},
+                                                variant="outline",
+                                                color="blue",
                                             ),
-                                            width=6,
                                         ),
-                                        dbc.Col(
-                                            dmc.ActionIcon(
-                                                DashIconify(icon="mdi:refresh", width=20),
-                                                id={
-                                                    "type": "refresh-button",
-                                                    "index": id["index"],
-                                                },
-                                                size="lg",
-                                                n_clicks=0,
-                                            ),
-                                            width=6,
-                                            style={"display": "flex", "justifyContent": "center", "alignItems": "center"},
+                                        html.Hr(),
+                                        dbc.Collapse(
+                                            id={
+                                                "type": "collapse",
+                                                "index": id["index"],
+                                            },
+                                            is_open=False,
                                         ),
                                     ],
-                                    className="mb-2",
-                                ),
-                                html.Hr(),
-                                dbc.Collapse(
-                                    id={
-                                        "type": "collapse",
-                                        "index": id["index"],
-                                    },
-                                    is_open=False,
+                                    align="center",
+                                    style={"marginBottom": "15px"},
+                                    ta="center"
                                 ),
                             ]
                         ),
                     ],
-                    width=4,  # Fixed width for controls
+                    width=6,  # Increased from 4 to provide more space for edit controls
                     style={"paddingLeft": "15px"},
                 ),
             ],
@@ -678,7 +693,7 @@ def design_figure(id, component_data=None):
         ),
         dcc.Store(
             id={"type": "dict_kwargs", "index": id["index"]},
-            data={"x": None, "y": None},  # Initialize with basic parameters
+            data={},  # Initialize empty to trigger default generation
             storage_type="memory",
         ),
     ]
