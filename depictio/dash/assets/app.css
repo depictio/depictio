@@ -99,6 +99,7 @@
     color: var(--app-text-color, var(--mantine-color-black)) !important;
 }
 
+
 /* Aggressive FOUC prevention - hide header/navbar by default on initial load */
 #header-content,
 #sidebar,
