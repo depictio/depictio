@@ -99,6 +99,14 @@
     color: var(--app-text-color, var(--mantine-color-black)) !important;
 }
 
+/* CSS fallback for NavLink icons - lower specificity than JavaScript */
+#sidebar .mantine-NavLink-root:not(.mantine-NavLink-active) svg,
+#sidebar .mantine-NavLink-root:not(.mantine-NavLink-active) .iconify {
+    color: var(--app-text-color, inherit);
+    fill: var(--app-text-color, inherit);
+    transition: color 0.2s ease, fill 0.2s ease;
+}
+
 
 /* Aggressive FOUC prevention - hide header/navbar by default on initial load */
 #header-content,
