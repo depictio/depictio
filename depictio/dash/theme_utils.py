@@ -522,9 +522,32 @@ def register_theme_callbacks(app):
             };
         }
         """,
-        Output("page-content", "style", allow_duplicate=True),
+            Output("page-content", "style", allow_duplicate=True),
         Input("theme-store", "data"),
         prevent_initial_call=True,
+    )
+
+    # Dedicated callback for dashboard-title to trigger draggable updates
+    app.clientside_callback(
+        """
+        function(theme_data) {
+            console.log('=== DASHBOARD TITLE THEME TRIGGER ===');
+            console.log('Theme data:', theme_data);
+            
+            const theme = theme_data || 'light';
+            const textColor = theme === 'dark' ? '#ffffff' : '#000000';
+            
+            // Return a style object that changes with theme to trigger draggable
+            return {
+                'color': textColor,
+                'data-theme': theme,  // Add a data attribute that changes
+                'display': 'none'  // Keep it hidden
+            };
+        }
+        """,
+        Output("dashboard-title", "style", allow_duplicate=True),
+        Input("theme-store", "data"),
+        prevent_initial_call='initial_duplicate',
     )
 
 

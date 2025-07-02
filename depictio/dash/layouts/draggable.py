@@ -349,6 +349,7 @@ def register_callbacks_draggable(app):
         Input("edit-components-mode-button", "checked"),
         State("url", "pathname"),
         State("local-store", "data"),
+        # Input("dashboard-title", "style"),  # Indirect trigger for theme changes
         # Input("height-store", "data"),
         prevent_initial_call=True,
     )
@@ -385,6 +386,7 @@ def register_callbacks_draggable(app):
         input_edit_components_mode_button,
         pathname,
         local_data,
+        # dashboard_title_style,  # Indirect trigger for theme changes
         # height_store,
     ):
         if not local_data:
