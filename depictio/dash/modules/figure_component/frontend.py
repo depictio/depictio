@@ -486,26 +486,26 @@ def register_callbacks_figure_component(app):
         [
             Input({"type": "dict_kwargs", "index": MATCH}, "data"),
             Input({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
+            State("theme-store", "data"),  # Keep as State - theme handled separately
             State({"type": "workflow-selection-label", "index": MATCH}, "value"),
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
             State({"type": "segmented-control-visu-graph", "index": MATCH}, "id"),
             State("current-edit-parent-index", "data"),  # Retrieve parent_index
             State("local-store", "data"),
             State("url", "pathname"),
-            State("theme-store", "data"),  # Keep as State
         ],
         prevent_initial_call=True,
     )
     def update_figure(*args):
         dict_kwargs = args[0]
         visu_type = args[1]
-        workflow_id = args[2]
-        data_collection_id = args[3]
-        id = args[4]
-        parent_index = args[5]
-        local_data = args[6]
-        pathname = args[7]
-        theme_data = args[8]  # theme_data is back to being the last argument (State)
+        theme_data = args[2]  # theme_data is now the 3rd argument (State)
+        workflow_id = args[3]
+        data_collection_id = args[4]
+        id = args[5]
+        parent_index = args[6]
+        local_data = args[7]
+        pathname = args[8]
 
         if not local_data:
             raise dash.exceptions.PreventUpdate

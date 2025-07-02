@@ -85,7 +85,7 @@ _sampling_cache = {}
 def render_figure(dict_kwargs, visu_type, df, cutoff=100000, selected_point=None, theme="light"):
     # Add the appropriate Plotly template based on the theme
     if "template" not in dict_kwargs:
-        dict_kwargs["template"] = "plotly_dark" if theme == "dark" else "plotly_white"
+        dict_kwargs["template"] = "mantine_dark" if theme == "dark" else "mantine_light"
 
     logger.info("=== FIGURE RENDER DEBUG ===")
     logger.info(f"Theme received: {theme}")
@@ -108,7 +108,7 @@ def render_figure(dict_kwargs, visu_type, df, cutoff=100000, selected_point=None
         else:
             figure = plotly_vizu_dict[visu_type.lower()](df.to_pandas(), **dict_kwargs)
     else:
-        figure = px.scatter(template=dict_kwargs.get("template", "plotly_white"))
+        figure = px.scatter(template=dict_kwargs.get("template", "mantine_light"))
 
     if selected_point:
         selected_x = selected_point["x"]

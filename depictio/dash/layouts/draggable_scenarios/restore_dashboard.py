@@ -53,7 +53,7 @@ def return_interactive_components_dict(dashboard_data):
     return interactive_components_dict
 
 
-def render_dashboard(stored_metadata, edit_components_button, dashboard_id, TOKEN):
+def render_dashboard(stored_metadata, edit_components_button, dashboard_id, theme, TOKEN):
     logger.info(f"Rendering dashboard with ID: {dashboard_id}")
     from depictio.dash.layouts.draggable import clean_stored_metadata
 
@@ -79,6 +79,10 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, TOKE
         build_function = build_functions[component_type]
         # logger.info(f"build_function : {build_function.__name__}")
 
+        # Add theme to child metadata for figure generation
+        if component_type == "figure":
+            child_metadata["theme"] = theme
+        
         # Build the child using the appropriate function and kwargs
         child = build_function(**child_metadata)
         # logger.debug(f"child : ")
@@ -105,6 +109,7 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, TOKE
         switch_state=edit_components_button,
         TOKEN=TOKEN,
         dashboard_id=dashboard_id,
+        theme=theme,  # Pass theme to interactive component updates
     )
     # logger.info(f"Children: {children}")
     return children
@@ -196,6 +201,7 @@ def load_depictio_data(dashboard_id, local_data):
                 dashboard_data.stored_metadata,
                 edit_components_button_checked,
                 dashboard_id,
+                "light",  # Default theme for dashboard loading
                 local_data["access_token"],
             )
             # logger.info(f"Render Children: {children}")

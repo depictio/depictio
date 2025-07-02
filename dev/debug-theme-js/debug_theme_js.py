@@ -5,12 +5,16 @@ Isolates the theme switching logic to identify the "Cannot read properties of un
 """
 
 import dash
-from dash import html, dcc, Input, Output, State
+import dash_draggable
 import dash_mantine_components as dmc
-from dash_iconify import DashIconify
+import pandas as pd
+import plotly
 import plotly.express as px
 import plotly.graph_objects as go
-import pandas as pd
+from dash import Input, Output, dcc, html
+from dash_iconify import DashIconify
+
+print(f"Plotly version: {plotly.__version__}")
 
 # Initialize the Dash app
 app = dash.Dash(__name__)
@@ -108,14 +112,68 @@ app.layout = dmc.MantineProvider(
                                 html.Hr(),
                                 html.Div(id="theme-indicator"),
                                 html.Hr(),
-                                html.H3("Plotly Figure Test:"),
-                                dcc.Graph(
-                                    id="test-graph",
-                                    figure={},  # Will be populated by callback
+                                html.H3("Draggable Plotly Figure Test:"),
+                                # Add draggable layout with plotly figure
+                                dash_draggable.ResponsiveGridLayout(
+                                    id="draggable",
+                                    clearSavedLayout=False,
+                                    layouts={
+                                        "lg": [
+                                            {"i": "0", "x": 0, "y": 0, "w": 12, "h": 8},
+                                            {"i": "1", "x": 0, "y": 8, "w": 12, "h": 4},
+                                        ]
+                                    },
+                                    children=[
+                                        dmc.Card(
+                                            id="plotly-card",
+                                            children=[
+                                                dmc.CardSection(
+                                                    dmc.Title("📊 Draggable Plotly Chart", order=4),
+                                                    withBorder=True,
+                                                    inheritPadding=True,
+                                                    py="xs",
+                                                ),
+                                                dcc.Graph(
+                                                    id="test-graph",
+                                                    figure={},  # Will be populated by callback
+                                                    style={"height": "100%"},
+                                                ),
+                                            ],
+                                            withBorder=True,
+                                            shadow="sm",
+                                            radius="md",
+                                            style={"height": "100%"},
+                                        ),
+                                        dmc.Card(
+                                            id="info-card",
+                                            children=[
+                                                dmc.CardSection(
+                                                    dmc.Title("🎛️ Draggable Controls", order=4),
+                                                    withBorder=True,
+                                                    inheritPadding=True,
+                                                    py="xs",
+                                                ),
+                                                html.P("Try dragging and resizing the cards above!"),
+                                                html.P("This tests theme integration with draggable components."),
+                                            ],
+                                            withBorder=True,
+                                            shadow="sm",
+                                            radius="md",
+                                            style={"height": "100%"},
+                                        ),
+                                    ],
+                                    isDraggable=True,
+                                    isResizable=True,
+                                    style={
+                                        "width": "100%",
+                                        "height": "600px",
+                                        "margin": "20px 0",
+                                    },
                                 ),
                                 html.Hr(),
                                 html.H3("Debug Console:"),
                                 html.P("Check browser console for detailed logs"),
+                                html.P("🔍 Focus: Test if theme issues occur within draggable components"),
                             ]
                         )
                     ]
@@ -125,6 +183,10 @@ app.layout = dmc.MantineProvider(
         
         # Theme store
         dcc.Store(id="theme-store", data="light"),
+        
+        # Draggable layout stores
+        dcc.Store(id="stored-draggable-layouts", storage_type="session", data={}),
+        dcc.Store(id="stored-draggable-children", storage_type="session", data={}),
     ]
 )
 
@@ -184,7 +246,7 @@ def update_mantine_theme(theme):
     ],
     prevent_initial_call=True,
 )
-def update_page_content(*args):
+def update_page_content(*_):
     ctx = dash.callback_context
     if not ctx.triggered:
         return dash.no_update
@@ -281,6 +343,68 @@ def update_plotly_figure(theme):
     )
     
     return fig
+
+# Draggable layout callback to save layouts
+@app.callback(
+    Output("stored-draggable-layouts", "data"),
+    Input("draggable", "layouts"),
+    prevent_initial_call=True,
+)
+def save_draggable_layouts(layouts):
+    """Save draggable layouts to store"""
+    return layouts or {}
+
+# Additional clientside callback for draggable theme integration
+app.clientside_callback(
+    """
+    function(theme_data) {
+        console.log('🎯 DRAGGABLE THEME CALLBACK START');
+        console.log('Theme data for draggable:', theme_data);
+        
+        try {
+            const theme = theme_data || 'light';
+            
+            // Update draggable container theme
+            const draggableContainer = document.getElementById('draggable');
+            if (draggableContainer) {
+                const isDark = theme === 'dark';
+                draggableContainer.style.backgroundColor = isDark ? '#1a1b1e' : '#ffffff';
+                
+                // Update all cards within draggable
+                const cards = draggableContainer.querySelectorAll('.mantine-Card-root');
+                cards.forEach(card => {
+                    card.style.backgroundColor = isDark ? '#25262b' : '#ffffff';
+                    card.style.color = isDark ? '#ffffff' : '#000000';
+                    card.style.borderColor = isDark ? '#373a40' : '#dee2e6';
+                });
+                
+                console.log(`🎯 Updated ${cards.length} draggable cards for ${theme} theme`);
+            }
+            
+            // Trigger resize for any plots within draggable
+            setTimeout(() => {
+                if (window.Plotly) {
+                    const plots = document.querySelectorAll('#draggable .js-plotly-plot');
+                    plots.forEach(plot => {
+                        console.log('🔄 Resizing draggable plot for theme change');
+                        window.Plotly.Plots.resize(plot);
+                    });
+                }
+            }, 100);
+            
+            console.log('🎯 DRAGGABLE THEME CALLBACK END');
+            return window.dash_clientside.no_update;
+            
+        } catch (error) {
+            console.error('❌ Draggable theme error:', error);
+            return window.dash_clientside.no_update;
+        }
+    }
+    """,
+    Output("stored-draggable-children", "data", allow_duplicate=True),
+    Input("theme-store", "data"),
+    prevent_initial_call=True,
+)
 
 # SIMPLIFIED: NavLink icon theme callback - focused only on icons
 app.clientside_callback(
