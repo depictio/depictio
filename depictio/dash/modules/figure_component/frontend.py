@@ -587,6 +587,88 @@ def register_callbacks_figure_component(app):
             logger.error(f"Error auto-initializing default parameters: {e}")
             return {}
 
+    # Simple callback to trigger figure generation when component is created
+    @app.callback(
+        Output({"type": "figure-body", "index": MATCH}, "children", allow_duplicate=True),
+        [
+            Input({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
+        ],
+        [
+            State({"type": "dict_kwargs", "index": MATCH}, "data"),
+            State({"type": "workflow-selection-label", "index": MATCH}, "value"),
+            State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+            State("local-store", "data"),
+            State("theme-store", "data"),
+        ],
+        prevent_initial_call="initial_load",
+    )
+    def generate_default_figure_on_load(visu_type_label, dict_kwargs, workflow_id, data_collection_id, local_data, theme_data):
+        """Generate default figure when visualization type is first set."""
+        if not local_data or not workflow_id or not data_collection_id:
+            raise dash.exceptions.PreventUpdate
+
+        try:
+            TOKEN = local_data["access_token"]
+            
+            # Convert visualization label to name
+            visu_type = "scatter"  # Default fallback
+            if visu_type_label:
+                available_vizs = get_available_visualizations()
+                for viz in available_vizs:
+                    if viz.label == visu_type_label:
+                        visu_type = viz.name
+                        break
+
+            # If no parameters set, generate defaults
+            if not dict_kwargs or dict_kwargs in [{}, {"x": None, "y": None}]:
+                columns_json = get_columns_from_data_collection(workflow_id, data_collection_id, TOKEN)
+                columns_specs_reformatted = defaultdict(list)
+                {columns_specs_reformatted[v["type"]].append(k) for k, v in columns_json.items()}
+                
+                dict_kwargs = _get_default_parameters(visu_type, columns_specs_reformatted)
+                logger.info(f"Generated default parameters for {visu_type}: {dict_kwargs}")
+
+            if not dict_kwargs:
+                raise dash.exceptions.PreventUpdate
+
+            # Get data collection specs
+            dc_specs = httpx.get(
+                f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{data_collection_id}",
+                headers={"Authorization": f"Bearer {TOKEN}"},
+            ).json()
+
+            # Extract theme
+            theme = "light"
+            if theme_data:
+                if isinstance(theme_data, dict):
+                    theme = theme_data.get("colorScheme", "light")
+                elif isinstance(theme_data, str):
+                    theme = theme_data
+
+            # Build figure
+            figure_kwargs = {
+                "index": "default",  # Use default index for initial generation
+                "dict_kwargs": dict_kwargs,
+                "visu_type": visu_type,
+                "wf_id": workflow_id,
+                "dc_id": data_collection_id,
+                "dc_config": dc_specs["config"],
+                "access_token": TOKEN,
+                "theme": theme,
+            }
+
+            return build_figure(**figure_kwargs)
+
+        except Exception as e:
+            logger.error(f"Error generating default figure: {e}")
+            return html.Div([
+                dmc.Alert(
+                    f"Error generating default figure: {str(e)}", 
+                    title="Figure Generation Error", 
+                    color="red"
+                )
+            ])
+
 
 def design_figure(id, component_data=None):
     # Get limited set of visualizations for user request: Scatter, Bar, Box, Line only

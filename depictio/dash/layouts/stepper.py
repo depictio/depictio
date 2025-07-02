@@ -2,7 +2,7 @@ import dash
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import httpx
-from dash import ALL, MATCH, Input, Output, State, ctx, html
+from dash import ALL, MATCH, Input, Output, State, callback, ctx, html
 from dash_iconify import DashIconify
 
 # Depictio imports
@@ -385,56 +385,42 @@ def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
     # else:
     #     modal_body = [dbc.Row(card)]
 
-    modal = dbc.Modal(
+    modal = dmc.Modal(
         id={"type": "modal-edit", "index": n},
         children=[
-            dbc.ModalHeader(html.H5("Edit your dashboard component"), close_button=False),
-            dbc.ModalBody(
-                modal_body,
-                # id={"type": "modal-body-edit", "index": n},
-                style={
-                    "display": "flex",
-                    "justify-content": "center",
-                    "align-items": "center",
-                    "flex-direction": "column",
-                    "height": "100%",
-                    "width": "100%",
-                },
-            ),
-            dbc.ModalFooter(
-                [
-                    dmc.Center(
-                        dmc.Button(
-                            "Confirm Edit",
-                            id={"type": "btn-done-edit", "index": n},
-                            # id={"type": "btn-done-edit", "index": n},
-                            n_clicks=0,
-                            size="xl",
-                            leftSection=DashIconify(
-                                icon="bi:check-circle", width=30, color="white"
-                            ),
-                            disabled=True,
-                        )
+            html.Div([
+                html.H3("Edit your dashboard component", style={"marginBottom": "20px", "textAlign": "center"}),
+                html.Div(
+                    modal_body,
+                    style={
+                        "display": "flex",
+                        "justify-content": "center",
+                        "align-items": "center",
+                        "flex-direction": "column",
+                        "height": "100%",
+                        "width": "100%",
+                        "padding": "1rem",
+                    },
+                ),
+                dmc.Group([
+                    dmc.Button(
+                        "Confirm Edit",
+                        id={"type": "btn-done-edit", "index": n},
+                        n_clicks=0,
+                        size="lg",
+                        leftSection=DashIconify(icon="bi:check-circle", width=20),
+                        color="green",
+                        disabled=True,
                     ),
-                ],
-                style={
-                    "display": "flex",
-                    "justify-content": "center",
-                    "align-items": "center",
-                    "width": "100%",
-                    "height": "100%",  # Set height to fill available space
-                    "padding": "1rem",  # Optional: adjust padding for spacing
-                },
-            ),
+                ], justify="center", style={"marginTop": "20px"})
+            ])
         ],
-        is_open=True,
-        size="xl",
-        backdrop=False,
-        keyboard=False,
-        style={
-            "height": "100%",
-            "width": "100%",
-        },
+        opened=True,
+        size="90%",  # Use percentage for larger modal
+        centered=True,
+        withCloseButton=False,
+        closeOnClickOutside=False,
+        closeOnEscape=False,
     )
     logger.info(f"TEST MODAL: {modal}")
 
@@ -623,30 +609,31 @@ def create_stepper_output(n, active):
 
     modal = html.Div(
         [
-            dbc.Modal(
+            dmc.Modal(
                 id={"type": "modal", "index": n},
                 children=[
-                    dbc.ModalHeader(html.H5("Design your new dashboard component")),
-                    dbc.ModalBody(
-                        [stepper, stepper_footer],
-                        id={"type": "modal-body", "index": n},
-                        style={
-                            "display": "flex",
-                            "justify-content": "center",
-                            "align-items": "center",
-                            "flex-direction": "column",
-                            "height": "100%",
-                            "width": "100%",
-                        },
-                    ),
+                    html.Div([
+                        html.H3("Design your new dashboard component", style={"marginBottom": "20px", "textAlign": "center"}),
+                        html.Div(
+                            [stepper, stepper_footer],
+                            style={
+                                "display": "flex",
+                                "justify-content": "center",
+                                "align-items": "center",
+                                "flex-direction": "column",
+                                "height": "100%",
+                                "width": "100%",
+                                "padding": "1rem",
+                            },
+                        ),
+                    ])
                 ],
-                is_open=True,
-                size="xl",
-                backdrop=False,
-                style={
-                    "height": "100%",
-                    "width": "100%",
-                },
+                opened=True,
+                size="90%",  # Use percentage for larger modal
+                centered=True,
+                withCloseButton=False,
+                closeOnClickOutside=False,
+                closeOnEscape=False,
             ),
         ],
         id=n,
@@ -654,3 +641,28 @@ def create_stepper_output(n, active):
     # logger.info(f"TEST MODAL: {modal}")
 
     return modal
+
+
+# Callback to dynamically control modal size
+@callback(
+    Output({"type": "modal-edit", "index": MATCH}, "size"),
+    [Input({"type": "modal-edit", "index": MATCH}, "opened")],
+    prevent_initial_call=True,
+)
+def update_modal_size(opened):
+    """Update modal size when it opens."""
+    if opened:
+        return "95%"  # Large size when opened
+    return "90%"  # Default size
+
+
+@callback(
+    Output({"type": "modal", "index": MATCH}, "size"),
+    [Input({"type": "modal", "index": MATCH}, "opened")],
+    prevent_initial_call=True,
+)
+def update_modal_size_regular(opened):
+    """Update regular modal size when it opens."""
+    if opened:
+        return "95%"  # Large size when opened
+    return "90%"  # Default size
