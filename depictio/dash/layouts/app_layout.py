@@ -3,7 +3,6 @@ import dash
 # import dash_bootstrap_components as dbc  # Not needed for AppShell layout
 import dash_mantine_components as dmc
 from dash import dcc, html
-from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import api_call_fetch_user_from_token, purge_expired_tokens
@@ -155,7 +154,7 @@ def handle_authenticated_user(pathname, local_data):
 
 
 def create_default_header(text):
-    # Return content for AppShellHeader - DMC 2.0+ equivalent with proper alignment and padding
+    # Return content for AppShellHeader - Simple text without sidebar button
     return dmc.Group(
         [
             dmc.Text(
@@ -187,6 +186,8 @@ def create_admin_header(text):
     Returns:
     - dmc.Header: A Dash Mantine Components Header containing the title and navigation tabs.
     """
+    from dash_iconify import DashIconify
+
     add_group_button = dmc.Button(
         "Add Group",
         color="blue",
@@ -203,7 +204,7 @@ def create_admin_header(text):
         id="group-add-modal-text-input",
     )
 
-    add_group_modal, add_group_modal_id = create_add_with_input_modal(
+    add_group_modal, _ = create_add_with_input_modal(
         id_prefix="group",
         input_field=text_group_input,
         title="Add Group",
@@ -226,14 +227,6 @@ def create_admin_header(text):
                         align="center",
                         style={"height": "100%"},
                         children=[
-                            # Title Section
-                            # dmc.Title(
-                            #     text,
-                            #     order=3,  # Corresponds to h3
-                            #     size="h3",
-                            #     weight=700,
-                            #     color="dark",
-                            # ),
                             # Navigation Tabs
                             dmc.Tabs(
                                 value="users",  # Default active tab
@@ -329,7 +322,7 @@ def create_admin_header(text):
 
 
 def create_header_with_button(text, button):
-    # Return content for AppShellHeader - DMC 2.0+ equivalent of original Group with position="apart"
+    # Return content for AppShellHeader - Simple text and button without sidebar button
     return dmc.Group(
         [
             dmc.Text(
@@ -443,6 +436,11 @@ def create_app_layout():
                 data={},  # Start empty, will be populated by clientside callback
             ),
             dcc.Store(
+                id="sidebar-collapsed",
+                storage_type="memory",
+                data=False,  # Start with sidebar expanded
+            ),
+            dcc.Store(
                 id="local-store-components-metadata",
                 data={},
                 storage_type="local",
@@ -452,6 +450,9 @@ def create_app_layout():
             html.Div(
                 id="dummy-plotly-output", style={"display": "none"}
             ),  # Hidden output for Plotly theme callback
+            html.Div(
+                id="dummy-resize-output", style={"display": "none"}
+            ),  # Hidden output for resize callback
             dmc.Drawer(
                 title="",
                 id="drawer-simple",
@@ -462,6 +463,7 @@ def create_app_layout():
                 children=[],
             ),
             dmc.AppShell(
+                id="app-shell",  # Add ID for callback targeting
                 navbar={
                     "width": 220,
                     "breakpoint": "sm",
@@ -483,13 +485,10 @@ def create_app_layout():
                         id="header-content",
                     ),
                     dmc.AppShellMain(
-                        dmc.Container(  # ✅ Consistent container wrapper for all pages
-                            html.Div(
-                                id="page-content",
-                                style={"padding": "1rem"},
-                            ),
-                            fluid=True,  # Allow full width usage when needed
+                        html.Div(
+                            id="page-content",
                             style={
+                                "padding": "1rem",
                                 "minHeight": "calc(100vh - 87px)",  # Ensure minimum height for short content
                                 "overflowY": "auto",  # Allow vertical scrolling
                             },

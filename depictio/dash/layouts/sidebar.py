@@ -12,42 +12,81 @@ from depictio.dash.theme_utils import create_theme_switch
 
 
 def register_sidebar_callbacks(app):
-    # Inject JavaScript to handle the resize
+    # Inject JavaScript to handle the resize when sidebar state changes
     app.clientside_callback(
         """
-        function(n_clicks) {
+        function(navbar_config) {
+            // Wait for DOM update then trigger resize
             setTimeout(function() {
+                // Trigger window resize event
                 window.dispatchEvent(new Event('resize'));
-            }, 50);
-            return null;
+
+                // Also trigger resize for Plotly plots
+                if (window.Plotly) {
+                    var plots = document.querySelectorAll('.js-plotly-plot');
+                    plots.forEach(function(plot) {
+                        window.Plotly.Plots.resize(plot);
+                    });
+                }
+
+                // Trigger resize for AG Grids
+                if (window.agGrid) {
+                    var grids = document.querySelectorAll('.ag-root-wrapper');
+                    grids.forEach(function(grid) {
+                        if (grid && grid.__agComponent && grid.__agComponent.gridOptions && grid.__agComponent.gridOptions.api) {
+                            try {
+                                grid.__agComponent.gridOptions.api.sizeColumnsToFit();
+                            } catch (e) {
+                                console.log('AG Grid resize error:', e);
+                            }
+                        }
+                    });
+                }
+
+                // Dispatch custom event for draggable grids
+                window.dispatchEvent(new CustomEvent('sidebar-toggled'));
+            }, 350);  // Increased delay to match navbar animation (transition is 200ms)
+
+            return window.dash_clientside.no_update;
         }
         """,
-        dd.Output("sidebar", "style", allow_duplicate=True),
-        [dd.Input("sidebar-button", "n_clicks")],
+        dd.Output("dummy-resize-output", "children"),
+        [dd.Input("app-shell", "navbar")],
         prevent_initial_call=True,
     )
 
-    # Callback to toggle sidebar - simplified for AppShell
+    # Combined callback to handle sidebar icon based on both initialization and clicks
     @app.callback(
         Output("sidebar-icon", "icon"),
-        Output("initialized-navbar-button", "data"),
+        [Input("sidebar-collapsed", "data"), Input("sidebar-button", "n_clicks")],
+        prevent_initial_call=False,  # Allow initial call to set correct icon
+    )
+    def update_sidebar_icon(is_collapsed, n_clicks):
+        # Set icon based on current collapsed state
+        # When collapsed -> show right arrow (points to expand)
+        # When expanded -> show left arrow (points to collapse)
+        return "ep:d-arrow-right" if is_collapsed else "ep:d-arrow-left"
+
+    # Callback to toggle AppShell navbar collapsed state using store
+    @app.callback(
+        Output("app-shell", "navbar"),
+        Output("sidebar-collapsed", "data"),
         Input("sidebar-button", "n_clicks"),
-        State("sidebar-icon", "icon"),
-        State("initialized-navbar-button", "data"),
+        State("sidebar-collapsed", "data"),
         prevent_initial_call=True,
     )
-    def toggle_sidebar(n_clicks, icon, initialized):
-        if not initialized:
-            return icon, True
+    def toggle_appshell_navbar(n_clicks, is_collapsed):
+        # Toggle the collapsed state
+        new_collapsed_state = not is_collapsed
 
-        # AppShell handles sidebar toggle automatically on mobile
-        # Just toggle the icon direction
-        if icon == "ep:d-arrow-left":
-            icon = "ep:d-arrow-right"
-        else:
-            icon = "ep:d-arrow-left"
+        # Return new navbar configuration
+        navbar_config = {
+            "width": 220,
+            "breakpoint": "sm",
+            "collapsed": {"mobile": True, "desktop": new_collapsed_state},
+        }
 
-        return icon, initialized
+        return navbar_config, new_collapsed_state
 
     # Callback to update sidebar-link active state
     @app.callback(

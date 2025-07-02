@@ -593,81 +593,73 @@ def design_header(data, local_store):
             dmc.ActionIcon(
                 DashIconify(
                     id="sidebar-icon",
-                    icon="ep:d-arrow-left",
-                    width=34,
-                    height=34,
+                    icon="ep:d-arrow-right",  # Start with right arrow (collapsed state - default)
+                    width=24,
+                    height=24,
                     color="#c2c7d0",
                 ),
                 variant="subtle",
-                p=1,
                 id="sidebar-button",
-                # In DMC 2.0+, use responsive styles instead of MediaQuery
-                style={
-                    "@media (max-width: 768px)": {"display": "block"},  # Show on mobile
-                    "@media (min-width: 769px)": {"display": "none"},  # Hide on desktop
-                },
+                size="lg",
+                style={"marginRight": "5px"},  # Small margin to prevent overlap
             ),
         ]
     )
 
-    # DMC 2.0+ - Return content for AppShellHeader instead of Container
-    # Remove Container wrapper and return direct content for AppShell
-    header = [
+    # DMC 2.0+ - Use Group instead of Grid for better flex control
+    header_content = dmc.Group(
+        [
+            # Left section - sidebar button and badges
+            dmc.Group(
+                [button_menu, card_section], 
+                gap="xs",
+                style={"minWidth": "fit-content", "flexShrink": 0},  # Prevent shrinking
+            ),
+            
+            # Center section - title (with flex grow to take available space)
+            dmc.Title(
+                f"{data['title']}",
+                order=1,
+                id="dashboard-title",
+                style={
+                    "fontWeight": "bold",
+                    "fontSize": "24px",
+                    "textAlign": "center",
+                    "flex": "1",  # Take remaining space
+                },
+            ),
+            
+            # Right section - action buttons
+            dmc.Group(
+                [
+                    add_new_component_button,
+                    save_button,
+                    open_offcanvas_parameters_button,
+                ],
+                gap="xs",
+                style={"minWidth": "fit-content", "flexShrink": 0},  # Prevent shrinking
+            ),
+        ],
+        justify="space-between",
+        align="center",
+        style={
+            "height": "100%",
+            "padding": "0 20px",
+            "width": "100%",
+            "flexWrap": "nowrap",  # Prevent wrapping
+            "minWidth": 0,  # Allow flex items to shrink
+        },
+    )
+
+    # Backend components that need to be in the layout but not in header
+    backend_components_extended = html.Div([
+        backend_components,
         offcanvas_parameters,
         modal_save_button,
         dummy_output,
         dummy_output2,
         stepper_output,
         html.Div(children=stores_add_edit),
-        dmc.Grid(
-            [
-                dmc.GridCol(
-                    [
-                        dmc.Group([button_menu, card_section], gap="xs"),
-                    ],
-                    span=3,
-                    style={"justifyContent": "start"},
-                ),
-                dmc.GridCol(
-                    [
-                        dmc.Center(
-                            dmc.Title(
-                                f"{data['title']}",
-                                order=1,  # Increase to order=1 for larger font size
-                                id="dashboard-title",  # Add ID for theme targeting
-                                style={
-                                    "fontWeight": "bold",  # Make the text bold
-                                    "fontSize": "24px",  # Increase font size
-                                    # "fontFamily": "Open Sans",  # Change the font family
-                                },
-                            )
-                        ),
-                    ],
-                    span=7,
-                ),
-                dmc.GridCol(
-                    [
-                        html.Div(
-                            children=[
-                                dmc.Group(
-                                    [
-                                        add_new_component_button,
-                                        save_button,
-                                        open_offcanvas_parameters_button,
-                                    ],
-                                    gap="xs",
-                                    justify="flex-end",  # Aligns items to the right
-                                    style={"paddingTop": "5px"},
-                                ),
-                            ],
-                        ),
-                    ],
-                    span=2,
-                ),
-            ],
-            align="center",
-            style={"height": "100%", "padding": "10px"},
-        ),
-    ]
+    ])
 
-    return header, backend_components
+    return header_content, backend_components_extended
