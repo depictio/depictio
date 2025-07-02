@@ -785,7 +785,13 @@ def register_callbacks_draggable(app):
 
                 if state_stored_draggable_layouts:
                     if dashboard_id in state_stored_draggable_layouts:
-                        theme = theme_store if isinstance(theme_store, str) else theme_store.get("theme", "light") if theme_store else "light"
+                        theme = (
+                            theme_store
+                            if isinstance(theme_store, str)
+                            else theme_store.get("theme", "light")
+                            if theme_store
+                            else "light"
+                        )
                         children = render_dashboard(
                             stored_metadata,
                             edit_components_mode_button,

@@ -34,10 +34,9 @@ def build_figure_frame(index, children=None):
                 "height": "100%",  # Ensure the card fills the container's height
                 "padding": "0",  # Remove default padding
                 "margin": "0",  # Remove default margin
-                "boxShadow": "none",  # Optional: Remove shadow for a cleaner look
-                # "border": "1px solid #ddd",  # Optional: Add a light border
-                # "borderRadius": "4px",  # Optional: Slightly round the corners
-                "border": "0px",  # Optional: Remove border
+                "boxShadow": "none",  # Remove shadow for a cleaner look
+                "border": "none",  # Remove border
+                "backgroundColor": "transparent",  # Remove background color
             },
             id={
                 "type": "figure-component",
@@ -66,10 +65,9 @@ def build_figure_frame(index, children=None):
                 "height": "100%",  # Ensure the card fills the container's height
                 "padding": "0",  # Remove default padding
                 "margin": "0",  # Remove default margin
-                "boxShadow": "none",  # Optional: Remove shadow for a cleaner look
-                # "border": "1px solid #ddd",  # Optional: Add a light border
-                # "borderRadius": "4px",  # Optional: Slightly round the corners
-                "border": "0px",  # Optional: Remove border
+                "boxShadow": "none",  # Remove shadow for a cleaner look
+                "border": "none",  # Remove border
+                "backgroundColor": "transparent",  # Remove background color
             },
             id={
                 "type": "figure-component",

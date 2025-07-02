@@ -453,6 +453,9 @@ def create_app_layout():
             html.Div(
                 id="dummy-resize-output", style={"display": "none"}
             ),  # Hidden output for resize callback
+            html.Div(
+                id="dummy-multiselect-slider-output", style={"display": "none"}
+            ),  # Hidden output for MultiSelect and Slider theme callback
             dmc.Drawer(
                 title="",
                 id="drawer-simple",

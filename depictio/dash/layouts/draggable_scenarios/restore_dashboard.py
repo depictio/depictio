@@ -82,7 +82,7 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, them
         # Add theme to child metadata for figure generation
         if component_type == "figure":
             child_metadata["theme"] = theme
-        
+
         # Build the child using the appropriate function and kwargs
         child = build_function(**child_metadata)
         # logger.debug(f"child : ")

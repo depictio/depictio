@@ -611,11 +611,10 @@ def design_header(data, local_store):
         [
             # Left section - sidebar button and badges
             dmc.Group(
-                [button_menu, card_section], 
+                [button_menu, card_section],
                 gap="xs",
                 style={"minWidth": "fit-content", "flexShrink": 0},  # Prevent shrinking
             ),
-            
             # Center section - title (with flex grow to take available space)
             dmc.Title(
                 f"{data['title']}",
@@ -628,7 +627,6 @@ def design_header(data, local_store):
                     "flex": "1",  # Take remaining space
                 },
             ),
-            
             # Right section - action buttons
             dmc.Group(
                 [
@@ -652,14 +650,16 @@ def design_header(data, local_store):
     )
 
     # Backend components that need to be in the layout but not in header
-    backend_components_extended = html.Div([
-        backend_components,
-        offcanvas_parameters,
-        modal_save_button,
-        dummy_output,
-        dummy_output2,
-        stepper_output,
-        html.Div(children=stores_add_edit),
-    ])
+    backend_components_extended = html.Div(
+        [
+            backend_components,
+            offcanvas_parameters,
+            modal_save_button,
+            dummy_output,
+            dummy_output2,
+            stepper_output,
+            html.Div(children=stores_add_edit),
+        ]
+    )
 
     return header_content, backend_components_extended

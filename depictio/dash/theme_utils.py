@@ -230,6 +230,76 @@ def register_theme_callbacks(app):
         prevent_initial_call=True,
     )
 
+    # Client-side callback to fix MultiSelect and Slider dark mode styling
+    app.clientside_callback(
+        """
+        function(theme_data) {
+            const theme = theme_data || 'light';
+            console.log('MultiSelect/Slider theme callback triggered:', theme);
+            
+            // Inject CSS styles for MultiSelect and Slider components in dark mode
+            let multiselectSliderStyleElement = document.getElementById('multiselect-slider-theme-styles');
+            if (!multiselectSliderStyleElement) {
+                multiselectSliderStyleElement = document.createElement('style');
+                multiselectSliderStyleElement.id = 'multiselect-slider-theme-styles';
+                document.head.appendChild(multiselectSliderStyleElement);
+            }
+            
+            if (theme === 'dark') {
+                const darkModeCSS = `
+                    /* MultiSelect values fix */
+                    .mantine-MultiSelect-values,
+                    .mantine-MultiSelect-value,
+                    .mantine-MultiSelect-pill,
+                    .mantine-Pill-root,
+                    [data-mantine="MultiSelect"] .mantine-Pill-root,
+                    [data-mantine="MultiSelect"] .mantine-Pill-label,
+                    .mantine-MultiSelect-root .mantine-Pill-root,
+                    .mantine-MultiSelect-root .mantine-Pill-label {
+                        color: #C1C2C5 !important;
+                    }
+                    
+                    /* Slider ticks and labels fix */
+                    .mantine-Slider-mark,
+                    .mantine-RangeSlider-mark,
+                    .mantine-Slider-markLabel,
+                    .mantine-RangeSlider-markLabel,
+                    [data-mantine="Slider"] .mantine-Slider-mark,
+                    [data-mantine="RangeSlider"] .mantine-RangeSlider-mark,
+                    [data-mantine="Slider"] .mantine-Slider-markLabel,
+                    [data-mantine="RangeSlider"] .mantine-RangeSlider-markLabel {
+                        color: #C1C2C5 !important;
+                        opacity: 1 !important;
+                    }
+                    
+                    /* Additional comprehensive selectors */
+                    [class*="MultiSelect"] [class*="Pill"],
+                    [class*="multiselect"] [class*="pill"] {
+                        color: #C1C2C5 !important;
+                    }
+                    
+                    [class*="Slider"] [class*="mark"],
+                    [class*="slider"] [class*="mark"] {
+                        color: #C1C2C5 !important;
+                        opacity: 1 !important;
+                    }
+                `;
+                multiselectSliderStyleElement.textContent = darkModeCSS;
+                console.log('Applied dark mode styles for MultiSelect and Slider');
+            } else {
+                // Remove dark mode styles for light mode
+                multiselectSliderStyleElement.textContent = '';
+                console.log('Removed dark mode styles for MultiSelect and Slider');
+            }
+            
+            return window.dash_clientside.no_update;
+        }
+        """,
+        Output("dummy-multiselect-slider-output", "children", allow_duplicate=True),
+        Input("theme-store", "data"),
+        prevent_initial_call=True,
+    )
+
     # Client-side callback for theme updates - single modular callback with working NavLink icon handling
     app.clientside_callback(
         """

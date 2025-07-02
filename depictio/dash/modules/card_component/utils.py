@@ -107,7 +107,7 @@ def build_card_frame(index, children=None):
                 "padding": "0",  # Remove default padding
                 "margin": "0",  # Remove default margin
                 "boxShadow": "none",  # Optional: Remove shadow for a cleaner look
-                "border": "1px solid #ddd",  # Optional: Add a light border
+                "border": "none",  # Remove border
                 # "borderRadius": "4px",  # Optional: Slightly round the corners
                 # "border": "0px",  # Optional: Remove border
             },
@@ -138,7 +138,7 @@ def build_card_frame(index, children=None):
                 "padding": "0",  # Remove default padding
                 "margin": "0",  # Remove default margin
                 "boxShadow": "none",  # Optional: Remove shadow for a cleaner look
-                "border": "1px solid #ddd",  # Optional: Add a light border
+                "border": "none",  # Remove border
                 # "borderRadius": "4px",  # Optional: Slightly round the corners
                 # "border-width": "0px",  # Optional: Remove border
             },
