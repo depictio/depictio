@@ -523,17 +523,46 @@ def register_callbacks_figure_component(app):
         ],
         [
             State({"type": "dict_kwargs", "index": MATCH}, "data"),
+            State({"type": "workflow-selection-label", "index": MATCH}, "value"),
+            State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+            State("local-store", "data"),
         ],
         prevent_initial_call=True,
     )
-    def initialize_default_parameters(visu_type_label, current_kwargs):
+    def initialize_default_parameters(visu_type_label, current_kwargs, workflow_id, data_collection_id, local_data):
         """Initialize default parameters when visualization type is first selected."""
         # Only trigger if we have empty or null kwargs
         if current_kwargs and current_kwargs != {"x": None, "y": None}:
             raise dash.exceptions.PreventUpdate
 
-        # Return minimal parameters to trigger the main update_figure callback
-        return {"x": None, "y": None}
+        if not local_data or not workflow_id or not data_collection_id:
+            return {"x": None, "y": None}
+
+        try:
+            # Get column information for defaults
+            TOKEN = local_data["access_token"]
+            columns_json = get_columns_from_data_collection(workflow_id, data_collection_id, TOKEN)
+            columns_specs_reformatted = defaultdict(list)
+            {columns_specs_reformatted[v["type"]].append(k) for k, v in columns_json.items()}
+
+            # Convert visualization label to name
+            visu_type = "scatter"  # Default fallback
+            if visu_type_label:
+                available_vizs = get_available_visualizations()
+                for viz in available_vizs:
+                    if viz.label == visu_type_label:
+                        visu_type = viz.name
+                        break
+
+            # Get default parameters for this visualization type
+            default_params = _get_default_parameters(visu_type, columns_specs_reformatted)
+            
+            logger.info(f"Initializing default parameters for {visu_type}: {default_params}")
+            return default_params if default_params else {"x": None, "y": None}
+
+        except Exception as e:
+            logger.error(f"Error initializing default parameters: {e}")
+            return {"x": None, "y": None}
 
 
 def design_figure(id, component_data=None):
