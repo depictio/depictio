@@ -33,12 +33,12 @@ def fetch_projects(token: str) -> list[Project]:
 
     headers = {"Authorization": f"Bearer {token}"}
     projects = httpx.get(url, headers=headers)
-    logger.info(f"Response status code: {projects.status_code}")
-    logger.info(f"Response content: {projects.content}")
-    logger.info(f"Response headers: {projects.headers}")
-    logger.info(f"Response JSON: {projects.json()}")
-    logger.info("Successfully fetched projects.")
-    logger.info(f"Projects: {projects.json()}")
+    # logger.info(f"Response status code: {projects.status_code}")
+    # logger.info(f"Response content: {projects.content}")
+    # logger.info(f"Response headers: {projects.headers}")
+    # logger.info(f"Response JSON: {projects.json()}")
+    # logger.info("Successfully fetched projects.")
+    # logger.info(f"Projects: {projects.json()}")
 
     projects = [Project.from_mongo(project) for project in projects.json()]
     return projects

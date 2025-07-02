@@ -471,7 +471,7 @@ def create_app_layout():
                 layout="alt",  # Use alternative layout where header stops at navbar
                 style={
                     "height": "100vh",
-                    "overflow": "hidden",
+                    "overflow": "auto",  # ✅ Allow scrolling
                 },
                 children=[
                     dmc.AppShellNavbar(
@@ -483,9 +483,16 @@ def create_app_layout():
                         id="header-content",
                     ),
                     dmc.AppShellMain(
-                        html.Div(
-                            id="page-content",
-                            style={"padding": "1rem"},
+                        dmc.Container(  # ✅ Consistent container wrapper for all pages
+                            html.Div(
+                                id="page-content",
+                                style={"padding": "1rem"},
+                            ),
+                            fluid=True,  # Allow full width usage when needed
+                            style={
+                                "minHeight": "calc(100vh - 87px)",  # Ensure minimum height for short content
+                                "overflowY": "auto",  # Allow vertical scrolling
+                            },
                         ),
                     ),
                 ],
