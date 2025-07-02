@@ -389,8 +389,9 @@ def register_callbacks_draggable(app):
         local_data,
         # height_store,
     ):
-        if not local_data:
-            return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+        # Skip if on auth page or user not logged in
+        if not local_data or pathname == "/auth":
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
         if not state_stored_draggable_layouts:
             state_stored_draggable_layouts = {}

@@ -77,9 +77,9 @@ def register_callbacks_save(app):
         n_clicks_remove_all,
     ):
         logger.info("Saving dashboard data...")
-        # Early return if user is not logged in
-        if not local_store:
-            logger.warning("User not logged in.")
+        # Early return if user is not logged in or on auth page
+        if not local_store or pathname == "/auth":
+            logger.warning("User not logged in or on auth page.")
             return dash.no_update
 
         # Validate user authentication

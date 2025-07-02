@@ -11,58 +11,145 @@
     font-size: '20px' !important; /* Add font size */
 }
 
-/* Triangle particle animations for auth background */
+/* assets/app.css */
+
+/* --- REVISED TRIANGLE ANIMATIONS --- */
+
+/* Keyframes rewritten for smooth, continuous, and circular/elliptical paths */
+
+/* Large triangle - smooth circular motion (scale 1.5) */
 @keyframes triangleParticle0 {
-    0% { transform: translate(0, 0) rotate(0deg); }
-    25% { transform: translate(20px, -30px) rotate(90deg); }
-    50% { transform: translate(-10px, -60px) rotate(180deg); }
-    75% { transform: translate(-30px, -30px) rotate(270deg); }
-    100% { transform: translate(0, 0) rotate(360deg); }
+    0%   { transform: translate(0, 0) rotate(0deg) scale(1.5); }
+    25%  { transform: translate(25px, -25px) rotate(90deg) scale(1.5); }
+    50%  { transform: translate(50px, 0px) rotate(180deg) scale(1.5); }
+    75%  { transform: translate(25px, 25px) rotate(270deg) scale(1.5); }
+    100% { transform: translate(0, 0) rotate(360deg) scale(1.5); }
 }
 
+/* Medium triangle - wide elliptical orbit (scale 1.0) */
 @keyframes triangleParticle1 {
-    0% { transform: translate(0, 0) rotate(0deg); }
-    25% { transform: translate(-25px, 15px) rotate(-90deg); }
-    50% { transform: translate(10px, 40px) rotate(-180deg); }
-    75% { transform: translate(35px, 10px) rotate(-270deg); }
-    100% { transform: translate(0, 0) rotate(-360deg); }
+    0%   { transform: translate(0, 0) rotate(0deg) scale(1.0); }
+    25%  { transform: translate(-30px, 15px) rotate(-90deg) scale(1.0); }
+    50%  { transform: translate(0px, 30px) rotate(-180deg) scale(1.0); }
+    75%  { transform: translate(30px, 15px) rotate(-270deg) scale(1.0); }
+    100% { transform: translate(0, 0) rotate(-360deg) scale(1.0); }
 }
 
+/* Small triangle - gentle wave-like motion (scale 0.7) */
 @keyframes triangleParticle2 {
-    0% { transform: translate(0, 0) rotate(0deg); }
-    25% { transform: translate(15px, 25px) rotate(45deg); }
-    50% { transform: translate(-20px, 50px) rotate(90deg); }
-    75% { transform: translate(-35px, 25px) rotate(135deg); }
-    100% { transform: translate(0, 0) rotate(180deg); }
+    0%   { transform: translate(0, 0) rotate(0deg) scale(0.7); }
+    25%  { transform: translate(-15px, 20px) rotate(90deg) scale(0.7); }
+    50%  { transform: translate(0px, 40px) rotate(180deg) scale(0.7); }
+    75%  { transform: translate(15px, 20px) rotate(270deg) scale(0.7); }
+    100% { transform: translate(0, 0) rotate(360deg) scale(0.7); }
 }
 
+/* Extra large triangle - majestic slow circular flow (scale 2.0) */
 @keyframes triangleParticle3 {
-    0% { transform: translate(0, 0) rotate(0deg); }
-    25% { transform: translate(30px, -15px) rotate(-45deg); }
-    50% { transform: translate(60px, 10px) rotate(-90deg); }
-    75% { transform: translate(30px, 35px) rotate(-135deg); }
-    100% { transform: translate(0, 0) rotate(-180deg); }
+    0%   { transform: translate(0, 0) rotate(0deg) scale(2.0); }
+    25%  { transform: translate(35px, 15px) rotate(-90deg) scale(2.0); }
+    50%  { transform: translate(0px, 30px) rotate(-180deg) scale(2.0); }
+    75%  { transform: translate(-35px, 15px) rotate(-270deg) scale(2.0); }
+    100% { transform: translate(0, 0) rotate(-360deg) scale(2.0); }
 }
 
+/* Medium-small triangle - tight circular motion (scale 0.9) */
 @keyframes triangleParticle4 {
-    0% { transform: translate(0, 0) rotate(0deg); }
-    25% { transform: translate(-15px, -25px) rotate(120deg); }
-    50% { transform: translate(5px, -50px) rotate(240deg); }
-    75% { transform: translate(25px, -25px) rotate(360deg); }
-    100% { transform: translate(0, 0) rotate(480deg); }
+    0%   { transform: translate(0, 0) rotate(0deg) scale(0.9); }
+    25%  { transform: translate(0px, -25px) rotate(90deg) scale(0.9); }
+    50%  { transform: translate(-25px, -50px) rotate(180deg) scale(0.9); }
+    75%  { transform: translate(-50px, -25px) rotate(270deg) scale(0.9); }
+    100% { transform: translate(0, 0) rotate(360deg) scale(0.9); }
 }
 
+/* Tiny triangle - gentle drift in a small circle (scale 0.5) */
 @keyframes triangleParticle5 {
-    0% { transform: translate(0, 0) rotate(0deg); }
-    25% { transform: translate(-10px, 20px) rotate(-60deg); }
-    50% { transform: translate(-30px, -10px) rotate(-120deg); }
-    75% { transform: translate(-10px, -40px) rotate(-180deg); }
-    100% { transform: translate(0, 0) rotate(-240deg); }
+    0%   { transform: translate(0, 0) rotate(0deg) scale(0.5); }
+    25%  { transform: translate(-10px, 15px) rotate(-90deg) scale(0.5); }
+    50%  { transform: translate(-20px, 0px) rotate(-180deg) scale(0.5); }
+    75%  { transform: translate(-10px, -15px) rotate(-270deg) scale(0.5); }
+    100% { transform: translate(0, 0) rotate(-360deg) scale(0.5); }
 }
 
+/* Medium-large triangle - smooth counter-clockwise circle (scale 1.3) */
+@keyframes triangleParticle6 {
+    0%   { transform: translate(0, 0) rotate(0deg) scale(1.3); }
+    25%  { transform: translate(30px, 20px) rotate(90deg) scale(1.3); }
+    50%  { transform: translate(60px, 0) rotate(180deg) scale(1.3); }
+    75%  { transform: translate(30px, -20px) rotate(270deg) scale(1.3); }
+    100% { transform: translate(0, 0) rotate(360deg) scale(1.3); }
+}
+
+/* Small-medium triangle - smooth figure-8 motion (scale 0.8) */
+@keyframes triangleParticle7 {
+    0%   { transform: translate(0, 0) rotate(0deg) scale(0.8); }
+    25%  { transform: translate(-20px, -15px) rotate(90deg) scale(0.8); }
+    50%  { transform: translate(0, -30px) rotate(180deg) scale(0.8); }
+    75%  { transform: translate(20px, -15px) rotate(270deg) scale(0.8); }
+    100% { transform: translate(0, 0) rotate(360deg) scale(0.8); }
+}
+
+
+/* Large triangle - constant circular motion (scale 1.5) */
+@keyframes triangleParticle0 {
+    0%   { transform: translate(30px, 0) rotate(0deg) scale(1.5); }
+    25%  { transform: translate(0, -30px) rotate(90deg) scale(1.5); }
+    50%  { transform: translate(-30px, 0) rotate(180deg) scale(1.5); }
+    75%  { transform: translate(0, 30px) rotate(270deg) scale(1.5); }
+    100% { transform: translate(30px, 0) rotate(360deg) scale(1.5); }
+}
+
+
+/* Extra large triangle - majestic slow elliptical flow (scale 2.0) */
+@keyframes triangleParticle3 {
+    0%   { transform: translate(0, -25px) rotate(0deg) scale(2.0); }
+    25%  { transform: translate(45px, 0px) rotate(-90deg) scale(2.0); }
+    50%  { transform: translate(0px, 25px) rotate(-180deg) scale(2.0); }
+    75%  { transform: translate(-45px, 0px) rotate(-270deg) scale(2.0); }
+    100% { transform: translate(0, -25px) rotate(-360deg) scale(2.0); }
+}
+
+
+/* Medium-large triangle - smooth counter-clockwise ellipse (scale 1.3) */
+@keyframes triangleParticle6 {
+    0%   { transform: translate(35px, 0) rotate(0deg) scale(1.3); }
+    25%  { transform: translate(0, 40px) rotate(90deg) scale(1.3); }
+    50%  { transform: translate(-35px, 0) rotate(180deg) scale(1.3); }
+    75%  { transform: translate(0, -40px) rotate(270deg) scale(1.3); }
+    100% { transform: translate(35px, 0) rotate(360deg) scale(1.3); }
+}
+/* Base particle class with rendering optimization */
 .triangle-particle {
-    animation-timing-function: ease-in-out;
     animation-iteration-count: infinite;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+    will-change: transform; /* Hint to the browser to optimize for animation */
+}
+
+/* Size variants with specific, non-conflicting timing functions */
+.triangle-particle--tiny {
+    animation-timing-function: cubic-bezier(0.4, 0.0, 0.2, 1);
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.15));
+}
+
+.triangle-particle--small {
+    animation-timing-function: cubic-bezier(0.4, 0.0, 0.2, 1);
+    filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.12));
+}
+
+.triangle-particle--medium {
+    animation-timing-function: cubic-bezier(0.4, 0.0, 0.2, 1);
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+}
+
+/* CORRECTED: Large particles use a single, undisputed 'linear' timing function */
+.triangle-particle--large {
+    animation-timing-function: linear;
+    filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.08));
+}
+
+.triangle-particle--extra-large {
+    animation-timing-function: linear;
+    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.06));
 }
 
 .auth-modal-content {

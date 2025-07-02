@@ -38,6 +38,10 @@ def register_callbacks_header(app):
 
         len_output = 8
 
+        # Check if local_store is None, doesn't have access_token, or on auth page
+        if not local_store or not local_store.get("access_token") or pathname == "/auth":
+            return [True] * len_output
+
         current_user = api_call_fetch_user_from_token(local_store["access_token"])
 
         if not local_store["access_token"]:

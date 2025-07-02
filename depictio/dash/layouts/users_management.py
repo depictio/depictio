@@ -345,6 +345,31 @@ def handle_registration(register_email, register_password, register_confirm_pass
 
 layout = html.Div(
     [
+        # Hidden draggable component to prevent callback errors
+        html.Div(
+            id="draggable",
+            style={"display": "none"},
+            children=[],
+        ),
+        # Hidden stores for draggable callbacks
+        dcc.Store(id="stored-draggable-children", data={}),
+        dcc.Store(id="stored-draggable-layouts", data={}),
+        # Hidden dummy outputs for save callbacks
+        html.Div(id="dummy-output", style={"display": "none"}),
+        # Hidden button components for dashboard callbacks
+        html.Button(id="reset-all-filters-button", style={"display": "none"}),
+        html.Button(id="remove-all-components-button", style={"display": "none"}),
+        html.Button(id="save-button-dashboard", style={"display": "none"}),
+        html.Button(id="toggle-interactivity-button", style={"display": "none"}),
+        html.Button(id="edit-dashboard-mode-button", style={"display": "none"}),
+        html.Button(id="edit-components-mode-button", style={"display": "none"}),
+        html.Button(id="add-button", style={"display": "none"}),
+        html.Button(id="share-button", style={"display": "none"}),
+        # Hidden dashboard version component
+        html.Div(id="dashboard-version", style={"display": "none"}),
+        # Hidden stores for dashboard callbacks
+        dcc.Store(id="stored-edit-dashboard-mode-button", data={}),
+        dcc.Store(id="stored-add-button", data={}),
         # Triangle particles background - white with colored triangles
         html.Div(
             id="auth-background",
@@ -366,6 +391,7 @@ layout = html.Div(
                         "width": "100%",
                         "height": "100%",
                     },
+                    
                     children=[
                         # Create multiple triangle particles with random distribution and Depictio-style shape
                         html.Div(
@@ -388,7 +414,7 @@ layout = html.Div(
                                 # Random initial rotation (0-360 degrees) so triangles start in different directions
                                 "transform": f"rotate({(i * 73) % 360}deg)",
                                 # Use CSS animations from assets/app.css
-                                "animationName": f"triangleParticle{i % 6}",
+                                "animationName": f"triangleParticle{i % 7}",
                                 "animationDuration": f"{10 + (i * 3) % 30}s",
                                 "animationIterationCount": "infinite",
                                 "animationTimingFunction": "ease-in-out",
@@ -428,8 +454,8 @@ layout = html.Div(
                 id="auth-modal-listener",
             ),
             withCloseButton=False,
-            closeOnEscape=False,
-            closeOnClickOutside=False,
+            closeOnEscape=True,
+            closeOnClickOutside=True,
             size="lg",
             overlayProps={
                 "opacity": 0,  # Make overlay transparent so we can see our custom background
