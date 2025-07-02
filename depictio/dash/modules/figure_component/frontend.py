@@ -234,71 +234,69 @@ def register_callbacks_figure_component(app):
                 ]
             )
 
-    # Universal parameter change listener using pattern matching
-    # This callback listens to ANY component with pattern {"type": "param-*", "index": MATCH}
-    @app.callback(
+    # Clientside callback to extract parameter values from accordion
+    app.clientside_callback(
+        """
+        function(accordion_children, existing_kwargs) {
+            if (!accordion_children) {
+                return existing_kwargs || {};
+            }
+
+            const parameters = {};
+
+            function findParameterInputs(data) {
+                if (!data) return;
+
+                try {
+                    if (Array.isArray(data)) {
+                        data.forEach(item => findParameterInputs(item));
+                    } else if (typeof data === 'object' && data !== null) {
+                        // Check if this is a parameter input
+                        if (data.props && data.props.id && data.props.id.type && data.props.id.type.startsWith('param-')) {
+                            const paramName = data.props.id.type.replace('param-', '');
+                            let value = null;
+
+                            // Extract value based on component type
+                            if (data.props.hasOwnProperty('value')) {
+                                value = data.props.value;
+                            } else if (data.props.hasOwnProperty('checked')) {
+                                value = data.props.checked;
+                            }
+
+                            // Only include non-empty values
+                            if (value !== null && value !== "" && value !== undefined &&
+                                !(Array.isArray(value) && value.length === 0)) {
+                                parameters[paramName] = value;
+                            }
+                        }
+
+                        // Recursively search all properties - safer iteration
+                        for (const key in data) {
+                            if (data.hasOwnProperty(key)) {
+                                findParameterInputs(data[key]);
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.warn('Error processing parameter data:', error);
+                }
+            }
+
+            findParameterInputs(accordion_children);
+
+            console.log('Extracted parameters:', Object.keys(parameters));
+            return parameters;
+        }
+        """,
         Output({"type": "dict_kwargs", "index": MATCH}, "data"),
         [
-            # This Input will match ANY parameter component dynamically
-            Input({"type": ALL, "index": MATCH}, "value"),
-            Input({"type": ALL, "index": MATCH}, "checked"),
+            Input({"type": "parameter-accordion", "index": MATCH}, "children"),
         ],
         [
             State({"type": "dict_kwargs", "index": MATCH}, "data"),
         ],
         prevent_initial_call=True,
     )
-    def extract_parameters_universal(all_values, all_checked, existing_kwargs):
-        """Universal parameter extraction using pattern matching."""
-
-        # Get the callback context to understand what triggered this
-        ctx = dash.callback_context
-        if not ctx.triggered:
-            raise dash.exceptions.PreventUpdate
-
-        # Get the triggered input ID
-        triggered_id = ctx.triggered[0]["prop_id"].split(".")[0]
-
-        try:
-            import json
-
-            triggered_id_dict = json.loads(triggered_id)
-        except (json.JSONDecodeError, TypeError):
-            raise dash.exceptions.PreventUpdate
-
-        # Only process if it's a parameter input
-        if not (
-            isinstance(triggered_id_dict, dict)
-            and triggered_id_dict.get("type", "").startswith("param-")
-        ):
-            raise dash.exceptions.PreventUpdate
-
-        logger.info("=== UNIVERSAL PARAMETER EXTRACTION ===")
-        logger.info(f"Triggered by: {triggered_id_dict}")
-
-        # Extract parameters from callback context inputs
-        parameters = {}
-
-        # Get all inputs from the callback context
-        for input_dict in ctx.inputs_list:
-            for input_item in input_dict:
-                input_id = input_item.get("id", {})
-                if isinstance(input_id, dict) and input_id.get("type", "").startswith("param-"):
-                    param_name = input_id["type"].replace("param-", "")
-
-                    # Get value from the triggered values
-                    value = input_item.get("value")
-
-                    # Include non-empty values
-                    if value is not None and value != "" and value != []:
-                        parameters[param_name] = value
-                    elif isinstance(value, bool):  # Include boolean False
-                        parameters[param_name] = value
-
-        logger.info(f"Extracted parameters: {parameters}")
-        logger.info(f"Parameter count: {len(parameters)}")
-
-        return parameters if parameters else (existing_kwargs or {})
 
     @app.callback(
         Output(
@@ -366,14 +364,14 @@ def register_callbacks_figure_component(app):
     )
     def update_figure(*args):
         dict_kwargs = args[0]
-        visu_type = args[1]
-        theme_data = args[2]  # theme_data is now the 3rd argument (State)
-        workflow_id = args[3]
-        data_collection_id = args[4]
-        id = args[5]
-        parent_index = args[6]
-        local_data = args[7]
-        pathname = args[8]
+        visu_type_label = args[1]  # This is the label from segmented control
+        workflow_id = args[2]
+        data_collection_id = args[3]
+        component_id_dict = args[4]
+        parent_index = args[5]
+        local_data = args[6]
+        pathname = args[7]
+        theme_data = args[8]
 
         if not local_data:
             raise dash.exceptions.PreventUpdate
@@ -386,8 +384,6 @@ def register_callbacks_figure_component(app):
         logger.info(f"Component ID: {component_id}")
         logger.info(f"Visualization type label: {visu_type_label}")
         logger.info(f"Parameters: {dict_kwargs}")
-        logger.info(f"Parameters type: {type(dict_kwargs)}")
-        logger.info(f"Parameters empty: {not dict_kwargs or dict_kwargs == {'x': None, 'y': None}}")
 
         # Convert visualization label to name using new robust system
         visu_type = "scatter"  # Default fallback
@@ -488,6 +484,33 @@ def register_callbacks_figure_component(app):
                 ]
             )
 
+    # Callback to handle refresh button
+    @app.callback(
+        Output({"type": "figure-body", "index": MATCH}, "children", allow_duplicate=True),
+        [
+            Input({"type": "refresh-button", "index": MATCH}, "n_clicks"),
+        ],
+        [
+            State({"type": "dict_kwargs", "index": MATCH}, "data"),
+            State({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
+            State({"type": "workflow-selection-label", "index": MATCH}, "value"),
+            State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+            State({"type": "segmented-control-visu-graph", "index": MATCH}, "id"),
+            State("current-edit-parent-index", "data"),
+            State("local-store", "data"),
+            State("url", "pathname"),
+            State("theme-store", "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def refresh_figure(refresh_clicks, *args):
+        """Handle refresh button clicks by rebuilding the figure."""
+        if not refresh_clicks:
+            raise dash.exceptions.PreventUpdate
+
+        # Use the same logic as update_figure but force data refresh
+        return update_figure(*args)
+
     # Callback to initialize figure with default visualization when component is first created
     @app.callback(
         Output({"type": "dict_kwargs", "index": MATCH}, "data", allow_duplicate=True),
@@ -496,271 +519,31 @@ def register_callbacks_figure_component(app):
         ],
         [
             State({"type": "dict_kwargs", "index": MATCH}, "data"),
-            State({"type": "workflow-selection-label", "index": MATCH}, "value"),
-            State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
-            State("local-store", "data"),
         ],
         prevent_initial_call=True,
     )
-    def initialize_default_parameters(
-        visu_type_label, current_kwargs, workflow_id, data_collection_id, local_data
-    ):
-        """Initialize default parameters when visualization type changes, preserving shared parameters."""
-        logger.info("=== PARAMETER PRESERVATION TRIGGERED ===")
-        logger.info(f"Visualization type: {visu_type_label}")
-        logger.info(f"Current parameters: {current_kwargs}")
-        logger.info(f"Current parameters type: {type(current_kwargs)}")
-        logger.info(f"Has workflow_id: {bool(workflow_id)}")
-        logger.info(f"Has data_collection_id: {bool(data_collection_id)}")
-        logger.info(f"Has local_data: {bool(local_data)}")
-
-        # Check if we need to prevent update to avoid race conditions
-        ctx = dash.callback_context
-        if not ctx.triggered:
-            logger.info("No trigger detected, preventing update")
+    def initialize_default_parameters(visu_type_label, current_kwargs):
+        """Initialize default parameters when visualization type is first selected."""
+        # Only trigger if we have empty or null kwargs
+        if current_kwargs and current_kwargs != {"x": None, "y": None}:
             raise dash.exceptions.PreventUpdate
 
-        triggered_prop = ctx.triggered[0]["prop_id"]
-        logger.info(f"Triggered by: {triggered_prop}")
-
-        # Only process if visualization type actually changed
-        if "segmented-control-visu-graph" not in triggered_prop:
-            logger.info("Not triggered by visualization change, preventing update")
-            raise dash.exceptions.PreventUpdate
-
-        if not local_data or not workflow_id or not data_collection_id:
-            logger.warning("Missing required data for parameter initialization")
-            raise dash.exceptions.PreventUpdate
-
-        try:
-            # Get column information for defaults
-            TOKEN = local_data["access_token"]
-            columns_json = get_columns_from_data_collection(workflow_id, data_collection_id, TOKEN)
-            columns_specs_reformatted = defaultdict(list)
-            {columns_specs_reformatted[v["type"]].append(k) for k, v in columns_json.items()}
-
-            # Convert visualization label to name
-            visu_type = "scatter"  # Default fallback
-            if visu_type_label:
-                available_vizs = get_available_visualizations()
-                for viz in available_vizs:
-                    if viz.label == visu_type_label:
-                        visu_type = viz.name
-                        break
-
-            # Get default parameters for this visualization type
-            default_params = _get_default_parameters(visu_type, columns_specs_reformatted)
-
-            # If we have existing parameters, preserve shared ones
-            if current_kwargs and current_kwargs not in [{}, {"x": None, "y": None}]:
-                try:
-                    logger.info(f"Attempting to preserve parameters from: {current_kwargs}")
-
-                    # Get required parameters for the new visualization
-                    new_viz_def = get_visualization_definition(visu_type)
-                    new_param_names = {param.name for param in new_viz_def.parameters}
-                    logger.info(
-                        f"New visualization '{visu_type}' accepts parameters: {new_param_names}"
-                    )
-
-                    # Preserve parameters that exist in both old and new visualization
-                    preserved_params = {}
-                    for param_name, value in current_kwargs.items():
-                        if (
-                            param_name in new_param_names
-                            and value is not None
-                            and value != ""
-                            and value != []
-                        ):
-                            preserved_params[param_name] = value
-                            logger.info(f"Preserving parameter '{param_name}': {value}")
-
-                    logger.info(f"Parameters eligible for preservation: {preserved_params}")
-
-                    # Merge preserved parameters with defaults (preserved takes priority)
-                    final_params = {**default_params, **preserved_params}
-
-                    logger.info(f"Default parameters for {visu_type}: {default_params}")
-                    logger.info(f"Preserved parameters for {visu_type}: {preserved_params}")
-                    logger.info(f"Final merged parameters for {visu_type}: {final_params}")
-
-                    # Only return if we actually have some parameters to preserve
-                    if preserved_params:
-                        logger.info(f"Successfully preserved {len(preserved_params)} parameters")
-                        return final_params
-                    else:
-                        logger.info("No parameters could be preserved, using defaults")
-                        return default_params if default_params else {"x": None, "y": None}
-
-                except Exception as e:
-                    logger.error(f"Error preserving parameters: {e}, using defaults only")
-                    return default_params if default_params else {"x": None, "y": None}
-            else:
-                # No existing parameters, use defaults
-                logger.info(
-                    f"No existing parameters to preserve, initializing defaults for {visu_type}: {default_params}"
-                )
-                return default_params if default_params else {"x": None, "y": None}
-
-        except Exception as e:
-            logger.error(f"Error initializing default parameters: {e}")
-            return {"x": None, "y": None}
-
-    # Callback to automatically initialize figure when component loads
-    @app.callback(
-        Output({"type": "dict_kwargs", "index": MATCH}, "data", allow_duplicate=True),
-        [
-            Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
-            Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
-        ],
-        [
-            State({"type": "dict_kwargs", "index": MATCH}, "data"),
-            State({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
-            State("local-store", "data"),
-        ],
-        prevent_initial_call=True,
-    )
-    def auto_initialize_on_load(
-        workflow_id, data_collection_id, current_kwargs, visu_type_label, local_data
-    ):
-        """Auto-initialize default parameters when workflow/datacollection are set."""
-        # Only trigger if we have empty kwargs and all required data
-        if current_kwargs or not workflow_id or not data_collection_id or not local_data:
-            raise dash.exceptions.PreventUpdate
-
-        try:
-            # Get column information for defaults
-            TOKEN = local_data["access_token"]
-            columns_json = get_columns_from_data_collection(workflow_id, data_collection_id, TOKEN)
-            columns_specs_reformatted = defaultdict(list)
-            {columns_specs_reformatted[v["type"]].append(k) for k, v in columns_json.items()}
-
-            # Convert visualization label to name (default to scatter)
-            visu_type = "scatter"
-            if visu_type_label:
-                available_vizs = get_available_visualizations()
-                for viz in available_vizs:
-                    if viz.label == visu_type_label:
-                        visu_type = viz.name
-                        break
-
-            # Get default parameters for this visualization type
-            default_params = _get_default_parameters(visu_type, columns_specs_reformatted)
-
-            logger.info(f"Auto-initializing default parameters for {visu_type}: {default_params}")
-            return default_params if default_params else {}
-
-        except Exception as e:
-            logger.error(f"Error auto-initializing default parameters: {e}")
-            return {}
-
-    # Simple callback to trigger figure generation when component is created
-    @app.callback(
-        Output({"type": "figure-body", "index": MATCH}, "children", allow_duplicate=True),
-        [
-            Input({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
-        ],
-        [
-            State({"type": "dict_kwargs", "index": MATCH}, "data"),
-            State({"type": "workflow-selection-label", "index": MATCH}, "value"),
-            State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
-            State("local-store", "data"),
-            State("theme-store", "data"),
-        ],
-        prevent_initial_call="initial_load",
-    )
-    def generate_default_figure_on_load(
-        visu_type_label, dict_kwargs, workflow_id, data_collection_id, local_data, theme_data
-    ):
-        """Generate default figure when visualization type is first set."""
-        if not local_data or not workflow_id or not data_collection_id:
-            raise dash.exceptions.PreventUpdate
-
-        try:
-            TOKEN = local_data["access_token"]
-
-            # Convert visualization label to name
-            visu_type = "scatter"  # Default fallback
-            if visu_type_label:
-                available_vizs = get_available_visualizations()
-                for viz in available_vizs:
-                    if viz.label == visu_type_label:
-                        visu_type = viz.name
-                        break
-
-            # If no parameters set, generate defaults
-            if not dict_kwargs or dict_kwargs in [{}, {"x": None, "y": None}]:
-                columns_json = get_columns_from_data_collection(
-                    workflow_id, data_collection_id, TOKEN
-                )
-                columns_specs_reformatted = defaultdict(list)
-                {columns_specs_reformatted[v["type"]].append(k) for k, v in columns_json.items()}
-
-                dict_kwargs = _get_default_parameters(visu_type, columns_specs_reformatted)
-                logger.info(f"Generated default parameters for {visu_type}: {dict_kwargs}")
-
-            if not dict_kwargs:
-                raise dash.exceptions.PreventUpdate
-
-            # Get data collection specs
-            dc_specs = httpx.get(
-                f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{data_collection_id}",
-                headers={"Authorization": f"Bearer {TOKEN}"},
-            ).json()
-
-            # Extract theme
-            theme = "light"
-            if theme_data:
-                if isinstance(theme_data, dict):
-                    theme = theme_data.get("colorScheme", "light")
-                elif isinstance(theme_data, str):
-                    theme = theme_data
-
-            # Build figure
-            figure_kwargs = {
-                "index": "default",  # Use default index for initial generation
-                "dict_kwargs": dict_kwargs,
-                "visu_type": visu_type,
-                "wf_id": workflow_id,
-                "dc_id": data_collection_id,
-                "dc_config": dc_specs["config"],
-                "access_token": TOKEN,
-                "theme": theme,
-            }
-
-            return build_figure(**figure_kwargs)
-
-        except Exception as e:
-            logger.error(f"Error generating default figure: {e}")
-            return html.Div(
-                [
-                    dmc.Alert(
-                        f"Error generating default figure: {str(e)}",
-                        title="Figure Generation Error",
-                        color="red",
-                    )
-                ]
-            )
+        # Return minimal parameters to trigger the main update_figure callback
+        return {"x": None, "y": None}
 
 
 def design_figure(id, component_data=None):
-    # Get limited set of visualizations for user request: Scatter, Bar, Box, Line only
+    # Get all available visualizations and create dropdown options
     all_vizs = get_available_visualizations()
-
-    # Filter to only the requested visualization types
-    allowed_types = {"scatter", "bar", "box", "line"}
-    filtered_vizs = [viz for viz in all_vizs if viz.name.lower() in allowed_types]
-
     viz_options = [
-        {"label": viz.label, "value": viz.label}
-        for viz in sorted(filtered_vizs, key=lambda x: x.label)
+        {"label": viz.label, "value": viz.label} for viz in sorted(all_vizs, key=lambda x: x.label)
     ]
 
     # Default to scatter if no component data
     default_value = "Scatter"
     if component_data and "visu_type" in component_data:
-        # Find the label for the visualization type from filtered list
-        for viz in filtered_vizs:
+        # Find the label for the visualization type
+        for viz in all_vizs:
             if viz.name.lower() == component_data["visu_type"].lower():
                 default_value = viz.label
                 break
@@ -769,8 +552,27 @@ def design_figure(id, component_data=None):
         # Controls row - compact and centered
         dmc.Group(
             [
-                # Styled visualization selector
-                dmc.Group(
+                html.H5("Select your visualisation type"),
+                dmc.Select(
+                    data=viz_options,
+                    value=default_value,
+                    id={
+                        "type": "segmented-control-visu-graph",  # Keep same ID for compatibility
+                        "index": id["index"],
+                    },
+                    placeholder="Choose a visualization type...",
+                    clearable=False,
+                    searchable=True,
+                    style={"marginBottom": "10px"},
+                    comboboxProps={"withinPortal": False},
+                ),
+            ],
+            style={"height": "5%"},
+        ),
+        html.Br(),
+        dbc.Row(
+            [
+                dbc.Col(
                     [
                         DashIconify(icon="mdi:chart-line", width=20, color="#228be6"),
                         dmc.Text(
@@ -845,7 +647,7 @@ def design_figure(id, component_data=None):
         ),
         dcc.Store(
             id={"type": "dict_kwargs", "index": id["index"]},
-            data={},  # Initialize empty to trigger default generation
+            data={"x": None, "y": None},  # Initialize with basic parameters
             storage_type="memory",
         ),
     ]

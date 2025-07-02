@@ -94,9 +94,8 @@ class ComponentBuilder:
             disabled=disabled,
             clearable=not param.required,
             searchable=True,
-            size="md",  # Make dropdown larger
             comboboxProps={"withinPortal": False},  # Prevents dropdown from going behind modals
-            style={"width": "100%", "minHeight": "40px"},  # Increase height
+            style={"width": "100%"},
         )
 
     def _build_multi_select(
@@ -116,9 +115,8 @@ class ComponentBuilder:
             placeholder=f"Select {param.label.lower()}...",
             disabled=disabled,
             searchable=True,
-            size="md",  # Make dropdown larger
             comboboxProps={"withinPortal": False},  # Prevents dropdown from going behind modals
-            style={"width": "100%", "minHeight": "40px"},  # Increase height
+            style={"width": "100%"},
         )
 
     def _build_text_input(
@@ -132,7 +130,6 @@ class ComponentBuilder:
             placeholder=param.label,
             disabled=disabled,
             style={"width": "100%"},
-            autoComplete="off",  # Prevent autofill CSS selector issues
         )
 
     def _build_numeric_input(
@@ -152,7 +149,6 @@ class ComponentBuilder:
             max=param.max_value,
             step=step,
             style={"width": "100%"},
-            autoComplete="off",  # Prevent autofill CSS selector issues
         )
 
     def _build_boolean_switch(
@@ -192,7 +188,6 @@ class ComponentBuilder:
                                     placeholder="Min",
                                     disabled=disabled,
                                     size="sm",
-                                    autoComplete="off",  # Prevent autofill CSS selector issues
                                 ),
                             ],
                             width=6,
@@ -207,7 +202,6 @@ class ComponentBuilder:
                                     placeholder="Max",
                                     disabled=disabled,
                                     size="sm",
-                                    autoComplete="off",  # Prevent autofill CSS selector issues
                                 ),
                             ],
                             width=6,
@@ -227,7 +221,6 @@ class ComponentBuilder:
             value=value or "#1f77b4",
             disabled=disabled,
             style={"width": "100%", "height": "38px"},
-            autoComplete="off",  # Prevent autofill CSS selector issues
         )
 
 
@@ -275,60 +268,28 @@ class AccordionBuilder:
                 param, value=current_value
             )
 
-            # Create label with tooltip and required indicator
-            label_text = param.label
-            if param.required:
-                label_text += " *"
-
-            # Create tooltip for parameter description if available
-            if param.description:
-                label_component = dmc.Tooltip(
-                    label=param.description,
+            # Create tooltip for parameter description
+            tooltip_content = (
+                dmc.Tooltip(
+                    label=param.description or param.label,
                     position="top",
                     multiline=True,
-                    withArrow=True,
-                    withinPortal=False,  # Prevent tooltip from being hidden behind modal
                     children=[
-                        dmc.Text(
-                            label_text,
-                            size="sm",
-                            fw="bold",
-                            c="red" if param.required else "dark",
-                            style={
-                                "cursor": "help",
-                                "textDecoration": "underline dotted"
-                                if param.description
-                                else "none",
-                                "minWidth": "120px",
-                                "display": "flex",
-                                "alignItems": "center",
-                            },
-                        )
+                        dmc.Text(param.label, size="sm", fw="bold", style={"marginBottom": "5px"})
                     ],
                 )
-            else:
-                label_component = dmc.Text(
-                    label_text,
-                    size="sm",
-                    fw="bold",
-                    c="red" if param.required else "dark",
-                    style={
-                        "minWidth": "120px",
-                        "display": "flex",
-                        "alignItems": "center",
-                    },
+                if param.description
+                else dmc.Text(param.label, size="sm", fw="bold", style={"marginBottom": "5px"})
+            )
+
+            # Add required indicator
+            label_content = [tooltip_content]
+            if param.required:
+                label_content.append(
+                    dmc.Text(" *", c="red", size="sm", style={"display": "inline"})
                 )
 
-            # Create horizontal parameter row with label on left, input on right
-            parameter_row = dmc.Group(
-                [
-                    html.Div(label_component, style={"width": "30%", "minWidth": "120px"}),
-                    html.Div(input_component, style={"width": "70%", "flex": "1"}),
-                ],
-                gap="md",
-                align="center",
-                style={"width": "100%"},
-            )
+            parameter_row = dmc.Stack([html.Div(label_content), input_component], gap="xs")
 
             parameter_inputs.append(parameter_row)
 
