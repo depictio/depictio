@@ -173,11 +173,11 @@ def register_theme_callbacks(app):
                     try {
                         // Force a complete purge and redraw
                         console.log('Purging and redrawing graph', index);
-                        
+
                         // Get current data and create new layout with template
                         const currentData = graph.data || [];
                         const currentLayout = graph.layout || {};
-                        
+
                         // Create completely new layout object with template
                         const newLayout = {
                             ...currentLayout,
@@ -194,7 +194,7 @@ def register_theme_callbacks(app):
                             responsive: true,
                             displayModeBar: true
                         });
-                        
+
                         console.log('Plotly.newPlot completed for graph', index);
 
                         // Verify the update worked
@@ -204,7 +204,7 @@ def register_theme_callbacks(app):
 
                     } catch (err) {
                         console.error('Error updating graph', index, ':', err);
-                        
+
                         // Fallback: try simpler relayout approach
                         try {
                             console.log('Trying fallback relayout for graph', index);
