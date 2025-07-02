@@ -818,7 +818,7 @@ def register_theme_callbacks(app):
             }
         }
         """,
-            Output("page-content", "style", allow_duplicate=True),
+        Output("page-content", "style", allow_duplicate=True),
         Input("theme-store", "data"),
         prevent_initial_call=True,
     )
