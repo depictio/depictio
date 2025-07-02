@@ -347,6 +347,7 @@ def register_callbacks_draggable(app):
         Input("edit-dashboard-mode-button", "checked"),
         State("edit-components-mode-button", "checked"),
         Input("edit-components-mode-button", "checked"),
+        Input("theme-store", "data"),
         State("url", "pathname"),
         State("local-store", "data"),
         # Input("height-store", "data"),
@@ -383,6 +384,7 @@ def register_callbacks_draggable(app):
         input_edit_dashboard_mode_button,
         edit_components_mode_button,
         input_edit_components_mode_button,
+        theme_store,
         pathname,
         local_data,
         # height_store,
@@ -667,6 +669,7 @@ def register_callbacks_draggable(app):
                             switch_state=edit_components_mode_button,
                             TOKEN=TOKEN,
                             dashboard_id=dashboard_id,
+                            theme="light",  # TODO: Get theme from store
                         )
                         return (
                             new_children,
@@ -720,6 +723,7 @@ def register_callbacks_draggable(app):
                     switch_state=edit_components_mode_button,
                     TOKEN=TOKEN,
                     dashboard_id=dashboard_id,
+                    theme="light",  # TODO: Get theme from store
                 )
                 state_stored_draggable_children[dashboard_id] = new_children
 
@@ -774,17 +778,19 @@ def register_callbacks_draggable(app):
                 )
                 # return new_children, dash.no_update, state_stored_draggable_children, dash.no_update
 
-            elif triggered_input == "stored-draggable-layouts":
+            elif triggered_input == "stored-draggable-layouts" or triggered_input == "theme-store":
                 # logger.info("Stored draggable layouts triggered")
                 # logger.info(f"Input draggable layouts: {input_draggable_layouts}")
                 # logger.info(f"State stored draggable layouts: {state_stored_draggable_layouts}")
 
                 if state_stored_draggable_layouts:
                     if dashboard_id in state_stored_draggable_layouts:
+                        theme = theme_store if isinstance(theme_store, str) else theme_store.get("theme", "light") if theme_store else "light"
                         children = render_dashboard(
                             stored_metadata,
                             edit_components_mode_button,
                             dashboard_id,
+                            theme,
                             TOKEN,
                         )
 
@@ -1326,6 +1332,10 @@ def design_draggable(
             if key not in init_layout:
                 init_layout[key] = []
         # logger.info(f"Initialized layout with required breakpoints: {init_layout}")
+
+    import plotly
+
+    logger.info(f"Plotly version: {plotly.__version__}")
 
     # Create the draggable layout outside of the if-else to keep it in the DOM
     draggable = dash_draggable.ResponsiveGridLayout(
