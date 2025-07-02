@@ -6,7 +6,7 @@ import dash
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import httpx
-from dash import MATCH, Input, Output, State, dcc, html
+from dash import ALL, MATCH, Input, Output, State, dcc, html
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL
@@ -234,69 +234,71 @@ def register_callbacks_figure_component(app):
                 ]
             )
 
-    # Clientside callback to extract parameter values from accordion
-    app.clientside_callback(
-        """
-        function(accordion_children, existing_kwargs) {
-            if (!accordion_children) {
-                return existing_kwargs || {};
-            }
-
-            const parameters = {};
-
-            function findParameterInputs(data) {
-                if (!data) return;
-
-                try {
-                    if (Array.isArray(data)) {
-                        data.forEach(item => findParameterInputs(item));
-                    } else if (typeof data === 'object' && data !== null) {
-                        // Check if this is a parameter input
-                        if (data.props && data.props.id && data.props.id.type && data.props.id.type.startsWith('param-')) {
-                            const paramName = data.props.id.type.replace('param-', '');
-                            let value = null;
-
-                            // Extract value based on component type
-                            if (data.props.hasOwnProperty('value')) {
-                                value = data.props.value;
-                            } else if (data.props.hasOwnProperty('checked')) {
-                                value = data.props.checked;
-                            }
-
-                            // Only include non-empty values
-                            if (value !== null && value !== "" && value !== undefined &&
-                                !(Array.isArray(value) && value.length === 0)) {
-                                parameters[paramName] = value;
-                            }
-                        }
-
-                        // Recursively search all properties - safer iteration
-                        for (const key in data) {
-                            if (data.hasOwnProperty(key)) {
-                                findParameterInputs(data[key]);
-                            }
-                        }
-                    }
-                } catch (error) {
-                    console.warn('Error processing parameter data:', error);
-                }
-            }
-
-            findParameterInputs(accordion_children);
-
-            console.log('Extracted parameters:', Object.keys(parameters));
-            return parameters;
-        }
-        """,
+    # Universal parameter change listener using pattern matching
+    # This callback listens to ANY component with pattern {"type": "param-*", "index": MATCH}
+    @app.callback(
         Output({"type": "dict_kwargs", "index": MATCH}, "data"),
         [
-            Input({"type": "parameter-accordion", "index": MATCH}, "children"),
+            # This Input will match ANY parameter component dynamically
+            Input({"type": ALL, "index": MATCH}, "value"),
+            Input({"type": ALL, "index": MATCH}, "checked"),
         ],
         [
             State({"type": "dict_kwargs", "index": MATCH}, "data"),
         ],
         prevent_initial_call=True,
     )
+    def extract_parameters_universal(all_values, all_checked, existing_kwargs):
+        """Universal parameter extraction using pattern matching."""
+
+        # Get the callback context to understand what triggered this
+        ctx = dash.callback_context
+        if not ctx.triggered:
+            raise dash.exceptions.PreventUpdate
+
+        # Get the triggered input ID
+        triggered_id = ctx.triggered[0]["prop_id"].split(".")[0]
+
+        try:
+            import json
+
+            triggered_id_dict = json.loads(triggered_id)
+        except (json.JSONDecodeError, TypeError):
+            raise dash.exceptions.PreventUpdate
+
+        # Only process if it's a parameter input
+        if not (
+            isinstance(triggered_id_dict, dict)
+            and triggered_id_dict.get("type", "").startswith("param-")
+        ):
+            raise dash.exceptions.PreventUpdate
+
+        logger.info("=== UNIVERSAL PARAMETER EXTRACTION ===")
+        logger.info(f"Triggered by: {triggered_id_dict}")
+
+        # Extract parameters from callback context inputs
+        parameters = {}
+
+        # Get all inputs from the callback context
+        for input_dict in ctx.inputs_list:
+            for input_item in input_dict:
+                input_id = input_item.get("id", {})
+                if isinstance(input_id, dict) and input_id.get("type", "").startswith("param-"):
+                    param_name = input_id["type"].replace("param-", "")
+
+                    # Get value from the triggered values
+                    value = input_item.get("value")
+
+                    # Include non-empty values
+                    if value is not None and value != "" and value != []:
+                        parameters[param_name] = value
+                    elif isinstance(value, bool):  # Include boolean False
+                        parameters[param_name] = value
+
+        logger.info(f"Extracted parameters: {parameters}")
+        logger.info(f"Parameter count: {len(parameters)}")
+
+        return parameters if parameters else (existing_kwargs or {})
 
     @app.callback(
         Output(
@@ -384,6 +386,8 @@ def register_callbacks_figure_component(app):
         logger.info(f"Component ID: {component_id}")
         logger.info(f"Visualization type label: {visu_type_label}")
         logger.info(f"Parameters: {dict_kwargs}")
+        logger.info(f"Parameters type: {type(dict_kwargs)}")
+        logger.info(f"Parameters empty: {not dict_kwargs or dict_kwargs == {'x': None, 'y': None}}")
 
         # Convert visualization label to name using new robust system
         visu_type = "scatter"  # Default fallback
@@ -533,17 +537,23 @@ def register_callbacks_figure_component(app):
 
 
 def design_figure(id, component_data=None):
-    # Get all available visualizations and create dropdown options
+    # Get limited set of visualizations for user request: Scatter, Bar, Box, Line only
     all_vizs = get_available_visualizations()
+
+    # Filter to only the requested visualization types
+    allowed_types = {"scatter", "bar", "box", "line"}
+    filtered_vizs = [viz for viz in all_vizs if viz.name.lower() in allowed_types]
+
     viz_options = [
-        {"label": viz.label, "value": viz.label} for viz in sorted(all_vizs, key=lambda x: x.label)
+        {"label": viz.label, "value": viz.label}
+        for viz in sorted(filtered_vizs, key=lambda x: x.label)
     ]
 
     # Default to scatter if no component data
     default_value = "Scatter"
     if component_data and "visu_type" in component_data:
-        # Find the label for the visualization type
-        for viz in all_vizs:
+        # Find the label for the visualization type from filtered list
+        for viz in filtered_vizs:
             if viz.name.lower() == component_data["visu_type"].lower():
                 default_value = viz.label
                 break
