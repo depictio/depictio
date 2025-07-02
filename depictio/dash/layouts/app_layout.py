@@ -402,9 +402,9 @@ def create_dashboard_layout(
                     core,
                 ],
             ),
-            html.Div(id="test-input"),
+            # html.Div(id="test-input"),
             html.Div(id="test-output", style={"display": "none"}),
-            html.Div(id="test-output-visible"),
+            # html.Div(id="test-output-visible"),
         ],
         fluid=True,
         style={
