@@ -165,8 +165,9 @@ def register_theme_callbacks(app):
             console.log('Switch checked:', checked);
             console.log('Manual theme selection:', theme);
 
-            // Store theme preference
+            // Store theme preference with timestamp to indicate manual selection
             localStorage.setItem('depictio-theme', theme);
+            localStorage.setItem('depictio-theme-timestamp', Date.now().toString());
 
             // Mark as manual override to prevent automatic system updates
             localStorage.setItem('depictio-theme-manual-override', 'true');
@@ -273,23 +274,137 @@ def register_theme_callbacks(app):
         logo_src = dash.get_asset_url("logo_white.svg" if theme == "dark" else "logo_black.svg")
         return logo_src
 
-    # Update auth modal logos with client-side callback
+    # Update auth modal logos and theme styling with client-side callback
     app.clientside_callback(
         """
         function(theme_data) {
             const theme = theme_data || 'light';
             const logoSrc = theme === 'dark' ? '/assets/logo_white.svg' : '/assets/logo_black.svg';
 
-            // Update login logo if it exists
-            const loginLogo = document.getElementById('auth-modal-logo-login');
-            if (loginLogo) {
-                loginLogo.src = logoSrc;
+            console.log('🎨 Updating auth modal theme:', theme);
+
+            // Update logos with retry mechanism for timing issues
+            function updateLogos() {
+                console.log('🔍 Looking for logo elements...');
+
+                // Update login logo if it exists
+                const loginLogo = document.getElementById('auth-modal-logo-login');
+                if (loginLogo) {
+                    console.log('🖼️ Found and updating login logo to:', logoSrc);
+                    loginLogo.src = logoSrc;
+                } else {
+                    console.log('❌ Login logo element not found');
+                }
+
+                // Update register logo if it exists
+                const registerLogo = document.getElementById('auth-modal-logo-register');
+                if (registerLogo) {
+                    console.log('🖼️ Found and updating register logo to:', logoSrc);
+                    registerLogo.src = logoSrc;
+                } else {
+                    console.log('❌ Register logo element not found');
+                }
+
+                // Also try to find any img elements inside the auth modal
+                const authModal = document.querySelector('.auth-modal-content');
+                if (authModal) {
+                    const allLogos = authModal.querySelectorAll('img[src*="logo"]');
+                    console.log('🎯 Found', allLogos.length, 'logo images in auth modal');
+                    allLogos.forEach((logo, index) => {
+                        console.log(`🖼️ Updating logo ${index} from ${logo.src} to ${logoSrc}`);
+                        logo.src = logoSrc;
+                    });
+                }
             }
 
-            // Update register logo if it exists
-            const registerLogo = document.getElementById('auth-modal-logo-register');
-            if (registerLogo) {
-                registerLogo.src = logoSrc;
+            // Try immediately
+            updateLogos();
+
+            // Retry after a short delay in case elements aren't rendered yet
+            setTimeout(updateLogos, 100);
+
+            // Also retry when form changes (login/register switch)
+            setTimeout(updateLogos, 500);
+
+            // Set up mutation observer to catch when modal content changes
+            const modalContent = document.querySelector('.auth-modal-content');
+            if (modalContent && !modalContent.hasAttribute('data-logo-observer')) {
+                modalContent.setAttribute('data-logo-observer', 'true');
+                const observer = new MutationObserver(function(mutations) {
+                    let shouldUpdate = false;
+                    mutations.forEach(function(mutation) {
+                        if (mutation.type === 'childList') {
+                            // Check if any img elements were added/changed
+                            mutation.addedNodes.forEach(function(node) {
+                                if (node.nodeType === Node.ELEMENT_NODE) {
+                                    if (node.tagName === 'IMG' || node.querySelector('img')) {
+                                        shouldUpdate = true;
+                                    }
+                                }
+                            });
+                        }
+                    });
+                    if (shouldUpdate) {
+                        console.log('🔄 Modal content changed, updating logos...');
+                        setTimeout(updateLogos, 50);
+                    }
+                });
+
+                observer.observe(modalContent, {
+                    childList: true,
+                    subtree: true
+                });
+                console.log('👀 Set up mutation observer for modal content changes');
+            }
+
+            // Update auth modal background and text colors
+            const authModal = document.querySelector('.auth-modal-content');
+            const authModalParent = document.querySelector('[data-mantine="Modal"]');
+
+            if (authModal) {
+                console.log('📋 Updating auth modal styling');
+
+                if (theme === 'dark') {
+                    authModal.style.background = 'rgba(37, 38, 43, 0.95)';
+                    authModal.style.color = '#C1C2C5';
+                    authModal.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.3)';
+                } else {
+                    authModal.style.background = 'rgba(255, 255, 255, 0.95)';
+                    authModal.style.color = '#000000';
+                    authModal.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.1)';
+                }
+
+                // Update all text elements inside auth modal
+                const textElements = authModal.querySelectorAll('.mantine-Title-root, [data-mantine="Title"], .mantine-Text-root, [data-mantine="Text"]');
+                textElements.forEach(element => {
+                    element.style.color = theme === 'dark' ? '#C1C2C5' : '#000000';
+                });
+
+                // Update form elements
+                const inputs = authModal.querySelectorAll('.mantine-TextInput-input, .mantine-PasswordInput-input');
+                const labels = authModal.querySelectorAll('.mantine-TextInput-label, .mantine-PasswordInput-label');
+
+                inputs.forEach(input => {
+                    if (theme === 'dark') {
+                        input.style.backgroundColor = '#25262b';
+                        input.style.color = '#C1C2C5';
+                        input.style.borderColor = '#373A40';
+                    } else {
+                        input.style.backgroundColor = '#ffffff';
+                        input.style.color = '#000000';
+                        input.style.borderColor = '#ced4da';
+                    }
+                });
+
+                labels.forEach(label => {
+                    label.style.color = theme === 'dark' ? '#C1C2C5' : '#000000';
+                });
+            }
+
+            // Update the mantine provider attribute for proper theme cascade
+            const mantineProvider = document.querySelector('[data-mantine-color-scheme]');
+            if (mantineProvider) {
+                mantineProvider.setAttribute('data-mantine-color-scheme', theme);
             }
 
             return window.dash_clientside.no_update;
@@ -703,7 +818,7 @@ def register_theme_callbacks(app):
             }
         }
         """,
-            Output("page-content", "style", allow_duplicate=True),
+        Output("page-content", "style", allow_duplicate=True),
         Input("theme-store", "data"),
         prevent_initial_call=True,
     )
@@ -714,10 +829,10 @@ def register_theme_callbacks(app):
         function(theme_data) {
             console.log('=== DASHBOARD TITLE THEME TRIGGER ===');
             console.log('Theme data:', theme_data);
-            
+
             const theme = theme_data || 'light';
             const textColor = theme === 'dark' ? '#ffffff' : '#000000';
-            
+
             // Return a style object that changes with theme to trigger draggable
             return {
                 'color': textColor,
@@ -728,7 +843,7 @@ def register_theme_callbacks(app):
         """,
         Output("dashboard-title", "style", allow_duplicate=True),
         Input("theme-store", "data"),
-        prevent_initial_call='initial_duplicate',
+        prevent_initial_call="initial_duplicate",
     )
 
 
