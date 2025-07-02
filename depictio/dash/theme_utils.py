@@ -11,8 +11,8 @@ def create_theme_switch():
     return dmc.Switch(
         id="theme-switch",
         size="lg",
-        onLabel=DashIconify(icon="ph:moon-fill", width=16),
-        offLabel=DashIconify(icon="ph:sun-fill", width=16),
+        onLabel=DashIconify(icon="ph:sun-fill", width=16),  # Dark mode ON = show sun
+        offLabel=DashIconify(icon="ph:moon-fill", width=16),  # Light mode OFF = show moon
         style={"marginBottom": "10px"},
     )
 
@@ -140,88 +140,89 @@ def register_theme_callbacks(app):
         prevent_initial_call=True,
     )
 
-    # Update Plotly figure templates when theme changes
+    # Update Plotly figure templates when theme changes using Mantine templates
     app.clientside_callback(
         """
         function(theme_data) {
-            console.log('=== PLOTLY THEME UPDATE ===');
+            console.log('📊 === PLOTLY MANTINE THEME UPDATE ===');
             console.log('Theme data received:', theme_data);
 
-            const theme = theme_data || 'light';
-            const template = theme === 'dark' ? 'plotly_dark' : 'plotly_white';
-            console.log('Using template:', template);
+            try {
+                const theme = theme_data || 'light';
+                const template = theme === 'dark' ? 'mantine_dark' : 'mantine_light';
+                console.log('Using Mantine template:', template);
 
-            // Check if Plotly is available
-            if (!window.Plotly) {
-                console.log('Plotly not available, skipping update');
+                // Check if Plotly is available
+                if (!window.Plotly) {
+                    console.log('Plotly not available, skipping update');
+                    return window.dash_clientside.no_update;
+                }
+
+                console.log('Plotly available, proceeding with Mantine template update');
+
+                // Find graphs and force complete redraw
+                const graphs = document.querySelectorAll('.js-plotly-plot');
+                console.log('Found', graphs.length, 'Plotly graphs');
+
+                if (graphs.length === 0) {
+                    console.log('No graphs found, skipping update');
+                    return window.dash_clientside.no_update;
+                }
+
+                // Use minimal delay to ensure graphs are ready but keep it responsive
+                setTimeout(() => {
+                    graphs.forEach(async (graph, index) => {
+                        console.log(`Processing graph ${index} with template: ${template}`);
+
+                        try {
+                            // Get current data and layout
+                            const currentData = graph.data || [];
+                            const currentLayout = graph.layout || {};
+
+                            // Create new layout with Mantine template
+                            const newLayout = {
+                                ...currentLayout,
+                                template: template,
+                                // Let Mantine templates handle the colors
+                            };
+
+                            console.log(`New layout for graph ${index}:`, newLayout);
+
+                            // Use newPlot for complete recreation with Mantine template
+                            await window.Plotly.newPlot(graph, currentData, newLayout, {
+                                responsive: true,
+                                displayModeBar: true
+                            });
+
+                            console.log(`✅ Plotly.newPlot completed for graph ${index} with ${template}`);
+
+                            // Verify the update worked
+                            console.log('Final layout template:', graph.layout?.template);
+
+                        } catch (err) {
+                            console.error(`❌ Error updating graph ${index}:`, err);
+
+                            // Fallback: try simpler relayout approach
+                            try {
+                                console.log(`Trying fallback relayout for graph ${index}`);
+                                await window.Plotly.relayout(graph, {
+                                    'template': template
+                                });
+                                console.log(`✅ Fallback relayout completed for graph ${index}`);
+                            } catch (fallbackErr) {
+                                console.error(`❌ Fallback also failed for graph ${index}:`, fallbackErr);
+                            }
+                        }
+                    });
+                }, 10); // Small delay to ensure DOM is ready
+
+                console.log('📊 === PLOTLY MANTINE THEME UPDATE END ===');
+                return window.dash_clientside.no_update;
+
+            } catch (error) {
+                console.error('❌ Plotly theme callback error:', error);
                 return window.dash_clientside.no_update;
             }
-
-            console.log('Plotly available, proceeding with update');
-
-            // Find graphs and force complete redraw
-            const graphs = document.querySelectorAll('.js-plotly-plot');
-            console.log('Found', graphs.length, 'Plotly graphs');
-
-            // Use minimal delay to ensure graphs are ready but keep it responsive
-            const delay = 1;
-
-            setTimeout(() => {
-                graphs.forEach(async (graph, index) => {
-                    console.log('Processing graph', index);
-
-                    try {
-                        // Force a complete purge and redraw
-                        console.log('Purging and redrawing graph', index);
-                        
-                        // Get current data and create new layout with template
-                        const currentData = graph.data || [];
-                        const currentLayout = graph.layout || {};
-                        
-                        // Create completely new layout object with template
-                        const newLayout = {
-                            ...currentLayout,
-                            template: template,
-                            // Force background colors that match Plotly dark theme
-                            paper_bgcolor: theme === 'dark' ? '#111111' : '#ffffff',
-                            plot_bgcolor: theme === 'dark' ? '#111111' : '#ffffff'
-                        };
-
-                        console.log('New layout for graph', index, ':', newLayout);
-
-                        // Use newPlot for complete recreation
-                        const result = await window.Plotly.newPlot(graph, currentData, newLayout, {
-                            responsive: true,
-                            displayModeBar: true
-                        });
-                        
-                        console.log('Plotly.newPlot completed for graph', index);
-
-                        // Verify the update worked
-                        console.log('Final layout template:', graph.layout?.template);
-                        console.log('Final layout paper_bgcolor:', graph.layout?.paper_bgcolor);
-                        console.log('Final layout plot_bgcolor:', graph.layout?.plot_bgcolor);
-
-                    } catch (err) {
-                        console.error('Error updating graph', index, ':', err);
-                        
-                        // Fallback: try simpler relayout approach
-                        try {
-                            console.log('Trying fallback relayout for graph', index);
-                            await window.Plotly.relayout(graph, {
-                                'template': template,
-                                'paper_bgcolor': theme === 'dark' ? '#111111' : '#ffffff',
-                                'plot_bgcolor': theme === 'dark' ? '#111111' : '#ffffff'
-                            });
-                            console.log('Fallback relayout completed for graph', index);
-                        } catch (fallbackErr) {
-                            console.error('Fallback also failed for graph', index, ':', fallbackErr);
-                        }
-                    }
-                });
-            }, delay);
-
-            return window.dash_clientside.no_update;
         }
         """,
         Output("dummy-plotly-output", "children", allow_duplicate=True),
@@ -229,308 +230,306 @@ def register_theme_callbacks(app):
         prevent_initial_call=True,
     )
 
-    # Client-side callback for theme updates - using page-content as reliable output
+    # Client-side callback for theme updates - single modular callback with working NavLink icon handling
     app.clientside_callback(
         """
         function(theme_data) {
-            console.log('=== THEME CALLBACK START ===');
+            // === MODULAR JAVASCRIPT FUNCTIONS ===
+
+            // Function to safely apply styles with error handling
+            function safeApplyStyles(element, styles) {
+                if (!element) return false;
+                try {
+                    Object.keys(styles).forEach(prop => {
+                        element.style.setProperty(prop, styles[prop], 'important');
+                    });
+                    return true;
+                } catch (error) {
+                    console.error('Error applying styles:', error);
+                    return false;
+                }
+            }
+
+            // Function to handle NavLink icon theming (from working debug app)
+            function updateNavLinkIcons(theme) {
+                const iconColor = theme === 'dark' ? '#ffffff' : '#000000';
+                console.log(`🎨 Updating NavLink icons for theme: ${theme}, color: ${iconColor}`);
+
+                try {
+                    // Find all NavLinks with pattern matching support
+                    const navLinks = document.querySelectorAll('.mantine-NavLink-root, [data-mantine="NavLink"]');
+                    console.log(`Found ${navLinks.length} NavLinks`);
+
+                    navLinks.forEach((navLink, index) => {
+                        const isActive = navLink.getAttribute('data-active') === 'true';
+                        const icons = navLink.querySelectorAll('svg, [class*="iconify"], .iconify');
+
+                        console.log(`NavLink ${index}: active=${isActive}, icons=${icons.length}`);
+
+                        icons.forEach(icon => {
+                            if (isActive) {
+                                // Active NavLink: clear forced styles to show original color
+                                icon.style.color = '';
+                                icon.style.fill = '';
+                                console.log('  🟠 Preserved active NavLink icon color');
+                            } else {
+                                // Inactive NavLink: use theme color
+                                icon.style.color = iconColor + ' !important';
+                                icon.style.fill = iconColor + ' !important';
+                                console.log(`  ⚫⚪ Applied theme color: ${iconColor}`);
+                            }
+
+                            // Handle SVG paths
+                            if (icon.tagName === 'SVG') {
+                                const paths = icon.querySelectorAll('path');
+                                paths.forEach(path => {
+                                    if (!isActive) {
+                                        path.style.fill = iconColor + ' !important';
+                                    } else {
+                                        path.style.fill = 'currentColor';
+                                    }
+                                });
+                            }
+                        });
+                    });
+
+                    return true;
+                } catch (error) {
+                    console.error('❌ NavLink icon update error:', error);
+                    return false;
+                }
+            }
+
+            // Function to inject comprehensive CSS styles
+            function injectThemeCSS(theme, textColor, backgroundColor) {
+                let themeStyleElement = document.getElementById('dynamic-theme-styles');
+                if (!themeStyleElement) {
+                    themeStyleElement = document.createElement('style');
+                    themeStyleElement.id = 'dynamic-theme-styles';
+                    document.head.appendChild(themeStyleElement);
+                }
+
+                const themeCSS = `
+                    /* Core theme elements */
+                    #page-content {
+                        background-color: ${backgroundColor} !important;
+                        color: ${textColor} !important;
+                    }
+
+                    /* Headers - fix visibility in dark mode */
+                    #header-content,
+                    .mantine-AppShell-header {
+                        background-color: ${theme === 'dark' ? '#25262b' : '#ffffff'} !important;
+                        color: ${textColor} !important;
+                    }
+
+                    /* Header text elements */
+                    #header-content .mantine-Text-root,
+                    #header-content [data-mantine="Text"],
+                    .mantine-AppShell-header .mantine-Text-root,
+                    .mantine-AppShell-header [data-mantine="Text"] {
+                        color: ${textColor} !important;
+                    }
+
+                    /* Dashboard title */
+                    #dashboard-title,
+                    #header-content [data-mantine="Title"],
+                    .mantine-AppShell-header [data-mantine="Title"] {
+                        color: ${textColor} !important;
+                    }
+
+                    /* Sidebar */
+                    #sidebar,
+                    .mantine-AppShell-navbar {
+                        background-color: ${theme === 'dark' ? '#25262b' : '#ffffff'} !important;
+                    }
+
+                    /* NavLink labels - only fix dark mode visibility */
+                    ${theme === 'dark' ? `
+                    #sidebar .mantine-NavLink-label,
+                    #sidebar .mantine-NavLink-root .mantine-Text-root,
+                    #sidebar [data-mantine="NavLink"] .mantine-Text-root,
+                    .mantine-AppShell-navbar .mantine-NavLink-label,
+                    .mantine-AppShell-navbar .mantine-NavLink-root .mantine-Text-root,
+                    .mantine-AppShell-navbar [data-mantine="NavLink"] .mantine-Text-root {
+                        color: #C1C2C5 !important;
+                    }
+
+                    /* NavLink icons - only inactive ones should use theme color in dark mode */
+                    #sidebar .mantine-NavLink-root:not(.mantine-NavLink-active) .iconify,
+                    #sidebar .mantine-NavLink-root:not(.mantine-NavLink-active) [class*="iconify"],
+                    #sidebar .mantine-NavLink-root:not(.mantine-NavLink-active) svg,
+                    .mantine-AppShell-navbar .mantine-NavLink-root:not(.mantine-NavLink-active) .iconify,
+                    .mantine-AppShell-navbar .mantine-NavLink-root:not(.mantine-NavLink-active) [class*="iconify"],
+                    .mantine-AppShell-navbar .mantine-NavLink-root:not(.mantine-NavLink-active) svg {
+                        color: #C1C2C5 !important;
+                        fill: #C1C2C5 !important;
+                    }` : ''}
+
+                    /* Avatar container text - fix visibility in dark mode */
+                    #sidebar .mantine-Avatar-root + *,
+                    #sidebar .mantine-Avatar-root ~ *,
+                    .mantine-AppShell-navbar .mantine-Avatar-root + *,
+                    .mantine-AppShell-navbar .mantine-Avatar-root ~ * {
+                        color: ${textColor} !important;
+                    }
+
+                    /* Avatar text containers */
+                    #sidebar [id*="avatar"] .mantine-Text-root,
+                    #sidebar [class*="avatar"] .mantine-Text-root,
+                    .mantine-AppShell-navbar [id*="avatar"] .mantine-Text-root,
+                    .mantine-AppShell-navbar [class*="avatar"] .mantine-Text-root {
+                        color: ${textColor} !important;
+                    }
+
+                    /* Draggable boxes - ResponsiveGridLayout items */
+                    .react-grid-item,
+                    .react-grid-item .card,
+                    .react-grid-item [data-mantine="Card"],
+                    #draggable .react-grid-item,
+                    #draggable .react-grid-item > *,
+                    #draggable .react-grid-item [class*="Card"] {
+                        background-color: ${theme === 'dark' ? '#25262b' : '#ffffff'} !important;
+                        color: ${textColor} !important;
+                    }
+
+                    /* Draggable box content */
+                    .react-grid-item .mantine-Text-root,
+                    .react-grid-item [data-mantine="Text"],
+                    #draggable .react-grid-item .mantine-Text-root,
+                    #draggable .react-grid-item [data-mantine="Text"] {
+                        color: ${textColor} !important;
+                    }
+
+                    /* Bootstrap card components in draggable items */
+                    .react-grid-item .card-body,
+                    .react-grid-item .card-header,
+                    #draggable .card,
+                    #draggable .card-body,
+                    #draggable .card-header {
+                        background-color: ${theme === 'dark' ? '#25262b' : '#ffffff'} !important;
+                        color: ${textColor} !important;
+                    }
+
+                    /* Profile text */
+                    #user-info-placeholder .mantine-Text-root {
+                        color: ${textColor} !important;
+                    }
+
+                    /* Dashboard offcanvas - Bootstrap component theming */
+                    #offcanvas-parameters,
+                    .dashboard-offcanvas,
+                    .offcanvas {
+                        background-color: ${theme === 'dark' ? '#25262b' : '#ffffff'} !important;
+                        color: ${textColor} !important;
+                    }
+
+                    /* Offcanvas header */
+                    #offcanvas-parameters .offcanvas-header,
+                    .dashboard-offcanvas .offcanvas-header,
+                    .offcanvas .offcanvas-header {
+                        background-color: ${theme === 'dark' ? '#25262b' : '#ffffff'} !important;
+                        color: ${textColor} !important;
+                        border-bottom: 1px solid ${theme === 'dark' ? '#373A40' : '#dee2e6'} !important;
+                    }
+
+                    /* Offcanvas body */
+                    #offcanvas-parameters .offcanvas-body,
+                    .dashboard-offcanvas .offcanvas-body,
+                    .offcanvas .offcanvas-body {
+                        background-color: ${theme === 'dark' ? '#25262b' : '#ffffff'} !important;
+                        color: ${textColor} !important;
+                    }
+
+                    /* Offcanvas title */
+                    #offcanvas-parameters .offcanvas-title,
+                    .dashboard-offcanvas .offcanvas-title,
+                    .offcanvas .offcanvas-title {
+                        color: ${textColor} !important;
+                    }
+
+                    /* Offcanvas close button */
+                    #offcanvas-parameters .btn-close,
+                    .dashboard-offcanvas .btn-close,
+                    .offcanvas .btn-close {
+                        filter: ${theme === 'dark' ? 'invert(1) grayscale(100%) brightness(200%)' : 'none'} !important;
+                    }
+                `;
+
+                themeStyleElement.textContent = themeCSS;
+                console.log('✅ Injected comprehensive theme CSS');
+                return true;
+            }
+
+            // === MAIN CALLBACK EXECUTION ===
+            console.log('🎨 === THEME CALLBACK START ===');
             console.log('Input theme_data:', theme_data);
 
-            const theme = theme_data || 'light';
-            console.log('Resolved theme:', theme);
+            try {
+                const theme = theme_data || 'light';
+                const textColor = theme === 'dark' ? '#ffffff' : '#000000';
+                const backgroundColor = theme === 'dark' ? '#1a1b1e' : '#ffffff';
 
-            const textColor = theme === 'dark' ? '#ffffff' : '#000000';
-            const backgroundColor = theme === 'dark' ? '#1a1b1e' : '#ffffff';
+                console.log('Resolved theme:', theme);
+                console.log('Colors - text:', textColor, 'background:', backgroundColor);
 
-            console.log('Colors - text:', textColor, 'background:', backgroundColor);
+                // Update page-content with safe style application
+                const pageContent = document.getElementById('page-content');
+                if (pageContent) {
+                    safeApplyStyles(pageContent, {
+                        'background-color': backgroundColor,
+                        'color': textColor
+                    });
+                    console.log('✅ Applied styles to page-content');
+                }
 
-            // Force update page-content with direct styles
-            const pageContent = document.getElementById('page-content');
-            console.log('Page content element found:', !!pageContent);
-            if (pageContent) {
-                pageContent.style.backgroundColor = backgroundColor + ' !important';
-                pageContent.style.color = textColor + ' !important';
-                console.log('Applied styles to page-content');
-            }
-
-            // Update all possible title elements with stronger CSS override
-            const allTitles = document.querySelectorAll('h1, h2, h3, h4, h5, h6, [data-mantine="Title"]');
-            console.log('Found title elements:', allTitles.length);
-            allTitles.forEach((title, index) => {
-                title.style.setProperty('color', textColor, 'important');
-                title.style.setProperty('fill', textColor, 'important');
-                console.log('Updated title', index, 'current color:', window.getComputedStyle(title).color);
-            });
-
-            console.log('Theme callback executing with theme:', theme);
-
-            // Try broader selectors for NavLinks
-            const navLinkSelectors = [
-                '[data-mantine="NavLink"]',
-                '.mantine-NavLink-root',
-                '[class*="NavLink"]',
-                '#sidebar a',
-                '#sidebar-content *'
-            ];
-
-            let foundNavLinks = [];
-            navLinkSelectors.forEach(selector => {
-                const elements = document.querySelectorAll(selector);
-                console.log(`Selector "${selector}" found:`, elements.length);
-                foundNavLinks = foundNavLinks.concat(Array.from(elements));
-            });
-
-            // Update all NavLink-related elements
-            foundNavLinks.forEach((link, index) => {
-                console.log(`Processing NavLink ${index}:`, link.tagName, link.className);
-
-                // Update the link itself
-                link.style.color = textColor + ' !important';
-
-                // Find and update all text content within
-                const textElements = link.querySelectorAll('*');
-                textElements.forEach(el => {
-                    if (el.textContent && el.textContent.trim()) {
-                        el.style.color = textColor + ' !important';
-                    }
+                // Update titles with safe style application
+                const allTitles = document.querySelectorAll('h1, h2, h3, h4, h5, h6, [data-mantine="Title"]');
+                console.log(`Found ${allTitles.length} title elements`);
+                allTitles.forEach((title, index) => {
+                    safeApplyStyles(title, {
+                        'color': textColor,
+                        'fill': textColor
+                    });
                 });
 
-                // Update icons within the link
-                const icons = link.querySelectorAll('svg, [class*="iconify"], [class*="icon"]');
-                icons.forEach(icon => {
-                    icon.style.color = textColor + ' !important';
-                    if (icon.tagName === 'SVG') {
-                        icon.style.fill = textColor + ' !important';
-                    }
+                // Update NavLink icons with the working solution from debug app
+                updateNavLinkIcons(theme);
+
+                // Update headers
+                const headerContent = document.getElementById('header-content');
+                if (headerContent) {
+                    safeApplyStyles(headerContent, {
+                        'background-color': backgroundColor
+                    });
+                }
+
+                const appShellHeaders = document.querySelectorAll('.mantine-AppShell-header');
+                appShellHeaders.forEach(header => {
+                    safeApplyStyles(header, {
+                        'background-color': backgroundColor
+                    });
                 });
-            });
 
-            // Try broader selectors for Text elements
-            const textSelectors = [
-                '[data-mantine="Text"]',
-                '.mantine-Text-root',
-                '[class*="Text"]',
-                '#sidebar span',
-                '#sidebar div'
-            ];
+                // Inject comprehensive CSS styles
+                injectThemeCSS(theme, textColor, backgroundColor);
 
-            textSelectors.forEach(selector => {
-                const elements = document.querySelectorAll(selector);
-                console.log(`Text selector "${selector}" found:`, elements.length);
-                elements.forEach((text, index) => {
-                    if (text.textContent && text.textContent.trim()) {
-                        text.style.color = textColor + ' !important';
-                        console.log(`Updated text element ${index}:`, text.textContent.substring(0, 20));
-                    }
-                });
-            });
+                // Set CSS custom properties for broader coverage
+                document.documentElement.style.setProperty('--app-bg-color', backgroundColor);
+                document.documentElement.style.setProperty('--app-text-color', textColor);
 
-            // Simple header update
-            const headerContent = document.getElementById('header-content');
-            if (headerContent) {
-                headerContent.style.setProperty('background-color', backgroundColor, 'important');
+                console.log('🎨 === THEME CALLBACK END ===');
+
+                // Return the new background color for page-content
+                return {
+                    'background-color': backgroundColor + ' !important',
+                    'color': textColor + ' !important'
+                };
+
+            } catch (error) {
+                console.error('❌ Theme callback error:', error);
+                return window.dash_clientside.no_update;
             }
-
-            const appShellHeaders = document.querySelectorAll('.mantine-AppShell-header');
-            appShellHeaders.forEach(header => {
-                header.style.setProperty('background-color', backgroundColor, 'important');
-            });
-
-            // Inject CSS styles for stronger overrides
-            let themeStyleElement = document.getElementById('dynamic-theme-styles');
-            if (!themeStyleElement) {
-                themeStyleElement = document.createElement('style');
-                themeStyleElement.id = 'dynamic-theme-styles';
-                document.head.appendChild(themeStyleElement);
-            }
-
-            const themeCSS = `
-                /* Core theme elements */
-                #page-content {
-                    background-color: ${backgroundColor} !important;
-                    color: ${textColor} !important;
-                }
-
-                /* Headers - fix visibility in dark mode */
-                #header-content,
-                .mantine-AppShell-header {
-                    background-color: ${theme === 'dark' ? '#25262b' : '#ffffff'} !important;
-                    color: ${textColor} !important;
-                }
-
-                /* Header text elements */
-                #header-content .mantine-Text-root,
-                #header-content [data-mantine="Text"],
-                .mantine-AppShell-header .mantine-Text-root,
-                .mantine-AppShell-header [data-mantine="Text"] {
-                    color: ${textColor} !important;
-                }
-
-                /* Dashboard header grid */
-                #header-content .mantine-Grid-root,
-                .mantine-AppShell-header .mantine-Grid-root {
-                    background-color: ${theme === 'dark' ? '#25262b' : '#ffffff'} !important;
-                }
-
-                /* Dashboard title */
-                #dashboard-title,
-                #header-content [data-mantine="Title"],
-                .mantine-AppShell-header [data-mantine="Title"] {
-                    color: ${textColor} !important;
-                }
-
-                /* Dashboard header text (not badges - they keep their colors) */
-                #header-content .mantine-Text-root,
-                .mantine-AppShell-header .mantine-Text-root {
-                    color: ${textColor} !important;
-                }
-
-                /* Dashboard header badges - keep their original colors, don't force theme colors */
-                #header-content .mantine-Badge-root,
-                .mantine-AppShell-header .mantine-Badge-root {
-                    /* Badges keep their original colored backgrounds and white text */
-                }
-
-                /* Sidebar */
-                #sidebar,
-                .mantine-AppShell-navbar {
-                    background-color: ${theme === 'dark' ? '#25262b' : '#ffffff'} !important;
-                }
-
-                /* NavLinks - only fix dark mode visibility, preserve colors in light mode */
-                ${theme === 'dark' ? `
-                #sidebar .mantine-NavLink-root,
-                #sidebar [data-mantine="NavLink"],
-                .mantine-AppShell-navbar .mantine-NavLink-root,
-                .mantine-AppShell-navbar [data-mantine="NavLink"] {
-                    /* Only override in dark mode for visibility */
-                }
-
-                /* NavLink labels - only fix dark mode visibility */
-                #sidebar .mantine-NavLink-label,
-                #sidebar .mantine-NavLink-root .mantine-Text-root,
-                #sidebar [data-mantine="NavLink"] .mantine-Text-root,
-                .mantine-AppShell-navbar .mantine-NavLink-label,
-                .mantine-AppShell-navbar .mantine-NavLink-root .mantine-Text-root,
-                .mantine-AppShell-navbar [data-mantine="NavLink"] .mantine-Text-root {
-                    color: #C1C2C5 !important;
-                }
-
-                /* NavLink icons - only inactive ones should use theme color in dark mode */
-                #sidebar .mantine-NavLink-root:not(.mantine-NavLink-active) .iconify,
-                #sidebar .mantine-NavLink-root:not(.mantine-NavLink-active) [class*="iconify"],
-                #sidebar .mantine-NavLink-root:not(.mantine-NavLink-active) svg,
-                .mantine-AppShell-navbar .mantine-NavLink-root:not(.mantine-NavLink-active) .iconify,
-                .mantine-AppShell-navbar .mantine-NavLink-root:not(.mantine-NavLink-active) [class*="iconify"],
-                .mantine-AppShell-navbar .mantine-NavLink-root:not(.mantine-NavLink-active) svg {
-                    color: #C1C2C5 !important;
-                    fill: #C1C2C5 !important;
-                }` : ''}
-
-                /* Avatar container text - fix visibility in dark mode */
-                #sidebar .mantine-Avatar-root + *,
-                #sidebar .mantine-Avatar-root ~ *,
-                .mantine-AppShell-navbar .mantine-Avatar-root + *,
-                .mantine-AppShell-navbar .mantine-Avatar-root ~ * {
-                    color: ${textColor} !important;
-                }
-
-                /* Avatar text containers */
-                #sidebar [id*="avatar"] .mantine-Text-root,
-                #sidebar [class*="avatar"] .mantine-Text-root,
-                .mantine-AppShell-navbar [id*="avatar"] .mantine-Text-root,
-                .mantine-AppShell-navbar [class*="avatar"] .mantine-Text-root {
-                    color: ${textColor} !important;
-                }
-
-                /* Draggable boxes - ResponsiveGridLayout items */
-                .react-grid-item,
-                .react-grid-item .card,
-                .react-grid-item [data-mantine="Card"],
-                #draggable .react-grid-item,
-                #draggable .react-grid-item > *,
-                #draggable .react-grid-item [class*="Card"] {
-                    background-color: ${theme === 'dark' ? '#25262b' : '#ffffff'} !important;
-                    color: ${textColor} !important;
-                }
-
-                /* Draggable box content */
-                .react-grid-item .mantine-Text-root,
-                .react-grid-item [data-mantine="Text"],
-                #draggable .react-grid-item .mantine-Text-root,
-                #draggable .react-grid-item [data-mantine="Text"] {
-                    color: ${textColor} !important;
-                }
-
-                /* Bootstrap card components in draggable items */
-                .react-grid-item .card-body,
-                .react-grid-item .card-header,
-                #draggable .card,
-                #draggable .card-body,
-                #draggable .card-header {
-                    background-color: ${theme === 'dark' ? '#25262b' : '#ffffff'} !important;
-                    color: ${textColor} !important;
-                }
-
-                /* Profile text */
-                #user-info-placeholder .mantine-Text-root {
-                    color: ${textColor} !important;
-                }
-
-                /* Dashboard offcanvas - Bootstrap component theming */
-                #offcanvas-parameters,
-                .dashboard-offcanvas,
-                .offcanvas {
-                    background-color: ${theme === 'dark' ? '#25262b' : '#ffffff'} !important;
-                    color: ${textColor} !important;
-                }
-
-                /* Offcanvas header */
-                #offcanvas-parameters .offcanvas-header,
-                .dashboard-offcanvas .offcanvas-header,
-                .offcanvas .offcanvas-header {
-                    background-color: ${theme === 'dark' ? '#25262b' : '#ffffff'} !important;
-                    color: ${textColor} !important;
-                    border-bottom: 1px solid ${theme === 'dark' ? '#373A40' : '#dee2e6'} !important;
-                }
-
-                /* Offcanvas body */
-                #offcanvas-parameters .offcanvas-body,
-                .dashboard-offcanvas .offcanvas-body,
-                .offcanvas .offcanvas-body {
-                    background-color: ${theme === 'dark' ? '#25262b' : '#ffffff'} !important;
-                    color: ${textColor} !important;
-                }
-
-                /* Offcanvas title */
-                #offcanvas-parameters .offcanvas-title,
-                .dashboard-offcanvas .offcanvas-title,
-                .offcanvas .offcanvas-title {
-                    color: ${textColor} !important;
-                }
-
-                /* Offcanvas close button */
-                #offcanvas-parameters .btn-close,
-                .dashboard-offcanvas .btn-close,
-                .offcanvas .btn-close {
-                    filter: ${theme === 'dark' ? 'invert(1) grayscale(100%) brightness(200%)' : 'none'} !important;
-                }
-            `;
-
-            themeStyleElement.textContent = themeCSS;
-            console.log('Injected dynamic CSS styles');
-
-            // Set CSS custom properties for broader coverage
-            document.documentElement.style.setProperty('--app-bg-color', backgroundColor);
-            document.documentElement.style.setProperty('--app-text-color', textColor);
-
-            console.log('=== THEME CALLBACK END ===');
-
-            // Return the new background color for page-content
-            return {
-                'background-color': backgroundColor + ' !important',
-                'color': textColor + ' !important'
-            };
         }
         """,
         Output("page-content", "style", allow_duplicate=True),
