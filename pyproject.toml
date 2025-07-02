@@ -28,7 +28,8 @@ dependencies = [
   "numpy==2.2.3",
   "pandas==2.2.3",
   # "playwright==1.50.1",
-  "plotly_express==0.4.1",
+  "plotly_express",
+  # "plotly_express==0.4.1",
   "polars==1.22.0",
   "pydantic[email]==2.10.6",
   "pydantic-settings==2.7.1",
@@ -44,7 +45,7 @@ dependencies = [
   "pyyaml",
   "uvicorn==0.34.0",
   "dash-draggable==0.1.2",
-  "dash-ag-grid==31.3.0",
+  "dash-ag-grid==31.3.1",
   "tomli",
   "types-requests>=2.32.4.20250611",
 ]
