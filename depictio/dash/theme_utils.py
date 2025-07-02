@@ -247,7 +247,7 @@ def register_theme_callbacks(app):
             
             if (theme === 'dark') {
                 const darkModeCSS = `
-                    /* MultiSelect values fix */
+                    /* MultiSelect selected values fix */
                     .mantine-MultiSelect-values,
                     .mantine-MultiSelect-value,
                     .mantine-MultiSelect-pill,
@@ -257,6 +257,29 @@ def register_theme_callbacks(app):
                     .mantine-MultiSelect-root .mantine-Pill-root,
                     .mantine-MultiSelect-root .mantine-Pill-label {
                         color: #C1C2C5 !important;
+                    }
+                    
+                    /* MultiSelect dropdown options fix */
+                    .mantine-MultiSelect-dropdown,
+                    .mantine-MultiSelect-option,
+                    .mantine-MultiSelect-item,
+                    .mantine-Combobox-dropdown,
+                    .mantine-Combobox-option,
+                    .mantine-Combobox-item,
+                    [data-mantine="MultiSelect"] .mantine-Combobox-option,
+                    [data-mantine="MultiSelect"] .mantine-Combobox-item,
+                    .mantine-MultiSelect-root .mantine-Combobox-option,
+                    .mantine-MultiSelect-root .mantine-Combobox-item {
+                        color: #C1C2C5 !important;
+                        background-color: transparent !important;
+                    }
+                    
+                    /* MultiSelect dropdown container */
+                    .mantine-MultiSelect-dropdown,
+                    .mantine-Combobox-dropdown,
+                    [data-mantine="MultiSelect"] .mantine-Combobox-dropdown {
+                        background-color: #25262b !important;
+                        border-color: #373A40 !important;
                     }
                     
                     /* Slider ticks and labels fix */

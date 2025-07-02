@@ -582,6 +582,14 @@ def register_callbacks_draggable(app):
                     # Handle scenarios where the user clicks on a specific point on the graph
                     if "clickData" in ctx_triggered_prop_id:
                         logger.info("Click data triggered")
+                        # Extract theme from theme_store
+                        theme = (
+                            theme_store
+                            if isinstance(theme_store, str)
+                            else theme_store.get("theme", "light")
+                            if theme_store
+                            else "light"
+                        )
                         updated_children = refresh_children_based_on_click_data(
                             graph_click_data=graph_click_data,
                             graph_ids=graph_ids,
@@ -592,6 +600,7 @@ def register_callbacks_draggable(app):
                             edit_components_mode_button=edit_components_mode_button,
                             TOKEN=TOKEN,
                             dashboard_id=dashboard_id,
+                            theme=theme,
                         )
                         if updated_children:
                             return (
@@ -613,6 +622,14 @@ def register_callbacks_draggable(app):
                     # Handle scenarios where the user selects a range on the graph
                     elif "selectedData" in ctx_triggered_prop_id:
                         logger.info("Selected data triggered")
+                        # Extract theme from theme_store
+                        theme = (
+                            theme_store
+                            if isinstance(theme_store, str)
+                            else theme_store.get("theme", "light")
+                            if theme_store
+                            else "light"
+                        )
                         updated_children = refresh_children_based_on_selected_data(
                             graph_selected_data=graph_selected_data,
                             graph_ids=graph_ids,
@@ -623,6 +640,7 @@ def register_callbacks_draggable(app):
                             edit_components_mode_button=edit_components_mode_button,
                             TOKEN=TOKEN,
                             dashboard_id=dashboard_id,
+                            theme=theme,
                         )
                         if updated_children:
                             return (
@@ -662,6 +680,14 @@ def register_callbacks_draggable(app):
                         # logger.info(f"Stored metadata: {stored_metadata}")
                         # logger.info(f"Interactive components dict: {interactive_components_dict}")
 
+                        # Extract theme from theme_store
+                        theme = (
+                            theme_store
+                            if isinstance(theme_store, str)
+                            else theme_store.get("theme", "light")
+                            if theme_store
+                            else "light"
+                        )
                         new_children = update_interactive_component(
                             stored_metadata,
                             interactive_components_dict,
@@ -669,7 +695,7 @@ def register_callbacks_draggable(app):
                             switch_state=edit_components_mode_button,
                             TOKEN=TOKEN,
                             dashboard_id=dashboard_id,
-                            theme="light",  # TODO: Get theme from store
+                            theme=theme,
                         )
                         return (
                             new_children,
@@ -716,6 +742,14 @@ def register_callbacks_draggable(app):
 
                 stored_metadata = clean_stored_metadata(stored_metadata)
 
+                # Extract theme from theme_store
+                theme = (
+                    theme_store
+                    if isinstance(theme_store, str)
+                    else theme_store.get("theme", "light")
+                    if theme_store
+                    else "light"
+                )
                 new_children = update_interactive_component(
                     stored_metadata,
                     interactive_components_dict,
@@ -723,7 +757,7 @@ def register_callbacks_draggable(app):
                     switch_state=edit_components_mode_button,
                     TOKEN=TOKEN,
                     dashboard_id=dashboard_id,
-                    theme="light",  # TODO: Get theme from store
+                    theme=theme,
                 )
                 state_stored_draggable_children[dashboard_id] = new_children
 

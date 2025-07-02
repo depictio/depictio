@@ -268,6 +268,7 @@ def refresh_children_based_on_click_data(
     edit_components_mode_button,
     TOKEN,
     dashboard_id,
+    theme="light",
 ):
     logger.info(f"Graph click data: {graph_click_data}")
     logger.info(f"Graph ids: {graph_ids}")
@@ -341,7 +342,7 @@ def refresh_children_based_on_click_data(
             switch_state=edit_components_mode_button,
             TOKEN=TOKEN,
             dashboard_id=dashboard_id,
-            theme="light",  # TODO: Get theme from store
+            theme=theme,
         )
         # state_stored_draggable_children[dashboard_id] = new_children
 
@@ -358,6 +359,7 @@ def refresh_children_based_on_selected_data(
     edit_components_mode_button,
     TOKEN,
     dashboard_id,
+    theme="light",
 ):
     selectedData = [
         e
@@ -408,7 +410,7 @@ def refresh_children_based_on_selected_data(
             switch_state=edit_components_mode_button,
             TOKEN=TOKEN,
             dashboard_id=dashboard_id,
-            theme="light",  # TODO: Get theme from store
+            theme=theme,
         )
 
         logger.info(f"New children len : {len(new_children)}")
