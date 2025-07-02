@@ -414,6 +414,17 @@ def register_theme_callbacks(app):
                 .mantine-AppShell-navbar .mantine-NavLink-root .mantine-Text-root,
                 .mantine-AppShell-navbar [data-mantine="NavLink"] .mantine-Text-root {
                     color: #C1C2C5 !important;
+                }
+
+                /* NavLink icons - only inactive ones should use theme color in dark mode */
+                #sidebar .mantine-NavLink-root:not(.mantine-NavLink-active) .iconify,
+                #sidebar .mantine-NavLink-root:not(.mantine-NavLink-active) [class*="iconify"],
+                #sidebar .mantine-NavLink-root:not(.mantine-NavLink-active) svg,
+                .mantine-AppShell-navbar .mantine-NavLink-root:not(.mantine-NavLink-active) .iconify,
+                .mantine-AppShell-navbar .mantine-NavLink-root:not(.mantine-NavLink-active) [class*="iconify"],
+                .mantine-AppShell-navbar .mantine-NavLink-root:not(.mantine-NavLink-active) svg {
+                    color: #C1C2C5 !important;
+                    fill: #C1C2C5 !important;
                 }` : ''}
 
                 /* Avatar container text - fix visibility in dark mode */
