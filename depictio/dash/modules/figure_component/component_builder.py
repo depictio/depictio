@@ -130,6 +130,7 @@ class ComponentBuilder:
             placeholder=param.label,
             disabled=disabled,
             style={"width": "100%"},
+            autoComplete="off",  # Prevent autofill CSS selector issues
         )
 
     def _build_numeric_input(
@@ -149,6 +150,7 @@ class ComponentBuilder:
             max=param.max_value,
             step=step,
             style={"width": "100%"},
+            autoComplete="off",  # Prevent autofill CSS selector issues
         )
 
     def _build_boolean_switch(
@@ -188,6 +190,7 @@ class ComponentBuilder:
                                     placeholder="Min",
                                     disabled=disabled,
                                     size="sm",
+                                    autoComplete="off",  # Prevent autofill CSS selector issues
                                 ),
                             ],
                             width=6,
@@ -202,6 +205,7 @@ class ComponentBuilder:
                                     placeholder="Max",
                                     disabled=disabled,
                                     size="sm",
+                                    autoComplete="off",  # Prevent autofill CSS selector issues
                                 ),
                             ],
                             width=6,
@@ -221,6 +225,7 @@ class ComponentBuilder:
             value=value or "#1f77b4",
             disabled=disabled,
             style={"width": "100%", "height": "38px"},
+            autoComplete="off",  # Prevent autofill CSS selector issues
         )
 
 
