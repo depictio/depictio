@@ -1,5 +1,5 @@
-import inspect
-import re
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
@@ -11,6 +11,9 @@ from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+from .definitions import get_visualization_definition
+from .models import ComponentConfig
 
 
 def build_figure_frame(index, children=None):
@@ -78,65 +81,254 @@ def build_figure_frame(index, children=None):
         )
 
 
+# Configuration for figure component
+_config = ComponentConfig()
+
 # Cache for sampled data to avoid re-sampling large datasets
 _sampling_cache = {}
 
 
-def render_figure(dict_kwargs, visu_type, df, cutoff=100000, selected_point=None, theme="light"):
-    # Add the appropriate Plotly template based on the theme
+# Plotly Express function mapping - dynamically get all available functions
+def _get_plotly_functions():
+    """Get all available Plotly Express plotting functions."""
+    functions = {}
+    for name in dir(px):
+        obj = getattr(px, name)
+        if callable(obj) and not name.startswith("_"):
+            # Check if it's a plotting function (has 'data_frame' parameter)
+            try:
+                import inspect
+
+                sig = inspect.signature(obj)
+                if "data_frame" in sig.parameters:
+                    functions[name] = obj
+            except (ValueError, TypeError):
+                pass
+    return functions
+
+
+# Initialize with all available functions
+PLOTLY_FUNCTIONS = _get_plotly_functions()
+
+
+def _get_required_parameters(visu_type: str) -> List[str]:
+    """Get required parameters for a visualization type using dynamic discovery.
+
+    Args:
+        visu_type: Visualization type name
+
+    Returns:
+        List of required parameter names
+    """
+    try:
+        # Use the visualization definition to get required parameters
+        viz_def = get_visualization_definition(visu_type)
+        required_params = []
+
+        # Extract required parameters from the definition
+        for param in viz_def.parameters:
+            if param.required:
+                required_params.append(param.name)
+
+        # If no required parameters found in definition, use common fallbacks
+        if not required_params:
+            # Basic fallbacks for common visualization types
+            if visu_type.lower() in ["histogram", "box", "violin"]:
+                required_params = ["x"] if visu_type.lower() == "histogram" else ["y"]
+            elif visu_type.lower() in ["pie", "sunburst", "treemap"]:
+                required_params = ["values"]
+            else:
+                required_params = ["x", "y"]  # Default for most plots
+
+        return required_params
+
+    except Exception:
+        # Fallback if visualization definition not found
+        return ["x", "y"]
+
+
+def render_figure(
+    dict_kwargs: Dict[str, Any],
+    visu_type: str,
+    df: pl.DataFrame,
+    cutoff: int = 100000,
+    selected_point: Optional[Dict] = None,
+    theme: str = "light",
+) -> Any:
+    """Render a Plotly figure with robust parameter handling.
+
+    Args:
+        dict_kwargs: Figure parameters
+        visu_type: Visualization type
+        df: Data as Polars DataFrame
+        cutoff: Maximum data points before sampling
+        selected_point: Point to highlight
+        theme: Theme ('light' or 'dark')
+
+    Returns:
+        Plotly figure object
+    """
+    # Validate visualization type
+    if visu_type.lower() not in PLOTLY_FUNCTIONS:
+        logger.warning(f"Unknown visualization type: {visu_type}, falling back to scatter")
+        visu_type = "scatter"
+
+    # Add theme-appropriate template
     if "template" not in dict_kwargs:
         dict_kwargs["template"] = "mantine_dark" if theme == "dark" else "mantine_light"
 
-    logger.info("=== FIGURE RENDER DEBUG ===")
-    logger.info(f"Theme received: {theme}")
-    logger.info(f"Template selected: {dict_kwargs.get('template', 'None')}")
-    logger.info(f"Dict kwargs keys: {list(dict_kwargs.keys())}")
+    logger.info("=== FIGURE RENDER ===")
+    logger.info(f"Visualization: {visu_type}")
+    logger.info(f"Theme: {theme}")
+    logger.info(f"Template: {dict_kwargs.get('template')}")
+    logger.info(f"Data shape: {df.shape if df is not None else 'None'}")
+    logger.info(f"Parameters: {list(dict_kwargs.keys())}")
 
-    if dict_kwargs and visu_type.lower() in plotly_vizu_dict and df is not None:
+    # Handle empty or invalid data
+    if df is None or df.is_empty():
+        logger.warning("Empty or invalid dataframe, creating empty figure")
+        return px.scatter(template=dict_kwargs.get("template", "plotly_white"))
+
+    # Clean parameters - remove None values and invalid parameters
+    cleaned_kwargs = {k: v for k, v in dict_kwargs.items() if v is not None}
+
+    # Check if required parameters are missing for the visualization type
+    required_params = _get_required_parameters(visu_type.lower())
+    missing_params = [param for param in required_params if param not in cleaned_kwargs]
+
+    if missing_params:
+        logger.warning(
+            f"Missing required parameters for {visu_type}: {missing_params}. Available columns: {df.columns}"
+        )
+        # Create a fallback figure with helpful message
+        title = f"Please select {', '.join(missing_params).upper()} column(s) to create {visu_type} plot"
+        return px.scatter(template=dict_kwargs.get("template", "plotly_white"), title=title)
+
+    try:
+        # Get the appropriate Plotly function
+        plot_function = PLOTLY_FUNCTIONS[visu_type.lower()]
+
+        # Handle large datasets with sampling
         if df.height > cutoff:
-            # Use caching for sampled data to improve performance
-            cache_key = f"{id(df)}_{cutoff}_{hash(str(dict_kwargs))}"
-            if cache_key not in _sampling_cache:
-                _sampling_cache[cache_key] = df.sample(n=cutoff, seed=0).to_pandas()
-                logger.debug(
-                    f"Figure: Cached sampled data for large dataset (cache_key: {cache_key})"
-                )
-            else:
-                logger.debug(f"Figure: Using cached sampled data (cache_key: {cache_key})")
+            cache_key = f"{id(df)}_{cutoff}_{hash(str(cleaned_kwargs))}"
 
-            figure = plotly_vizu_dict[visu_type.lower()](_sampling_cache[cache_key], **dict_kwargs)
+            if cache_key not in _sampling_cache:
+                sampled_df = df.sample(n=cutoff, seed=0).to_pandas()
+                _sampling_cache[cache_key] = sampled_df
+                logger.info(f"Cached sampled data: {cutoff} points from {df.height}")
+            else:
+                sampled_df = _sampling_cache[cache_key]
+                logger.info(f"Using cached sampled data: {cutoff} points")
+
+            figure = plot_function(sampled_df, **cleaned_kwargs)
         else:
             figure = plotly_vizu_dict[visu_type.lower()](df.to_pandas(), **dict_kwargs)
     else:
         figure = px.scatter(template=dict_kwargs.get("template", "mantine_light"))
 
-    if selected_point:
+        # Apply responsive sizing
+        if _config.responsive_sizing:
+            figure.update_layout(
+                autosize=True,
+                margin=dict(l=40, r=40, t=40, b=40),
+                height=None,  # Let container control height
+            )
+
+        # Highlight selected point if provided
+        if selected_point and "x" in cleaned_kwargs and "y" in cleaned_kwargs:
+            _highlight_selected_point(figure, df, cleaned_kwargs, selected_point)
+
+        return figure
+
+    except Exception as e:
+        logger.error(f"Error creating figure: {e}")
+        # Return fallback figure
+        return px.scatter(
+            template=dict_kwargs.get("template", "plotly_white"), title=f"Error: {str(e)}"
+        )
+
+
+def _highlight_selected_point(figure, df, dict_kwargs, selected_point):
+    """Highlight a selected point on the figure."""
+    try:
         selected_x = selected_point["x"]
         selected_y = selected_point["y"]
 
-        # Optimized: Single vectorized operation instead of multiple list comprehensions
         x_col = df[dict_kwargs["x"]]
         y_col = df[dict_kwargs["y"]]
 
         # Create boolean mask for selected points
         is_selected = (x_col == selected_x) & (y_col == selected_y)
 
-        # Use vectorized operations for better performance
+        # Update marker colors
         colors = ["red" if sel else "blue" for sel in is_selected]
         opacities = [1.0 if sel else 0.3 for sel in is_selected]
 
-        # Update marker colors with optimized data
-        figure.update_traces(
-            marker=dict(
-                color=colors,
-                opacity=opacities,
-            )
-        )
-
-    return figure
+        figure.update_traces(marker=dict(color=colors, opacity=opacities))
+    except Exception as e:
+        logger.warning(f"Failed to highlight selected point: {e}")
 
 
-def build_figure(**kwargs):
+def get_available_columns(df: pl.DataFrame) -> Dict[str, List[str]]:
+    """Get available columns categorized by data type.
+
+    Args:
+        df: Polars DataFrame
+
+    Returns:
+        Dictionary with column categories
+    """
+    if df is None or df.is_empty():
+        return {"all": [], "numeric": [], "categorical": [], "datetime": []}
+
+    columns = {"all": df.columns, "numeric": [], "categorical": [], "datetime": []}
+
+    for col in df.columns:
+        dtype = str(df[col].dtype)
+        if dtype in ["Int64", "Float64", "Int32", "Float32"]:
+            columns["numeric"].append(col)
+        elif dtype in ["Utf8", "Boolean"]:
+            columns["categorical"].append(col)
+        elif "Date" in dtype or "Time" in dtype:
+            columns["datetime"].append(col)
+
+    return columns
+
+
+def validate_parameters(visu_type: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
+    """Validate and clean parameters for a visualization type.
+
+    Args:
+        visu_type: Visualization type
+        parameters: Raw parameters
+
+    Returns:
+        Validated and cleaned parameters
+    """
+    try:
+        viz_def = get_visualization_definition(visu_type)
+        valid_params = {p.name for p in viz_def.parameters}
+
+        # Filter to valid parameters only
+        cleaned = {k: v for k, v in parameters.items() if k in valid_params and v is not None}
+
+        logger.info(f"Validated parameters for {visu_type}: {list(cleaned.keys())}")
+        return cleaned
+
+    except Exception as e:
+        logger.warning(f"Parameter validation failed: {e}, returning original")
+        return {k: v for k, v in parameters.items() if v is not None}
+
+
+def build_figure(**kwargs) -> html.Div:
+    """Build figure component with robust parameter handling.
+
+    Args:
+        **kwargs: Figure configuration parameters
+
+    Returns:
+        Figure component as HTML div
+    """
     index = kwargs.get("index")
     dict_kwargs = kwargs.get("dict_kwargs", {})
     visu_type = kwargs.get("visu_type", "scatter")
@@ -150,19 +342,14 @@ def build_figure(**kwargs):
     filter_applied = kwargs.get("filter_applied", False)
     theme = kwargs.get("theme", "light")
 
-    # selected_point = kwargs.get("selected_point")  # New parameter for selected point
+    logger.info(f"Building figure component {index}")
+    logger.info(f"Visualization type: {visu_type}")
+    logger.info(f"Theme: {theme}")
 
-    logger.info(f"Building figure with index {index}")
-    # logger.info(f"Dict kwargs: {dict_kwargs}")
-    # logger.info(f"Visu type: {visu_type}")
-    # logger.info(f"WF ID: {wf_id}")
-    # logger.info(f"DC ID: {dc_id}")
-    # logger.info(f"DC config: {dc_config}")
-    # logger.info(f"Build frame: {build_frame}")
-    # logger.info(f"Selected Point: {selected_point}")
-
+    # Clean the component index
     store_index = index.replace("-tmp", "") if index else "unknown"
 
+    # Create component metadata
     store_component_data = {
         "index": str(store_index),
         "component_type": "figure",
@@ -173,314 +360,156 @@ def build_figure(**kwargs):
         "dc_config": dc_config,
         "parent_index": parent_index,
         "filter_applied": filter_applied,
+        "last_updated": datetime.now().isoformat(),
     }
 
-    dict_kwargs = {k: v for k, v in dict_kwargs.items() if v is not None}
+    # Validate and clean parameters
+    validated_kwargs = validate_parameters(visu_type, dict_kwargs)
 
-    # wf_id, dc_id = return_mongoid(workflow_id=wf_id, data_collection_id=dc_id)
-    if df.is_empty():
-        # Check if we're in a refresh context where we should load new data
-        if kwargs.get("refresh", True):
-            logger.info(
-                f"Figure component {index}: Loading delta table for {wf_id}:{dc_id} (no pre-loaded df)"
-            )
-            # Validate that we have valid IDs before calling load_deltatable_lite
-            if not wf_id or not dc_id:
-                logger.warning(f"Missing workflow_id ({wf_id}) or data_collection_id ({dc_id})")
-                df = pl.DataFrame()  # Return empty DataFrame if IDs are missing
-            else:
+    # Handle data loading
+    if df.is_empty() and kwargs.get("refresh", True):
+        if wf_id and dc_id:
+            logger.info(f"Loading data for {wf_id}:{dc_id}")
+            try:
                 df = load_deltatable_lite(ObjectId(wf_id), ObjectId(dc_id), TOKEN=TOKEN)
+            except Exception as e:
+                logger.error(f"Failed to load data: {e}")
+                df = pl.DataFrame()
         else:
-            # If refresh=False and df is empty, this means filters resulted in no data
-            # Keep the empty DataFrame to properly reflect the filtered state
-            logger.info(
-                f"Figure component {index}: Using empty DataFrame from filters (shape: {df.shape}) - filters exclude all data"
-            )
-    else:
-        logger.debug(f"Figure component {index}: Using pre-loaded DataFrame (shape: {df.shape})")
+            logger.warning(f"Missing workflow_id ({wf_id}) or data_collection_id ({dc_id})")
 
-    # figure = render_figure(dict_kwargs, visu_type, df)
+    # Create the figure
+    try:
+        figure = render_figure(validated_kwargs, visu_type, df, theme=theme)
+    except Exception as e:
+        logger.error(f"Failed to render figure: {e}")
+        figure = px.scatter(title=f"Error: {str(e)}")
 
-    # selected_point = df.sample(n=1).to_dicts()[0]
-    # logger.info(f"Selected point: {selected_point}")
-    # logger.info(f"Dict kwargs: {dict_kwargs}")
-    # selected_point = {"x": selected_point[dict_kwargs["x"]], "y": selected_point[dict_kwargs["y"]]}
-    logger.debug(f"Figure theme: {theme}")
+    # Create info badges
+    badges = _create_info_badges(index or "unknown", df, visu_type, filter_applied, build_frame)
 
-    figure = render_figure(dict_kwargs, visu_type, df, theme=theme)
-
-    style_partial_data_displayed = {"display": "none"}
-    cutoff = 100000
-    if build_frame:
-        if visu_type.lower() == "scatter" and df.shape[0] > cutoff:
-            style_partial_data_displayed = {"display": "block"}
-
-    partial_data_badge = dmc.Tooltip(
-        children=dmc.Badge(
-            "Partial data displayed",
-            id={"type": "graph-partial-data-displayed", "index": index},
-            style=style_partial_data_displayed,
-            leftSection=DashIconify(
-                icon="mdi:alert-circle",
-                width=20,
-            ),
-            # sx={"paddingLeft": 0},
-            size="lg",
-            radius="xl",
-            color="red",
-            fullWidth=False,
-        ),
-        label=f"Scatter plots are only displayed with a maximum of {cutoff} points.",
-        position="top",
-        openDelay=500,
-    )
-    # dc_config["filter_applied"] = True
-    filter_badge_style = {"display": "none"}
-    if filter_applied:
-        if visu_type.lower() == "scatter":
-            filter_badge_style = {"display": "block"}
-    logger.debug(f"Filter applied: {filter_applied}")
-    logger.debug(f"Filter badge style: {filter_badge_style}")
-
-    filter_badge = dmc.Tooltip(
-        children=dmc.Badge(
-            "Filter applied",
-            id={"type": "graph-filter-badge", "index": index},
-            style=filter_badge_style,
-            leftSection=DashIconify(
-                icon="mdi:filter",
-                width=20,
-            ),
-            size="lg",
-            radius="xl",
-            color="orange",
-            fullWidth=False,
-        ),
-        label="Data displayed in the plot was filtered.",
-        position="top",
-        openDelay=500,
-    )
-
-    row_badges = html.Div()
-    if build_frame:
-        row_badges = dbc.Row(
-            dmc.Group(
-                [partial_data_badge, filter_badge],
-                grow=False,
-                gap="xl",
-                style={"margin-left": "12px"},
-            )
-        )
-
+    # Create figure component
     figure_div = html.Div(
         [
-            row_badges,
+            badges,
             dcc.Graph(
-                # figure,
                 figure=figure,
                 id={"type": "graph", "index": index},
-                config={"editable": True, "scrollZoom": True},
+                config={
+                    "editable": True,
+                    "scrollZoom": True,
+                    "responsive": True,
+                    "displayModeBar": True,
+                },
+                style={"width": "100%", "height": "100%"},
             ),
-            # f"TEST-GRAPH-{id['index']}",
             dcc.Store(
                 data=store_component_data,
-                id={
-                    "type": "stored-metadata-component",
-                    "index": index,
-                },
+                id={"type": "stored-metadata-component", "index": index},
             ),
         ]
     )
+
+    return build_figure_frame(index, children=figure_div) if build_frame else figure_div
+
+
+def _create_info_badges(
+    index: str, df: pl.DataFrame, visu_type: str, filter_applied: bool, build_frame: bool
+) -> html.Div:
+    """Create informational badges for the figure."""
     if not build_frame:
-        return figure_div
-    else:
-        return build_figure_frame(index, children=figure_div)
+        return html.Div()
 
+    badges = []
+    cutoff = _config.max_data_points
 
-def extract_info_from_docstring(docstring):
-    """
-    Extract information from a docstring and return a dictionary with the parameters and their types
-    """
-    lines = docstring.split("\n")
-    parameters_section = False
-    result = {}
-
-    # Iterate over the lines in the docstring
-    for line in lines:
-        # Check if the line starts with 'Parameters'
-        if line.startswith("Parameters"):
-            parameters_section = True
-            continue
-        # Check if the line starts with 'Returns'
-        if parameters_section:
-            if line.startswith("    ") is False:
-                line_processed = line.split(": ")
-                # Check if the line contains a parameter and a type
-                if len(line_processed) == 2:
-                    # Get the parameter and the type and add them to the result dictionary
-                    parameter, type = line_processed[0], line_processed[1]
-                    result[parameter] = {"type": type, "description": list()}
-                else:
-                    continue
-            # If the line starts with 4 spaces, it is a description of the parameter
-            elif line.startswith("    ") is True:
-                result[parameter]["description"].append(line.strip())
-
-    return result
-
-
-def process_json_from_docstring(data):
-    """
-    Process the JSON data extracted from the docstring to add the processed type and options
-    """
-    for key, value in data.items():
-        # Get the type associated with the field
-        field_type = value.get("type")
-        description = " ".join(value.get("description"))
-
-        # Check if there are any options available for the field
-        options = []
-        # Check if the description contains 'One of'
-        if "One of" in description:
-            # The options are usually listed after 'One of'
-            option_str = description.split("One of")[-1].split(".")[0]
-            options = list(set(re.findall("`'(.*?)'`", option_str)))
-        elif "one of" in data[key]["type"]:
-            option_str = data[key]["type"].split("one of")[-1]
-            options = list(set(re.findall("`'(.*?)'`", option_str)))
-
-        if options:
-            data[key]["options"] = options
-
-        if "Series or array-like" in field_type:
-            data[key]["processed_type"] = "column"
-        else:
-            data[key]["processed_type"] = data[key]["type"].split(" ")[0].split(",")[0]
-    return data
-
-
-# Cache for parameter information to avoid re-processing docstrings
-_param_info_cache = {}
-
-
-def get_param_info(plotly_vizu_list):
-    # Use caching to avoid re-processing docstrings on every call
-    cache_key = tuple(func.__name__ for func in plotly_vizu_list)
-
-    if cache_key in _param_info_cache:
-        logger.debug("Figure: Using cached parameter info")
-        return _param_info_cache[cache_key]
-
-    logger.debug("Figure: Processing parameter info from docstrings")
-    param_info = {}
-    for func in plotly_vizu_list:
-        param_info[func.__name__] = extract_info_from_docstring(func.__doc__)
-        param_info[func.__name__] = process_json_from_docstring(param_info[func.__name__])
-
-    _param_info_cache[cache_key] = param_info
-    return param_info
-
-
-# FIXME: find another way than inspect.signature to get the parameters, not stable enough for long term support
-# TODO: export this to a separate file in order to be used in the frontend
-
-
-def get_common_params(plotly_vizu_list):
-    """
-    Get the common parameters between a list of Plotly visualizations
-    """
-    # Iterate over the list of visualizations and get the parameters, then get the common ones
-    if not plotly_vizu_list:
-        return set(), []
-
-    param_sets = [set(inspect.signature(func).parameters.keys()) for func in plotly_vizu_list]
-    common_params = param_sets[0].intersection(*param_sets[1:]) if param_sets else set()
-    # Sort the common parameters based on the order of the first visualization
-    common_param_names = [p for p in list(common_params)]
-    common_param_names.sort(
-        key=lambda x: list(inspect.signature(plotly_vizu_list[0]).parameters).index(x)
-    )
-    return common_params, common_param_names
-
-
-def get_specific_params(plotly_vizu_list, common_params):
-    """
-    Get the specific parameters for each visualization in a list of Plotly visualizations
-    """
-    # Iterate over the list of visualizations and get the specific parameters
-    specific_params = {}
-    for vizu_func in plotly_vizu_list:
-        func_params = inspect.signature(vizu_func).parameters
-        param_names = list(func_params.keys())
-        common_params_tmp = (
-            common_params.intersection(func_params.keys())
-            if common_params
-            else set(func_params.keys())
+    # Partial data badge
+    if visu_type.lower() == "scatter" and not df.is_empty() and df.shape[0] > cutoff:
+        partial_badge = dmc.Tooltip(
+            children=dmc.Badge(
+                "Partial data displayed",
+                id={"type": "graph-partial-data-displayed", "index": index},
+                leftSection=DashIconify(icon="mdi:alert-circle", width=20),
+                size="lg",
+                radius="xl",
+                color="red",
+            ),
+            label=f"Showing {cutoff:,} of {df.shape[0]:,} points for performance.",
+            position="top",
+            openDelay=500,
         )
-        specific_params[vizu_func.__name__] = [p for p in param_names if p not in common_params_tmp]
-    return specific_params
+        badges.append(partial_badge)
+
+    # Filter applied badge
+    if filter_applied:
+        filter_badge = dmc.Tooltip(
+            children=dmc.Badge(
+                "Filter applied",
+                id={"type": "graph-filter-badge", "index": index},
+                leftSection=DashIconify(icon="mdi:filter", width=20),
+                size="lg",
+                radius="xl",
+                color="orange",
+            ),
+            label="Data has been filtered.",
+            position="top",
+            openDelay=500,
+        )
+        badges.append(filter_badge)
+
+    if badges:
+        return html.Div(dbc.Row(dmc.Group(badges, gap="md", style={"margin-left": "12px"})))
+
+    return html.Div()
 
 
-########################################
+def create_stepper_figure_button(n, disabled=False):
+    """Create the stepper figure button.
 
-# TODO: move this to a separate file
+    Args:
+        n: Button index
+        disabled: Whether button is disabled
 
-# Define the elements for the dropdown menu
-base_elements = ["x", "y", "color"]
+    Returns:
+        Button and store components
+    """
+    from depictio.dash.utils import UNSELECTED_STYLE
 
-# Define allowed types and the corresponding Bootstrap components
-allowed_types = ["str", "int", "float", "boolean", "column"]
-plotly_bootstrap_mapping = {
-    "str": dbc.Input,
-    "int": dbc.Input,
-    "float": dbc.Input,
-    "boolean": dbc.Checklist,
-    "column": dcc.Dropdown,
-    "list": dcc.Dropdown,
-}
-
-# Define the list of Plotly visualizations
-plotly_vizu_list = [px.scatter, px.line, px.bar, px.histogram, px.box]
-
-# Map visualization function names to the functions themselves
-plotly_vizu_dict = {vizu_func.__name__: vizu_func for vizu_func in plotly_vizu_list}
-
-# Get common and specific parameters for the visualizations
-common_params, common_params_names = get_common_params(plotly_vizu_list)
-# print("\n")
-# print("common_params", common_params)
-# print("\n")
-specific_params = get_specific_params(plotly_vizu_list, common_params)
-
-# print(common_params)
-# print(common_params_names)
-# print(specific_params)
-
-# Generate parameter information and dropdown options
-param_info = get_param_info(plotly_vizu_list)
-# dropdown_options = get_dropdown_options(df)
+    button = dbc.Col(
+        dmc.Button(
+            "Figure",
+            id={
+                "type": "btn-option",
+                "index": n,
+                "value": "Figure",
+            },
+            n_clicks=0,
+            style=UNSELECTED_STYLE,
+            size="xl",
+            color="grape",
+            leftSection=DashIconify(icon="mdi:graph-box", color="white"),
+            disabled=disabled,
+        )
+    )
+    store = dcc.Store(
+        id={
+            "type": "store-btn-option",
+            "index": n,
+            "value": "Figure",
+        },
+        data=0,
+        storage_type="memory",
+    )
+    return button, store
 
 
-# Identify the parameters not in the dropdown elements
-secondary_common_params = [
-    e
-    for e in common_params_names[1:]
-    # e for e in common_params_names[1:] if e not in dropdown_elements
-]
-secondary_common_params_lite = [
-    e
-    for e in secondary_common_params
-    if e
-    not in [
-        "category_orders",
-        "color_discrete_sequence",
-        "color_discrete_map",
-        "log_x",
-        "log_y",
-        "labels",
-        "range_x",
-        "range_y",
-    ]
-]
-# print(secondary_common_params)
-# print("\n")
+# Legacy exports for backward compatibility
+# These will be removed in future versions
+def get_available_visualizations():
+    """Get available visualization types."""
+    return list(PLOTLY_FUNCTIONS.keys())
+
+
+def get_visualization_options():
+    """Get visualization options for UI."""
+    return [{"label": name.title(), "value": name} for name in PLOTLY_FUNCTIONS.keys()]
