@@ -384,7 +384,7 @@ layout = html.Div(
                                 """,
                                 "backgroundSize": "contain",
                                 "backgroundRepeat": "no-repeat",
-                                "opacity": "0.4",
+                                "opacity": "0.6",
                                 # Random initial rotation (0-360 degrees) so triangles start in different directions
                                 "transform": f"rotate({(i * 73) % 360}deg)",
                                 # Use CSS animations from assets/app.css
@@ -395,7 +395,7 @@ layout = html.Div(
                                 "animationDelay": f"{(i * 0.7) % 15}s",
                             },
                         )
-                        for i in range(50)  # Increased to 50 triangle particles
+                        for i in range(40)  # 40 triangle particles with optimized performance
                     ],
                 ),
             ],

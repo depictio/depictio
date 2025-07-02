@@ -596,8 +596,8 @@ def register_callbacks_dashboards_management(app):
                                         dmc.Image(
                                             src=default_thumbnail_url,
                                             style={
-                                                "width": "80px",
-                                                "height": "80px",
+                                                "width": "180px",
+                                                "height": "180px",
                                                 "objectFit": "contain",
                                             },
                                             alt="Default dashboard thumbnail",
@@ -612,7 +612,7 @@ def register_callbacks_dashboards_management(app):
                                     ],
                                     style={
                                         "width": "100%",
-                                        "height": "180px",  # Match optimized thumbnail height
+                                        "height": "280px",  # Match optimized thumbnail height
                                         "display": "flex",
                                         "flexDirection": "column",
                                         "alignItems": "center",
@@ -636,7 +636,7 @@ def register_callbacks_dashboards_management(app):
                             src=thumbnail_url,
                             style={
                                 "width": "100%",
-                                "height": "180px",  # Optimized height for 3-column layout
+                                "height": "280px",  # Optimized height for 3-column layout
                                 "objectFit": "cover",  # Fill container completely
                                 "objectPosition": "center center",  # Center the image content
                                 "borderRadius": "8px 8px 0 0",

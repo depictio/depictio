@@ -65,6 +65,7 @@
     animation-iteration-count: infinite;
 }
 
+/* Auth modal styling - theme aware */
 .auth-modal-content {
     position: relative;
     z-index: 10000;
@@ -72,6 +73,57 @@
     background: rgba(255, 255, 255, 0.95);
     border-radius: 16px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Dark theme auth modal */
+[data-mantine-color-scheme="dark"] .auth-modal-content {
+    background: rgba(37, 38, 43, 0.95) !important;
+    color: #C1C2C5 !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Auth modal text elements */
+.auth-modal-content .mantine-Title-root,
+.auth-modal-content [data-mantine="Title"],
+.auth-modal-content .mantine-Text-root,
+.auth-modal-content [data-mantine="Text"] {
+    color: inherit;
+    transition: color 0.2s ease;
+}
+
+/* Dark theme text colors */
+[data-mantine-color-scheme="dark"] .auth-modal-content .mantine-Title-root,
+[data-mantine-color-scheme="dark"] .auth-modal-content [data-mantine="Title"],
+[data-mantine-color-scheme="dark"] .auth-modal-content .mantine-Text-root,
+[data-mantine-color-scheme="dark"] .auth-modal-content [data-mantine="Text"] {
+    color: #C1C2C5 !important;
+}
+
+/* Auth modal form elements */
+.auth-modal-content .mantine-TextInput-root,
+.auth-modal-content .mantine-PasswordInput-root,
+.auth-modal-content .mantine-TextInput-input,
+.auth-modal-content .mantine-PasswordInput-input {
+    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+/* Dark theme form elements */
+[data-mantine-color-scheme="dark"] .auth-modal-content .mantine-TextInput-input,
+[data-mantine-color-scheme="dark"] .auth-modal-content .mantine-PasswordInput-input {
+    background-color: #25262b !important;
+    color: #C1C2C5 !important;
+    border-color: #373A40 !important;
+}
+
+[data-mantine-color-scheme="dark"] .auth-modal-content .mantine-TextInput-label,
+[data-mantine-color-scheme="dark"] .auth-modal-content .mantine-PasswordInput-label {
+    color: #C1C2C5 !important;
+}
+
+/* Auth modal buttons */
+.auth-modal-content .mantine-Button-root {
+    transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 /* Dash debug menu styling - no interference with functionality */
