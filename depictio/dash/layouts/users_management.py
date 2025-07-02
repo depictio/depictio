@@ -410,15 +410,15 @@ layout = html.Div(
                                 """,
                                 "backgroundSize": "contain",
                                 "backgroundRepeat": "no-repeat",
-                                "opacity": "0.4",
-                                # Random initial rotation (0-360 degrees) so triangles start in different directions
-                                "transform": f"rotate({(i * 73) % 360}deg)",
-                                # Use CSS animations from assets/app.css
-                                "animationName": f"triangleParticle{i % 7}",
-                                "animationDuration": f"{10 + (i * 3) % 30}s",
+                                "opacity": "0.55",  # Increased opacity
+                                # Remove initial transform to prevent conflicts with CSS animation
+                                # Use CSS animations from assets/app.css (0-7 animations available)
+                                "animationName": f"triangleParticle{i % 8}",
+                                "animationDuration": f"{12 + (i * 2) % 18}s",  # Slower, more consistent timing
                                 "animationIterationCount": "infinite",
-                                "animationTimingFunction": "ease-in-out",
-                                "animationDelay": f"{(i * 0.7) % 15}s",
+                                "animationTimingFunction": "cubic-bezier(0.4, 0.0, 0.2, 1)",  # Smooth timing
+                                "animationDelay": f"{(i * 0.5) % 10}s",  # Reduced delay spread
+                                "animationFillMode": "both",  # Maintain first frame before animation starts
                             },
                         )
                         for i in range(50)  # Increased to 50 triangle particles
