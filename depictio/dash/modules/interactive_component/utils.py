@@ -29,13 +29,13 @@ def build_interactive_frame(index, children=None):
                 # },
             ),
             style={
-            #     "width": "100%",
-            #     "height": "100%",  # Ensure the card fills the container's height
-            #     "padding": "0",  # Remove default padding
-            #     "margin": "0",  # Remove default margin
-            #     "boxShadow": "none",  # Optional: Remove shadow for a cleaner look
-            #     # "border": "1px solid #ddd",  # Optional: Add a light border
-            #     # "borderRadius": "4px",  # Optional: Slightly round the corners
+                #     "width": "100%",
+                #     "height": "100%",  # Ensure the card fills the container's height
+                #     "padding": "0",  # Remove default padding
+                #     "margin": "0",  # Remove default margin
+                #     "boxShadow": "none",  # Optional: Remove shadow for a cleaner look
+                #     # "border": "1px solid #ddd",  # Optional: Add a light border
+                #     # "borderRadius": "4px",  # Optional: Slightly round the corners
                 "border": "0px",  # Optional: Remove border
             },
             id={

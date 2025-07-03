@@ -84,7 +84,7 @@ depictio/dash/
 ### For Users
 1. **Automatic**: Theme matches your computer automatically
 2. **Manual Light**: Click theme switch to force light theme
-3. **Manual Dark**: Click theme switch to force dark theme  
+3. **Manual Dark**: Click theme switch to force dark theme
 4. **Back to Auto**: Click "🔄 Auto" button to re-enable automatic detection
 
 ### For Developers
@@ -102,7 +102,7 @@ auto_button = create_auto_theme_button()
 ## Browser Compatibility
 
 - **Chrome/Edge**: Full support
-- **Firefox**: Full support  
+- **Firefox**: Full support
 - **Safari**: Full support
 - **Mobile**: Full support on modern browsers
 

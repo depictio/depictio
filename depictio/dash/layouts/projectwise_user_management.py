@@ -1190,8 +1190,8 @@ def register_projectwise_user_management_callbacks(app):
     )
     def update_ag_grid_theme(theme_data):
         """Update AG Grid theme class based on current theme."""
-        theme = theme_data or 'light'
-        if theme == 'dark':
+        theme = theme_data or "light"
+        if theme == "dark":
             return "ag-theme-alpine-dark"
         else:
             return "ag-theme-alpine"

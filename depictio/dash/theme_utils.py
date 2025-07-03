@@ -671,13 +671,13 @@ def register_theme_callbacks(app):
                 // Update auth modal specifically
                 const authModalContent = document.querySelector('.auth-modal-content');
                 if (authModalContent) {
-                    const modalBg = theme === 'dark' 
-                        ? 'rgba(37, 38, 43, 0.95)' 
+                    const modalBg = theme === 'dark'
+                        ? 'rgba(37, 38, 43, 0.95)'
                         : 'rgba(255, 255, 255, 0.95)';
                     const modalShadow = theme === 'dark'
                         ? '0 8px 32px rgba(0, 0, 0, 0.3)'
                         : '0 8px 32px rgba(0, 0, 0, 0.1)';
-                    
+
                     safeApplyStyles(authModalContent, {
                         'background': modalBg,
                         'color': textColor,
