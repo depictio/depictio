@@ -114,67 +114,67 @@ body.theme-manual-dark .auth-modal-content {
 
 /* GPU-optimized animations with increased movement */
 @keyframes backgroundDrift {
-    0%, 100% { 
+    0%, 100% {
         transform: translate3d(0, 0, 0) rotate(0deg);
     }
-    25% { 
+    25% {
         transform: translate3d(15px, -10px, 0) rotate(1deg);
     }
-    50% { 
+    50% {
         transform: translate3d(-10px, 15px, 0) rotate(-1deg);
     }
-    75% { 
+    75% {
         transform: translate3d(-15px, -5px, 0) rotate(0.5deg);
     }
 }
 
 @keyframes triangleFloat {
-    0%, 100% { 
+    0%, 100% {
         transform: translate3d(0, 0, 0) rotate(0deg);
         opacity: 0.2;
     }
-    25% { 
+    25% {
         transform: translate3d(25px, -20px, 0) rotate(90deg);
         opacity: 0.5;
     }
-    50% { 
+    50% {
         transform: translate3d(35px, 10px, 0) rotate(180deg);
         opacity: 0.4;
     }
-    75% { 
+    75% {
         transform: translate3d(15px, 30px, 0) rotate(270deg);
         opacity: 0.45;
     }
 }
 
 @keyframes triangleDrift {
-    0%, 100% { 
+    0%, 100% {
         transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
         opacity: 0.3;
     }
-    33% { 
+    33% {
         transform: translate3d(40px, -25px, 0) rotate(120deg) scale(1.1);
         opacity: 0.5;
     }
-    66% { 
+    66% {
         transform: translate3d(-30px, 20px, 0) rotate(240deg) scale(0.9);
         opacity: 0.4;
     }
 }
 
 @keyframes trianglePulse {
-    0%, 100% { 
+    0%, 100% {
         opacity: 0.2;
         transform: scale3d(1, 1, 1) rotate(0deg) translate3d(0, 0, 0);
     }
-    50% { 
+    50% {
         opacity: 0.6;
         transform: scale3d(1.2, 1.2, 1) rotate(180deg) translate3d(20px, -15px, 0);
     }
 }
 
 @keyframes triangleRotate {
-    0% { 
+    0% {
         transform: rotate(0deg) translate3d(0, 0, 0);
         opacity: 0.25;
     }
@@ -190,49 +190,49 @@ body.theme-manual-dark .auth-modal-content {
         transform: rotate(270deg) translate3d(-25px, 0, 0);
         opacity: 0.45;
     }
-    100% { 
+    100% {
         transform: rotate(360deg) translate3d(0, 0, 0);
         opacity: 0.25;
     }
 }
 
 @keyframes triangleOrbit {
-    0%, 100% { 
+    0%, 100% {
         transform: translate3d(0, 0, 0) rotate(0deg);
         opacity: 0.3;
     }
-    25% { 
+    25% {
         transform: translate3d(45px, -35px, 0) rotate(45deg);
         opacity: 0.5;
     }
-    50% { 
+    50% {
         transform: translate3d(50px, 40px, 0) rotate(180deg);
         opacity: 0.4;
     }
-    75% { 
+    75% {
         transform: translate3d(-40px, 30px, 0) rotate(315deg);
         opacity: 0.45;
     }
 }
 
 @keyframes triangleWave {
-    0%, 100% { 
+    0%, 100% {
         transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
         opacity: 0.25;
     }
-    20% { 
+    20% {
         transform: translate3d(20px, -30px, 0) rotate(72deg) scale(1.05);
         opacity: 0.4;
     }
-    40% { 
+    40% {
         transform: translate3d(35px, 15px, 0) rotate(144deg) scale(0.95);
         opacity: 0.5;
     }
-    60% { 
+    60% {
         transform: translate3d(-25px, 35px, 0) rotate(216deg) scale(1.1);
         opacity: 0.45;
     }
-    80% { 
+    80% {
         transform: translate3d(-35px, -20px, 0) rotate(288deg) scale(0.9);
         opacity: 0.35;
     }
