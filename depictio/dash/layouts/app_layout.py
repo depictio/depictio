@@ -1,5 +1,3 @@
-import dash
-
 # import dash_bootstrap_components as dbc  # Not needed for AppShell layout
 import dash_mantine_components as dmc
 from dash import dcc, html
@@ -150,7 +148,14 @@ def handle_authenticated_user(pathname, local_data):
         return about_layout, header, pathname, local_data
     else:
         # Fallback to dashboards if path is unrecognized
-        return dash.no_update, dash.no_update, "/dashboards", local_data
+        user = api_call_fetch_user_from_token(local_data["access_token"])
+        # Check if user is anonymous
+        is_anonymous = hasattr(user, "is_anonymous") and user.is_anonymous
+
+        create_button = return_create_dashboard_button(user.email, is_anonymous=is_anonymous)
+        header = create_header_with_button("Dashboards", create_button)
+        content = create_dashboards_management_layout()
+        return content, header, "/dashboards", local_data
 
 
 def create_default_header(text):
