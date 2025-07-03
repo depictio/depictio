@@ -103,33 +103,7 @@ describe('Project Permissions Management', () => {
 
     // Helper function to login
     function login(user) {
-        cy.visit('/auth')
-        cy.wait(1000)
-
-        // Check if already logged in by looking for auth modal
-        cy.get('body').then($body => {
-            if ($body.find('#auth-modal').length > 0) {
-                cy.get('#auth-modal').should('be.visible')
-
-                cy.get('input[type="text"][placeholder="Enter your email"]')
-                    .filter(':visible')
-                    .clear()
-                    .type(user.email)
-
-                cy.get('input[type="password"][placeholder="Enter your password"]')
-                    .filter(':visible')
-                    .clear()
-                    .type(user.password)
-
-                cy.contains('Login').click()
-                cy.wait(2000)
-            } else {
-                // Already logged in, just verify we're on a valid page
-                cy.log('Already logged in, checking current page')
-            }
-        })
-
-        // Ensure we end up on dashboards
+        cy.loginUser(user.email, user.password)
         cy.url().should('include', '/dashboards')
     }
 

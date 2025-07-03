@@ -21,19 +21,19 @@ describe('Login Success', () => {
     }
   })
 
-  it('logs in user', () => {
-    cy.visit('/auth')
-    cy.get('#auth-modal').should('be.visible')
-
-    cy.get('input[type="text"][placeholder="Enter your email"]')
-      .filter(':visible')
-      .type(testUser.email)
-
-    cy.get('input[type="password"][placeholder="Enter your password"]')
-      .filter(':visible')
-      .type(testUser.password)
-
-    cy.contains('Login').click()
+  it('logs in user using reusable function', () => {
+    // Use the new reusable login function
+    cy.loginUser(testUser.email, testUser.password)
+    
+    // Optional: verify successful login by checking URL or page content
+    // cy.url().should('include', '/dashboards')
+  })
+  
+  it('logs in user using quick test user function', () => {
+    // Even simpler - use the test user function
+    cy.loginAsTestUser('testUser')
+    
+    // Optional: verify successful login
     // cy.url().should('include', '/dashboards')
   })
 })
