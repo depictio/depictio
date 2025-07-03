@@ -350,8 +350,6 @@ def register_callbacks_draggable(app):
         State("url", "pathname"),
         State("local-store", "data"),
         # Input("height-store", "data"),
-        State("theme-store", "data"),
-        Input("theme-relay-store", "data"),  # Add theme relay as Input to trigger updates
         prevent_initial_call=True,
     )
     def populate_draggable(
@@ -387,8 +385,6 @@ def register_callbacks_draggable(app):
         input_edit_components_mode_button,
         pathname,
         local_data,
-        theme_store,  # New input for theme store
-        theme_relay_data,  # New input for theme relay
         # height_store,
     ):
         if not local_data:
@@ -449,14 +445,14 @@ def register_callbacks_draggable(app):
             triggered_input_dict = None
 
         logger.info(f"Triggered input: {triggered_input}")
-        logger.info(f"Theme store: {theme_store}")
+        # logger.info(f"Theme store: {theme_store}")
         
         # Extract theme safely from multiple sources
         theme = "light"  # Default
-        if theme_relay_data:
-            theme = theme_relay_data.get("theme", "light")
-        elif theme_store:
-            theme = theme_store
+        # if theme_relay_data:
+        #     theme = theme_relay_data.get("theme", "light")
+        # elif theme_store:
+        #     theme = theme_store
         logger.info(f"Using theme: {theme}")
 
         # FIXME: Remove duplicates from stored_metadata

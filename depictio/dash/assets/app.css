@@ -65,37 +65,11 @@
     animation-iteration-count: infinite;
 }
 
-.auth-modal-content {
-    position: relative;
-    z-index: 10000;
-    backdrop-filter: blur(10px);
-    background: rgba(255, 255, 255, 0.95);
-    border-radius: 16px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-}
 
-/* Dash debug menu styling - no interference with functionality */
-.dash-debug-menu__outer {
-    /* Let Dash handle the debug menu behavior naturally */
-}
-
-/* Theme-aware page content */
-#page-content {
-    transition: background-color 0.2s ease, color 0.2s ease;
-    background-color: var(--app-bg-color, var(--mantine-color-white)) !important;
-    color: var(--app-text-color, var(--mantine-color-black)) !important;
-}
 
 /* Theme-aware titles */
 [data-mantine="Title"] {
     transition: color 0.2s ease;
-    color: var(--app-text-color, var(--mantine-color-black)) !important;
-}
-
-/* Theme support for main containers */
-.mantine-AppShell-main,
-.mantine-Container-root {
-    background-color: var(--app-bg-color, var(--mantine-color-white)) !important;
     color: var(--app-text-color, var(--mantine-color-black)) !important;
 }
 
@@ -127,14 +101,4 @@ body.auth-page .mantine-AppShell-header {
     display: none !important;
     visibility: hidden !important;
     opacity: 0 !important;
-}
-
-/* Ensure auth background is immediately visible */
-#auth-background {
-    position: fixed !important;
-    top: 0 !important;
-    left: 0 !important;
-    width: 100vw !important;
-    height: 100vh !important;
-    z-index: 9998 !important;
 }

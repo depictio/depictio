@@ -20,7 +20,7 @@ print(f"Plotly version: {plotly.__version__}")
 app = dash.Dash(__name__)
 
 # Add Mantine figure templates
-dmc.add_figure_templates()
+# dmc.add_figure_templates()
 
 # Create sample data for the graph
 sample_data = pd.DataFrame({
@@ -316,7 +316,8 @@ def update_page_styles(theme):
 )
 def update_plotly_figure(theme):
     # Use Mantine templates based on theme
-    template = "mantine_dark" if theme == "dark" else "mantine_light"
+    template = "plotly_dark" if theme == "dark" else "plotly_white"
+    # template = "mantine_dark" if theme == "dark" else "mantine_light"
     
     # Create a bar chart with the sample data
     fig = px.bar(

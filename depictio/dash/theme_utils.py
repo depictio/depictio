@@ -300,8 +300,28 @@ def register_theme_callbacks(app):
                 }
             }
 
-            // Function to inject comprehensive CSS styles
-            function injectThemeCSS(theme, textColor, backgroundColor) {
+            // Function to update CSS variables for theme
+            function updateThemeVariables(theme, textColor, backgroundColor) {
+                const root = document.documentElement;
+                const surfaceColor = theme === 'dark' ? '#25262b' : '#ffffff';
+                const borderColor = theme === 'dark' ? '#373A40' : '#dee2e6';
+
+                // Update CSS custom properties
+                root.style.setProperty('--app-bg-color', backgroundColor);
+                root.style.setProperty('--app-text-color', textColor);
+                root.style.setProperty('--app-surface-color', surfaceColor);
+                root.style.setProperty('--app-border-color', borderColor);
+
+                // Add theme class to body for additional styling
+                document.body.classList.remove('theme-light', 'theme-dark');
+                document.body.classList.add(`theme-${theme}`);
+
+                console.log(`✅ Updated CSS variables for ${theme} theme`);
+                return true;
+            }
+
+            // Function to inject non-background theme styles (keeping only text colors and component-specific styles)
+            function injectNonBackgroundCSS(theme, textColor) {
                 let themeStyleElement = document.getElementById('dynamic-theme-styles');
                 if (!themeStyleElement) {
                     themeStyleElement = document.createElement('style');
@@ -310,19 +330,6 @@ def register_theme_callbacks(app):
                 }
 
                 const themeCSS = `
-                    /* Core theme elements */
-                    #page-content {
-                        background-color: ${backgroundColor} !important;
-                        color: ${textColor} !important;
-                    }
-
-                    /* Headers - fix visibility in dark mode */
-                    #header-content,
-                    .mantine-AppShell-header {
-                        background-color: ${theme === 'dark' ? '#25262b' : '#ffffff'} !important;
-                        color: ${textColor} !important;
-                    }
-
                     /* Header text elements */
                     #header-content .mantine-Text-root,
                     #header-content [data-mantine="Text"],
@@ -336,12 +343,6 @@ def register_theme_callbacks(app):
                     #header-content [data-mantine="Title"],
                     .mantine-AppShell-header [data-mantine="Title"] {
                         color: ${textColor} !important;
-                    }
-
-                    /* Sidebar */
-                    #sidebar,
-                    .mantine-AppShell-navbar {
-                        background-color: ${theme === 'dark' ? '#25262b' : '#ffffff'} !important;
                     }
 
                     /* NavLink labels - only fix dark mode visibility */
@@ -382,32 +383,11 @@ def register_theme_callbacks(app):
                         color: ${textColor} !important;
                     }
 
-                    /* Draggable boxes - ResponsiveGridLayout items */
-                    .react-grid-item,
-                    .react-grid-item .card,
-                    .react-grid-item [data-mantine="Card"],
-                    #draggable .react-grid-item,
-                    #draggable .react-grid-item > *,
-                    #draggable .react-grid-item [class*="Card"] {
-                        background-color: ${theme === 'dark' ? '#25262b' : '#ffffff'} !important;
-                        color: ${textColor} !important;
-                    }
-
-                    /* Draggable box content */
+                    /* Draggable box content - only text colors */
                     .react-grid-item .mantine-Text-root,
                     .react-grid-item [data-mantine="Text"],
                     #draggable .react-grid-item .mantine-Text-root,
                     #draggable .react-grid-item [data-mantine="Text"] {
-                        color: ${textColor} !important;
-                    }
-
-                    /* Bootstrap card components in draggable items */
-                    .react-grid-item .card-body,
-                    .react-grid-item .card-header,
-                    #draggable .card,
-                    #draggable .card-body,
-                    #draggable .card-header {
-                        background-color: ${theme === 'dark' ? '#25262b' : '#ffffff'} !important;
                         color: ${textColor} !important;
                     }
 
@@ -416,39 +396,13 @@ def register_theme_callbacks(app):
                         color: ${textColor} !important;
                     }
 
-                    /* Dashboard offcanvas - Bootstrap component theming */
-                    #offcanvas-parameters,
-                    .dashboard-offcanvas,
-                    .offcanvas {
-                        background-color: ${theme === 'dark' ? '#25262b' : '#ffffff'} !important;
-                        color: ${textColor} !important;
-                    }
-
-                    /* Offcanvas header */
-                    #offcanvas-parameters .offcanvas-header,
-                    .dashboard-offcanvas .offcanvas-header,
-                    .offcanvas .offcanvas-header {
-                        background-color: ${theme === 'dark' ? '#25262b' : '#ffffff'} !important;
-                        color: ${textColor} !important;
-                        border-bottom: 1px solid ${theme === 'dark' ? '#373A40' : '#dee2e6'} !important;
-                    }
-
-                    /* Offcanvas body */
-                    #offcanvas-parameters .offcanvas-body,
-                    .dashboard-offcanvas .offcanvas-body,
-                    .offcanvas .offcanvas-body {
-                        background-color: ${theme === 'dark' ? '#25262b' : '#ffffff'} !important;
-                        color: ${textColor} !important;
-                    }
-
-                    /* Offcanvas title */
+                    /* Offcanvas title and close button */
                     #offcanvas-parameters .offcanvas-title,
                     .dashboard-offcanvas .offcanvas-title,
                     .offcanvas .offcanvas-title {
                         color: ${textColor} !important;
                     }
 
-                    /* Offcanvas close button */
                     #offcanvas-parameters .btn-close,
                     .dashboard-offcanvas .btn-close,
                     .offcanvas .btn-close {
@@ -462,43 +416,43 @@ def register_theme_callbacks(app):
                         background-color: #25262b !important;
                         border-color: #373A40 !important;
                     }
-                    
+
                     /* Select options */
                     .mantine-Select-option {
                         background-color: #25262b !important;
                         color: #C1C2C5 !important;
                     }
-                    
+
                     /* Select option hover state */
                     .mantine-Select-option:hover,
                     .mantine-Select-option[data-hovered="true"] {
                         background-color: #373A40 !important;
                         color: #ffffff !important;
                     }
-                    
+
                     /* Select option selected state */
                     .mantine-Select-option[data-selected="true"] {
                         background-color: #228be6 !important;
                         color: #ffffff !important;
                     }
-                    
+
                     /* Select input field */
                     .mantine-Select-input {
                         background-color: #25262b !important;
                         border-color: #373A40 !important;
                         color: #C1C2C5 !important;
                     }
-                    
+
                     /* Select input placeholder */
                     .mantine-Select-input::placeholder {
                         color: #909296 !important;
                     }
-                    
+
                     /* Select label */
                     .mantine-Select-label {
                         color: #C1C2C5 !important;
                     }
-                    
+
                     /* Select description */
                     .mantine-Select-description {
                         color: #909296 !important;
@@ -507,7 +461,7 @@ def register_theme_callbacks(app):
                 `;
 
                 themeStyleElement.textContent = themeCSS;
-                console.log('✅ Injected comprehensive theme CSS');
+                console.log('✅ Injected non-background theme CSS');
                 return true;
             }
 
@@ -523,15 +477,8 @@ def register_theme_callbacks(app):
                 console.log('Resolved theme:', theme);
                 console.log('Colors - text:', textColor, 'background:', backgroundColor);
 
-                // Update page-content with safe style application
-                const pageContent = document.getElementById('page-content');
-                if (pageContent) {
-                    safeApplyStyles(pageContent, {
-                        'background-color': backgroundColor,
-                        'color': textColor
-                    });
-                    console.log('✅ Applied styles to page-content');
-                }
+                // Update CSS variables for theme (handles backgrounds via CSS)
+                updateThemeVariables(theme, textColor, backgroundColor);
 
                 // Update titles with safe style application
                 const allTitles = document.querySelectorAll('h1, h2, h3, h4, h5, h6, [data-mantine="Title"]');
@@ -546,37 +493,14 @@ def register_theme_callbacks(app):
                 // Update NavLink icons with the working solution from debug app
                 updateNavLinkIcons(theme);
 
-                // Update headers
-                const headerContent = document.getElementById('header-content');
-                if (headerContent) {
-                    safeApplyStyles(headerContent, {
-                        'background-color': backgroundColor
-                    });
-                }
-
-                const appShellHeaders = document.querySelectorAll('.mantine-AppShell-header');
-                appShellHeaders.forEach(header => {
-                    safeApplyStyles(header, {
-                        'background-color': backgroundColor
-                    });
-                });
-
-                // Update project management header elements
-                const projectHeader = document.getElementById('permissions-manager-project-header');
-                if (projectHeader) {
-                    safeApplyStyles(projectHeader, {
-                        'background-color': backgroundColor,
-                        'color': textColor
-                    });
-                }
-                
+                // Update project management header elements (text colors only)
                 const projectTitle = document.getElementById('permissions-manager-project-title');
                 if (projectTitle) {
                     safeApplyStyles(projectTitle, {
                         'color': textColor
                     });
                 }
-                
+
                 const projectDetails = document.getElementById('permissions-manager-project-details');
                 if (projectDetails) {
                     safeApplyStyles(projectDetails, {
@@ -584,12 +508,8 @@ def register_theme_callbacks(app):
                     });
                 }
 
-                // Inject comprehensive CSS styles
-                injectThemeCSS(theme, textColor, backgroundColor);
-
-                // Set CSS custom properties for broader coverage
-                document.documentElement.style.setProperty('--app-bg-color', backgroundColor);
-                document.documentElement.style.setProperty('--app-text-color', textColor);
+                // Inject non-background theme styles (text colors and components)
+                injectNonBackgroundCSS(theme, textColor);
 
                 console.log('🎨 === THEME CALLBACK END ===');
 
@@ -619,9 +539,9 @@ def register_theme_callbacks(app):
 def register_theme_bridge_callback(app):
     """Register the universal theme bridge callback for dashboard figure updates."""
     import time
-    
-    from dash import Input, Output
-    
+
+    from dash import Input, Output, State
+
     @app.callback(
         Output("theme-relay-store", "data"),
         Input("theme-store", "data"),
