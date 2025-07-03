@@ -614,3 +614,20 @@ def register_theme_callbacks(app):
 # Note: DMC figure templates are now loaded via dmc.add_figure_templates()
 # They are applied both during figure creation and via client-side updates
 # Templates used: "mantine_light" and "mantine_dark"
+
+
+def register_theme_bridge_callback(app):
+    """Register the universal theme bridge callback for dashboard figure updates."""
+    import time
+    
+    from dash import Input, Output
+    
+    @app.callback(
+        Output("theme-relay-store", "data"),
+        Input("theme-store", "data"),
+        prevent_initial_call=False,  # Allow initial call to set default theme
+    )
+    def sync_theme_relay(theme_data):
+        """Bridge theme-store to a relay that can be safely used everywhere."""
+        theme = theme_data or "light"
+        return {"theme": theme, "timestamp": time.time()}

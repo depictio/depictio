@@ -436,6 +436,11 @@ def create_app_layout():
                 data={},  # Start empty, will be populated by clientside callback
             ),
             dcc.Store(
+                id="theme-relay-store",
+                storage_type="memory",
+                data={"theme": "light", "timestamp": 0},  # Bridge for theme updates
+            ),
+            dcc.Store(
                 id="sidebar-collapsed",
                 storage_type="memory",
                 data=False,  # Start with sidebar expanded

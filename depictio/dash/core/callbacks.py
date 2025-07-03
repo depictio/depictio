@@ -60,6 +60,10 @@ def register_all_callbacks(app):
 
     # Register feature-specific callbacks
     register_feature_callbacks(app)
+    
+    # Register theme bridge callback
+    from depictio.dash.theme_utils import register_theme_bridge_callback
+    register_theme_bridge_callback(app)
 
 
 def register_layout_callbacks(app):

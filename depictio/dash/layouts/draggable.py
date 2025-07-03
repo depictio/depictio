@@ -351,6 +351,7 @@ def register_callbacks_draggable(app):
         State("local-store", "data"),
         # Input("height-store", "data"),
         State("theme-store", "data"),
+        Input("theme-relay-store", "data"),  # Add theme relay as Input to trigger updates
         prevent_initial_call=True,
     )
     def populate_draggable(
@@ -387,6 +388,7 @@ def register_callbacks_draggable(app):
         pathname,
         local_data,
         theme_store,  # New input for theme store
+        theme_relay_data,  # New input for theme relay
         # height_store,
     ):
         if not local_data:
@@ -448,6 +450,14 @@ def register_callbacks_draggable(app):
 
         logger.info(f"Triggered input: {triggered_input}")
         logger.info(f"Theme store: {theme_store}")
+        
+        # Extract theme safely from multiple sources
+        theme = "light"  # Default
+        if theme_relay_data:
+            theme = theme_relay_data.get("theme", "light")
+        elif theme_store:
+            theme = theme_store
+        logger.info(f"Using theme: {theme}")
 
         # FIXME: Remove duplicates from stored_metadata
         # Remove duplicates from stored_metadata
@@ -496,6 +506,7 @@ def register_callbacks_draggable(app):
                     switch_state=edit_components_mode_button,
                     dashboard_id=dashboard_id,
                     TOKEN=TOKEN,
+                    theme=theme,
                 )
                 child = children
 
@@ -672,6 +683,7 @@ def register_callbacks_draggable(app):
                             switch_state=edit_components_mode_button,
                             TOKEN=TOKEN,
                             dashboard_id=dashboard_id,
+                            theme=theme,
                         )
                         return (
                             new_children,
@@ -697,7 +709,7 @@ def register_callbacks_draggable(app):
                         dash.no_update,
                     )
 
-            elif "interactive-component" in triggered_input and toggle_interactivity_button:
+            elif "interactive-component" in triggered_input and toggle_interactivity_button or triggered_input == "theme-relay-store":
                 logger.info("Interactive component triggered")
 
                 def clean_stored_metadata(stored_metadata):
@@ -718,6 +730,8 @@ def register_callbacks_draggable(app):
 
                 stored_metadata = clean_stored_metadata(stored_metadata)
 
+                logger.info(f"Updating components with theme: {theme}")
+
                 new_children = update_interactive_component(
                     stored_metadata,
                     interactive_components_dict,
@@ -725,6 +739,7 @@ def register_callbacks_draggable(app):
                     switch_state=edit_components_mode_button,
                     TOKEN=TOKEN,
                     dashboard_id=dashboard_id,
+                    theme=theme,
                 )
                 state_stored_draggable_children[dashboard_id] = new_children
 
@@ -790,6 +805,7 @@ def register_callbacks_draggable(app):
                             stored_metadata,
                             edit_components_mode_button,
                             dashboard_id,
+                            theme,
                             TOKEN,
                         )
 
@@ -1059,7 +1075,7 @@ def register_callbacks_draggable(app):
                     metadata["filter_applied"] = False
 
                     new_child, index = render_raw_children(
-                        metadata, edit_components_mode_button, dashboard_id, TOKEN=TOKEN
+                        metadata, edit_components_mode_button, dashboard_id, TOKEN=TOKEN, theme=theme
                     )
                     new_children.append(new_child)
 
