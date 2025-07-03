@@ -129,14 +129,41 @@ def build_table(**kwargs):
                     cols[c]["filter"] = "agDateColumnFilter"
 
     # print(cols)
-    columnDefs = [
-        {
-            "field": c,
+    columnDefs = []
+    for c, e in cols.items():  # type: ignore[possibly-unbound-attribute]
+        # Use original column names for both field and header
+        field_name = c
+        header_name = c  # Keep original format like sepal.length
+        
+        col_def = {
+            "field": field_name,
+            "headerName": header_name,  # Use original column name
             "headerTooltip": f"Column type: {e['type']}",
-            "filter": e["filter"],
+            "filter": e.get("filter", "agTextColumnFilter"),
         }
-        for c, e in cols.items()  # type: ignore[possibly-unbound-attribute]
-    ]
+        
+        # Add specific formatting for numerical columns
+        if e["type"] in ["int64", "float64"]:
+            col_def.update({
+                "type": "numericColumn",
+                "cellClass": "ag-right-aligned-cell",  # Right-align numbers
+            })
+            # Only add formatter for float columns to show decimals
+            if e["type"] == "float64":
+                col_def["valueFormatter"] = {"function": "params.value != null ? Number(params.value).toFixed(2) : ''"}
+        elif e["type"] == "object":
+            col_def.update({
+                "cellDataType": "text",
+            })
+        elif e["type"] == "datetime":
+            col_def.update({
+                "cellDataType": "dateString",
+            })
+        
+        columnDefs.append(col_def)
+
+    # Debug column definitions
+    logger.debug(f"Generated column definitions: {columnDefs}")
 
     # if description in col sub dict, update headerTooltip
     for col in columnDefs:
@@ -156,7 +183,7 @@ def build_table(**kwargs):
 
     cutoff = 1000
 
-    if df.to_pandas().shape[0] > cutoff:
+    if df.shape[0] > cutoff:
         df = df.head(cutoff)
         if build_frame:
             style_partial_data_displayed = {"display": "block", "paddingBottom": "5px"}
@@ -181,32 +208,108 @@ def build_table(**kwargs):
         openDelay=500,
     )
     # Prepare ag grid table
-    table_aggrid = dag.AgGrid(
-        id={"type": value_div_type, "index": str(index)},
-        rowData=df.to_pandas().to_dict("records"),
-        # rowModelType="infinite",
-        columnDefs=columnDefs,
-        dashGridOptions={
-            "tooltipShowDelay": 500,
-            "pagination": True,
-            "paginationAutoPageSize": False,
-            "animateRows": False,
-            # The number of rows rendered outside the viewable area the grid renders.
-            # "rowBuffer": 0,
-            # # How many blocks to keep in the store. Default is no limit, so every requested block is kept.
-            # "maxBlocksInCache": 2,
-            # "cacheBlockSize": 100,
-            # "cacheOverflowSize": 2,
-            # "maxConcurrentDatasourceRequests": 2,
-            # "infiniteInitialRowCount": 1,
-            "rowSelection": "multiple",
-            "enableCellTextSelection": True,
-            "ensureDomOrder": True,
-        },
-        # columnSize="sizeToFit",
-        defaultColDef={"resizable": True, "sortable": True, "filter": True},
-        # use the parameters above
+    # For datasets larger than cutoff or when explicitly requested, use infinite row model
+    # But disable for stepper tables (with -tmp suffix) until metadata access is resolved
+    is_stepper_table = "-tmp" in str(index)
+    use_infinite_model = (
+        (df.shape[0] > cutoff or kwargs.get("force_infinite", False)) 
+        and not is_stepper_table
     )
+
+    if use_infinite_model:
+        # Infinite row model configuration
+        table_aggrid = dag.AgGrid(
+            id={"type": value_div_type, "index": str(index)},
+            rowModelType="infinite",
+            columnDefs=columnDefs,
+            dashGridOptions={
+                "tooltipShowDelay": 500,
+                "animateRows": False,
+                # Row buffer for smooth scrolling
+                "rowBuffer": 10,
+                # Cache configuration for performance (optimized for MB to GB datasets)
+                "maxBlocksInCache": 10,  # Keep up to 10 blocks in memory
+                "cacheBlockSize": 100,  # 100 rows per block
+                "cacheOverflowSize": 2,  # Load 2 extra blocks
+                "maxConcurrentDatasourceRequests": 2,
+                "infiniteInitialRowCount": 100,  # Initial rows to show
+                "rowSelection": "multiple",
+                "enableCellTextSelection": True,
+                "ensureDomOrder": True,
+                # Loading overlay configuration
+                "loadingOverlayComponent": "agLoadingOverlay",
+                "noRowsOverlayComponent": "agNoRowsOverlay",
+            },
+            defaultColDef={"resizable": True, "sortable": True, "filter": True},
+        )
+    else:
+        # Standard pagination for smaller datasets
+        # Convert data using pure Polars, preserving numerical types
+        logger.debug(f"Original Polars schema: {df.schema}")
+        logger.debug(f"Column info mapping: {cols}")
+        logger.debug(f"DataFrame columns: {df.columns}")
+        
+        # Ensure numerical columns are properly typed in Polars and handle NaN values
+        df_processed = df
+        for col_name, col_info in (cols or {}).items():
+            if col_name in df.columns:
+                if col_info.get("type") in ["int64", "float64"]:
+                    try:
+                        # First, handle any string representations of numbers
+                        current_col = pl.col(col_name)
+                        
+                        if col_info.get("type") == "int64":
+                            df_processed = df_processed.with_columns(
+                                current_col.cast(pl.Int64, strict=False).alias(col_name)
+                            )
+                        elif col_info.get("type") == "float64":
+                            df_processed = df_processed.with_columns(
+                                current_col.cast(pl.Float64, strict=False).alias(col_name)
+                            )
+                        logger.debug(f"Column {col_name} cast to {col_info.get('type')}")
+                    except Exception as e:
+                        logger.warning(f"Could not cast column {col_name} to {col_info.get('type')}: {e}")
+        
+        logger.debug(f"Final Polars schema: {df_processed.schema}")
+        
+        # Convert to dict with Polars, letting nulls be handled naturally by to_dicts()
+        # Polars to_dicts() converts null values to None automatically in Python
+        row_data = df_processed.to_dicts()
+        
+        # Log sample with specific focus on numerical columns
+        if row_data:
+            sample_data = row_data[:2]
+            logger.info(f"Sample data: {sample_data}")
+            
+            # Check all columns in the first row
+            if sample_data:
+                first_row = sample_data[0]
+                logger.info(f"First row keys: {list(first_row.keys())}")
+                logger.info(f"First row values: {list(first_row.values())}")
+                
+            # Log specific numerical columns to debug
+            for col_name, col_info in (cols or {}).items():
+                if col_info.get("type") in ["int64", "float64"] and sample_data:
+                    values = [row.get(col_name) for row in sample_data[:2]]
+                    logger.info(f"Column '{col_name}' (type: {col_info.get('type')}) sample values: {values}")
+        else:
+            logger.info("No data available")
+        
+        table_aggrid = dag.AgGrid(
+            id={"type": value_div_type, "index": str(index)},
+            rowData=row_data,
+            columnDefs=columnDefs,
+            dashGridOptions={
+                "tooltipShowDelay": 500,
+                "pagination": True,
+                "paginationAutoPageSize": False,
+                "animateRows": False,
+                "rowSelection": "multiple",
+                "enableCellTextSelection": True,
+                "ensureDomOrder": True,
+            },
+            defaultColDef={"resizable": True, "sortable": True, "filter": True},
+        )
 
     # Metadata management - Create a store component to store the metadata of the card
     store_index = index.replace("-tmp", "")  # type: ignore[possibly-unbound-attribute]
