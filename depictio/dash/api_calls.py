@@ -106,7 +106,7 @@ def api_call_fetch_user_from_token(token: str) -> User | None:
     if not user_data:
         return None
 
-    user = User(**user_data)
+    user = User(**user_data)  # type: ignore[missing-argument]
 
     # Cache the result
     _user_cache[cache_key] = (user, current_time)
@@ -151,7 +151,7 @@ def api_call_fetch_user_from_email(email: EmailStr) -> User | None:
     if not user_data:
         return None
 
-    user = User(**user_data)
+    user = User(**user_data)  # type: ignore[missing-argument]
 
     return user
 

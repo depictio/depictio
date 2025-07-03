@@ -148,7 +148,6 @@ def register_upgrade_modal_callbacks(app):
             upgrade_result = api_call_upgrade_to_temporary_user(
                 access_token,
                 expiry_hours=settings.auth.temporary_user_expiry_hours,
-                expiry_minutes=settings.auth.temporary_user_expiry_minutes,
             )
 
             if upgrade_result:

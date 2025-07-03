@@ -387,7 +387,7 @@ class TestApiCallUpgradeToTemporaryUser:
         self.mock_httpx_post.return_value = mock_response
 
         # Act
-        result = api_call_upgrade_to_temporary_user("anon_token", expiry_hours=0, expiry_minutes=1)
+        result = api_call_upgrade_to_temporary_user("anon_token", expiry_hours=0)
         # Assert
         assert result is not None
         assert result["is_temporary"] is True

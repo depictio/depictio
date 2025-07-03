@@ -174,7 +174,7 @@ def create_project_header(project_name, project_id, is_public, is_admin=False, i
     details = dmc.Text(
         f"Project ID: {project_id}",
         size="sm",
-        c="dimmed",
+        c="gray",
         id="permissions-manager-project-details",
     )
     return dmc.Paper(
