@@ -380,47 +380,62 @@ def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
     card = return_design_component(component_selected=component_selected, id=id, df=df)
     logger.info(f"Card: {card}")
 
-    # if component_selected != "Card":
-    modal_body = [select_row, dbc.Row(card)]
-    # else:
-    #     modal_body = [dbc.Row(card)]
+    # Use html.Div instead of dbc.Row to avoid Bootstrap grid constraints
+    modal_body = [select_row, html.Div(card, style={"width": "100%"})]
+
+    # Use wider content specifically for Figure components
+    modal_content_style = {
+        "display": "flex",
+        "justify-content": "center",
+        "align-items": "center",
+        "flex-direction": "column",
+        "height": "100%",
+        "width": "100%" if component_selected != "Figure" else "95%",  # Wider for Figure
+        "maxWidth": "none"
+        if component_selected == "Figure"
+        else "1200px",  # No max-width limit for Figure
+        "padding": "1rem",
+    }
 
     modal = dmc.Modal(
         id={"type": "modal-edit", "index": n},
         children=[
-            html.Div([
-                html.H3("Edit your dashboard component", style={"marginBottom": "20px", "textAlign": "center"}),
-                html.Div(
-                    modal_body,
-                    style={
-                        "display": "flex",
-                        "justify-content": "center",
-                        "align-items": "center",
-                        "flex-direction": "column",
-                        "height": "100%",
-                        "width": "100%",
-                        "padding": "1rem",
-                    },
-                ),
-                dmc.Group([
-                    dmc.Button(
-                        "Confirm Edit",
-                        id={"type": "btn-done-edit", "index": n},
-                        n_clicks=0,
-                        size="lg",
-                        leftSection=DashIconify(icon="bi:check-circle", width=20),
-                        color="green",
-                        disabled=True,
+            html.Div(
+                [
+                    html.H3(
+                        "Edit your dashboard component",
+                        style={"marginBottom": "20px", "textAlign": "center"},
                     ),
-                ], justify="center", style={"marginTop": "20px"})
-            ])
+                    html.Div(
+                        modal_body,
+                        style=modal_content_style,
+                    ),
+                    dmc.Group(
+                        [
+                            dmc.Button(
+                                "Confirm Edit",
+                                id={"type": "btn-done-edit", "index": n},
+                                n_clicks=0,
+                                size="lg",
+                                leftSection=DashIconify(icon="bi:check-circle", width=20),
+                                color="green",
+                                disabled=True,
+                            ),
+                        ],
+                        justify="center",
+                        style={"marginTop": "20px"},
+                    ),
+                ]
+            )
         ],
         opened=True,
-        size="90%",  # Use percentage for larger modal
+        size="95%"
+        if component_selected == "Figure"
+        else "90%",  # Larger modal for Figure components
         centered=True,
-        withCloseButton=False,
-        closeOnClickOutside=False,
-        closeOnEscape=False,
+        withCloseButton=True,
+        closeOnClickOutside=True,
+        closeOnEscape=True,
     )
     logger.info(f"TEST MODAL: {modal}")
 
@@ -507,7 +522,8 @@ def create_stepper_output(n, active):
         ],
         style={
             "height": "100%",
-            "width": "822px",
+            "width": "100%",
+            "maxWidth": "none",
         },
     )
 
@@ -550,7 +566,8 @@ def create_stepper_output(n, active):
             id={
                 "type": "output-stepper-step-3",
                 "index": n,
-            }
+            },
+            style={"width": "100%"},
         ),
         id={"type": "stepper-step-3", "index": n},
     )
@@ -612,21 +629,26 @@ def create_stepper_output(n, active):
             dmc.Modal(
                 id={"type": "modal", "index": n},
                 children=[
-                    html.Div([
-                        html.H3("Design your new dashboard component", style={"marginBottom": "20px", "textAlign": "center"}),
-                        html.Div(
-                            [stepper, stepper_footer],
-                            style={
-                                "display": "flex",
-                                "justify-content": "center",
-                                "align-items": "center",
-                                "flex-direction": "column",
-                                "height": "100%",
-                                "width": "100%",
-                                "padding": "1rem",
-                            },
-                        ),
-                    ])
+                    html.Div(
+                        [
+                            html.H3(
+                                "Design your new dashboard component",
+                                style={"marginBottom": "20px", "textAlign": "center"},
+                            ),
+                            html.Div(
+                                [stepper, stepper_footer],
+                                style={
+                                    "display": "flex",
+                                    "justify-content": "flex-start",
+                                    "align-items": "center",
+                                    "flex-direction": "column",
+                                    "height": "100%",
+                                    "width": "100%",
+                                    "padding": "1rem",
+                                },
+                            ),
+                        ]
+                    )
                 ],
                 opened=True,
                 size="90%",  # Use percentage for larger modal
