@@ -520,11 +520,11 @@ def register_theme_callbacks(app):
 
                 console.log('🎨 === THEME CALLBACK END ===');
 
-                // Return the new background color for page-content & font color for titles
+                // Return the new background color for page-content
                 return {
                     'background-color': backgroundColor + ' !important',
                     'color': textColor + ' !important'
-                }
+                };
 
             } catch (error) {
                 console.error('❌ Theme callback error:', error);
@@ -532,8 +532,7 @@ def register_theme_callbacks(app):
             }
         }
         """,
-        [Output("page-content", "style", allow_duplicate=True),
-         Output("dashboard-title", "style", allow_duplicate=True)],
+        Output("page-content", "style", allow_duplicate=True),
         Input("theme-store", "data"),
         prevent_initial_call=True,
     )

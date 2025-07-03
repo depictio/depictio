@@ -351,7 +351,6 @@ def register_callbacks_draggable(app):
         State("local-store", "data"),
         # Input("height-store", "data"),
         State("theme-store", "data"),
-        Input("dashboard-title", "style"),  # New input for header style
         prevent_initial_call=True,
     )
     def populate_draggable(
@@ -388,7 +387,6 @@ def register_callbacks_draggable(app):
         pathname,
         local_data,
         theme_store,  # New input for theme store
-        header_style,  # New input for header style
         # height_store,
     ):
         if not local_data:
@@ -402,8 +400,6 @@ def register_callbacks_draggable(app):
         TOKEN = local_data["access_token"]
 
         ctx = dash.callback_context
-
-
 
         # logger.info("CTX: {}".format(ctx))
         # logger.info("CTX triggered: {}".format(ctx.triggered))
@@ -452,7 +448,6 @@ def register_callbacks_draggable(app):
 
         logger.info(f"Triggered input: {triggered_input}")
         logger.info(f"Theme store: {theme_store}")
-        logger.info(f"Header style: {header_style}")
 
         # FIXME: Remove duplicates from stored_metadata
         # Remove duplicates from stored_metadata
