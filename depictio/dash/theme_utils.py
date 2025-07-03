@@ -45,7 +45,7 @@ def register_theme_callbacks(app):
     """Register theme-related callbacks"""
 
     # Add Mantine figure templates for Plotly when theme system initializes
-    dmc.add_figure_templates()
+    dmc.add_figure_templates()  # type: ignore[unresolved-attribute]
 
     # Enhanced automatic theme detection with system preference monitoring
     app.clientside_callback(

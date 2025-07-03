@@ -40,7 +40,7 @@ def render_login_form():
                     order=2,
                     style={"fontFamily": "Virgil"},
                     ta="center",
-                    c="dimmed",  # Use theme-aware color
+                    c="gray",  # Use theme-aware color
                 )
             ),
             dmc.Space(h=10),
@@ -181,7 +181,7 @@ def render_register_form():
                     order=2,
                     style={"fontFamily": "Virgil"},
                     ta="center",
-                    c="dimmed",  # Use theme-aware color
+                    c="gray",  # Use theme-aware color
                 )
             ),
             dmc.Space(h=10),
@@ -388,8 +388,6 @@ def create_triangle_background():
         # Depictio-style triangle with 2:1 ratio
         # Equal sides are ~2x the short side (base)
         # Make triangle taller and more pointed for proper ratio
-        base_width = w * 0.6  # Short side (base)
-        triangle_height = h * 0.8  # Height for proper proportions
 
         # Create isosceles triangle with curved base for organic Depictio feel
         svg_path = (
@@ -405,7 +403,6 @@ def create_triangle_background():
     # Use a combination of grid-based and pseudo-random distribution for even coverage
     grid_cols = 8  # 8 columns
     grid_rows = 5  # 5 rows
-    particles_per_cell = 1  # 1 particle per cell on average
 
     for i in range(num_particles):
         # Choose size based on weights

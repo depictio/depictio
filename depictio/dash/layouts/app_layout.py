@@ -215,7 +215,7 @@ def create_admin_header(text):
         opened=False,
     )
 
-    header = dmc.AppShellHeader(
+    header = dmc.AppShellHeader(  # type: ignore[unresolved-attribute]
         h=60,  # Height of the header
         # padding="xs",  # Padding inside the header
         children=[
@@ -223,7 +223,7 @@ def create_admin_header(text):
                 fluid=True,  # Make the container fluid (full-width)
                 children=[
                     dmc.Group(
-                        ta="apart",  # Space between the title and tabs
+                        justify="space-between",  # Space between the title and tabs
                         align="center",
                         style={"height": "100%"},
                         children=[
@@ -234,7 +234,7 @@ def create_admin_header(text):
                                 # onTabChange=lambda value: dash.callback_context.triggered,  # Placeholder for callback
                                 children=dmc.TabsList(
                                     [
-                                        dmc.TabsTab(
+                                        dmc.TabsTab(  # type: ignore[unresolved-attribute]
                                             "Users",
                                             leftSection=DashIconify(
                                                 icon="mdi:account",
@@ -245,7 +245,7 @@ def create_admin_header(text):
                                             # value="users",
                                             # component=dcc.Link("Users", href="/admin/users", style={"textDecoration": "none", "color": "inherit"})
                                         ),
-                                        dmc.TabsTab(
+                                        dmc.TabsTab(  # type: ignore[unresolved-attribute]
                                             "Groups",
                                             leftSection=DashIconify(
                                                 icon="mdi:account-group",
@@ -256,7 +256,7 @@ def create_admin_header(text):
                                             # value="users",
                                             # component=dcc.Link("Users", href="/admin/users", style={"textDecoration": "none", "color": "inherit"})
                                         ),
-                                        dmc.TabsTab(
+                                        dmc.TabsTab(  # type: ignore[unresolved-attribute]
                                             "Projects",
                                             leftSection=DashIconify(
                                                 icon="mdi:jira",
@@ -267,7 +267,7 @@ def create_admin_header(text):
                                             # value="projects",
                                             # component=dcc.Link("Projects", href="/admin/projects", style={"textDecoration": "none", "color": "inherit"})
                                         ),
-                                        dmc.TabsTab(
+                                        dmc.TabsTab(  # type: ignore[unresolved-attribute]
                                             "Dashboards",
                                             leftSection=DashIconify(
                                                 icon="mdi:view-dashboard",
@@ -481,15 +481,15 @@ def create_app_layout():
                     "overflow": "auto",  # ✅ Allow scrolling
                 },
                 children=[
-                    dmc.AppShellNavbar(
+                    dmc.AppShellNavbar(  # type: ignore[unresolved-attribute]
                         children=render_sidebar_content(""),
                         id="sidebar",
                     ),
-                    dmc.AppShellHeader(
+                    dmc.AppShellHeader(  # type: ignore[unresolved-attribute]
                         children=[],  # Will be populated by callback
                         id="header-content",
                     ),
-                    dmc.AppShellMain(
+                    dmc.AppShellMain(  # type: ignore[unresolved-attribute]
                         html.Div(
                             id="page-content",
                             style={
