@@ -505,13 +505,32 @@ def register_callbacks_figure_component(app):
     def initialize_default_parameters(
         visu_type_label, current_kwargs, workflow_id, data_collection_id, local_data
     ):
-        """Initialize default parameters when visualization type is first selected."""
-        # Only trigger if we have empty kwargs or need to set defaults
-        if current_kwargs and current_kwargs not in [{}, {"x": None, "y": None}]:
+        """Initialize default parameters when visualization type changes, preserving shared parameters."""
+        logger.info("=== PARAMETER PRESERVATION TRIGGERED ===")
+        logger.info(f"Visualization type: {visu_type_label}")
+        logger.info(f"Current parameters: {current_kwargs}")
+        logger.info(f"Current parameters type: {type(current_kwargs)}")
+        logger.info(f"Has workflow_id: {bool(workflow_id)}")
+        logger.info(f"Has data_collection_id: {bool(data_collection_id)}")
+        logger.info(f"Has local_data: {bool(local_data)}")
+
+        # Check if we need to prevent update to avoid race conditions
+        ctx = dash.callback_context
+        if not ctx.triggered:
+            logger.info("No trigger detected, preventing update")
+            raise dash.exceptions.PreventUpdate
+
+        triggered_prop = ctx.triggered[0]["prop_id"]
+        logger.info(f"Triggered by: {triggered_prop}")
+
+        # Only process if visualization type actually changed
+        if "segmented-control-visu-graph" not in triggered_prop:
+            logger.info("Not triggered by visualization change, preventing update")
             raise dash.exceptions.PreventUpdate
 
         if not local_data or not workflow_id or not data_collection_id:
-            return {"x": None, "y": None}
+            logger.warning("Missing required data for parameter initialization")
+            raise dash.exceptions.PreventUpdate
 
         try:
             # Get column information for defaults
@@ -532,8 +551,56 @@ def register_callbacks_figure_component(app):
             # Get default parameters for this visualization type
             default_params = _get_default_parameters(visu_type, columns_specs_reformatted)
 
-            logger.info(f"Initializing default parameters for {visu_type}: {default_params}")
-            return default_params if default_params else {"x": None, "y": None}
+            # If we have existing parameters, preserve shared ones
+            if current_kwargs and current_kwargs not in [{}, {"x": None, "y": None}]:
+                try:
+                    logger.info(f"Attempting to preserve parameters from: {current_kwargs}")
+
+                    # Get required parameters for the new visualization
+                    new_viz_def = get_visualization_definition(visu_type)
+                    new_param_names = {param.name for param in new_viz_def.parameters}
+                    logger.info(
+                        f"New visualization '{visu_type}' accepts parameters: {new_param_names}"
+                    )
+
+                    # Preserve parameters that exist in both old and new visualization
+                    preserved_params = {}
+                    for param_name, value in current_kwargs.items():
+                        if (
+                            param_name in new_param_names
+                            and value is not None
+                            and value != ""
+                            and value != []
+                        ):
+                            preserved_params[param_name] = value
+                            logger.info(f"Preserving parameter '{param_name}': {value}")
+
+                    logger.info(f"Parameters eligible for preservation: {preserved_params}")
+
+                    # Merge preserved parameters with defaults (preserved takes priority)
+                    final_params = {**default_params, **preserved_params}
+
+                    logger.info(f"Default parameters for {visu_type}: {default_params}")
+                    logger.info(f"Preserved parameters for {visu_type}: {preserved_params}")
+                    logger.info(f"Final merged parameters for {visu_type}: {final_params}")
+
+                    # Only return if we actually have some parameters to preserve
+                    if preserved_params:
+                        logger.info(f"Successfully preserved {len(preserved_params)} parameters")
+                        return final_params
+                    else:
+                        logger.info("No parameters could be preserved, using defaults")
+                        return default_params if default_params else {"x": None, "y": None}
+
+                except Exception as e:
+                    logger.error(f"Error preserving parameters: {e}, using defaults only")
+                    return default_params if default_params else {"x": None, "y": None}
+            else:
+                # No existing parameters, use defaults
+                logger.info(
+                    f"No existing parameters to preserve, initializing defaults for {visu_type}: {default_params}"
+                )
+                return default_params if default_params else {"x": None, "y": None}
 
         except Exception as e:
             logger.error(f"Error initializing default parameters: {e}")
@@ -602,14 +669,16 @@ def register_callbacks_figure_component(app):
         ],
         prevent_initial_call="initial_load",
     )
-    def generate_default_figure_on_load(visu_type_label, dict_kwargs, workflow_id, data_collection_id, local_data, theme_data):
+    def generate_default_figure_on_load(
+        visu_type_label, dict_kwargs, workflow_id, data_collection_id, local_data, theme_data
+    ):
         """Generate default figure when visualization type is first set."""
         if not local_data or not workflow_id or not data_collection_id:
             raise dash.exceptions.PreventUpdate
 
         try:
             TOKEN = local_data["access_token"]
-            
+
             # Convert visualization label to name
             visu_type = "scatter"  # Default fallback
             if visu_type_label:
@@ -621,10 +690,12 @@ def register_callbacks_figure_component(app):
 
             # If no parameters set, generate defaults
             if not dict_kwargs or dict_kwargs in [{}, {"x": None, "y": None}]:
-                columns_json = get_columns_from_data_collection(workflow_id, data_collection_id, TOKEN)
+                columns_json = get_columns_from_data_collection(
+                    workflow_id, data_collection_id, TOKEN
+                )
                 columns_specs_reformatted = defaultdict(list)
                 {columns_specs_reformatted[v["type"]].append(k) for k, v in columns_json.items()}
-                
+
                 dict_kwargs = _get_default_parameters(visu_type, columns_specs_reformatted)
                 logger.info(f"Generated default parameters for {visu_type}: {dict_kwargs}")
 
@@ -661,13 +732,15 @@ def register_callbacks_figure_component(app):
 
         except Exception as e:
             logger.error(f"Error generating default figure: {e}")
-            return html.Div([
-                dmc.Alert(
-                    f"Error generating default figure: {str(e)}", 
-                    title="Figure Generation Error", 
-                    color="red"
-                )
-            ])
+            return html.Div(
+                [
+                    dmc.Alert(
+                        f"Error generating default figure: {str(e)}",
+                        title="Figure Generation Error",
+                        color="red",
+                    )
+                ]
+            )
 
 
 def design_figure(id, component_data=None):
@@ -693,10 +766,11 @@ def design_figure(id, component_data=None):
                 break
 
     figure_row = [
-        html.Br(),
-        dbc.Row(
+        # Controls row - compact and centered
+        dmc.Group(
             [
-                dbc.Col(
+                # Styled visualization selector
+                dmc.Group(
                     [
                         DashIconify(icon="mdi:chart-line", width=20, color="#228be6"),
                         dmc.Text(
@@ -721,69 +795,22 @@ def design_figure(id, component_data=None):
                             comboboxProps={"withinPortal": False},
                         ),
                     ],
-                    width=6,  # Reduced from 8 to give more space to controls
-                    style={"paddingRight": "15px"},
+                    gap="xs",
+                    align="center",
                 ),
-                dbc.Col(
-                    [
-                        html.Br(),
-                        html.Div(
-                            children=[
-                                # Visualization type selector
-                                dmc.Group(
-                                    [
-                                        html.H6(
-                                            "Visualization:",
-                                            style={"marginBottom": "5px", "marginRight": "10px"},
-                                        ),
-                                        dmc.Select(
-                                            data=viz_options,
-                                            value=default_value,
-                                            id={
-                                                "type": "segmented-control-visu-graph",  # Keep same ID for compatibility
-                                                "index": id["index"],
-                                            },
-                                            placeholder="Choose type...",
-                                            clearable=False,
-                                            searchable=True,
-                                            size="sm",
-                                            style={"width": "200px"},
-                                            comboboxProps={"withinPortal": False},
-                                        ),
-                                        # Edit button
-                                        dmc.Center(
-                                            dmc.Button(
-                                                "Edit Figure",
-                                                id={
-                                                    "type": "edit-button",
-                                                    "index": id["index"],
-                                                },
-                                                n_clicks=0,
-                                                size="md",
-                                                leftSection=DashIconify(icon="mdi:cog", width=20),
-                                                style={"marginBottom": "15px"},
-                                                variant="outline",
-                                                color="blue",
-                                            ),
-                                        ),
-                                        html.Hr(),
-                                        dbc.Collapse(
-                                            id={
-                                                "type": "collapse",
-                                                "index": id["index"],
-                                            },
-                                            is_open=False,
-                                        ),
-                                    ],
-                                    align="center",
-                                    style={"marginBottom": "15px"},
-                                    ta="center"
-                                ),
-                            ]
-                        ),
-                    ],
-                    width=6,  # Increased from 4 to provide more space for edit controls
-                    style={"paddingLeft": "15px"},
+                # Edit button - close to visualization selector
+                dmc.Button(
+                    "Edit Figure",
+                    id={
+                        "type": "edit-button",
+                        "index": id["index"],
+                    },
+                    n_clicks=0,
+                    size="sm",
+                    leftSection=DashIconify(icon="mdi:cog", width=16),
+                    variant="outline",
+                    color="blue",
+                    style={"fontWeight": 500},
                 ),
             ],
             justify="flex-start",
