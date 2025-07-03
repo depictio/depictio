@@ -454,6 +454,56 @@ def register_theme_callbacks(app):
                     .offcanvas .btn-close {
                         filter: ${theme === 'dark' ? 'invert(1) grayscale(100%) brightness(200%)' : 'none'} !important;
                     }
+
+                    /* DMC Select component theming */
+                    ${theme === 'dark' ? `
+                    /* Select dropdown background and border */
+                    .mantine-Select-dropdown {
+                        background-color: #25262b !important;
+                        border-color: #373A40 !important;
+                    }
+                    
+                    /* Select options */
+                    .mantine-Select-option {
+                        background-color: #25262b !important;
+                        color: #C1C2C5 !important;
+                    }
+                    
+                    /* Select option hover state */
+                    .mantine-Select-option:hover,
+                    .mantine-Select-option[data-hovered="true"] {
+                        background-color: #373A40 !important;
+                        color: #ffffff !important;
+                    }
+                    
+                    /* Select option selected state */
+                    .mantine-Select-option[data-selected="true"] {
+                        background-color: #228be6 !important;
+                        color: #ffffff !important;
+                    }
+                    
+                    /* Select input field */
+                    .mantine-Select-input {
+                        background-color: #25262b !important;
+                        border-color: #373A40 !important;
+                        color: #C1C2C5 !important;
+                    }
+                    
+                    /* Select input placeholder */
+                    .mantine-Select-input::placeholder {
+                        color: #909296 !important;
+                    }
+                    
+                    /* Select label */
+                    .mantine-Select-label {
+                        color: #C1C2C5 !important;
+                    }
+                    
+                    /* Select description */
+                    .mantine-Select-description {
+                        color: #909296 !important;
+                    }
+                    ` : ''}
                 `;
 
                 themeStyleElement.textContent = themeCSS;
@@ -510,6 +560,29 @@ def register_theme_callbacks(app):
                         'background-color': backgroundColor
                     });
                 });
+
+                // Update project management header elements
+                const projectHeader = document.getElementById('permissions-manager-project-header');
+                if (projectHeader) {
+                    safeApplyStyles(projectHeader, {
+                        'background-color': backgroundColor,
+                        'color': textColor
+                    });
+                }
+                
+                const projectTitle = document.getElementById('permissions-manager-project-title');
+                if (projectTitle) {
+                    safeApplyStyles(projectTitle, {
+                        'color': textColor
+                    });
+                }
+                
+                const projectDetails = document.getElementById('permissions-manager-project-details');
+                if (projectDetails) {
+                    safeApplyStyles(projectDetails, {
+                        'color': textColor
+                    });
+                }
 
                 // Inject comprehensive CSS styles
                 injectThemeCSS(theme, textColor, backgroundColor);
