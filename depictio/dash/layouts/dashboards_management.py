@@ -216,7 +216,7 @@ def register_callbacks_dashboards_management(app):
                                     "index": dashboard["dashboard_id"],
                                 },
                                 variant="outline",
-                                color="dark",
+                                color="blue",
                             ),
                             href=f"/dashboard/{dashboard['dashboard_id']}",
                         ),
@@ -491,7 +491,7 @@ def register_callbacks_dashboards_management(app):
                                         "index": dashboard["dashboard_id"],
                                     },
                                     variant="outline",
-                                    color="dark",
+                                    color=colors["blue"],  # Use Depictio blue
                                     size="sm",
                                     # style={"fontFamily": "Virgil"},
                                     # leftIcon=DashIconify(icon="mdi:eye", width=12, color="black"),
@@ -506,7 +506,7 @@ def register_callbacks_dashboards_management(app):
                                     "index": dashboard["dashboard_id"],
                                 },
                                 variant="outline",
-                                color="blue",
+                                color=colors["teal"],  # Use Depictio teal
                                 # style={"fontFamily": "Virgil"},
                                 disabled=disabled,
                                 size="sm",
@@ -519,7 +519,7 @@ def register_callbacks_dashboards_management(app):
                                     "index": dashboard["dashboard_id"],
                                 },
                                 variant="outline",
-                                color="gray",
+                                color=colors["pink"],  # Use Depictio gray
                                 # style={"fontFamily": "Virgil"},
                                 size="sm",
                                 style={"padding": "2px 6px", "fontSize": "12px"},
@@ -532,7 +532,7 @@ def register_callbacks_dashboards_management(app):
                                     "index": dashboard["dashboard_id"],
                                 },
                                 variant="outline",
-                                color="red",
+                                color=colors["red"],  # Use Depictio red
                                 # style={"fontFamily": "Virgil"},
                                 disabled=disabled,
                                 size="sm",
