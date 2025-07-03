@@ -14,7 +14,7 @@
     color: var(--app-text-color, var(--mantine-color-black)) !important;
 }
 
-/* Auth modal content background */
+/* Auth modal content background - theme aware */
 .auth-modal-content {
     position: relative;
     z-index: 10000;
@@ -22,6 +22,29 @@
     background: rgba(255, 255, 255, 0.95);
     border-radius: 16px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    color: var(--app-text-color, var(--depictio-text-light));
+    transition: background 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* Dark theme modal content */
+@media (prefers-color-scheme: dark) {
+    .auth-modal-content {
+        background: rgba(37, 38, 43, 0.95);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+}
+
+/* Manual theme overrides for modal content */
+body.theme-manual-light .auth-modal-content {
+    background: rgba(255, 255, 255, 0.95) !important;
+    color: var(--depictio-text-light) !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1) !important;
+}
+
+body.theme-manual-dark .auth-modal-content {
+    background: rgba(37, 38, 43, 0.95) !important;
+    color: var(--depictio-text-dark) !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3) !important;
 }
 
 /* Auth background positioning - GPU optimized */
@@ -240,7 +263,7 @@
     animation: triangleWave 18s infinite ease-in-out;
 }
 
-/* Dark theme backgrounds */
+/* CSS Custom Properties for Theme Variables */
 :root {
     --depictio-bg-light: #ffffff;
     --depictio-bg-dark: #1a1b1e;
@@ -248,6 +271,31 @@
     --depictio-surface-dark: #25262b;
     --depictio-text-light: #000000;
     --depictio-text-dark: #ffffff;
+    --depictio-border-light: #dee2e6;
+    --depictio-border-dark: #373A40;
+}
+
+/* =============================================================================
+   AUTOMATIC THEME DETECTION
+   Uses CSS media queries to detect system theme preference
+   ============================================================================= */
+
+/* Default light theme */
+:root {
+    --app-bg-color: var(--depictio-bg-light);
+    --app-text-color: var(--depictio-text-light);
+    --app-surface-color: var(--depictio-surface-light);
+    --app-border-color: var(--depictio-border-light);
+}
+
+/* Automatic dark theme detection via CSS media query */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --app-bg-color: var(--depictio-bg-dark);
+        --app-text-color: var(--depictio-text-dark);
+        --app-surface-color: var(--depictio-surface-dark);
+        --app-border-color: var(--depictio-border-dark);
+    }
 }
 
 /* Light theme (default) */
