@@ -279,7 +279,7 @@ class AccordionBuilder:
             label_text = param.label
             if param.required:
                 label_text += " *"
-            
+
             # Create tooltip for parameter description if available
             if param.description:
                 label_component = dmc.Tooltip(
@@ -296,36 +296,38 @@ class AccordionBuilder:
                             c="red" if param.required else "dark",
                             style={
                                 "cursor": "help",
-                                "textDecoration": "underline dotted" if param.description else "none",
+                                "textDecoration": "underline dotted"
+                                if param.description
+                                else "none",
                                 "minWidth": "120px",
                                 "display": "flex",
                                 "alignItems": "center",
-                            }
+                            },
                         )
                     ],
                 )
             else:
                 label_component = dmc.Text(
                     label_text,
-                    size="sm", 
+                    size="sm",
                     fw="bold",
                     c="red" if param.required else "dark",
                     style={
                         "minWidth": "120px",
                         "display": "flex",
                         "alignItems": "center",
-                    }
+                    },
                 )
 
             # Create horizontal parameter row with label on left, input on right
             parameter_row = dmc.Group(
                 [
-                    dmc.Box(label_component, style={"width": "30%", "minWidth": "120px"}),
-                    dmc.Box(input_component, style={"width": "70%", "flex": "1"}),
+                    html.Div(label_component, style={"width": "30%", "minWidth": "120px"}),
+                    html.Div(input_component, style={"width": "70%", "flex": "1"}),
                 ],
                 gap="md",
                 align="center",
-                style={"width": "100%"}
+                style={"width": "100%"},
             )
 
             parameter_inputs.append(parameter_row)
