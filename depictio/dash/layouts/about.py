@@ -66,7 +66,6 @@ layout = dmc.Container(
                                                     DashIconify(
                                                         icon="mdi:github",
                                                         width=40,
-                                                        color="#333",
                                                     ),
                                                     dmc.Text(
                                                         "GitHub Repository",
@@ -139,7 +138,6 @@ layout = dmc.Container(
                                                     DashIconify(
                                                         icon="mdi:file-document",
                                                         width=40,
-                                                        color="#333",
                                                     ),
                                                     dmc.Text(
                                                         "Documentation",
