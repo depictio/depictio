@@ -17,16 +17,42 @@ def create_theme_switch():
     )
 
 
+def create_auto_theme_button():
+    """Create a button to reset theme to automatic detection"""
+    return dmc.Button(
+        "🔄 Auto",
+        id="auto-theme-button",
+        variant="subtle",
+        size="xs",
+        # title="Reset to automatic theme detection based on system preference",
+        style={"marginTop": "5px", "display": "none"},  # Hidden by default
+    )
+
+
+def create_theme_controls():
+    """Create complete theme control group with switch and auto button"""
+    return dmc.Stack(
+        [
+            create_theme_switch(),
+            create_auto_theme_button(),
+        ],
+        gap="xs",
+        align="center",
+    )
+
+
 def register_theme_callbacks(app):
     """Register theme-related callbacks"""
 
     # Add Mantine figure templates for Plotly when theme system initializes
     dmc.add_figure_templates()
 
-    # Initialize theme based on system preference (following DMC demo pattern)
+    # Enhanced automatic theme detection with system preference monitoring
     app.clientside_callback(
         """
         function(pathname) {
+            console.log('🎨 === AUTOMATIC THEME DETECTION START ===');
+
             // Manage page classes for FOUC prevention
             const body = document.body;
 
@@ -44,15 +70,75 @@ def register_theme_callbacks(app):
                 }, 50);
             }
 
-            // Check for saved theme preference first
-            const savedTheme = localStorage.getItem('depictio-theme');
-            if (savedTheme) {
-                return savedTheme;
+            // Function to detect current system theme
+            function getSystemTheme() {
+                const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                return prefersDark ? 'dark' : 'light';
             }
 
-            // Otherwise check system preference
-            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-            return prefersDark ? 'dark' : 'light';
+            // Check for saved theme preference first
+            const savedTheme = localStorage.getItem('depictio-theme');
+            console.log('Saved theme preference:', savedTheme);
+
+            // Get current system theme
+            const systemTheme = getSystemTheme();
+            console.log('System theme preference:', systemTheme);
+
+            // Determine final theme
+            let finalTheme;
+            if (savedTheme) {
+                // User has explicitly set a preference
+                finalTheme = savedTheme;
+                console.log('Using saved theme:', finalTheme);
+            } else {
+                // No saved preference, use system theme
+                finalTheme = systemTheme;
+                console.log('Using system theme:', finalTheme);
+
+                // Save the detected system theme as the initial preference
+                localStorage.setItem('depictio-theme', finalTheme);
+            }
+
+            // Set up automatic system theme change listener
+            const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+            // Remove any existing listener to avoid duplicates
+            if (window.depictioThemeListener) {
+                mediaQuery.removeListener(window.depictioThemeListener);
+            }
+
+            // Create new listener for system theme changes
+            window.depictioThemeListener = function(e) {
+                console.log('🎨 System theme changed to:', e.matches ? 'dark' : 'light');
+
+                // Only auto-update if user hasn't manually overridden the theme
+                const currentSaved = localStorage.getItem('depictio-theme');
+                const currentSystem = e.matches ? 'dark' : 'light';
+
+                // Check if current saved theme matches the previous system preference
+                // If so, update to new system preference
+                const wasPreviouslyAuto = !localStorage.getItem('depictio-theme-manual-override');
+
+                if (wasPreviouslyAuto) {
+                    console.log('Auto-updating theme to match system:', currentSystem);
+                    localStorage.setItem('depictio-theme', currentSystem);
+
+                    // Trigger theme update by dispatching a custom event
+                    window.dispatchEvent(new CustomEvent('depictio-theme-changed', {
+                        detail: { theme: currentSystem, source: 'system-auto' }
+                    }));
+                } else {
+                    console.log('Theme manual override detected, not auto-updating');
+                }
+            };
+
+            // Add the listener
+            mediaQuery.addListener(window.depictioThemeListener);
+
+            console.log('🎨 === AUTOMATIC THEME DETECTION END ===');
+            console.log('Final theme:', finalTheme);
+
+            return finalTheme;
         }
         """,
         Output("theme-store", "data"),
@@ -69,27 +155,101 @@ def register_theme_callbacks(app):
     def sync_switch_state(theme_data):
         return theme_data == "dark"
 
-    # Handle theme switch toggle (following DMC demo pattern)
+    # Handle manual theme switch toggle with override tracking
     app.clientside_callback(
         """
         function(checked) {
             const theme = checked ? 'dark' : 'light';
 
-            console.log('=== THEME SWITCH DEBUG ===');
+            console.log('🎨 === MANUAL THEME SWITCH ===');
             console.log('Switch checked:', checked);
-            console.log('Theme switch clicked! New theme:', theme);
-            console.log('Storing in localStorage:', theme);
+            console.log('Manual theme selection:', theme);
 
             // Store theme preference
             localStorage.setItem('depictio-theme', theme);
 
-            console.log('localStorage after set:', localStorage.getItem('depictio-theme'));
+            // Mark as manual override to prevent automatic system updates
+            localStorage.setItem('depictio-theme-manual-override', 'true');
+
+            console.log('Theme saved with manual override flag');
 
             return theme;
         }
         """,
         Output("theme-store", "data", allow_duplicate=True),
         Input("theme-switch", "checked"),
+        prevent_initial_call=True,
+    )
+
+    # Handle auto theme button - reset to system preference
+    app.clientside_callback(
+        """
+        function(n_clicks) {
+            if (!n_clicks) {
+                return window.dash_clientside.no_update;
+            }
+
+            console.log('🎨 === RESET TO AUTO THEME ===');
+
+            // Remove manual override flag
+            localStorage.removeItem('depictio-theme-manual-override');
+
+            // Detect current system theme
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const systemTheme = prefersDark ? 'dark' : 'light';
+
+            console.log('Resetting to automatic theme detection');
+            console.log('Current system theme:', systemTheme);
+
+            // Save the system theme as preference
+            localStorage.setItem('depictio-theme', systemTheme);
+
+            console.log('Auto theme detection re-enabled');
+
+            return systemTheme;
+        }
+        """,
+        Output("theme-store", "data", allow_duplicate=True),
+        Input("auto-theme-button", "n_clicks"),
+        prevent_initial_call=True,
+    )
+
+    # Listen for automatic theme changes from system
+    app.clientside_callback(
+        """
+        function() {
+            console.log('🎨 Setting up automatic theme change listener');
+
+            // Listen for custom theme change events
+            function handleAutoThemeChange(event) {
+                if (event.detail && event.detail.source === 'system-auto') {
+                    console.log('🎨 Received automatic theme change:', event.detail.theme);
+
+                    // Update the theme store through a hidden trigger
+                    const themeStore = document.getElementById('theme-store');
+                    if (themeStore) {
+                        // Dispatch a change event to trigger Dash callbacks
+                        const changeEvent = new Event('change', { bubbles: true });
+                        themeStore.value = event.detail.theme;
+                        themeStore.dispatchEvent(changeEvent);
+                    }
+                }
+            }
+
+            // Remove existing listener if any
+            if (window.depictioAutoThemeHandler) {
+                window.removeEventListener('depictio-theme-changed', window.depictioAutoThemeHandler);
+            }
+
+            // Add new listener
+            window.depictioAutoThemeHandler = handleAutoThemeChange;
+            window.addEventListener('depictio-theme-changed', handleAutoThemeChange);
+
+            return window.dash_clientside.no_update;
+        }
+        """,
+        Output("dummy-resize-output", "children", allow_duplicate=True),
+        Input("url", "pathname"),
         prevent_initial_call=True,
     )
 
@@ -508,6 +668,24 @@ def register_theme_callbacks(app):
                     });
                 }
 
+                // Update auth modal specifically
+                const authModalContent = document.querySelector('.auth-modal-content');
+                if (authModalContent) {
+                    const modalBg = theme === 'dark' 
+                        ? 'rgba(37, 38, 43, 0.95)' 
+                        : 'rgba(255, 255, 255, 0.95)';
+                    const modalShadow = theme === 'dark'
+                        ? '0 8px 32px rgba(0, 0, 0, 0.3)'
+                        : '0 8px 32px rgba(0, 0, 0, 0.1)';
+                    
+                    safeApplyStyles(authModalContent, {
+                        'background': modalBg,
+                        'color': textColor,
+                        'box-shadow': modalShadow
+                    });
+                    console.log('✅ Updated auth modal styling');
+                }
+
                 // Inject non-background theme styles (text colors and components)
                 injectNonBackgroundCSS(theme, textColor);
 
@@ -540,7 +718,7 @@ def register_theme_bridge_callback(app):
     """Register the universal theme bridge callback for dashboard figure updates."""
     import time
 
-    from dash import Input, Output, State
+    from dash import Input, Output
 
     @app.callback(
         Output("theme-relay-store", "data"),

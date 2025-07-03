@@ -8,7 +8,7 @@ from dash_iconify import DashIconify
 from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import api_call_fetch_user_from_token
-from depictio.dash.theme_utils import create_theme_switch
+from depictio.dash.theme_utils import create_theme_controls
 
 
 def register_sidebar_callbacks(app):
@@ -291,7 +291,7 @@ def render_sidebar(email):
         id="sidebar-footer",
         # className="mt-auto",
         children=[
-            dmc.Center(create_theme_switch()),
+            dmc.Center(create_theme_controls()),
             dmc.Grid(
                 id="sidebar-footer-server-status",
                 align="center",
@@ -401,7 +401,7 @@ def render_sidebar_content(email):
     sidebar_footer = html.Div(
         id="sidebar-footer",
         children=[
-            dmc.Center(create_theme_switch()),
+            dmc.Center(create_theme_controls()),
             dmc.Grid(
                 id="sidebar-footer-server-status",
                 align="center",
