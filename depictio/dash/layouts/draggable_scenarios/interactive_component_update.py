@@ -207,7 +207,7 @@ def render_raw_children(
     # Add theme to component if it's a figure
     if comp_type == "figure":
         component["theme"] = theme
-    
+
     # Build the component using the helpers_mapping
     try:
         child = helpers_mapping[comp_type](**component)
@@ -248,7 +248,9 @@ def update_interactive_component(
 
     if not interactive_components_dict:
         for metadata in stored_metadata_raw:
-            child, index = render_raw_children(metadata, switch_state, dashboard_id, TOKEN, theme=theme)
+            child, index = render_raw_children(
+                metadata, switch_state, dashboard_id, TOKEN, theme=theme
+            )
             children.append(child)
         return children
 
@@ -385,7 +387,7 @@ def update_interactive_component(
             component["build_frame"] = True
             component["refresh"] = False
             component["access_token"] = TOKEN
-            
+
             # Add theme to component if it's a figure
             if component["component_type"] == "figure":
                 component["theme"] = theme
@@ -407,7 +409,7 @@ def update_interactive_component(
             component["refresh"] = True
             component["access_token"] = TOKEN
             component["dashboard_id"] = dashboard_id
-            
+
             # Add theme to component if it's a figure (though jbrowse shouldn't need it)
             if component["component_type"] == "figure":
                 component["theme"] = theme

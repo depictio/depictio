@@ -428,8 +428,8 @@ layout = html.Div(
                 id="auth-modal-listener",
             ),
             withCloseButton=False,
-            closeOnEscape=False,
-            closeOnClickOutside=False,
+            closeOnEscape=True,
+            closeOnClickOutside=True,
             size="lg",
             overlayProps={
                 "opacity": 0,  # Make overlay transparent so we can see our custom background
