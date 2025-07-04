@@ -22,14 +22,27 @@ describe('Edit Password Test', () => {
   })
 
   it('edits the password of the user', () => {
-    // Log in using the reusable function
+    // Use the reusable login function that works in login-success.cy.js
     cy.loginAsTestUser('testUser')
 
-    // Check if the login was successful
-    cy.url().should('include', '/dashboards')
+    // Wait for login to complete
+    cy.wait(5000)
+
+    // Check if login modal is still visible - if so, login failed
+    cy.get('body').then(($body) => {
+      if ($body.find('[role="dialog"][aria-modal="true"]').length > 0) {
+        cy.log('Login modal still visible - login may have failed')
+        throw new Error('Login failed - modal still visible')
+      }
+    })
+
+    // Navigate to dashboards
+    cy.visit('/dashboards')
+    cy.wait(2000)
 
     // Go to profile page
     cy.visit('/profile')
+    cy.wait(2000)
 
     // Click on the edit password button
     cy.contains('button', 'Edit Password').click()

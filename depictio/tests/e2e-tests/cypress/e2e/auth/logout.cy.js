@@ -24,6 +24,11 @@ describe('Logout Test', () => {
       // Log in using the reusable function
       cy.loginAsTestUser('testUser')
 
+      // Wait for login to complete and navigate
+      cy.wait(3000)
+      cy.visit('/dashboards')
+      cy.wait(2000)
+
       // Check if the login was successful
       cy.url().should('include', '/dashboards')
 

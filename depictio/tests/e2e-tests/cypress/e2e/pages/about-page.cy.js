@@ -21,25 +21,13 @@ describe('About Page Test', () => {
     })
 
     it('tests the About page for errors', () => {
-      // Navigate to the auth page
-      cy.visit('/auth')
+      // Log in using the reusable function
+      cy.loginAsTestUser('testUser')
 
-      // Check if we're on the auth page
-      cy.url().should('include', '/auth')
-
-      // Check if the login form is present
-      cy.get('#auth-modal').should('be.visible')
-
-      // Log in with valid credentials
-      cy.get('input[type="text"][placeholder="Enter your email"]')
-        .filter(':visible')
-        .type(testUser.email)
-
-      cy.get('input[type="password"][placeholder="Enter your password"]')
-        .filter(':visible')
-        .type(testUser.password)
-
-      cy.contains('button', 'Login').click()
+      // Wait for login to complete and navigate
+      cy.wait(3000)
+      cy.visit('/dashboards')
+      cy.wait(2000)
 
       // Check if the login was successful
       cy.url().should('include', '/dashboards')

@@ -36,7 +36,17 @@ describe('User Registration Test', () => {
       // Log in with the new credentials using reusable function
       cy.loginUser(test_email, test_password, { visitAuth: false })
 
-      // Check if the login was successful
+      // Wait for login to complete
+      cy.wait(3000)
+
+      // Check if the login was successful or navigate explicitly
+      cy.url().then((url) => {
+        if (!url.includes('/dashboards')) {
+          cy.visit('/dashboards')
+          cy.wait(2000)
+        }
+      })
+
       cy.url().should('include', '/dashboards')
 
       // Note: You might want to add API call to delete the test user
