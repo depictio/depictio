@@ -1,0 +1,390 @@
+/* Updated Background-related CSS styles for Depictio - GPU Optimized */
+
+/* Theme-aware page content */
+#page-content {
+    transition: background-color 0.2s ease, color 0.2s ease;
+    background-color: var(--app-bg-color, var(--mantine-color-white)) !important;
+    color: var(--app-text-color, var(--mantine-color-black)) !important;
+}
+
+/* Theme support for main containers */
+.mantine-AppShell-main,
+.mantine-Container-root {
+    background-color: var(--app-bg-color, var(--mantine-color-white)) !important;
+    color: var(--app-text-color, var(--mantine-color-black)) !important;
+}
+
+/* Auth modal content background - theme aware */
+.auth-modal-content {
+    position: relative;
+    z-index: 10000;
+    backdrop-filter: blur(10px);
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    color: var(--app-text-color, var(--depictio-text-light));
+    transition: background 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* Dark theme modal content */
+@media (prefers-color-scheme: dark) {
+    .auth-modal-content {
+        background: rgba(37, 38, 43, 0.95);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+}
+
+/* Manual theme overrides for modal content */
+body.theme-manual-light .auth-modal-content {
+    background: rgba(255, 255, 255, 0.95) !important;
+    color: var(--depictio-text-light) !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1) !important;
+}
+
+body.theme-manual-dark .auth-modal-content {
+    background: rgba(37, 38, 43, 0.95) !important;
+    color: var(--depictio-text-dark) !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Auth background positioning - GPU optimized */
+#auth-background {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    z-index: 9998 !important;
+    overflow: hidden;
+    /* Enable hardware acceleration */
+    transform: translateZ(0);
+    will-change: transform;
+}
+
+/* Triangle particles container - GPU optimized with background movement */
+#triangle-particles {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    /* Enable hardware acceleration */
+    transform: translateZ(0);
+    will-change: transform;
+    /* Add subtle background drift */
+    animation: backgroundDrift 60s infinite ease-in-out;
+}
+
+/* Base triangle particle styles */
+.triangle-particle {
+    position: absolute;
+    /* Enable hardware acceleration for smooth animations */
+    transform: translateZ(0);
+    will-change: transform, opacity;
+    /* Smooth transitions */
+    transition: none;
+    /* Base opacity */
+    opacity: 0.3;
+    background-size: contain;
+    background-repeat: no-repeat;
+}
+
+/* Small triangles - 12x12px (2:1 ratio: equal sides ~24px, short side ~12px) */
+.triangle-small {
+    width: 12px;
+    height: 12px;
+}
+
+/* Medium triangles - 18x18px (2:1 ratio: equal sides ~36px, short side ~18px) */
+.triangle-medium {
+    width: 18px;
+    height: 18px;
+}
+
+/* Large triangles - 24x24px (2:1 ratio: equal sides ~48px, short side ~24px) */
+.triangle-large {
+    width: 24px;
+    height: 24px;
+}
+
+/* Extra large triangles - 32x32px (2:1 ratio: equal sides ~64px, short side ~32px) */
+.triangle-xlarge {
+    width: 32px;
+    height: 32px;
+    opacity: 0.25; /* Slightly more transparent for larger triangles */
+}
+
+/* GPU-optimized animations with increased movement */
+@keyframes backgroundDrift {
+    0%, 100% {
+        transform: translate3d(0, 0, 0) rotate(0deg);
+    }
+    25% {
+        transform: translate3d(15px, -10px, 0) rotate(1deg);
+    }
+    50% {
+        transform: translate3d(-10px, 15px, 0) rotate(-1deg);
+    }
+    75% {
+        transform: translate3d(-15px, -5px, 0) rotate(0.5deg);
+    }
+}
+
+@keyframes triangleFloat {
+    0%, 100% {
+        transform: translate3d(0, 0, 0) rotate(0deg);
+        opacity: 0.2;
+    }
+    25% {
+        transform: translate3d(25px, -20px, 0) rotate(90deg);
+        opacity: 0.5;
+    }
+    50% {
+        transform: translate3d(35px, 10px, 0) rotate(180deg);
+        opacity: 0.4;
+    }
+    75% {
+        transform: translate3d(15px, 30px, 0) rotate(270deg);
+        opacity: 0.45;
+    }
+}
+
+@keyframes triangleDrift {
+    0%, 100% {
+        transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
+        opacity: 0.3;
+    }
+    33% {
+        transform: translate3d(40px, -25px, 0) rotate(120deg) scale(1.1);
+        opacity: 0.5;
+    }
+    66% {
+        transform: translate3d(-30px, 20px, 0) rotate(240deg) scale(0.9);
+        opacity: 0.4;
+    }
+}
+
+@keyframes trianglePulse {
+    0%, 100% {
+        opacity: 0.2;
+        transform: scale3d(1, 1, 1) rotate(0deg) translate3d(0, 0, 0);
+    }
+    50% {
+        opacity: 0.6;
+        transform: scale3d(1.2, 1.2, 1) rotate(180deg) translate3d(20px, -15px, 0);
+    }
+}
+
+@keyframes triangleRotate {
+    0% {
+        transform: rotate(0deg) translate3d(0, 0, 0);
+        opacity: 0.25;
+    }
+    25% {
+        transform: rotate(90deg) translate3d(30px, -20px, 0);
+        opacity: 0.4;
+    }
+    50% {
+        transform: rotate(180deg) translate3d(0, 25px, 0);
+        opacity: 0.35;
+    }
+    75% {
+        transform: rotate(270deg) translate3d(-25px, 0, 0);
+        opacity: 0.45;
+    }
+    100% {
+        transform: rotate(360deg) translate3d(0, 0, 0);
+        opacity: 0.25;
+    }
+}
+
+@keyframes triangleOrbit {
+    0%, 100% {
+        transform: translate3d(0, 0, 0) rotate(0deg);
+        opacity: 0.3;
+    }
+    25% {
+        transform: translate3d(45px, -35px, 0) rotate(45deg);
+        opacity: 0.5;
+    }
+    50% {
+        transform: translate3d(50px, 40px, 0) rotate(180deg);
+        opacity: 0.4;
+    }
+    75% {
+        transform: translate3d(-40px, 30px, 0) rotate(315deg);
+        opacity: 0.45;
+    }
+}
+
+@keyframes triangleWave {
+    0%, 100% {
+        transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
+        opacity: 0.25;
+    }
+    20% {
+        transform: translate3d(20px, -30px, 0) rotate(72deg) scale(1.05);
+        opacity: 0.4;
+    }
+    40% {
+        transform: translate3d(35px, 15px, 0) rotate(144deg) scale(0.95);
+        opacity: 0.5;
+    }
+    60% {
+        transform: translate3d(-25px, 35px, 0) rotate(216deg) scale(1.1);
+        opacity: 0.45;
+    }
+    80% {
+        transform: translate3d(-35px, -20px, 0) rotate(288deg) scale(0.9);
+        opacity: 0.35;
+    }
+}
+
+/* Apply animations to different triangle types */
+.triangle-anim-1 {
+    animation: triangleFloat 16s infinite ease-in-out;
+}
+
+.triangle-anim-2 {
+    animation: triangleDrift 22s infinite ease-in-out;
+}
+
+.triangle-anim-3 {
+    animation: trianglePulse 14s infinite ease-in-out;
+}
+
+.triangle-anim-4 {
+    animation: triangleRotate 28s infinite linear;
+}
+
+.triangle-anim-5 {
+    animation: triangleOrbit 20s infinite ease-in-out;
+}
+
+.triangle-anim-6 {
+    animation: triangleWave 18s infinite ease-in-out;
+}
+
+/* CSS Custom Properties for Theme Variables */
+:root {
+    --depictio-bg-light: #ffffff;
+    --depictio-bg-dark: #1a1b1e;
+    --depictio-surface-light: #ffffff;
+    --depictio-surface-dark: #25262b;
+    --depictio-text-light: #000000;
+    --depictio-text-dark: #ffffff;
+    --depictio-border-light: #dee2e6;
+    --depictio-border-dark: #373A40;
+}
+
+/* =============================================================================
+   AUTOMATIC THEME DETECTION
+   Uses CSS media queries to detect system theme preference
+   ============================================================================= */
+
+/* Default light theme */
+:root {
+    --app-bg-color: var(--depictio-bg-light);
+    --app-text-color: var(--depictio-text-light);
+    --app-surface-color: var(--depictio-surface-light);
+    --app-border-color: var(--depictio-border-light);
+}
+
+/* Automatic dark theme detection via CSS media query */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --app-bg-color: var(--depictio-bg-dark);
+        --app-text-color: var(--depictio-text-dark);
+        --app-surface-color: var(--depictio-surface-dark);
+        --app-border-color: var(--depictio-border-dark);
+    }
+}
+
+/* Light theme (default) */
+.theme-light {
+    --app-bg-color: var(--depictio-bg-light);
+    --app-text-color: var(--depictio-text-light);
+    --app-surface-color: var(--depictio-surface-light);
+}
+
+/* Dark theme */
+.theme-dark {
+    --app-bg-color: var(--depictio-bg-dark);
+    --app-text-color: var(--depictio-text-dark);
+    --app-surface-color: var(--depictio-surface-dark);
+}
+
+/* Base page background */
+body {
+    background-color: var(--app-bg-color, var(--depictio-bg-light));
+    color: var(--app-text-color, var(--depictio-text-light));
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Headers and navigation background */
+#header-content,
+.mantine-AppShell-header {
+    background-color: var(--app-surface-color, var(--depictio-surface-light)) !important;
+    color: var(--app-text-color, var(--depictio-text-light)) !important;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+#sidebar,
+.mantine-AppShell-navbar {
+    background-color: var(--app-surface-color, var(--depictio-surface-light)) !important;
+    transition: background-color 0.2s ease;
+}
+
+/* Draggable components background */
+.react-grid-item,
+.react-grid-item .card,
+.react-grid-item [data-mantine="Card"],
+#draggable .react-grid-item,
+#draggable .react-grid-item > *,
+#draggable .react-grid-item [class*="Card"] {
+    background-color: var(--app-surface-color, var(--depictio-surface-light)) !important;
+    color: var(--app-text-color, var(--depictio-text-light)) !important;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Bootstrap card components in draggable items */
+.react-grid-item .card-body,
+.react-grid-item .card-header,
+#draggable .card,
+#draggable .card-body,
+#draggable .card-header {
+    background-color: var(--app-surface-color, var(--depictio-surface-light)) !important;
+    color: var(--app-text-color, var(--depictio-text-light)) !important;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Dashboard offcanvas background */
+#offcanvas-parameters,
+.dashboard-offcanvas,
+.offcanvas {
+    background-color: var(--app-surface-color, var(--depictio-surface-light)) !important;
+    color: var(--app-text-color, var(--depictio-text-light)) !important;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+#offcanvas-parameters .offcanvas-header,
+.dashboard-offcanvas .offcanvas-header,
+.offcanvas .offcanvas-header {
+    background-color: var(--app-surface-color, var(--depictio-surface-light)) !important;
+    color: var(--app-text-color, var(--depictio-text-light)) !important;
+    border-bottom: 1px solid var(--app-border-color, #dee2e6) !important;
+    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+#offcanvas-parameters .offcanvas-body,
+.dashboard-offcanvas .offcanvas-body,
+.offcanvas .offcanvas-body {
+    background-color: var(--app-surface-color, var(--depictio-surface-light)) !important;
+    color: var(--app-text-color, var(--depictio-text-light)) !important;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Project management headers background */
+#permissions-manager-project-header {
+    background-color: var(--app-surface-color, var(--depictio-surface-light)) !important;
+    color: var(--app-text-color, var(--depictio-text-light)) !important;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}

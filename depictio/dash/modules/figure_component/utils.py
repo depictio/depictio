@@ -82,7 +82,16 @@ def build_figure_frame(index, children=None):
 _sampling_cache = {}
 
 
-def render_figure(dict_kwargs, visu_type, df, cutoff=100000, selected_point=None):
+def render_figure(dict_kwargs, visu_type, df, cutoff=100000, selected_point=None, theme="light"):
+    # Add the appropriate Plotly template based on the theme
+    if "template" not in dict_kwargs:
+        dict_kwargs["template"] = "mantine_dark" if theme == "dark" else "mantine_light"
+
+    logger.info("=== FIGURE RENDER DEBUG ===")
+    logger.info(f"Theme received: {theme}")
+    logger.info(f"Template selected: {dict_kwargs.get('template', 'None')}")
+    logger.info(f"Dict kwargs keys: {list(dict_kwargs.keys())}")
+
     if dict_kwargs and visu_type.lower() in plotly_vizu_dict and df is not None:
         if df.height > cutoff:
             # Use caching for sampled data to improve performance
@@ -99,7 +108,7 @@ def render_figure(dict_kwargs, visu_type, df, cutoff=100000, selected_point=None
         else:
             figure = plotly_vizu_dict[visu_type.lower()](df.to_pandas(), **dict_kwargs)
     else:
-        figure = px.scatter()
+        figure = px.scatter(template=dict_kwargs.get("template", "mantine_light"))
 
     if selected_point:
         selected_x = selected_point["x"]
@@ -139,6 +148,7 @@ def build_figure(**kwargs):
     df = kwargs.get("df", pl.DataFrame())
     TOKEN = kwargs.get("access_token")
     filter_applied = kwargs.get("filter_applied", False)
+    theme = kwargs.get("theme", "light")
 
     # selected_point = kwargs.get("selected_point")  # New parameter for selected point
 
@@ -195,8 +205,9 @@ def build_figure(**kwargs):
     # logger.info(f"Selected point: {selected_point}")
     # logger.info(f"Dict kwargs: {dict_kwargs}")
     # selected_point = {"x": selected_point[dict_kwargs["x"]], "y": selected_point[dict_kwargs["y"]]}
+    logger.debug(f"Figure theme: {theme}")
 
-    figure = render_figure(dict_kwargs, visu_type, df)
+    figure = render_figure(dict_kwargs, visu_type, df, theme=theme)
 
     style_partial_data_displayed = {"display": "none"}
     cutoff = 100000
@@ -256,7 +267,7 @@ def build_figure(**kwargs):
             dmc.Group(
                 [partial_data_badge, filter_badge],
                 grow=False,
-                spacing="xl",
+                gap="xl",
                 style={"margin-left": "12px"},
             )
         )

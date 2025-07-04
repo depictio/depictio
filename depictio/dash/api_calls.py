@@ -103,7 +103,7 @@ def api_call_fetch_user_from_token(token: str) -> User | None:
     user_data = response.json()
     logger.debug(f"User data fetched from API: {user_data.get('email', 'No email found')}")
 
-    if not user_data or "email" not in user_data:
+    if not user_data:
         return None
 
     # Add default password since frontend doesn't receive actual password
@@ -150,7 +150,7 @@ def api_call_fetch_user_from_email(email: EmailStr) -> User | None:
         f"User data fetched: {user_data.get('email', 'No email found')} with ID {user_data.get('_id', 'No ID found')}"
     )
 
-    if not user_data or "email" not in user_data:
+    if not user_data:
         return None
 
     # Add default password since frontend doesn't receive actual password
@@ -263,7 +263,7 @@ def api_call_cleanup_expired_temporary_users() -> dict[str, Any] | None:
 
 
 def api_call_upgrade_to_temporary_user(
-    access_token: str, expiry_hours: int = 24, expiry_minutes: int = 0
+    access_token: str, expiry_hours: int = 24
 ) -> dict[str, Any] | None:
     """
     Upgrade from anonymous user to temporary user for interactive features.
@@ -271,23 +271,16 @@ def api_call_upgrade_to_temporary_user(
     Args:
         access_token: Current user's access token
         expiry_hours: Number of hours until the temporary user expires (default: 24)
-        expiry_minutes: Number of additional minutes until the temporary user expires (default: 0)
 
     Returns:
         Session data for the new temporary user or None if failed
     """
     try:
-        logger.info(
-            f"Upgrading to temporary user with expiry: {expiry_hours} hours, {expiry_minutes} minutes"
-        )
-
-        params = {"expiry_hours": expiry_hours}
-        if expiry_minutes > 0:
-            params["expiry_minutes"] = expiry_minutes
+        logger.info(f"Upgrading to temporary user with expiry: {expiry_hours} hours")
 
         response = httpx.post(
             f"{API_BASE_URL}/depictio/api/v1/auth/upgrade_to_temporary_user",
-            params=params,
+            params={"expiry_hours": expiry_hours},
             headers={"Authorization": f"Bearer {access_token}"},
             timeout=30.0,
         )

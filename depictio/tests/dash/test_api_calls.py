@@ -387,7 +387,7 @@ class TestApiCallUpgradeToTemporaryUser:
         self.mock_httpx_post.return_value = mock_response
 
         # Act
-        result = api_call_upgrade_to_temporary_user("anon_token", expiry_hours=0, expiry_minutes=1)
+        result = api_call_upgrade_to_temporary_user("anon_token", expiry_hours=0)
         # Assert
         assert result is not None
         assert result["is_temporary"] is True
@@ -398,7 +398,7 @@ class TestApiCallUpgradeToTemporaryUser:
         # Verify HTTP call was made correctly
         self.mock_httpx_post.assert_called_once_with(
             "http://test-api/depictio/api/v1/auth/upgrade_to_temporary_user",
-            params={"expiry_hours": 0, "expiry_minutes": 1},
+            params={"expiry_hours": 0},
             headers={"Authorization": "Bearer anon_token"},
             timeout=30.0,
         )

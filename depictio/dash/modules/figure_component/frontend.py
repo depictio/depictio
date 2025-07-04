@@ -154,9 +154,13 @@ def register_callbacks_figure_component(app):
                         label=tooltip_label,
                         # position="left",
                         multiline=True,
-                        transition="pop",
+                        # transition="pop",
+                        transitionProps={
+                            "name": "pop",
+                            "duration": 300,
+                        },
                         withArrow=True,
-                        width=600,
+                        w=600,
                         openDelay=100,
                         closeDelay=100,
                         # transitionDuration=150,
@@ -233,9 +237,13 @@ def register_callbacks_figure_component(app):
                         label=tooltip_label,
                         # position="left",
                         multiline=True,
-                        transition="pop",
+                        # transition="pop",
+                        transitionProps={
+                            "name": "pop",
+                            "duration": 300,
+                        },
                         withArrow=True,
-                        width=600,
+                        w=600,
                         openDelay=100,
                         closeDelay=100,
                         # transitionDuration=150,
@@ -478,6 +486,7 @@ def register_callbacks_figure_component(app):
         [
             Input({"type": "dict_kwargs", "index": MATCH}, "data"),
             Input({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
+            State("theme-store", "data"),  # Keep as State - theme handled separately
             State({"type": "workflow-selection-label", "index": MATCH}, "value"),
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
             State({"type": "segmented-control-visu-graph", "index": MATCH}, "id"),
@@ -489,14 +498,14 @@ def register_callbacks_figure_component(app):
     )
     def update_figure(*args):
         dict_kwargs = args[0]
-
         visu_type = args[1]
-        workflow_id = args[2]
-        data_collection_id = args[3]
-        id = args[4]
-        parent_index = args[5]
-        local_data = args[6]
-        pathname = args[7]
+        theme_data = args[2]  # theme_data is now the 3rd argument (State)
+        workflow_id = args[3]
+        data_collection_id = args[4]
+        id = args[5]
+        parent_index = args[6]
+        local_data = args[7]
+        pathname = args[8]
 
         if not local_data:
             raise dash.exceptions.PreventUpdate
@@ -570,6 +579,23 @@ def register_callbacks_figure_component(app):
         logger.info(f"visu_type: {visu_type}")
 
         if dict_kwargs:
+            # Extract theme from theme_data
+            theme = "light"
+            if theme_data:
+                if isinstance(theme_data, dict):
+                    theme = theme_data.get("colorScheme", "light")
+                elif isinstance(theme_data, str):
+                    theme = theme_data  # theme_data is directly the theme string
+
+            logger.info("=== FRONTEND THEME DEBUG ===")
+            logger.info(f"Raw theme_data: {theme_data}")
+            logger.info(f"Theme data type: {type(theme_data)}")
+            logger.info(f"Is theme_data truthy: {bool(theme_data)}")
+            logger.info(f"Final extracted theme: {theme}")
+
+            # If theme_data is empty/None, it means the store hasn't been initialized yet
+            # In this case, we can't get the theme server-side, so rely on client-side updates
+
             figure_kwargs = {
                 "index": id["index"],
                 "dict_kwargs": dict_kwargs,
@@ -578,6 +604,7 @@ def register_callbacks_figure_component(app):
                 "dc_id": data_collection_id,
                 "dc_config": dc_specs["config"],
                 "access_token": TOKEN,
+                "theme": theme,  # Pass theme to build_figure
             }
 
             if parent_index:
@@ -711,7 +738,7 @@ def create_stepper_figure_button(n, disabled=False):
             style=UNSELECTED_STYLE,
             size="xl",
             color="grape",
-            leftIcon=DashIconify(icon="mdi:graph-box"),
+            leftSection=DashIconify(icon="mdi:graph-box", color="white"),
             disabled=disabled,
         )
     )

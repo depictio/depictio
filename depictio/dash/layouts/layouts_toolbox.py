@@ -34,29 +34,34 @@ def create_dashboard_modal(
         withCloseButton=True,
         closeOnClickOutside=False,
         closeOnEscape=False,
-        overlayOpacity=0.55,
-        overlayBlur=3,
+        # overlayOpacity=0.55,
+        # overlayBlur=3,
+        overlayProps={
+            "overlayBlur": 3,
+            "overlayOpacity": 0.55,
+        },
         shadow="xl",
         radius="md",
-        size=1000,
-        # size=2000,
+        # size="xl",
+        size=1500,
         zIndex=10000,
         styles={
             "modal": {
                 "padding": "28px",
-            }
+            },
+            # "height": "80vh",  # Set a fixed height for the modal
         },
         children=[
             # dmc.Grid(
             #     [
             #         dmc.Col(
             dmc.Stack(
-                spacing="xl",
+                gap="xl",
                 children=[
                     # Header with icon and title
                     dmc.Group(
-                        position="center",
-                        spacing="sm",
+                        justify="center",
+                        gap="sm",
                         children=[
                             DashIconify(
                                 icon="mdi:view-dashboard-outline",
@@ -67,7 +72,7 @@ def create_dashboard_modal(
                             dmc.Title(
                                 "Create New Depictio Dashboard",
                                 order=1,
-                                color="orange",
+                                c="orange",
                                 style={"margin": 0},
                             ),
                         ],
@@ -76,7 +81,7 @@ def create_dashboard_modal(
                     dmc.Divider(style={"marginTop": 5, "marginBottom": 5}),
                     # Form elements
                     dmc.Stack(
-                        spacing="md",
+                        gap="md",
                         children=[
                             # Dashboard title input
                             dmc.TextInput(
@@ -86,7 +91,7 @@ def create_dashboard_modal(
                                 id=f"{id_prefix}-title-input",
                                 value=dashboard_title,
                                 required=True,
-                                icon=DashIconify(icon="mdi:text-box-outline"),
+                                leftSection=DashIconify(icon="mdi:text-box-outline"),
                                 style={"width": "100%"},
                             ),
                             # Warning message (hidden by default)
@@ -97,17 +102,18 @@ def create_dashboard_modal(
                                 icon=DashIconify(icon="mdi:alert"),
                                 style={"display": "none"},
                             ),
-                            # Project dropdown
+                            # Project dropdown - simplified for debugging
                             dmc.Select(
                                 label="Project",
                                 description="Select the project this dashboard belongs to",
-                                data=projects,
-                                value=selected_project,
+                                data=[],  # Start empty, will be populated by callback
                                 id=f"{id_prefix}-projects",
-                                searchable=True,
-                                clearable=True,
-                                icon=DashIconify(icon="mdi:jira"),
+                                placeholder="Loading projects...",
                                 style={"width": "100%"},
+                                searchable=False,  # Disable search for now
+                                clearable=False,  # Disable clear for now
+                                # comboboxProps={"zIndex": 1000},
+                                comboboxProps={"withinPortal": False},
                             ),
                             # Available templates dropdown
                             # dmc.Select(
@@ -117,7 +123,7 @@ def create_dashboard_modal(
                             #     id=f"{id_prefix}-templates",
                             #     searchable=True,
                             #     clearable=True,
-                            #     icon=DashIconify(icon="mdi:palette"),
+                            #     leftSection=DashIconify(icon="mdi:palette"),
                             #     style={"width": "100%"},
                             # ),
                             # Template selection message
@@ -138,8 +144,8 @@ def create_dashboard_modal(
                     ),
                     # Buttons
                     dmc.Group(
-                        position="right",
-                        spacing="md",
+                        justify="flex-end",
+                        gap="md",
                         mt="lg",
                         children=[
                             dmc.Button(
@@ -154,7 +160,7 @@ def create_dashboard_modal(
                                 id=f"create-{id_prefix}-submit",
                                 color="orange",
                                 radius="md",
-                                leftIcon=DashIconify(icon="mdi:plus", width=16),
+                                leftSection=DashIconify(icon="mdi:plus", width=16),
                             ),
                         ],
                     ),
@@ -204,8 +210,12 @@ def create_delete_confirmation_modal(
         id=modal_id,
         centered=True,
         withCloseButton=False,
-        overlayOpacity=0.55,
-        overlayBlur=3,
+        # overlayOpacity=0.55,
+        # overlayBlur=3,
+        overlayProps={
+            "overlayOpacity": 0.55,
+            "overlayBlur": 3,
+        },
         shadow="xl",
         radius="md",
         size="md",
@@ -217,12 +227,12 @@ def create_delete_confirmation_modal(
         },
         children=[
             dmc.Stack(
-                spacing="lg",
+                gap="lg",
                 children=[
                     # Header with icon and title
                     dmc.Group(
-                        position="left",
-                        spacing="sm",
+                        justify="flex-start",
+                        gap="sm",
                         children=[
                             DashIconify(
                                 icon=icon,
@@ -243,13 +253,13 @@ def create_delete_confirmation_modal(
                     dmc.Text(
                         message,
                         size="sm",
-                        color="dimmed",
+                        c="gray",
                         style={"lineHeight": 1.5},
                     ),
                     # Buttons
                     dmc.Group(
-                        position="right",
-                        spacing="md",
+                        justify="flex-end",
+                        gap="md",
                         mt="md",
                         children=[
                             dmc.Button(
@@ -270,7 +280,7 @@ def create_delete_confirmation_modal(
                                 },
                                 color="red",
                                 radius="md",
-                                leftIcon=DashIconify(icon="mdi:delete", width=16),
+                                leftSection=DashIconify(icon="mdi:delete", width=16),
                             ),
                         ],
                     ),
@@ -314,8 +324,12 @@ def create_add_with_input_modal(
         id=modal_id,
         centered=True,
         withCloseButton=False,
-        overlayOpacity=0.55,
-        overlayBlur=3,
+        # overlayOpacity=0.55,
+        # overlayBlur=3,
+        overlayProps={
+            "overlayOpacity": 0.55,
+            "overlayBlur": 3,
+        },
         shadow="xl",
         radius="md",
         size="md",
@@ -327,12 +341,12 @@ def create_add_with_input_modal(
         },
         children=[
             dmc.Stack(
-                spacing="lg",
+                gap="lg",
                 children=[
                     # Header with icon and title
                     dmc.Group(
-                        position="left",
-                        spacing="sm",
+                        justify="flex-start",
+                        gap="sm",
                         children=[
                             DashIconify(
                                 icon=icon,
@@ -344,7 +358,7 @@ def create_add_with_input_modal(
                                 title,
                                 order=4,
                                 style={"margin": 0},
-                                color=title_color if title_color else None,
+                                c=title_color if title_color else None,
                             ),
                         ],
                     ),
@@ -355,15 +369,15 @@ def create_add_with_input_modal(
                         message,
                         id=f"{id_prefix}-add-confirmation-modal-message",
                         size="sm",
-                        color="dimmed",
+                        c="gray",
                         style={"lineHeight": 1.5},
                     ),
                     # Input field
                     input_field,
                     # Buttons
                     dmc.Group(
-                        position="right",
-                        spacing="md",
+                        justify="flex-end",
+                        gap="md",
                         mt="md",
                         children=[
                             dmc.Button(
@@ -378,7 +392,7 @@ def create_add_with_input_modal(
                                 id=f"confirm-{id_prefix}-add-button",
                                 color=confirm_button_color,
                                 radius="md",
-                                leftIcon=DashIconify(icon="mdi:check-circle", width=16),
+                                leftSection=DashIconify(icon="mdi:check-circle", width=16),
                             ),
                         ],
                     ),
@@ -445,8 +459,12 @@ def create_edit_password_modal(
         closeOnClickOutside=True,
         size="lg",
         # title=title,
-        overlayOpacity=0.55,
-        overlayBlur=3,
+        # overlayOpacity=0.55,
+        # overlayBlur=3,
+        overlayProps={
+            "overlayOpacity": 0.55,
+            "overlayBlur": 3,
+        },
         shadow="xl",
         radius="md",
         styles={
@@ -459,24 +477,24 @@ def create_edit_password_modal(
                 html.Div(
                     [
                         dmc.Stack(
-                            spacing="md",
+                            gap="md",
                             children=[
                                 # Header with icon and title
                                 dmc.Group(
-                                    position="left",
-                                    spacing="sm",
+                                    justify="flex-start",
+                                    gap="sm",
                                     children=[
                                         DashIconify(
                                             icon="carbon:password",
                                             width=28,
                                             height=28,
-                                            color="grey",
+                                            color="gray",
                                         ),
                                         dmc.Title(
                                             title,
                                             order=4,
                                             style={"margin": 0},
-                                            color="blue",
+                                            c="blue",
                                         ),
                                     ],
                                 ),
@@ -506,13 +524,13 @@ def create_edit_password_modal(
                                 ),
                                 dmc.Text(
                                     id="message-password",
-                                    color="red",
+                                    c="red",
                                     size="sm",
                                     style={"display": "none"},
                                 ),
                                 # Button
                                 dmc.Group(
-                                    position="right",
+                                    justify="flex-end",
                                     mt="lg",
                                     children=[
                                         dmc.Button(
@@ -520,7 +538,9 @@ def create_edit_password_modal(
                                             color="blue",
                                             id="save-password",
                                             radius="md",
-                                            leftIcon=DashIconify(icon="mdi:content-save", width=16),
+                                            leftSection=DashIconify(
+                                                icon="mdi:content-save", width=16
+                                            ),
                                         ),
                                     ],
                                 ),

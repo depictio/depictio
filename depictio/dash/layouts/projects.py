@@ -33,12 +33,12 @@ def fetch_projects(token: str) -> list[Project]:
 
     headers = {"Authorization": f"Bearer {token}"}
     projects = httpx.get(url, headers=headers)
-    logger.info(f"Response status code: {projects.status_code}")
-    logger.info(f"Response content: {projects.content}")
-    logger.info(f"Response headers: {projects.headers}")
-    logger.info(f"Response JSON: {projects.json()}")
-    logger.info("Successfully fetched projects.")
-    logger.info(f"Projects: {projects.json()}")
+    # logger.info(f"Response status code: {projects.status_code}")
+    # logger.info(f"Response content: {projects.content}")
+    # logger.info(f"Response headers: {projects.headers}")
+    # logger.info(f"Response JSON: {projects.json()}")
+    # logger.info("Successfully fetched projects.")
+    # logger.info(f"Projects: {projects.json()}")
 
     projects = [Project.from_mongo(project) for project in projects.json()]
     return projects
@@ -136,7 +136,7 @@ def return_deltatable_for_view(workflow_id: str, dc: DataCollection, token: str)
     )
     preview_panel = dmc.AccordionPanel(dmc.Paper(grid))
     preview_control = dmc.AccordionControl(
-        dmc.Text("Preview", weight=700, className="label-text"),
+        dmc.Text("Preview", fw="bold", className="label-text"),
         icon=DashIconify(icon="material-symbols:preview", width=20),
     )
     return preview_panel, preview_control
@@ -169,20 +169,24 @@ def render_data_collection(dc: DataCollection, workflow_id: str, token: str):
     preview_control = None
 
     metatype_lower = dc.config.metatype.lower() if dc.config.metatype else "unknown"
+    # TODO: DMC 2.0+ - 'black' is not a valid color for Badge, using 'dark' instead
     badge_type_metatype = dmc.Badge(
         children=("Metadata" if metatype_lower == "metadata" else "Aggregate"),
-        color="blue" if metatype_lower == "metadata" else "black",
+        color="blue" if metatype_lower == "metadata" else "dark",
         className="ml-2",
         style=(
             {"display": "inline-block"} if metatype_lower == "metadata" else {"display": "none"}
         ),
     )
 
+    # DMC 2.0+ - Using regular Accordion with AccordionItem structure
     return dmc.Paper(
         children=[
-            dmc.AccordionMultiple(
+            dmc.Accordion(
+                multiple=True,  # Allow multiple panels to be open simultaneously
                 children=[
-                    dmc.Accordion(
+                    dmc.AccordionItem(
+                        value="data-collection-details",
                         children=[
                             dmc.AccordionControl(
                                 dmc.Group(
@@ -197,97 +201,109 @@ def render_data_collection(dc: DataCollection, workflow_id: str, token: str):
                                 children=[
                                     dmc.Accordion(
                                         children=[
-                                            dmc.AccordionControl(
-                                                "Details",
-                                                icon=DashIconify(
-                                                    icon="mdi:information-outline",
-                                                    width=20,
-                                                ),
-                                            ),
-                                            dmc.AccordionPanel(
+                                            dmc.AccordionItem(
+                                                value="details",
                                                 children=[
-                                                    dmc.Group(
-                                                        children=[
-                                                            dmc.Text(
-                                                                "Database ID:",
-                                                                weight=700,
-                                                                className="label-text",
-                                                            ),
-                                                            dmc.Text(str(dc.id), weight=500),
-                                                        ],
-                                                        spacing="xs",
+                                                    dmc.AccordionControl(
+                                                        "Details",
+                                                        icon=DashIconify(
+                                                            icon="mdi:information-outline",
+                                                            width=20,
+                                                        ),
                                                     ),
-                                                    dmc.Group(
+                                                    dmc.AccordionPanel(
                                                         children=[
-                                                            dmc.Text(
-                                                                "Tag:",
-                                                                weight=700,
-                                                                className="label-text",
+                                                            dmc.Group(
+                                                                children=[
+                                                                    dmc.Text(
+                                                                        "Database ID:",
+                                                                        fw="bold",
+                                                                        className="label-text",
+                                                                    ),
+                                                                    dmc.Text(
+                                                                        str(dc.id), fw="normal"
+                                                                    ),
+                                                                ],
+                                                                gap="xs",
                                                             ),
-                                                            dmc.Text(
-                                                                dc.data_collection_tag,
-                                                                weight=500,
+                                                            dmc.Group(
+                                                                children=[
+                                                                    dmc.Text(
+                                                                        "Tag:",
+                                                                        fw="bold",
+                                                                        className="label-text",
+                                                                    ),
+                                                                    dmc.Text(
+                                                                        dc.data_collection_tag,
+                                                                        fw="normal",
+                                                                    ),
+                                                                ],
+                                                                gap="xs",
                                                             ),
-                                                        ],
-                                                        spacing="xs",
+                                                            dmc.Group(
+                                                                children=[
+                                                                    dmc.Text(
+                                                                        "Description:",
+                                                                        fw="bold",
+                                                                        className="label-text",
+                                                                    ),
+                                                                    dmc.Text(
+                                                                        (
+                                                                            dc.description
+                                                                            if hasattr(
+                                                                                dc,
+                                                                                "description",
+                                                                            )
+                                                                            else ""
+                                                                        ),
+                                                                        fw="normal",
+                                                                    ),
+                                                                ],
+                                                                gap="xs",
+                                                            ),
+                                                            dmc.Group(
+                                                                children=[
+                                                                    dmc.Text(
+                                                                        "Type:",
+                                                                        fw="bold",
+                                                                        className="label-text",
+                                                                    ),
+                                                                    dmc.Text(
+                                                                        dc.config.type,
+                                                                        fw="normal",
+                                                                    ),
+                                                                ],
+                                                                gap="xs",
+                                                            ),
+                                                            dmc.Group(
+                                                                children=[
+                                                                    dmc.Text(
+                                                                        "MetaType:",
+                                                                        fw="bold",
+                                                                        className="label-text",
+                                                                    ),
+                                                                    dmc.Text(
+                                                                        dc.config.metatype,
+                                                                        fw="normal",
+                                                                    ),
+                                                                ],
+                                                                gap="xs",
+                                                            ),
+                                                        ]
                                                     ),
-                                                    dmc.Group(
-                                                        children=[
-                                                            dmc.Text(
-                                                                "Description:",
-                                                                weight=700,
-                                                                className="label-text",
-                                                            ),
-                                                            dmc.Text(
-                                                                (
-                                                                    dc.description
-                                                                    if hasattr(
-                                                                        dc,
-                                                                        "description",
-                                                                    )
-                                                                    else ""
-                                                                ),
-                                                                weight=500,
-                                                            ),
-                                                        ],
-                                                        spacing="xs",
-                                                    ),
-                                                    dmc.Group(
-                                                        children=[
-                                                            dmc.Text(
-                                                                "Type:",
-                                                                weight=700,
-                                                                className="label-text",
-                                                            ),
-                                                            dmc.Text(
-                                                                dc.config.type,
-                                                                weight=500,
-                                                            ),
-                                                        ],
-                                                        spacing="xs",
-                                                    ),
-                                                    dmc.Group(
-                                                        children=[
-                                                            dmc.Text(
-                                                                "MetaType:",
-                                                                weight=700,
-                                                                className="label-text",
-                                                            ),
-                                                            dmc.Text(
-                                                                dc.config.metatype,
-                                                                weight=500,
-                                                            ),
-                                                        ],
-                                                        spacing="xs",
-                                                    ),
-                                                ]
-                                            ),
-                                            dmc.Accordion(
+                                                ],
+                                            )
+                                        ]
+                                    ),
+                                    dmc.Accordion(
+                                        children=[
+                                            dmc.AccordionItem(
+                                                value="config",
                                                 children=[
                                                     dmc.AccordionControl(
                                                         dmc.Text(
                                                             "depictio-CLI configuration",
-                                                            weight=700,
+                                                            fw="bold",
                                                             className="label-text",
                                                         ),
                                                         icon=DashIconify(
@@ -309,25 +325,30 @@ def render_data_collection(dc: DataCollection, workflow_id: str, token: str):
                                                         ]
                                                     ),
                                                 ],
-                                                chevronPosition="right",
-                                                variant="contained",
-                                            ),
-                                            dmc.Accordion(
+                                            )
+                                        ],
+                                        chevronPosition="right",
+                                        variant="contained",
+                                    ),
+                                    dmc.Accordion(
+                                        children=[
+                                            dmc.AccordionItem(
+                                                value="preview",
                                                 children=[
                                                     preview_control,
                                                     preview_panel,
                                                 ],
-                                                chevronPosition="right",
-                                                variant="contained",
-                                            ),
-                                        ]
-                                    )
+                                            )
+                                        ],
+                                        chevronPosition="right",
+                                        variant="contained",
+                                    ),
                                 ]
                             ),
-                        ]
+                        ],
                     ),
                 ],
-            )
+            ),
         ],
         className="p-3",
         radius="sm",
@@ -354,68 +375,68 @@ def render_workflow_item(wf: Workflow, token: str):
                 children=[
                     dmc.Group(
                         children=[
-                            dmc.Text("Database ID:", weight=700, className="label-text"),
-                            dmc.Text(str(wf.id), weight=500),
+                            dmc.Text("Database ID:", fw="bold", className="label-text"),
+                            dmc.Text(str(wf.id), fw="normal"),
                         ],
-                        spacing="xs",
+                        gap="xs",
                     ),
                     dmc.Group(
                         children=[
-                            dmc.Text("Name:", weight=700, className="label-text"),
-                            dmc.Text(wf.name, weight=500),
+                            dmc.Text("Name:", fw="bold", className="label-text"),
+                            dmc.Text(wf.name, fw="normal"),
                         ],
-                        spacing="xs",
+                        gap="xs",
                     ),
                     dmc.Group(
                         children=[
-                            dmc.Text("Engine:", weight=700, className="label-text"),
+                            dmc.Text("Engine:", fw="bold", className="label-text"),
                             dmc.Text(
                                 f"{wf.engine.name}"
                                 + (f" (version {wf.engine.version})" if wf.engine.version else ""),
-                                weight=500,
+                                fw="normal",
                             ),
                         ],
-                        spacing="xs",
+                        gap="xs",
                     ),
                     dmc.Group(
                         children=[
-                            dmc.Text("Repository URL:", weight=700, className="label-text"),
+                            dmc.Text("Repository URL:", fw="bold", className="label-text"),
                             dmc.Anchor(
                                 wf.repository_url,
                                 href=wf.repository_url,
                                 target="_blank",
-                                weight=500,
+                                fw="normal",
                             ),
                         ],
-                        spacing="xs",
+                        gap="xs",
                     ),
                     dmc.Group(
                         children=[
-                            dmc.Text("Description:", weight=700, className="label-text"),
-                            dmc.Text(wf.description, weight=500),
+                            dmc.Text("Description:", fw="bold", className="label-text"),
+                            dmc.Text(wf.description, fw="normal"),
                         ],
-                        spacing="xs",
+                        gap="xs",
                     ),
                     dmc.Group(
                         children=[
-                            dmc.Text("Created at:", weight=700, className="label-text"),
-                            dmc.Text(wf.registration_time, weight=500),
+                            dmc.Text("Created at:", fw="bold", className="label-text"),
+                            dmc.Text(wf.registration_time, fw="normal"),
                         ],
-                        spacing="xs",
+                        gap="xs",
                     ),
                     # dmc.Group(
                     #     children=[
-                    #         dmc.Text("Owners:", weight=700, className="label-text"),
-                    #         dmc.Text(str([o.id for o in wf.permissions.owners]), weight=500),
+                    #         dmc.Text("Owners:", fw="bold", className="label-text"),
+                    #         dmc.Text(str([o.id for o in wf.permissions.owners]), fw="medium"),
                     #     ],
-                    #     spacing="xs",
+                    #     gap="xs",
                     # ),
                     # dmc.Group(
                     #     children=[
-                    #         dmc.Text("Viewers:", weight=700, className="label-text"),
-                    #         dmc.Text(str(wf.permissions.viewers), weight=500),
+                    #         dmc.Text("Viewers:", fw="bold", className="label-text"),
+                    #         dmc.Text(str(wf.permissions.viewers), fw="medium"),
                     #     ],
-                    #     spacing="xs",
+                    #     gap="xs",
                     # ),
                 ],
                 className="dataset-details p-3",
@@ -518,33 +539,33 @@ def render_project_item(
                 children=[
                     dmc.Group(
                         children=[
-                            dmc.Text("Name:", weight=700, className="label-text"),
-                            dmc.Text(project.name, weight=500),
+                            dmc.Text("Name:", fw="bold", className="label-text"),
+                            dmc.Text(project.name, fw="normal"),
                         ],
-                        spacing="xs",
+                        gap="xs",
                     ),
                     dmc.Group(
                         children=[
-                            dmc.Text("Database ID:", weight=700, className="label-text"),
-                            dmc.Text(str(project.id), weight=500),
+                            dmc.Text("Database ID:", fw="bold", className="label-text"),
+                            dmc.Text(str(project.id), fw="normal"),
                         ],
-                        spacing="xs",
+                        gap="xs",
                     ),
                     dmc.Group(
                         children=[
-                            dmc.Text("Description:", weight=700, className="label-text"),
+                            dmc.Text("Description:", fw="bold", className="label-text"),
                             dmc.Text(
                                 (project.description if project.description else "Not defined"),
-                                weight=500,
+                                fw="normal",
                             ),
                         ],
-                        spacing="xs",
+                        gap="xs",
                     ),
                     dmc.Group(
                         children=[
                             dmc.Text(
                                 "Data Management Platform URL:",
-                                weight=700,
+                                fw="bold",
                                 className="label-text",
                             ),
                             (
@@ -552,41 +573,41 @@ def render_project_item(
                                     project.data_management_platform_project_url,
                                     href=project.data_management_platform_project_url,
                                     target="_blank",
-                                    weight=500,
+                                    fw="normal",
                                 )
                                 if project.data_management_platform_project_url
                                 else dmc.Text(
                                     "Not defined",
-                                    weight=500,
+                                    fw="normal",
                                 )
                             ),
                         ],
-                        spacing="xs",
+                        gap="xs",
                     ),
                     dmc.Group(
                         children=[
-                            dmc.Text("Created at:", weight=700, className="label-text"),
-                            dmc.Text(project.registration_time, weight=500),
+                            dmc.Text("Created at:", fw="bold", className="label-text"),
+                            dmc.Text(project.registration_time, fw="normal"),
                         ],
-                        spacing="xs",
+                        gap="xs",
                     ),
                     dmc.Group(
                         children=[
-                            dmc.Text("Owners:", weight=700, className="label-text"),
+                            dmc.Text("Owners:", fw="bold", className="label-text"),
                             dmc.Text(
                                 str(
                                     " ; ".join(
                                         [f"{o.email} - {o.id}" for o in project.permissions.owners]
                                     )
                                 ),
-                                weight=500,
+                                fw="normal",
                             ),
                         ],
-                        spacing="xs",
+                        gap="xs",
                     ),
                     dmc.Group(
                         children=[
-                            dmc.Text("Editors:", weight=700, className="label-text"),
+                            dmc.Text("Editors:", fw="bold", className="label-text"),
                             dmc.Text(
                                 (
                                     str(
@@ -600,14 +621,14 @@ def render_project_item(
                                     if project.permissions.editors
                                     else "None"
                                 ),
-                                weight=500,
+                                fw="normal",
                             ),
                         ],
-                        spacing="xs",
+                        gap="xs",
                     ),
                     dmc.Group(
                         children=[
-                            dmc.Text("Viewers:", weight=700, className="label-text"),
+                            dmc.Text("Viewers:", fw="bold", className="label-text"),
                             dmc.Text(
                                 (
                                     str(
@@ -621,14 +642,14 @@ def render_project_item(
                                     if project.permissions.viewers
                                     else "None"
                                 ),
-                                weight=500,
+                                fw="normal",
                             ),
                         ],
-                        spacing="xs",
+                        gap="xs",
                     ),
                     dmc.Group(
                         children=[
-                            dmc.Text("Is public:", weight=700, className="label-text"),
+                            dmc.Text("Is public:", fw="bold", className="label-text"),
                             dmc.Badge(
                                 "Public" if project.is_public else "Private",
                                 color="green" if project.is_public else "violet",
@@ -637,7 +658,7 @@ def render_project_item(
                                 size="xs",
                             ),
                         ],
-                        spacing="xs",
+                        gap="xs",
                     ),
                 ],
                 className="project-details p-3",
@@ -694,8 +715,8 @@ def render_project_item(
                 dmc.Group(
                     [
                         badge_ownership,
-                        dmc.Text(f"{project.name}", weight=700),
-                        # dmc.Text(f" ({str(project.id)})", weight=500),
+                        dmc.Text(f"{project.name}", fw="bold"),
+                        # dmc.Text(f" ({str(project.id)})", fw="medium"),
                     ],
                 ),
             ),
@@ -718,20 +739,18 @@ def render_project_item(
                             ),
                             dmc.AccordionPanel(
                                 children=[
-                                    dmc.AccordionMultiple(
-                                        children=[
-                                            (
-                                                html.Div(sections)
-                                                if sections
-                                                else html.P("No workflows available.")
-                                            ),
-                                        ]
+                                    # DMC 2.0+ - Simple content display instead of nested AccordionMultiple
+                                    (
+                                        html.Div(sections)
+                                        if sections
+                                        else html.P("No workflows available.")
                                     )
                                 ]
                             ),
-                        ],
+                        ]
                     ),
-                    dmc.Accordion(
+                    dmc.AccordionItem(
+                        value="roles-permissions",
                         children=[
                             dmc.Anchor(
                                 dmc.AccordionControl(
@@ -805,19 +824,19 @@ def render_projects_list(projects: list[Project], admin_UI: bool = False, token:
                             ),
                             dmc.Text(
                                 "No projects available",
-                                align="center",
-                                weight=700,
+                                ta="center",
+                                fw="bold",
                                 size="xl",
                             ),
                             dmc.Text(
                                 "Projects created by users will appear here.",
-                                align="center",
-                                color="dimmed",
+                                ta="center",
+                                c="gray",
                                 size="sm",
                             ),
                         ],
                         align="center",
-                        spacing="sm",
+                        gap="sm",
                     )
                 ],
                 shadow="sm",
@@ -986,19 +1005,19 @@ def register_workflows_callbacks(app):
                                 ),
                                 dmc.Text(
                                     "No projects available",
-                                    align="center",
-                                    weight=700,
+                                    ta="center",
+                                    fw="bold",
                                     size="xl",
                                 ),
                                 dmc.Text(
                                     "Projects created by users will appear here.",
-                                    align="center",
-                                    color="dimmed",
+                                    ta="center",
+                                    c="gray",
                                     size="sm",
                                 ),
                             ],
                             align="center",
-                            spacing="sm",
+                            gap="sm",
                         )
                     ],
                     shadow="sm",
