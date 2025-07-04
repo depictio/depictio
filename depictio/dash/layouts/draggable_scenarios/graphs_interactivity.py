@@ -341,6 +341,7 @@ def refresh_children_based_on_click_data(
             switch_state=edit_components_mode_button,
             TOKEN=TOKEN,
             dashboard_id=dashboard_id,
+            theme="light",  # TODO: Get theme from store
         )
         # state_stored_draggable_children[dashboard_id] = new_children
 
@@ -407,6 +408,7 @@ def refresh_children_based_on_selected_data(
             switch_state=edit_components_mode_button,
             TOKEN=TOKEN,
             dashboard_id=dashboard_id,
+            theme="light",  # TODO: Get theme from store
         )
 
         logger.info(f"New children len : {len(new_children)}")

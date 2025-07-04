@@ -23,18 +23,8 @@ describe('Create and manage dashboard', () => {
     })
 
     it('logs in, creates and manages a dashboard', () => {
-        cy.visit('/auth')
-        cy.get('#auth-modal').should('be.visible')
-
-        cy.get('input[type="text"][placeholder="Enter your email"]')
-            .filter(':visible')
-            .type(adminUser.email)
-
-        cy.get('input[type="password"][placeholder="Enter your password"]')
-            .filter(':visible')
-            .type(adminUser.password)
-
-        cy.contains('Login').click()
+        // Log in using the reusable function
+        cy.loginAsTestUser('adminUser')
         cy.url().should('include', '/dashboards')
 
         // Wait for the dashboard to load

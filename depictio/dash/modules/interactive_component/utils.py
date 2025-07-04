@@ -28,16 +28,16 @@ def build_interactive_frame(index, children=None):
                 #     "height": "100%",  # Make sure it fills the parent container
                 # },
             ),
-            # style={
-            #     "width": "100%",
-            #     "height": "100%",  # Ensure the card fills the container's height
-            #     "padding": "0",  # Remove default padding
-            #     "margin": "0",  # Remove default margin
-            #     "boxShadow": "none",  # Optional: Remove shadow for a cleaner look
-            #     # "border": "1px solid #ddd",  # Optional: Add a light border
-            #     # "borderRadius": "4px",  # Optional: Slightly round the corners
-            #     "border": "0px",  # Optional: Remove border
-            # },
+            style={
+                #     "width": "100%",
+                #     "height": "100%",  # Ensure the card fills the container's height
+                #     "padding": "0",  # Remove default padding
+                #     "margin": "0",  # Remove default margin
+                #     "boxShadow": "none",  # Optional: Remove shadow for a cleaner look
+                #     # "border": "1px solid #ddd",  # Optional: Add a light border
+                #     # "borderRadius": "4px",  # Optional: Slightly round the corners
+                "border": "0px",  # Optional: Remove border
+            },
             id={
                 "type": "interactive-component",
                 "index": index,
@@ -65,6 +65,7 @@ def build_interactive_frame(index, children=None):
                 "padding": "0",
                 "overflow": "visible",  # Allow dropdown to overflow
                 "position": "relative",  # Ensure positioning context
+                "border": "0px",  # Optional: Remove border
             },
             id={
                 "type": "interactive-component",
@@ -434,10 +435,10 @@ def build_interactive(**kwargs):
             multiselect_kwargs = {
                 "searchable": True,
                 "clearable": True,
-                "clearSearchOnChange": False,
+                # "clearSearchOnChange": False,
                 "persistence_type": "local",
-                "dropdownPosition": "bottom",
-                "zIndex": 1000,
+                # "dropdownPosition": "bottom",
+                # "zIndex": 1000,
                 # "position": "relative",
             }
             # Merge with existing component_kwargs that already includes the preserved value

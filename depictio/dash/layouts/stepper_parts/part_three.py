@@ -14,14 +14,21 @@ from depictio.dash.modules.table_component.frontend import design_table
 
 
 def return_design_component(component_selected, id, df, btn_component):
+    # Wrap all components in full-width container, but give Figure extra width treatment
     if component_selected == "Figure":
-        return design_figure(id), btn_component
+        component_content = design_figure(id)
+        return html.Div(
+            component_content, style={"width": "100%", "maxWidth": "none"}
+        ), btn_component
     elif component_selected == "Card":
-        return design_card(id, df), btn_component
+        component_content = design_card(id, df)
+        return html.Div(component_content, style={"width": "100%"}), btn_component
     elif component_selected == "Interactive":
-        return design_interactive(id, df), btn_component
+        component_content = design_interactive(id, df)
+        return html.Div(component_content, style={"width": "100%"}), btn_component
     elif component_selected == "Table":
-        return design_table(id), btn_component
+        component_content = design_table(id)
+        return html.Div(component_content, style={"width": "100%"}), btn_component
     elif component_selected == "JBrowse2":
         return dash.no_update, btn_component
         # return design_jbrowse(id), btn_component
@@ -31,7 +38,7 @@ def return_design_component(component_selected, id, df, btn_component):
     elif component_selected == "Map":
         return dash.no_update, btn_component
     else:
-        return html.Div("Not implemented yet"), btn_component
+        return html.Div("Not implemented yet", style={"width": "100%"}), btn_component
 
 
 def register_callbacks_stepper_part_three(app):

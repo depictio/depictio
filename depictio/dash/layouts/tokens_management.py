@@ -53,20 +53,20 @@ def render_tokens_list(tokens):
                             ),
                             dmc.Text(
                                 "No CLI Configurations Available",
-                                align="center",
-                                weight=700,
+                                ta="center",
+                                fw="bold",
                                 size="xl",
                                 style={"color": colors["blue"]},
                             ),
                             dmc.Text(
                                 "Add a new configuration to access Depictio via the command line interface.",
-                                align="center",
-                                color="dimmed",
+                                ta="center",
+                                c="gray",
                                 size="sm",
                             ),
                         ],
                         align="center",
-                        spacing="sm",
+                        gap="sm",
                     )
                 ],
                 shadow="sm",
@@ -107,20 +107,20 @@ def render_tokens_list(tokens):
                                         [
                                             dmc.Text(
                                                 str(token["name"]),
-                                                weight=700,
+                                                fw="bold",
                                                 size="lg",
                                                 style={"color": colors["blue"]},
                                             ),
                                             dmc.Text(
                                                 f"Expires: {expiration}",
                                                 size="xs",
-                                                color="dimmed",
+                                                c="gray",
                                             ),
                                         ],
-                                        spacing=0,
+                                        gap=None,
                                     ),
                                 ],
-                                spacing="sm",
+                                gap="sm",
                             ),
                             # Delete button
                             dmc.Button(
@@ -128,7 +128,7 @@ def render_tokens_list(tokens):
                                 id={"type": "delete-token", "index": str(token["_id"])},
                                 variant="subtle",
                                 radius="md",
-                                leftIcon=DashIconify(
+                                leftSection=DashIconify(
                                     icon="mdi:delete",
                                     width=16,
                                 ),
@@ -142,7 +142,7 @@ def render_tokens_list(tokens):
                                 },
                             ),
                         ],
-                        position="apart",
+                        justify="space-between",
                         style={"width": "100%"},
                     ),
                 ],
@@ -189,24 +189,25 @@ layout = dbc.Container(
                                     dmc.Title(
                                         "Depictio-CLI Configurations",
                                         order=2,
-                                        style={"color": colors["green"]},
+                                        # style={"color": colors["green"]},
+                                        c=colors["green"],
                                     ),
                                 ],
-                                spacing="xs",
-                                position="center",
+                                gap="xs",
+                                justify="center",
                             ),
                             # Description
                             dmc.Text(
                                 "Security configurations to access Depictio via the command line interface.",
-                                align="center",
-                                color="dimmed",
+                                ta="center",
+                                c="gray",
                                 size="sm",
                             ),
                             # Add new config button with improved styling
                             dmc.Button(
                                 "Add New Configuration",
                                 id="add-token-button",
-                                leftIcon=DashIconify(
+                                leftSection=DashIconify(
                                     icon="mdi:plus-circle",
                                     width=20,
                                     style={"color": "white"},
@@ -227,7 +228,7 @@ layout = dbc.Container(
                             ),
                         ],
                         align="center",
-                        spacing="xs",
+                        gap="xs",
                     ),
                 ],
                 shadow="xs",
@@ -252,8 +253,8 @@ layout = dbc.Container(
             withCloseButton=False,
             children=[
                 dmc.Group(
-                    position="left",
-                    spacing="sm",
+                    justify="flex-start",
+                    gap="sm",
                     children=[
                         DashIconify(
                             icon="mdi:console-line",
@@ -265,7 +266,8 @@ layout = dbc.Container(
                             "Name Your Configuration",
                             order=4,
                             style={"margin": 0},
-                            color=colors["green"],
+                            # color=colors["green"],
+                            c=colors["green"],
                         ),
                     ],
                     style={
@@ -316,7 +318,7 @@ layout = dbc.Container(
                             },
                         ),
                     ],
-                    position="right",
+                    justify="flex-end",
                     mt="xl",
                 ),
             ],
@@ -338,13 +340,13 @@ layout = dbc.Container(
                         dmc.Text(
                             "Are you sure you want to delete this configuration? This action cannot be undone.",
                             size="sm",
-                            color="dimmed",
+                            c="gray",
                         ),
                         dmc.TextInput(
                             id="delete-confirm-input",
                             label="Type 'delete' to confirm",
                             required=True,
-                            icon=DashIconify(icon="mdi:delete-alert", width=20),
+                            leftSection=DashIconify(icon="mdi:delete-alert", width=20),
                         ),
                         dmc.Group(
                             [
@@ -369,11 +371,11 @@ layout = dbc.Container(
                                     },
                                 ),
                             ],
-                            position="right",
+                            justify="flex-end",
                             mt="xl",
                         ),
                     ],
-                    spacing="md",
+                    gap="md",
                 ),
             ],
         ),
@@ -601,10 +603,11 @@ def register_tokens_management_callbacks(app):
                                         id="config-created-success",
                                         children="Configuration Created Successfully",
                                         order=3,
-                                        style={"color": colors["green"]},
+                                        # style={"color": colors["green"]},
+                                        c=colors["green"],
                                     ),
                                 ],
-                                spacing="sm",
+                                gap="sm",
                             ),
                             dmc.Alert(
                                 title="Important",
@@ -671,10 +674,10 @@ def register_tokens_management_callbacks(app):
                                         # ),
                                     ),
                                 ],
-                                position="right",
+                                justify="flex-end",
                             ),
                         ],
-                        spacing="md",
+                        gap="md",
                     ),
                 ]
             )

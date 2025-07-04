@@ -21,36 +21,8 @@ describe('Unsuccessful Registration - Already Registered', () => {
     })
 
     it('tests unsuccessful registration with already registered email', () => {
-      // Navigate to the auth page
-      cy.visit('/auth')
-
-      // Check if we're on the auth page
-      cy.url().should('include', '/auth')
-
-      // Check if the auth modal is present
-      cy.get('#auth-modal').should('be.visible')
-
-      // Click on the Switch to Register button
-      cy.contains('button', 'Register').click()
-
-      // Use a known registered email (from initial_users.yaml)
-      cy.get('input[type="text"][placeholder="Enter your email"]')
-        .filter(':visible')
-        .type(testUser.email)
-
-      cy.get('input[type="password"][placeholder="Enter your password"]')
-        .filter(':visible')
-        .type("SecurePassword123!")
-
-      cy.get('input[type="password"][placeholder="Confirm your password"]')
-        .filter(':visible')
-        .type("SecurePassword123!")
-
-    //   // Wait for the register button to be enabled
-    //   cy.get('#register-button').should('not.be.disabled')
-
-      // Click the register button
-      cy.contains('button', 'Register').click()
+      // Use a known registered email (from initial_users.yaml) with reusable function
+      cy.registerUser(testUser.email, "SecurePassword123!")
 
       // Wait for the error message
       cy.get('#user-feedback-message-register').should('be.visible')
