@@ -36,16 +36,16 @@
  */
 Cypress.Commands.add('loginUser', (email, password, options = {}) => {
   const { visitAuth = true, timeout = 10000 } = options;
-  
+
   if (visitAuth) {
     cy.visit('/auth');
     cy.wait(2000); // Wait for page to load
   }
-  
+
   // Check for modal visibility
   cy.get('[role="dialog"][aria-modal="true"]', { timeout }).should('be.visible');
   cy.get('#modal-content', { timeout }).should('be.visible');
-  
+
   // Fill in email input
   cy.get('#modal-content')
     .find('input[id="login-email"]')
@@ -55,7 +55,7 @@ Cypress.Commands.add('loginUser', (email, password, options = {}) => {
     .clear()
     .type(email, { delay: 50 })
     .should('have.value', email);
-    
+
   // Fill in password input
   cy.get('#modal-content')
     .find('input[id="login-password"]')
@@ -65,21 +65,21 @@ Cypress.Commands.add('loginUser', (email, password, options = {}) => {
     .clear()
     .type(password, { delay: 50 })
     .should('have.value', password);
-    
+
   // Click login button
   cy.get('#modal-content')
     .find('button[id="login-button"]')
     .should('be.visible')
     .should('not.be.disabled')
     .click();
-    
+
   // Wait for login processing
   cy.wait(1000);
 });
 
 /**
  * Reusable registration function that opens the auth modal and registers a new user
- * @param {string} email - User email  
+ * @param {string} email - User email
  * @param {string} password - User password
  * @param {string} confirmPassword - Password confirmation (optional, defaults to password)
  * @param {object} options - Optional configuration
@@ -89,25 +89,25 @@ Cypress.Commands.add('loginUser', (email, password, options = {}) => {
 Cypress.Commands.add('registerUser', (email, password, confirmPassword = null, options = {}) => {
   const { visitAuth = true, timeout = 10000 } = options;
   const confirmPwd = confirmPassword || password;
-  
+
   if (visitAuth) {
     cy.visit('/auth');
     cy.wait(2000); // Wait for page to load
   }
-  
+
   // Check for modal visibility
   cy.get('[role="dialog"][aria-modal="true"]', { timeout }).should('be.visible');
   cy.get('#modal-content', { timeout }).should('be.visible');
-  
+
   // Click register button to switch to registration form
   cy.get('#modal-content')
     .contains('Register')
     .should('be.visible')
     .click();
-    
+
   // Wait for form to switch
   cy.wait(500);
-  
+
   // Fill in email input - wait for register form to be visible
   cy.get('#modal-content')
     .find('input[id="register-email"]')
@@ -118,7 +118,7 @@ Cypress.Commands.add('registerUser', (email, password, confirmPassword = null, o
     .clear()
     .type(email, { delay: 100 })
     .should('have.value', email);
-    
+
   // Fill in password input
   cy.get('#modal-content')
     .find('input[id="register-password"]')
@@ -128,7 +128,7 @@ Cypress.Commands.add('registerUser', (email, password, confirmPassword = null, o
     .clear()
     .type(password, { delay: 50 })
     .should('have.value', password);
-    
+
   // Fill in confirm password input
   cy.get('#modal-content')
     .find('input[id="register-confirm-password"]')
@@ -138,14 +138,14 @@ Cypress.Commands.add('registerUser', (email, password, confirmPassword = null, o
     .clear()
     .type(confirmPwd, { delay: 50 })
     .should('have.value', confirmPwd);
-    
+
   // Click register button
   cy.get('#modal-content')
     .find('button[id="register-button"]')
     .should('be.visible')
     .should('not.be.disabled')
     .click();
-    
+
   // Wait for registration processing
   cy.wait(1000);
 });

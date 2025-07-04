@@ -8,7 +8,9 @@ describe('User Registration Test', () => {
   })
 
     it('tests user registration functionality', () => {
-      const test_email = "test_user_playwright@example.com"
+      // Use unique email to avoid conflicts
+      const timestamp = Date.now()
+      const test_email = `test_user_${timestamp}@example.com`
       const test_password = "SecurePassword123!"
 
       // Register using the reusable function

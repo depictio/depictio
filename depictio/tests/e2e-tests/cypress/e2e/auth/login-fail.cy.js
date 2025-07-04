@@ -11,7 +11,7 @@ describe('Login fail', () => {
     // Use invalid credentials
     const invalidEmail = 'invalid_user@example.com'
     const invalidPassword = 'wrong_password'
-    
+
     // Try to login with invalid credentials using reusable function
     cy.loginUser(invalidEmail, invalidPassword)
 

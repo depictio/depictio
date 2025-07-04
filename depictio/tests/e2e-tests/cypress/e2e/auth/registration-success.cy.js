@@ -13,10 +13,10 @@ describe('Registration Success', () => {
     const timestamp = Date.now();
     const testEmail = `test_${timestamp}@example.com`;
     const testPassword = 'test_password_123';
-    
+
     // Use the reusable registration function
     cy.registerUser(testEmail, testPassword);
-    
+
     // Verify registration success message or behavior
     // Check for success feedback in the modal content
     cy.get('#modal-content').then(($modal) => {
@@ -31,10 +31,10 @@ describe('Registration Success', () => {
     const testEmail = `test_fail_${timestamp}@example.com`;
     const testPassword = 'test_password_123';
     const wrongConfirmPassword = 'different_password';
-    
+
     // This should fail because passwords don't match
     cy.registerUser(testEmail, testPassword, wrongConfirmPassword);
-    
+
     // Verify error message in modal content
     cy.get('#modal-content')
       .should('contain', 'Passwords do not match');
@@ -45,9 +45,9 @@ describe('Registration Success', () => {
     cy.fixture('test-credentials.json').then((credentials) => {
       const existingEmail = credentials.testUser.email;
       const testPassword = 'some_password';
-      
+
       cy.registerUser(existingEmail, testPassword);
-      
+
       // Verify error message for existing email
       cy.get('#modal-content')
         .should('contain', 'Email already registered');

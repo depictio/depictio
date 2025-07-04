@@ -24,15 +24,15 @@ describe('Login Success', () => {
   it('logs in user using reusable function', () => {
     // Use the new reusable login function
     cy.loginUser(testUser.email, testUser.password)
-    
+
     // Optional: verify successful login by checking URL or page content
     // cy.url().should('include', '/dashboards')
   })
-  
+
   it('logs in user using quick test user function', () => {
     // Even simpler - use the test user function
     cy.loginAsTestUser('testUser')
-    
+
     // Optional: verify successful login
     // cy.url().should('include', '/dashboards')
   })

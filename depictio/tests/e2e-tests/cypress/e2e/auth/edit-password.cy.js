@@ -80,12 +80,12 @@ describe('Edit Password Test', () => {
     cy.get('body').then(($body) => {
       if ($body.find('#message-password:contains("passwords do not match")').length > 0) {
         cy.log('Password mismatch detected - retrying with fresh inputs')
-        
+
         // Clear and re-enter the passwords more carefully
         cy.get('#old-password').clear().type(testUser.password, { delay: 100 })
         cy.get('#new-password').clear().type(new_password, { delay: 100 })
         cy.get('#confirm-new-password').clear().type(new_password, { delay: 100 })
-        
+
         cy.wait(1000)
         cy.get('#save-password').click()
         cy.wait(2000)
