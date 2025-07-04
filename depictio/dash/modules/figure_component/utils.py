@@ -175,7 +175,7 @@ def render_figure(
 
     # Add theme-appropriate template
     if "template" not in dict_kwargs:
-        dict_kwargs["template"] = "mantine_dark" if theme == "dark" else "mantine_light"
+        dict_kwargs["template"] = "plotly_dark" if theme == "dark" else "plotly_white"
 
     logger.info("=== FIGURE RENDER ===")
     logger.info(f"Visualization: {visu_type}")
@@ -222,9 +222,9 @@ def render_figure(
 
             figure = plot_function(sampled_df, **cleaned_kwargs)
         else:
-            figure = plotly_vizu_dict[visu_type.lower()](df.to_pandas(), **dict_kwargs)
-    else:
-        figure = px.scatter(template=dict_kwargs.get("template", "mantine_light"))
+            # Use full dataset
+            pandas_df = df.to_pandas()
+            figure = plot_function(pandas_df, **cleaned_kwargs)
 
         # Apply responsive sizing
         if _config.responsive_sizing:
