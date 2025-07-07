@@ -11,10 +11,10 @@ describe('Unauthenticated Mode - Login as a temporary user Flow', () => {
     cy.clearLocalStorage()
   })
 
-  beforeEach(() => {
+  beforeEach(function() {
     // Skip if not in unauthenticated mode
     if (!Cypress.env('UNAUTHENTICATED_MODE')) {
-      cy.skip()
+      this.skip()
     }
   })
 

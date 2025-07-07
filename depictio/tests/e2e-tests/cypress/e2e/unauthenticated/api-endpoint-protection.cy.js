@@ -1,9 +1,9 @@
 describe('Unauthenticated Mode - API Endpoint Protection', () => {
 
-  beforeEach(() => {
+  beforeEach(function() {
     // Skip if not in unauthenticated mode
     if (!Cypress.env('UNAUTHENTICATED_MODE')) {
-      cy.skip()
+      this.skip()
     }
   })
 
