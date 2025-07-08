@@ -1262,6 +1262,13 @@ jobs:
         with:
           node-version: "16"
 
+      - name: Install Chrome
+        run: |
+          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+          echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+
       - name: Install Cypress dependencies
         run: |
           cd depictio/tests/e2e-tests
@@ -1275,9 +1282,13 @@ jobs:
       - name: Run Cypress tests
         run: |
           cd depictio/tests/e2e-tests
-          # Set environment variable for cypress to know it's authenticated mode
           export CYPRESS_UNAUTHENTICATED_MODE=false
-          npx cypress run --config screenshotsFolder=cypress/screenshots,videosFolder=cypress/videos,trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true --spec "cypress/e2e/!(unauthenticated)/**/*.cy.js"
+          # Run Chrome in headless mode for CI
+          npx cypress run \
+            --browser chrome \
+            --headless \
+            --config screenshotsFolder=cypress/screenshots,videosFolder=cypress/videos,trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true,viewportWidth=1920,viewportHeight=1080 \
+            --spec "cypress/e2e/!(unauthenticated)/**/*.cy.js"
 
       - name: Upload screenshots
         uses: actions/upload-artifact@v4
