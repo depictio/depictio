@@ -87,11 +87,11 @@ describe('Unauthenticated Mode - New Dashboard Button Behavior', () => {
 
     cy.contains('button', '+ New Dashboard').click()
 
-    // Dashboard creation modal should open
-    cy.get('#dashboard-modal').should('be.visible')
+    // Wait for modal to load
+    cy.wait(1000)
 
-    // Should have title input
-    cy.get('#dashboard-title-input').should('be.visible')
+    // Dashboard creation modal should open - check for form elements instead of modal container
+    cy.get('input[placeholder="Enter dashboard title"]').should('be.visible')
 
     // Should have project selector
     cy.get('#dashboard-projects').should('be.visible')

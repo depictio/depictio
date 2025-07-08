@@ -20,10 +20,10 @@ describe('Unauthenticated Mode - Dashboard Access Restrictions', () => {
     cy.wait(2000)
 
     // Find the Iris Dashboard card
-    cy.contains('h5.mantine-Title-root', 'Iris Dashboard').should('be.visible')
+    cy.contains('h4.mantine-Title-root', 'Iris Dashboard').should('be.visible')
 
     // Within the Iris Dashboard card, verify it has a Public badge
-    cy.contains('h5.mantine-Title-root', 'Iris Dashboard')
+    cy.contains('h4.mantine-Title-root', 'Iris Dashboard')
       .parents('.mantine-Card-root')
       .within(() => {
         cy.get('.mantine-Badge-root')
@@ -40,11 +40,11 @@ describe('Unauthenticated Mode - Dashboard Access Restrictions', () => {
     cy.wait(2000)
 
     // Find the Iris Dashboard card
-    cy.contains('h5.mantine-Title-root', 'Iris Dashboard')
+    cy.contains('h4.mantine-Title-root', 'Iris Dashboard')
       .parents('.mantine-Card-root')
       .within(() => {
         // Open Dashboard Actions accordion first to reveal the buttons
-        cy.get('[data-accordion-control="true"]').contains('Dashboard Actions').click()
+        cy.get('[data-accordion-control="true"]').contains('Actions').click()
         cy.wait(500)
 
         // Now check that View button is enabled
@@ -67,7 +67,7 @@ describe('Unauthenticated Mode - Dashboard Access Restrictions', () => {
     // Get the current URL for comparison
     cy.url().then((dashboardsUrl) => {
       // Method 1: Click the image/link at the top (easier)
-      cy.contains('h5.mantine-Title-root', 'Iris Dashboard')
+      cy.contains('h4.mantine-Title-root', 'Iris Dashboard')
         .parents('.mantine-Card-root')
         .within(() => {
           cy.get('a[href*="/dashboard/"]').first().click()
@@ -120,11 +120,11 @@ describe('Unauthenticated Mode - Dashboard Access Restrictions', () => {
     // Get the current URL for comparison
     cy.url().then((dashboardsUrl) => {
       // Method 2: Use the View button in the accordion
-      cy.contains('h5.mantine-Title-root', 'Iris Dashboard')
+      cy.contains('h4.mantine-Title-root', 'Iris Dashboard')
         .parents('.mantine-Card-root')
         .within(() => {
           // Open Dashboard Actions accordion
-          cy.get('[data-accordion-control="true"]').contains('Dashboard Actions').click()
+          cy.get('[data-accordion-control="true"]').contains('Actions').click()
           cy.wait(500)
 
           // Click the View button
@@ -213,7 +213,7 @@ describe('Unauthenticated Mode - Dashboard Access Restrictions', () => {
       .should('be.visible')
 
     // Verify that we can see at least one public dashboard (Iris Dashboard)
-    cy.contains('h5.mantine-Title-root', 'Iris Dashboard')
+    cy.contains('h4.mantine-Title-root', 'Iris Dashboard')
       .parents('.mantine-Card-root')
       .within(() => {
         cy.get('.mantine-Badge-root')

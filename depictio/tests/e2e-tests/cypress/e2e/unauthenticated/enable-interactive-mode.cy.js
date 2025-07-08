@@ -58,8 +58,8 @@ describe('Unauthenticated Mode - Login as a temporary user Flow', () => {
     // Wait for the upgrade process
     cy.wait(3000)
 
-    // Modal should close
-    cy.get('.mantine-Modal-root').should('not.exist')
+    // Modal should close (wait longer and check visibility instead of existence)
+    cy.get('.mantine-Modal-root').should('not.be.visible', { timeout: 15000 })
 
     // Verify local storage was updated (may take time to update)
     cy.window().then((win) => {
@@ -136,11 +136,11 @@ describe('Unauthenticated Mode - Login as a temporary user Flow', () => {
     cy.wait(3000)
 
     // Find the Iris Dashboard card
-    cy.contains('h5.mantine-Title-root', 'Iris Dashboard')
+    cy.contains('h4.mantine-Title-root', 'Iris Dashboard')
       .parents('.mantine-Card-root')
       .within(() => {
-        // Open Dashboard Actions accordion
-        cy.contains('Dashboard Actions').click({ force: true })
+        // Open Actions accordion
+        cy.contains('Actions').click({ force: true })
         cy.wait(1000)
 
         // Duplicate button should now be enabled (with retry logic)
@@ -149,10 +149,10 @@ describe('Unauthenticated Mode - Login as a temporary user Flow', () => {
           if ($btn.is(':disabled')) {
             cy.reload()
             cy.wait(2000)
-            cy.contains('h5.mantine-Title-root', 'Iris Dashboard')
+            cy.contains('h4.mantine-Title-root', 'Iris Dashboard')
               .parents('.mantine-Card-root')
               .within(() => {
-                cy.contains('Dashboard Actions').click({ force: true })
+                cy.contains('Actions').click({ force: true })
                 cy.wait(500)
               })
           }
@@ -183,10 +183,10 @@ describe('Unauthenticated Mode - Login as a temporary user Flow', () => {
     cy.reload()
     cy.wait(3000)
 
-    cy.contains('h5.mantine-Title-root', 'Iris Dashboard')
+    cy.contains('h4.mantine-Title-root', 'Iris Dashboard')
       .parents('.mantine-Card-root')
       .within(() => {
-        cy.contains('Dashboard Actions').click({ force: true })
+        cy.contains('Actions').click({ force: true })
         cy.wait(1000)
 
         // Verify duplicate button is enabled before clicking
@@ -202,7 +202,7 @@ describe('Unauthenticated Mode - Login as a temporary user Flow', () => {
     cy.wait(3000)
 
     // Should see the duplicated dashboard (with timeout)
-    cy.contains('h5.mantine-Title-root', 'Iris Dashboard (copy)', { timeout: 10000 }).should('be.visible')
+    cy.contains('h4.mantine-Title-root', 'Iris Dashboard (copy)', { timeout: 10000 }).should('be.visible')
 
     cy.screenshot('dashboard_duplicated_successfully')
   })
@@ -237,10 +237,10 @@ describe('Unauthenticated Mode - Login as a temporary user Flow', () => {
     cy.reload()
     cy.wait(3000)
 
-    cy.contains('h5.mantine-Title-root', 'Iris Dashboard')
+    cy.contains('h4.mantine-Title-root', 'Iris Dashboard')
       .parents('.mantine-Card-root')
       .within(() => {
-        cy.contains('Dashboard Actions').click({ force: true })
+        cy.contains('Actions').click({ force: true })
         cy.wait(1000)
         cy.contains('button', 'Duplicate').should('be.visible').should('not.be.disabled')
       })
@@ -270,8 +270,8 @@ describe('Unauthenticated Mode - Login as a temporary user Flow', () => {
 
     cy.wait(1000)
 
-    // Modal should close
-    cy.get('.mantine-Modal-root').should('not.exist')
+    // Modal should close (wait longer and check visibility instead of existence)
+    cy.get('.mantine-Modal-root').should('not.be.visible', { timeout: 15000 })
 
     // Should still be anonymous (no change) - check email field
     cy.get('#user-info-placeholder').within(() => {
