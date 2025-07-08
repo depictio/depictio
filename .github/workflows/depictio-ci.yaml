@@ -1337,6 +1337,12 @@ jobs:
           docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml --env-file docker-compose/.env up -d
           sleep 15
 
+      - name: Log backend container status
+        run: |
+          echo "📊 Backend container status:"
+          docker compose ps depictio-backend || echo "❌ Backend container not running"
+          docker compose logs depictio-backend || echo "❌ Failed to get backend logs"
+
       - name: Verify unauthenticated mode is enabled
         run: |
           echo "🔍 Verifying unauthenticated mode configuration..."
