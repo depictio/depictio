@@ -23,8 +23,7 @@ def register_callbacks_header(app):
         # Output("reset-all-filters-button", "disabled"),
         Output("dashboard-version", "disabled"),
         Output("share-button", "disabled"),
-        Output("draggable", "isDraggable"),
-        Output("draggable", "isResizable"),
+        Output("draggable", "showResizeHandles"),
         Input("edit-dashboard-mode-button", "checked"),
         State("local-store", "data"),
         State("url", "pathname"),
@@ -36,7 +35,7 @@ def register_callbacks_header(app):
         # logger.info(switch_state)
         # logger.info("API_BASE_URL: " + str(API_BASE_URL))
 
-        len_output = 8
+        len_output = 7
 
         current_user = api_call_fetch_user_from_token(local_store["access_token"])
 
@@ -76,7 +75,7 @@ def register_callbacks_header(app):
 
         # If not owner (but has viewing access), disable all editing controls
         if not owner and viewer:
-            # Disable all editing buttons + disable draggable/resizable
+            # Disable all editing buttons + disable remove/resize buttons
             return [True] * (len_output - 2) + [False] * 2
 
         # workflows = httpx.get(

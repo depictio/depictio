@@ -1,4 +1,5 @@
 import dash_bootstrap_components as dbc
+import dash_dynamic_grid_layout as dgl
 import dash_mantine_components as dmc
 from dash import html
 
@@ -24,6 +25,8 @@ def enable_box_edit_mode(
     fresh=False,
     component_data=dict(),
     TOKEN=None,
+    use_draggable_wrapper=False,
+    component_type="component",
 ):
     # logger.info(box)
     # logger.info(box["props"])
@@ -172,5 +175,27 @@ def enable_box_edit_mode(
             "boxSizing": "border-box",  # Include padding in the element's total width and height
         },
     )
+
+    # If requested, wrap in DraggableWrapper for dash-dynamic-grid-layout
+    if use_draggable_wrapper:
+        # Wrap the component in a div with proper styling for vertical growth
+        wrapped_content = html.Div(
+            new_draggable_child,
+            style={
+                "height": "100%",
+                "width": "100%",
+                "display": "flex",
+                "flex-direction": "column",
+                "box-sizing": "border-box",
+            },
+        )
+
+        return dgl.DraggableWrapper(
+            wrapped_content,
+            id=str(btn_index),
+            handleText="Drag",
+            handleBackground="rgba(66, 133, 244, 0.8)",
+            handleColor="white",
+        )
 
     return new_draggable_child

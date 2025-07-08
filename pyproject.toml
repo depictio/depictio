@@ -48,6 +48,7 @@ dependencies = [
   "dash-ag-grid==31.3.1",
   "tomli",
   "types-requests>=2.32.4.20250611",
+  "dash-dynamic-grid-layout>=0.1.3",
 ]
 authors = [{ name = "Thomas Weber", email = "thomas.weber@embl.de" }]
 urls = { Homepage = "http://github.com/depictio/depictio" }
