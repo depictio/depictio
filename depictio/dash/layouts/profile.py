@@ -81,7 +81,7 @@ layout = dbc.Container(
                                         dmc.Title(
                                             "User Profile",
                                             order=2,
-                                            color=colors["black"],
+                                            c=colors["black"],
                                             style={"fontWeight": 600},
                                         ),
                                         DashIconify(
@@ -91,7 +91,7 @@ layout = dbc.Container(
                                             # color=colors["violet"],
                                         ),
                                     ],
-                                    position="apart",
+                                    justify="space-between",
                                 ),
                                 dmc.Divider(
                                     variant="dashed",
@@ -102,7 +102,7 @@ layout = dbc.Container(
                                 # User information
                                 dmc.Stack(
                                     [user_info],
-                                    spacing="md",
+                                    gap="md",
                                     style={"padding": "16px 0"},
                                 ),
                                 # Action buttons row with improved styling
@@ -115,7 +115,7 @@ layout = dbc.Container(
                                             # color=colors["pink"],
                                             radius=BUTTON_RADIUS,
                                             disabled=False,  # Enable logout button even in unauthenticated mode
-                                            leftIcon=DashIconify(
+                                            leftSection=DashIconify(
                                                 icon="mdi:logout", width=ICON_SIZE
                                             ),
                                             styles={
@@ -139,7 +139,7 @@ layout = dbc.Container(
                                             style={
                                                 "display": "none"
                                             },  # Hidden by default, shown conditionally
-                                            leftIcon=DashIconify(
+                                            leftSection=DashIconify(
                                                 icon="mdi:account-arrow-up", width=ICON_SIZE
                                             ),
                                             styles={
@@ -163,7 +163,7 @@ layout = dbc.Container(
                                                 # color=colors["blue"],
                                                 radius=BUTTON_RADIUS,
                                                 disabled=settings.auth.unauthenticated_mode,
-                                                leftIcon=DashIconify(
+                                                leftSection=DashIconify(
                                                     icon="mdi:lock-outline",
                                                     width=ICON_SIZE,
                                                 ),
@@ -189,7 +189,7 @@ layout = dbc.Container(
                                                 # color=colors["green"],
                                                 radius=BUTTON_RADIUS,
                                                 disabled=settings.auth.unauthenticated_mode,
-                                                leftIcon=DashIconify(
+                                                leftSection=DashIconify(
                                                     icon="mdi:console", width=ICON_SIZE
                                                 ),
                                                 styles={
@@ -210,8 +210,8 @@ layout = dbc.Container(
                                             else "#",
                                         ),
                                     ],
-                                    spacing="md",
-                                    position="left",
+                                    gap="md",
+                                    justify="flex-start",
                                     mt="lg",
                                 ),
                                 # Upgrade feedback area
@@ -238,15 +238,15 @@ layout = dbc.Container(
                         dmc.Group(
                             [
                                 DashIconify(icon="mdi:account-arrow-up", width=30, color="blue"),
-                                dmc.Title("Login as a temporary user?", order=3, color="blue"),
+                                dmc.Title("Login as a temporary user?", order=3, c="blue"),
                             ],
-                            spacing="lg",
+                            gap="lg",
                         ),
                         dmc.Text(
                             "This will create a temporary account that expires in 24 hours, "
                             "allowing you to duplicate and modify dashboards.",
                             size="sm",
-                            color="dimmed",
+                            c="gray",
                         ),
                         dmc.Alert(
                             title="What you'll get:",
@@ -284,11 +284,11 @@ layout = dbc.Container(
                                     color="blue",
                                 ),
                             ],
-                            position="right",
+                            justify="flex-end",
                             mt="md",
                         ),
                     ],
-                    spacing="md",
+                    gap="md",
                 ),
             ],
             opened=False,
@@ -542,7 +542,7 @@ def register_profile_callbacks(app):
         avatar = html.Div(
             dmc.Avatar(
                 src=f"https://ui-avatars.com/api/?format=svg&name={user.get('email', 'N/A')}&background={colors['purple'].replace('#', '')}&color=white&rounded=true&bold=true&format=svg&size=160",
-                size=160,
+                size="xl",
                 radius="xl",
                 styles={
                     "root": {
@@ -572,18 +572,18 @@ def register_profile_callbacks(app):
                             [
                                 dmc.Text(
                                     key,
-                                    weight=700,
-                                    color=colors["black"],
+                                    fw="bold",
+                                    c=colors["black"],
                                     size="sm",
                                 ),
                                 dmc.Text(
                                     str(value),
-                                    color=colors["black"],
-                                    weight=500,
+                                    c=colors["black"],
+                                    fw="normal",
                                     size="sm",
                                 ),
                             ],
-                            position="apart",
+                            justify="space-between",
                         )
                     ],
                     p="sm",
@@ -593,7 +593,7 @@ def register_profile_callbacks(app):
                 )
             )
 
-        user_info_display = dmc.Stack(info_items, spacing="xs")
+        user_info_display = dmc.Stack(info_items, gap="xs")
 
         # Determine if upgrade button should be visible
         # Show button in unauthenticated mode for anonymous users (not temporary)
@@ -687,7 +687,6 @@ def register_profile_callbacks(app):
             upgrade_result = api_call_upgrade_to_temporary_user(
                 access_token,
                 expiry_hours=settings.auth.temporary_user_expiry_hours,
-                expiry_minutes=settings.auth.temporary_user_expiry_minutes,
             )
 
             if upgrade_result:

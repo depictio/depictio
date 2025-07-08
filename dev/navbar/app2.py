@@ -81,7 +81,7 @@ def update_page_content(pathname):
                 dmc.Text(
                     "Dashboards recently viewed",
                     size=20,
-                    weight=600,
+                    fw="semibold",
                     color="#333333",
                     style={"margin": "10px 10px 10px 10px"},
                 ),
@@ -117,7 +117,7 @@ def update_page_content(pathname):
                                                 p=1,
                                             ),
                                         ),
-                                        dmc.Text("Test", weight=700),
+                                        dmc.Text("Test", fw="bold"),
                                     ],
                                     mt="md",
                                     mb="xs",
@@ -179,7 +179,7 @@ def design_header(data):
                 [
                     dbc.Col(button_menu, width=1, align="center", style={"textAlign": "center"}),
                     dbc.Col(
-                        dmc.Title("Homepage", order=2, color="black"),
+                        dmc.Title("Homepage", order=2, c="black"),
                         width=11,
                         align="center",
                         style={"textAlign": "left"},

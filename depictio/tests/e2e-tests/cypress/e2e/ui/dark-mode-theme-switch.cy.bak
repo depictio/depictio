@@ -1,0 +1,210 @@
+describe('Dark Mode Theme Switch Functionality', () => {
+  beforeEach(() => {
+    // Skip if in unauthenticated mode
+    if (Cypress.env('UNAUTHENTICATED_MODE')) {
+      cy.skip()
+    }
+
+    // Clear localStorage to start with clean state
+    cy.clearLocalStorage()
+
+    // Login first to access the dashboard
+    cy.loginAsTestUser('testUser')
+
+    // Wait for login to complete
+    cy.wait(3000)
+
+    // Navigate to dashboards explicitly (don't rely on automatic redirect)
+    cy.visit('/dashboards')
+    cy.wait(2000) // Wait for page load and sidebar to appear
+  })
+
+  it('should display theme switch in sidebar', () => {
+    // Verify theme switch exists and label is visible
+    cy.get('#theme-switch').should('exist')
+    cy.get('label[for="theme-switch"]').should('be.visible')
+
+    // Take screenshot of initial state
+    cy.screenshot('theme-switch-initial-state')
+  })
+
+  it('should toggle between light and dark themes', () => {
+    // Check current theme state dynamically
+    cy.get('body').then(($body) => {
+      const isDarkMode = $body.hasClass('theme-dark')
+      cy.log(`Current theme: ${isDarkMode ? 'dark' : 'light'}`)
+
+      // Toggle theme
+      cy.get('label[for="theme-switch"]').click()
+      cy.wait(500)
+
+      // Verify theme changed
+      if (isDarkMode) {
+        cy.get('body').should('have.class', 'theme-light')
+        cy.get('#theme-switch').should('not.be.checked')
+      } else {
+        cy.get('body').should('have.class', 'theme-dark')
+        cy.get('#theme-switch').should('be.checked')
+      }
+
+      // Take screenshot
+      cy.screenshot('theme-switch-dark-mode')
+
+      // Toggle back
+      cy.get('label[for="theme-switch"]').click()
+      cy.wait(500)
+
+      // Verify back to original state
+      if (isDarkMode) {
+        cy.get('body').should('have.class', 'theme-dark')
+        cy.get('#theme-switch').should('be.checked')
+      } else {
+        cy.get('body').should('have.class', 'theme-light')
+        cy.get('#theme-switch').should('not.be.checked')
+      }
+    })
+
+    // Take screenshot of light mode restored
+    cy.screenshot('theme-switch-light-mode-restored')
+  })
+
+
+  it('should apply theme to page elements', () => {
+    // Get initial background color in light mode
+    cy.get('body').should('have.class', 'theme-light')
+
+    // Switch to dark theme
+    cy.get('label[for="theme-switch"]').click()
+    cy.wait(500)
+
+    // Verify dark theme class is applied
+    cy.get('body').should('have.class', 'theme-dark')
+
+    // Check that CSS variables are updated (verify dark styling is applied)
+    cy.get('body').should('have.css', 'background-color').then((darkBg) => {
+      // Switch back to light
+      cy.get('#theme-switch').click()
+      cy.wait(500)
+
+      // Verify different background color in light mode
+      cy.get('body').should('have.css', 'background-color').then((lightBg) => {
+        expect(darkBg).to.not.equal(lightBg)
+      })
+    })
+  })
+
+  it('should persist theme choice across page refreshes', () => {
+    // Switch to dark theme
+    cy.get('label[for="theme-switch"]').click()
+    cy.wait(500)
+
+    // Verify dark theme is applied
+    cy.get('body').should('have.class', 'theme-dark')
+    cy.get('#theme-switch').should('be.checked')
+
+    // Refresh page
+    cy.reload()
+    cy.wait(2000)
+
+    // Verify dark theme persists after reload
+    cy.get('body').should('have.class', 'theme-dark')
+    cy.get('#theme-switch').should('be.checked')
+
+    // Take screenshot of persisted dark mode
+    cy.screenshot('theme-switch-persisted-dark-mode')
+  })
+
+  it('should update navbar logo based on theme', () => {
+    // Check light theme logo
+    cy.get('#navbar-logo-content')
+      .should('be.visible')
+      .should('have.attr', 'src')
+      .and('include', 'logo_black.svg')
+
+    // Switch to dark theme
+    cy.get('label[for="theme-switch"]').click()
+    cy.wait(500)
+
+    // Check dark theme logo
+    cy.get('#navbar-logo-content')
+      .should('have.attr', 'src')
+      .and('include', 'logo_white.svg')
+
+    // Take screenshot showing logo change
+    cy.screenshot('theme-switch-logo-change-dark')
+  })
+
+  it('should work correctly across different pages', () => {
+    // Start on dashboards page
+    cy.get('body').should('have.class', 'theme-light')
+
+    // Switch to dark mode
+    cy.get('#theme-switch').click()
+    cy.wait(500)
+    cy.get('body').should('have.class', 'theme-dark')
+
+    // Navigate to profile page
+    cy.visit('/profile')
+    cy.wait(1000)
+
+    // Verify dark theme persists on profile page
+    cy.get('body').should('have.class', 'theme-dark')
+    cy.get('#theme-switch').should('be.checked')
+
+    // Navigate to projects page
+    cy.visit('/projects')
+    cy.wait(1000)
+
+    // Verify dark theme persists on projects page
+    cy.get('body').should('have.class', 'theme-dark')
+    cy.get('#theme-switch').should('be.checked')
+
+    // Take screenshot of dark mode on projects page
+    cy.screenshot('theme-switch-projects-page-dark')
+  })
+
+  it('should maintain theme state during navigation', () => {
+    // Set to dark mode
+    cy.get('#theme-switch').click()
+    cy.wait(500)
+
+    // Navigate through multiple pages and verify theme consistency
+    const pages = ['/profile', '/projects', '/dashboards']
+
+    pages.forEach((page, index) => {
+      cy.visit(page)
+      cy.wait(1000)
+
+      // Verify dark theme is maintained
+      cy.get('body').should('have.class', 'theme-dark')
+      cy.get('#theme-switch').should('be.checked')
+
+      // Take screenshot for each page
+      cy.screenshot(`theme-consistency-${page.replace('/', '')}-${index}`)
+    })
+  })
+
+  it('should handle rapid theme switching', () => {
+    // Rapidly toggle theme multiple times
+    for (let i = 0; i < 5; i++) {
+      cy.get('label[for="theme-switch"]').click()
+      cy.wait(100) // Short wait between clicks
+    }
+
+    // Wait for final state to settle
+    cy.wait(1000)
+
+    // Verify the switch still works correctly
+    cy.get('#theme-switch').should('exist')
+
+    // Check final state consistency
+    cy.get('#theme-switch').then(($switch) => {
+      const isChecked = $switch.prop('checked')
+      if (isChecked) {
+        cy.get('body').should('have.class', 'theme-dark')
+      } else {
+        cy.get('body').should('have.class', 'theme-light')
+      }
+    })
+  })
+})

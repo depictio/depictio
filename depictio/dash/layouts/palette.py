@@ -54,12 +54,12 @@ def create_color_palette_page():
                         children=[
                             dmc.Text(
                                 color_name.capitalize(),
-                                weight=500,
+                                fw="normal",
                                 size="md",
                             ),
                             dmc.Text(
                                 color_value,
-                                color="dimmed",
+                                c="gray",
                                 size="sm",
                                 style={"fontFamily": "monospace"},
                             ),
@@ -125,7 +125,7 @@ def create_color_palette_page():
         color_strip = dmc.Group(
             color_boxes,
             grow=True,
-            spacing=0,
+            gap=None,
             style={
                 "borderRadius": "8px",
                 "overflow": "hidden",
@@ -135,7 +135,7 @@ def create_color_palette_page():
 
         sequence_item = html.Div(
             [
-                dmc.Text(seq["name"], weight=500, size="md", style={"marginBottom": "8px"}),
+                dmc.Text(seq["name"], fw="normal", size="md", style={"marginBottom": "8px"}),
                 color_strip,
             ],
             style={"marginBottom": "24px"},
@@ -210,7 +210,8 @@ def create_color_palette_page():
                         },
                     ),
                 ],
-                spacing="md",
+                gap="md",
+                # spacing="md",
             ),
             html.Div(style={"height": "20px"}),  # Spacer instead of Space
             dmc.Title(
@@ -282,7 +283,7 @@ def create_color_palette_page():
             dmc.Text(
                 "This page showcases the Depictio brand color palette for consistent use across the application.",
                 size="lg",
-                color="dimmed",
+                c="gray",
                 style={"marginBottom": "32px"},
             ),
             *color_sections,

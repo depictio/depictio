@@ -410,7 +410,9 @@ def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
                             # id={"type": "btn-done-edit", "index": n},
                             n_clicks=0,
                             size="xl",
-                            leftIcon=DashIconify(icon="bi:check-circle", width=30, color="white"),
+                            leftSection=DashIconify(
+                                icon="bi:check-circle", width=30, color="white"
+                            ),
                             disabled=True,
                         )
                     ),
@@ -454,7 +456,7 @@ def create_stepper_output(n, active):
             dbc.Row(
                 [
                     dbc.Col(
-                        dmc.Title("Component selected:", order=3, align="left", weight=500),
+                        dmc.Title("Component selected:", order=3, ta="left", fw="normal"),
                         width=4,
                     ),
                     dbc.Col(
@@ -462,8 +464,8 @@ def create_stepper_output(n, active):
                             "None",
                             id={"type": "component-selected", "index": n},
                             size="xl",
-                            align="left",
-                            weight=500,
+                            ta="left",
+                            fw="normal",
                         ),
                         width=8,
                     ),
@@ -583,7 +585,7 @@ def create_stepper_output(n, active):
                             "align": "center",
                             "height": "100px",
                         },
-                        leftIcon=DashIconify(icon="bi:check-circle", width=30, color="white"),
+                        leftSection=DashIconify(icon="bi:check-circle", width=30, color="white"),
                     ),
                 ]
             ),
@@ -596,12 +598,12 @@ def create_stepper_output(n, active):
         id={"type": "stepper-basic-usage", "index": n},
         active=active,
         # color="green",
-        breakpoint="sm",
+        # breakpoint="sm",
         children=steps,
     )
 
     stepper_footer = dmc.Group(
-        position="center",
+        justify="center",
         mt="xl",
         children=[
             dmc.Button(

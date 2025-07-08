@@ -1262,6 +1262,13 @@ jobs:
         with:
           node-version: "16"
 
+      - name: Install Chrome
+        run: |
+          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+          echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+
       - name: Install Cypress dependencies
         run: |
           cd depictio/tests/e2e-tests
@@ -1275,9 +1282,15 @@ jobs:
       - name: Run Cypress tests
         run: |
           cd depictio/tests/e2e-tests
-          # Set environment variable for cypress to know it's authenticated mode
           export CYPRESS_UNAUTHENTICATED_MODE=false
-          npx cypress run --config screenshotsFolder=cypress/screenshots,videosFolder=cypress/videos,trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true --spec "cypress/e2e/!(unauthenticated)/**/*.cy.js"
+          # Set Chrome flags for better CI rendering and stability
+          export CYPRESS_BROWSER_ARGS="--disable-gpu --no-sandbox --disable-dev-shm-usage --disable-extensions --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows"
+          # Run Chrome in headless mode for CI with improved stability
+          npx cypress run \
+            --browser chrome \
+            --headless \
+            --config screenshotsFolder=cypress/screenshots,videosFolder=cypress/videos,trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true,viewportWidth=1920,viewportHeight=1080,chromeWebSecurity=false \
+            --spec "cypress/e2e/!(unauthenticated)/**/*.cy.js"
 
       - name: Upload screenshots
         uses: actions/upload-artifact@v4
@@ -1324,6 +1337,21 @@ jobs:
           docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml --env-file docker-compose/.env up -d
           sleep 15
 
+      - name: Show .env files
+        run: |
+          echo "📋 Environment variables in docker-compose/.env:"
+          cat docker-compose/.env || echo "❌ .env file not found"
+          echo "📋 Environment variables in .env.example:"
+          cat .env.example || echo "❌ .env.example file not found"
+          echo "📋 Environment variables in .env:"
+          cat .env || echo "❌ .env file not found"
+
+      - name: Log backend container status
+        run: |
+          echo "📊 Backend container status:"
+          docker compose ps depictio-backend || echo "❌ Backend container not running"
+          docker compose logs depictio-backend || echo "❌ Failed to get backend logs"
+
       - name: Verify unauthenticated mode is enabled
         run: |
           echo "🔍 Verifying unauthenticated mode configuration..."
@@ -1359,12 +1387,25 @@ jobs:
             npm ci
           fi
 
+      - name: Install Chrome for unauthenticated tests
+        run: |
+          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+          echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+
       - name: Run Cypress unauthenticated tests
         run: |
           cd depictio/tests/e2e-tests
           # Set environment variable for cypress to know it's unauthenticated mode
           export CYPRESS_UNAUTHENTICATED_MODE=true
-          npx cypress run --config screenshotsFolder=cypress/screenshots-unauthenticated,videosFolder=cypress/videos-unauthenticated,trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true --spec "cypress/e2e/unauthenticated/**/*.cy.js"
+          # Set Chrome flags for better CI rendering and stability
+          export CYPRESS_BROWSER_ARGS="--disable-gpu --no-sandbox --disable-dev-shm-usage --disable-extensions --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows"
+          npx cypress run \
+            --browser chrome \
+            --headless \
+            --config screenshotsFolder=cypress/screenshots-unauthenticated,videosFolder=cypress/videos-unauthenticated,trashAssetsBeforeRuns=false,video=true,screenshotOnRunFailure=true,viewportWidth=1920,viewportHeight=1080,chromeWebSecurity=false \
+            --spec "cypress/e2e/unauthenticated/**/*.cy.js"
 
       - name: Upload screenshots
         uses: actions/upload-artifact@v4

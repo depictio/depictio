@@ -51,7 +51,7 @@ def create_delete_confirmation_modal(
                     # Header with icon and title
                     dmc.Group(
                         position="left",
-                        spacing="sm",
+                        gap="sm",
                         children=[
                             DashIconify(
                                 icon=icon,
@@ -78,7 +78,7 @@ def create_delete_confirmation_modal(
                     # Buttons
                     dmc.Group(
                         position="right",
-                        spacing="md",
+                        gap="md",
                         mt="md",
                         children=[
                             dmc.Button(
@@ -155,7 +155,7 @@ app.layout = dmc.Container(
                         dmc.Group(
                             position="apart",
                             children=[
-                                dmc.Text(item["name"], weight=500, size="lg"),
+                                dmc.Text(item["name"], fw="medium", size="lg"),
                                 dmc.ActionIcon(
                                     color="red",
                                     variant="light",

@@ -170,11 +170,11 @@ def create_project_header(project_name, project_id, is_public, is_admin=False, i
         radius="xl",
         disabled=not (is_admin or is_owner),  # Only allow admins/owners to change visibility
     )
-    title_button = dmc.Group([title, make_public_button], position="apart")
+    title_button = dmc.Group([title, make_public_button], justify="space-between")
     details = dmc.Text(
         f"Project ID: {project_id}",
         size="sm",
-        color="gray",
+        c="gray",
         id="permissions-manager-project-details",
     )
     return dmc.Paper(
@@ -184,7 +184,6 @@ def create_project_header(project_name, project_id, is_public, is_admin=False, i
         radius="md",
         withBorder=True,
         style={
-            "backgroundColor": "#f8f9fa",
             "marginBottom": "20px",
             "marginTop": "20px",
         },
@@ -256,7 +255,7 @@ user_permissions_store = dcc.Store(
     id="permissions-manager-user-permissions", data=None, storage_type="memory"
 )
 
-text_table_header = dmc.Text("Project Permissions", size="xl", weight="bold", color="black")
+text_table_header = dmc.Text("Project Permissions", size="xl", fw="bold")
 
 # -----------------------------------------------------------------------------
 # Main Layout Definition
@@ -272,7 +271,7 @@ layout = dmc.Container(
         store_make_project_public_modal,
         user_permissions_store,
         # Project header and permissions grid
-        html.Div(id="permissions-manager-project-header"),
+        dmc.Box(id="permissions-manager-project-header"),
         text_table_header,
         dcc.Store(id="permissions-manager-grid-store", storage_type="memory"),
         dag.AgGrid(
@@ -306,11 +305,11 @@ layout = dmc.Container(
                 dmc.Grid(
                     [
                         dmc.Title("Add permissions section", order=3),
-                        dmc.Col(
+                        dmc.GridCol(
                             [
                                 html.Div(
                                     [
-                                        dmc.Text("Permissions", weight="bold", size="sm"),
+                                        dmc.Text("Permissions", fw="bold", size="sm"),
                                         dmc.Group(
                                             [
                                                 dmc.Checkbox(
@@ -329,7 +328,7 @@ layout = dmc.Container(
                                                     value="Viewer",
                                                 ),
                                             ],
-                                            spacing="md",
+                                            gap="md",
                                         ),
                                     ]
                                 )
@@ -365,7 +364,7 @@ layout = dmc.Container(
                         #     ],
                         #     span=12,
                         # ),
-                        dmc.Col(
+                        dmc.GridCol(
                             [
                                 dmc.Group(
                                     [
@@ -376,7 +375,7 @@ layout = dmc.Container(
                                             data=[],  # Updated via callback
                                             searchable=True,
                                             clearable=True,
-                                            nothingFound="No users found",
+                                            nothingFoundMessage="No users found",
                                             style={"width": "400px"},
                                         ),
                                         dmc.Button(
@@ -386,7 +385,7 @@ layout = dmc.Container(
                                             disabled=True,
                                         ),
                                     ],
-                                    position="left",
+                                    justify="flex-start",
                                     align="flex-end",
                                     style={"width": "100%"},
                                 ),
@@ -1183,3 +1182,16 @@ def register_projectwise_user_management_callbacks(app):
                 return False, value, value
             else:
                 return False, dash.no_update, dash.no_update
+
+    @app.callback(
+        Output("permissions-manager-grid", "className"),
+        Input("theme-store", "data"),
+        prevent_initial_call=True,
+    )
+    def update_ag_grid_theme(theme_data):
+        """Update AG Grid theme class based on current theme."""
+        theme = theme_data or "light"
+        if theme == "dark":
+            return "ag-theme-alpine-dark"
+        else:
+            return "ag-theme-alpine"

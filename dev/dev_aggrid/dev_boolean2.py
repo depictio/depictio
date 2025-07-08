@@ -4,7 +4,7 @@ import dash_mantine_components as dmc
 import uuid
 import json
 
-app = Dash(__name__, external_stylesheets=[dmc.theme.DEFAULT_COLORS])
+app = Dash(__name__)
 
 # Group composition mapping
 GROUP_COMPOSITION = {
@@ -116,7 +116,7 @@ app.layout = dmc.Container(
                         ),
                         dmc.Col(
                             [
-                                dmc.Text("Permissions", weight=500, mb=10),
+                                dmc.Text("Permissions", fw="medium", mb=10),
                                 dmc.CheckboxGroup(
                                     id="input-permissions",
                                     orientation="horizontal",

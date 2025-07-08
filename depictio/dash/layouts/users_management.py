@@ -18,6 +18,7 @@ from depictio.dash.api_calls import (
     api_call_handle_google_oauth_callback,
     api_call_register_user,
 )
+from depictio.dash.colors import colors  # Import Depictio color palette
 
 event = {"event": "keydown", "props": ["key"]}
 
@@ -27,7 +28,8 @@ def render_login_form():
         [
             dmc.Center(
                 html.Img(
-                    src=dash.get_asset_url("logo.png"),
+                    id="auth-modal-logo-login",
+                    src=dash.get_asset_url("logo_black.svg"),
                     height=60,
                     style={"margin-left": "0px"},
                 )
@@ -37,7 +39,8 @@ def render_login_form():
                     "Welcome to Depictio :",
                     order=2,
                     style={"fontFamily": "Virgil"},
-                    align="center",
+                    ta="center",
+                    c="gray",  # Use theme-aware color
                 )
             ),
             dmc.Space(h=10),
@@ -80,13 +83,19 @@ def render_login_form():
             dmc.Space(h=20),
             dmc.Group(
                 [
-                    dmc.Button("Login", radius="md", id="login-button", fullWidth=True),
+                    dmc.Button(
+                        "Login",
+                        radius="md",
+                        id="login-button",
+                        color=colors["blue"],
+                        style={"width": "120px"},
+                    ),
                     dmc.Button(
                         "",
                         radius="md",
                         id="register-button",
-                        fullWidth=True,
-                        style={"display": "none"},
+                        color=colors["blue"],
+                        style={"display": "none", "width": "120px"},
                     ),
                     # dmc.Button("", radius="md", id="logout-button", fullWidth=True, style={"display": "none"}),
                     html.A(
@@ -94,9 +103,9 @@ def render_login_form():
                             "Register",
                             radius="md",
                             variant="outline",
-                            color="gray",
-                            fullWidth=True,
+                            color=colors["blue"],
                             disabled=settings.auth.unauthenticated_mode,
+                            style={"width": "120px"},
                         ),
                         id="open-register-form",
                     ),
@@ -105,14 +114,14 @@ def render_login_form():
                             "",
                             radius="md",
                             variant="outline",
-                            color="gray",
-                            fullWidth=True,
+                            color=colors["blue"],
+                            style={"width": "120px"},
                         ),
                         id="open-login-form",
                         style={"display": "none"},
                     ),
                 ],
-                position="center",
+                justify="center",
                 mt="1rem",
             ),
             # Google OAuth Section
@@ -143,16 +152,14 @@ def render_login_form():
                         fullWidth=True,
                         style={
                             "display": "block" if settings.auth.google_oauth_enabled else "none",
-                            "border": "1px solid #db4437",
-                            "color": "#db4437",
                         },
                     ),
                 ],
-                spacing="0.5rem",
+                gap="0.5rem",
                 style={"display": "block" if settings.auth.google_oauth_enabled else "none"},
             ),
         ],
-        spacing="1rem",
+        gap="1rem",
         style={"width": "100%"},
     )
 
@@ -162,7 +169,8 @@ def render_register_form():
         [
             dmc.Center(
                 html.Img(
-                    src=dash.get_asset_url("logo.png"),
+                    id="auth-modal-logo-register",
+                    src=dash.get_asset_url("logo_black.svg"),
                     height=60,
                     style={"margin-left": "0px"},
                 )
@@ -172,7 +180,8 @@ def render_register_form():
                     "Please register :",
                     order=2,
                     style={"fontFamily": "Virgil"},
-                    align="center",
+                    ta="center",
+                    c="gray",  # Use theme-aware color
                 )
             ),
             dmc.Space(h=10),
@@ -214,18 +223,24 @@ def render_register_form():
                         "",
                         radius="md",
                         id="login-button",
-                        fullWidth=True,
-                        style={"display": "none"},
+                        color=colors["blue"],
+                        style={"display": "none", "width": "120px"},
                     ),
                     # dmc.Button("", radius="md", id="logout-button", fullWidth=True, style={"display": "none"}),
-                    dmc.Button("Register", radius="md", id="register-button", fullWidth=True),
+                    dmc.Button(
+                        "Register",
+                        radius="md",
+                        id="register-button",
+                        color=colors["blue"],
+                        style={"width": "140px"},
+                    ),
                     html.A(
                         dmc.Button(
                             "",
                             radius="md",
                             variant="outline",
-                            color="gray",
-                            fullWidth=True,
+                            color=colors["blue"],
+                            style={"width": "120px"},
                         ),
                         id="open-register-form",
                         style={"display": "none"},
@@ -236,17 +251,17 @@ def render_register_form():
                             id="back-to-login-button",
                             radius="md",
                             variant="outline",
-                            color="gray",
-                            fullWidth=True,
+                            color=colors["blue"],
+                            style={"width": "140px"},
                         ),
                         id="open-login-form",
                     ),
                 ],
-                position="center",
+                justify="center",
                 mt="1rem",
             ),
         ],
-        spacing="1rem",
+        gap="1rem",
         style={"width": "100%"},
     )
 
@@ -328,8 +343,210 @@ def handle_registration(register_email, register_password, register_confirm_pass
     return "Registration successful! Please login.", False
 
 
+def create_triangle_background():
+    """
+    Create GPU-optimized triangle particle background for Depictio
+    Reduced particles and efficient animations for better performance
+    """
+
+    # Depictio brand colors
+    colors = {
+        "purple": "#8B5CF6",
+        "violet": "#A855F7",
+        "blue": "#3B82F6",
+        "teal": "#14B8A6",
+        "green": "#10B981",
+        "yellow": "#F59E0B",
+        "orange": "#F97316",
+        "pink": "#EC4899",
+        "red": "#EF4444",
+    }
+
+    # Triangle sizes - 2:1 ratio (equal sides : short side)
+    sizes = {
+        "small": {"width": 12, "height": 12, "weight": 0.35},  # 35% small
+        "medium": {"width": 18, "height": 18, "weight": 0.3},  # 30% medium
+        "large": {"width": 24, "height": 24, "weight": 0.25},  # 25% large
+        "xlarge": {"width": 32, "height": 32, "weight": 0.1},  # 10% xlarge
+    }
+
+    # Animation types
+    animations = [
+        "triangle-anim-1",
+        "triangle-anim-2",
+        "triangle-anim-3",
+        "triangle-anim-4",
+        "triangle-anim-5",
+        "triangle-anim-6",
+    ]
+
+    # Generate SVG triangles for each size with 2:1 ratio (equal sides : short side)
+    def create_triangle_svg(size_key, color_hex):
+        size_info = sizes[size_key]
+        w, h = size_info["width"], size_info["height"]
+
+        # Depictio-style triangle with 2:1 ratio
+        # Equal sides are ~2x the short side (base)
+        # Make triangle taller and more pointed for proper ratio
+
+        # Create isosceles triangle with curved base for organic Depictio feel
+        svg_path = (
+            f"M{w / 2} {h * 0.05} L{w * 0.8} {h * 0.9} Q{w / 2} {h * 0.95} {w * 0.2} {h * 0.9} Z"
+        )
+
+        return f"""url("data:image/svg+xml,%3Csvg width='{w}' height='{h}' viewBox='0 0 {w} {h}' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='{svg_path}' fill='{color_hex.replace("#", "%23")}' /%3E%3C/svg%3E")"""
+
+    # Generate particles with better distribution across full background
+    triangle_particles = []
+    num_particles = 40  # Increased to 40 triangles as requested
+
+    # Use a combination of grid-based and pseudo-random distribution for even coverage
+    grid_cols = 8  # 8 columns
+    grid_rows = 5  # 5 rows
+
+    for i in range(num_particles):
+        # Choose size based on weights
+        cumulative_weight = 0
+        rand_val = (i * 0.37) % 1  # Deterministic "random" for consistent results
+
+        chosen_size = "small"
+        for size_key, size_info in sizes.items():
+            cumulative_weight += size_info["weight"]
+            if rand_val <= cumulative_weight:
+                chosen_size = size_key
+                break
+
+        # Choose color
+        color_keys = list(colors.keys())
+        color_key = color_keys[i % len(color_keys)]
+        color_hex = colors[color_key]
+
+        # Better distribution using grid + randomization
+        # Divide screen into grid cells, place particles with random offset
+        cell_width = 85 / grid_cols  # 85% width divided by columns
+        cell_height = 70 / grid_rows  # 70% height divided by rows
+
+        # Calculate which cell this particle belongs to
+        cell_x = i % grid_cols
+        cell_y = (i // grid_cols) % grid_rows
+
+        # Base position in cell center
+        base_x = cell_x * cell_width + cell_width / 2
+        base_y = cell_y * cell_height + cell_height / 2
+
+        # Add pseudo-random offset within cell (deterministic but varied)
+        offset_x = ((i * 37 + i * i * 13) % 100 - 50) / 100 * cell_width * 0.8
+        offset_y = ((i * 41 + i * i * 19) % 100 - 50) / 100 * cell_height * 0.8
+
+        # Final positions with bounds checking
+        x = max(5, min(90, base_x + offset_x + 7.5))
+        y = max(10, min(80, base_y + offset_y + 15))
+
+        # Choose animation
+        animation_class = animations[i % len(animations)]
+
+        # Create triangle element
+        triangle = html.Div(
+            className=f"triangle-particle triangle-{chosen_size} {animation_class}",
+            style={
+                "left": f"{x}%",
+                "top": f"{y}%",
+                "background": create_triangle_svg(chosen_size, color_hex),
+                # Random initial rotation for variety
+                "transform": f"rotate({(i * 73) % 360}deg) translateZ(0)",
+                # Staggered animation delays for dynamic feel
+                "animationDelay": f"{(i * 0.6) % 16}s",
+                # Varied duration for more organic movement
+                "animationDuration": f"{14 + (i * 1.5) % 12}s",
+            },
+        )
+
+        triangle_particles.append(triangle)
+
+    # Return the complete background structure
+    return html.Div(
+        id="auth-background",
+        style={
+            "position": "fixed",
+            "top": "0",
+            "left": "0",
+            "width": "100vw",
+            "height": "100vh",
+            "zIndex": "9998",
+            "overflow": "hidden",
+        },
+        children=[
+            html.Div(
+                id="triangle-particles",
+                style={
+                    "position": "absolute",
+                    "width": "100%",
+                    "height": "100%",
+                },
+                children=triangle_particles,
+            )
+        ],
+    )
+
+
 layout = html.Div(
     [
+        # Triangle particles background - white with colored triangles
+        create_triangle_background(),
+        # html.Div(
+        #     id="auth-background",
+        #     style={
+        #         "position": "fixed",
+        #         "top": "0",
+        #         "left": "0",
+        #         "width": "100vw",
+        #         "height": "100vh",
+        #         "zIndex": "9998",
+        #         "overflow": "hidden",
+        #     },
+        #     children=[
+        #         # Triangle particles container
+        #         html.Div(
+        #             id="triangle-particles",
+        #             style={
+        #                 "position": "absolute",
+        #                 "width": "100%",
+        #                 "height": "100%",
+        #             },
+        #             children=[
+        #                 # Create multiple triangle particles with random distribution and Depictio-style shape
+        #                 html.Div(
+        #                     className="triangle-particle",
+        #                     style={
+        #                         "position": "absolute",
+        #                         "width": "18px",
+        #                         "height": "18px",
+        #                         # Improved random distribution to prevent clustering
+        #                         "left": f"{((i * 37 + i * i * 13 + i * i * i * 5) % 90) + 5}%",
+        #                         "top": f"{((i * 41 + i * i * 19 + i * i * i * 7) % 85) + 7}%",
+        #                         # Depictio-style triangle: 2:1 ratio (equal sides : short side)
+        #                         # Short side = 8 units (from x=4 to x=12), Equal sides ≈ 16 units each
+        #                         "background": f"""
+        #                             url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M10 2 L16 18 Q10 19 4 18 Z' fill='{[colors["purple"], colors["violet"], colors["blue"], colors["teal"], colors["green"], colors["yellow"], colors["orange"], colors["pink"], colors["red"]][i % 9].replace("#", "%23")}' /%3E%3C/svg%3E")
+        #                         """,
+        #                         "backgroundSize": "contain",
+        #                         "backgroundRepeat": "no-repeat",
+        #                         "opacity": "0.4",
+        #                         # Random initial rotation (0-360 degrees) so triangles start in different directions
+        #                         "transform": f"rotate({(i * 73) % 360}deg)",
+        #                         # Use CSS animations from assets/app.css
+        #                         "animationName": f"triangleParticle{i % 6}",
+        #                         "animationDuration": f"{10 + (i * 3) % 30}s",
+        #                         "animationIterationCount": "infinite",
+        #                         "animationTimingFunction": "ease-in-out",
+        #                         "animationDelay": f"{(i * 0.7) % 15}s",
+        #                     },
+        #                 )
+        #                 for i in range(50)  # Increased to 50 triangle particles
+        #             ],
+        #         ),
+        #     ],
+        # ),
         dcc.Store(
             id="modal-state-store", data="login"
         ),  # Store to control modal content state (login or register)
@@ -339,7 +556,20 @@ layout = html.Div(
             opened=False,
             centered=True,
             children=EventListener(
-                [dmc.Center(id="modal-content")],
+                [
+                    dmc.Paper(
+                        id="modal-content",
+                        className="auth-modal-content",
+                        shadow="xl",
+                        radius="lg",
+                        p="xl",
+                        style={
+                            "position": "relative",
+                            "zIndex": "10001",
+                            "backdropFilter": "blur(10px)",
+                        },
+                    )
+                ],
                 events=[event],
                 logging=True,
                 id="auth-modal-listener",
@@ -348,6 +578,12 @@ layout = html.Div(
             closeOnEscape=False,
             closeOnClickOutside=False,
             size="lg",
+            overlayProps={
+                "opacity": 0,  # Make overlay transparent so we can see our custom background
+                "blur": 0,
+            },
+            # Ensure modal content is visible above background
+            zIndex=10000,
         ),
         # html.Div(id="landing-page-content"),
         # Hidden buttons for switching forms to ensure they exist in the layout
@@ -552,7 +788,7 @@ def register_callbacks_users_management(app):
                 dmc.Text(
                     feedback_message,
                     id="user-feedback-message-login",
-                    color="red" if modal_open_new else "green",
+                    c="red" if modal_open_new else "green",
                 ),
                 current_state,
                 modal_open_new,
@@ -571,7 +807,7 @@ def register_callbacks_users_management(app):
                     content,
                     dmc.Text(
                         feedback_message,
-                        color="red",
+                        c="red",
                         id="user-feedback-message-register",
                     ),
                     dash.no_update,
@@ -600,7 +836,7 @@ def register_callbacks_users_management(app):
                 content,
                 dmc.Text(
                     feedback_message,
-                    color="red" if modal_open_new else "green",
+                    c="red" if modal_open_new else "green",
                     id="user-feedback-message-register",
                 ),
                 dash.no_update,
