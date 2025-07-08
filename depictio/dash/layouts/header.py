@@ -437,6 +437,9 @@ def design_header(data, local_store):
                         width=16,
                         color="blue.5",
                     ),
+                    comboboxProps=dict(
+                        withinPortal=False,
+                    ),
                     # rightSection=DashIconify(icon="radix-icons:chevron-down"),
                 )
             ),

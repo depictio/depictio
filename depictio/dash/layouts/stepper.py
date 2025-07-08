@@ -355,6 +355,9 @@ def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
                         "width": "100%",
                         "display": "none",
                     },
+                    comboboxProps=dict(
+                        withinPortal=False,
+                    ),
                 )
             ),
         ],
@@ -491,6 +494,9 @@ def create_stepper_output(n, active):
                                 "display": "inline-block",
                                 "width": "100%",
                             },
+                            comboboxProps=dict(
+                                withinPortal=False,
+                            ),
                         )
                     ),
                     dbc.Col(
@@ -512,6 +518,9 @@ def create_stepper_output(n, active):
                                 "width": "100%",
                                 "display": "inline-block",
                             },
+                            comboboxProps=dict(
+                                withinPortal=False,
+                            ),
                         )
                     ),
                 ],
@@ -646,6 +655,7 @@ def create_stepper_output(n, active):
                 style={
                     "height": "100%",
                     "width": "100%",
+                    "z-index": "10001",  # Higher than other modals
                 },
             ),
         ],
