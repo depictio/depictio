@@ -2,21 +2,26 @@ const { defineConfig } = require('cypress')
 
 module.exports = defineConfig({
     e2e: {
+        experimentalStudio: true,
         // watchForFileChanges: true,
         baseUrl: 'http://localhost:5080',
         specPattern: 'cypress/e2e/**/*.cy.js',
         supportFile: 'cypress/support/e2e.js',
         viewportWidth: 1920,
         viewportHeight: 1080,
-        browser: 'chrome',
         experimentalRunAllSpecs: true,
-        // Add these settings to improve file watching
+        // Improved timeouts for CI stability
+        defaultCommandTimeout: 10000,
+        requestTimeout: 15000,
+        responseTimeout: 15000,
+        pageLoadTimeout: 30000,
+        // Better handling of CI environments
+        animationDistanceThreshold: 5,
+        waitForAnimations: true,
         watchOptions: {
             watchFileChanges: true,
-            // Reduce polling interval (milliseconds)
             pollInterval: 1000
         },
-        // Define environment variables with defaults
         env: {
             UNAUTHENTICATED_MODE: false
         },
@@ -37,14 +42,5 @@ module.exports = defineConfig({
             return config
         }
     },
-    chromeWebSecurity: false,
-    // Add these Chrome preferences to disable password saving
-    browser: {
-        chromePreferences: {
-            credentials_enable_service: false,
-            profile: {
-                password_manager_enabled: false
-            }
-        }
-    }
+    chromeWebSecurity: false
 })
