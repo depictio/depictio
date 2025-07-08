@@ -1,7 +1,6 @@
 import asyncio
 import json
 from datetime import datetime
-from uuid import UUID
 
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
@@ -593,7 +592,8 @@ async def delete_dashboard(
 @dashboards_endpoint_router.get("/get_component_data/{dashboard_id}/{component_id}")
 async def get_component_data_endpoint(
     dashboard_id: PyObjectId,
-    component_id: UUID,
+    component_id: str,
+    # component_id: UUID,
     current_user: User = Depends(get_user_or_anonymous),
 ):
     """

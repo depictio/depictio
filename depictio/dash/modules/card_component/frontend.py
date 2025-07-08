@@ -215,14 +215,16 @@ def register_callbacks_card_component(app):
                     # transition="pop",
                     # transitionDuration=300,
                     transitionProps={
-                        "name": "pop",
                         "duration": 300,
+                        "timingFunction": "ease",
+                        "transition": "slide-left",
                     },
-                    justify="flex-end",
+                    position="right-end",
                     withArrow=True,
-                    openDelay=500,
-                    closeDelay=500,
+                    openDelay=300,
+                    closeDelay=300,
                     color="gray",
+                    withinPortal=False,
                 ),
             ]
         )
@@ -308,6 +310,9 @@ def design_card(id, df):
                             },
                             data=[{"label": e, "value": e} for e in df.columns],
                             value=None,
+                            comboboxProps=dict(
+                                withinPortal=False,
+                            ),
                         ),
                         # Dropdown for the aggregation method selection
                         dmc.Select(
@@ -317,6 +322,9 @@ def design_card(id, df):
                                 "index": id["index"],
                             },
                             value=None,
+                            comboboxProps=dict(
+                                withinPortal=False,
+                            ),
                         ),
                         html.Div(
                             id={

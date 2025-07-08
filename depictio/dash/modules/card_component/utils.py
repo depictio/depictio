@@ -215,6 +215,8 @@ def build_card(**kwargs):
 
         # Always recalculate value when we have data (filtered or unfiltered)
         v = compute_value(data, column_name, aggregation)
+        if not v:
+            v = np.nan
         logger.debug(f"Card component {index}: Computed new value: {v}")
 
     try:

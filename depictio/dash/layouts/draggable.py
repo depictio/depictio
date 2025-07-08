@@ -507,11 +507,15 @@ def register_callbacks_draggable(app):
                 child = children
 
                 draggable_children.append(child)
-                child_id = f"box-{str(indexes)}"
+                child_id = str(child_index)
                 logger.info(f"Child type: {child_type}")
                 new_layout_item = calculate_new_layout_position(
                     child_type, draggable_layouts, child_id, len(draggable_children)
                 )
+
+                # Dash 3.x compatibility: Ensure the layout item ID matches component ID
+                # This prevents auto-generated IDs from overriding custom ones
+                new_layout_item["i"] = child_id
 
                 # logger.info(f"Required breakpoints: {required_breakpoints}")
                 # logger.info(f"Draggable layouts: {draggable_layouts}")
@@ -1031,7 +1035,7 @@ def register_callbacks_draggable(app):
                 n = len(updated_children)  # Position based on the number of components
 
                 new_layout = calculate_new_layout_position(
-                    f"{metadata['component_type']}-component",
+                    metadata["component_type"],  # Remove the "-component" suffix
                     existing_layouts,
                     child_id,
                     n,
@@ -1346,11 +1350,14 @@ def design_draggable(
     # logger.info(f"Init layout: {init_layout}")
 
     # Ensure init_layout has the required breakpoints
-    if init_layout:
-        for key in required_breakpoints:
-            if key not in init_layout:
-                init_layout[key] = []
-        # logger.info(f"Initialized layout with required breakpoints: {init_layout}")
+    # If init_layout is empty or None, initialize it with proper structure
+    if not init_layout:
+        init_layout = {}
+
+    for key in required_breakpoints:
+        if key not in init_layout:
+            init_layout[key] = []
+    # logger.info(f"Initialized layout with required breakpoints: {init_layout}")
 
     # Create the draggable layout outside of the if-else to keep it in the DOM
     draggable = dash_draggable.ResponsiveGridLayout(
@@ -1364,6 +1371,8 @@ def design_draggable(
         # verticalCompact=True,  # Compacts items vertically to eliminate gaps
         # preventCollision=True,  # Prevents collisions between items
         # isDroppable=True,
+        # gridCols={"lg": 12, "md": 10, "sm": 6, "xs": 4, "xxs": 2},  # Define grid columns
+        # rowHeight=30,  # Set a reasonable row height
         style={
             "display": display_style,
             "flex-grow": 1,
