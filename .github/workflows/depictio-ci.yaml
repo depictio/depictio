@@ -1337,6 +1337,15 @@ jobs:
           docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.minio.yaml --env-file docker-compose/.env up -d
           sleep 15
 
+      - name: Show .env files
+        run: |
+          echo "📋 Environment variables in docker-compose/.env:"
+          cat docker-compose/.env || echo "❌ .env file not found"
+          echo "📋 Environment variables in .env.example:"
+          cat .env.example || echo "❌ .env.example file not found"
+          echo "📋 Environment variables in .env:"
+          cat .env || echo "❌ .env file not found"
+
       - name: Log backend container status
         run: |
           echo "📊 Backend container status:"
