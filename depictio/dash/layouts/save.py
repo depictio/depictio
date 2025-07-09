@@ -142,8 +142,68 @@ def register_callbacks_save(app):
         # logger.info(f"seen_indexes: {seen_indexes}")
         # Remove child components for edit mode
         if "btn-done-edit" in triggered_id:
-            unique_metadata = [elem for elem in unique_metadata if "parent_index" not in elem]
-            # logger.info(f"Unique metadata after removing child components: {unique_metadata}")
+            logger.info("=== BTN-DONE-EDIT TRIGGERED - PROCESSING EDIT MODE ===")
+            logger.info(f"Unique metadata BEFORE filtering: {len(unique_metadata)} items")
+            for i, elem in enumerate(unique_metadata):
+                logger.info(
+                    f"Item {i}: index={elem.get('index')}, parent_index={elem.get('parent_index')}, component_type={elem.get('component_type')}"
+                )
+
+            # In edit mode, we need to:
+            # 1. Find the edited component (has parent_index)
+            # 2. Remove the original component (with index = parent_index)
+            # 3. Add the edited component with parent_index removed
+            original_count = len(unique_metadata)
+
+            # Find the component being edited (it will have parent_index set)
+            edited_components = [
+                elem for elem in unique_metadata if elem.get("parent_index") is not None
+            ]
+            non_edited_components = [
+                elem for elem in unique_metadata if elem.get("parent_index") is None
+            ]
+
+            logger.info(
+                f"Found {len(edited_components)} edited components and {len(non_edited_components)} non-edited components"
+            )
+
+            # Process edited components
+            for component in edited_components:
+                parent_index = component.get("parent_index")
+                component_index = component.get("index")
+
+                logger.info(
+                    f"Processing edited component: {component_index} (parent_index: {parent_index})"
+                )
+
+                # Remove the original component that was being edited
+                non_edited_components = [
+                    elem for elem in non_edited_components if elem.get("index") != parent_index
+                ]
+                logger.info(f"Removed original component with index {parent_index}")
+
+                # Update the edited component's index to be the same as the original
+                component["index"] = parent_index
+                logger.info(
+                    f"Updated edited component index from {component_index} to {parent_index}"
+                )
+
+                # Remove parent_index from the component data before saving
+                if "parent_index" in component:
+                    del component["parent_index"]
+                    logger.info(f"Removed parent_index from component {parent_index}")
+
+            # Combine all components back together
+            unique_metadata = non_edited_components + edited_components
+
+            logger.info(
+                f"Unique metadata AFTER processing: {len(unique_metadata)} items (removed {original_count - len(unique_metadata)} items)"
+            )
+            for i, elem in enumerate(unique_metadata):
+                logger.info(
+                    f"Final item {i}: index={elem.get('index')}, parent_index={elem.get('parent_index')}, component_type={elem.get('component_type')}"
+                )
+            logger.info("=== BTN-DONE-EDIT PROCESSING COMPLETE ===")
 
         # Use draggable layout metadata if triggered by draggable
         if "draggable" in triggered_id:

@@ -26,45 +26,85 @@ def register_callbacks_card_component(app):
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
             # State("local-store-components-metadata", "data"),
             State({"type": "card-dropdown-column", "index": MATCH}, "id"),
+            State("current-edit-parent-index", "data"),  # Add parent index for edit mode
             State("local-store", "data"),
             State("url", "pathname"),
         ],
         prevent_initial_call=True,
     )
     # def update_aggregation_options(column_name, wf_dc_store, component_id, local_data, pathname):
-    def update_aggregation_options(column_name, wf_tag, dc_tag, component_id, local_data, pathname):
+    def update_aggregation_options(
+        column_name, wf_tag, dc_tag, component_id, parent_index, local_data, pathname
+    ):
         """
         Callback to update aggregation dropdown options based on the selected column
         """
-
+        logger.info("=== CARD AGGREGATION OPTIONS CALLBACK START ===")
         logger.info(f"column_name: {column_name}")
+        logger.info(f"wf_tag: {wf_tag}")
+        logger.info(f"dc_tag: {dc_tag}")
         logger.info(f"component_id: {component_id}")
-        logger.info(f"local_data: {local_data}")
-        # logger.info(f"wf_dc_store: {wf_dc_store}")
+        logger.info(f"parent_index: {parent_index}")
+        logger.info(f"local_data available: {local_data is not None}")
+        logger.info(f"pathname: {pathname}")
 
         if not local_data:
+            logger.error("No local_data available!")
             return []
 
         TOKEN = local_data["access_token"]
 
-        # if not wf_dc_store:
-        #     return []
+        # In edit mode, we might need to get workflow/dc IDs from component data
+        if parent_index is not None and (not wf_tag or not dc_tag):
+            logger.info(
+                f"Edit mode detected - fetching component data for parent_index: {parent_index}"
+            )
+            dashboard_id = pathname.split("/")[-1]
+            component_data = get_component_data(
+                input_id=parent_index, dashboard_id=dashboard_id, TOKEN=TOKEN
+            )
+            if component_data:
+                wf_tag = component_data.get("wf_id")
+                dc_tag = component_data.get("dc_id")
+                logger.info(f"Retrieved from component_data - wf_tag: {wf_tag}, dc_tag: {dc_tag}")
 
         index = str(component_id["index"])
-
-        # wf_tag = wf_dc_store[index]["wf_tag"]
-        # dc_tag = wf_dc_store[index]["dc_tag"]
-
         logger.info(f"index: {index}")
-        logger.info(f"wf_tag: {wf_tag}")
-        logger.info(f"dc_tag: {dc_tag}")
+        logger.info(f"Final wf_tag: {wf_tag}")
+        logger.info(f"Final dc_tag: {dc_tag}")
+
+        # If any essential parameters are None, return empty list
+        if not wf_tag or not dc_tag:
+            logger.error(
+                f"Missing essential workflow/dc parameters - wf_tag: {wf_tag}, dc_tag: {dc_tag}"
+            )
+            return []
+
+        # If column_name is None, return empty list (but still log the attempt)
+        if not column_name:
+            logger.info(
+                "Column name is None - returning empty list (this is normal on initial load)"
+            )
+            return []
 
         # Get the columns from the selected data collection
+        logger.info("Fetching columns from data collection...")
         cols_json = get_columns_from_data_collection(wf_tag, dc_tag, TOKEN)
+        logger.info(f"cols_json keys: {list(cols_json.keys()) if cols_json else 'None'}")
 
-        logger.info(f"cols_json: {cols_json}")
+        # Check if cols_json is valid and contains the column
+        if not cols_json:
+            logger.error("cols_json is empty or None!")
+            return []
 
-        if column_name is None:
+        if column_name not in cols_json:
+            logger.error(f"column_name '{column_name}' not found in cols_json!")
+            logger.error(f"Available columns: {list(cols_json.keys())}")
+            return []
+
+        if "type" not in cols_json[column_name]:
+            logger.error(f"'type' field missing for column '{column_name}'")
+            logger.error(f"Available fields: {list(cols_json[column_name].keys())}")
             return []
 
         # Get the type of the selected column
@@ -72,11 +112,18 @@ def register_callbacks_card_component(app):
         logger.info(f"column_type: {column_type}")
 
         # Get the aggregation functions available for the selected column type
+        if str(column_type) not in agg_functions:
+            logger.error(f"Column type '{column_type}' not found in agg_functions!")
+            logger.error(f"Available types: {list(agg_functions.keys())}")
+            return []
+
         agg_functions_tmp_methods = agg_functions[str(column_type)]["card_methods"]
+        logger.info(f"agg_functions_tmp_methods: {agg_functions_tmp_methods}")
 
         # Create a list of options for the dropdown
         options = [{"label": k, "value": k} for k in agg_functions_tmp_methods.keys()]
-        logger.info(f"options: {options}")
+        logger.info(f"Final options to return: {options}")
+        logger.info("=== CARD AGGREGATION OPTIONS CALLBACK END ===")
 
         return options
 

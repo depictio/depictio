@@ -132,7 +132,14 @@ def register_callbacks_stepper(app):
             },
         ).json()
         all_wf_dc = project["workflows"]
-        selected_wf_data = [wf for wf in all_wf_dc if wf["id"] == selected_workflow][0]
+        selected_wf_list = [wf for wf in all_wf_dc if wf["id"] == selected_workflow]
+
+        if not selected_wf_list:
+            logger.error(f"No workflow found with id '{selected_workflow}'")
+            logger.error(f"Available workflow ids: {[wf['id'] for wf in all_wf_dc]}")
+            return [], None
+
+        selected_wf_data = selected_wf_list[0]
 
         mapping_component_data_collection = {
             "table": ["Figure", "Card", "Interactive", "Table"],
@@ -502,6 +509,7 @@ def create_stepper_output(n, active):
                             "type": "btn-done",
                             "index": n,
                         },
+                        color="green",
                         n_clicks=0,
                         size="xl",
                         style={

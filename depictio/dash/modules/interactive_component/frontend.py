@@ -21,6 +21,16 @@ from depictio.dash.utils import (
 
 
 def register_callbacks_interactive_component(app):
+    # Debug callback to track column selection changes
+    @app.callback(
+        Output({"type": "debug-interactive-log", "index": MATCH}, "children"),
+        [Input({"type": "input-dropdown-column", "index": MATCH}, "value")],
+        prevent_initial_call=False,
+    )
+    def debug_column_selection(column_value):
+        logger.info(f"=== DEBUG: Column selection changed to: {column_value} ===")
+        return f"Debug: Column = {column_value}"
+
     @app.callback(
         Output({"type": "input-dropdown-method", "index": MATCH}, "data"),
         [
@@ -28,24 +38,71 @@ def register_callbacks_interactive_component(app):
             Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
             Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
             State({"type": "input-dropdown-method", "index": MATCH}, "id"),
+            State("current-edit-parent-index", "data"),  # Add parent index for edit mode
             State("local-store", "data"),
             State("url", "pathname"),
         ],
-        prevent_initial_call=True,
+        prevent_initial_call=False,
     )
-    def update_aggregation_options(column_value, wf_tag, dc_tag, id, local_data, pathname):
+    def update_aggregation_options(
+        column_value, workflow_id, data_collection_id, id, parent_index, local_data, pathname
+    ):
         """
         Callback to update aggregation dropdown options based on the selected column
         """
+        logger.info("=== UPDATE AGGREGATION OPTIONS CALLBACK START ===")
+        logger.info(f"column_value: {column_value}")
+        logger.info(f"workflow_id: {workflow_id}")
+        logger.info(f"data_collection_id: {data_collection_id}")
+        logger.info(f"id: {id}")
+        logger.info(f"parent_index: {parent_index}")
+        logger.info(f"local_data available: {local_data is not None}")
+        logger.info(f"pathname: {pathname}")
+
         if not local_data:
+            logger.error("No local_data available!")
             return []
 
         TOKEN = local_data["access_token"]
 
-        cols_json = get_columns_from_data_collection(wf_tag, dc_tag, TOKEN)
-        # print(cols_json)
+        # In edit mode, we might need to get workflow/dc IDs from component data
+        if parent_index is not None and (not workflow_id or not data_collection_id):
+            logger.info(
+                f"Edit mode detected - fetching component data for parent_index: {parent_index}"
+            )
+            dashboard_id = pathname.split("/")[-1]
+            component_data = get_component_data(
+                input_id=parent_index, dashboard_id=dashboard_id, TOKEN=TOKEN
+            )
+            if component_data:
+                workflow_id = component_data.get("wf_id")
+                data_collection_id = component_data.get("dc_id")
+                logger.info(
+                    f"Retrieved from component_data - workflow_id: {workflow_id}, data_collection_id: {data_collection_id}"
+                )
 
-        if column_value is None:
+        # If any essential parameters are None, return empty list but allow case where column_value is None
+        if not workflow_id or not data_collection_id:
+            logger.error(
+                f"Missing essential workflow/dc parameters - workflow_id: {workflow_id}, data_collection_id: {data_collection_id}"
+            )
+            return []
+
+        # If column_value is None, return empty list (but still log the attempt)
+        if not column_value:
+            logger.info(
+                "Column value is None - returning empty list (this is normal on initial load)"
+            )
+            return []
+
+        logger.info("Fetching columns from data collection...")
+        cols_json = get_columns_from_data_collection(workflow_id, data_collection_id, TOKEN)
+        logger.info(f"cols_json keys: {list(cols_json.keys()) if cols_json else 'None'}")
+
+        # Check if column exists in cols_json
+        if column_value not in cols_json:
+            logger.error(f"Column '{column_value}' not found in cols_json!")
+            logger.error(f"Available columns: {list(cols_json.keys())}")
             return []
 
         # Get the type of the selected column
@@ -66,14 +123,19 @@ def register_callbacks_interactive_component(app):
             return []
 
         agg_functions_tmp_methods = agg_functions[str(column_type)]["input_methods"]
+        logger.info(f"agg_functions_tmp_methods: {agg_functions_tmp_methods}")
 
         # Create a list of options for the dropdown
         options = [{"label": k, "value": k} for k in agg_functions_tmp_methods.keys()]
+        logger.info(f"Options before filtering: {options}")
 
         # Remove the aggregation methods that are not suitable for the selected column
         if nb_unique > 5:
             options = [e for e in options if e["label"] != "SegmentedControl"]
+            logger.info(f"Options after filtering (nb_unique > 5): {options}")
 
+        logger.info(f"Final options to return: {options}")
+        logger.info("=== UPDATE AGGREGATION OPTIONS CALLBACK END ===")
         return options
 
     # Callback to reset aggregation dropdown value based on the selected column
@@ -391,6 +453,14 @@ def design_interactive(id, df):
                                         "type": "interactive-description",
                                         "index": id["index"],
                                     },
+                                ),
+                                html.Div(
+                                    "Debug: No column selected",
+                                    id={
+                                        "type": "debug-interactive-log",
+                                        "index": id["index"],
+                                    },
+                                    style={"fontSize": "10px", "color": "red"},
                                 ),
                             ],
                             gap="sm",
