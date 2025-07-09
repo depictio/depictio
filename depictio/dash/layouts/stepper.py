@@ -317,20 +317,22 @@ def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
                         modal_body,
                         style=MODAL_BODY_STYLE,
                     ),
-                    dmc.Group(
-                        [
-                            dmc.Button(
-                                "Confirm Edit",
-                                id={"type": "btn-done-edit", "index": n},
-                                n_clicks=0,
-                                size="lg",
-                                leftSection=DashIconify(icon="bi:check-circle", width=20),
-                                color="green",
-                                disabled=True,
-                            ),
-                        ],
-                        justify="center",
-                        style={"marginTop": "20px", "flexShrink": "0"},
+                    html.Div(
+                        dmc.Group(
+                            [
+                                dmc.Button(
+                                    "Confirm Edit",
+                                    id={"type": "btn-done-edit", "index": n},
+                                    n_clicks=0,
+                                    size="lg",
+                                    leftSection=DashIconify(icon="bi:check-circle", width=20),
+                                    color="green",
+                                    disabled=True,
+                                ),
+                            ],
+                            justify="center",
+                        ),
+                        style=MODAL_FOOTER_STYLE,
                     ),
                 ],
                 style=MODAL_CONTENT_STYLE,
@@ -360,13 +362,13 @@ def create_stepper_output(n, active):
     stepper_dropdowns = html.Div(
         [
             html.Hr(),
-            html.Div(
+            dmc.Center(
                 [
                     dmc.Title(
                         "Component selected:",
                         order=3,
                         ta="left",
-                        fw="normal",
+                        fw="bold",
                         style={"display": "inline-block", "margin-right": "10px"},
                     ),
                     html.Div(
@@ -382,7 +384,8 @@ def create_stepper_output(n, active):
                 ],
                 style={"align-items": "center", "display": "flex"},
             ),
-            html.Hr(),
+            # html.Hr(),
+            dmc.Space(h=20),
             dbc.Row(
                 [
                     dbc.Col(
@@ -517,7 +520,6 @@ def create_stepper_output(n, active):
 
     stepper_footer = dmc.Group(
         justify="center",
-        mt="xl",
         children=[
             dmc.Button(
                 "Back",
@@ -544,11 +546,19 @@ def create_stepper_output(n, active):
                         [
                             html.H3(
                                 "Design your new dashboard component",
-                                style={"marginBottom": "20px", "textAlign": "center"},
+                                style={
+                                    "marginBottom": "20px",
+                                    "textAlign": "center",
+                                    "flexShrink": "0",
+                                },
                             ),
                             html.Div(
-                                [stepper, stepper_footer],
+                                stepper,
                                 style=MODAL_BODY_STYLE,
+                            ),
+                            html.Div(
+                                stepper_footer,
+                                style=MODAL_FOOTER_STYLE,
                             ),
                         ],
                         style=MODAL_CONTENT_STYLE,
@@ -594,6 +604,13 @@ MODAL_BODY_STYLE = {
     "padding": "0.5rem",
     "minHeight": "0",  # Allow flex item to shrink
     "boxSizing": "border-box",
+}
+
+MODAL_FOOTER_STYLE = {
+    "flexShrink": "0",
+    "padding": "1rem",
+    "borderTop": "1px solid #e0e0e0",
+    # "backgroundColor": "#f9f9f9",
 }
 
 
