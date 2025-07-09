@@ -377,6 +377,9 @@ layout = dmc.Container(
                                             clearable=True,
                                             nothingFoundMessage="No users found",
                                             style={"width": "400px"},
+                                            comboboxProps=dict(
+                                                withinPortal=False,
+                                            ),
                                         ),
                                         dmc.Button(
                                             "Add Users",

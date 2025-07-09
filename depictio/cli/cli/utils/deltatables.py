@@ -206,9 +206,7 @@ def aggregate_lazy_dataframes(lazy_frames: list) -> pl.DataFrame:
     # Concatenate all lazy frames into one lazy frame.
     concatenated_lf = pl.concat(aligned_lfs)
     # Add an aggregation timestamp column lazily.
-    concatenated_lf = concatenated_lf.with_columns(
-        pl.lit(datetime.now().strftime("%Y-%m-%d %H:%M:%S")).alias("aggregation_time")
-    )
+    concatenated_lf = concatenated_lf.with_columns(pl.lit(datetime.now()).alias("aggregation_time"))
     # Materialize the lazy operations.
     try:
         aggregated_df: pl.DataFrame = concatenated_lf.collect()  # type: ignore[unresolved-attribute]
@@ -416,7 +414,7 @@ def client_aggregate_data(
     extended = True if rich_tables else False
 
     if rich_tables:
-        aggregated_df.rich(  # type: ignore[unresolved-attribute]
+        aggregated_df.rich_print(  # type: ignore[unresolved-attribute]
             title="Aggregated DataFrame - {data_collection.data_collection_tag}",
             max_rows=10,
             max_cols=10,

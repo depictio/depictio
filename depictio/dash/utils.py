@@ -1,6 +1,5 @@
 import collections
 import sys
-import uuid
 
 import httpx
 import numpy as np
@@ -29,12 +28,46 @@ UNSELECTED_STYLE = {
 
 
 # Helper Functions
+# Global counter for simple numeric IDs (temporary workaround for Dash 3.x compatibility)
+_next_component_id = 0
+
+
 def generate_unique_index():
     """
-    Generate a unique index using UUID4.
+    Generate a unique index using simple incrementing numbers.
+    TEMPORARY: Changed from UUID4 to simple numeric IDs for Dash 3.x compatibility.
     Used to create unique identifiers for components.
     """
-    return str(uuid.uuid4())
+    # return str(uuid.uuid4())
+    global _next_component_id
+    current_id = str(_next_component_id)
+    _next_component_id += 1
+    return current_id
+
+
+def initialize_component_id_counter(existing_metadata):
+    """
+    Initialize the component ID counter based on existing metadata.
+    This ensures new components don't conflict with existing ones.
+    """
+    global _next_component_id
+    if not existing_metadata:
+        _next_component_id = 0
+        return
+
+    # Find the highest numeric ID in existing metadata
+    max_id = -1
+    for component in existing_metadata:
+        try:
+            component_id = int(component.get("index", "-1"))
+            max_id = max(max_id, component_id)
+        except (ValueError, TypeError):
+            # Skip non-numeric IDs (shouldn't happen with new system)
+            continue
+
+    # Start counter at next available ID
+    _next_component_id = max_id + 1
+    logger.info(f"Initialized component ID counter to {_next_component_id}")
 
 
 def get_size(obj, seen=None):

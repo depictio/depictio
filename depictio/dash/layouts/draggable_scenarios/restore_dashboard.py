@@ -128,6 +128,12 @@ def load_depictio_data(dashboard_id, local_data):
 
     dashboard_data = DashboardData.from_mongo(dashboard_data_dict)
 
+    # Initialize component ID counter based on existing metadata
+    from depictio.dash.utils import initialize_component_id_counter
+
+    if hasattr(dashboard_data, "stored_metadata") and dashboard_data.stored_metadata:
+        initialize_component_id_counter(dashboard_data.stored_metadata)
+
     # logger.info(f"load_depictio_data : {dashboard_data}")
 
     if dashboard_data:
