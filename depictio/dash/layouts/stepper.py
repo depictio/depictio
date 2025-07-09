@@ -309,10 +309,6 @@ def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
         children=[
             html.Div(
                 [
-                    html.H3(
-                        "Edit your dashboard component",
-                        style={"marginBottom": "20px", "textAlign": "center", "flexShrink": "0"},
-                    ),
                     html.Div(
                         modal_body,
                         style=MODAL_BODY_STYLE,
@@ -338,12 +334,25 @@ def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
                 style=MODAL_CONTENT_STYLE,
             )
         ],
+        title="Edit your dashboard component",
         opened=True,
         size=MODAL_CONFIG["size"],
         centered=True,
         withCloseButton=True,
         closeOnClickOutside=True,
         closeOnEscape=True,
+        styles={
+            "title": {
+                "fontSize": "1.8rem",
+                "fontWeight": "bold",
+                "textAlign": "center",
+                "width": "100%",
+            },
+            "header": {
+                "justifyContent": "center",
+                "textAlign": "center",
+            },
+        },
     )
     logger.info(f"TEST MODAL: {modal}")
 
@@ -544,14 +553,19 @@ def create_stepper_output(n, active):
                 children=[
                     html.Div(
                         [
-                            html.H3(
-                                "Design your new dashboard component",
-                                style={
-                                    "marginBottom": "20px",
-                                    "textAlign": "center",
-                                    "flexShrink": "0",
-                                },
-                            ),
+                            # html.H3(
+                            #     "Design your new dashboard component",
+                            #     style={
+                            #         "marginBottom": "0",
+                            #         "marginTop": "0",
+                            #         "textAlign": "center",
+                            #         "flexShrink": "0",
+                            #         "padding": "5px 1rem 5px 1rem",
+                            #         "fontSize": "1.4rem",
+                            #         "backgroundColor": "#f8f9fa",
+                            #         "borderBottom": "1px solid #e0e0e0",
+                            #     },
+                            # ),
                             html.Div(
                                 stepper,
                                 style=MODAL_BODY_STYLE,
@@ -561,15 +575,32 @@ def create_stepper_output(n, active):
                                 style=MODAL_FOOTER_STYLE,
                             ),
                         ],
-                        style=MODAL_CONTENT_STYLE,
+                        style={
+                            **MODAL_CONTENT_STYLE,
+                            "marginTop": "-7px",  # Negative margin to move title closer to top
+                        },
                     )
                 ],
+                title="Design your new dashboard component",
                 opened=True,
                 size=MODAL_CONFIG["size"],
-                centered=True,
+                centered=False,  # Don't center for fullscreen
                 withCloseButton=True,
                 closeOnClickOutside=True,
                 closeOnEscape=True,
+                fullScreen=True,
+                styles={
+                    "title": {
+                        "fontSize": "1.8rem",
+                        "fontWeight": "bold",
+                        "textAlign": "center",
+                        "width": "100%",
+                    },
+                    "header": {
+                        "justifyContent": "center",
+                        "textAlign": "center",
+                    },
+                },
             ),
         ],
         id=n,
@@ -582,16 +613,16 @@ def create_stepper_output(n, active):
 # Modal configuration constants
 MODAL_CONFIG = {
     "size": "90%",
-    "height": "80vh",  # Fixed height
+    "height": "100vh",  # Full height for fullscreen
 }
 
-# Modal styles for consistent sizing and scrolling
+# Modal styles for fullscreen mode
 MODAL_CONTENT_STYLE = {
-    "height": "80vh",  # Fixed height matching modal
-    "minHeight": "80vh",  # Ensure minimum height
-    "maxHeight": "80vh",  # Prevent exceeding fixed height
-    "overflowY": "auto",
-    "padding": "1rem",
+    "height": "100vh",  # Full viewport height
+    "minHeight": "100vh",  # Ensure full height
+    "maxHeight": "100vh",  # Prevent exceeding viewport
+    "overflowY": "hidden",  # Prevent content scroll - let body handle it
+    "padding": "0",  # Remove padding for fullscreen
     "display": "flex",
     "flexDirection": "column",
     "boxSizing": "border-box",
@@ -601,16 +632,22 @@ MODAL_BODY_STYLE = {
     "flex": "1",
     "overflowY": "auto",
     "overflowX": "hidden",  # Prevent horizontal scrolling
-    "padding": "0.5rem",
+    "padding": "0.5rem 1rem 1rem 1rem",  # Reduced top padding
     "minHeight": "0",  # Allow flex item to shrink
     "boxSizing": "border-box",
+    "marginBottom": "80px",  # Space for footer
 }
 
 MODAL_FOOTER_STYLE = {
     "flexShrink": "0",
     "padding": "1rem",
     "borderTop": "1px solid #e0e0e0",
-    # "backgroundColor": "#f9f9f9",
+    "backgroundColor": "#f9f9f9",
+    "position": "fixed",  # Fixed to viewport
+    "bottom": "0",
+    "left": "0",
+    "right": "0",
+    "zIndex": "1000",
 }
 
 

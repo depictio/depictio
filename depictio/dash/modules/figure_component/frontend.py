@@ -241,14 +241,13 @@ def register_callbacks_figure_component(app):
         [
             # This Input will match ANY parameter component dynamically
             Input({"type": ALL, "index": MATCH}, "value"),
-            Input({"type": ALL, "index": MATCH}, "checked"),
         ],
         [
             State({"type": "dict_kwargs", "index": MATCH}, "data"),
         ],
         prevent_initial_call=True,
     )
-    def extract_parameters_universal(all_values, all_checked, existing_kwargs):
+    def extract_parameters_universal(all_values, existing_kwargs):
         """Universal parameter extraction using pattern matching."""
 
         # Get the callback context to understand what triggered this
@@ -367,13 +366,13 @@ def register_callbacks_figure_component(app):
     def update_figure(*args):
         dict_kwargs = args[0]
         visu_type_label = args[1]  # This is the label from segmented control
-        workflow_id = args[2]
-        data_collection_id = args[3]
-        component_id_dict = args[4]
-        parent_index = args[5]
-        local_data = args[6]
-        pathname = args[7]
-        theme_data = args[8]
+        theme_data = args[2]  # Theme is 3rd in the State list
+        workflow_id = args[3]
+        data_collection_id = args[4]
+        component_id_dict = args[5]
+        parent_index = args[6]
+        local_data = args[7]
+        pathname = args[8]
 
         if not local_data:
             raise dash.exceptions.PreventUpdate
@@ -742,6 +741,55 @@ def register_callbacks_figure_component(app):
                 ]
             )
 
+    # Client-side callback to preserve scroll position in collapse panel
+    app.clientside_callback(
+        """
+        function(dict_kwargs) {
+            try {
+                // Store scroll position before parameter change
+                const collapseElement = document.querySelector('[id*="collapse"]');
+                if (collapseElement) {
+                    const scrollTop = collapseElement.scrollTop;
+                    // Use a simple key for sessionStorage
+                    sessionStorage.setItem('figure_collapse_scroll_position', scrollTop);
+                }
+            } catch (error) {
+                console.log('Error storing scroll position:', error);
+            }
+            return window.dash_clientside.no_update;
+        }
+        """,
+        Output({"type": "scroll-store", "index": MATCH}, "data"),
+        Input({"type": "dict_kwargs", "index": MATCH}, "data"),
+        prevent_initial_call=True,
+    )
+
+    # Client-side callback to restore scroll position after parameter change
+    app.clientside_callback(
+        """
+        function(collapse_children) {
+            try {
+                // Restore scroll position after content update
+                setTimeout(() => {
+                    const collapseElement = document.querySelector('[id*="collapse"]');
+                    if (collapseElement) {
+                        const scrollTop = sessionStorage.getItem('figure_collapse_scroll_position');
+                        if (scrollTop !== null && scrollTop !== undefined) {
+                            collapseElement.scrollTop = parseInt(scrollTop);
+                        }
+                    }
+                }, 100);
+            } catch (error) {
+                console.log('Error restoring scroll position:', error);
+            }
+            return window.dash_clientside.no_update;
+        }
+        """,
+        Output({"type": "scroll-restore", "index": MATCH}, "data"),
+        Input({"type": "collapse", "index": MATCH}, "children"),
+        prevent_initial_call=True,
+    )
+
 
 def design_figure(id, component_data=None):
     # Get limited set of visualizations for user request: Scatter, Bar, Box, Line only
@@ -765,14 +813,15 @@ def design_figure(id, component_data=None):
                 default_value = viz.label
                 break
 
+    # Create layout optimized for fullscreen modal
     figure_row = [
-        # Controls row - compact and centered
+        # Compact header with controls
         dmc.Group(
             [
                 # Styled visualization selector
                 dmc.Group(
                     [
-                        DashIconify(icon="mdi:chart-line", width=20, color="#228be6"),
+                        DashIconify(icon="mdi:chart-line", width=18, color="#228be6"),
                         dmc.Text(
                             "Visualization",
                             fw="bold",
@@ -789,7 +838,7 @@ def design_figure(id, component_data=None):
                             },
                             placeholder="Choose type...",
                             clearable=False,
-                            searchable=True,
+                            searchable=False,
                             size="sm",
                             style={"width": "160px"},
                             comboboxProps={"withinPortal": False},
@@ -816,36 +865,65 @@ def design_figure(id, component_data=None):
             justify="flex-start",
             align="center",
             gap="lg",
-            style={"marginBottom": "15px", "width": "100%"},
+            style={"marginBottom": "10px", "width": "100%", "padding": "0 5px"},
         ),
-        html.Hr(style={"margin": "10px 0"}),
-        # Figure content - full width
+        # Main content area - split layout for fullscreen
         html.Div(
             [
-                # Figure display - full width
+                # Figure display - left side, smaller for fullscreen
                 html.Div(
                     build_figure_frame(index=id["index"]),
                     id={
                         "type": "component-container",
                         "index": id["index"],
                     },
-                    style={"width": "100%", "marginBottom": "15px"},
-                ),
-                # Collapsible edit panel - full width
-                dbc.Collapse(
-                    id={
-                        "type": "collapse",
-                        "index": id["index"],
+                    style={
+                        "width": "60%",  # Smaller width for fullscreen
+                        "height": "60vh",  # Fixed height for better space usage
+                        "display": "inline-block",
+                        "verticalAlign": "top",
+                        "marginRight": "2%",
                     },
-                    is_open=False,
-                    style={"width": "100%"},
+                ),
+                # Collapsible edit panel - right side
+                html.Div(
+                    dbc.Collapse(
+                        id={
+                            "type": "collapse",
+                            "index": id["index"],
+                        },
+                        is_open=False,
+                        style={
+                            "height": "60vh",
+                            "overflowY": "auto",
+                            "scrollBehavior": "smooth",  # Smooth scrolling
+                        },
+                    ),
+                    style={
+                        "width": "38%",  # Remaining width
+                        "display": "inline-block",
+                        "verticalAlign": "top",
+                        "height": "60vh",
+                    },
                 ),
             ],
-            style={"width": "100%"},
+            style={"width": "100%", "marginTop": "10px"},
         ),
+        # Store components
         dcc.Store(
             id={"type": "dict_kwargs", "index": id["index"]},
             data={},  # Initialize empty to trigger default generation
+            storage_type="memory",
+        ),
+        # Hidden stores for scroll position preservation
+        dcc.Store(
+            id={"type": "scroll-store", "index": id["index"]},
+            data={},
+            storage_type="memory",
+        ),
+        dcc.Store(
+            id={"type": "scroll-restore", "index": id["index"]},
+            data={},
             storage_type="memory",
         ),
     ]
