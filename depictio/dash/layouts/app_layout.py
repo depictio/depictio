@@ -443,8 +443,10 @@ def create_app_layout():
             dcc.Store(
                 id="theme-store",
                 storage_type="local",
-                data={},  # Start empty, will be populated by clientside callback
+                data="light",  # Start with light theme as fallback, will be updated by theme detection
             ),
+            # Hidden div to trigger theme detection on app load
+            html.Div(id="theme-detection-trigger", style={"display": "none"}),
             dcc.Store(
                 id="theme-relay-store",
                 storage_type="memory",

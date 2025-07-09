@@ -25,6 +25,10 @@ def _get_theme_template(theme: str) -> str:
     Returns:
         Plotly template name
     """
+    # Handle case where theme is empty dict, None, or other falsy value
+    if not theme or theme == {} or theme == "{}":
+        theme = "light"
+
     logger.info(f"Using theme: {theme} for Plotly template")
     return "mantine_dark" if theme == "dark" else "mantine_light"
 
@@ -54,6 +58,7 @@ def build_figure_frame(index, children=None):
                 # "border": "1px solid #ddd",  # Optional: Add a light border
                 # "borderRadius": "4px",  # Optional: Slightly round the corners
                 "border": "0px",  # Optional: Remove border
+                "backgroundColor": "var(--app-surface-color, #ffffff)",
             },
             id={
                 "type": "figure-component",
@@ -86,6 +91,7 @@ def build_figure_frame(index, children=None):
                 # "border": "1px solid #ddd",  # Optional: Add a light border
                 # "borderRadius": "4px",  # Optional: Slightly round the corners
                 "border": "0px",  # Optional: Remove border
+                "backgroundColor": "var(--app-surface-color, #ffffff)",
             },
             id={
                 "type": "figure-component",

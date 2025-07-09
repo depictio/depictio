@@ -128,6 +128,12 @@ def load_depictio_data(dashboard_id, local_data, theme="light"):
         ValueError: If the dashboard data cannot be fetched or is invalid.
     """
     logger.info(f"Loading Depictio data for dashboard ID: {dashboard_id}")
+
+    # Ensure theme is valid
+    if not theme or theme == {} or theme == "{}":
+        theme = "light"
+    logger.info(f"Using theme: {theme} for dashboard rendering")
+
     if not local_data["access_token"]:
         logger.warning("Access token not found.")
         return None

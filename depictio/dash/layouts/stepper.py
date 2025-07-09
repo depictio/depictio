@@ -641,8 +641,8 @@ MODAL_BODY_STYLE = {
 MODAL_FOOTER_STYLE = {
     "flexShrink": "0",
     "padding": "1rem",
-    "borderTop": "1px solid #e0e0e0",
-    "backgroundColor": "#f9f9f9",
+    "borderTop": "1px solid var(--app-border-color, #e0e0e0)",
+    "backgroundColor": "var(--app-surface-color, #f9f9f9)",
     "position": "fixed",  # Fixed to viewport
     "bottom": "0",
     "left": "0",

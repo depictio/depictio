@@ -50,14 +50,21 @@ def register_theme_callbacks(app):
     # Enhanced automatic theme detection with system preference monitoring
     app.clientside_callback(
         """
-        function(pathname) {
+        function(triggerId) {
             console.log('🎨 === AUTOMATIC THEME DETECTION START ===');
+            console.log('Theme detection trigger ID:', triggerId);
+            console.log('⏰ Timestamp:', new Date().toISOString());
+
+            // Early detection to set theme immediately
+            if (!triggerId) {
+                console.log('🎨 No trigger ID, running early theme detection');
+            }
 
             // Manage page classes for FOUC prevention
             const body = document.body;
 
             // Check if this is an auth page
-            const isAuthPage = pathname === '/auth' || document.getElementById('auth-background');
+            const isAuthPage = window.location.pathname === '/auth' || document.getElementById('auth-background');
 
             if (isAuthPage) {
                 body.classList.add('auth-page');
@@ -137,12 +144,17 @@ def register_theme_callbacks(app):
 
             console.log('🎨 === AUTOMATIC THEME DETECTION END ===');
             console.log('Final theme:', finalTheme);
+            console.log('⏰ Detection complete at:', new Date().toISOString());
+
+            // Store the theme completion state for other callbacks to check
+            window.depictioThemeDetectionComplete = true;
+            window.depictioCurrentTheme = finalTheme;
 
             return finalTheme;
         }
         """,
         Output("theme-store", "data"),
-        Input("url", "pathname"),
+        Input("theme-detection-trigger", "id"),  # Use theme-detection-trigger to run immediately
         prevent_initial_call=False,
     )
 
@@ -258,7 +270,7 @@ def register_theme_callbacks(app):
     @app.callback(
         Output("mantine-provider", "forceColorScheme"),
         Input("theme-store", "data"),
-        prevent_initial_call=True,
+        prevent_initial_call=False,  # Allow initial call to set theme on page load
     )
     def update_mantine_theme(theme_data):
         return theme_data or "light"
@@ -267,7 +279,7 @@ def register_theme_callbacks(app):
     @app.callback(
         Output("navbar-logo-content", "src"),
         Input("theme-store", "data"),
-        prevent_initial_call=True,
+        prevent_initial_call=False,  # Allow initial call to set correct logo on page load
     )
     def update_navbar_logo(theme_data):
         theme = theme_data or "light"
@@ -733,6 +745,41 @@ def register_theme_callbacks(app):
                         color: #909296 !important;
                     }
                     ` : ''}
+
+                    /* DataTable styling for all components */
+                    .dash-table-container .dash-spreadsheet-container .dash-spreadsheet-inner table {
+                        background-color: var(--app-surface-color, #ffffff) !important;
+                        color: var(--app-text-color, #000000) !important;
+                    }
+
+                    .dash-table-container .dash-spreadsheet-container .dash-spreadsheet-inner table th,
+                    .dash-table-container .dash-spreadsheet-container .dash-spreadsheet-inner table td {
+                        background-color: var(--app-surface-color, #ffffff) !important;
+                        color: var(--app-text-color, #000000) !important;
+                        padding: 4px 8px !important;
+                        font-size: 11px !important;
+                        max-width: 150px !important;
+                        word-wrap: break-word !important;
+                    }
+
+                    /* Modal footer theme styling */
+                    .mantine-Modal-content .mantine-Stack-root:last-child {
+                        background-color: var(--app-surface-color, #f9f9f9) !important;
+                        border-top: 1px solid var(--app-border-color, #e0e0e0) !important;
+                    }
+
+                    /* Figure component backgrounds */
+                    .mantine-Card-root[id*="figure-component"],
+                    div[id*="figure-component"] {
+                        background-color: var(--app-surface-color, #ffffff) !important;
+                    }
+
+                    /* Card component backgrounds */
+                    .mantine-Card-root[id*="card-component"],
+                    div[id*="card-component"] {
+                        background-color: var(--app-surface-color, #ffffff) !important;
+                        border-color: var(--app-border-color, #ddd) !important;
+                    }
                 `;
 
                 themeStyleElement.textContent = themeCSS;

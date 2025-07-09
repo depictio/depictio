@@ -349,7 +349,7 @@ def register_callbacks_draggable(app):
         Input("edit-components-mode-button", "checked"),
         State("url", "pathname"),
         State("local-store", "data"),
-        State("theme-store", "data"),  # Add theme store as State parameter
+        State("theme-store", "data"),
         # Input("dashboard-title", "style"),  # Indirect trigger for theme changes
         # Input("height-store", "data"),
         prevent_initial_call=True,
@@ -387,7 +387,7 @@ def register_callbacks_draggable(app):
         input_edit_components_mode_button,
         pathname,
         local_data,
-        theme_store,  # Add theme store parameter
+        theme_store,  # Now an Input parameter - triggers callback when theme changes
         # dashboard_title_style,  # Indirect trigger for theme changes
         # height_store,
     ):
@@ -451,14 +451,25 @@ def register_callbacks_draggable(app):
         logger.info(f"Triggered input: {triggered_input}")
         # logger.info(f"Theme store: {theme_store}")
 
-        # Extract theme safely from theme store
+        # Extract theme safely from theme store with improved fallback handling
         theme = "light"  # Default
         if theme_store:
             if isinstance(theme_store, dict):
-                theme = theme_store.get("colorScheme", "light")
-            elif isinstance(theme_store, str):
+                # Handle empty dict case
+                if theme_store == {}:
+                    theme = "light"
+                else:
+                    theme = theme_store.get("colorScheme", theme_store.get("theme", "light"))
+            elif isinstance(theme_store, str) and theme_store in ["light", "dark"]:
                 theme = theme_store
+            else:
+                logger.warning(
+                    f"Invalid theme_store value: {theme_store}, using default light theme"
+                )
+                theme = "light"
         logger.info(f"Using theme: {theme}")
+        logger.info(f"Dashboard callback triggered by: {triggered_input}")
+        logger.info(f"Theme store value: {theme_store}")
 
         # FIXME: Remove duplicates from stored_metadata
         # Remove duplicates from stored_metadata
@@ -715,7 +726,10 @@ def register_callbacks_draggable(app):
                 and toggle_interactivity_button
                 or triggered_input == "theme-store"
             ):
-                logger.info("Interactive component triggered")
+                if triggered_input == "theme-store":
+                    logger.info("Theme store triggered - updating all components with new theme")
+                else:
+                    logger.info("Interactive component triggered")
 
                 def clean_stored_metadata(stored_metadata):
                     # Remove duplicates from stored_metadata by checking parent_index and index
@@ -813,6 +827,7 @@ def register_callbacks_draggable(app):
                             theme,
                             TOKEN,
                         )
+                        logger.info(f"render_dashboard called with theme: {theme}")
 
                         # Ensure we're using the stored layouts
                         current_layouts = state_stored_draggable_layouts[dashboard_id]

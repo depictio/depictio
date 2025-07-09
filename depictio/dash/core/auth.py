@@ -45,21 +45,33 @@ def get_temporary_user_session(expiry_hours: int = 24, expiry_minutes: int = 0):
 
 
 # Enhanced process_authentication with refresh logic
-def process_authentication(pathname, local_data, theme):
+def process_authentication(pathname, local_data, theme_store):
     """
     Process authentication with refresh token support.
 
     Args:
         pathname (str): Current URL pathname
         local_data (dict): Local storage data containing authentication information
+        theme_store: Theme store data from theme-store component
 
     Returns:
         tuple: (page_content, header, pathname, local_data)
     """
-    logger.debug(f"Theme: {theme}")
-    logger.debug(f"URL Pathname: {pathname}")
-    logger.debug(f"Local Data keys: {list(local_data.keys()) if local_data else None}")
-    logger.debug("Processing authentication...")
+    # Extract theme from theme store properly
+    theme = "light"  # Default theme
+    if theme_store:
+        if isinstance(theme_store, dict):
+            theme = theme_store.get("colorScheme", "light")
+        elif isinstance(theme_store, str):
+            theme = theme_store
+
+    logger.info(f"AUTH CALLBACK - Theme Store: {theme_store} (type: {type(theme_store)})")
+    logger.info(f"AUTH CALLBACK - Extracted Theme: {theme}")
+    logger.info(f"AUTH CALLBACK - URL Pathname: {pathname}")
+    logger.info(
+        f"AUTH CALLBACK - Local Data keys: {list(local_data.keys()) if local_data else None}"
+    )
+    logger.info("AUTH CALLBACK - Processing authentication...")
 
     # Check if unauthenticated mode is enabled
     if settings.auth.unauthenticated_mode:

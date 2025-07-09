@@ -197,12 +197,26 @@ def register_callbacks_card_component(app):
             data=data_columns_df,
             # Small font size, helvetica, no border, center text
             style_cell={
-                "fontSize": 12,
+                "fontSize": 11,
                 "fontFamily": "Helvetica",
                 "border": "0px",
                 "textAlign": "center",
+                "backgroundColor": "var(--app-surface-color, #ffffff)",
+                "color": "var(--app-text-color, #000000)",
+                "padding": "4px 8px",
+                "maxWidth": "150px",
+                "overflow": "hidden",
+                "textOverflow": "ellipsis",
             },
-            style_header={"fontWeight": "bold"},
+            style_header={
+                "fontWeight": "bold",
+                "backgroundColor": "var(--app-surface-color, #ffffff)",
+                "color": "var(--app-text-color, #000000)",
+            },
+            style_data={
+                "backgroundColor": "var(--app-surface-color, #ffffff)",
+                "color": "var(--app-text-color, #000000)",
+            },
         )
 
         # If any of the input values are None, return an empty list

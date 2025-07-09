@@ -119,8 +119,11 @@ def build_card_frame(index, children=None, show_border=False):
                 "padding": "0",
                 "margin": "0",
                 "boxShadow": "none",
-                "border": "1px solid #ddd" if show_border else "0px solid #ddd",
+                "border": "1px solid var(--app-border-color, #ddd)"
+                if show_border
+                else "0px solid var(--app-border-color, #ddd)",
                 "borderRadius": "4px",
+                "backgroundColor": "var(--app-surface-color, #ffffff)",
             },
             id={
                 "type": "card-component",
@@ -149,10 +152,11 @@ def build_card_frame(index, children=None, show_border=False):
                 "padding": "0",  # Remove default padding
                 "margin": "0",  # Remove default margin
                 "boxShadow": "none",  # Optional: Remove shadow for a cleaner look
-                "border": "1px solid #ddd"
+                "border": "1px solid var(--app-border-color, #ddd)"
                 if show_border
-                else "0px solid #ddd",  # Conditional border
+                else "0px solid var(--app-border-color, #ddd)",  # Conditional border
                 "borderRadius": "4px",
+                "backgroundColor": "var(--app-surface-color, #ffffff)",
             },
             id={
                 "type": "card-component",
