@@ -225,6 +225,7 @@ def register_callbacks_interactive_component(app):
                     ],
                     multiline=True,
                     w=300,
+                    withinPortal=False,
                     # transition="pop",
                     # transitionDuration=300,
                     transitionProps={

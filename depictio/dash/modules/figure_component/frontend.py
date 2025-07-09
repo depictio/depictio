@@ -775,7 +775,7 @@ def design_figure(id, component_data=None):
                         DashIconify(icon="mdi:chart-line", width=20, color="#228be6"),
                         dmc.Text(
                             "Visualization",
-                            fw=600,
+                            fw="bold",
                             size="sm",
                             c="dark",
                             style={"marginRight": "8px"},

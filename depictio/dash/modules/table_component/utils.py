@@ -179,6 +179,7 @@ def build_table(**kwargs):
         label=f"Tables are currently loaded with a maximum of {cutoff} rows.",
         position="top",
         openDelay=500,
+        withinPortal=False,
     )
     # Prepare ag grid table
     table_aggrid = dag.AgGrid(

@@ -437,6 +437,7 @@ def _create_info_badges(
             label=f"Showing {cutoff:,} of {df.shape[0]:,} points for performance.",
             position="top",
             openDelay=500,
+            withinPortal=False,
         )
         badges.append(partial_badge)
 
@@ -454,6 +455,7 @@ def _create_info_badges(
             label="Data has been filtered.",
             position="top",
             openDelay=500,
+            withinPortal=False,
         )
         badges.append(filter_badge)
 

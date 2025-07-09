@@ -142,6 +142,7 @@ def render_welcome_section(email, is_anonymous=False):
                             size="lg",
                             radius="xl",
                         ),
+                        withinPortal=False,
                         label=email,
                         position="bottom",
                     ),

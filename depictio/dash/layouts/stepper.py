@@ -23,7 +23,7 @@ active = 0
 
 def register_callbacks_stepper(app):
     @app.callback(
-        Output({"type": "modal", "index": MATCH}, "is_open"),
+        Output({"type": "modal", "index": MATCH}, "opened"),
         [Input({"type": "btn-done", "index": MATCH}, "n_clicks")],
         prevent_initial_call=True,
     )
@@ -653,9 +653,9 @@ def create_stepper_output(n, active):
                 opened=True,
                 size="90%",  # Use percentage for larger modal
                 centered=True,
-                withCloseButton=False,
-                closeOnClickOutside=False,
-                closeOnEscape=False,
+                withCloseButton=True,
+                closeOnClickOutside=True,
+                closeOnEscape=True,
             ),
         ],
         id=n,
