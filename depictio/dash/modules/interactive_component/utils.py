@@ -340,7 +340,7 @@ def build_interactive(**kwargs):
     stepper = kwargs.get("stepper", False)
     parent_index = kwargs.get("parent_index", None)
 
-    # logger.info(f"Interactive - kwargs: {kwargs}")
+    logger.info(f"Interactive - kwargs: {kwargs}")
 
     if stepper:
         value_div_type = "interactive-component-value-tmp"
@@ -369,6 +369,12 @@ def build_interactive(**kwargs):
     }
 
     logger.debug(f"Interactive component {index}: store_data: {store_data}")
+    logger.info(
+        f"Interactive component {index}: column_type={column_type}, interactive_component_type={interactive_component_type}"
+    )
+    logger.info(
+        f"Interactive component {index}: available agg_functions keys: {list(agg_functions.keys())}"
+    )
 
     # Load the delta table & get the specs
     if df is None:
@@ -647,6 +653,40 @@ def build_interactive(**kwargs):
             )
             kwargs.update({"marks": marks, "step": None, "included": False})
         interactive_component = func_name(**kwargs)
+
+    # If the aggregation value is Checkbox or Switch (boolean data types)
+    elif interactive_component_type in ["Checkbox", "Switch"]:
+        logger.debug(f"Boolean component: {interactive_component_type}")
+        logger.debug(f"Value: {value}")
+        logger.debug(f"Value type: {type(value)}")
+        kwargs = {"persistence_type": "local"}
+        if value is None:
+            value = False
+        # Convert value to boolean if it's not already
+        if isinstance(value, str):
+            value = value.lower() in ["true", "1", "yes", "on"]
+        elif not isinstance(value, bool):
+            value = bool(value)
+        kwargs.update({"checked": value})
+        interactive_component = func_name(
+            id={"type": value_div_type, "index": str(index)},
+            **kwargs,
+        )
+
+    # Fallback for any other component types
+    else:
+        logger.warning(f"Unsupported interactive component type: {interactive_component_type}")
+        logger.warning(f"Column type: {column_type}")
+        logger.warning(f"Column name: {column_name}")
+        logger.warning(
+            f"Available component types: {list(agg_functions.get(column_type, {}).get('input_methods', {}).keys())}"
+        )
+        # Create a fallback text component
+        interactive_component = dmc.Text(
+            f"Unsupported component type: {interactive_component_type} for {column_type} data",
+            id={"type": value_div_type, "index": str(index)},
+            color="red",
+        )
 
     # If no title is provided, use the aggregation value on the selected column
     if not title:

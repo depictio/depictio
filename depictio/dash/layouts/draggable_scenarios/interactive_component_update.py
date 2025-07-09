@@ -65,6 +65,18 @@ def apply_sliders(df, n_dict):
     return df
 
 
+def apply_boolean(df, n_dict):
+    # if the interactive component is a Checkbox or Switch
+    if n_dict["metadata"]["interactive_component_type"] in ["Checkbox", "Switch"]:
+        # filter the df based on the boolean value
+        value = n_dict["value"]
+        if isinstance(value, str):
+            # Convert string to boolean
+            value = value.lower() in ["true", "1", "yes", "on"]
+        df = df[df[n_dict["metadata"]["column_name"]] == value]
+    return df
+
+
 def filter_data(new_df, n_dict):
     """
     Filter the data based on the interactive component type and the selected value
@@ -96,6 +108,16 @@ def filter_data(new_df, n_dict):
             "Slider",
         ]:
             new_df = apply_sliders(new_df, n_dict)
+
+    # Handles the case of the bool type
+    elif n_dict["metadata"]["column_type"] == "bool":
+        # if the interactive component is a Checkbox or Switch
+        if n_dict["metadata"]["interactive_component_type"] in [
+            "Checkbox",
+            "Switch",
+        ]:
+            new_df = apply_boolean(new_df, n_dict)
+
     return new_df
 
 

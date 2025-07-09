@@ -747,11 +747,6 @@ def register_theme_callbacks(app):
                     ` : ''}
 
                     /* DataTable styling for all components */
-                    .dash-table-container .dash-spreadsheet-container .dash-spreadsheet-inner table {
-                        background-color: var(--app-surface-color, #ffffff) !important;
-                        color: var(--app-text-color, #000000) !important;
-                    }
-
                     .dash-table-container .dash-spreadsheet-container .dash-spreadsheet-inner table th,
                     .dash-table-container .dash-spreadsheet-container .dash-spreadsheet-inner table td {
                         background-color: var(--app-surface-color, #ffffff) !important;
@@ -759,7 +754,13 @@ def register_theme_callbacks(app):
                         padding: 4px 8px !important;
                         font-size: 11px !important;
                         max-width: 150px !important;
-                        word-wrap: break-word !important;
+                        border: 1px solid var(--app-border-color, #ddd) !important;
+                    }
+
+                    /* Specific header styling */
+                    .dash-table-container .dash-spreadsheet-container .dash-spreadsheet-inner table th {
+                        font-weight: bold !important;
+                        text-align: center !important;
                     }
 
                     /* Modal footer theme styling */
