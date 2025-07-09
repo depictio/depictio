@@ -123,6 +123,7 @@ def register_callbacks_figure_component(app):
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
             State("current-edit-parent-index", "data"),
             State({"type": "edit-button", "index": MATCH}, "id"),
+            State({"type": "dict_kwargs", "index": MATCH}, "data"),
             State("local-store", "data"),
             State("url", "pathname"),
         ],
@@ -135,6 +136,7 @@ def register_callbacks_figure_component(app):
         data_collection,
         parent_index,
         edit_button_id,
+        current_dict_kwargs,
         local_data,
         pathname,
     ):
@@ -207,9 +209,15 @@ def register_callbacks_figure_component(app):
                 if state.visualization_type != visu_type:
                     state_manager.change_visualization_type(component_index, visu_type)
 
-            # Load existing parameters from component data
-            if component_data and "dict_kwargs" in component_data:
-                for param_name, value in component_data["dict_kwargs"].items():
+            # Load existing parameters from current dict_kwargs (which contains preserved values)
+            # or fall back to component data if no current values exist
+            parameters_to_load = current_dict_kwargs or (
+                component_data.get("dict_kwargs", {}) if component_data else {}
+            )
+
+            if parameters_to_load:
+                logger.info(f"Loading parameters into state: {parameters_to_load}")
+                for param_name, value in parameters_to_load.items():
                     state.set_parameter_value(param_name, value)
 
             # Build UI components
@@ -562,15 +570,45 @@ def register_callbacks_figure_component(app):
                         f"New visualization '{visu_type}' accepts parameters: {new_param_names}"
                     )
 
-                    # Preserve parameters that exist in both old and new visualization
+                    # Define common parameters that should be preserved across all visualizations
+                    common_params = {
+                        "title",
+                        "width",
+                        "height",
+                        "template",
+                        "opacity",
+                        "hover_name",
+                        "hover_data",
+                        "custom_data",
+                        "labels",
+                        "color_discrete_sequence",
+                        "color_continuous_scale",
+                        "log_x",
+                        "log_y",
+                        "range_x",
+                        "range_y",
+                        "category_orders",
+                        "color_discrete_map",
+                        "animation_frame",
+                        "animation_group",
+                        "facet_row",
+                        "facet_col",
+                        "facet_col_wrap",
+                    }
+
+                    # Preserve parameters that exist in both old and new visualization, OR are common parameters
                     preserved_params = {}
                     for param_name, value in current_kwargs.items():
+                        should_preserve = (
+                            param_name in new_param_names  # Parameter exists in new visualization
+                            or param_name in common_params  # Parameter is a common parameter
+                        )
+
                         if (
-                            param_name in new_param_names
-                            and value is not None
-                            and value != ""
-                            and value != []
-                        ):
+                            should_preserve and value is not None and value != "" and value != []
+                        ) or (
+                            should_preserve and isinstance(value, bool)
+                        ):  # Preserve boolean False
                             preserved_params[param_name] = value
                             logger.info(f"Preserving parameter '{param_name}': {value}")
 

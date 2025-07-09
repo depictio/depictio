@@ -219,8 +219,38 @@ class FigureStateManager:
             new_params = {p.name for p in new_viz.parameters}
             common_params = old_params.intersection(new_params)
 
-            # Keep only common parameters
-            migrated_params = {k: v for k, v in state.parameters.items() if k in common_params}
+            # Define common parameters that should be preserved across all visualizations
+            always_preserve_params = {
+                "title",
+                "width",
+                "height",
+                "template",
+                "opacity",
+                "hover_name",
+                "hover_data",
+                "custom_data",
+                "labels",
+                "color_discrete_sequence",
+                "color_continuous_scale",
+                "log_x",
+                "log_y",
+                "range_x",
+                "range_y",
+                "category_orders",
+                "color_discrete_map",
+                "animation_frame",
+                "animation_group",
+                "facet_row",
+                "facet_col",
+                "facet_col_wrap",
+            }
+
+            # Keep parameters that are in common between visualizations OR are always preserved
+            migrated_params = {
+                k: v
+                for k, v in state.parameters.items()
+                if k in common_params or k in always_preserve_params
+            }
 
             state.parameters = migrated_params
 
