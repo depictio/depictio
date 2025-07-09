@@ -85,31 +85,42 @@ def compute_value(data, column_name, aggregation):
     return new_value
 
 
-def build_card_frame(index, children=None):
+def build_card_frame(index, children=None, show_border=False):
     if not children:
         return dbc.Card(
             dbc.CardBody(
+                html.Div(
+                    "Configure your card using the edit menu",
+                    style={
+                        "textAlign": "center",
+                        "color": "#999",
+                        "fontSize": "14px",
+                        "fontStyle": "italic",
+                    },
+                ),
                 id={
                     "type": "card-body",
                     "index": index,
                 },
                 style={
-                    "padding": "5px",  # Reduce padding inside the card body
+                    "padding": "20px",
                     "display": "flex",
                     "flexDirection": "column",
                     "justifyContent": "center",
-                    # "height": "100%",  # Make sure it fills the parent container
+                    "alignItems": "center",
+                    "minHeight": "150px",  # Ensure minimum height
+                    "height": "100%",
+                    "minWidth": "150px",  # Ensure minimum width
                 },
             ),
             style={
                 "width": "100%",
-                "height": "100%",  # Ensure the card fills the container's height
-                "padding": "0",  # Remove default padding
-                "margin": "0",  # Remove default margin
-                "boxShadow": "none",  # Optional: Remove shadow for a cleaner look
-                "border": "0px solid #ddd",  # Optional: Add a light border
-                # "borderRadius": "4px",  # Optional: Slightly round the corners
-                # "border": "0px",  # Optional: Remove border
+                "height": "100%",
+                "padding": "0",
+                "margin": "0",
+                "boxShadow": "none",
+                "border": "1px solid #ddd" if show_border else "0px solid #ddd",
+                "borderRadius": "4px",
             },
             id={
                 "type": "card-component",
@@ -129,7 +140,7 @@ def build_card_frame(index, children=None):
                     "display": "flex",
                     "flexDirection": "column",
                     "justifyContent": "center",
-                    # "height": "100%",  # Make sure it fills the parent container
+                    "height": "100%",  # Make sure it fills the parent container
                 },
             ),
             style={
@@ -138,9 +149,10 @@ def build_card_frame(index, children=None):
                 "padding": "0",  # Remove default padding
                 "margin": "0",  # Remove default margin
                 "boxShadow": "none",  # Optional: Remove shadow for a cleaner look
-                "border": "0px solid #ddd",  # Optional: Add a light border
-                # "borderRadius": "4px",  # Optional: Slightly round the corners
-                # "border-width": "0px",  # Optional: Remove border
+                "border": "1px solid #ddd"
+                if show_border
+                else "0px solid #ddd",  # Conditional border
+                "borderRadius": "4px",
             },
             id={
                 "type": "card-component",

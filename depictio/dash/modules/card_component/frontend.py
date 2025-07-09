@@ -1,5 +1,4 @@
 # Import necessary libraries
-import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import httpx
 from dash import MATCH, Input, Output, State, dcc, html
@@ -108,6 +107,7 @@ def register_callbacks_card_component(app):
     @app.callback(
         Output({"type": "card-body", "index": MATCH}, "children"),
         Output({"type": "aggregation-description", "index": MATCH}, "children"),
+        Output({"type": "card-columns-description", "index": MATCH}, "children"),
         [
             Input({"type": "card-input", "index": MATCH}, "value"),
             Input({"type": "card-dropdown-column", "index": MATCH}, "value"),
@@ -181,10 +181,34 @@ def register_callbacks_card_component(app):
         cols_json = get_columns_from_data_collection(wf_id, dc_id, TOKEN)
         logger.info(f"cols_json: {cols_json}")
 
+        from dash import dash_table
+
+        data_columns_df = [
+            {"column": c, "description": cols_json[c]["description"]}
+            for c in cols_json
+            if cols_json[c]["description"] is not None
+        ]
+
+        columns_description_df = dash_table.DataTable(
+            columns=[
+                {"name": "Column", "id": "column"},
+                {"name": "Description", "id": "description"},
+            ],
+            data=data_columns_df,
+            # Small font size, helvetica, no border, center text
+            style_cell={
+                "fontSize": 12,
+                "fontFamily": "Helvetica",
+                "border": "0px",
+                "textAlign": "center",
+            },
+            style_header={"fontWeight": "bold"},
+        )
+
         # If any of the input values are None, return an empty list
         if column_name is None or aggregation_value is None or wf_id is None or dc_id is None:
             if not component_data:
-                return ([], None)
+                return ([], None, columns_description_df)
             else:
                 column_name = component_data["column_name"]
                 aggregation_value = component_data["aggregation"]
@@ -203,7 +227,7 @@ def register_callbacks_card_component(app):
                 dmc.Tooltip(
                     children=dmc.Badge(
                         children="Aggregation description",
-                        leftSection=DashIconify(icon="mdi:information", color="gray", width=20),
+                        leftSection=DashIconify(icon="mdi:information", color="white", width=20),
                         color="gray",
                         radius="lg",
                     ),
@@ -281,99 +305,163 @@ def register_callbacks_card_component(app):
 
         new_card_body = build_card(**card_kwargs)
 
-        return new_card_body, aggregation_description
+        return new_card_body, aggregation_description, columns_description_df
 
 
 def design_card(id, df):
-    left_column = dbc.Col(
-        [
-            html.H5("Card edit menu"),
-            dbc.Card(
-                dbc.CardBody(
-                    [
-                        # Input for the card title
-                        dmc.TextInput(
-                            label="Card title",
-                            id={
-                                "type": "card-input",
-                                "index": id["index"],
-                            },
-                            value="",
+    left_column = dmc.GridCol(
+        dmc.Stack(
+            [
+                html.H5("Card edit menu", style={"textAlign": "center"}),
+                dmc.Card(
+                    dmc.CardSection(
+                        dmc.Stack(
+                            [
+                                # Input for the card title
+                                dmc.TextInput(
+                                    label="Card title",
+                                    id={
+                                        "type": "card-input",
+                                        "index": id["index"],
+                                    },
+                                    value="",
+                                ),
+                                # Dropdown for the column selection
+                                dmc.Select(
+                                    label="Select your column",
+                                    id={
+                                        "type": "card-dropdown-column",
+                                        "index": id["index"],
+                                    },
+                                    data=[{"label": e, "value": e} for e in df.columns],
+                                    value=None,
+                                ),
+                                # Dropdown for the aggregation method selection
+                                dmc.Select(
+                                    label="Select your aggregation method",
+                                    id={
+                                        "type": "card-dropdown-aggregation",
+                                        "index": id["index"],
+                                    },
+                                    value=None,
+                                ),
+                                html.Div(
+                                    id={
+                                        "type": "aggregation-description",
+                                        "index": id["index"],
+                                    },
+                                ),
+                            ],
+                            gap="sm",
                         ),
-                        # Dropdown for the column selection
-                        dmc.Select(
-                            label="Select your column",
-                            id={
-                                "type": "card-dropdown-column",
-                                "index": id["index"],
-                            },
-                            data=[{"label": e, "value": e} for e in df.columns],
-                            value=None,
-                        ),
-                        # Dropdown for the aggregation method selection
-                        dmc.Select(
-                            label="Select your aggregation method",
-                            id={
-                                "type": "card-dropdown-aggregation",
-                                "index": id["index"],
-                            },
-                            value=None,
-                        ),
-                        html.Div(
-                            id={
-                                "type": "aggregation-description",
-                                "index": id["index"],
-                            },
-                        ),
-                    ],
+                        id={
+                            "type": "card",
+                            "index": id["index"],
+                        },
+                        style={"padding": "1rem"},
+                    ),
+                    withBorder=True,
+                    shadow="sm",
+                    style={"width": "100%"},
                 ),
-                id={
-                    "type": "card",
-                    "index": id["index"],
-                },
-                style={"width": "100%"},
-            ),
-        ],
-        width="auto",
+            ],
+            align="flex-end",  # Align to right (horizontal)
+            justify="center",  # Center vertically
+            gap="md",
+            style={"height": "100%"},
+        ),
+        span="auto",
+        style={
+            "display": "flex",
+            "alignItems": "center",
+            "justifyContent": "flex-end",
+        },  # Align to right
     )
-    right_column = dbc.Col(
-        [
-            html.H5("Resulting card"),
-            html.Div(
+    right_column = dmc.GridCol(
+        dmc.Stack(
+            [
+                html.H5("Resulting card", style={"textAlign": "center"}),
                 html.Div(
-                    build_card_frame(index=id["index"]),
-                    # dbc.Card(
-                    #     dbc.CardBody(
-                    #         id={
-                    #             "type": "card-body",
-                    #             "index": id["index"],
-                    #         }
-                    #     ),
-                    #     style={"width": "100%"},
-                    #     id={
-                    #         "type": "card-component",
-                    #         "index": id["index"],
-                    #     },
-                    # ),
+                    build_card_frame(index=id["index"], show_border=True),
                     id={
                         "type": "component-container",
                         "index": id["index"],
                     },
-                )
+                ),
+            ],
+            align="flex-start",  # Align to left (horizontal)
+            justify="center",  # Center vertically
+            gap="md",
+            style={"height": "100%"},
+        ),
+        span="auto",
+        style={
+            "display": "flex",
+            "alignItems": "center",
+            "justifyContent": "flex-start",
+        },  # Align to left
+    )
+    # Arrow between columns
+    arrow_column = dmc.GridCol(
+        dmc.Stack(
+            [
+                html.Div(style={"height": "50px"}),  # Spacer to align with content
+                dmc.Center(
+                    DashIconify(
+                        icon="mdi:arrow-right-bold",
+                        width=40,
+                        height=40,
+                        color="#666",
+                    ),
+                ),
+            ],
+            align="center",
+            justify="center",
+            style={"height": "100%"},
+        ),
+        span="content",
+        style={"display": "flex", "alignItems": "center", "justifyContent": "center"},
+    )
+
+    # Main layout with components
+    main_layout = dmc.Grid(
+        [left_column, arrow_column, right_column],
+        justify="center",
+        align="center",
+        gutter="md",
+        style={"height": "100%", "minHeight": "300px"},
+    )
+
+    # Bottom section with column descriptions
+    bottom_section = dmc.Stack(
+        [
+            dmc.Title("Data Collection - Columns description", order=5, ta="center"),
+            html.Div(
+                id={
+                    "type": "card-columns-description",
+                    "index": id["index"],
+                }
             ),
         ],
-        width="auto",
+        gap="md",
+        style={"marginTop": "2rem"},
     )
-    row = [
-        dmc.Center(dbc.Row([left_column, right_column])),
+
+    card_row = [
+        dmc.Stack(
+            [main_layout, html.Hr(), bottom_section],
+            gap="lg",
+        ),
     ]
-    return row
+    return card_row
 
 
 def create_stepper_card_button(n, disabled=False):
     """
     Create the stepper card button
     """
+
+    import dash_bootstrap_components as dbc
 
     # Create the card button
     button = dbc.Col(

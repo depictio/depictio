@@ -12,31 +12,41 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
 
-def build_interactive_frame(index, children=None):
+def build_interactive_frame(index, children=None, show_border=False):
     if not children:
         return dbc.Card(
             dbc.CardBody(
+                html.Div(
+                    "Configure your interactive component using the edit menu",
+                    style={
+                        "textAlign": "center",
+                        "color": "#999",
+                        "fontSize": "14px",
+                        "fontStyle": "italic",
+                    },
+                ),
                 id={
                     "type": "input-body",
                     "index": index,
                 },
-                # style={
-                #     "padding": "5px",  # Reduce padding inside the card body
-                #     "display": "flex",
-                #     "flexDirection": "column",
-                #     "justifyContent": "center",
-                #     "height": "100%",  # Make sure it fills the parent container
-                # },
+                style={
+                    "padding": "20px",
+                    "display": "flex",
+                    "flexDirection": "column",
+                    "justifyContent": "center",
+                    "alignItems": "center",
+                    "minHeight": "150px",  # Ensure minimum height
+                    "height": "100%",
+                },
             ),
             style={
-                #     "width": "100%",
-                #     "height": "100%",  # Ensure the card fills the container's height
-                #     "padding": "0",  # Remove default padding
-                #     "margin": "0",  # Remove default margin
-                #     "boxShadow": "none",  # Optional: Remove shadow for a cleaner look
-                #     # "border": "1px solid #ddd",  # Optional: Add a light border
-                #     # "borderRadius": "4px",  # Optional: Slightly round the corners
-                "border": "0px",  # Optional: Remove border
+                "width": "100%",
+                "height": "100%",
+                "padding": "0",
+                "margin": "0",
+                "boxShadow": "none",
+                "border": "1px solid #ddd" if show_border else "0px solid #ddd",
+                "borderRadius": "4px",
             },
             id={
                 "type": "interactive-component",
@@ -65,7 +75,8 @@ def build_interactive_frame(index, children=None):
                 "padding": "0",
                 "overflow": "visible",  # Allow dropdown to overflow
                 "position": "relative",  # Ensure positioning context
-                "border": "0px",  # Optional: Remove border
+                "border": "1px solid #ddd" if show_border else "0px solid #ddd",
+                "borderRadius": "4px",
             },
             id={
                 "type": "interactive-component",

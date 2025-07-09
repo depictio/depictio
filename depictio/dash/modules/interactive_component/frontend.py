@@ -1,5 +1,4 @@
 # Import necessary libraries
-import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import httpx
 from dash import MATCH, Input, Output, State, dcc, html
@@ -99,7 +98,7 @@ def register_callbacks_interactive_component(app):
     @app.callback(
         Output({"type": "input-body", "index": MATCH}, "children"),
         Output({"type": "interactive-description", "index": MATCH}, "children"),
-        Output({"type": "columns-description", "index": MATCH}, "children"),
+        Output({"type": "interactive-columns-description", "index": MATCH}, "children"),
         [
             Input({"type": "input-title", "index": MATCH}, "value"),
             Input({"type": "input-dropdown-column", "index": MATCH}, "value"),
@@ -213,7 +212,7 @@ def register_callbacks_interactive_component(app):
                             dmc.Badge(
                                 children="Interactive component description",
                                 leftSection=DashIconify(
-                                    icon="mdi:information", color="gray", width=20
+                                    icon="mdi:information", color="white", width=20
                                 ),
                                 color="gray",
                                 radius="lg",
@@ -285,102 +284,137 @@ def register_callbacks_interactive_component(app):
 
 
 def design_interactive(id, df):
-    left_column = dbc.Col(
-        [
-            html.H5("Card edit menu"),
-            dbc.Card(
-                dbc.CardBody(
-                    [
-                        dmc.TextInput(
-                            label="Interactive component title",
-                            id={
-                                "type": "input-title",
-                                "index": id["index"],
-                            },
+    left_column = dmc.GridCol(
+        dmc.Stack(
+            [
+                html.H5("Interactive edit menu", style={"textAlign": "center"}),
+                dmc.Card(
+                    dmc.CardSection(
+                        dmc.Stack(
+                            [
+                                dmc.TextInput(
+                                    label="Interactive component title",
+                                    id={
+                                        "type": "input-title",
+                                        "index": id["index"],
+                                    },
+                                ),
+                                dmc.Select(
+                                    label="Select your column",
+                                    id={
+                                        "type": "input-dropdown-column",
+                                        "index": id["index"],
+                                    },
+                                    data=[{"label": e, "value": e} for e in df.columns],
+                                    value=None,
+                                ),
+                                dmc.Select(
+                                    label="Select your interactive component",
+                                    id={
+                                        "type": "input-dropdown-method",
+                                        "index": id["index"],
+                                    },
+                                    value=None,
+                                ),
+                                html.Div(
+                                    id={
+                                        "type": "interactive-description",
+                                        "index": id["index"],
+                                    },
+                                ),
+                            ],
+                            gap="sm",
                         ),
-                        dmc.Select(
-                            label="Select your column",
-                            id={
-                                "type": "input-dropdown-column",
-                                "index": id["index"],
-                            },
-                            data=[{"label": e, "value": e} for e in df.columns],
-                            value=None,
-                        ),
-                        dmc.Select(
-                            label="Select your interactive component",
-                            id={
-                                "type": "input-dropdown-method",
-                                "index": id["index"],
-                            },
-                            value=None,
-                        ),
-                        html.Div(
-                            id={
-                                "type": "interactive-description",
-                                "index": id["index"],
-                            },
-                        ),
-                    ],
+                        id={
+                            "type": "input",
+                            "index": id["index"],
+                        },
+                        style={"padding": "1rem"},
+                    ),
+                    withBorder=True,
+                    shadow="sm",
+                    style={"width": "100%"},
                 ),
-                id={
-                    "type": "input",
-                    "index": id["index"],
-                },
-            ),
-        ],
-        width="auto",
+            ],
+            align="flex-end",  # Align to right (horizontal)
+            justify="center",  # Center vertically
+            gap="md",
+            style={"height": "100%"},
+        ),
+        span="auto",
+        style={"display": "flex", "alignItems": "center", "justifyContent": "flex-end"},
     )
-    right_column = dbc.Col(
+    right_column = dmc.GridCol(
+        dmc.Stack(
+            [
+                html.H5("Resulting interactive component", style={"textAlign": "center"}),
+                html.Div(
+                    build_interactive_frame(index=id["index"], show_border=True),
+                    id={
+                        "type": "component-container",
+                        "index": id["index"],
+                    },
+                ),
+            ],
+            align="flex-start",  # Align to left (horizontal)
+            justify="center",  # Center vertically
+            gap="md",
+            style={"height": "100%"},
+        ),
+        span="auto",
+        style={"display": "flex", "alignItems": "center", "justifyContent": "flex-start"},
+    )
+
+    # Arrow between columns
+    arrow_column = dmc.GridCol(
+        dmc.Stack(
+            [
+                html.Div(style={"height": "50px"}),  # Spacer to align with content
+                dmc.Center(
+                    DashIconify(
+                        icon="mdi:arrow-right-bold",
+                        width=40,
+                        height=40,
+                        color="#666",
+                    ),
+                ),
+            ],
+            align="center",
+            justify="center",
+            style={"height": "100%"},
+        ),
+        span="content",
+        style={"display": "flex", "alignItems": "center", "justifyContent": "center"},
+    )
+
+    # Main layout with components
+    main_layout = dmc.Grid(
+        [left_column, arrow_column, right_column],
+        justify="center",
+        align="center",
+        gutter="md",
+        style={"height": "100%", "minHeight": "300px"},
+    )
+
+    # Bottom section with column descriptions
+    bottom_section = dmc.Stack(
         [
-            html.H5("Resulting interactive component"),
+            dmc.Title("Data Collection - Columns description", order=5, ta="center"),
             html.Div(
-                build_interactive_frame(index=id["index"]),
-                # dbc.Card(
-                #     dbc.CardBody(
-                #         id={
-                #             "type": "input-body",
-                #             "index": id["index"],
-                #         },
-                #         style={"width": "100%"},
-                #     ),
-                #     style={"width": "600px"},
-                #     id={
-                #         "type": "interactive-component",
-                #         "index": id["index"],
-                #     },
-                # ),
                 id={
-                    "type": "component-container",
+                    "type": "interactive-columns-description",
                     "index": id["index"],
-                },
+                }
             ),
         ],
-        width="auto",
+        gap="md",
+        style={"marginTop": "2rem"},
     )
 
     interactive_row = [
-        dmc.Center(
-            dmc.Stack(
-                [
-                    dbc.Row([left_column, right_column]),
-                    html.Hr(),
-                    # dmc.Space(h=5),
-                    dbc.Row(
-                        dmc.Stack(
-                            [
-                                dmc.Title("Data Collection - Columns description", order=5),
-                                html.Div(
-                                    id={
-                                        "type": "columns-description",
-                                        "index": id["index"],
-                                    }
-                                ),
-                            ]
-                        )
-                    ),
-                ]
-            ),
+        dmc.Stack(
+            [main_layout, html.Hr(), bottom_section],
+            gap="lg",
         ),
     ]
     return interactive_row
@@ -390,6 +424,7 @@ def create_stepper_interactive_button(n, disabled=False):
     """
     Create the stepper interactive button
     """
+    import dash_bootstrap_components as dbc
 
     button = dbc.Col(
         dmc.Button(
