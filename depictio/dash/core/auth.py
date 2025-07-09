@@ -45,7 +45,7 @@ def get_temporary_user_session(expiry_hours: int = 24, expiry_minutes: int = 0):
 
 
 # Enhanced process_authentication with refresh logic
-def process_authentication(pathname, local_data):
+def process_authentication(pathname, local_data, theme):
     """
     Process authentication with refresh token support.
 
@@ -56,6 +56,7 @@ def process_authentication(pathname, local_data):
     Returns:
         tuple: (page_content, header, pathname, local_data)
     """
+    logger.debug(f"Theme: {theme}")
     logger.debug(f"URL Pathname: {pathname}")
     logger.debug(f"Local Data keys: {list(local_data.keys()) if local_data else None}")
     logger.debug("Processing authentication...")
@@ -77,7 +78,7 @@ def process_authentication(pathname, local_data):
                     pathname = "/dashboards"
 
                 logger.debug("HANDLE AUTHENTICATED USER (EXISTING SESSION)")
-                return handle_authenticated_user(pathname, local_data)
+                return handle_authenticated_user(pathname, local_data, theme)
 
             except Exception as e:
                 logger.error(f"Failed to handle existing session data: {e}")
@@ -85,7 +86,7 @@ def process_authentication(pathname, local_data):
                 # Fetch the real anonymous user and their permanent token
                 anonymous_local_data = get_anonymous_user_session()
 
-                return handle_authenticated_user(pathname, anonymous_local_data)
+                return handle_authenticated_user(pathname, anonymous_local_data, theme)
 
         else:
             logger.debug("No existing session data - fetching anonymous user session")
@@ -99,7 +100,7 @@ def process_authentication(pathname, local_data):
                     pathname = "/dashboards"
 
                 logger.debug("HANDLE AUTHENTICATED USER (ANONYMOUS MODE)")
-                return handle_authenticated_user(pathname, anonymous_local_data)
+                return handle_authenticated_user(pathname, anonymous_local_data, theme)
 
             except Exception as e:
                 logger.error(f"Failed to fetch anonymous user session: {e}")
@@ -196,4 +197,4 @@ def process_authentication(pathname, local_data):
     logger.debug(f"Access Token: {local_data['access_token'][:10]}...")
     logger.debug("HANDLE AUTHENTICATED USER")
 
-    return handle_authenticated_user(pathname, local_data)
+    return handle_authenticated_user(pathname, local_data, theme)

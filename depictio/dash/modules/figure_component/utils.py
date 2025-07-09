@@ -16,6 +16,19 @@ from .definitions import get_visualization_definition
 from .models import ComponentConfig
 
 
+def _get_theme_template(theme: str) -> str:
+    """Get the appropriate Plotly template based on the theme.
+
+    Args:
+        theme: Theme name ("light", "dark", or other)
+
+    Returns:
+        Plotly template name
+    """
+    logger.info(f"Using theme: {theme} for Plotly template")
+    return "mantine_dark" if theme == "dark" else "mantine_light"
+
+
 def build_figure_frame(index, children=None):
     if not children:
         return dbc.Card(
@@ -173,9 +186,9 @@ def render_figure(
         logger.warning(f"Unknown visualization type: {visu_type}, falling back to scatter")
         visu_type = "scatter"
 
-    # Add theme-appropriate template
+    # Add theme-appropriate template using Mantine-compatible themes
     if "template" not in dict_kwargs:
-        dict_kwargs["template"] = "plotly_dark" if theme == "dark" else "plotly_white"
+        dict_kwargs["template"] = _get_theme_template(theme)
 
     logger.info("=== FIGURE RENDER ===")
     logger.info(f"Visualization: {visu_type}")
@@ -187,7 +200,7 @@ def render_figure(
     # Handle empty or invalid data
     if df is None or df.is_empty():
         logger.warning("Empty or invalid dataframe, creating empty figure")
-        return px.scatter(template=dict_kwargs.get("template", "plotly_white"))
+        return px.scatter(template=dict_kwargs.get("template", _get_theme_template(theme)))
 
     # Clean parameters - remove None values and invalid parameters
     cleaned_kwargs = {k: v for k, v in dict_kwargs.items() if v is not None}
@@ -202,7 +215,9 @@ def render_figure(
         )
         # Create a fallback figure with helpful message
         title = f"Please select {', '.join(missing_params).upper()} column(s) to create {visu_type} plot"
-        return px.scatter(template=dict_kwargs.get("template", "plotly_white"), title=title)
+        return px.scatter(
+            template=dict_kwargs.get("template", _get_theme_template(theme)), title=title
+        )
 
     try:
         # Get the appropriate Plotly function
@@ -244,7 +259,8 @@ def render_figure(
         logger.error(f"Error creating figure: {e}")
         # Return fallback figure
         return px.scatter(
-            template=dict_kwargs.get("template", "plotly_white"), title=f"Error: {str(e)}"
+            template=dict_kwargs.get("template", _get_theme_template(theme)),
+            title=f"Error: {str(e)}",
         )
 
 

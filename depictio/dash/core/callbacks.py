@@ -2,7 +2,7 @@
 Callback registration for the Depictio Dash application.
 """
 
-from dash import Input, Output, ctx
+from dash import Input, Output, State, ctx
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.core.auth import process_authentication
@@ -21,10 +21,10 @@ def register_main_callback(app):
         Output("header-content", "children"),
         Output("url", "pathname"),
         Output("local-store", "data", allow_duplicate=True),
-        [Input("url", "pathname"), Input("local-store", "data")],
+        [Input("url", "pathname"), Input("local-store", "data"), State("theme-store", "data")],
         prevent_initial_call=True,
     )
-    def display_page(pathname, local_data):
+    def display_page(pathname, local_data, theme_store):
         """
         Main callback for handling page routing and authentication.
 
@@ -39,7 +39,7 @@ def register_main_callback(app):
         logger.debug(f"Trigger: {trigger}")
 
         # Process authentication and return appropriate content
-        return process_authentication(pathname, local_data)
+        return process_authentication(pathname, local_data, theme_store)
 
 
 def register_all_callbacks(app):

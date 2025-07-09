@@ -349,6 +349,7 @@ def register_callbacks_draggable(app):
         Input("edit-components-mode-button", "checked"),
         State("url", "pathname"),
         State("local-store", "data"),
+        State("theme-store", "data"),  # Add theme store as State parameter
         # Input("dashboard-title", "style"),  # Indirect trigger for theme changes
         # Input("height-store", "data"),
         prevent_initial_call=True,
@@ -386,6 +387,7 @@ def register_callbacks_draggable(app):
         input_edit_components_mode_button,
         pathname,
         local_data,
+        theme_store,  # Add theme store parameter
         # dashboard_title_style,  # Indirect trigger for theme changes
         # height_store,
     ):
@@ -449,12 +451,13 @@ def register_callbacks_draggable(app):
         logger.info(f"Triggered input: {triggered_input}")
         # logger.info(f"Theme store: {theme_store}")
 
-        # Extract theme safely from multiple sources
+        # Extract theme safely from theme store
         theme = "light"  # Default
-        # if theme_relay_data:
-        #     theme = theme_relay_data.get("theme", "light")
-        # elif theme_store:
-        #     theme = theme_store
+        if theme_store:
+            if isinstance(theme_store, dict):
+                theme = theme_store.get("colorScheme", "light")
+            elif isinstance(theme_store, str):
+                theme = theme_store
         logger.info(f"Using theme: {theme}")
 
         # FIXME: Remove duplicates from stored_metadata
@@ -710,7 +713,7 @@ def register_callbacks_draggable(app):
             elif (
                 "interactive-component" in triggered_input
                 and toggle_interactivity_button
-                or triggered_input == "theme-relay-store"
+                or triggered_input == "theme-store"
             ):
                 logger.info("Interactive component triggered")
 
