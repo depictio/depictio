@@ -59,7 +59,7 @@ def handle_unauthenticated_user(pathname):
     )
 
 
-def handle_authenticated_user(pathname, local_data):
+def handle_authenticated_user(pathname, local_data, theme="light"):
     logger.info(f"User logged in: {local_data.get('email', 'Unknown')}")
     # logger.info(f"Local data: {local_data}")
 
@@ -68,7 +68,7 @@ def handle_authenticated_user(pathname, local_data):
     # Map the pathname to the appropriate content and header
     if pathname.startswith("/dashboard/"):
         dashboard_id = pathname.split("/")[-1]
-        depictio_dash_data = load_depictio_data(dashboard_id, local_data)
+        depictio_dash_data = load_depictio_data(dashboard_id, local_data, theme=theme)
         # logger.info(f"Depictio dash data: {depictio_dash_data}")
         header_content, backend_components = design_header(
             data=depictio_dash_data, local_store=local_data
@@ -80,6 +80,7 @@ def handle_authenticated_user(pathname, local_data):
                 dashboard_id=dashboard_id,
                 local_data=local_data,
                 backend_components=backend_components,
+                theme=theme,
             ),
             header_content,
             pathname,
@@ -367,7 +368,11 @@ def create_tokens_management_layout():
 
 
 def create_dashboard_layout(
-    depictio_dash_data=None, dashboard_id: str = "", local_data=None, backend_components=None
+    depictio_dash_data=None,
+    dashboard_id: str = "",
+    local_data=None,
+    backend_components=None,
+    theme="light",
 ):
     # Init layout and children if depictio_dash_data is available, else set to empty
     if depictio_dash_data and isinstance(depictio_dash_data, dict):
@@ -402,9 +407,9 @@ def create_dashboard_layout(
                     core,
                 ],
             ),
-            html.Div(id="test-input"),
+            # html.Div(id="test-input"),
             html.Div(id="test-output", style={"display": "none"}),
-            html.Div(id="test-output-visible"),
+            # html.Div(id="test-output-visible"),
         ],
         fluid=True,
         style={
@@ -438,8 +443,10 @@ def create_app_layout():
             dcc.Store(
                 id="theme-store",
                 storage_type="local",
-                data={},  # Start empty, will be populated by clientside callback
+                data="light",  # Start with light theme as fallback, will be updated by theme detection
             ),
+            # Hidden div to trigger theme detection on app load
+            html.Div(id="theme-detection-trigger", style={"display": "none"}),
             dcc.Store(
                 id="theme-relay-store",
                 storage_type="memory",

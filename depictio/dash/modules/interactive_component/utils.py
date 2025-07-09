@@ -12,31 +12,41 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
 
-def build_interactive_frame(index, children=None):
+def build_interactive_frame(index, children=None, show_border=False):
     if not children:
         return dbc.Card(
             dbc.CardBody(
+                html.Div(
+                    "Configure your interactive component using the edit menu",
+                    style={
+                        "textAlign": "center",
+                        "color": "#999",
+                        "fontSize": "14px",
+                        "fontStyle": "italic",
+                    },
+                ),
                 id={
                     "type": "input-body",
                     "index": index,
                 },
-                # style={
-                #     "padding": "5px",  # Reduce padding inside the card body
-                #     "display": "flex",
-                #     "flexDirection": "column",
-                #     "justifyContent": "center",
-                #     "height": "100%",  # Make sure it fills the parent container
-                # },
+                style={
+                    "padding": "20px",
+                    "display": "flex",
+                    "flexDirection": "column",
+                    "justifyContent": "center",
+                    "alignItems": "center",
+                    "minHeight": "150px",  # Ensure minimum height
+                    "height": "100%",
+                },
             ),
             style={
-                #     "width": "100%",
-                #     "height": "100%",  # Ensure the card fills the container's height
-                #     "padding": "0",  # Remove default padding
-                #     "margin": "0",  # Remove default margin
-                #     "boxShadow": "none",  # Optional: Remove shadow for a cleaner look
-                #     # "border": "1px solid #ddd",  # Optional: Add a light border
-                #     # "borderRadius": "4px",  # Optional: Slightly round the corners
-                "border": "0px",  # Optional: Remove border
+                "width": "100%",
+                "height": "100%",
+                "padding": "0",
+                "margin": "0",
+                "boxShadow": "none",
+                "border": "1px solid #ddd" if show_border else "0px solid #ddd",
+                "borderRadius": "4px",
             },
             id={
                 "type": "interactive-component",
@@ -65,7 +75,8 @@ def build_interactive_frame(index, children=None):
                 "padding": "0",
                 "overflow": "visible",  # Allow dropdown to overflow
                 "position": "relative",  # Ensure positioning context
-                "border": "0px",  # Optional: Remove border
+                "border": "1px solid #ddd" if show_border else "0px solid #ddd",
+                "borderRadius": "4px",
             },
             id={
                 "type": "interactive-component",
@@ -329,7 +340,7 @@ def build_interactive(**kwargs):
     stepper = kwargs.get("stepper", False)
     parent_index = kwargs.get("parent_index", None)
 
-    # logger.info(f"Interactive - kwargs: {kwargs}")
+    logger.info(f"Interactive - kwargs: {kwargs}")
 
     if stepper:
         value_div_type = "interactive-component-value-tmp"
@@ -358,6 +369,12 @@ def build_interactive(**kwargs):
     }
 
     logger.debug(f"Interactive component {index}: store_data: {store_data}")
+    logger.info(
+        f"Interactive component {index}: column_type={column_type}, interactive_component_type={interactive_component_type}"
+    )
+    logger.info(
+        f"Interactive component {index}: available agg_functions keys: {list(agg_functions.keys())}"
+    )
 
     # Load the delta table & get the specs
     if df is None:
@@ -636,6 +653,40 @@ def build_interactive(**kwargs):
             )
             kwargs.update({"marks": marks, "step": None, "included": False})
         interactive_component = func_name(**kwargs)
+
+    # If the aggregation value is Checkbox or Switch (boolean data types)
+    elif interactive_component_type in ["Checkbox", "Switch"]:
+        logger.debug(f"Boolean component: {interactive_component_type}")
+        logger.debug(f"Value: {value}")
+        logger.debug(f"Value type: {type(value)}")
+        kwargs = {"persistence_type": "local"}
+        if value is None:
+            value = False
+        # Convert value to boolean if it's not already
+        if isinstance(value, str):
+            value = value.lower() in ["true", "1", "yes", "on"]
+        elif not isinstance(value, bool):
+            value = bool(value)
+        kwargs.update({"checked": value})
+        interactive_component = func_name(
+            id={"type": value_div_type, "index": str(index)},
+            **kwargs,
+        )
+
+    # Fallback for any other component types
+    else:
+        logger.warning(f"Unsupported interactive component type: {interactive_component_type}")
+        logger.warning(f"Column type: {column_type}")
+        logger.warning(f"Column name: {column_name}")
+        logger.warning(
+            f"Available component types: {list(agg_functions.get(column_type, {}).get('input_methods', {}).keys())}"
+        )
+        # Create a fallback text component
+        interactive_component = dmc.Text(
+            f"Unsupported component type: {interactive_component_type} for {column_type} data",
+            id={"type": value_div_type, "index": str(index)},
+            color="red",
+        )
 
     # If no title is provided, use the aggregation value on the selected column
     if not title:

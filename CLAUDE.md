@@ -254,3 +254,95 @@ This ensures all code changes comply with project standards including:
 - Import sorting and other quality checks
 
 **No exceptions** - pre-commit compliance is mandatory for all code changes.
+
+## Frontend Development Guidelines
+
+### Component Framework Standards
+
+**CRITICAL REQUIREMENT**: All new frontend components and features MUST use **DMC 2.0+** (Dash Mantine Components) for UI consistency and maintainability.
+
+#### Component Library Priority
+
+1. **Primary**: DMC 2.0+ components (dash-mantine-components >= 2.0.0)
+   - All new UI components must use DMC 2.0+ unless technically impossible
+   - Provides consistent styling and theme integration
+   - Better accessibility and modern UI patterns
+
+2. **Secondary**: Custom HTML/CSS components (only when DMC is insufficient)
+   - Must follow the established theme system patterns
+   - Require justification for not using DMC
+
+3. **Deprecated**: Bootstrap components (dash-bootstrap-components)
+   - Only maintain existing usage, do not extend
+   - Gradually migrate to DMC when refactoring
+
+#### Theme Compatibility Requirements
+
+**MANDATORY**: All new components and modifications MUST be compatible with the dark/light theme switch system.
+
+##### Theme-Aware Development Checklist
+
+- [ ] **Use CSS Variables**: All styling must use theme-aware CSS variables:
+  - `var(--app-bg-color)` for background colors
+  - `var(--app-text-color)` for text colors
+  - `var(--app-surface-color)` for component surfaces
+  - `var(--app-border-color)` for borders
+
+- [ ] **Test Both Themes**: Manually test components in both light and dark themes
+  - Verify text readability and contrast
+  - Check background color inheritance
+  - Ensure icons and graphics are theme-appropriate
+
+- [ ] **Follow Theme Patterns**:
+  - Use DMC's built-in theme support when available
+  - Extend `theme_utils.py` for custom theme-aware styling
+  - Never hardcode colors (e.g., `#ffffff`, `#000000`)
+
+- [ ] **DataTable Styling**: For Dash DataTables, use the established pattern:
+  ```python
+  style_cell={
+      "backgroundColor": "var(--app-surface-color, #ffffff)",
+      "color": "var(--app-text-color, #000000)",
+      # ... other styling
+  }
+  ```
+
+##### Theme Integration Examples
+
+```python
+# ✅ GOOD: Theme-aware component
+dmc.Paper(
+    children=[...],
+    style={
+        "backgroundColor": "var(--app-surface-color, #ffffff)",
+        "color": "var(--app-text-color, #000000)",
+        "border": "1px solid var(--app-border-color, #ddd)",
+    }
+)
+
+# ❌ BAD: Hardcoded colors
+dmc.Paper(
+    children=[...],
+    style={
+        "backgroundColor": "#ffffff",
+        "color": "#000000",
+        "border": "1px solid #ddd",
+    }
+)
+```
+
+#### Component Testing Requirements
+
+- **Visual Testing**: All components must be visually tested in both themes
+- **Accessibility**: Ensure proper contrast ratios in both light and dark modes
+- **Responsive Design**: Components must work across different screen sizes
+- **State Management**: Theme changes should not break component state
+
+#### Migration Strategy
+
+When working with existing components:
+
+1. **Assess Current State**: Identify non-DMC components that need migration
+2. **Gradual Migration**: Replace components incrementally during feature work
+3. **Theme Compatibility**: Ensure all changes maintain theme switching functionality
+4. **Documentation**: Update component documentation with theme requirements

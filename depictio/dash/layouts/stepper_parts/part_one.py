@@ -124,10 +124,17 @@ def register_callbacks_stepper_part_one(app):
                                 style={
                                     "font-weight": "bold",
                                     "text-align": "left",
-                                    "width": "20%",
+                                    "width": "25%",
                                 },
                             ),
-                            html.Td(workflow_id, style={"text-align": "left"}),
+                            html.Td(
+                                workflow_id,
+                                style={
+                                    "text-align": "left",
+                                    "word-break": "break-all",
+                                    "overflow-wrap": "break-word",
+                                },
+                            ),
                         ]
                     ),
                     html.Tr(
@@ -137,11 +144,10 @@ def register_callbacks_stepper_part_one(app):
                                 style={
                                     "font-weight": "bold",
                                     "text-align": "left",
-                                    "width": "20%",
+                                    "width": "25%",
                                 },
                             ),
                             html.Td(
-                                # camelcase
                                 dc_specs["config"]["type"].capitalize(),
                                 style={"text-align": "left"},
                             ),
@@ -154,11 +160,10 @@ def register_callbacks_stepper_part_one(app):
                                 style={
                                     "font-weight": "bold",
                                     "text-align": "left",
-                                    "width": "20%",
+                                    "width": "25%",
                                 },
                             ),
                             html.Td(
-                                # camelcase
                                 dc_specs["config"]["metatype"].capitalize(),
                                 style={"text-align": "left"},
                             ),
@@ -171,12 +176,16 @@ def register_callbacks_stepper_part_one(app):
                                 style={
                                     "font-weight": "bold",
                                     "text-align": "left",
-                                    "width": "20%",
+                                    "width": "25%",
                                 },
                             ),
                             html.Td(
                                 dc_specs["data_collection_tag"],
-                                style={"text-align": "left"},
+                                style={
+                                    "text-align": "left",
+                                    "word-break": "break-all",
+                                    "overflow-wrap": "break-word",
+                                },
                             ),
                         ]
                     ),
@@ -187,10 +196,17 @@ def register_callbacks_stepper_part_one(app):
                                 style={
                                     "font-weight": "bold",
                                     "text-align": "left",
-                                    "width": "20%",
+                                    "width": "25%",
                                 },
                             ),
-                            html.Td(dc_specs["description"], style={"text-align": "left"}),
+                            html.Td(
+                                dc_specs["description"],
+                                style={
+                                    "text-align": "left",
+                                    "word-break": "break-all",
+                                    "overflow-wrap": "break-word",
+                                },
+                            ),
                         ]
                     ),
                     html.Tr(
@@ -200,10 +216,19 @@ def register_callbacks_stepper_part_one(app):
                                 style={
                                     "font-weight": "bold",
                                     "text-align": "left",
-                                    "width": "20%",
+                                    "width": "25%",
                                 },
                             ),
-                            html.Td(dc_specs["_id"], style={"text-align": "left"}),
+                            html.Td(
+                                dc_specs["_id"],
+                                style={
+                                    "text-align": "left",
+                                    "word-break": "break-all",
+                                    "overflow-wrap": "break-word",
+                                    "font-family": "monospace",
+                                    "font-size": "0.9em",
+                                },
+                            ),
                         ]
                     ),
                     html.Tr(
@@ -213,14 +238,19 @@ def register_callbacks_stepper_part_one(app):
                                 style={
                                     "font-weight": "bold",
                                     "text-align": "left",
-                                    "width": "20%",
+                                    "width": "25%",
                                 },
                             ),
                             html.Td("v1", style={"text-align": "left"}),
                         ]
                     ),
                 ],
-                style={"width": "100%", "table-layout": "fixed"},
+                style={
+                    "width": "100%",
+                    "table-layout": "fixed",
+                    "overflow-wrap": "break-word",
+                    "word-break": "break-all",
+                },
             )
 
             # turn main_info into 4 rows with 2 columns
@@ -374,7 +404,8 @@ def register_callbacks_stepper_part_one(app):
             leftSection=DashIconify(
                 icon=component_metadata_dict[component_selected]["icon"],
                 width=15,
-                color=component_metadata_dict[component_selected]["color"],
+                color="white",
+                # color=component_metadata_dict[component_selected]["color"],
             ),
         )
 

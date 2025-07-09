@@ -82,6 +82,7 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, them
         # Add theme to child metadata for figure generation
         if component_type == "figure":
             child_metadata["theme"] = theme
+            logger.info(f"Using theme: {theme} for figure component")
 
         # Build the child using the appropriate function and kwargs
         child = build_function(**child_metadata)
@@ -115,8 +116,24 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, them
     return children
 
 
-def load_depictio_data(dashboard_id, local_data):
+def load_depictio_data(dashboard_id, local_data, theme="light"):
+    """Load the dashboard data from the API and render it.
+    Args:
+        dashboard_id (str): The ID of the dashboard to load.
+        local_data (dict): Local data containing access token and other information.
+        theme (str): The theme to use for rendering the dashboard.
+    Returns:
+        dict: The dashboard data with rendered children.
+    Raises:
+        ValueError: If the dashboard data cannot be fetched or is invalid.
+    """
     logger.info(f"Loading Depictio data for dashboard ID: {dashboard_id}")
+
+    # Ensure theme is valid
+    if not theme or theme == {} or theme == "{}":
+        theme = "light"
+    logger.info(f"Using theme: {theme} for dashboard rendering")
+
     if not local_data["access_token"]:
         logger.warning("Access token not found.")
         return None
@@ -201,7 +218,7 @@ def load_depictio_data(dashboard_id, local_data):
                 dashboard_data.stored_metadata,
                 edit_components_button_checked,
                 dashboard_id,
-                "light",  # Default theme for dashboard loading
+                theme,
                 local_data["access_token"],
             )
             # logger.info(f"Render Children: {children}")

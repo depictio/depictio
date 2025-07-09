@@ -1,5 +1,4 @@
 # Import necessary libraries
-import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import httpx
 from dash import MATCH, Input, Output, State, dcc, html
@@ -51,6 +50,8 @@ def register_callbacks_interactive_component(app):
 
         # Get the type of the selected column
         column_type = cols_json[column_value]["type"]
+        logger.info(f"Frontend: Column '{column_value}' has type '{column_type}'")
+        logger.info(f"Frontend: Available agg_functions keys: {list(agg_functions.keys())}")
 
         # Get the number of unique values in the selected column if it is a categorical column
         if column_type in ["object", "category"]:
@@ -59,6 +60,11 @@ def register_callbacks_interactive_component(app):
             nb_unique = 0
 
         # Get the aggregation functions available for the selected column type
+        if str(column_type) not in agg_functions:
+            logger.error(f"Frontend: Column type '{column_type}' not found in agg_functions!")
+            logger.error(f"Frontend: Available types: {list(agg_functions.keys())}")
+            return []
+
         agg_functions_tmp_methods = agg_functions[str(column_type)]["input_methods"]
 
         # Create a list of options for the dropdown
@@ -99,7 +105,7 @@ def register_callbacks_interactive_component(app):
     @app.callback(
         Output({"type": "input-body", "index": MATCH}, "children"),
         Output({"type": "interactive-description", "index": MATCH}, "children"),
-        Output({"type": "columns-description", "index": MATCH}, "children"),
+        Output({"type": "interactive-columns-description", "index": MATCH}, "children"),
         [
             Input({"type": "input-title", "index": MATCH}, "value"),
             Input({"type": "input-dropdown-column", "index": MATCH}, "value"),
@@ -128,8 +134,17 @@ def register_callbacks_interactive_component(app):
         """
         Callback to update card body based on the selected column and aggregation
         """
+        logger.info("=== UPDATE CARD BODY CALLBACK START ===")
+        logger.info(f"input_value: {input_value}")
+        logger.info(f"column_value: {column_value}")
+        logger.info(f"aggregation_value: {aggregation_value}")
+        logger.info(f"workflow_id: {workflow_id}")
+        logger.info(f"data_collection_id: {data_collection_id}")
+        logger.info(f"parent_index: {parent_index}")
+        logger.info(f"pathname: {pathname}")
 
         if not local_data:
+            logger.error("No local_data available!")
             return []
 
         TOKEN = local_data["access_token"]
@@ -141,9 +156,15 @@ def register_callbacks_interactive_component(app):
         dashboard_id = pathname.split("/")[-1]
         # input_id = id["index"]
 
-        component_data = get_component_data(
-            input_id=parent_index, dashboard_id=dashboard_id, TOKEN=TOKEN
-        )
+        # Only fetch component data if parent_index is not None (editing existing component)
+        if parent_index is not None:
+            logger.info(f"Fetching existing component data for parent_index: {parent_index}")
+            component_data = get_component_data(
+                input_id=parent_index, dashboard_id=dashboard_id, TOKEN=TOKEN
+            )
+        else:
+            logger.info("Creating new component - no existing component data to fetch")
+            component_data = None
 
         # Check if value was already assigned
         value = None
@@ -151,46 +172,80 @@ def register_callbacks_interactive_component(app):
         # Get the columns from the selected data collection
         cols_json = get_columns_from_data_collection(workflow_id, data_collection_id, TOKEN)
         logger.info(f"cols_json: {cols_json}")
+        logger.info(f"cols_json type: {type(cols_json)}")
+
+        if not cols_json:
+            logger.error("cols_json is empty or None!")
+            return []
 
         from dash import dash_table
 
-        data_columns_df = [
-            {"column": c, "description": cols_json[c]["description"]}
-            for c in cols_json
-            if cols_json[c]["description"] is not None
-        ]
+        logger.info("Creating data_columns_df...")
+        try:
+            data_columns_df = [
+                {"column": c, "description": cols_json[c]["description"]}
+                for c in cols_json
+                if cols_json[c]["description"] is not None
+            ]
+            logger.info(f"data_columns_df created successfully: {len(data_columns_df)} rows")
+        except Exception as e:
+            logger.error(f"Error creating data_columns_df: {e}")
+            logger.error(f"cols_json structure: {list(cols_json.keys()) if cols_json else 'None'}")
+            return []
 
-        columns_description_df = dash_table.DataTable(
-            # id={
-            #     "type": "columns-description",
-            #     "index": input_id,
-            # },
-            columns=[
-                {"name": "Column", "id": "column"},
-                {"name": "Description", "id": "description"},
-            ],
-            data=data_columns_df,
-            # Small font size, helvetica, no border, center text
-            style_cell={
-                "fontSize": 12,
-                "fontFamily": "Helvetica",
-                "border": "0px",
-                "textAlign": "center",
-            },
-            style_header={"fontWeight": "bold"},
-        )
+        logger.info("Creating DataTable...")
+        try:
+            columns_description_df = dash_table.DataTable(
+                # id={
+                #     "type": "columns-description",
+                #     "index": input_id,
+                # },
+                columns=[
+                    {"name": "Column", "id": "column"},
+                    {"name": "Description", "id": "description"},
+                ],
+                data=data_columns_df,
+                # Small font size, helvetica, no border, center text
+                style_cell={
+                    "fontSize": 11,
+                    "fontFamily": "Helvetica",
+                    "border": "0px",
+                    "textAlign": "center",
+                    "backgroundColor": "var(--app-surface-color, #ffffff)",
+                    "color": "var(--app-text-color, #000000)",
+                    "padding": "4px 8px",
+                    "maxWidth": "150px",
+                    "overflow": "hidden",
+                    "textOverflow": "ellipsis",
+                },
+                style_header={
+                    "fontWeight": "bold",
+                    "backgroundColor": "var(--app-surface-color, #ffffff)",
+                    "color": "var(--app-text-color, #000000)",
+                },
+                style_data={
+                    "backgroundColor": "var(--app-surface-color, #ffffff)",
+                    "color": "var(--app-text-color, #000000)",
+                },
+            )
+            logger.info("DataTable created successfully")
+        except Exception as e:
+            logger.error(f"Error creating DataTable: {e}")
+            columns_description_df = html.Div("Error creating columns description table")
 
-        # If any of the input values are None, return an empty list
+        # Check if essential values are missing - input_value can be None for new components
         if (
-            input_value is None
-            or column_value is None
+            column_value is None
             or aggregation_value is None
             or workflow_id is None
             or data_collection_id is None
         ):
+            logger.info("Missing essential values - checking component_data...")
             if not component_data:
+                logger.info("No component_data available - returning empty result")
                 return ([], None, columns_description_df)
             else:
+                logger.info("Using component_data to populate missing values")
                 input_value = component_data.get("title", "")
                 column_value = component_data["column_name"]
                 aggregation_value = component_data["interactive_component_type"]
@@ -200,9 +255,23 @@ def register_callbacks_interactive_component(app):
                 logger.info(f"column_value: {column_value}")
                 logger.info(f"aggregation_value: {aggregation_value}")
                 logger.info(f"value: {value}")
+        else:
+            logger.info("All essential values present - proceeding with component creation")
+
+        logger.debug(f"TOTO - input_value: {input_value}")
+
+        logger.info("About to get column type...")
+        logger.info(f"column_value: {column_value}")
+        logger.info(f"cols_json keys: {list(cols_json.keys()) if cols_json else 'None'}")
+
+        # Check if column_value exists in cols_json
+        if column_value not in cols_json:
+            logger.error(f"column_value '{column_value}' not found in cols_json!")
+            return ([], None, columns_description_df)
 
         # Get the type of the selected column
         column_type = cols_json[column_value]["type"]
+        logger.info(f"column_type: {column_type}")
 
         interactive_description = html.Div(
             children=[
@@ -213,7 +282,7 @@ def register_callbacks_interactive_component(app):
                             dmc.Badge(
                                 children="Interactive component description",
                                 leftSection=DashIconify(
-                                    icon="mdi:information", color="gray", width=20
+                                    icon="mdi:information", color="white", width=20
                                 ),
                                 color="gray",
                                 radius="lg",
@@ -225,13 +294,14 @@ def register_callbacks_interactive_component(app):
                     ],
                     multiline=True,
                     w=300,
+                    withinPortal=False,
                     # transition="pop",
                     # transitionDuration=300,
                     transitionProps={
                         "name": "pop",
                         "duration": 300,
                     },
-                    justify="flex-end",
+                    # justify="flex-end",
                     withArrow=True,
                     openDelay=500,
                     closeDelay=500,
@@ -284,102 +354,137 @@ def register_callbacks_interactive_component(app):
 
 
 def design_interactive(id, df):
-    left_column = dbc.Col(
-        [
-            html.H5("Card edit menu"),
-            dbc.Card(
-                dbc.CardBody(
-                    [
-                        dmc.TextInput(
-                            label="Interactive component title",
-                            id={
-                                "type": "input-title",
-                                "index": id["index"],
-                            },
+    left_column = dmc.GridCol(
+        dmc.Stack(
+            [
+                html.H5("Interactive edit menu", style={"textAlign": "center"}),
+                dmc.Card(
+                    dmc.CardSection(
+                        dmc.Stack(
+                            [
+                                dmc.TextInput(
+                                    label="Interactive component title",
+                                    id={
+                                        "type": "input-title",
+                                        "index": id["index"],
+                                    },
+                                ),
+                                dmc.Select(
+                                    label="Select your column",
+                                    id={
+                                        "type": "input-dropdown-column",
+                                        "index": id["index"],
+                                    },
+                                    data=[{"label": e, "value": e} for e in df.columns],
+                                    value=None,
+                                ),
+                                dmc.Select(
+                                    label="Select your interactive component",
+                                    id={
+                                        "type": "input-dropdown-method",
+                                        "index": id["index"],
+                                    },
+                                    value=None,
+                                ),
+                                html.Div(
+                                    id={
+                                        "type": "interactive-description",
+                                        "index": id["index"],
+                                    },
+                                ),
+                            ],
+                            gap="sm",
                         ),
-                        dmc.Select(
-                            label="Select your column",
-                            id={
-                                "type": "input-dropdown-column",
-                                "index": id["index"],
-                            },
-                            data=[{"label": e, "value": e} for e in df.columns],
-                            value=None,
-                        ),
-                        dmc.Select(
-                            label="Select your interactive component",
-                            id={
-                                "type": "input-dropdown-method",
-                                "index": id["index"],
-                            },
-                            value=None,
-                        ),
-                        html.Div(
-                            id={
-                                "type": "interactive-description",
-                                "index": id["index"],
-                            },
-                        ),
-                    ],
+                        id={
+                            "type": "input",
+                            "index": id["index"],
+                        },
+                        style={"padding": "1rem"},
+                    ),
+                    withBorder=True,
+                    shadow="sm",
+                    style={"width": "100%"},
                 ),
-                id={
-                    "type": "input",
-                    "index": id["index"],
-                },
-            ),
-        ],
-        width="auto",
+            ],
+            align="flex-end",  # Align to right (horizontal)
+            justify="center",  # Center vertically
+            gap="md",
+            style={"height": "100%"},
+        ),
+        span="auto",
+        style={"display": "flex", "alignItems": "center", "justifyContent": "flex-end"},
     )
-    right_column = dbc.Col(
+    right_column = dmc.GridCol(
+        dmc.Stack(
+            [
+                html.H5("Resulting interactive component", style={"textAlign": "center"}),
+                html.Div(
+                    build_interactive_frame(index=id["index"], show_border=True),
+                    id={
+                        "type": "component-container",
+                        "index": id["index"],
+                    },
+                ),
+            ],
+            align="flex-start",  # Align to left (horizontal)
+            justify="center",  # Center vertically
+            gap="md",
+            style={"height": "100%"},
+        ),
+        span="auto",
+        style={"display": "flex", "alignItems": "center", "justifyContent": "flex-start"},
+    )
+
+    # Arrow between columns
+    arrow_column = dmc.GridCol(
+        dmc.Stack(
+            [
+                html.Div(style={"height": "50px"}),  # Spacer to align with content
+                dmc.Center(
+                    DashIconify(
+                        icon="mdi:arrow-right-bold",
+                        width=40,
+                        height=40,
+                        color="#666",
+                    ),
+                ),
+            ],
+            align="center",
+            justify="center",
+            style={"height": "100%"},
+        ),
+        span="content",
+        style={"display": "flex", "alignItems": "center", "justifyContent": "center"},
+    )
+
+    # Main layout with components
+    main_layout = dmc.Grid(
+        [left_column, arrow_column, right_column],
+        justify="center",
+        align="center",
+        gutter="md",
+        style={"height": "100%", "minHeight": "300px"},
+    )
+
+    # Bottom section with column descriptions
+    bottom_section = dmc.Stack(
         [
-            html.H5("Resulting interactive component"),
+            dmc.Title("Data Collection - Columns description", order=5, ta="center"),
             html.Div(
-                build_interactive_frame(index=id["index"]),
-                # dbc.Card(
-                #     dbc.CardBody(
-                #         id={
-                #             "type": "input-body",
-                #             "index": id["index"],
-                #         },
-                #         style={"width": "100%"},
-                #     ),
-                #     style={"width": "600px"},
-                #     id={
-                #         "type": "interactive-component",
-                #         "index": id["index"],
-                #     },
-                # ),
                 id={
-                    "type": "component-container",
+                    "type": "interactive-columns-description",
                     "index": id["index"],
-                },
+                }
             ),
         ],
-        width="auto",
+        gap="md",
+        style={"marginTop": "2rem"},
     )
 
     interactive_row = [
-        dmc.Center(
-            dmc.Stack(
-                [
-                    dbc.Row([left_column, right_column]),
-                    html.Hr(),
-                    # dmc.Space(h=5),
-                    dbc.Row(
-                        dmc.Stack(
-                            [
-                                dmc.Title("Data Collection - Columns description", order=5),
-                                html.Div(
-                                    id={
-                                        "type": "columns-description",
-                                        "index": id["index"],
-                                    }
-                                ),
-                            ]
-                        )
-                    ),
-                ]
-            ),
+        dmc.Stack(
+            [main_layout, html.Hr(), bottom_section],
+            gap="lg",
         ),
     ]
     return interactive_row
@@ -389,6 +494,7 @@ def create_stepper_interactive_button(n, disabled=False):
     """
     Create the stepper interactive button
     """
+    import dash_bootstrap_components as dbc
 
     button = dbc.Col(
         dmc.Button(
