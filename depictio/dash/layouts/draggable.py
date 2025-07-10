@@ -116,6 +116,8 @@ def register_callbacks_draggable(app):
             Input("url", "pathname"),
             Input({"type": "btn-done", "index": ALL}, "n_clicks"),
             Input({"type": "btn-done-edit", "index": ALL}, "n_clicks"),
+            Input({"type": "edit-box-button", "index": ALL}, "n_clicks"),
+            Input({"type": "duplicate-box-button", "index": ALL}, "n_clicks"),
         ],
         [
             State("local-store", "data"),  # Contains 'access_token'
@@ -132,6 +134,8 @@ def register_callbacks_draggable(app):
         pathname,
         btn_done_clicks,
         btn_done_edit_clicks,
+        edit_box_button_clicks,
+        duplicate_box_button_clicks,
         local_store,
         components_store,
         wf_ids,
@@ -160,6 +164,8 @@ def register_callbacks_draggable(app):
         logger.info(f"URL pathname: {pathname}")
         logger.info(f"Button done clicks: {btn_done_clicks}")
         logger.info(f"Button done edit clicks: {btn_done_edit_clicks}")
+        logger.info(f"Edit box button clicks: {edit_box_button_clicks}")
+        logger.info(f"Duplicate box button clicks: {duplicate_box_button_clicks}")
         logger.info(f"Local store data: {local_store}")
         logger.info(f"Components store data before update: {components_store}")
         logger.info(f"Workflow IDs: {wf_ids}")
