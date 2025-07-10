@@ -341,21 +341,46 @@ def build_interactive(**kwargs):
     parent_index = kwargs.get("parent_index", None)
 
     logger.info(f"Interactive - kwargs: {kwargs}")
+    logger.info(
+        f"BUILD_INTERACTIVE: column_type={column_type}, interactive_component_type={interactive_component_type}"
+    )
+    logger.info(
+        f"BUILD_INTERACTIVE: Available input_methods for {column_type}: {list(agg_functions[column_type].get('input_methods', {}).keys())}"
+    )
 
     if stepper:
         value_div_type = "interactive-component-value-tmp"
     else:
         value_div_type = "interactive-component-value"
 
+    # Check if the interactive_component_type is valid for this column_type
+    if interactive_component_type not in agg_functions[column_type]["input_methods"]:
+        logger.error(
+            f"INVALID COMBINATION: {interactive_component_type} not available for {column_type} columns"
+        )
+        logger.error(
+            f"Available options: {list(agg_functions[column_type]['input_methods'].keys())}"
+        )
+        raise ValueError(
+            f"Interactive component type '{interactive_component_type}' is not available for column type '{column_type}'. Available options: {list(agg_functions[column_type]['input_methods'].keys())}"
+        )
+
     func_name = agg_functions[column_type]["input_methods"][interactive_component_type]["component"]
 
     # Common Store Component
-    store_index = index.replace("-tmp", "") if index else "unknown"
+    # For stepper mode, use the temporary index to avoid conflicts with existing components
+    # For normal mode, use the original index (remove -tmp suffix if present)
+    if stepper:
+        store_index = index  # Use the temporary index with -tmp suffix
+        data_index = index.replace("-tmp", "") if index else "unknown"  # Clean index for data
+    else:
+        store_index = index.replace("-tmp", "") if index else "unknown"
+        data_index = store_index
 
     store_data = {
         "component_type": "interactive",
         "interactive_component_type": interactive_component_type,
-        "index": str(store_index),
+        "index": str(data_index),
         "title": title,
         "wf_id": wf_id,
         "dc_id": dc_id,

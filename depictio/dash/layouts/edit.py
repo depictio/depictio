@@ -8,7 +8,14 @@ from depictio.dash.utils import get_component_data
 
 
 def edit_component(index, parent_id, active=0, component_data=None, TOKEN=None):
-    logger.info(f"Editing component {parent_id}")
+    logger.info("=== EDIT COMPONENT ===")
+    logger.info("Function parameters:")
+    logger.info(f"  index: {index}")
+    logger.info(f"  parent_id: {parent_id}")
+    logger.info(f"  active: {active}")
+    logger.info(f"  component_data type: {type(component_data)}")
+    logger.info(f"  component_data: {component_data}")
+    logger.info(f"  TOKEN: {'***' if TOKEN else None}")
 
     current_draggable_children = create_stepper_output_edit(
         index, parent_id, active, component_data, TOKEN

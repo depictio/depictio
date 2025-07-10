@@ -65,13 +65,13 @@ def process_authentication(pathname, local_data, theme_store):
         elif isinstance(theme_store, str):
             theme = theme_store
 
-    logger.info(f"AUTH CALLBACK - Theme Store: {theme_store} (type: {type(theme_store)})")
-    logger.info(f"AUTH CALLBACK - Extracted Theme: {theme}")
-    logger.info(f"AUTH CALLBACK - URL Pathname: {pathname}")
-    logger.info(
-        f"AUTH CALLBACK - Local Data keys: {list(local_data.keys()) if local_data else None}"
-    )
-    logger.info("AUTH CALLBACK - Processing authentication...")
+    # logger.info(f"AUTH CALLBACK - Theme Store: {theme_store} (type: {type(theme_store)})")
+    # logger.info(f"AUTH CALLBACK - Extracted Theme: {theme}")
+    # logger.info(f"AUTH CALLBACK - URL Pathname: {pathname}")
+    # logger.info(
+    #     f"AUTH CALLBACK - Local Data keys: {list(local_data.keys()) if local_data else None}"
+    # )
+    # logger.info("AUTH CALLBACK - Processing authentication...")
 
     # Check if unauthenticated mode is enabled
     if settings.auth.unauthenticated_mode:

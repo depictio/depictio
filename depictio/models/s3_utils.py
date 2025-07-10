@@ -131,7 +131,7 @@ def S3_storage_checks(s3_config: S3DepictioCLIConfig, checks: list[str] | None =
                 Options: ['s3', 'bucket', 'write']
     """
     logger.info("Checking S3 accessibility...")
-    logger.info(f"S3 config: {s3_config}")
+    logger.debug(f"S3 config: {s3_config}")
     minio_manager = MinIOManager(s3_config)
     logger.info("MinIOManager initialized.")
     minio_manager.suggest_adjustments(checks)
@@ -144,10 +144,10 @@ def turn_S3_config_into_polars_storage_options(
     """
     Convert S3 configuration into storage options for the client.
     """
-    logger.info("Converting S3 config to Polars storage options...")
-    logger.info(f"S3 config: {s3_config}")
-    logger.info("Using endpoint URL: %s", s3_config.endpoint_url)
-    logger.info("Using public URL: %s", s3_config.public_url)
+    logger.debug("Converting S3 config to Polars storage options...")
+    logger.debug(f"S3 config: {s3_config}")
+    logger.debug("Using endpoint URL: %s", s3_config.endpoint_url)
+    logger.debug("Using public URL: %s", s3_config.public_url)
 
     # return PolarsStorageOptions(
     #     endpoint_url=s3_config.endpoint_url,

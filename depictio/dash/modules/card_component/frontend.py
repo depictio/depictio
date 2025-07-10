@@ -353,7 +353,8 @@ def register_callbacks_card_component(app):
             "aggregation": aggregation_value,
             # "value": v,
             "access_token": TOKEN,
-            "stepper": True,
+            "stepper": True,  # Show border during editing
+            "build_frame": True,  # Use card frame for editing
         }
 
         if relevant_metadata:

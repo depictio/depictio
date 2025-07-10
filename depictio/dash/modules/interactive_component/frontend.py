@@ -197,17 +197,18 @@ def register_callbacks_interactive_component(app):
         Callback to update card body based on the selected column and aggregation
         """
         logger.info("=== UPDATE CARD BODY CALLBACK START ===")
-        logger.info(f"input_value: {input_value}")
-        logger.info(f"column_value: {column_value}")
-        logger.info(f"aggregation_value: {aggregation_value}")
-        logger.info(f"workflow_id: {workflow_id}")
-        logger.info(f"data_collection_id: {data_collection_id}")
-        logger.info(f"parent_index: {parent_index}")
-        logger.info(f"pathname: {pathname}")
+        logger.info("CALLBACK INPUT VALUES:")
+        logger.info(f"  input_value: {input_value}")
+        logger.info(f"  column_value: {column_value}")
+        logger.info(f"  aggregation_value: {aggregation_value}")
+        logger.info(f"  workflow_id: {workflow_id}")
+        logger.info(f"  data_collection_id: {data_collection_id}")
+        logger.info(f"  parent_index: {parent_index}")
+        logger.info(f"  pathname: {pathname}")
 
         if not local_data:
             logger.error("No local_data available!")
-            return []
+            return [], None, None
 
         TOKEN = local_data["access_token"]
 
@@ -231,14 +232,85 @@ def register_callbacks_interactive_component(app):
         # Check if value was already assigned
         value = None
 
-        # Get the columns from the selected data collection
+        # In edit mode, we should prioritize form values over component_data
+        # Only fall back to component_data for missing workflow_id and data_collection_id
+        if component_data and parent_index is not None:
+            logger.info("Edit mode detected - using form values with component_data fallback")
+
+            # Use form values if available, otherwise fall back to component_data
+            if not workflow_id:
+                workflow_id = component_data.get("wf_id")
+                logger.info(f"Using workflow_id from component_data: {workflow_id}")
+
+            if not data_collection_id:
+                data_collection_id = component_data.get("dc_id")
+                logger.info(f"Using data_collection_id from component_data: {data_collection_id}")
+
+            # For edit mode, prefer form values over component_data
+            # Only use component_data if form values are explicitly None
+            if column_value is None:
+                column_value = component_data["column_name"]
+                logger.info(f"Using column_value from component_data: {column_value}")
+            else:
+                logger.info(f"Using column_value from form: {column_value}")
+
+            if aggregation_value is None:
+                aggregation_value = component_data["interactive_component_type"]
+                logger.info(f"Using aggregation_value from component_data: {aggregation_value}")
+            else:
+                logger.info(f"Using aggregation_value from form: {aggregation_value}")
+
+            if not value:
+                value = component_data.get("value", None)
+                logger.info(f"Using value from component_data: {value}")
+            else:
+                logger.info(f"Using value from form: {value}")
+
+            if not input_value:
+                input_value = component_data.get("title", "")
+                logger.info(f"Using input_value from component_data: {input_value}")
+            else:
+                logger.info(f"Using input_value from form: {input_value}")
+
+        # If not in edit mode, check if essential values are missing
+        elif not component_data or parent_index is None:
+            logger.info("Not in edit mode - checking for missing values")
+            if (
+                column_value is None
+                or aggregation_value is None
+                or workflow_id is None
+                or data_collection_id is None
+            ):
+                logger.error("Missing essential values in non-edit mode")
+                return ([], None, None)
+
+        # Check if we still have missing essential values
+        if (
+            column_value is None
+            or aggregation_value is None
+            or workflow_id is None
+            or data_collection_id is None
+        ):
+            logger.error("Still missing essential values after fallback")
+            logger.error(f"column_value: {column_value}, aggregation_value: {aggregation_value}")
+            logger.error(f"workflow_id: {workflow_id}, data_collection_id: {data_collection_id}")
+            return ([], None, None)
+
+        logger.info("Using final values:")
+        logger.info(f"  column_value: {column_value}")
+        logger.info(f"  aggregation_value: {aggregation_value}")
+        logger.info(f"  workflow_id: {workflow_id}")
+        logger.info(f"  data_collection_id: {data_collection_id}")
+
+        # Get the columns from the selected data collection - NOW with valid workflow_id and data_collection_id
         cols_json = get_columns_from_data_collection(workflow_id, data_collection_id, TOKEN)
+
         logger.info(f"cols_json: {cols_json}")
         logger.info(f"cols_json type: {type(cols_json)}")
 
         if not cols_json:
             logger.error("cols_json is empty or None!")
-            return []
+            return [], None, None
 
         from dash import dash_table
 
@@ -253,7 +325,7 @@ def register_callbacks_interactive_component(app):
         except Exception as e:
             logger.error(f"Error creating data_columns_df: {e}")
             logger.error(f"cols_json structure: {list(cols_json.keys()) if cols_json else 'None'}")
-            return []
+            return [], None, None
 
         logger.info("Creating DataTable...")
         try:
@@ -295,30 +367,26 @@ def register_callbacks_interactive_component(app):
             logger.error(f"Error creating DataTable: {e}")
             columns_description_df = html.Div("Error creating columns description table")
 
-        # Check if essential values are missing - input_value can be None for new components
-        if (
-            column_value is None
-            or aggregation_value is None
-            or workflow_id is None
-            or data_collection_id is None
-        ):
-            logger.info("Missing essential values - checking component_data...")
-            if not component_data:
-                logger.info("No component_data available - returning empty result")
+        # Early validation: Check if the aggregation_value is compatible with the column type
+        if cols_json and column_value in cols_json:
+            actual_column_type = cols_json[column_value]["type"]
+            from depictio.dash.modules.interactive_component.utils import agg_functions
+
+            available_methods = list(
+                agg_functions.get(str(actual_column_type), {}).get("input_methods", {}).keys()
+            )
+
+            if aggregation_value not in available_methods:
+                logger.warning("INVALID COMBINATION detected in callback:")
+                logger.warning(f"  Column: {column_value} (type: {actual_column_type})")
+                logger.warning(f"  Requested component: {aggregation_value}")
+                logger.warning(f"  Available components: {available_methods}")
+                logger.warning("Returning empty result - user needs to select a valid component")
                 return ([], None, columns_description_df)
             else:
-                logger.info("Using component_data to populate missing values")
-                input_value = component_data.get("title", "")
-                column_value = component_data["column_name"]
-                aggregation_value = component_data["interactive_component_type"]
-                value = component_data.get("value", None)
-                logger.info(f"component_data: {component_data}")
-                logger.info(f"input_value: {input_value}")
-                logger.info(f"column_value: {column_value}")
-                logger.info(f"aggregation_value: {aggregation_value}")
-                logger.info(f"value: {value}")
-        else:
-            logger.info("All essential values present - proceeding with component creation")
+                logger.info(
+                    f"VALID COMBINATION: {aggregation_value} is available for {actual_column_type}"
+                )
 
         logger.debug(f"TOTO - input_value: {input_value}")
 
@@ -334,6 +402,32 @@ def register_callbacks_interactive_component(app):
         # Get the type of the selected column
         column_type = cols_json[column_value]["type"]
         logger.info(f"column_type: {column_type}")
+
+        # Check if the aggregation_value is valid for this column_type
+        logger.info(
+            f"Checking if aggregation_value '{aggregation_value}' is valid for column_type '{column_type}'"
+        )
+        logger.info(
+            f"Available input_methods for {column_type}: {list(agg_functions[str(column_type)].get('input_methods', {}).keys())}"
+        )
+
+        # Create interactive description with error handling
+        try:
+            description_text = agg_functions[str(column_type)]["input_methods"][aggregation_value][
+                "description"
+            ]
+            logger.info(
+                f"Found description for {column_type}.{aggregation_value}: {description_text}"
+            )
+        except KeyError as e:
+            logger.error(f"KeyError accessing description: {e}")
+            logger.error(f"column_type: {column_type}, aggregation_value: {aggregation_value}")
+            logger.error(
+                f"Available aggregation values: {list(agg_functions[str(column_type)].get('input_methods', {}).keys())}"
+            )
+            description_text = (
+                f"Description not available for {aggregation_value} on {column_type} data"
+            )
 
         interactive_description = html.Div(
             children=[
@@ -351,9 +445,7 @@ def register_callbacks_interactive_component(app):
                             ),
                         ]
                     ),
-                    label=agg_functions[str(column_type)]["input_methods"][aggregation_value][
-                        "description"
-                    ],
+                    label=description_text,
                     multiline=True,
                     w=300,
                     withinPortal=False,
@@ -401,12 +493,19 @@ def register_callbacks_interactive_component(app):
             "access_token": TOKEN,
             "stepper": True,
             "parent_index": parent_index,
+            "build_frame": False,  # Don't build frame - return just the content for the input-body container
         }
 
         if value:
             interactive_kwargs["value"] = value
 
         new_interactive_component = build_interactive(**interactive_kwargs)
+
+        logger.info("=== INTERACTIVE COMPONENT BUILT ===")
+        logger.info(f"interactive_kwargs: {interactive_kwargs}")
+        logger.info(f"new_interactive_component type: {type(new_interactive_component)}")
+        logger.info(f"new_interactive_component: {new_interactive_component}")
+        logger.info("=== RETURNING FROM UPDATE_CARD_BODY ===")
 
         return (
             new_interactive_component,

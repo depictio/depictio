@@ -47,6 +47,8 @@ def build_figure_frame(index, children=None):
                     "flexDirection": "column",
                     "justifyContent": "center",
                     "height": "100%",  # Make sure it fills the parent container
+                    "minHeight": "400px",  # Ensure minimum height for visibility
+                    "backgroundColor": "transparent",  # Fix white background
                 },
             ),
             style={
@@ -79,6 +81,8 @@ def build_figure_frame(index, children=None):
                     "flexDirection": "column",
                     "justifyContent": "center",
                     "height": "100%",  # Make sure it fills the parent container
+                    "minHeight": "400px",  # Ensure minimum height for visibility
+                    "backgroundColor": "transparent",  # Fix white background
                 },
             ),
             style={
@@ -196,12 +200,14 @@ def render_figure(
     if "template" not in dict_kwargs:
         dict_kwargs["template"] = _get_theme_template(theme)
 
-    logger.info("=== FIGURE RENDER ===")
+    logger.info("=== FIGURE RENDER DEBUG ===")
     logger.info(f"Visualization: {visu_type}")
     logger.info(f"Theme: {theme}")
     logger.info(f"Template: {dict_kwargs.get('template')}")
     logger.info(f"Data shape: {df.shape if df is not None else 'None'}")
     logger.info(f"Parameters: {list(dict_kwargs.keys())}")
+    logger.info(f"Full dict_kwargs: {dict_kwargs}")
+    logger.info(f"Available columns in df: {df.columns if df is not None else 'None'}")
 
     # Handle empty or invalid data
     if df is None or df.is_empty():
@@ -351,8 +357,17 @@ def build_figure(**kwargs) -> html.Div:
     Returns:
         Figure component as HTML div
     """
+    logger.info("=== BUILD FIGURE CALLED ===")
+    logger.info(f"All kwargs: {kwargs}")
+    logger.info(f"All kwargs keys: {list(kwargs.keys())}")
+
     index = kwargs.get("index")
     dict_kwargs = kwargs.get("dict_kwargs", {})
+
+    logger.info(f"INDEX: {index}")
+    logger.info(f"DICT_KWARGS RECEIVED: {dict_kwargs}")
+    logger.info(f"DICT_KWARGS TYPE: {type(dict_kwargs)}")
+    logger.info(f"DICT_KWARGS EMPTY: {not dict_kwargs}")
     visu_type = kwargs.get("visu_type", "scatter")
     wf_id = kwargs.get("wf_id")
     dc_id = kwargs.get("dc_id")
@@ -385,6 +400,26 @@ def build_figure(**kwargs) -> html.Div:
         "last_updated": datetime.now().isoformat(),
     }
 
+    # Ensure dc_config is available for build_figure
+    if not dc_config and wf_id and dc_id:
+        logger.warning(f"dc_config missing for figure {index}, attempting to fetch")
+        try:
+            import httpx
+
+            from depictio.api.v1.configs.config import API_BASE_URL
+
+            headers = {"Authorization": f"Bearer {TOKEN}"} if TOKEN else {}
+            dc_specs = httpx.get(
+                f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{dc_id}",
+                headers=headers,
+            ).json()
+            dc_config = dc_specs.get("config", {})
+            store_component_data["dc_config"] = dc_config
+            logger.info(f"Successfully fetched dc_config for figure {index}")
+        except Exception as e:
+            logger.error(f"Failed to fetch dc_config for figure {index}: {e}")
+            dc_config = {}
+
     # Validate and clean parameters
     validated_kwargs = validate_parameters(visu_type, dict_kwargs)
 
@@ -401,8 +436,15 @@ def build_figure(**kwargs) -> html.Div:
             logger.warning(f"Missing workflow_id ({wf_id}) or data_collection_id ({dc_id})")
 
     # Create the figure
+    logger.info("CALLING render_figure WITH:")
+    logger.info(f"  validated_kwargs: {validated_kwargs}")
+    logger.info(f"  visu_type: {visu_type}")
+    logger.info(f"  df shape: {df.shape if df is not None else 'None'}")
+    logger.info(f"  theme: {theme}")
+
     try:
         figure = render_figure(validated_kwargs, visu_type, df, theme=theme)
+        logger.info(f"render_figure SUCCESS: figure type = {type(figure)}")
     except Exception as e:
         logger.error(f"Failed to render figure: {e}")
         figure = px.scatter(title=f"Error: {str(e)}")
@@ -423,13 +465,24 @@ def build_figure(**kwargs) -> html.Div:
                     "responsive": True,
                     "displayModeBar": True,
                 },
-                style={"width": "100%", "height": "100%"},
+                style={
+                    "width": "100%",
+                    "height": "100%",
+                    "backgroundColor": "transparent",  # Fix white background issue
+                    "minHeight": "400px",  # Ensure minimum height for visibility
+                },
             ),
             dcc.Store(
                 data=store_component_data,
                 id={"type": "stored-metadata-component", "index": index},
             ),
-        ]
+        ],
+        style={
+            "width": "100%",
+            "height": "100%",
+            "minHeight": "400px",  # Ensure container has minimum height
+            "backgroundColor": "transparent",
+        },
     )
 
     return build_figure_frame(index, children=figure_div) if build_frame else figure_div

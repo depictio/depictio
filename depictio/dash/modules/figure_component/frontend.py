@@ -127,7 +127,7 @@ def register_callbacks_figure_component(app):
             State("local-store", "data"),
             State("url", "pathname"),
         ],
-        prevent_initial_call=True,
+        prevent_initial_call=True,  # Prevent initial call to avoid loops
     )
     def build_parameter_interface(
         _n_clicks_edit,  # Prefixed with _ to indicate unused
@@ -168,6 +168,7 @@ def register_callbacks_figure_component(app):
                 component_data = get_component_data(
                     input_id=parent_index, dashboard_id=dashboard_id, TOKEN=TOKEN
                 )
+                logger.info(f"Edit mode: loaded component data: {component_data}")
             except Exception as e:
                 logger.warning(f"Failed to get component data: {e}")
 
@@ -337,6 +338,7 @@ def register_callbacks_figure_component(app):
     )
     def toggle_collapse(n, _is_open):  # Prefixed with _ to indicate unused
         # print(n, is_open, n % 2 == 0)
+        logger.info(f"Toggle collapse called with n={n}, returning is_open={n % 2 != 0}")
         if n % 2 == 0:
             return False
         else:
@@ -389,10 +391,11 @@ def register_callbacks_figure_component(app):
         dashboard_id = pathname.split("/")[-1]
         component_id = component_id_dict["index"]
 
-        logger.info("=== UPDATE FIGURE CALLBACK ===")
+        logger.info("=== UPDATE FIGURE CALLBACK DEBUG ===")
         logger.info(f"Component ID: {component_id}")
+        logger.info(f"Parent index: {parent_index}")
         logger.info(f"Visualization type label: {visu_type_label}")
-        logger.info(f"Parameters: {dict_kwargs}")
+        logger.info(f"Parameters received: {dict_kwargs}")
         logger.info(f"Parameters type: {type(dict_kwargs)}")
         logger.info(f"Parameters empty: {not dict_kwargs or dict_kwargs == {'x': None, 'y': None}}")
 
@@ -444,15 +447,22 @@ def register_callbacks_figure_component(app):
             if not dict_kwargs or dict_kwargs == {"x": None, "y": None}:
                 dict_kwargs = {}
 
-        logger.info(f"Final visu_type: {visu_type}")
-        logger.info(f"Final dict_kwargs: {dict_kwargs}")
+        logger.info("BEFORE FIGURE CREATION:")
+        logger.info(f"  Final visu_type: {visu_type}")
+        logger.info(f"  Final dict_kwargs: {dict_kwargs}")
+        logger.info(f"  Dict_kwargs keys: {list(dict_kwargs.keys()) if dict_kwargs else 'None'}")
+        logger.info(
+            f"  Dict_kwargs values: {list(dict_kwargs.values()) if dict_kwargs else 'None'}"
+        )
 
         # Get data collection specs
+        dc_config = None
         try:
             dc_specs = httpx.get(
                 f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{data_collection_id}",
                 headers={"Authorization": f"Bearer {TOKEN}"},
             ).json()
+            dc_config = dc_specs.get("config", {})
         except Exception as e:
             logger.error(f"Failed to get data collection specs: {e}")
             raise dash.exceptions.PreventUpdate
@@ -475,7 +485,7 @@ def register_callbacks_figure_component(app):
                 "visu_type": visu_type,
                 "wf_id": workflow_id,
                 "dc_id": data_collection_id,
-                "dc_config": dc_specs["config"],
+                "dc_config": dc_config,
                 "access_token": TOKEN,
                 "theme": theme,
             }
@@ -483,7 +493,17 @@ def register_callbacks_figure_component(app):
             if parent_index:
                 figure_kwargs["parent_index"] = parent_index
 
-            return build_figure(**figure_kwargs)
+            logger.info("CALLING build_figure WITH:")
+            logger.info(f"  dict_kwargs: {figure_kwargs['dict_kwargs']}")
+            logger.info(f"  visu_type: {figure_kwargs['visu_type']}")
+            logger.info(f"  wf_id: {figure_kwargs['wf_id']}")
+            logger.info(f"  dc_id: {figure_kwargs['dc_id']}")
+            logger.info(f"  theme: {figure_kwargs['theme']}")
+            logger.info(f"  parent_index: {figure_kwargs.get('parent_index', 'None')}")
+
+            figure_result = build_figure(**figure_kwargs)
+            logger.info(f"build_figure RETURNED: {type(figure_result)}")
+            return figure_result
 
         except Exception as e:
             logger.error(f"Failed to build figure: {e}")
@@ -740,10 +760,15 @@ def register_callbacks_figure_component(app):
                 raise dash.exceptions.PreventUpdate
 
             # Get data collection specs
-            dc_specs = httpx.get(
-                f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{data_collection_id}",
-                headers={"Authorization": f"Bearer {TOKEN}"},
-            ).json()
+            try:
+                dc_specs = httpx.get(
+                    f"{API_BASE_URL}/depictio/api/v1/datacollections/specs/{data_collection_id}",
+                    headers={"Authorization": f"Bearer {TOKEN}"},
+                ).json()
+                dc_config = dc_specs.get("config", {})
+            except Exception as e:
+                logger.error(f"Failed to get data collection specs in generate_default_figure: {e}")
+                dc_config = {}
 
             # Extract theme
             theme = "light"
@@ -760,7 +785,7 @@ def register_callbacks_figure_component(app):
                 "visu_type": visu_type,
                 "wf_id": workflow_id,
                 "dc_id": data_collection_id,
-                "dc_config": dc_specs["config"],
+                "dc_config": dc_config,
                 "access_token": TOKEN,
                 "theme": theme,
             }

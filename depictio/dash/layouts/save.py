@@ -167,6 +167,25 @@ def register_callbacks_save(app):
                 f"Found {len(edited_components)} edited components and {len(non_edited_components)} non-edited components"
             )
 
+            # Log all component indices for debugging
+            logger.info("=== ALL COMPONENTS BEFORE PROCESSING ===")
+            for i, comp in enumerate(unique_metadata):
+                logger.info(
+                    f"Component {i}: index={comp.get('index')}, parent_index={comp.get('parent_index')}, type={comp.get('component_type')}, title={comp.get('title')}"
+                )
+
+            logger.info("=== EDITED COMPONENTS ===")
+            for i, comp in enumerate(edited_components):
+                logger.info(
+                    f"Edited {i}: index={comp.get('index')}, parent_index={comp.get('parent_index')}, type={comp.get('component_type')}, title={comp.get('title')}"
+                )
+
+            logger.info("=== NON-EDITED COMPONENTS ===")
+            for i, comp in enumerate(non_edited_components):
+                logger.info(
+                    f"Non-edited {i}: index={comp.get('index')}, parent_index={comp.get('parent_index')}, type={comp.get('component_type')}, title={comp.get('title')}"
+                )
+
             # Process edited components
             for component in edited_components:
                 parent_index = component.get("parent_index")
@@ -175,6 +194,23 @@ def register_callbacks_save(app):
                 logger.info(
                     f"Processing edited component: {component_index} (parent_index: {parent_index})"
                 )
+                logger.info(
+                    f"Component data: type={component.get('component_type')}, title={component.get('title')}, aggregation={component.get('aggregation')}"
+                )
+
+                # Find and log the original component that will be removed
+                original_component = None
+                for elem in non_edited_components:
+                    if elem.get("index") == parent_index:
+                        original_component = elem
+                        break
+
+                if original_component:
+                    logger.info(
+                        f"Found original component to remove: index={original_component.get('index')}, type={original_component.get('component_type')}, title={original_component.get('title')}, aggregation={original_component.get('aggregation')}"
+                    )
+                else:
+                    logger.warning(f"Could not find original component with index {parent_index}")
 
                 # Remove the original component that was being edited
                 non_edited_components = [
@@ -186,6 +222,9 @@ def register_callbacks_save(app):
                 component["index"] = parent_index
                 logger.info(
                     f"Updated edited component index from {component_index} to {parent_index}"
+                )
+                logger.info(
+                    f"Updated component data: type={component.get('component_type')}, title={component.get('title')}, aggregation={component.get('aggregation')}"
                 )
 
                 # Remove parent_index from the component data before saving
@@ -199,9 +238,10 @@ def register_callbacks_save(app):
             logger.info(
                 f"Unique metadata AFTER processing: {len(unique_metadata)} items (removed {original_count - len(unique_metadata)} items)"
             )
+            logger.info("=== FINAL COMPONENTS AFTER PROCESSING ===")
             for i, elem in enumerate(unique_metadata):
                 logger.info(
-                    f"Final item {i}: index={elem.get('index')}, parent_index={elem.get('parent_index')}, component_type={elem.get('component_type')}"
+                    f"Final item {i}: index={elem.get('index')}, parent_index={elem.get('parent_index')}, component_type={elem.get('component_type')}, title={elem.get('title')}, aggregation={elem.get('aggregation')}"
                 )
             logger.info("=== BTN-DONE-EDIT PROCESSING COMPLETE ===")
 

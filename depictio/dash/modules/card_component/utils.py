@@ -178,12 +178,12 @@ def build_card(**kwargs):
     v = kwargs.get("value")
     build_frame = kwargs.get("build_frame", False)
     refresh = kwargs.get("refresh", False)
-    # stepper = kwargs.get("stepper", False)
+    stepper = kwargs.get("stepper", False)
 
-    # if stepper:
-    #     index = f"{index}-tmp"
-    # else:
-    index = index
+    if stepper:
+        index = f"{index}-tmp"
+    else:
+        index = index
 
     # logger.debug(f"Card kwargs: {kwargs}")
 
@@ -239,14 +239,22 @@ def build_card(**kwargs):
         pass
 
     # Metadata management - Create a store component to store the metadata of the card
-    store_index = index.replace("-tmp", "") if index else "unknown"
+    # For stepper mode, use the temporary index to avoid conflicts with existing components
+    # For normal mode, use the original index (remove -tmp suffix if present)
+    if stepper:
+        store_index = index  # Use the temporary index with -tmp suffix
+        data_index = index.replace("-tmp", "") if index else "unknown"  # Clean index for data
+    else:
+        store_index = index.replace("-tmp", "") if index else "unknown"
+        data_index = store_index
+
     store_component = dcc.Store(
         id={
             "type": "stored-metadata-component",
             "index": str(store_index),
         },
         data={
-            "index": str(store_index),
+            "index": str(data_index),
             "component_type": "card",
             "title": title,
             "wf_id": wf_id,
@@ -287,7 +295,8 @@ def build_card(**kwargs):
     if not build_frame:
         return new_card_body
     else:
-        return build_card_frame(index=index, children=new_card_body)
+        # Show border only when in stepper mode (editing)
+        return build_card_frame(index=index, children=new_card_body, show_border=stepper)
 
 
 # List of all the possible aggregation methods for each data type
