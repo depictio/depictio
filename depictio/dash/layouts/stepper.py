@@ -45,6 +45,7 @@ def register_callbacks_stepper(app):
         Input({"type": "btn-option", "index": MATCH, "value": ALL}, "n_clicks"),
         State("local-store", "data"),
         State("url", "pathname"),
+        prevent_initial_call=True,
     )
     def set_workflow_options(n_clicks, local_store, pathname):
         logger.info(f"CTX Triggered ID: {ctx.triggered_id}")
@@ -107,11 +108,12 @@ def register_callbacks_stepper(app):
     @app.callback(
         Output({"type": "datacollection-selection-label", "index": MATCH}, "data"),
         Output({"type": "datacollection-selection-label", "index": MATCH}, "value"),
-        Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
+        State({"type": "workflow-selection-label", "index": MATCH}, "value"),
         State({"type": "workflow-selection-label", "index": MATCH}, "id"),
         Input({"type": "btn-option", "index": MATCH, "value": ALL}, "n_clicks"),
         State("local-store", "data"),
         State("url", "pathname"),
+        prevent_initial_call=True,
     )
     def set_datacollection_options(selected_workflow, id, n_clicks, local_store, pathname):
         if not local_store:
@@ -131,8 +133,12 @@ def register_callbacks_stepper(app):
                 "Authorization": f"Bearer {TOKEN}",
             },
         ).json()
+        logger.info(f"Id: {id}")
+        logger.info(f"Selected workflow: {selected_workflow}")
         all_wf_dc = project["workflows"]
+        logger.info(f"All workflows and data collections: {all_wf_dc}")
         selected_wf_list = [wf for wf in all_wf_dc if wf["id"] == selected_workflow]
+        logger.info(f"Selected workflow: {selected_wf_list}")
 
         if not selected_wf_list:
             logger.error(f"No workflow found with id '{selected_workflow}'")

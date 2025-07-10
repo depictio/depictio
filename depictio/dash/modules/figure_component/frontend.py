@@ -153,13 +153,10 @@ def register_callbacks_figure_component(app):
         dashboard_id = pathname.split("/")[-1]
         component_index = edit_button_id["index"] if edit_button_id else "unknown"
 
-        # Get available columns
-        try:
-            columns_json = get_columns_from_data_collection(workflow, data_collection, TOKEN)
-            columns = list(columns_json.keys())
-        except Exception as e:
-            logger.error(f"Failed to get columns: {e}")
-            columns = []
+        logger.info(f"Component index: {component_index}")
+        logger.info(f"parent_index: {parent_index}")
+        logger.info(f"Workflow: {workflow}")
+        logger.info(f"Data collection: {data_collection}")
 
         # Get existing component data
         component_data = None
@@ -168,9 +165,26 @@ def register_callbacks_figure_component(app):
                 component_data = get_component_data(
                     input_id=parent_index, dashboard_id=dashboard_id, TOKEN=TOKEN
                 )
-                logger.info(f"Edit mode: loaded component data: {component_data}")
+                logger.info(
+                    f"Edit mode: loaded component data: {component_data} from parent_index: {parent_index} for component {component_index}"
+                )
+                workflow = component_data.get("wf_id", workflow)
+                data_collection = component_data.get("dc_id", data_collection)
+                logger.info(f"Workflow after component data: {workflow}")
+                logger.info(f"Data collection after component data: {data_collection}")
             except Exception as e:
                 logger.warning(f"Failed to get component data: {e}")
+
+        logger.info("Fetching available columns for data collection...")
+        logger.info(f"Workflow ID: {workflow}")
+        logger.info(f"Data Collection ID: {data_collection}")
+        # Get available columns
+        try:
+            columns_json = get_columns_from_data_collection(workflow, data_collection, TOKEN)
+            columns = list(columns_json.keys())
+        except Exception as e:
+            logger.error(f"Failed to get columns: {e}")
+            columns = []
 
         # Determine visualization type from segmented control
         if visu_type:  # visu_type is the label from segmented control
@@ -384,6 +398,14 @@ def register_callbacks_figure_component(app):
         local_data = args[7]
         pathname = args[8]
 
+        logger.info("=== UPDATE FIGURE CALLBACK ===")
+        logger.info(f"Received dict_kwargs: {dict_kwargs}")
+        logger.info(f"Visualization type label: {visu_type_label}")
+        logger.info(f"Workflow ID: {workflow_id}")
+        logger.info(f"Data Collection ID: {data_collection_id}")
+        logger.info(f"Component ID dict: {component_id_dict}")
+        logger.info(f"Parent index: {parent_index}")
+
         if not local_data:
             raise dash.exceptions.PreventUpdate
 
@@ -428,6 +450,8 @@ def register_callbacks_figure_component(app):
 
         # Get column information for defaults
         try:
+            workflow_id = workflow_id or component_data.get("wf_id", "")
+            data_collection_id = data_collection_id or component_data.get("dc_id", "")
             columns_json = get_columns_from_data_collection(workflow_id, data_collection_id, TOKEN)
             columns_specs_reformatted = defaultdict(list)
             {columns_specs_reformatted[v["type"]].append(k) for k, v in columns_json.items()}

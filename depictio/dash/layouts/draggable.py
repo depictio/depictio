@@ -111,20 +111,32 @@ def register_callbacks_draggable(app):
     @app.callback(
         Output("local-store-components-metadata", "data"),
         [
-            Input({"type": "workflow-selection-label", "index": ALL}, "value"),
-            Input({"type": "datacollection-selection-label", "index": ALL}, "value"),
+            State({"type": "workflow-selection-label", "index": ALL}, "value"),
+            State({"type": "datacollection-selection-label", "index": ALL}, "value"),
             Input("url", "pathname"),
+            Input({"type": "btn-done", "index": ALL}, "n_clicks"),
+            Input({"type": "btn-done-edit", "index": ALL}, "n_clicks"),
         ],
         [
             State("local-store", "data"),  # Contains 'access_token'
             State("local-store-components-metadata", "data"),  # Existing components' data
             State({"type": "workflow-selection-label", "index": ALL}, "id"),
             State({"type": "datacollection-selection-label", "index": ALL}, "id"),
+            State("current-edit-parent-index", "data"),  # Retrieve parent_index
         ],
         prevent_initial_call=True,
     )
     def store_wf_dc_selection(
-        wf_values, dc_values, pathname, local_store, components_store, wf_ids, dc_ids
+        wf_values,
+        dc_values,
+        pathname,
+        btn_done_clicks,
+        btn_done_edit_clicks,
+        local_store,
+        components_store,
+        wf_ids,
+        dc_ids,
+        current_edit_parent_index,  # Retrieve parent_index from state
     ):
         """
         Callback to store all components' workflow and data collection data in a centralized store.
@@ -143,11 +155,16 @@ def register_callbacks_draggable(app):
             dict: Updated components' wf/dc data.
         """
         logger.info("Storing workflow and data collection selections in components store.")
-        # logger.info(f"Workflow values (IDs): {wf_values}")
-        # logger.info(f"Data collection values (IDs): {dc_values}")
-        # logger.info(f"URL pathname: {pathname}")
-        # logger.info(f"Local store data: {local_store}")
-        # logger.info(f"Components store data before update: {components_store}")
+        logger.info(f"Workflow values (IDs): {wf_values}")
+        logger.info(f"Data collection values (IDs): {dc_values}")
+        logger.info(f"URL pathname: {pathname}")
+        logger.info(f"Button done clicks: {btn_done_clicks}")
+        logger.info(f"Button done edit clicks: {btn_done_edit_clicks}")
+        logger.info(f"Local store data: {local_store}")
+        logger.info(f"Components store data before update: {components_store}")
+        logger.info(f"Workflow IDs: {wf_ids}")
+        logger.info(f"Data collection IDs: {dc_ids}")
+        logger.info(f"Current edit parent index: {current_edit_parent_index}")
 
         # Validate access token
         if not local_store or "access_token" not in local_store:
@@ -178,7 +195,31 @@ def register_callbacks_draggable(app):
             components_store.setdefault(trigger_index, {})
             components_store[trigger_index]["wf_id"] = wf_id_value
 
+            # Get component data if available
+            component_data = None
+            try:
+                if wf_id_value is None or wf_id_value == "":
+                    dashboard_id = pathname.split("/")[-1]
+                    if current_edit_parent_index:
+                        component_data = get_component_data(
+                            input_id=current_edit_parent_index,
+                            dashboard_id=dashboard_id,
+                            TOKEN=TOKEN,
+                        )
+                        wf_id_value = component_data.get("wf_id", wf_id_value)
+                        logger.info(
+                            f"Component data retrieved for '{trigger_index}': {component_data}"
+                        )
+                        logger.info(f"Updated wf_id_value for '{trigger_index}': {wf_id_value}")
+
+                        logger.info(f"Component data: {component_data}")
+            except Exception as e:
+                logger.warning(f"Failed to get component data: {e}")
+
+            # Use comp
+
             # Get the workflow tag from the ID for reference/display purposes
+            logger.info(f"Updating component '{trigger_index}' with wf_id: {wf_id_value}")
             try:
                 wf_tag = return_wf_tag_from_id(workflow_id=wf_id_value, TOKEN=TOKEN)
                 components_store[trigger_index]["wf_tag"] = wf_tag
@@ -209,6 +250,19 @@ def register_callbacks_draggable(app):
 
             # Get the datacollection tag from the ID for reference/display purposes
             try:
+                if dc_id_value is None or dc_id_value == "":
+                    dashboard_id = pathname.split("/")[-1]
+                    if current_edit_parent_index:
+                        component_data = get_component_data(
+                            input_id=current_edit_parent_index,
+                            dashboard_id=dashboard_id,
+                            TOKEN=TOKEN,
+                        )
+                        dc_id_value = component_data.get("dc_id", dc_id_value)
+                        logger.info(
+                            f"Component data retrieved for '{trigger_index}': {component_data}"
+                        )
+                        logger.info(f"Updated dc_id_value for '{trigger_index}': {dc_id_value}")
                 dc_tag = return_dc_tag_from_id(data_collection_id=dc_id_value, TOKEN=TOKEN)
                 components_store[trigger_index]["dc_tag"] = dc_tag
                 logger.debug(
@@ -886,6 +940,7 @@ def register_callbacks_draggable(app):
                 logger.info("Edit box button clicked")
 
                 input_id = ctx.triggered_id["index"]
+                logger.info(f"Input ID: {input_id}")
 
                 component_data = get_component_data(
                     input_id=input_id, dashboard_id=dashboard_id, TOKEN=TOKEN
