@@ -11,6 +11,11 @@ from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
+from depictio.dash.modules.figure_component.code_executor import SecureCodeExecutor
+from depictio.dash.modules.figure_component.code_mode import (
+    convert_ui_params_to_code,
+    create_code_mode_interface,
+)
 
 # Depictio imports - Updated to use new robust system
 from depictio.dash.modules.figure_component.component_builder import (
@@ -384,6 +389,7 @@ def register_callbacks_figure_component(app):
             State("current-edit-parent-index", "data"),  # Retrieve parent_index
             State("local-store", "data"),
             State("url", "pathname"),
+            State({"type": "figure-mode-store", "index": MATCH}, "data"),
         ],
         prevent_initial_call=True,
     )
@@ -397,14 +403,21 @@ def register_callbacks_figure_component(app):
         parent_index = args[6]
         local_data = args[7]
         pathname = args[8]
+        current_mode = args[9]  # Current mode from figure-mode-store
 
         logger.info("=== UPDATE FIGURE CALLBACK ===")
         logger.info(f"Received dict_kwargs: {dict_kwargs}")
         logger.info(f"Visualization type label: {visu_type_label}")
+        logger.info(f"Current mode: {current_mode}")
         logger.info(f"Workflow ID: {workflow_id}")
         logger.info(f"Data Collection ID: {data_collection_id}")
         logger.info(f"Component ID dict: {component_id_dict}")
         logger.info(f"Parent index: {parent_index}")
+
+        # Don't update if in code mode - let code execution handle it
+        if current_mode == "code":
+            logger.info("Skipping UI figure update - in code mode")
+            raise dash.exceptions.PreventUpdate
 
         if not local_data:
             raise dash.exceptions.PreventUpdate
@@ -450,8 +463,10 @@ def register_callbacks_figure_component(app):
 
         # Get column information for defaults
         try:
-            workflow_id = workflow_id or component_data.get("wf_id", "")
-            data_collection_id = data_collection_id or component_data.get("dc_id", "")
+            workflow_id = workflow_id or (component_data.get("wf_id", "") if component_data else "")
+            data_collection_id = data_collection_id or (
+                component_data.get("dc_id", "") if component_data else ""
+            )
             columns_json = get_columns_from_data_collection(workflow_id, data_collection_id, TOKEN)
             columns_specs_reformatted = defaultdict(list)
             {columns_specs_reformatted[v["type"]].append(k) for k, v in columns_json.items()}
@@ -750,6 +765,7 @@ def register_callbacks_figure_component(app):
             State("local-store", "data"),
             State("theme-store", "data"),
             State("url", "pathname"),
+            State({"type": "figure-mode-store", "index": MATCH}, "data"),
         ],
         prevent_initial_call="initial_load",
     )
@@ -763,16 +779,23 @@ def register_callbacks_figure_component(app):
         local_data,
         theme_data,
         pathname,
+        current_mode,
     ):
         logger.info("=== GENERATE DEFAULT FIGURE CALLBACK ===")
         logger.info(f"Visualization type label: {visu_type_label}")
         logger.info(f"Component index: {component_index}")
+        logger.info(f"Current mode: {current_mode}")
         logger.info(f"Current parameters: {dict_kwargs}")
         logger.info(f"dict_kwargs.keys: {len(list(dict_kwargs.keys()))}")
         logger.info(f"Workflow ID: {workflow_id}")
         logger.info(f"Data Collection ID: {data_collection_id}")
         logger.info(f"parent_index: {parent_index}")
         logger.info(f"pathname: {pathname}")
+
+        # Don't generate default figure if in code mode - let code execution handle it
+        if current_mode == "code":
+            logger.info("Skipping default figure generation - in code mode")
+            raise dash.exceptions.PreventUpdate
 
         # Get existing component data
         component_data = None
@@ -950,6 +973,201 @@ def register_callbacks_figure_component(app):
         prevent_initial_call=True,
     )
 
+    # Mode switching callback
+    @app.callback(
+        [
+            Output({"type": "ui-mode-header", "index": MATCH}, "style"),
+            Output({"type": "ui-mode-content", "index": MATCH}, "style"),
+            Output({"type": "code-mode-content", "index": MATCH}, "style"),
+            Output({"type": "code-mode-interface", "index": MATCH}, "children"),
+            Output({"type": "figure-mode-store", "index": MATCH}, "data"),
+        ],
+        [
+            Input({"type": "figure-mode-toggle", "index": MATCH}, "value"),
+        ],
+        [
+            State({"type": "figure-mode-store", "index": MATCH}, "data"),
+            State({"type": "dict_kwargs", "index": MATCH}, "data"),
+            State({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
+            State({"type": "code-content-store", "index": MATCH}, "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def handle_mode_switch(mode, current_mode, dict_kwargs, visu_type_label, current_code):
+        """Handle switching between UI and Code modes"""
+        logger.info(f"Mode switch triggered: {current_mode} -> {mode}")
+
+        component_id = dash.callback_context.triggered[0]["prop_id"].split(".")[0]
+        component_index = eval(component_id)["index"]
+
+        if mode == "ui":
+            # Switch to UI mode
+            ui_header_style = {"display": "block"}
+            ui_content_style = {"display": "block"}
+            code_content_style = {"display": "none"}
+            code_interface_children = []
+        else:
+            # Switch to Code mode
+            ui_header_style = {"display": "none"}
+            ui_content_style = {"display": "none"}
+            code_content_style = {"display": "block"}
+
+            # Create code mode interface
+            code_interface_children = create_code_mode_interface(component_index)
+
+        return (
+            ui_header_style,
+            ui_content_style,
+            code_content_style,
+            code_interface_children,
+            mode,
+        )
+
+    # Parameter preservation callback - UI to Code
+    @app.callback(
+        Output({"type": "code-editor", "index": MATCH}, "value", allow_duplicate=True),
+        [
+            Input({"type": "figure-mode-toggle", "index": MATCH}, "value"),
+        ],
+        [
+            State({"type": "dict_kwargs", "index": MATCH}, "data"),
+            State({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
+        ],
+        prevent_initial_call=True,
+    )
+    def preserve_ui_to_code(mode, dict_kwargs, visu_type_label):
+        """Convert UI parameters to code when switching to code mode"""
+        if mode == "code" and dict_kwargs:
+            # Convert visualization label to name
+            visu_type = "scatter"  # Default fallback
+            if visu_type_label:
+                available_vizs = get_available_visualizations()
+                for viz in available_vizs:
+                    if viz.label == visu_type_label:
+                        visu_type = viz.name
+                        break
+
+            # Convert UI parameters to code
+            generated_code = convert_ui_params_to_code(dict_kwargs, visu_type)
+            if generated_code:
+                return generated_code
+
+        return dash.no_update
+
+    # Parameter preservation callback - Code to UI (disabled for now due to component lifecycle issues)
+    # @app.callback(
+    #     Output({"type": "dict_kwargs", "index": MATCH}, "data", allow_duplicate=True),
+    #     [
+    #         Input({"type": "figure-mode-toggle", "index": MATCH}, "value"),
+    #     ],
+    #     [
+    #         State({"type": "dict_kwargs", "index": MATCH}, "data"),
+    #     ],
+    #     prevent_initial_call=True,
+    # )
+    # def preserve_code_to_ui(mode, current_kwargs):
+    #     """Preserve parameters when switching to UI mode"""
+    #     return dash.no_update
+
+    # Code execution callback
+    @app.callback(
+        [
+            Output({"type": "code-generated-figure", "index": MATCH}, "data"),
+            Output({"type": "code-status", "index": MATCH}, "children"),
+            Output({"type": "code-status", "index": MATCH}, "color"),
+            Output({"type": "code-status", "index": MATCH}, "title"),
+        ],
+        [
+            Input({"type": "code-execute-btn", "index": MATCH}, "n_clicks"),
+        ],
+        [
+            State({"type": "code-editor", "index": MATCH}, "value"),
+            State({"type": "workflow-selection-label", "index": MATCH}, "value"),
+            State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+            State("local-store", "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def execute_code(n_clicks, code, workflow_id, data_collection_id, local_data):
+        """Execute Python code and generate figure"""
+        if not n_clicks or not code:
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+        if not local_data:
+            return (
+                html.Div("Authentication required"),
+                "Authentication required to execute code",
+                "red",
+                "Error",
+            )
+
+        try:
+            # Get dataset from actual data collection
+            import pandas as pd
+
+            if workflow_id and data_collection_id:
+                from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+                TOKEN = local_data["access_token"]
+                loaded_df = load_deltatable_lite(workflow_id, data_collection_id, TOKEN=TOKEN)
+                # Convert Polars DataFrame to Pandas DataFrame
+                df = (
+                    loaded_df.to_pandas()
+                    if hasattr(loaded_df, "to_pandas")
+                    else pd.DataFrame(loaded_df)
+                )
+            else:
+                return (
+                    None,
+                    "Please select a workflow and data collection",
+                    "orange",
+                    "Warning",
+                )
+
+            # Execute code securely
+            executor = SecureCodeExecutor()
+            success, result, message = executor.execute_code(code, df)
+
+            if success and result:
+                # Store the figure data for further processing
+                figure_data = result.to_dict()
+                return (figure_data, "Code executed successfully!", "green", "Success")
+            else:
+                return (None, message, "red", "Error")
+
+        except Exception as e:
+            error_msg = f"Unexpected error: {str(e)}"
+            logger.error(f"Code execution error: {error_msg}")
+            return (None, error_msg, "red", "Error")
+
+    # Update figure when code is executed successfully
+    @app.callback(
+        Output({"type": "figure-body", "index": MATCH}, "children", allow_duplicate=True),
+        [
+            Input({"type": "code-generated-figure", "index": MATCH}, "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def update_figure_from_code(figure_data):
+        """Update the figure display when code execution succeeds"""
+        if figure_data:
+            return dcc.Graph(figure=figure_data, style={"height": "100%"})
+        return dash.no_update
+
+    # Clear code callback
+    @app.callback(
+        Output({"type": "code-editor", "index": MATCH}, "value", allow_duplicate=True),
+        [
+            Input({"type": "code-clear-btn", "index": MATCH}, "n_clicks"),
+        ],
+        prevent_initial_call=True,
+    )
+    def clear_code(n_clicks):
+        """Clear the code editor"""
+        if n_clicks:
+            return ""
+        return dash.no_update
+
 
 def design_figure(id, component_data=None):
     # Get limited set of visualizations for user request: Scatter, Bar, Box, Line only
@@ -975,92 +1193,136 @@ def design_figure(id, component_data=None):
 
     # Create layout optimized for fullscreen modal
     figure_row = [
-        # Compact header with controls
-        dmc.Group(
+        # Mode toggle (central and prominent)
+        dmc.Center(
             [
-                # Styled visualization selector
-                dmc.Group(
-                    [
-                        DashIconify(icon="mdi:chart-line", width=18, color="#228be6"),
-                        dmc.Text(
-                            "Visualization",
-                            fw="bold",
-                            size="sm",
-                            c="dark",
-                            style={"marginRight": "8px"},
-                        ),
-                        dmc.Select(
-                            data=viz_options,
-                            value=default_value,
-                            id={
-                                "type": "segmented-control-visu-graph",
-                                "index": id["index"],
-                            },
-                            placeholder="Choose type...",
-                            clearable=False,
-                            searchable=False,
-                            size="sm",
-                            style={"width": "160px"},
-                            comboboxProps={"withinPortal": False},
-                        ),
+                dmc.SegmentedControl(
+                    id={"type": "figure-mode-toggle", "index": id["index"]},
+                    data=[
+                        {"label": "UI Mode", "value": "ui"},
+                        {"label": "Code Mode", "value": "code"},
                     ],
-                    gap="xs",
-                    align="center",
-                ),
-                # Edit button - close to visualization selector
-                dmc.Button(
-                    "Edit Figure",
-                    id={
-                        "type": "edit-button",
-                        "index": id["index"],
-                    },
-                    n_clicks=0,
+                    value="ui",  # Default to UI mode
                     size="sm",
-                    leftSection=DashIconify(icon="mdi:cog", width=16),
-                    variant="outline",
-                    color="blue",
-                    style={"fontWeight": 500},
-                ),
-            ],
-            justify="flex-start",
-            align="center",
-            gap="lg",
-            style={"marginBottom": "10px", "width": "100%", "padding": "0 5px"},
+                    style={"marginBottom": "15px"},
+                )
+            ]
         ),
-        # Main content area - split layout for fullscreen
+        # Compact header with controls (only shown in UI mode)
         html.Div(
             [
-                # Figure display - left side, smaller for fullscreen
+                dmc.Group(
+                    [
+                        # Styled visualization selector
+                        dmc.Group(
+                            [
+                                DashIconify(icon="mdi:chart-line", width=18, color="#228be6"),
+                                dmc.Text(
+                                    "Visualization",
+                                    fw="bold",
+                                    size="sm",
+                                    c="dark",
+                                    style={"marginRight": "8px"},
+                                ),
+                                dmc.Select(
+                                    data=viz_options,
+                                    value=default_value,
+                                    id={
+                                        "type": "segmented-control-visu-graph",
+                                        "index": id["index"],
+                                    },
+                                    placeholder="Choose type...",
+                                    clearable=False,
+                                    searchable=False,
+                                    size="sm",
+                                    style={"width": "160px"},
+                                    comboboxProps={"withinPortal": False},
+                                ),
+                            ],
+                            gap="xs",
+                            align="center",
+                        ),
+                        # Edit button - close to visualization selector
+                        dmc.Button(
+                            "Edit Figure",
+                            id={
+                                "type": "edit-button",
+                                "index": id["index"],
+                            },
+                            n_clicks=0,
+                            size="sm",
+                            leftSection=DashIconify(icon="mdi:cog", width=16),
+                            variant="outline",
+                            color="blue",
+                            style={"fontWeight": 500},
+                        ),
+                    ],
+                    justify="flex-start",
+                    align="center",
+                    gap="lg",
+                    style={"marginBottom": "10px", "width": "100%", "padding": "0 5px"},
+                )
+            ],
+            id={"type": "ui-mode-header", "index": id["index"]},
+        ),
+        # Main content area - side-by-side layout
+        html.Div(
+            id={"type": "main-content-area", "index": id["index"]},
+            children=[
+                # Left side - Shared figure container (used by both UI and Code modes)
                 html.Div(
                     build_figure_frame(index=id["index"]),
                     id={
-                        "type": "component-container",
+                        "type": "shared-figure-container",
                         "index": id["index"],
                     },
                     style={
-                        "width": "60%",  # Smaller width for fullscreen
-                        "height": "60vh",  # Fixed height for better space usage
+                        "width": "60%",
+                        "height": "60vh",
                         "display": "inline-block",
                         "verticalAlign": "top",
                         "marginRight": "2%",
                     },
                 ),
-                # Collapsible edit panel - right side
+                # Right side - Mode-specific controls
                 html.Div(
-                    dbc.Collapse(
-                        id={
-                            "type": "collapse",
-                            "index": id["index"],
-                        },
-                        is_open=False,
-                        style={
-                            "height": "60vh",
-                            "overflowY": "auto",
-                            "scrollBehavior": "smooth",  # Smooth scrolling
-                        },
-                    ),
+                    children=[
+                        # UI Mode Layout (default) - edit panel
+                        html.Div(
+                            [
+                                dbc.Collapse(
+                                    id={
+                                        "type": "collapse",
+                                        "index": id["index"],
+                                    },
+                                    is_open=False,
+                                    style={
+                                        "height": "60vh",
+                                        "overflowY": "auto",
+                                        "scrollBehavior": "smooth",
+                                    },
+                                ),
+                            ],
+                            id={"type": "ui-mode-content", "index": id["index"]},
+                            style={"display": "block"},
+                        ),
+                        # Code Mode Layout (hidden by default) - code interface
+                        html.Div(
+                            [
+                                html.Div(
+                                    id={"type": "code-mode-interface", "index": id["index"]},
+                                    style={
+                                        "width": "100%",
+                                        "height": "60vh",
+                                    },
+                                ),
+                            ],
+                            id={"type": "code-mode-content", "index": id["index"]},
+                            style={"display": "none"},
+                        ),
+                    ],
                     style={
-                        "width": "38%",  # Remaining width
+                        "width": "38%",
                         "display": "inline-block",
                         "verticalAlign": "top",
                         "height": "60vh",
@@ -1073,6 +1335,22 @@ def design_figure(id, component_data=None):
         dcc.Store(
             id={"type": "dict_kwargs", "index": id["index"]},
             data={},  # Initialize empty to trigger default generation
+            storage_type="memory",
+        ),
+        # Mode management stores
+        dcc.Store(
+            id={"type": "figure-mode-store", "index": id["index"]},
+            data="ui",  # Default to UI mode
+            storage_type="memory",
+        ),
+        dcc.Store(
+            id={"type": "code-content-store", "index": id["index"]},
+            data="",  # Store for code content
+            storage_type="memory",
+        ),
+        dcc.Store(
+            id={"type": "code-generated-figure", "index": id["index"]},
+            data=None,  # Store for code-generated figure data
             storage_type="memory",
         ),
         # Hidden stores for scroll position preservation
