@@ -740,6 +740,7 @@ def register_callbacks_figure_component(app):
         Output({"type": "figure-body", "index": MATCH}, "children", allow_duplicate=True),
         [
             Input({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
+            Input({"type": "segmented-control-visu-graph", "index": MATCH}, "id"),
         ],
         [
             State({"type": "dict_kwargs", "index": MATCH}, "data"),
@@ -754,6 +755,7 @@ def register_callbacks_figure_component(app):
     )
     def generate_default_figure_on_load(
         visu_type_label,
+        component_index,
         dict_kwargs,
         workflow_id,
         data_collection_id,
@@ -764,12 +766,19 @@ def register_callbacks_figure_component(app):
     ):
         logger.info("=== GENERATE DEFAULT FIGURE CALLBACK ===")
         logger.info(f"Visualization type label: {visu_type_label}")
+        logger.info(f"Component index: {component_index}")
         logger.info(f"Current parameters: {dict_kwargs}")
         logger.info(f"dict_kwargs.keys: {len(list(dict_kwargs.keys()))}")
         logger.info(f"Workflow ID: {workflow_id}")
         logger.info(f"Data Collection ID: {data_collection_id}")
         logger.info(f"parent_index: {parent_index}")
         logger.info(f"pathname: {pathname}")
+
+        # Get the actual component ID from the callback context
+        if not component_index:
+            component_id = "default_component"
+        else:
+            component_id = component_index["index"]
 
         if not local_data:
             raise dash.exceptions.PreventUpdate
@@ -838,7 +847,7 @@ def register_callbacks_figure_component(app):
 
             # Build figure
             figure_kwargs = {
-                "index": "default",  # Use default index for initial generation
+                "index": component_id,  # Use the correct component ID
                 "dict_kwargs": dict_kwargs,
                 "visu_type": visu_type,
                 "wf_id": workflow_id,
@@ -847,6 +856,10 @@ def register_callbacks_figure_component(app):
                 "access_token": TOKEN,
                 "theme": theme,
             }
+
+            # Add parent_index if available
+            if parent_index:
+                figure_kwargs["parent_index"] = parent_index
 
             return build_figure(**figure_kwargs)
 
