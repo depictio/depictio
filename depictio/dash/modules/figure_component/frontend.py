@@ -774,6 +774,24 @@ def register_callbacks_figure_component(app):
         logger.info(f"parent_index: {parent_index}")
         logger.info(f"pathname: {pathname}")
 
+        # Get existing component data
+        component_data = None
+        if parent_index:
+            try:
+                dashboard_id = pathname.split("/")[-1]
+                component_data = get_component_data(
+                    input_id=parent_index, dashboard_id=dashboard_id, TOKEN=TOKEN
+                )
+                logger.info(
+                    f"Edit mode: loaded component data: {component_data} from parent_index: {parent_index} for component {component_index}"
+                )
+                workflow = component_data.get("wf_id", workflow_id)
+                data_collection = component_data.get("dc_id", data_collection_id)
+                logger.info(f"Workflow after component data: {workflow}")
+                logger.info(f"Data collection after component data: {data_collection}")
+            except Exception as e:
+                logger.warning(f"Failed to get component data: {e}")
+
         # Get the actual component ID from the callback context
         if not component_index:
             component_id = "default_component"
@@ -781,6 +799,12 @@ def register_callbacks_figure_component(app):
             component_id = component_index["index"]
 
         if not local_data:
+            raise dash.exceptions.PreventUpdate
+
+        # Prevent update if we don't have the required workflow and data collection IDs
+        # This can happen when the callback is triggered during edit mode
+        if not workflow_id or not data_collection_id:
+            logger.info("Missing workflow_id or data_collection_id, preventing figure generation")
             raise dash.exceptions.PreventUpdate
 
         if len(list(dict_kwargs.keys())) == 0 and parent_index:

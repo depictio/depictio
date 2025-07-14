@@ -995,19 +995,32 @@ def register_callbacks_draggable(app):
                 for metadata in stored_metadata:
                     if str(metadata["index"]) == str(index):
                         parent_index = metadata["parent_index"]
-                        parent_metadata = metadata
                 for child, metadata in zip(test_container, stored_metadata):
                     child_index = str(child["props"]["id"]["index"])
                     if str(child_index) == str(index):
                         logger.info(f"Found child with index: {child_index}")
                         logger.info(f"Index: {index}")
                         logger.info(f"Metadata: {metadata}")
+                        # Create metadata with parent_index as the component ID for proper replacement
+                        metadata_for_render = metadata.copy()
+                        metadata_for_render["index"] = parent_index
+
+                        # Re-render the component with updated metadata to ensure it has the latest data
+                        fresh_child = render_raw_children(
+                            metadata_for_render,
+                            switch_state=False,  # Don't add edit buttons initially
+                            dashboard_id=dashboard_id,
+                            TOKEN=TOKEN,
+                            theme=theme,
+                        )[0]
+
+                        # Then wrap it with edit buttons
                         edited_child = enable_box_edit_mode(
-                            child,
+                            fresh_child,
                             edit_components_mode_button,
                             dashboard_id=dashboard_id,
                             fresh=False,
-                            component_data=parent_metadata,
+                            component_data=metadata_for_render,
                             TOKEN=TOKEN,
                         )
 
@@ -1019,12 +1032,15 @@ def register_callbacks_draggable(app):
                         else:
                             updated_children.append(child)
 
+                    # Update the layout to use the parent_index (keep the component at the same position)
+                    # The edited component should replace the original component in the same layout position
                     for bp in required_breakpoints:
                         # logger.info(f"BP: {bp}")
                         for layout in draggable_layouts[bp]:
                             # logger.info(f"Layout: {layout}")
                             if layout["i"] == f"box-{parent_index}":
-                                layout["i"] = f"box-{index}"
+                                # Keep the layout ID as parent_index (don't change to new index)
+                                # This ensures the component stays in the same position
                                 break
 
                     state_stored_draggable_layouts[dashboard_id] = draggable_layouts
