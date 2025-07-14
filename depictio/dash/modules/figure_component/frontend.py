@@ -976,7 +976,6 @@ def register_callbacks_figure_component(app):
     # Mode switching callback
     @app.callback(
         [
-            Output({"type": "ui-mode-header", "index": MATCH}, "style"),
             Output({"type": "ui-mode-content", "index": MATCH}, "style"),
             Output({"type": "code-mode-content", "index": MATCH}, "style"),
             Output({"type": "code-mode-interface", "index": MATCH}, "children"),
@@ -1002,13 +1001,11 @@ def register_callbacks_figure_component(app):
 
         if mode == "ui":
             # Switch to UI mode
-            ui_header_style = {"display": "block"}
             ui_content_style = {"display": "block"}
             code_content_style = {"display": "none"}
             code_interface_children = []
         else:
             # Switch to Code mode
-            ui_header_style = {"display": "none"}
             ui_content_style = {"display": "none"}
             code_content_style = {"display": "block"}
 
@@ -1016,7 +1013,6 @@ def register_callbacks_figure_component(app):
             code_interface_children = create_code_mode_interface(component_index)
 
         return (
-            ui_header_style,
             ui_content_style,
             code_content_style,
             code_interface_children,
@@ -1037,6 +1033,10 @@ def register_callbacks_figure_component(app):
     )
     def preserve_ui_to_code(mode, dict_kwargs, visu_type_label):
         """Convert UI parameters to code when switching to code mode"""
+        logger.info(
+            f"preserve_ui_to_code called: mode={mode}, dict_kwargs={dict_kwargs}, visu_type_label={visu_type_label}"
+        )
+
         if mode == "code" and dict_kwargs:
             # Convert visualization label to name
             visu_type = "scatter"  # Default fallback
@@ -1047,8 +1047,12 @@ def register_callbacks_figure_component(app):
                         visu_type = viz.name
                         break
 
+            logger.info(f"Converting to visu_type: {visu_type}")
+
             # Convert UI parameters to code
             generated_code = convert_ui_params_to_code(dict_kwargs, visu_type)
+            logger.info(f"Generated code: {generated_code}")
+
             if generated_code:
                 return generated_code
 
@@ -1168,6 +1172,97 @@ def register_callbacks_figure_component(app):
             return ""
         return dash.no_update
 
+    # Populate DataFrame columns information in code mode
+    @app.callback(
+        Output({"type": "columns-info", "index": MATCH}, "children"),
+        Input({"type": "figure-mode-toggle", "index": MATCH}, "value"),
+        State("local-store", "data"),
+        State("url", "pathname"),
+        State({"type": "columns-info", "index": MATCH}, "id"),
+        prevent_initial_call=True,
+    )
+    def update_columns_info(mode, local_data, pathname, index_data):
+        """Update the available columns information for code mode"""
+        logger.info("\n")
+        logger.info(f"update_columns_info called: mode={mode}")
+
+        # Only update when in code mode
+        if mode != "code":
+            logger.info("Not in code mode, skipping update")
+            return dash.no_update
+
+        if not local_data:
+            logger.info("No local data available")
+            return "Authentication required."
+
+        try:
+            # Get component index from the callback context
+            component_index = index_data["index"]
+            dashboard_id = pathname.split("/")[-1]
+
+            logger.info(
+                f"Getting component data for index: {component_index}, dashboard: {dashboard_id}"
+            )
+
+            component_data = get_component_data(
+                input_id=component_index,
+                dashboard_id=dashboard_id,
+                TOKEN=local_data["access_token"],
+            )
+
+            workflow_id = component_data.get("wf_id")
+            data_collection_id = component_data.get("dc_id")
+
+            logger.info(
+                f"Retrieved workflow_id: {workflow_id}, data_collection_id: {data_collection_id}"
+            )
+
+            if not workflow_id or not data_collection_id:
+                return "Please ensure workflow and data collection are selected in the component."
+
+            from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+            TOKEN = local_data["access_token"]
+            loaded_df = load_deltatable_lite(workflow_id, data_collection_id, TOKEN=TOKEN)
+
+            # Convert to pandas to get column info
+            import pandas as pd
+
+            df = (
+                loaded_df.to_pandas()
+                if hasattr(loaded_df, "to_pandas")
+                else pd.DataFrame(loaded_df)
+            )
+
+            if df.empty:
+                return "No data available in the selected data collection."
+
+            # Create formatted column information
+            columns_info = []
+            for col in df.columns:
+                dtype = str(df[col].dtype)
+                # Simplify dtype names
+                if dtype.startswith("int"):
+                    dtype = "integer"
+                elif dtype.startswith("float"):
+                    dtype = "float"
+                elif dtype == "object":
+                    dtype = "text"
+                elif dtype.startswith("datetime"):
+                    dtype = "datetime"
+
+                columns_info.append(f"• {col} ({dtype})")
+
+            columns_text = (
+                f"DataFrame shape: {df.shape[0]} rows × {df.shape[1]} columns\n\n"
+                + "\n".join(columns_info)
+            )
+            return dmc.Text(columns_text, style={"whiteSpace": "pre-line", "fontSize": "12px"})
+
+        except Exception as e:
+            logger.error(f"Error loading column information: {e}")
+            return f"Error loading column information: {str(e)}"
+
 
 def design_figure(id, component_data=None):
     # Get limited set of visualizations for user request: Scatter, Bar, Box, Line only
@@ -1208,62 +1303,10 @@ def design_figure(id, component_data=None):
                 )
             ]
         ),
-        # Compact header with controls (only shown in UI mode)
+        # UI mode header - now empty since controls moved to right column
         html.Div(
-            [
-                dmc.Group(
-                    [
-                        # Styled visualization selector
-                        dmc.Group(
-                            [
-                                DashIconify(icon="mdi:chart-line", width=18, color="#228be6"),
-                                dmc.Text(
-                                    "Visualization",
-                                    fw="bold",
-                                    size="sm",
-                                    c="dark",
-                                    style={"marginRight": "8px"},
-                                ),
-                                dmc.Select(
-                                    data=viz_options,
-                                    value=default_value,
-                                    id={
-                                        "type": "segmented-control-visu-graph",
-                                        "index": id["index"],
-                                    },
-                                    placeholder="Choose type...",
-                                    clearable=False,
-                                    searchable=False,
-                                    size="sm",
-                                    style={"width": "160px"},
-                                    comboboxProps={"withinPortal": False},
-                                ),
-                            ],
-                            gap="xs",
-                            align="center",
-                        ),
-                        # Edit button - close to visualization selector
-                        dmc.Button(
-                            "Edit Figure",
-                            id={
-                                "type": "edit-button",
-                                "index": id["index"],
-                            },
-                            n_clicks=0,
-                            size="sm",
-                            leftSection=DashIconify(icon="mdi:cog", width=16),
-                            variant="outline",
-                            color="blue",
-                            style={"fontWeight": 500},
-                        ),
-                    ],
-                    justify="flex-start",
-                    align="center",
-                    gap="lg",
-                    style={"marginBottom": "10px", "width": "100%", "padding": "0 5px"},
-                )
-            ],
             id={"type": "ui-mode-header", "index": id["index"]},
+            style={"display": "block", "height": "0px"},  # Keep visible for callback but no height
         ),
         # Main content area - side-by-side layout
         html.Div(
@@ -1287,20 +1330,71 @@ def design_figure(id, component_data=None):
                 # Right side - Mode-specific controls
                 html.Div(
                     children=[
-                        # UI Mode Layout (default) - edit panel
+                        # UI Mode Layout (default) - simple controls
                         html.Div(
                             [
-                                dbc.Collapse(
-                                    id={
-                                        "type": "collapse",
-                                        "index": id["index"],
-                                    },
-                                    is_open=False,
-                                    style={
-                                        "height": "60vh",
-                                        "overflowY": "auto",
-                                        "scrollBehavior": "smooth",
-                                    },
+                                html.Div(
+                                    [
+                                        # Visualization section
+                                        html.Div(
+                                            [
+                                                dmc.Text(
+                                                    "Visualization Type:",
+                                                    fw="bold",
+                                                    size="sm",
+                                                    style={"marginBottom": "8px"},
+                                                ),
+                                                dmc.Select(
+                                                    data=viz_options,
+                                                    value=default_value,
+                                                    id={
+                                                        "type": "segmented-control-visu-graph",
+                                                        "index": id["index"],
+                                                    },
+                                                    placeholder="Choose type...",
+                                                    clearable=False,
+                                                    searchable=False,
+                                                    size="sm",
+                                                    style={"width": "100%"},
+                                                ),
+                                            ],
+                                            style={"marginBottom": "20px"},
+                                        ),
+                                        # Edit button section
+                                        html.Div(
+                                            [
+                                                dmc.Button(
+                                                    "Edit Figure",
+                                                    id={
+                                                        "type": "edit-button",
+                                                        "index": id["index"],
+                                                    },
+                                                    n_clicks=0,
+                                                    size="sm",
+                                                    leftSection=DashIconify(
+                                                        icon="mdi:cog", width=16
+                                                    ),
+                                                    variant="outline",
+                                                    color="blue",
+                                                    fullWidth=True,
+                                                ),
+                                            ],
+                                            style={"marginBottom": "20px"},
+                                        ),
+                                        # Edit panel
+                                        dbc.Collapse(
+                                            id={
+                                                "type": "collapse",
+                                                "index": id["index"],
+                                            },
+                                            is_open=False,
+                                            style={
+                                                "overflowY": "auto",
+                                                "maxHeight": "35vh",
+                                            },
+                                        ),
+                                    ],
+                                    style={"padding": "20px"},
                                 ),
                             ],
                             id={"type": "ui-mode-content", "index": id["index"]},

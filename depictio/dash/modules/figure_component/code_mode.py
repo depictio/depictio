@@ -156,6 +156,15 @@ def create_code_mode_interface(component_index: str) -> html.Div:
                         style={"marginTop": "15px"},
                         withCloseButton=False,
                     ),
+                    # Available columns information
+                    dmc.Alert(
+                        id={"type": "columns-info", "index": component_index},
+                        title="Available Columns",
+                        color="teal",
+                        children="Loading column information...",
+                        style={"marginTop": "15px"},
+                        withCloseButton=False,
+                    ),
                 ]
             ),
             # Note: code-generated-figure store is created in design_figure function
