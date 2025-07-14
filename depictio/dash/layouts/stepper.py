@@ -238,7 +238,7 @@ def register_callbacks_stepper(app):
 
 
 def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
-    logger.info(f"Component data: {component_data}")
+    # logger.info(f"Component data: {component_data}")
     id = {"type": f"{component_data['component_type']}-component", "index": n}
 
     # wf_tag = return_wf_tag_from_id(component_data["wf_id"], TOKEN=TOKEN)
@@ -295,10 +295,10 @@ def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
         style={"display": "none"},
     )
 
-    logger.info(f"Select row: {select_row}")
+    # logger.info(f"Select row: {select_row}")
 
     df = load_deltatable_lite(component_data["wf_id"], component_data["dc_id"], TOKEN=TOKEN)
-    logger.info(f"DF: {df}")
+    # logger.info(f"DF: {df}")
 
     def return_design_component(component_selected, id, df):
         if component_selected == "Figure":
@@ -312,7 +312,7 @@ def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
 
     component_selected = component_data["component_type"].capitalize()
     card = return_design_component(component_selected=component_selected, id=id, df=df)
-    logger.info(f"Card: {card}")
+    # logger.info(f"Card: {card}")
 
     # Use html.Div instead of dbc.Row to avoid Bootstrap grid constraints
     modal_body = [select_row, html.Div(card, style={"width": "100%"})]
@@ -367,7 +367,7 @@ def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
             },
         },
     )
-    logger.info(f"TEST MODAL: {modal}")
+    # logger.info(f"TEST MODAL: {modal}")
 
     return modal
 

@@ -198,7 +198,16 @@ COMMON_PARAMETERS = [
         category=ParameterCategory.COMMON,
         label="Template",
         description="Plotly template to use",
-        options=["plotly", "plotly_white", "plotly_dark", "ggplot2", "seaborn", "simple_white"],
+        options=[
+            "plotly",
+            "plotly_white",
+            "plotly_dark",
+            "ggplot2",
+            "seaborn",
+            "simple_white",
+            "mantine_white",
+            "mantine_dark",
+        ],
         default="plotly",
     ),
     ParameterDefinition(

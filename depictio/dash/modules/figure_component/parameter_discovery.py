@@ -64,6 +64,8 @@ class ParameterInspector:
                 "ggplot2",
                 "seaborn",
                 "simple_white",
+                "mantine_white",
+                "mantine_dark",
             ],
             "description": "Plotly template",
             "default": "plotly",

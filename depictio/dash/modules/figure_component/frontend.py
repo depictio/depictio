@@ -745,17 +745,51 @@ def register_callbacks_figure_component(app):
             State({"type": "dict_kwargs", "index": MATCH}, "data"),
             State({"type": "workflow-selection-label", "index": MATCH}, "value"),
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+            State("current-edit-parent-index", "data"),  # Retrieve parent_index
             State("local-store", "data"),
             State("theme-store", "data"),
+            State("url", "pathname"),
         ],
         prevent_initial_call="initial_load",
     )
     def generate_default_figure_on_load(
-        visu_type_label, dict_kwargs, workflow_id, data_collection_id, local_data, theme_data
+        visu_type_label,
+        dict_kwargs,
+        workflow_id,
+        data_collection_id,
+        parent_index,
+        local_data,
+        theme_data,
+        pathname,
     ):
-        """Generate default figure when visualization type is first set."""
-        if not local_data or not workflow_id or not data_collection_id:
+        logger.info("=== GENERATE DEFAULT FIGURE CALLBACK ===")
+        logger.info(f"Visualization type label: {visu_type_label}")
+        logger.info(f"Current parameters: {dict_kwargs}")
+        logger.info(f"dict_kwargs.keys: {len(list(dict_kwargs.keys()))}")
+        logger.info(f"Workflow ID: {workflow_id}")
+        logger.info(f"Data Collection ID: {data_collection_id}")
+        logger.info(f"parent_index: {parent_index}")
+        logger.info(f"pathname: {pathname}")
+
+        if not local_data:
             raise dash.exceptions.PreventUpdate
+
+        if len(list(dict_kwargs.keys())) == 0 and parent_index:
+            try:
+                component_data = get_component_data(
+                    input_id=parent_index,
+                    dashboard_id=pathname.split("/")[-1],
+                    TOKEN=local_data["access_token"],
+                )
+                workflow_id = component_data.get("wf_id", workflow_id)
+                data_collection_id = component_data.get("dc_id", data_collection_id)
+                dict_kwargs = component_data.get("dict_kwargs", dict_kwargs)
+                logger.info("------ COMPONENT DATA LOADED ---")
+                logger.info(f"Loaded component data: {component_data}")
+                logger.info(f"Workflow ID: {workflow_id}")
+                logger.info(f"Data Collection ID: {data_collection_id}")
+            except Exception as e:
+                logger.error(f"Failed to get component data: {e}")
 
         try:
             TOKEN = local_data["access_token"]

@@ -166,8 +166,8 @@ def register_callbacks_draggable(app):
         logger.info(f"Button done edit clicks: {btn_done_edit_clicks}")
         logger.info(f"Edit box button clicks: {edit_box_button_clicks}")
         logger.info(f"Duplicate box button clicks: {duplicate_box_button_clicks}")
-        logger.info(f"Local store data: {local_store}")
-        logger.info(f"Components store data before update: {components_store}")
+        # logger.info(f"Local store data: {local_store}")
+        # logger.info(f"Components store data before update: {components_store}")
         logger.info(f"Workflow IDs: {wf_ids}")
         logger.info(f"Data collection IDs: {dc_ids}")
         logger.info(f"Current edit parent index: {current_edit_parent_index}")
@@ -989,7 +989,9 @@ def register_callbacks_draggable(app):
 
                 edited_child = None
                 parent_index = None
-
+                logger.info(f"Index: {index}")
+                logger.info(f"Stored metadata: {stored_metadata}")
+                logger.info(f"test_container: {test_container}")
                 for metadata in stored_metadata:
                     if str(metadata["index"]) == str(index):
                         parent_index = metadata["parent_index"]
@@ -997,6 +999,9 @@ def register_callbacks_draggable(app):
                 for child, metadata in zip(test_container, stored_metadata):
                     child_index = str(child["props"]["id"]["index"])
                     if str(child_index) == str(index):
+                        logger.info(f"Found child with index: {child_index}")
+                        logger.info(f"Index: {index}")
+                        logger.info(f"Metadata: {metadata}")
                         edited_child = enable_box_edit_mode(
                             child,
                             edit_components_mode_button,
