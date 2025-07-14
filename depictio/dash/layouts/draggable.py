@@ -990,37 +990,24 @@ def register_callbacks_draggable(app):
                 edited_child = None
                 parent_index = None
                 logger.info(f"Index: {index}")
-                logger.info(f"Stored metadata: {stored_metadata}")
+                # logger.info(f"Stored metadata: {stored_metadata}")
                 logger.info(f"test_container: {test_container}")
                 for metadata in stored_metadata:
                     if str(metadata["index"]) == str(index):
                         parent_index = metadata["parent_index"]
+                        parent_metadata = metadata
                 for child, metadata in zip(test_container, stored_metadata):
                     child_index = str(child["props"]["id"]["index"])
                     if str(child_index) == str(index):
                         logger.info(f"Found child with index: {child_index}")
                         logger.info(f"Index: {index}")
                         logger.info(f"Metadata: {metadata}")
-                        # Create metadata with parent_index as the component ID for proper replacement
-                        metadata_for_render = metadata.copy()
-                        metadata_for_render["index"] = parent_index
-
-                        # Re-render the component with updated metadata to ensure it has the latest data
-                        fresh_child = render_raw_children(
-                            metadata_for_render,
-                            switch_state=False,  # Don't add edit buttons initially
-                            dashboard_id=dashboard_id,
-                            TOKEN=TOKEN,
-                            theme=theme,
-                        )[0]
-
-                        # Then wrap it with edit buttons
                         edited_child = enable_box_edit_mode(
-                            fresh_child,
+                            child,
                             edit_components_mode_button,
                             dashboard_id=dashboard_id,
                             fresh=False,
-                            component_data=metadata_for_render,
+                            component_data=parent_metadata,
                             TOKEN=TOKEN,
                         )
 

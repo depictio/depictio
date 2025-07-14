@@ -780,7 +780,9 @@ def register_callbacks_figure_component(app):
             try:
                 dashboard_id = pathname.split("/")[-1]
                 component_data = get_component_data(
-                    input_id=parent_index, dashboard_id=dashboard_id, TOKEN=TOKEN
+                    input_id=parent_index,
+                    dashboard_id=dashboard_id,
+                    TOKEN=local_data["access_token"],
                 )
                 logger.info(
                     f"Edit mode: loaded component data: {component_data} from parent_index: {parent_index} for component {component_index}"
