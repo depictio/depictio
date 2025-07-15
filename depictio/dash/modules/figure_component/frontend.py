@@ -998,6 +998,11 @@ def register_callbacks_figure_component(app):
 
         component_id = dash.callback_context.triggered[0]["prop_id"].split(".")[0]
         component_index = eval(component_id)["index"]
+        logger.info(f"Component index for mode switch: {component_index}")
+        logger.info(f"Current code content: {current_code}")
+        logger.info(f"Current mode: {current_mode}")
+        logger.info(f"Current dict_kwargs: {dict_kwargs}")
+        logger.info(f"Visualization type label: {visu_type_label}")
 
         if mode == "ui":
             # Switch to UI mode
@@ -1019,9 +1024,9 @@ def register_callbacks_figure_component(app):
             mode,
         )
 
-    # Parameter preservation callback - UI to Code
+    # Store generated code when switching to code mode
     @app.callback(
-        Output({"type": "code-editor", "index": MATCH}, "value", allow_duplicate=True),
+        Output({"type": "code-content-store", "index": MATCH}, "data"),
         [
             Input({"type": "figure-mode-toggle", "index": MATCH}, "value"),
         ],
@@ -1029,32 +1034,71 @@ def register_callbacks_figure_component(app):
             State({"type": "dict_kwargs", "index": MATCH}, "data"),
             State({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
         ],
-        prevent_initial_call=True,
+        prevent_initial_call=False,
     )
-    def preserve_ui_to_code(mode, dict_kwargs, visu_type_label):
-        """Convert UI parameters to code when switching to code mode"""
-        logger.info(
-            f"preserve_ui_to_code called: mode={mode}, dict_kwargs={dict_kwargs}, visu_type_label={visu_type_label}"
-        )
+    def store_generated_code(mode, dict_kwargs, visu_type_label):
+        """Store generated code when switching to code mode"""
 
-        if mode == "code" and dict_kwargs:
-            # Convert visualization label to name
-            visu_type = "scatter"  # Default fallback
-            if visu_type_label:
+        logger.info("=== store_generated_code CALLBACK CALLED ===")
+        logger.info(f"Mode: {mode}")
+        logger.info(f"Dict kwargs: {dict_kwargs}")
+        logger.info(f"Visualization type label: {visu_type_label}")
+
+        if mode == "code":
+            logger.info("Switching to code mode, generating code from UI parameters")
+            if dict_kwargs:
+                # Convert visualization label to name
+                visu_type = "scatter"  # Default fallback
                 available_vizs = get_available_visualizations()
                 for viz in available_vizs:
                     if viz.label == visu_type_label:
                         visu_type = viz.name
                         break
 
-            logger.info(f"Converting to visu_type: {visu_type}")
+                logger.info(f"Converting to visu_type: {visu_type}")
 
-            # Convert UI parameters to code
-            generated_code = convert_ui_params_to_code(dict_kwargs, visu_type)
-            logger.info(f"Generated code: {generated_code}")
+                # Convert UI parameters to code
+                generated_code = convert_ui_params_to_code(dict_kwargs, visu_type)
+                logger.info(f"Generated code: {generated_code}")
 
-            if generated_code:
-                return generated_code
+                if generated_code:
+                    return generated_code
+            else:
+                logger.info("No dict_kwargs, returning template")
+                return "# Add your Plotly code here\n# Example:\n# fig = px.scatter(df, x='column1', y='column2')\n# fig.show()"
+
+        logger.info("Not in code mode, returning no_update")
+        return dash.no_update
+
+    # Update code editor from stored code and handle clear button
+    @app.callback(
+        Output({"type": "code-editor", "index": MATCH}, "value"),
+        [
+            Input({"type": "code-content-store", "index": MATCH}, "data"),
+            Input({"type": "code-clear-btn", "index": MATCH}, "n_clicks"),
+        ],
+        prevent_initial_call=False,
+    )
+    def update_code_editor(stored_code, clear_clicks):
+        """Update code editor from stored code or clear button"""
+
+        ctx = dash.callback_context
+        if not ctx.triggered:
+            return dash.no_update
+
+        triggered_prop = ctx.triggered[0]["prop_id"]
+        logger.info(f"=== update_code_editor TRIGGERED by: {triggered_prop} ===")
+
+        # Check if clear button was clicked
+        if "code-clear-btn" in triggered_prop:
+            logger.info("Clear button clicked, clearing code editor")
+            return ""
+
+        # Check if stored code was updated
+        if "code-content-store" in triggered_prop:
+            logger.info(f"Stored code updated: {stored_code}")
+            if stored_code:
+                return stored_code
 
         return dash.no_update
 
@@ -1158,30 +1202,18 @@ def register_callbacks_figure_component(app):
             return dcc.Graph(figure=figure_data, style={"height": "100%"})
         return dash.no_update
 
-    # Clear code callback
-    @app.callback(
-        Output({"type": "code-editor", "index": MATCH}, "value", allow_duplicate=True),
-        [
-            Input({"type": "code-clear-btn", "index": MATCH}, "n_clicks"),
-        ],
-        prevent_initial_call=True,
-    )
-    def clear_code(n_clicks):
-        """Clear the code editor"""
-        if n_clicks:
-            return ""
-        return dash.no_update
-
     # Populate DataFrame columns information in code mode
     @app.callback(
         Output({"type": "columns-info", "index": MATCH}, "children"),
         Input({"type": "figure-mode-toggle", "index": MATCH}, "value"),
         State("local-store", "data"),
         State("url", "pathname"),
-        State({"type": "columns-info", "index": MATCH}, "id"),
-        prevent_initial_call=True,
+        # State({"type": "columns-info", "index": MATCH}, "id"),
+        State({"type": "workflow-selection-label", "index": MATCH}, "value"),
+        State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+        prevent_initial_call=False,
     )
-    def update_columns_info(mode, local_data, pathname, index_data):
+    def update_columns_info(mode, local_data, pathname, workflow_id, data_collection_id):
         """Update the available columns information for code mode"""
         logger.info("\n")
         logger.info(f"update_columns_info called: mode={mode}")
@@ -1197,25 +1229,9 @@ def register_callbacks_figure_component(app):
 
         try:
             # Get component index from the callback context
-            component_index = index_data["index"]
             dashboard_id = pathname.split("/")[-1]
 
-            logger.info(
-                f"Getting component data for index: {component_index}, dashboard: {dashboard_id}"
-            )
-
-            component_data = get_component_data(
-                input_id=component_index,
-                dashboard_id=dashboard_id,
-                TOKEN=local_data["access_token"],
-            )
-
-            workflow_id = component_data.get("wf_id")
-            data_collection_id = component_data.get("dc_id")
-
-            logger.info(
-                f"Retrieved workflow_id: {workflow_id}, data_collection_id: {data_collection_id}"
-            )
+            logger.info(f"Getting component data for index: dashboard: {dashboard_id}")
 
             if not workflow_id or not data_collection_id:
                 return "Please ensure workflow and data collection are selected in the component."
@@ -1294,8 +1310,8 @@ def design_figure(id, component_data=None):
                 dmc.SegmentedControl(
                     id={"type": "figure-mode-toggle", "index": id["index"]},
                     data=[
-                        {"label": "UI Mode", "value": "ui"},
-                        {"label": "Code Mode", "value": "code"},
+                        {"value": "ui", "label": "UI Mode"},
+                        {"value": "code", "label": "Code Mode"},
                     ],
                     value="ui",  # Default to UI mode
                     size="sm",
@@ -1335,48 +1351,69 @@ def design_figure(id, component_data=None):
                             [
                                 html.Div(
                                     [
-                                        # Visualization section
+                                        # Visualization and Edit button row (2/3 + 1/3 layout)
                                         html.Div(
                                             [
-                                                dmc.Text(
-                                                    "Visualization Type:",
-                                                    fw="bold",
-                                                    size="sm",
-                                                    style={"marginBottom": "8px"},
-                                                ),
-                                                dmc.Select(
-                                                    data=viz_options,
-                                                    value=default_value,
-                                                    id={
-                                                        "type": "segmented-control-visu-graph",
-                                                        "index": id["index"],
+                                                # Visualization section (2/3 width)
+                                                html.Div(
+                                                    [
+                                                        dmc.Text(
+                                                            "Visualization Type:",
+                                                            fw="bold",
+                                                            size="sm",
+                                                            style={"marginBottom": "8px"},
+                                                        ),
+                                                        dmc.Select(
+                                                            data=viz_options,
+                                                            value=default_value,
+                                                            id={
+                                                                "type": "segmented-control-visu-graph",
+                                                                "index": id["index"],
+                                                            },
+                                                            placeholder="Choose type...",
+                                                            clearable=False,
+                                                            searchable=False,
+                                                            size="sm",
+                                                            style={"width": "100%"},
+                                                        ),
+                                                    ],
+                                                    style={
+                                                        "width": "65%",
+                                                        "display": "inline-block",
+                                                        "verticalAlign": "top",
+                                                        "marginRight": "5%",
                                                     },
-                                                    placeholder="Choose type...",
-                                                    clearable=False,
-                                                    searchable=False,
-                                                    size="sm",
-                                                    style={"width": "100%"},
                                                 ),
-                                            ],
-                                            style={"marginBottom": "20px"},
-                                        ),
-                                        # Edit button section
-                                        html.Div(
-                                            [
-                                                dmc.Button(
-                                                    "Edit Figure",
-                                                    id={
-                                                        "type": "edit-button",
-                                                        "index": id["index"],
+                                                # Edit button section (1/3 width)
+                                                html.Div(
+                                                    [
+                                                        dmc.Text(
+                                                            " ",  # Empty space to align with label
+                                                            fw="bold",
+                                                            size="sm",
+                                                            style={"marginBottom": "8px"},
+                                                        ),
+                                                        dmc.Button(
+                                                            "Edit",
+                                                            id={
+                                                                "type": "edit-button",
+                                                                "index": id["index"],
+                                                            },
+                                                            n_clicks=0,
+                                                            size="sm",
+                                                            leftSection=DashIconify(
+                                                                icon="mdi:cog", width=16
+                                                            ),
+                                                            variant="outline",
+                                                            color="blue",
+                                                            fullWidth=True,
+                                                        ),
+                                                    ],
+                                                    style={
+                                                        "width": "30%",
+                                                        "display": "inline-block",
+                                                        "verticalAlign": "top",
                                                     },
-                                                    n_clicks=0,
-                                                    size="sm",
-                                                    leftSection=DashIconify(
-                                                        icon="mdi:cog", width=16
-                                                    ),
-                                                    variant="outline",
-                                                    color="blue",
-                                                    fullWidth=True,
                                                 ),
                                             ],
                                             style={"marginBottom": "20px"},
