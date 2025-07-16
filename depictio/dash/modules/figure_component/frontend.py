@@ -193,22 +193,13 @@ def register_callbacks_figure_component(app):
             columns = []
 
         # Determine visualization type from segmented control
-        if visu_type:  # visu_type is the label from segmented control
-            # Convert label to name using visualization definitions
-            available_vizs = get_available_visualizations()
-            visu_name = "scatter"  # Default fallback
-            for viz in available_vizs:
-                if viz.label == visu_type:
-                    visu_name = viz.name
-                    break
-            visu_type = visu_name
+        if visu_type:  # visu_type is now the name (lowercase) from dropdown
+            # Since we now use viz.name.lower() as dropdown value, use it directly
+            visu_type = visu_type.lower()
         elif component_data and "visu_type" in component_data:
-            visu_type = component_data["visu_type"]
+            visu_type = component_data["visu_type"].lower()
         else:
             visu_type = "scatter"  # Default fallback
-
-        # Ensure visualization type is lowercase for consistency
-        visu_type = visu_type.lower()
 
         logger.info(f"Final visualization type: {visu_type}")
 
@@ -458,7 +449,7 @@ def register_callbacks_figure_component(app):
     )
     def update_figure(*args):
         dict_kwargs = args[0]
-        visu_type_label = args[1]  # This is the label from segmented control
+        visu_type_label = args[1]  # This is now the visualization name from dropdown
         theme_data = args[2]  # Theme is 3rd in the State list
         workflow_id = args[3]
         data_collection_id = args[4]
@@ -497,14 +488,10 @@ def register_callbacks_figure_component(app):
         logger.info(f"Parameters type: {type(dict_kwargs)}")
         logger.info(f"Parameters empty: {not dict_kwargs or dict_kwargs == {'x': None, 'y': None}}")
 
-        # Convert visualization label to name using new robust system
+        # visu_type_label is now the visualization name (lowercase) from dropdown
         visu_type = "scatter"  # Default fallback
         if visu_type_label:
-            available_vizs = get_available_visualizations()
-            for viz in available_vizs:
-                if viz.label == visu_type_label:
-                    visu_type = viz.name
-                    break
+            visu_type = visu_type_label.lower()
 
         # Get component data if available
         component_data = None
@@ -668,14 +655,10 @@ def register_callbacks_figure_component(app):
             columns_specs_reformatted = defaultdict(list)
             {columns_specs_reformatted[v["type"]].append(k) for k, v in columns_json.items()}
 
-            # Convert visualization label to name
+            # visu_type_label is now the visualization name (lowercase) from dropdown
             visu_type = "scatter"  # Default fallback
             if visu_type_label:
-                available_vizs = get_available_visualizations()
-                for viz in available_vizs:
-                    if viz.label == visu_type_label:
-                        visu_type = viz.name
-                        break
+                visu_type = visu_type_label.lower()
 
             # Get default parameters for this visualization type
             default_params = _get_default_parameters(visu_type, columns_specs_reformatted)
@@ -794,14 +777,10 @@ def register_callbacks_figure_component(app):
             columns_specs_reformatted = defaultdict(list)
             {columns_specs_reformatted[v["type"]].append(k) for k, v in columns_json.items()}
 
-            # Convert visualization label to name (default to scatter)
+            # visu_type_label is now the visualization name (lowercase) from dropdown
             visu_type = "scatter"
             if visu_type_label:
-                available_vizs = get_available_visualizations()
-                for viz in available_vizs:
-                    if viz.label == visu_type_label:
-                        visu_type = viz.name
-                        break
+                visu_type = visu_type_label.lower()
 
             # Get default parameters for this visualization type
             default_params = _get_default_parameters(visu_type, columns_specs_reformatted)
@@ -915,14 +894,10 @@ def register_callbacks_figure_component(app):
         try:
             TOKEN = local_data["access_token"]
 
-            # Convert visualization label to name
+            # visu_type_label is now the visualization name (lowercase) from dropdown
             visu_type = "scatter"  # Default fallback
             if visu_type_label:
-                available_vizs = get_available_visualizations()
-                for viz in available_vizs:
-                    if viz.label == visu_type_label:
-                        visu_type = viz.name
-                        break
+                visu_type = visu_type_label.lower()
 
             # If no parameters set, generate defaults
             if not dict_kwargs or dict_kwargs in [{}, {"x": None, "y": None}]:
@@ -1110,13 +1085,10 @@ def register_callbacks_figure_component(app):
         if mode == "code":
             logger.info("Switching to code mode, generating code from UI parameters")
             if dict_kwargs:
-                # Convert visualization label to name
+                # visu_type_label is now the visualization name (lowercase) from dropdown
                 visu_type = "scatter"  # Default fallback
-                available_vizs = get_available_visualizations()
-                for viz in available_vizs:
-                    if viz.label == visu_type_label:
-                        visu_type = viz.name
-                        break
+                if visu_type_label:
+                    visu_type = visu_type_label.lower()
 
                 logger.info(f"Converting to visu_type: {visu_type}")
 
@@ -1373,26 +1345,23 @@ def register_callbacks_figure_component(app):
 
 
 def design_figure(id, component_data=None):
-    # Get limited set of visualizations for user request: Scatter, Bar, Box, Line only
+    # Get all available visualizations
     all_vizs = get_available_visualizations()
 
-    # Filter to only the requested visualization types
-    allowed_types = {"scatter", "bar", "box", "line"}
-    filtered_vizs = [viz for viz in all_vizs if viz.name.lower() in allowed_types]
+    # Use all available visualizations (no filtering)
+    filtered_vizs = all_vizs
 
+    # Create options with visualization name as value for icon mapping
     viz_options = [
-        {"label": viz.label, "value": viz.label}
+        {"label": viz.label, "value": viz.name.lower()}
         for viz in sorted(filtered_vizs, key=lambda x: x.label)
     ]
 
     # Default to scatter if no component data
-    default_value = "Scatter"
+    default_value = "scatter"
     if component_data and "visu_type" in component_data:
-        # Find the label for the visualization type from filtered list
-        for viz in filtered_vizs:
-            if viz.name.lower() == component_data["visu_type"].lower():
-                default_value = viz.label
-                break
+        # Use the visualization name (lowercase) as value
+        default_value = component_data["visu_type"].lower()
 
     # Create layout optimized for fullscreen modal
     figure_row = [
@@ -1464,11 +1433,23 @@ def design_figure(id, component_data=None):
                                                 # Visualization section (2/3 width)
                                                 html.Div(
                                                     [
-                                                        dmc.Text(
-                                                            "Visualization Type:",
-                                                            fw="bold",
-                                                            size="sm",
-                                                            style={"marginBottom": "8px"},
+                                                        dmc.Group(
+                                                            [
+                                                                DashIconify(
+                                                                    icon="mdi:chart-line",
+                                                                    width=18,
+                                                                    height=18,
+                                                                ),
+                                                                dmc.Text(
+                                                                    "Visualization Type:",
+                                                                    fw="bold",
+                                                                    size="md",
+                                                                    style={"fontSize": "16px"},
+                                                                ),
+                                                            ],
+                                                            gap="xs",
+                                                            align="center",
+                                                            style={"marginBottom": "10px"},
                                                         ),
                                                         dmc.Select(
                                                             data=viz_options,
@@ -1477,11 +1458,17 @@ def design_figure(id, component_data=None):
                                                                 "type": "segmented-control-visu-graph",
                                                                 "index": id["index"],
                                                             },
-                                                            placeholder="Choose type...",
+                                                            placeholder="Choose visualization type...",
                                                             clearable=False,
-                                                            searchable=False,
-                                                            size="sm",
-                                                            style={"width": "100%"},
+                                                            searchable=True,
+                                                            size="md",
+                                                            style={
+                                                                "width": "100%",
+                                                                "fontSize": "14px",
+                                                            },
+                                                            renderOption={
+                                                                "function": "renderVisualizationOption"
+                                                            },
                                                         ),
                                                     ],
                                                     style={
