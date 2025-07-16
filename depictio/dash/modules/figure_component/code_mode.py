@@ -86,9 +86,10 @@ def create_code_mode_interface(component_index: str) -> html.Div:
 
     return html.Div(
         [
-            # Code editor area
-            dmc.Paper(
+            # Code editor area - flexible height container
+            dmc.Stack(
                 [
+                    # Header with controls
                     dmc.Group(
                         [
                             dmc.Text("Python Code:", fw="bold", size="sm", c="gray"),
@@ -116,9 +117,8 @@ def create_code_mode_interface(component_index: str) -> html.Div:
                         ],
                         justify="space-between",
                         align="center",
-                        style={"marginBottom": "10px"},
                     ),
-                    # Enhanced Code Editor with dash-ace or fallback textarea
+                    # Enhanced Code Editor with dash-ace - flexible height
                     dmc.Paper(
                         [
                             # Code editor header bar (like in prototype)
@@ -174,7 +174,7 @@ def create_code_mode_interface(component_index: str) -> html.Div:
                                     "borderBottom": "1px solid var(--mantine-color-gray-3, #dee2e6)",
                                 },
                             ),
-                            # Code input area with enhanced editor
+                            # Code input area with enhanced editor - flexible height
                             dmc.Box(
                                 [
                                     dash_ace.DashAceEditor(
@@ -192,12 +192,14 @@ def create_code_mode_interface(component_index: str) -> html.Div:
                                             "enableSnippets": True,
                                             "tabSize": 4,
                                             "useSoftTabs": True,
-                                            "wrap": False,
+                                            "wrap": True,  # Enable word wrapping
                                             "fontFamily": "Fira Code, JetBrains Mono, Monaco, Consolas, Courier New, monospace",
+                                            "printMargin": 55,  # Set print margin at ~55 characters
                                         },
                                         style={
                                             "width": "100%",
-                                            "height": "300px",
+                                            "height": "100%",
+                                            "minHeight": "200px",
                                             "borderRadius": "0 0 8px 8px",
                                         },
                                         placeholder="# Enter your Python/Plotly code here...\n# Available: df (DataFrame), px (plotly.express), go (plotly.graph_objects), pd (pandas), np (numpy)\n# Example:\nfig = px.scatter(df, x='column1', y='column2', color='category')",
@@ -205,79 +207,103 @@ def create_code_mode_interface(component_index: str) -> html.Div:
                                 ],
                                 style={
                                     "width": "100%",
-                                    "minHeight": "300px",
-                                    "height": "300px",
-                                    "resize": "vertical",
-                                    "overflow": "hidden",
+                                    "flex": "1",  # Take available space
+                                    "minHeight": "200px",
+                                    "display": "flex",
+                                    "flexDirection": "column",
                                     "borderRadius": "0 0 8px 8px",
                                 },
                             ),
                         ],
                         radius="md",
                         withBorder=True,
-                        style={"backgroundColor": "transparent", "overflow": "hidden"},
+                        style={
+                            "backgroundColor": "transparent",
+                            "overflow": "hidden",
+                            "flex": "1",  # Take available space
+                            "display": "flex",
+                            "flexDirection": "column",
+                        },
                     ),
                 ],
-                p="md",
-                withBorder=True,
-                radius="md",
+                gap="sm",
+                style={
+                    "flex": "1",  # Take available space
+                    "display": "flex",
+                    "flexDirection": "column",
+                },
             ),
-            # Status and data preview area
-            html.Div(
+            # Status and data preview area - fixed height, scrollable
+            dmc.ScrollArea(
                 [
-                    # Execution status
-                    dmc.Alert(
-                        id={"type": "code-status", "index": component_index},
-                        title="Ready",
-                        color="blue",
-                        children="Enter code and click 'Execute Code' to generate a figure.",
-                        style={"marginTop": "15px", "marginBottom": "15px"},
-                        withCloseButton=False,
-                    ),
-                    # Data info (show basic info about the loaded dataframe)
-                    dmc.Alert(
-                        id={"type": "data-info", "index": component_index},
-                        title="Dataset Information",
-                        color="blue",
-                        children="DataFrame loaded from selected data collection will be available as 'df' variable.",
-                        style={"marginTop": "15px"},
-                        withCloseButton=False,
-                    ),
-                    # Available columns information
-                    dmc.Alert(
-                        id={"type": "columns-info", "index": component_index},
-                        title="Available Columns",
-                        color="teal",
-                        children="Loading column information...",
-                        style={"marginTop": "15px"},
-                        withCloseButton=False,
-                    ),
-                ]
+                    dmc.Stack(
+                        [
+                            # Execution status
+                            dmc.Alert(
+                                id={"type": "code-status", "index": component_index},
+                                title="Ready",
+                                color="blue",
+                                children="Enter code and click 'Execute Code' to generate a figure.",
+                                withCloseButton=False,
+                            ),
+                            # Data info (show basic info about the loaded dataframe)
+                            dmc.Alert(
+                                id={"type": "data-info", "index": component_index},
+                                title="Dataset Information",
+                                color="blue",
+                                children="DataFrame loaded from selected data collection will be available as 'df' variable.",
+                                withCloseButton=False,
+                            ),
+                            # Available columns information
+                            dmc.Alert(
+                                id={"type": "columns-info", "index": component_index},
+                                title="Available Columns",
+                                color="teal",
+                                children="Loading column information...",
+                                withCloseButton=False,
+                            ),
+                        ],
+                        gap="sm",
+                    )
+                ],
+                style={
+                    "maxHeight": "200px",
+                    "flex": "0 0 auto",  # Don't grow, but take needed space
+                },
             ),
             # Note: code-generated-figure store is created in design_figure function
         ],
-        style={"height": "100%", "overflow": "auto"},
+        style={
+            "height": "100%",
+            "display": "flex",
+            "flexDirection": "column",
+            "gap": "10px",
+            "padding": "10px",
+        },
     )
 
 
 def convert_ui_params_to_code(dict_kwargs: Dict[str, Any], visu_type: str) -> str:
-    """Convert UI parameters to Python code"""
+    """Convert UI parameters to Python code with proper line wrapping"""
     if not dict_kwargs:
         return ""
 
+    # Maximum line length based on user's screen: "fig = px.scatter(df, x='sepal.length', template='plotly',"
+    MAX_LINE_LENGTH = 55
+
     # Start with basic plot based on visualization type
     if visu_type.lower() == "scatter":
-        code_lines = ["fig = px.scatter(df"]
+        base_call = "fig = px.scatter(df"
     elif visu_type.lower() == "line":
-        code_lines = ["fig = px.line(df"]
+        base_call = "fig = px.line(df"
     elif visu_type.lower() == "bar":
-        code_lines = ["fig = px.bar(df"]
+        base_call = "fig = px.bar(df"
     elif visu_type.lower() == "box":
-        code_lines = ["fig = px.box(df"]
+        base_call = "fig = px.box(df"
     elif visu_type.lower() == "histogram":
-        code_lines = ["fig = px.histogram(df"]
+        base_call = "fig = px.histogram(df"
     else:
-        code_lines = ["fig = px.scatter(df"]  # Default fallback
+        base_call = "fig = px.scatter(df"  # Default fallback
 
     # Add parameters
     params = []
@@ -288,10 +314,32 @@ def convert_ui_params_to_code(dict_kwargs: Dict[str, Any], visu_type: str) -> st
             else:
                 params.append(f"{key}={repr(value)}")
 
-    if params:
-        code_lines[0] += ", " + ", ".join(params)
+    if not params:
+        return base_call + ")"
 
-    code_lines[0] += ")"
+    # Build the code with proper line wrapping
+    code_lines = []
+    current_line = base_call
+    indent = " " * 4  # 4 spaces for continuation lines
+
+    for i, param in enumerate(params):
+        param_text = f", {param}" if i > 0 or current_line != base_call else f", {param}"
+
+        # Check if adding this parameter would exceed the line length
+        if len(current_line + param_text) > MAX_LINE_LENGTH:
+            # Start a new line
+            code_lines.append(current_line + ",")
+            current_line = indent + param
+        else:
+            # Add to current line
+            current_line += param_text
+
+    # Add the closing parenthesis
+    if len(current_line + ")") > MAX_LINE_LENGTH and current_line.strip() != base_call.strip():
+        code_lines.append(current_line)
+        code_lines.append(")")
+    else:
+        code_lines.append(current_line + ")")
 
     return "\n".join(code_lines)
 
