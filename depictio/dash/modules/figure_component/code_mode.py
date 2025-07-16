@@ -4,6 +4,7 @@ Code mode component for figure creation using Python/Plotly code
 
 from typing import Any, Dict
 
+import dash_ace
 import dash_mantine_components as dmc
 import pandas as pd
 from dash import html
@@ -117,18 +118,104 @@ def create_code_mode_interface(component_index: str) -> html.Div:
                         align="center",
                         style={"marginBottom": "10px"},
                     ),
-                    dmc.Textarea(
-                        id={"type": "code-editor", "index": component_index},
-                        placeholder="Enter your Python/Plotly code here...\n\nExample:\nfig = px.scatter(df, x='x', y='y', color='category')",
-                        autosize=True,
-                        minRows=8,
-                        maxRows=20,
-                        style={
-                            "fontFamily": "Monaco, Consolas, 'Courier New', monospace",
-                            "fontSize": "13px",
-                            "lineHeight": "1.4",
-                        },
-                        value="",
+                    # Enhanced Code Editor with dash-ace or fallback textarea
+                    dmc.Paper(
+                        [
+                            # Code editor header bar (like in prototype)
+                            dmc.Group(
+                                [
+                                    dmc.Group(
+                                        [
+                                            dmc.Box(
+                                                style={
+                                                    "width": "12px",
+                                                    "height": "12px",
+                                                    "borderRadius": "50%",
+                                                    "backgroundColor": "#ff5f57",
+                                                }
+                                            ),
+                                            dmc.Box(
+                                                style={
+                                                    "width": "12px",
+                                                    "height": "12px",
+                                                    "borderRadius": "50%",
+                                                    "backgroundColor": "#ffbd2e",
+                                                }
+                                            ),
+                                            dmc.Box(
+                                                style={
+                                                    "width": "12px",
+                                                    "height": "12px",
+                                                    "borderRadius": "50%",
+                                                    "backgroundColor": "#28ca42",
+                                                }
+                                            ),
+                                        ],
+                                        gap="xs",
+                                    ),
+                                    dmc.Text(
+                                        "main.py",
+                                        size="sm",
+                                        c="gray",
+                                        style={"fontFamily": "monospace"},
+                                    ),
+                                    dmc.Group(
+                                        [
+                                            dmc.Text("Python", size="xs", c="gray"),
+                                            dmc.Text("UTF-8", size="xs", c="gray"),
+                                        ],
+                                        gap="md",
+                                    ),
+                                ],
+                                justify="space-between",
+                                p="sm",
+                                style={
+                                    "backgroundColor": "var(--mantine-color-gray-1, #f8f9fa)",
+                                    "borderBottom": "1px solid var(--mantine-color-gray-3, #dee2e6)",
+                                },
+                            ),
+                            # Code input area with enhanced editor
+                            dmc.Box(
+                                [
+                                    dash_ace.DashAceEditor(
+                                        id={"type": "code-editor", "index": component_index},
+                                        value="",
+                                        theme="github",
+                                        mode="python",
+                                        fontSize=15,
+                                        showGutter=True,
+                                        showPrintMargin=False,
+                                        highlightActiveLine=True,
+                                        setOptions={
+                                            "enableBasicAutocompletion": True,
+                                            "enableLiveAutocompletion": True,
+                                            "enableSnippets": True,
+                                            "tabSize": 4,
+                                            "useSoftTabs": True,
+                                            "wrap": False,
+                                            "fontFamily": "Fira Code, JetBrains Mono, Monaco, Consolas, Courier New, monospace",
+                                        },
+                                        style={
+                                            "width": "100%",
+                                            "height": "300px",
+                                            "borderRadius": "0 0 8px 8px",
+                                        },
+                                        placeholder="# Enter your Python/Plotly code here...\n# Available: df (DataFrame), px (plotly.express), go (plotly.graph_objects), pd (pandas), np (numpy)\n# Example:\nfig = px.scatter(df, x='column1', y='column2', color='category')",
+                                    ),
+                                ],
+                                style={
+                                    "width": "100%",
+                                    "minHeight": "300px",
+                                    "height": "300px",
+                                    "resize": "vertical",
+                                    "overflow": "hidden",
+                                    "borderRadius": "0 0 8px 8px",
+                                },
+                            ),
+                        ],
+                        radius="md",
+                        withBorder=True,
+                        style={"backgroundColor": "transparent", "overflow": "hidden"},
                     ),
                 ],
                 p="md",
