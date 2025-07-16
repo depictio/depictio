@@ -234,43 +234,59 @@ def create_code_mode_interface(component_index: str) -> html.Div:
                 },
             ),
             # Status and data preview area - fixed height, scrollable
-            dmc.ScrollArea(
+            # dmc.ScrollArea(
+            #     [
+            dmc.Stack(
                 [
-                    dmc.Stack(
-                        [
-                            # Execution status
-                            dmc.Alert(
-                                id={"type": "code-status", "index": component_index},
-                                title="Ready",
-                                color="blue",
-                                children="Enter code and click 'Execute Code' to generate a figure.",
-                                withCloseButton=False,
-                            ),
-                            # Data info (show basic info about the loaded dataframe)
-                            dmc.Alert(
-                                id={"type": "data-info", "index": component_index},
-                                title="Dataset Information",
-                                color="blue",
-                                children="DataFrame loaded from selected data collection will be available as 'df' variable.",
-                                withCloseButton=False,
-                            ),
-                            # Available columns information
-                            dmc.Alert(
-                                id={"type": "columns-info", "index": component_index},
-                                title="Available Columns",
-                                color="teal",
-                                children="Loading column information...",
-                                withCloseButton=False,
-                            ),
-                        ],
-                        gap="sm",
-                    )
+                    # Available columns information
+                    dmc.Alert(
+                        id={"type": "columns-info", "index": component_index},
+                        title="Available Columns",
+                        color="teal",
+                        children="Loading column information...",
+                        withCloseButton=False,
+                        icon=DashIconify(
+                            icon="mdi:table",
+                            width=16,
+                            style={"color": "var(--mantine-color-teal-6, #1de9b6)"},
+                        ),
+                    ),
+                    # Execution status
+                    dmc.Alert(
+                        id={"type": "code-status", "index": component_index},
+                        title="Ready",
+                        color="blue",
+                        children="Enter code and click 'Execute Code' to generate a figure.",
+                        withCloseButton=False,
+                        icon=DashIconify(
+                            icon="mdi:check-circle",
+                            width=16,
+                            style={"color": "var(--mantine-color-blue-6, #1e88e5)"},
+                        ),
+                    ),
+                    # Data info (show basic info about the loaded dataframe)
+                    dmc.Alert(
+                        id={"type": "data-info", "index": component_index},
+                        title="Dataset Information",
+                        color="blue",
+                        children="DataFrame loaded from selected data collection will be available as 'df' variable.",
+                        withCloseButton=False,
+                        icon=DashIconify(
+                            icon="mdi:database",
+                            width=16,
+                            style={"color": "var(--mantine-color-blue-6, #1e88e5)"},
+                        ),
+                    ),
                 ],
-                style={
-                    "maxHeight": "200px",
-                    "flex": "0 0 auto",  # Don't grow, but take needed space
-                },
+                gap="sm",
             ),
+            # ],
+            #     style={
+            #         # "maxHeight": "200px",
+            #         # "flex": "0 0 auto",  # Don't grow, but take needed space
+            #         "overflowY": "auto",
+            #     },
+            # ),
             # Note: code-generated-figure store is created in design_figure function
         ],
         style={
@@ -345,31 +361,71 @@ def convert_ui_params_to_code(dict_kwargs: Dict[str, Any], visu_type: str) -> st
 
 
 def extract_params_from_code(code: str) -> Dict[str, Any]:
-    """Extract parameter information from Python code (basic parsing)"""
+    """Extract parameter information from Python code (enhanced parsing)"""
     params = {}
 
-    # Simple regex-based extraction for common patterns
+    # Enhanced regex-based extraction for common patterns
     import re
 
     # Look for px.scatter, px.line, etc. function calls
     plotly_call_pattern = r"px\.\w+\(df(?:,\s*(.+?))?\)"
-    match = re.search(plotly_call_pattern, code)
+    match = re.search(plotly_call_pattern, code, re.DOTALL)
 
     if match and match.group(1):
         params_str = match.group(1)
 
-        # Extract individual parameters (basic approach)
+        # Extract individual parameters (enhanced approach)
         param_patterns = [
+            # String parameters (quoted)
             (r"x\s*=\s*['\"]([^'\"]+)['\"]", "x"),
             (r"y\s*=\s*['\"]([^'\"]+)['\"]", "y"),
             (r"color\s*=\s*['\"]([^'\"]+)['\"]", "color"),
             (r"size\s*=\s*['\"]([^'\"]+)['\"]", "size"),
             (r"title\s*=\s*['\"]([^'\"]+)['\"]", "title"),
+            (r"facet_col\s*=\s*['\"]([^'\"]+)['\"]", "facet_col"),
+            (r"facet_row\s*=\s*['\"]([^'\"]+)['\"]", "facet_row"),
+            (r"hover_name\s*=\s*['\"]([^'\"]+)['\"]", "hover_name"),
+            (r"animation_frame\s*=\s*['\"]([^'\"]+)['\"]", "animation_frame"),
+            (r"animation_group\s*=\s*['\"]([^'\"]+)['\"]", "animation_group"),
+            (r"template\s*=\s*['\"]([^'\"]+)['\"]", "template"),
+            (r"color_discrete_sequence\s*=\s*['\"]([^'\"]+)['\"]", "color_discrete_sequence"),
+            (r"color_continuous_scale\s*=\s*['\"]([^'\"]+)['\"]", "color_continuous_scale"),
+            (r"symbol\s*=\s*['\"]([^'\"]+)['\"]", "symbol"),
+            (r"line_dash\s*=\s*['\"]([^'\"]+)['\"]", "line_dash"),
+            (r"pattern_shape\s*=\s*['\"]([^'\"]+)['\"]", "pattern_shape"),
+            (r"orientation\s*=\s*['\"]([^'\"]+)['\"]", "orientation"),
+            (r"barmode\s*=\s*['\"]([^'\"]+)['\"]", "barmode"),
+            (r"histnorm\s*=\s*['\"]([^'\"]+)['\"]", "histnorm"),
+            (r"points\s*=\s*['\"]([^'\"]+)['\"]", "points"),
+            (r"violinmode\s*=\s*['\"]([^'\"]+)['\"]", "violinmode"),
+            (r"line_shape\s*=\s*['\"]([^'\"]+)['\"]", "line_shape"),
+            (r"trendline\s*=\s*['\"]([^'\"]+)['\"]", "trendline"),
+            # Boolean parameters
+            (r"log_x\s*=\s*(True|False)", "log_x"),
+            (r"log_y\s*=\s*(True|False)", "log_y"),
+            (r"marginal_x\s*=\s*['\"]([^'\"]+)['\"]", "marginal_x"),
+            (r"marginal_y\s*=\s*['\"]([^'\"]+)['\"]", "marginal_y"),
+            # Special handling for False as a string value
+            (r"points\s*=\s*False", "points"),
         ]
 
         for pattern, key in param_patterns:
             param_match = re.search(pattern, params_str)
             if param_match:
-                params[key] = param_match.group(1)
+                # Handle patterns that might not have groups
+                if param_match.groups():
+                    value = param_match.group(1)
+
+                    # Handle boolean values
+                    if value == "True":
+                        params[key] = True
+                    elif value == "False":
+                        params[key] = False
+                    else:
+                        params[key] = value
+                else:
+                    # For patterns without groups (like points=False)
+                    if key == "points":
+                        params[key] = False
 
     return params

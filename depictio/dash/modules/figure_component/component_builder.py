@@ -85,7 +85,7 @@ class ComponentBuilder:
         self, param: ParameterDefinition, component_id: Dict, value: Any, disabled: bool
     ) -> dmc.Select:
         """Build dropdown for option selection."""
-        options = [{"label": str(opt), "value": opt} for opt in (param.options or [])]
+        options = [{"label": str(opt), "value": str(opt)} for opt in (param.options or [])]
         return dmc.Select(
             id=component_id,
             data=options,
@@ -107,7 +107,7 @@ class ComponentBuilder:
             # Special case for data parameters - use columns
             options = [{"label": col, "value": col} for col in self.columns]
         else:
-            options = [{"label": str(opt), "value": opt} for opt in (param.options or [])]
+            options = [{"label": str(opt), "value": str(opt)} for opt in (param.options or [])]
 
         return dmc.MultiSelect(
             id=component_id,

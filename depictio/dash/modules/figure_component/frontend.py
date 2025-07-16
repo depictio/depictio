@@ -15,6 +15,7 @@ from depictio.dash.modules.figure_component.code_executor import SecureCodeExecu
 from depictio.dash.modules.figure_component.code_mode import (
     convert_ui_params_to_code,
     create_code_mode_interface,
+    extract_params_from_code,
 )
 
 # Depictio imports - Updated to use new robust system
@@ -262,6 +263,32 @@ def register_callbacks_figure_component(app):
                 ]
             )
 
+    def _convert_parameter_value(param_name: str, value: Any) -> Any:
+        """Convert string values back to their original types based on parameter definitions."""
+        # Handle string representations of boolean values
+        if isinstance(value, str):
+            if value.lower() == "true":
+                return True
+            elif value.lower() == "false":
+                return False
+
+            # Handle specific parameters that need boolean conversion
+            if param_name == "points" and value == "False":
+                return False
+
+            # Try to convert to numeric if it looks like a number
+            try:
+                # Try integer first
+                if value.isdigit() or (value.startswith("-") and value[1:].isdigit()):
+                    return int(value)
+                # Try float
+                return float(value)
+            except ValueError:
+                pass
+
+        # Return original value if no conversion needed
+        return value
+
     # Universal parameter change listener using pattern matching
     # This callback listens to ANY component with pattern {"type": "param-*", "index": MATCH}
     @app.callback(
@@ -318,7 +345,9 @@ def register_callbacks_figure_component(app):
 
                     # Include non-empty values
                     if value is not None and value != "" and value != []:
-                        parameters[param_name] = value
+                        # Convert string values back to their original types
+                        converted_value = _convert_parameter_value(param_name, value)
+                        parameters[param_name] = converted_value
                     elif isinstance(value, bool):  # Include boolean False
                         parameters[param_name] = value
 
@@ -1065,7 +1094,7 @@ def register_callbacks_figure_component(app):
                     return generated_code
             else:
                 logger.info("No dict_kwargs, returning template")
-                return "# Add your Plotly code here\n# Example:\n# fig = px.scatter(df, x='column1', y='column2')\n# fig.show()"
+                return "# Add your Plotly code here\n# Example:\n# fig = px.scatter(df, x='column1', y='column2')"
 
         logger.info("Not in code mode, returning no_update")
         return dash.no_update
@@ -1102,20 +1131,42 @@ def register_callbacks_figure_component(app):
 
         return dash.no_update
 
-    # Parameter preservation callback - Code to UI (disabled for now due to component lifecycle issues)
-    # @app.callback(
-    #     Output({"type": "dict_kwargs", "index": MATCH}, "data", allow_duplicate=True),
-    #     [
-    #         Input({"type": "figure-mode-toggle", "index": MATCH}, "value"),
-    #     ],
-    #     [
-    #         State({"type": "dict_kwargs", "index": MATCH}, "data"),
-    #     ],
-    #     prevent_initial_call=True,
-    # )
-    # def preserve_code_to_ui(mode, current_kwargs):
-    #     """Preserve parameters when switching to UI mode"""
-    #     return dash.no_update
+    # Parameter preservation callback - Code to UI
+    @app.callback(
+        Output({"type": "dict_kwargs", "index": MATCH}, "data", allow_duplicate=True),
+        [
+            Input({"type": "figure-mode-toggle", "index": MATCH}, "value"),
+        ],
+        [
+            State({"type": "dict_kwargs", "index": MATCH}, "data"),
+            State({"type": "code-content-store", "index": MATCH}, "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def preserve_code_to_ui(mode, current_kwargs, stored_code):
+        """Preserve parameters when switching to UI mode"""
+        logger.info(f"Code to UI preservation triggered: mode={mode}")
+        logger.info(f"Current kwargs: {current_kwargs}")
+        logger.info(f"Stored code: {stored_code}")
+
+        # Only sync when switching to UI mode
+        if mode == "ui" and stored_code:
+            try:
+                # Extract parameters from the stored code
+                extracted_params = extract_params_from_code(stored_code)
+
+                logger.info(f"Extracted params from code: {extracted_params}")
+
+                # Merge with existing parameters, prioritizing extracted ones
+                if extracted_params:
+                    updated_kwargs = {**(current_kwargs or {}), **extracted_params}
+                    logger.info(f"Updated kwargs for UI mode: {updated_kwargs}")
+                    return updated_kwargs
+
+            except Exception as e:
+                logger.error(f"Failed to extract parameters from code: {e}")
+
+        return dash.no_update
 
     # Code execution callback
     @app.callback(
@@ -1310,8 +1361,23 @@ def design_figure(id, component_data=None):
                 dmc.SegmentedControl(
                     id={"type": "figure-mode-toggle", "index": id["index"]},
                     data=[
-                        {"value": "ui", "label": "UI Mode"},
-                        {"value": "code", "label": "Code Mode"},
+                        {
+                            "value": "ui",
+                            "label": dmc.Center(
+                                [
+                                    DashIconify(icon="tabler:eye", width=16),
+                                    html.Span("UI Mode"),
+                                ],
+                                style={"gap": 10},
+                            ),
+                        },
+                        {
+                            "value": "code",
+                            "label": dmc.Center(
+                                [DashIconify(icon="tabler:code", width=16), html.Span("Code Mode")],
+                                style={"gap": 10},
+                            ),
+                        },
                     ],
                     value="ui",  # Default to UI mode
                     size="sm",
@@ -1412,7 +1478,8 @@ def design_figure(id, component_data=None):
                                                     style={
                                                         "width": "30%",
                                                         "display": "inline-block",
-                                                        "verticalAlign": "top",
+                                                        # "verticalAlign": "top",
+                                                        "marginTop": "20px",
                                                     },
                                                 ),
                                             ],
@@ -1427,7 +1494,7 @@ def design_figure(id, component_data=None):
                                             is_open=False,
                                             style={
                                                 "overflowY": "auto",
-                                                "maxHeight": "35vh",
+                                                # "maxHeight": "35vh",
                                             },
                                         ),
                                     ],
