@@ -202,7 +202,7 @@ def create_code_mode_interface(component_index: str) -> html.Div:
                                             "minHeight": "200px",
                                             "borderRadius": "0 0 8px 8px",
                                         },
-                                        placeholder="# Enter your Python/Plotly code here...\n# Available: df (DataFrame), px (plotly.express), go (plotly.graph_objects), pd (pandas), np (numpy)\n# Example:\nfig = px.scatter(df, x='column1', y='column2', color='category')",
+                                        placeholder="# Enter your Python/Plotly code here...\n# Available: df (DataFrame), px (plotly.express), go (plotly.graph_objects), pd (pandas), np (numpy)\n# Example:\n# fig = px.scatter(df, x='your_x_column', y='your_y_column', color='your_color_column')",
                                     ),
                                 ],
                                 style={

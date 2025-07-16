@@ -289,6 +289,40 @@ def register_callbacks_figure_component(app):
         # Return original value if no conversion needed
         return value
 
+    def _is_placeholder_code(code: str) -> bool:
+        """Check if the code is placeholder/template code that shouldn't be used for parameter extraction."""
+        if not code or not code.strip():
+            return True
+
+        # Check for common placeholder patterns
+        placeholder_indicators = [
+            "# Add your Plotly code here",
+            "# Example:",
+            "column1",
+            "column2",
+            "x='column1'",
+            "y='column2'",
+            "x='your_x_column'",
+            "y='your_y_column'",
+            "# Enter your Python/Plotly code here",
+        ]
+
+        # If the code contains placeholder indicators, it's likely placeholder code
+        for indicator in placeholder_indicators:
+            if indicator in code:
+                return True
+
+        # Check if it's very short (less than 20 characters of actual code)
+        code_lines = [
+            line.strip()
+            for line in code.split("\n")
+            if line.strip() and not line.strip().startswith("#")
+        ]
+        if len("".join(code_lines)) < 20:
+            return True
+
+        return False
+
     # Universal parameter change listener using pattern matching
     # This callback listens to ANY component with pattern {"type": "param-*", "index": MATCH}
     @app.callback(
@@ -1094,7 +1128,7 @@ def register_callbacks_figure_component(app):
                     return generated_code
             else:
                 logger.info("No dict_kwargs, returning template")
-                return "# Add your Plotly code here\n# Example:\n# fig = px.scatter(df, x='column1', y='column2')"
+                return "# Add your Plotly code here\n# Available: df (DataFrame), px (plotly.express), go (plotly.graph_objects)\n# Example:\n# fig = px.scatter(df, x='your_x_column', y='your_y_column')"
 
         logger.info("Not in code mode, returning no_update")
         return dash.no_update
@@ -1152,6 +1186,13 @@ def register_callbacks_figure_component(app):
         # Only sync when switching to UI mode
         if mode == "ui" and stored_code:
             try:
+                # Check if the code is just placeholder/template code
+                if _is_placeholder_code(stored_code):
+                    logger.info(
+                        "Code appears to be placeholder/template, skipping parameter extraction"
+                    )
+                    return dash.no_update
+
                 # Extract parameters from the stored code
                 extracted_params = extract_params_from_code(stored_code)
 
