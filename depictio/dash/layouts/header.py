@@ -590,6 +590,18 @@ def design_header(data, local_store):
                 storage_type="memory",
                 data=False,
             ),
+            # Depictio favicon - visible when sidebar is collapsed
+            html.Img(
+                id="header-favicon",
+                src=dash.get_asset_url("favicon.ico"),
+                style={
+                    "height": "24px",
+                    "width": "24px",
+                    "marginLeft": "8px",
+                    "marginRight": "5px",
+                    "display": "none",  # Initially hidden, shown when sidebar is collapsed
+                },
+            ),
             dmc.ActionIcon(
                 DashIconify(
                     id="sidebar-icon",

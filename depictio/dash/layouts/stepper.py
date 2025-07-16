@@ -347,7 +347,20 @@ def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
                 style=MODAL_CONTENT_STYLE,
             )
         ],
-        title="Edit your dashboard component",
+        title=html.Div(
+            [
+                html.Img(
+                    src=dash.get_asset_url("favicon.ico"),
+                    style={
+                        "height": "34px",
+                        "width": "34px",
+                        "marginRight": "10px",
+                        "verticalAlign": "middle",
+                    },
+                ),
+                html.Span("Edit your dashboard component", style={"verticalAlign": "middle"}),
+            ]
+        ),
         opened=True,
         size=MODAL_CONFIG["size"],
         centered=True,
@@ -595,7 +608,22 @@ def create_stepper_output(n, active):
                         },
                     )
                 ],
-                title="Design your new dashboard component",
+                title=html.Div(
+                    [
+                        html.Img(
+                            src=dash.get_asset_url("favicon.ico"),
+                            style={
+                                "height": "34px",
+                                "width": "34px",
+                                "marginRight": "10px",
+                                "verticalAlign": "middle",
+                            },
+                        ),
+                        html.Span(
+                            "Design your new dashboard component", style={"verticalAlign": "middle"}
+                        ),
+                    ]
+                ),
                 opened=True,
                 size=MODAL_CONFIG["size"],
                 centered=False,  # Don't center for fullscreen

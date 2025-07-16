@@ -67,6 +67,28 @@ def register_sidebar_callbacks(app):
         # When expanded -> show left arrow (points to collapse)
         return "ep:d-arrow-right" if is_collapsed else "ep:d-arrow-left"
 
+    # Callback to show/hide the header favicon based on sidebar collapsed state
+    @app.callback(
+        Output("header-favicon", "style"),
+        [Input("sidebar-collapsed", "data")],
+        prevent_initial_call=False,
+    )
+    def update_header_favicon_visibility(is_collapsed):
+        # Show favicon when sidebar is collapsed, hide when expanded
+        base_style = {
+            "height": "44px",
+            "width": "44px",
+            "marginLeft": "-5px",
+            "marginRight": "0px",
+        }
+
+        if is_collapsed:
+            base_style["display"] = "block"
+        else:
+            base_style["display"] = "none"
+
+        return base_style
+
     # Callback to toggle AppShell navbar collapsed state using store
     @app.callback(
         Output("app-shell", "navbar"),
