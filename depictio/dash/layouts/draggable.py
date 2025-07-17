@@ -1,7 +1,7 @@
 import copy
 
 import dash
-import dash_draggable
+import dash_dynamic_grid_layout as dgl
 import dash_mantine_components as dmc
 import httpx
 from dash import ALL, Input, Output, State, ctx, dcc, html
@@ -284,8 +284,8 @@ def register_callbacks_draggable(app):
         return components_store
 
     @app.callback(
-        Output("draggable", "children"),
-        Output("draggable", "layouts"),
+        Output("draggable", "items"),
+        Output("draggable", "currentLayout"),
         Output("stored-draggable-children", "data"),
         Output("stored-draggable-layouts", "data"),
         Output("current-edit-parent-index", "data"),  # Add this Output
@@ -361,9 +361,9 @@ def register_callbacks_draggable(app):
             },
             "children",
         ),
-        State("draggable", "children"),
-        State("draggable", "layouts"),
-        Input("draggable", "layouts"),
+        State("draggable", "items"),
+        State("draggable", "currentLayout"),
+        Input("draggable", "currentLayout"),
         State("stored-draggable-children", "data"),
         State("stored-draggable-layouts", "data"),
         Input("stored-draggable-children", "data"),
@@ -483,12 +483,43 @@ def register_callbacks_draggable(app):
         # Extract dashboard_id from the pathname
         dashboard_id = pathname.split("/")[-1]
 
+        # Helper function to convert between formats
+        def convert_layout_to_dict(layout):
+            """Convert list format to dict format for internal processing"""
+            if isinstance(layout, list):
+                return {"lg": layout}
+            elif layout is None:
+                return {"lg": []}
+            else:
+                return layout
+
+        def convert_layout_to_list(layout):
+            """Convert dict format to list format for currentLayout output"""
+            if isinstance(layout, dict):
+                return layout.get("lg", [])
+            elif isinstance(layout, list):
+                return layout
+            else:
+                return []
+
+        # Convert draggable_layouts from list to dict format if needed
+        # dash-dynamic-grid-layout returns a list, but the rest of the code expects a dict
+        draggable_layouts = convert_layout_to_dict(draggable_layouts)
+
         # Initialize layouts from stored layouts if available
         if dashboard_id in state_stored_draggable_layouts:
             # Check if draggable_layouts is empty or doesn't have the required breakpoints with content
-            is_empty = not draggable_layouts or not any(
-                draggable_layouts.get(bp, []) for bp in required_breakpoints
-            )
+            # Handle both dict format (old dash-draggable) and list format (new dash-dynamic-grid-layout)
+            if isinstance(draggable_layouts, dict):
+                # Old format: {"lg": [...], "md": [...], ...}
+                is_empty = not draggable_layouts or not any(
+                    draggable_layouts.get(bp, []) for bp in required_breakpoints
+                )
+            elif isinstance(draggable_layouts, list):
+                # New format: [{"i": "item1", "x": 0, "y": 0, "w": 4, "h": 4}, ...]
+                is_empty = not draggable_layouts or len(draggable_layouts) == 0
+            else:
+                is_empty = True
 
             if is_empty:
                 logger.info(
@@ -603,9 +634,10 @@ def register_callbacks_draggable(app):
                 # logger.info(f"State stored draggable layouts: {state_stored_draggable_layouts}")
 
                 # logger.info(f"New draggable children: {draggable_children}")
+                # Convert dict format back to list for currentLayout output
                 return (
                     draggable_children,
-                    draggable_layouts,
+                    convert_layout_to_list(draggable_layouts),
                     dash.no_update,
                     state_stored_draggable_layouts,
                     dash.no_update,
@@ -620,14 +652,16 @@ def register_callbacks_draggable(app):
                 # logger.info(f"Draggable layouts: {input_draggable_layouts}")
                 # logger.info(f"State stored draggable layouts: {state_stored_draggable_layouts}")
 
-                if "draggable.layouts" in ctx_triggered_props_id:
-                    new_layouts = input_draggable_layouts
+                if "draggable.currentLayout" in ctx_triggered_props_id:
+                    # dash-dynamic-grid-layout returns a single layout array
+                    # but we need to convert it to the expected format for storage
+                    new_layouts = {"lg": input_draggable_layouts}  # Convert to breakpoint format
                     state_stored_draggable_children[dashboard_id] = draggable_children
                     state_stored_draggable_layouts[dashboard_id] = new_layouts
 
                     return (
                         draggable_children,
-                        new_layouts,
+                        input_draggable_layouts,  # Return the raw layout array
                         dash.no_update,
                         state_stored_draggable_layouts,
                         dash.no_update,
@@ -1441,25 +1475,38 @@ def design_draggable(
                 init_layout[key] = []
         # logger.info(f"Initialized layout with required breakpoints: {init_layout}")
 
-    # Create the draggable layout outside of the if-else to keep it in the DOM
-    draggable = dash_draggable.ResponsiveGridLayout(
+    # Create the draggable layout using dash-dynamic-grid-layout
+    # Since enable_box_edit_mode now returns DraggableWrapper components,
+    # we can use them directly without additional wrapping
+    draggable_items = init_children  # These are already DraggableWrapper components
+
+    # Get the current layout for the main breakpoint (lg)
+    current_layout = init_layout.get("lg", [])
+
+    # Convert the responsive layout format to dash-dynamic-grid-layout format
+    # dash-dynamic-grid-layout expects: [{"i": "id", "x": 0, "y": 0, "w": 4, "h": 4}, ...]
+    # dash-draggable format: {"lg": [{"i": "id", "x": 0, "y": 0, "w": 4, "h": 4}], "md": [...]}
+
+    logger.info("Converting layout from dash-draggable to dash-dynamic-grid-layout format")
+    logger.info(f"Current layout (lg): {current_layout}")
+
+    # Ensure we have a valid layout array
+    if not current_layout:
+        current_layout = []
+
+    draggable = dgl.DashGridLayout(
         id="draggable",
-        clearSavedLayout=False,  # Changed to False to prevent clearing saved layouts
-        layouts=init_layout,
-        children=init_children,
-        isDraggable=True,
-        isResizable=True,
-        # autoSize=True,
-        # verticalCompact=True,  # Compacts items vertically to eliminate gaps
-        # preventCollision=True,  # Prevents collisions between items
-        # isDroppable=True,
+        items=draggable_items,
+        itemLayout=current_layout,
+        rowHeight=120,  # Larger row height for better component display
+        cols={"lg": 12, "md": 10, "sm": 6, "xs": 4, "xxs": 2},
+        showRemoveButton=False,  # Will be controlled by edit mode
+        showResizeHandles=False,  # Will be controlled by edit mode
         style={
             "display": display_style,
             "flex-grow": 1,
             "width": "100%",
             "height": "auto",
-            # "height": "100%",
-            # "overflowY": "auto",
         },
     )
 

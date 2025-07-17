@@ -51,3 +51,4 @@ dependencies:
     - dash-draggable==0.1.2
     - dash-ag-grid==31.3.1
     - dash-ace
+    - dash-dynamic-grid-layout

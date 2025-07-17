@@ -1,4 +1,5 @@
 import dash_bootstrap_components as dbc
+import dash_dynamic_grid_layout as dgl
 import dash_mantine_components as dmc
 from dash import html
 
@@ -164,20 +165,36 @@ def enable_box_edit_mode(
     else:
         box_components_list = [box]
 
-    new_draggable_child = html.Div(
+    # Create a DraggableWrapper for dash-dynamic-grid-layout
+    # This preserves the UUID and makes the component draggable
+
+    # Generate proper UUID for the draggable component (following prototype pattern)
+    box_uuid = f"box-{str(btn_index)}"
+
+    logger.info(f"Creating DraggableWrapper with UUID: {box_uuid}")
+
+    # Create the content div with edit buttons (if in edit mode)
+    content_div = html.Div(
         box_components_list,
-        id=f"box-{str(btn_index)}",
         style={
-            # "overflowY": "auto",
             "overflowY": "hidden",  # Hide overflow to prevent scrollbar
             "width": "100%",  # Ensure it takes full width of the parent
-            # "height": "auto",  # Ensure it takes full height of the parent
             "height": "100%",  # Ensure it takes full height of the parent
             "display": "flex",  # Use flexbox for better layout control
             "flexDirection": "column",  # Arrange children vertically
-            # "padding": "5px",  # Reduce padding to save space
             "boxSizing": "border-box",  # Include padding in the element's total width and height
+            "padding": "10px",  # Add some padding
+            "border": "1px solid #ddd",  # Add a subtle border
+            "borderRadius": "5px",  # Add rounded corners
+            "background": "#ffffff",  # White background
         },
     )
 
-    return new_draggable_child
+    # Create DraggableWrapper with the UUID as ID (like in the prototype)
+    draggable_wrapper = dgl.DraggableWrapper(
+        id=box_uuid,  # Use UUID as ID for layout tracking
+        children=[content_div],
+        handleText="Move Component",  # Handle text for dragging
+    )
+
+    return draggable_wrapper
