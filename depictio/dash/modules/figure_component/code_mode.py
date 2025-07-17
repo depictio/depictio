@@ -308,18 +308,15 @@ def convert_ui_params_to_code(dict_kwargs: Dict[str, Any], visu_type: str) -> st
     MAX_LINE_LENGTH = 55
 
     # Start with basic plot based on visualization type
-    if visu_type.lower() == "scatter":
-        base_call = "fig = px.scatter(df"
-    elif visu_type.lower() == "line":
-        base_call = "fig = px.line(df"
-    elif visu_type.lower() == "bar":
-        base_call = "fig = px.bar(df"
-    elif visu_type.lower() == "box":
-        base_call = "fig = px.box(df"
-    elif visu_type.lower() == "histogram":
-        base_call = "fig = px.histogram(df"
+    visu_lower = visu_type.lower()
+
+    # Handle clustering visualizations (custom functions)
+    if visu_lower == "umap":
+        # For UMAP, we need to import and use the clustering function
+        base_call = "# Import clustering function\nfrom depictio.dash.modules.figure_component.clustering import create_umap_plot\n\n# Create UMAP plot\nfig = create_umap_plot(df"
     else:
-        base_call = "fig = px.scatter(df"  # Default fallback
+        # Standard Plotly Express visualizations
+        base_call = f"fig = px.{visu_lower}(df"
 
     # Add parameters
     params = []
@@ -333,13 +330,23 @@ def convert_ui_params_to_code(dict_kwargs: Dict[str, Any], visu_type: str) -> st
     if not params:
         return base_call + ")"
 
+    # Handle multi-line base_call (like UMAP)
+    if "\n" in base_call:
+        # Split the base_call and work with the last line
+        base_lines = base_call.split("\n")
+        initial_lines = base_lines[:-1]
+        function_call_line = base_lines[-1]
+    else:
+        initial_lines = []
+        function_call_line = base_call
+
     # Build the code with proper line wrapping
-    code_lines = []
-    current_line = base_call
+    code_lines = initial_lines.copy() if initial_lines else []
+    current_line = function_call_line
     indent = " " * 4  # 4 spaces for continuation lines
 
     for i, param in enumerate(params):
-        param_text = f", {param}" if i > 0 or current_line != base_call else f", {param}"
+        param_text = f", {param}" if i > 0 or current_line != function_call_line else f", {param}"
 
         # Check if adding this parameter would exceed the line length
         if len(current_line + param_text) > MAX_LINE_LENGTH:
@@ -351,7 +358,10 @@ def convert_ui_params_to_code(dict_kwargs: Dict[str, Any], visu_type: str) -> st
             current_line += param_text
 
     # Add the closing parenthesis
-    if len(current_line + ")") > MAX_LINE_LENGTH and current_line.strip() != base_call.strip():
+    if (
+        len(current_line + ")") > MAX_LINE_LENGTH
+        and current_line.strip() != function_call_line.strip()
+    ):
         code_lines.append(current_line)
         code_lines.append(")")
     else:
@@ -367,8 +377,8 @@ def extract_params_from_code(code: str) -> Dict[str, Any]:
     # Enhanced regex-based extraction for common patterns
     import re
 
-    # Look for px.scatter, px.line, etc. function calls
-    plotly_call_pattern = r"px\.\w+\(df(?:,\s*(.+?))?\)"
+    # Look for px.scatter, px.line, etc. function calls OR clustering functions
+    plotly_call_pattern = r"(px\.\w+\(df(?:,\s*(.+?))?\)|create_\w+_plot\(df(?:,\s*(.+?))?\))"
     match = re.search(plotly_call_pattern, code, re.DOTALL)
 
     if match and match.group(1):
