@@ -80,6 +80,11 @@ def _get_required_parameters_for_visu(visu_type: str) -> List[str]:
 
 def _needs_default_parameters(visu_type: str, dict_kwargs: Dict[str, Any]) -> bool:
     """Check if default parameters need to be set for a visualization type."""
+    # Defensive handling: ensure dict_kwargs is a dict
+    if not isinstance(dict_kwargs, dict):
+        logger.warning(f"Expected dict for dict_kwargs, got {type(dict_kwargs)}: {dict_kwargs}")
+        return True
+
     if not dict_kwargs:
         return True
 

@@ -8,7 +8,7 @@ visualizations, replacing the fragile docstring parsing approach.
 from enum import Enum
 from typing import Any, Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator, validator
 
 
 class ParameterType(str, Enum):
@@ -122,6 +122,14 @@ class FigureComponentState(BaseModel):
     theme: Literal["light", "dark"] = Field("light", description="Theme setting")
     is_editing: bool = Field(False, description="Whether component is in edit mode")
     last_updated: Optional[str] = Field(None, description="Last update timestamp")
+
+    @field_validator("parameters")
+    def validate_parameters(cls, v):
+        """Ensure parameters is always a dictionary."""
+        if not isinstance(v, dict):
+            # If parameters is not a dict, convert it to an empty dict
+            return {}
+        return v
 
     def get_parameter_value(self, param_name: str, default: Any = None) -> Any:
         """Get parameter value with fallback to default."""
