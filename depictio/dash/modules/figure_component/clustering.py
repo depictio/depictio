@@ -14,6 +14,8 @@ import pandas as pd
 import plotly.express as px
 from plotly.graph_objects import Figure
 
+from depictio.api.v1.configs.config import settings
+
 # Configure Numba environment to avoid Docker/container caching issues
 os.environ["NUMBA_CACHE_DIR"] = "/tmp"
 os.environ["NUMBA_DISABLE_JIT"] = "0"
@@ -91,9 +93,11 @@ def create_umap_plot(
         )
 
     # Apply UMAP
+    # Get the number of workers from Dash configuration for optimal performance
+    n_workers = settings.dash.workers
     logger.info(
         f"Running UMAP with n_neighbors={n_neighbors}, min_dist={min_dist}, "
-        f"n_components={n_components}, metric={metric}"
+        f"n_components={n_components}, metric={metric}, n_jobs={n_workers}"
     )
 
     try:
@@ -103,6 +107,8 @@ def create_umap_plot(
             n_components=n_components,
             metric=metric,
             random_state=random_state,
+            n_jobs=n_workers,  # Use configured number of workers
+            low_memory=True,  # Enable low memory mode for better performance
         )
 
         embedding = umap_model.fit_transform(feature_matrix)
@@ -124,6 +130,7 @@ def create_umap_plot(
                     n_components=n_components,
                     metric="euclidean",  # Use simpler metric
                     random_state=random_state,
+                    n_jobs=1,  # Use single worker for fallback to avoid issues
                     low_memory=True,  # Enable low memory mode
                 )
 
