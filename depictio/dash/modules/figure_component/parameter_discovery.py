@@ -65,8 +65,8 @@ class ParameterInspector:
                 "ggplot2",
                 "seaborn",
                 "simple_white",
-                "mantine_white",
-                "mantine_dark",
+                "presentation",
+                "none",
             ],
             "description": "Plotly template",
             "default": "plotly",
@@ -341,6 +341,333 @@ class ParameterInspector:
         # Return default metadata
         return {"description": f"Parameter: {param_name}"}
 
+    def _get_special_parameter_overrides(
+        self, func_name: str
+    ) -> Optional[List[ParameterDefinition]]:
+        """Get special parameter overrides for visualizations that need custom parameter definitions.
+
+        Args:
+            func_name: Name of the visualization function
+
+        Returns:
+            List of parameter definitions if override exists, None otherwise
+        """
+        overrides = {
+            "violin": self._create_violin_parameters,
+            "sunburst": self._create_sunburst_parameters,
+            "treemap": self._create_treemap_parameters,
+            "pie": self._create_pie_parameters,
+            "timeline": self._create_timeline_parameters,
+        }
+
+        if func_name in overrides:
+            return overrides[func_name]()
+        return None
+
+    def _create_violin_parameters(self) -> List[ParameterDefinition]:
+        """Create proper parameters for violin plots."""
+        return [
+            # Core parameters
+            ParameterDefinition(
+                name="y",
+                type=ParameterType.COLUMN,
+                category=ParameterCategory.CORE,
+                label="Y Axis",
+                description="Values for violin plot distribution",
+                required=True,
+            ),
+            ParameterDefinition(
+                name="x",
+                type=ParameterType.COLUMN,
+                category=ParameterCategory.CORE,
+                label="X Axis",
+                description="Categories for grouping violins",
+                required=False,
+            ),
+            ParameterDefinition(
+                name="color",
+                type=ParameterType.COLUMN,
+                category=ParameterCategory.CORE,
+                label="Color",
+                description="Column for color encoding",
+                required=False,
+            ),
+            # Common parameters
+            *self._get_common_plot_parameters(),
+            # Specific violin parameters
+            ParameterDefinition(
+                name="box",
+                type=ParameterType.BOOLEAN,
+                category=ParameterCategory.SPECIFIC,
+                label="Show Box",
+                description="Whether to show box plot inside violin",
+                default=False,
+                required=False,
+            ),
+            ParameterDefinition(
+                name="points",
+                type=ParameterType.SELECT,
+                category=ParameterCategory.SPECIFIC,
+                label="Points",
+                description="How to display points",
+                options=["outliers", "suspectedoutliers", "all", False],
+                default=False,
+                required=False,
+            ),
+        ]
+
+    def _create_sunburst_parameters(self) -> List[ParameterDefinition]:
+        """Create proper parameters for sunburst charts."""
+        return [
+            # Core parameters
+            ParameterDefinition(
+                name="values",
+                type=ParameterType.COLUMN,
+                category=ParameterCategory.CORE,
+                label="Values",
+                description="Values for each segment size",
+                required=True,
+            ),
+            ParameterDefinition(
+                name="parents",
+                type=ParameterType.COLUMN,
+                category=ParameterCategory.CORE,
+                label="Parents",
+                description="Parent categories for hierarchy (leave empty for root-level charts)",
+                required=False,
+            ),
+            ParameterDefinition(
+                name="names",
+                type=ParameterType.COLUMN,
+                category=ParameterCategory.CORE,
+                label="Names",
+                description="Names for each segment",
+                required=False,
+            ),
+            ParameterDefinition(
+                name="ids",
+                type=ParameterType.COLUMN,
+                category=ParameterCategory.CORE,
+                label="IDs",
+                description="Unique identifiers for segments",
+                required=False,
+            ),
+            ParameterDefinition(
+                name="color",
+                type=ParameterType.COLUMN,
+                category=ParameterCategory.CORE,
+                label="Color",
+                description="Column for color encoding",
+                required=False,
+            ),
+            # Common parameters
+            *self._get_common_plot_parameters(),
+            # Specific sunburst parameters
+            ParameterDefinition(
+                name="maxdepth",
+                type=ParameterType.INTEGER,
+                category=ParameterCategory.SPECIFIC,
+                label="Max Depth",
+                description="Maximum depth of hierarchy to show",
+                min_value=1,
+                max_value=10,
+                required=False,
+            ),
+        ]
+
+    def _create_treemap_parameters(self) -> List[ParameterDefinition]:
+        """Create proper parameters for treemap charts."""
+        return [
+            # Core parameters
+            ParameterDefinition(
+                name="values",
+                type=ParameterType.COLUMN,
+                category=ParameterCategory.CORE,
+                label="Values",
+                description="Values for each rectangle size",
+                required=True,
+            ),
+            ParameterDefinition(
+                name="parents",
+                type=ParameterType.COLUMN,
+                category=ParameterCategory.CORE,
+                label="Parents",
+                description="Parent categories for hierarchy (leave empty for root-level charts)",
+                required=False,
+            ),
+            ParameterDefinition(
+                name="names",
+                type=ParameterType.COLUMN,
+                category=ParameterCategory.CORE,
+                label="Names",
+                description="Names for each rectangle",
+                required=False,
+            ),
+            ParameterDefinition(
+                name="ids",
+                type=ParameterType.COLUMN,
+                category=ParameterCategory.CORE,
+                label="IDs",
+                description="Unique identifiers for rectangles",
+                required=False,
+            ),
+            ParameterDefinition(
+                name="color",
+                type=ParameterType.COLUMN,
+                category=ParameterCategory.CORE,
+                label="Color",
+                description="Column for color encoding",
+                required=False,
+            ),
+            # Common parameters
+            *self._get_common_plot_parameters(),
+            # Specific treemap parameters
+            ParameterDefinition(
+                name="maxdepth",
+                type=ParameterType.INTEGER,
+                category=ParameterCategory.SPECIFIC,
+                label="Max Depth",
+                description="Maximum depth of hierarchy to show",
+                min_value=1,
+                max_value=10,
+                required=False,
+            ),
+        ]
+
+    def _create_pie_parameters(self) -> List[ParameterDefinition]:
+        """Create proper parameters for pie charts."""
+        return [
+            # Core parameters
+            ParameterDefinition(
+                name="values",
+                type=ParameterType.COLUMN,
+                category=ParameterCategory.CORE,
+                label="Values",
+                description="Values for each slice size",
+                required=True,
+            ),
+            ParameterDefinition(
+                name="names",
+                type=ParameterType.COLUMN,
+                category=ParameterCategory.CORE,
+                label="Names",
+                description="Names for each slice",
+                required=False,
+            ),
+            ParameterDefinition(
+                name="color",
+                type=ParameterType.COLUMN,
+                category=ParameterCategory.CORE,
+                label="Color",
+                description="Column for color encoding",
+                required=False,
+            ),
+            # Common parameters
+            *self._get_common_plot_parameters(),
+            # Specific pie parameters
+            ParameterDefinition(
+                name="hole",
+                type=ParameterType.FLOAT,
+                category=ParameterCategory.SPECIFIC,
+                label="Hole Size",
+                description="Size of hole in center (0 = pie, >0 = donut)",
+                min_value=0.0,
+                max_value=0.9,
+                default=0.0,
+                required=False,
+            ),
+        ]
+
+    def _create_timeline_parameters(self) -> List[ParameterDefinition]:
+        """Create proper parameters for timeline charts."""
+        return [
+            # Core parameters
+            ParameterDefinition(
+                name="x_start",
+                type=ParameterType.COLUMN,
+                category=ParameterCategory.CORE,
+                label="Start Time",
+                description="Start time/date for timeline events",
+                required=True,
+            ),
+            ParameterDefinition(
+                name="x_end",
+                type=ParameterType.COLUMN,
+                category=ParameterCategory.CORE,
+                label="End Time",
+                description="End time/date for timeline events",
+                required=False,
+            ),
+            ParameterDefinition(
+                name="y",
+                type=ParameterType.COLUMN,
+                category=ParameterCategory.CORE,
+                label="Category",
+                description="Categories for timeline rows",
+                required=False,
+            ),
+            ParameterDefinition(
+                name="color",
+                type=ParameterType.COLUMN,
+                category=ParameterCategory.CORE,
+                label="Color",
+                description="Column for color encoding",
+                required=False,
+            ),
+            # Common parameters
+            *self._get_common_plot_parameters(),
+        ]
+
+    def _get_common_plot_parameters(self) -> List[ParameterDefinition]:
+        """Get common parameters that apply to most visualizations."""
+        return [
+            ParameterDefinition(
+                name="title",
+                type=ParameterType.STRING,
+                category=ParameterCategory.COMMON,
+                label="Title",
+                description="Plot title",
+                required=False,
+            ),
+            ParameterDefinition(
+                name="width",
+                type=ParameterType.INTEGER,
+                category=ParameterCategory.COMMON,
+                label="Width",
+                description="Figure width in pixels",
+                min_value=100,
+                max_value=2000,
+                required=False,
+            ),
+            ParameterDefinition(
+                name="height",
+                type=ParameterType.INTEGER,
+                category=ParameterCategory.COMMON,
+                label="Height",
+                description="Figure height in pixels",
+                min_value=100,
+                max_value=2000,
+                required=False,
+            ),
+            ParameterDefinition(
+                name="hover_name",
+                type=ParameterType.COLUMN,
+                category=ParameterCategory.COMMON,
+                label="Hover Name",
+                description="Column for hover tooltip names",
+                required=False,
+            ),
+            ParameterDefinition(
+                name="hover_data",
+                type=ParameterType.MULTI_SELECT,
+                category=ParameterCategory.COMMON,
+                label="Hover Data",
+                description="Columns to show on hover",
+                required=False,
+                options=[],
+            ),
+        ]
+
     def discover_parameters(self, func_name: str) -> List[ParameterDefinition]:
         """Discover parameters for a Plotly Express function.
 
@@ -352,6 +679,12 @@ class ParameterInspector:
         """
         if func_name in self._parameter_cache:
             return self._parameter_cache[func_name]
+
+        # Check for special parameter overrides first
+        special_params = self._get_special_parameter_overrides(func_name)
+        if special_params:
+            self._parameter_cache[func_name] = special_params
+            return special_params
 
         signature = self.get_function_signature(func_name)
         if not signature:
@@ -544,9 +877,23 @@ def discover_all_visualizations() -> Dict[str, VisualizationDefinition]:
     # Add custom clustering functions
     functions.extend(["umap"])
 
+    # Disabled visualizations (temporarily removed from dropdown)
+    disabled_visualizations = {
+        "ecdf",
+        "funnel_area",
+        "icicle",
+        "parallel_categories",
+        "parallel_coordinates",
+        "strip",
+    }
+
     visualizations = {}
 
     for func_name in functions:
+        # Skip disabled visualizations
+        if func_name in disabled_visualizations:
+            logger.debug(f"Skipping disabled visualization: {func_name}")
+            continue
         try:
             if func_name == "umap":
                 # Create custom UMAP visualization definition
@@ -701,7 +1048,16 @@ def create_umap_visualization_definition() -> VisualizationDefinition:
             category=ParameterCategory.COMMON,
             label="Template",
             description="Plotly template",
-            options=["plotly", "plotly_white", "plotly_dark", "ggplot2", "seaborn", "simple_white"],
+            options=[
+                "plotly",
+                "plotly_white",
+                "plotly_dark",
+                "ggplot2",
+                "seaborn",
+                "simple_white",
+                "presentation",
+                "none",
+            ],
             default="plotly",
             required=False,
         ),

@@ -60,6 +60,8 @@ def _get_required_parameters_for_visu(visu_type: str) -> List[str]:
                 required_params = ["x"] if visu_type.lower() == "histogram" else ["y"]
             elif visu_type.lower() in ["pie", "sunburst", "treemap"]:
                 required_params = ["values"]
+            elif visu_type.lower() in ["timeline"]:
+                required_params = ["x_start"]
             elif visu_type.lower() in ["umap"]:
                 # Clustering visualizations don't have required parameters
                 # They can work without explicit parameters (will use all numeric columns)
@@ -117,6 +119,23 @@ def _get_default_parameters(visu_type: str, columns_specs: Dict[str, List[str]])
     # Add color column if available
     if categorical_cols and "color" not in defaults:
         defaults["color"] = categorical_cols[0]
+
+    # Special handling for hierarchical visualizations (sunburst, treemap)
+    if visu_type.lower() in ["sunburst", "treemap"]:
+        # For hierarchical charts, set helpful defaults for optional parameters
+        if "parents" not in defaults and len(categorical_cols) > 1:
+            # Use second categorical column as parents if available
+            defaults["parents"] = categorical_cols[1] if len(categorical_cols) > 1 else ""
+        elif "parents" not in defaults:
+            # Empty string is valid for root-level hierarchical charts
+            defaults["parents"] = ""
+
+        if "names" not in defaults and categorical_cols:
+            defaults["names"] = categorical_cols[0]
+
+        if "ids" not in defaults and categorical_cols:
+            # Use first categorical column as IDs if available
+            defaults["ids"] = categorical_cols[0]
 
     return {k: v for k, v in defaults.items() if v is not None}
 
@@ -381,6 +400,9 @@ def register_callbacks_figure_component(app):
                         converted_value = _convert_parameter_value(param_name, value)
                         parameters[param_name] = converted_value
                     elif isinstance(value, bool):  # Include boolean False
+                        parameters[param_name] = value
+                    elif value == "":  # Include empty string for optional parameters like parents
+                        # For hierarchical charts (sunburst, treemap), empty string is valid for parents
                         parameters[param_name] = value
 
         logger.info(f"Extracted parameters: {parameters}")

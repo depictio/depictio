@@ -89,9 +89,16 @@ class ComponentBuilder:
         self, param: ParameterDefinition, component_id: Dict, value: Any, disabled: bool
     ) -> dmc.Select:
         """Build dropdown for column selection."""
+        # For hierarchical charts, add empty option for parents parameter
+        options = [{"label": col, "value": col} for col in self.columns]
+
+        # Add empty option for optional parameters in hierarchical charts
+        if not param.required and param.name in ["parents"]:
+            options.insert(0, {"label": "(None - Root level)", "value": ""})
+
         return dmc.Select(
             id=component_id,
-            data=[{"label": col, "value": col} for col in self.columns],
+            data=options,
             value=value,
             placeholder=f"Select {param.label.lower()}...",
             disabled=disabled,

@@ -38,7 +38,7 @@ dmcfuncs.renderVisualizationOption = function ({ option, checked }) {
     treemap: React.createElement(iconify.DashIconify, { icon: "mdi:view-grid", width: 16 }),
     area: React.createElement(iconify.DashIconify, { icon: "mdi:chart-areaspline", width: 16 }),
     density_contour: React.createElement(iconify.DashIconify, { icon: "mdi:chart-line-variant", width: 16 }),
-    density_heatmap: React.createElement(iconify.DashIconify, { icon: "mdi:chart-heatmap", width: 16 }),
+    density_heatmap: React.createElement(iconify.DashIconify, { icon: "mdi:grid", width: 16 }),
     funnel: React.createElement(iconify.DashIconify, { icon: "mdi:filter-variant", width: 16 }),
     strip: React.createElement(iconify.DashIconify, { icon: "mdi:chart-scatter-plot-hexbin", width: 16 }),
     parallel_coordinates: React.createElement(iconify.DashIconify, { icon: "mdi:chart-multiline", width: 16 }),

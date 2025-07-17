@@ -31,7 +31,8 @@ def _get_theme_template(theme: str) -> str:
         theme = "light"
 
     logger.info(f"Using theme: {theme} for Plotly template")
-    return "mantine_dark" if theme == "dark" else "mantine_light"
+    # Use actual available Plotly templates
+    return "plotly_dark" if theme == "dark" else "plotly_white"
 
 
 def build_figure_frame(index, children=None):
@@ -161,6 +162,8 @@ def _get_required_parameters(visu_type: str) -> List[str]:
                 required_params = ["x"] if visu_type.lower() == "histogram" else ["y"]
             elif visu_type.lower() in ["pie", "sunburst", "treemap"]:
                 required_params = ["values"]
+            elif visu_type.lower() in ["timeline"]:
+                required_params = ["x_start"]
             elif visu_type.lower() in ["umap"]:
                 # Clustering visualizations don't have required parameters
                 # They can work without explicit parameters (will use all numeric columns)
@@ -240,6 +243,23 @@ def render_figure(
         return px.scatter(
             template=dict_kwargs.get("template", _get_theme_template(theme)), title=title
         )
+
+    # Special handling for hierarchical charts (sunburst, treemap)
+    if visu_type.lower() in ["sunburst", "treemap"]:
+        # Ensure parents parameter is handled correctly
+        if "parents" in cleaned_kwargs and cleaned_kwargs["parents"] == "":
+            # Empty string is valid for root-level hierarchical charts
+            cleaned_kwargs["parents"] = None
+
+        # Validate that columns exist in the dataframe
+        for param_name, column_name in cleaned_kwargs.items():
+            if param_name in ["values", "names", "ids", "parents", "color"] and column_name:
+                if column_name not in df.columns:
+                    logger.warning(
+                        f"Column '{column_name}' not found in dataframe for parameter '{param_name}'"
+                    )
+                    # Remove invalid column reference
+                    cleaned_kwargs[param_name] = None
 
     try:
         if is_clustering:
