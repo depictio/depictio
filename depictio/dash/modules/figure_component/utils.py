@@ -227,8 +227,22 @@ def render_figure(
         logger.warning("Empty or invalid dataframe, creating empty figure")
         return px.scatter(template=dict_kwargs.get("template", _get_theme_template(theme)))
 
-    # Clean parameters - remove None values and invalid parameters
-    cleaned_kwargs = {k: v for k, v in dict_kwargs.items() if v is not None}
+    # Clean parameters - remove None values and problematic empty strings
+    # Keep certain parameters that can legitimately be empty strings (like parents for hierarchical charts)
+    keep_empty_string_params = {
+        "parents",
+        "names",
+        "ids",
+        "hover_name",
+        "hover_data",
+        "custom_data",
+    }
+    cleaned_kwargs = {}
+    for k, v in dict_kwargs.items():
+        if v is not None:
+            # Keep the parameter if it's not empty, or if it's in the allowed empty string list
+            if v != "" and v != [] or (k in keep_empty_string_params and v == ""):
+                cleaned_kwargs[k] = v
 
     # Check if required parameters are missing for the visualization type
     required_params = _get_required_parameters(visu_type.lower())
@@ -387,6 +401,11 @@ def validate_parameters(visu_type: str, parameters: Dict[str, Any]) -> Dict[str,
     Returns:
         Validated and cleaned parameters
     """
+    # Defensive handling: ensure parameters is a dict
+    if not isinstance(parameters, dict):
+        logger.warning(f"Expected dict for parameters, got {type(parameters)}: {parameters}")
+        return {}
+
     try:
         viz_def = get_visualization_definition(visu_type)
         valid_params = {p.name for p in viz_def.parameters}
@@ -399,7 +418,11 @@ def validate_parameters(visu_type: str, parameters: Dict[str, Any]) -> Dict[str,
 
     except Exception as e:
         logger.warning(f"Parameter validation failed: {e}, returning original")
-        return {k: v for k, v in parameters.items() if v is not None}
+        # Additional defensive handling in exception case
+        if isinstance(parameters, dict):
+            return {k: v for k, v in parameters.items() if v is not None}
+        else:
+            return {}
 
 
 def build_figure(**kwargs) -> html.Div:
@@ -417,6 +440,11 @@ def build_figure(**kwargs) -> html.Div:
 
     index = kwargs.get("index")
     dict_kwargs = kwargs.get("dict_kwargs", {})
+
+    # Defensive handling: ensure dict_kwargs is always a dict
+    if not isinstance(dict_kwargs, dict):
+        logger.warning(f"Expected dict for dict_kwargs, got {type(dict_kwargs)}: {dict_kwargs}")
+        dict_kwargs = {}
 
     logger.info(f"INDEX: {index}")
     logger.info(f"DICT_KWARGS RECEIVED: {dict_kwargs}")

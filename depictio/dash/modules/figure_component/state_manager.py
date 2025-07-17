@@ -155,8 +155,22 @@ class FigureStateManager:
 
             return result
 
-        except Exception:
-            return state.parameters.copy()
+        except Exception as e:
+            # Defensive handling: ensure parameters is a dict before calling copy()
+            if isinstance(state.parameters, dict):
+                return state.parameters.copy()
+            else:
+                # If parameters is not a dict (e.g., accidentally set to string), return empty dict
+                # Log this issue for debugging
+                import logging
+
+                logger = logging.getLogger(__name__)
+                logger.warning(
+                    f"State parameters for component {component_id} is not a dict: "
+                    f"type={type(state.parameters)}, value={state.parameters}. "
+                    f"Original error: {e}"
+                )
+                return {}
 
     def validate_visualization_change(self, component_id: str, new_visu_type: str) -> bool:
         """Validate if visualization type change is allowed.
