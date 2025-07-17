@@ -18,6 +18,7 @@ from .models import (
     ParameterDefinition,
     ParameterType,
     VisualizationDefinition,
+    VisualizationGroup,
 )
 
 
@@ -452,6 +453,63 @@ def get_available_plotly_functions() -> List[str]:
     return sorted(functions)
 
 
+def get_visualization_group(func_name: str) -> VisualizationGroup:
+    """Determine the group for a visualization function."""
+    # Core/Standard visualizations
+    core_viz = {"scatter", "line", "bar", "histogram", "box", "pie", "area"}
+
+    # Advanced statistical plots
+    advanced_viz = {
+        "violin",
+        "density_contour",
+        "density_heatmap",
+        "parallel_coordinates",
+        "parallel_categories",
+        "ecdf",
+        "strip",
+        "sunburst",
+        "treemap",
+        "funnel",
+        "funnel_area",
+        "icicle",
+        "timeline",
+    }
+
+    # 3D visualizations
+    three_d_viz = {"scatter_3d", "line_3d"}
+
+    # Geographic visualizations
+    geographic_viz = {
+        "choropleth",
+        "choropleth_map",
+        "choropleth_mapbox",
+        "density_map",
+        "density_mapbox",
+        "line_geo",
+        "line_map",
+        "line_mapbox",
+        "scatter_geo",
+        "scatter_map",
+        "scatter_mapbox",
+    }
+
+    # Clustering visualizations (custom implementations)
+    clustering_viz = {"umap"}
+
+    if func_name in core_viz:
+        return VisualizationGroup.CORE
+    elif func_name in advanced_viz:
+        return VisualizationGroup.ADVANCED
+    elif func_name in three_d_viz:
+        return VisualizationGroup.THREE_D
+    elif func_name in geographic_viz:
+        return VisualizationGroup.GEOGRAPHIC
+    elif func_name in clustering_viz:
+        return VisualizationGroup.CLUSTERING
+    else:
+        return VisualizationGroup.SPECIALIZED
+
+
 def discover_all_visualizations() -> Dict[str, VisualizationDefinition]:
     """Discover all available visualizations dynamically.
 
@@ -477,24 +535,198 @@ def discover_all_visualizations() -> Dict[str, VisualizationDefinition]:
         "strip": "mdi:chart-scatter-plot",
         "parallel_coordinates": "mdi:chart-line-variant",
         "parallel_categories": "mdi:chart-sankey",
+        # Clustering visualizations
+        "umap": "mdi:scatter-plot",
     }
 
     functions = get_available_plotly_functions()
+
+    # Add custom clustering functions
+    functions.extend(["umap"])
+
     visualizations = {}
 
     for func_name in functions:
         try:
-            viz_def = parameter_inspector.create_visualization_definition(
-                func_name=func_name, icon=ICON_MAPPING.get(func_name, "mdi:chart-line")
-            )
+            if func_name == "umap":
+                # Create custom UMAP visualization definition
+                viz_def = create_umap_visualization_definition()
+            else:
+                # Create standard Plotly visualization definition
+                viz_def = parameter_inspector.create_visualization_definition(
+                    func_name=func_name, icon=ICON_MAPPING.get(func_name, "mdi:chart-line")
+                )
+
+            # Set the visualization group
+            viz_def.group = get_visualization_group(func_name)
+
             visualizations[func_name] = viz_def
-            logger.debug(f"Created visualization definition for {func_name}")
+            logger.debug(
+                f"Created visualization definition for {func_name} in group {viz_def.group}"
+            )
 
         except Exception as e:
             logger.warning(f"Failed to create definition for {func_name}: {e}")
 
     logger.info(f"Discovered {len(visualizations)} visualizations")
     return visualizations
+
+
+def create_umap_visualization_definition() -> VisualizationDefinition:
+    """Create UMAP visualization definition with custom parameters."""
+
+    # Define UMAP-specific parameters
+    umap_parameters = [
+        # Core parameters
+        ParameterDefinition(
+            name="features",
+            type=ParameterType.MULTI_SELECT,
+            category=ParameterCategory.CORE,
+            label="Features",
+            description="Columns to use for UMAP computation (if empty, uses all numeric columns)",
+            required=False,
+            options=[],  # Will be populated with column names
+        ),
+        ParameterDefinition(
+            name="color",
+            type=ParameterType.COLUMN,
+            category=ParameterCategory.CORE,
+            label="Color",
+            description="Column for color encoding",
+            required=False,
+        ),
+        # UMAP-specific parameters
+        ParameterDefinition(
+            name="n_neighbors",
+            type=ParameterType.INTEGER,
+            category=ParameterCategory.SPECIFIC,
+            label="Number of Neighbors",
+            description="Number of nearest neighbors for UMAP",
+            default=15,
+            min_value=2,
+            max_value=200,
+            required=False,
+        ),
+        ParameterDefinition(
+            name="min_dist",
+            type=ParameterType.FLOAT,
+            category=ParameterCategory.SPECIFIC,
+            label="Minimum Distance",
+            description="Minimum distance between points in low-dimensional space",
+            default=0.1,
+            min_value=0.0,
+            max_value=1.0,
+            required=False,
+        ),
+        ParameterDefinition(
+            name="n_components",
+            type=ParameterType.SELECT,
+            category=ParameterCategory.SPECIFIC,
+            label="Number of Components",
+            description="Number of dimensions for UMAP output",
+            options=[2, 3],
+            default=2,
+            required=False,
+        ),
+        ParameterDefinition(
+            name="metric",
+            type=ParameterType.SELECT,
+            category=ParameterCategory.SPECIFIC,
+            label="Distance Metric",
+            description="Distance metric for UMAP",
+            options=["euclidean", "manhattan", "chebyshev", "minkowski", "cosine", "correlation"],
+            default="euclidean",
+            required=False,
+        ),
+        ParameterDefinition(
+            name="random_state",
+            type=ParameterType.INTEGER,
+            category=ParameterCategory.SPECIFIC,
+            label="Random State",
+            description="Random state for reproducibility",
+            default=42,
+            min_value=0,
+            max_value=10000,
+            required=False,
+        ),
+        # Common visualization parameters
+        ParameterDefinition(
+            name="hover_name",
+            type=ParameterType.COLUMN,
+            category=ParameterCategory.COMMON,
+            label="Hover Name",
+            description="Column for hover tooltip names",
+            required=False,
+        ),
+        ParameterDefinition(
+            name="hover_data",
+            type=ParameterType.MULTI_SELECT,
+            category=ParameterCategory.COMMON,
+            label="Hover Data",
+            description="Columns to show on hover",
+            required=False,
+            options=[],
+        ),
+        ParameterDefinition(
+            name="title",
+            type=ParameterType.STRING,
+            category=ParameterCategory.COMMON,
+            label="Title",
+            description="Plot title",
+            required=False,
+        ),
+        ParameterDefinition(
+            name="width",
+            type=ParameterType.INTEGER,
+            category=ParameterCategory.COMMON,
+            label="Width",
+            description="Figure width in pixels",
+            min_value=100,
+            max_value=2000,
+            required=False,
+        ),
+        ParameterDefinition(
+            name="height",
+            type=ParameterType.INTEGER,
+            category=ParameterCategory.COMMON,
+            label="Height",
+            description="Figure height in pixels",
+            min_value=100,
+            max_value=2000,
+            required=False,
+        ),
+        ParameterDefinition(
+            name="template",
+            type=ParameterType.SELECT,
+            category=ParameterCategory.COMMON,
+            label="Template",
+            description="Plotly template",
+            options=["plotly", "plotly_white", "plotly_dark", "ggplot2", "seaborn", "simple_white"],
+            default="plotly",
+            required=False,
+        ),
+        ParameterDefinition(
+            name="opacity",
+            type=ParameterType.FLOAT,
+            category=ParameterCategory.COMMON,
+            label="Opacity",
+            description="Marker opacity",
+            min_value=0.0,
+            max_value=1.0,
+            default=0.7,
+            required=False,
+        ),
+    ]
+
+    return VisualizationDefinition(
+        name="umap",
+        function_name="umap",  # Custom function name
+        label="UMAP",
+        description="Uniform Manifold Approximation and Projection for dimensionality reduction",
+        parameters=umap_parameters,
+        icon="mdi:scatter-plot",
+        group=VisualizationGroup.CLUSTERING,
+    )
 
 
 def get_common_visualizations() -> List[str]:

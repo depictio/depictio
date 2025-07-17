@@ -34,6 +34,17 @@ class ParameterCategory(str, Enum):
     ADVANCED = "advanced"  # Advanced/rarely used parameters
 
 
+class VisualizationGroup(str, Enum):
+    """Visualization groups for organizing dropdown."""
+
+    CORE = "core"  # Basic/standard visualizations (scatter, bar, line, etc.)
+    ADVANCED = "advanced"  # Advanced statistical plots
+    THREE_D = "3d"  # 3D visualizations
+    GEOGRAPHIC = "geographic"  # Map-based visualizations
+    CLUSTERING = "clustering"  # Clustering and dimensionality reduction
+    SPECIALIZED = "specialized"  # Specialized/niche visualizations
+
+
 class ParameterDefinition(BaseModel):
     """Definition of a single parameter for a visualization."""
 
@@ -77,6 +88,7 @@ class VisualizationDefinition(BaseModel):
     description: str = Field("", description="Visualization description")
     parameters: List[ParameterDefinition] = Field(..., description="Parameter definitions")
     icon: str = Field("mdi:chart-line", description="Icon for UI")
+    group: VisualizationGroup = Field(VisualizationGroup.CORE, description="Visualization group")
 
     @property
     def core_params(self) -> List[ParameterDefinition]:

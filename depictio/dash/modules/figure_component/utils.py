@@ -12,6 +12,7 @@ from dash_iconify import DashIconify
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
+from .clustering import get_clustering_function
 from .definitions import get_visualization_definition
 from .models import ComponentConfig
 
@@ -160,6 +161,10 @@ def _get_required_parameters(visu_type: str) -> List[str]:
                 required_params = ["x"] if visu_type.lower() == "histogram" else ["y"]
             elif visu_type.lower() in ["pie", "sunburst", "treemap"]:
                 required_params = ["values"]
+            elif visu_type.lower() in ["umap"]:
+                # Clustering visualizations don't have required parameters
+                # They can work without explicit parameters (will use all numeric columns)
+                required_params = []
             else:
                 required_params = ["x", "y"]  # Default for most plots
 
@@ -167,6 +172,8 @@ def _get_required_parameters(visu_type: str) -> List[str]:
 
     except Exception:
         # Fallback if visualization definition not found
+        if visu_type.lower() in ["umap"]:
+            return []  # Clustering visualizations don't require specific parameters
         return ["x", "y"]
 
 
@@ -191,8 +198,11 @@ def render_figure(
     Returns:
         Plotly figure object
     """
+    # Check if it's a clustering visualization
+    is_clustering = visu_type.lower() in ["umap"]
+
     # Validate visualization type
-    if visu_type.lower() not in PLOTLY_FUNCTIONS:
+    if not is_clustering and visu_type.lower() not in PLOTLY_FUNCTIONS:
         logger.warning(f"Unknown visualization type: {visu_type}, falling back to scatter")
         visu_type = "scatter"
 
@@ -232,26 +242,50 @@ def render_figure(
         )
 
     try:
-        # Get the appropriate Plotly function
-        plot_function = PLOTLY_FUNCTIONS[visu_type.lower()]
+        if is_clustering:
+            # Handle clustering visualizations (e.g., UMAP)
+            clustering_function = get_clustering_function(visu_type.lower())
 
-        # Handle large datasets with sampling
-        if df.height > cutoff:
-            cache_key = f"{id(df)}_{cutoff}_{hash(str(cleaned_kwargs))}"
+            # Handle large datasets with sampling for clustering
+            if df.height > cutoff:
+                cache_key = f"{id(df)}_{cutoff}_{hash(str(cleaned_kwargs))}"
 
-            if cache_key not in _sampling_cache:
-                sampled_df = df.sample(n=cutoff, seed=0).to_pandas()
-                _sampling_cache[cache_key] = sampled_df
-                logger.info(f"Cached sampled data: {cutoff} points from {df.height}")
+                if cache_key not in _sampling_cache:
+                    sampled_df = df.sample(n=cutoff, seed=0).to_pandas()
+                    _sampling_cache[cache_key] = sampled_df
+                    logger.info(
+                        f"Cached sampled data for clustering: {cutoff} points from {df.height}"
+                    )
+                else:
+                    sampled_df = _sampling_cache[cache_key]
+                    logger.info(f"Using cached sampled data for clustering: {cutoff} points")
+
+                figure = clustering_function(sampled_df, **cleaned_kwargs)
             else:
-                sampled_df = _sampling_cache[cache_key]
-                logger.info(f"Using cached sampled data: {cutoff} points")
-
-            figure = plot_function(sampled_df, **cleaned_kwargs)
+                # Use full dataset
+                pandas_df = df.to_pandas()
+                figure = clustering_function(pandas_df, **cleaned_kwargs)
         else:
-            # Use full dataset
-            pandas_df = df.to_pandas()
-            figure = plot_function(pandas_df, **cleaned_kwargs)
+            # Handle standard Plotly visualizations
+            plot_function = PLOTLY_FUNCTIONS[visu_type.lower()]
+
+            # Handle large datasets with sampling
+            if df.height > cutoff:
+                cache_key = f"{id(df)}_{cutoff}_{hash(str(cleaned_kwargs))}"
+
+                if cache_key not in _sampling_cache:
+                    sampled_df = df.sample(n=cutoff, seed=0).to_pandas()
+                    _sampling_cache[cache_key] = sampled_df
+                    logger.info(f"Cached sampled data: {cutoff} points from {df.height}")
+                else:
+                    sampled_df = _sampling_cache[cache_key]
+                    logger.info(f"Using cached sampled data: {cutoff} points")
+
+                figure = plot_function(sampled_df, **cleaned_kwargs)
+            else:
+                # Use full dataset
+                pandas_df = df.to_pandas()
+                figure = plot_function(pandas_df, **cleaned_kwargs)
 
         # Apply responsive sizing
         if _config.responsive_sizing:

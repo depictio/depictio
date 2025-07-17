@@ -4,7 +4,28 @@ var dmc = window.dash_mantine_components;
 var iconify = window.dash_iconify;
 
 dmcfuncs.renderVisualizationOption = function ({ option, checked }) {
-  // Icon mapping for visualization types
+  // Check if this is a group header, separator, or special option
+  const isGroupHeader = option.value.startsWith("__group__");
+  const isSeparator = option.value.startsWith("__separator__") || option.label === "";
+  const isInfo = option.value.startsWith("__info__");
+
+  // For group headers, separators, or info items, don't show icons
+  if (isGroupHeader || isSeparator || isInfo) {
+    return React.createElement(
+      "div",
+      {
+        style: {
+          fontSize: "14px",
+          fontWeight: isGroupHeader ? "bold" : "normal",
+          color: isGroupHeader ? "#495057" : "#868e96",
+          padding: isSeparator ? "2px 0" : "4px 0"
+        }
+      },
+      option.label
+    );
+  }
+
+  // Icon mapping for visualization types (only for actual visualizations)
   const icons = {
     scatter: React.createElement(iconify.DashIconify, { icon: "mdi:chart-scatter-plot", width: 16 }),
     line: React.createElement(iconify.DashIconify, { icon: "mdi:chart-line", width: 16 }),
@@ -48,6 +69,9 @@ dmcfuncs.renderVisualizationOption = function ({ option, checked }) {
     scatter_matrix: React.createElement(iconify.DashIconify, { icon: "mdi:matrix", width: 16 }),
     scatter_polar: React.createElement(iconify.DashIconify, { icon: "mdi:chart-scatter-plot", width: 16 }),
     scatter_ternary: React.createElement(iconify.DashIconify, { icon: "mdi:chart-scatter-plot", width: 16 }),
+
+    // Clustering visualizations
+    umap: React.createElement(iconify.DashIconify, { icon: "mdi:scatter-plot", width: 16 }),
   };
 
   // Default icon for unknown types

@@ -18,15 +18,35 @@ from .models import FigureComponentState, ParameterDefinition, ParameterType
 class ComponentBuilder:
     """Builder for creating parameter input components."""
 
-    def __init__(self, component_index: str, columns: List[str]):
+    def __init__(
+        self, component_index: str, columns: List[str], columns_info: Optional[Dict] = None
+    ):
         """Initialize component builder.
 
         Args:
             component_index: Unique index for this component instance
             columns: Available column names for column-type parameters
+            columns_info: Dictionary with column type information {col_name: {"type": "int64", ...}}
         """
         self.component_index = component_index
         self.columns = columns
+        self.columns_info = columns_info or {}
+
+    def _get_numeric_columns(self) -> List[str]:
+        """Get list of numeric columns based on column type information."""
+        if not self.columns_info:
+            # Fallback: return all columns if no type info available
+            return self.columns
+
+        numeric_types = {"int64", "float64", "int32", "float32", "number"}
+        numeric_columns = []
+
+        for col_name, col_info in self.columns_info.items():
+            col_type = col_info.get("type", "").lower()
+            if col_type in numeric_types or "int" in col_type or "float" in col_type:
+                numeric_columns.append(col_name)
+
+        return numeric_columns
 
     def build_parameter_input(
         self, param: ParameterDefinition, value: Any = None, disabled: bool = False
@@ -101,11 +121,14 @@ class ComponentBuilder:
 
     def _build_multi_select(
         self, param: ParameterDefinition, component_id: Dict, value: Any, disabled: bool
-    ) -> dmc.MultiSelect:
+    ) -> Union[dmc.MultiSelect, html.Div]:
         """Build multi-select dropdown."""
         if param.name in ["hover_data", "custom_data"]:
             # Special case for data parameters - use columns
             options = [{"label": col, "value": col} for col in self.columns]
+        elif param.name == "features":
+            # Special case for UMAP features - use only numeric columns with Select All button
+            return self._build_features_multi_select(param, component_id, value, disabled)
         else:
             options = [{"label": str(opt), "value": str(opt)} for opt in (param.options or [])]
 
@@ -119,6 +142,51 @@ class ComponentBuilder:
             size="md",  # Make dropdown larger
             comboboxProps={"withinPortal": False},  # Prevents dropdown from going behind modals
             style={"width": "100%", "minHeight": "40px"},  # Increase height
+        )
+
+    def _build_features_multi_select(
+        self, param: ParameterDefinition, component_id: Dict, value: Any, disabled: bool
+    ) -> html.Div:
+        """Build enhanced multi-select for features with Select All functionality."""
+        numeric_columns = self._get_numeric_columns()
+        options = [{"label": col, "value": col} for col in numeric_columns]
+
+        select_all_id = {"type": f"select-all-{param.name}", "index": self.component_index}
+
+        return html.Div(
+            [
+                dmc.Group(
+                    [
+                        dmc.MultiSelect(
+                            id=component_id,
+                            data=options,
+                            value=value or [],
+                            placeholder=f"Select {param.label.lower()}... ({len(numeric_columns)} numeric columns available)",
+                            disabled=disabled,
+                            searchable=True,
+                            size="md",
+                            comboboxProps={"withinPortal": False},
+                            style={"flex": "1", "minHeight": "40px"},
+                        ),
+                        dmc.Button(
+                            "Select All",
+                            id=select_all_id,
+                            variant="outline",
+                            size="sm",
+                            leftSection=DashIconify(icon="mdi:select-all", width=16),
+                            disabled=disabled,
+                            style={"minWidth": "100px"},
+                        ),
+                    ],
+                    gap="xs",
+                    style={"width": "100%"},
+                ),
+                # Information about selected features
+                html.Div(
+                    id={"type": f"features-info-{param.name}", "index": self.component_index},
+                    style={"marginTop": "5px", "fontSize": "12px", "color": "gray"},
+                ),
+            ]
         )
 
     def _build_text_input(

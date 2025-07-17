@@ -45,6 +45,7 @@ dependencies:
   - tomli
   - typer
   - typeguard
+  - umap-learn
   - uvicorn==0.34.0
   - pip:
     - dash-draggable==0.1.2

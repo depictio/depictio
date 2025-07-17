@@ -60,6 +60,10 @@ def _get_required_parameters_for_visu(visu_type: str) -> List[str]:
                 required_params = ["x"] if visu_type.lower() == "histogram" else ["y"]
             elif visu_type.lower() in ["pie", "sunburst", "treemap"]:
                 required_params = ["values"]
+            elif visu_type.lower() in ["umap"]:
+                # Clustering visualizations don't have required parameters
+                # They can work without explicit parameters (will use all numeric columns)
+                required_params = []
             else:
                 required_params = ["x", "y"]  # Default for most plots
 
@@ -67,6 +71,8 @@ def _get_required_parameters_for_visu(visu_type: str) -> List[str]:
 
     except Exception:
         # Fallback if visualization definition not found
+        if visu_type.lower() in ["umap"]:
+            return []  # Clustering visualizations don't require specific parameters
         return ["x", "y"]
 
 
@@ -191,6 +197,7 @@ def register_callbacks_figure_component(app):
         except Exception as e:
             logger.error(f"Failed to get columns: {e}")
             columns = []
+            columns_json = {}
 
         # Determine visualization type from segmented control
         if visu_type:  # visu_type is now the name (lowercase) from dropdown
@@ -233,7 +240,7 @@ def register_callbacks_figure_component(app):
                     state.set_parameter_value(param_name, value)
 
             # Build UI components
-            component_builder = ComponentBuilder(component_index, columns)
+            component_builder = ComponentBuilder(component_index, columns, columns_json)
             accordion_builder = AccordionBuilder(component_builder)
 
             # Build the complete accordion interface
@@ -1343,19 +1350,111 @@ def register_callbacks_figure_component(app):
             logger.error(f"Error loading column information: {e}")
             return f"Error loading column information: {str(e)}"
 
+    # Combined callback for Select All button and features info display
+    @app.callback(
+        [
+            Output({"type": "param-features", "index": MATCH}, "value"),
+            Output({"type": "features-info-features", "index": MATCH}, "children"),
+        ],
+        [
+            Input({"type": "select-all-features", "index": MATCH}, "n_clicks"),
+            Input({"type": "param-features", "index": MATCH}, "value"),
+        ],
+        [
+            State({"type": "param-features", "index": MATCH}, "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def handle_features_selection(n_clicks, selected_features, options_data):
+        """Handle Select All button and update features info display."""
+        ctx = dash.callback_context
+        if not ctx.triggered:
+            raise dash.exceptions.PreventUpdate
+
+        triggered_prop = ctx.triggered[0]["prop_id"]
+
+        # Check if Select All button was clicked
+        if "select-all-features" in triggered_prop and n_clicks:
+            # Extract all available values from the options data
+            if options_data:
+                all_values = [opt["value"] for opt in options_data]
+                info_text = f"Selected all {len(all_values)} numeric columns"
+                return all_values, info_text
+            else:
+                return selected_features or [], "No numeric columns available"
+
+        # Update info display when selection changes
+        elif "param-features" in triggered_prop:
+            if not selected_features:
+                return (
+                    selected_features,
+                    "No features selected (will use all numeric columns automatically)",
+                )
+
+            total_numeric = len(options_data) if options_data else 0
+            selected_count = len(selected_features)
+
+            info_text = f"Selected {selected_count} of {total_numeric} numeric columns: {', '.join(selected_features[:3])}{'...' if len(selected_features) > 3 else ''}"
+            return selected_features, info_text
+
+        raise dash.exceptions.PreventUpdate
+
 
 def design_figure(id, component_data=None):
     # Get all available visualizations
     all_vizs = get_available_visualizations()
 
-    # Use all available visualizations (no filtering)
-    filtered_vizs = all_vizs
+    # Group visualizations by their group
+    from .models import VisualizationGroup
 
-    # Create options with visualization name as value for icon mapping
-    viz_options = [
-        {"label": viz.label, "value": viz.name.lower()}
-        for viz in sorted(filtered_vizs, key=lambda x: x.label)
-    ]
+    grouped_vizs = {}
+    for viz in all_vizs:
+        group = viz.group
+        if group not in grouped_vizs:
+            grouped_vizs[group] = []
+        grouped_vizs[group].append(viz)
+
+    # Define group order and labels (Geographic and Specialized hidden from dropdown display)
+    group_info = {
+        VisualizationGroup.CORE: {"label": "Core", "order": 1},
+        VisualizationGroup.ADVANCED: {"label": "Advanced", "order": 2},
+        VisualizationGroup.THREE_D: {"label": "3D", "order": 3},
+        VisualizationGroup.CLUSTERING: {"label": "Clustering", "order": 4},
+        # Note: Geographic and Specialized groups exist but are hidden from dropdown
+        # VisualizationGroup.GEOGRAPHIC: {"label": "Geographic", "order": 5},
+        # VisualizationGroup.SPECIALIZED: {"label": "Specialized", "order": 6},
+    }
+
+    # Create flat options ordered by group (DMC Select doesn't support true groups)
+    viz_options = []
+    for group in sorted(grouped_vizs.keys(), key=lambda g: group_info.get(g, {}).get("order", 99)):
+        if group in grouped_vizs and grouped_vizs[group] and group in group_info:
+            # Add group header as disabled option
+            group_label = group_info.get(group, {"label": group.title()})["label"]
+            viz_options.append(
+                {
+                    "label": f"─── {group_label} ───",
+                    "value": f"__group__{group}",
+                    "disabled": True,
+                }
+            )
+
+            # Add visualizations in this group
+            for viz in sorted(grouped_vizs[group], key=lambda x: x.label):
+                viz_options.append({"label": f"  {viz.label}", "value": viz.name.lower()})
+
+            # Add separator except for last group
+            if (
+                group
+                != list(
+                    sorted(
+                        grouped_vizs.keys(), key=lambda g: group_info.get(g, {}).get("order", 99)
+                    )
+                )[-1]
+            ):
+                viz_options.append(
+                    {"label": "", "value": f"__separator__{group}", "disabled": True}
+                )
 
     # Default to scatter if no component data
     default_value = "scatter"
