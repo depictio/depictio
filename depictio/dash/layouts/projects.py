@@ -292,11 +292,7 @@ def render_data_collection(dc: DataCollection, workflow_id: str, token: str):
                                                         ]
                                                     ),
                                                 ],
-                                            )
-                                        ]
-                                    ),
-                                    dmc.Accordion(
-                                        children=[
+                                            ),
                                             dmc.AccordionItem(
                                                 value="config",
                                                 children=[
@@ -325,21 +321,22 @@ def render_data_collection(dc: DataCollection, workflow_id: str, token: str):
                                                         ]
                                                     ),
                                                 ],
-                                            )
-                                        ],
-                                        chevronPosition="right",
-                                        variant="contained",
-                                    ),
-                                    dmc.Accordion(
-                                        children=[
-                                            dmc.AccordionItem(
-                                                value="preview",
-                                                children=[
-                                                    preview_control,
-                                                    preview_panel,
-                                                ],
-                                            )
-                                        ],
+                                            ),
+                                        ]
+                                        + (
+                                            [
+                                                dmc.AccordionItem(
+                                                    value="preview",
+                                                    children=[
+                                                        preview_control,
+                                                        preview_panel,
+                                                    ],
+                                                )
+                                            ]
+                                            if preview_control and preview_panel
+                                            else []
+                                        ),
+                                        multiple=True,
                                         chevronPosition="right",
                                         variant="contained",
                                     ),
@@ -487,29 +484,36 @@ def render_workflow_item(wf: Workflow, token: str):
                 children=[
                     dmc.Accordion(
                         children=[
-                            dmc.AccordionControl(
-                                "Details",
-                                icon=DashIconify(icon="mdi:information-outline", width=20),
-                            ),
-                            dmc.AccordionPanel(workflow_details),
-                        ],
-                    ),
-                    dmc.Accordion(
-                        children=[
-                            dmc.AccordionControl(
-                                "Data Collections",
-                                icon=DashIconify(icon="mdi:database", width=20),
-                            ),
-                            dmc.AccordionPanel(
+                            dmc.AccordionItem(
+                                value="workflow-details",
                                 children=[
-                                    (
-                                        data_collections_section
-                                        if data_collections_section
-                                        else html.P("No data collections available.")
-                                    )
-                                ]
+                                    dmc.AccordionControl(
+                                        "Details",
+                                        icon=DashIconify(icon="mdi:information-outline", width=20),
+                                    ),
+                                    dmc.AccordionPanel(workflow_details),
+                                ],
+                            ),
+                            dmc.AccordionItem(
+                                value="workflow-data-collections",
+                                children=[
+                                    dmc.AccordionControl(
+                                        "Data Collections",
+                                        icon=DashIconify(icon="mdi:database", width=20),
+                                    ),
+                                    dmc.AccordionPanel(
+                                        children=[
+                                            (
+                                                data_collections_section
+                                                if data_collections_section
+                                                else html.P("No data collections available.")
+                                            )
+                                        ]
+                                    ),
+                                ],
                             ),
                         ],
+                        multiple=True,
                     ),
                 ]
             ),
@@ -667,7 +671,7 @@ def render_project_item(
         radius="md",
         withBorder=True,
         shadow="sm",
-        className="p-3",
+        # className="p-3",
     )
 
     def create_workflow_section(title, workflows: list[Workflow]):
@@ -724,80 +728,84 @@ def render_project_item(
                 children=[
                     dmc.Accordion(
                         children=[
-                            dmc.AccordionControl(
-                                "Project Details",
-                                icon=DashIconify(icon="mdi:information-outline", width=20),
-                            ),
-                            dmc.AccordionPanel(project_details),
-                        ],
-                    ),
-                    dmc.Accordion(
-                        children=[
-                            dmc.AccordionControl(
-                                "Workflows",
-                                icon=DashIconify(icon="mdi:workflow", width=20),
-                            ),
-                            dmc.AccordionPanel(
+                            dmc.AccordionItem(
+                                value="project-details",
                                 children=[
-                                    # DMC 2.0+ - Simple content display instead of nested AccordionMultiple
-                                    (
-                                        html.Div(sections)
-                                        if sections
-                                        else html.P("No workflows available.")
-                                    )
-                                ]
+                                    dmc.AccordionControl(
+                                        "Project Details",
+                                        icon=DashIconify(icon="mdi:information-outline", width=20),
+                                    ),
+                                    dmc.AccordionPanel(project_details),
+                                ],
                             ),
-                        ]
-                    ),
-                    dmc.AccordionItem(
-                        value="roles-permissions",
-                        children=[
-                            dmc.Anchor(
-                                dmc.AccordionControl(
-                                    "Roles and permissions",
-                                    icon=DashIconify(icon="mdi:shield-account", width=20),
-                                ),
-                                href=f"/project/{str(project.id)}",
-                                style={"textDecoration": "none", "color": "inherit"},
+                            dmc.AccordionItem(
+                                value="project-workflows",
+                                children=[
+                                    dmc.AccordionControl(
+                                        "Workflows",
+                                        icon=DashIconify(icon="mdi:workflow", width=20),
+                                    ),
+                                    dmc.AccordionPanel(
+                                        children=(
+                                            sections
+                                            if sections
+                                            else [html.P("No workflows available.")]
+                                        )
+                                    ),
+                                ],
                             ),
-                            # dmc.AccordionPanel(
-                            #     children=[
-                            #         dmc.Accordion(
-                            #             children=[
-                            #                 dag.AgGrid(
-                            #                     columnDefs=[
-                            #                         # set types
-                            #                         {"field": "id"},
-                            #                         {"field": "email"},
-                            #                         {
-                            #                             "field": "Owner",
-                            #                             "cellRenderer": "agCheckboxCellRenderer",
-                            #                         },
-                            #                         {"field": "Editor"},
-                            #                         {"field": "Viewer"},
-                            #                     ],
-                            #                     rowData=[
-                            #                         {
-                            #                             "id": str(user.id),
-                            #                             "email": user.email,
-                            #                             "Owner": True,
-                            #                             "Editor": False,
-                            #                             "Viewer": False,
-                            #                         }
-                            #                         for user in project.permissions.viewers
-                            #                         + project.permissions.owners
-                            #                     ],
-                            #                     defaultColDef={
-                            #                         "resizable": True,
-                            #                         "sortable": True,
-                            #                         "filter": True,
-                            #                     },
-                            #                 )
-                            #             ]
-                            #         )
-                            #     ]
-                            # ),
+                            dmc.AccordionItem(
+                                value="roles-permissions",
+                                children=[
+                                    dmc.Anchor(
+                                        dmc.AccordionControl(
+                                            "Roles and permissions",
+                                            icon=DashIconify(icon="mdi:shield-account", width=20),
+                                        ),
+                                        href=f"/project/{str(project.id)}",
+                                        style={"textDecoration": "none", "color": "inherit"},
+                                    ),
+                                    # dmc.AccordionPanel(
+                                    #     children=[
+                                    #         dmc.Accordion(
+                                    #             children=[
+                                    #                 dag.AgGrid(
+                                    #                     columnDefs=[
+                                    #                         # set types
+                                    #                         {"field": "id"},
+                                    #                         {"field": "email"},
+                                    #                         {
+                                    #                             "field": "Owner",
+                                    #                             "cellRenderer": "agCheckboxCellRenderer",
+                                    #                         },
+                                    #                         {"field": "Editor"},
+                                    #                         {"field": "Viewer"},
+                                    #                     ],
+                                    #                     rowData=[
+                                    #                         {
+                                    #                             "id": str(user.id),
+                                    #                             "email": user.email,
+                                    #                             "Owner": True,
+                                    #                             "Editor": False,
+                                    #                             "Viewer": False,
+                                    #                         }
+                                    #                         for user in project.permissions.viewers
+                                    #                         + project.permissions.owners
+                                    #                     ],
+                                    #                     defaultColDef={
+                                    #                         "resizable": True,
+                                    #                         "sortable": True,
+                                    #                         "filter": True,
+                                    #                     },
+                                    #                 )
+                                    #             ]
+                                    #         )
+                                    #     ]
+                                    # ),
+                                ],
+                            ),
                         ],
+                        multiple=True,
                     ),
                 ]
             ),
@@ -845,7 +853,7 @@ def render_projects_list(projects: list[Project], admin_UI: bool = False, token:
                 withBorder=True,
                 style={"width": "100%", "maxWidth": "500px"},
             ),
-            style={"height": "300px"},
+            style={"minHeight": "300px", "height": "auto"},
         )
         return content
 
@@ -870,6 +878,8 @@ def render_projects_list(projects: list[Project], admin_UI: bool = False, token:
                 children=project_items,
                 chevronPosition="right",
                 className="mb-4",
+                multiple=True,
+                style={"height": "auto", "overflow": "visible"},
             ),
         ]
 
@@ -878,6 +888,7 @@ def render_projects_list(projects: list[Project], admin_UI: bool = False, token:
     return dmc.Container(
         children=sections,
         fluid=True,
+        style={"height": "auto", "minHeight": "400px"},
     )
 
 
@@ -1026,7 +1037,7 @@ def register_workflows_callbacks(app):
                     withBorder=True,
                     style={"width": "100%", "maxWidth": "500px"},
                 ),
-                style={"height": "300px"},
+                style={"minHeight": "300px", "height": "auto"},
             )
             return content
 

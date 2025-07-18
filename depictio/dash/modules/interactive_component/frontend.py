@@ -6,6 +6,7 @@ from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
+from depictio.dash.colors import colors
 
 # Depictio imports
 from depictio.dash.modules.interactive_component.utils import (
@@ -165,6 +166,21 @@ def register_callbacks_interactive_component(app):
         return True
 
     @app.callback(
+        Output({"type": "input-dropdown-scale", "index": MATCH}, "style"),
+        Output({"type": "input-number-marks", "index": MATCH}, "style"),
+        Input({"type": "input-dropdown-method", "index": MATCH}, "value"),
+        prevent_initial_call=True,
+    )
+    def toggle_slider_controls_visibility(method_value):
+        """
+        Show the scale selector and marks number input only for Slider and RangeSlider components
+        """
+        if method_value in ["Slider", "RangeSlider"]:
+            return {"display": "block"}, {"display": "block"}
+        else:
+            return {"display": "none"}, {"display": "none"}
+
+    @app.callback(
         Output({"type": "input-body", "index": MATCH}, "children"),
         Output({"type": "interactive-description", "index": MATCH}, "children"),
         Output({"type": "interactive-columns-description", "index": MATCH}, "children"),
@@ -172,6 +188,9 @@ def register_callbacks_interactive_component(app):
             Input({"type": "input-title", "index": MATCH}, "value"),
             Input({"type": "input-dropdown-column", "index": MATCH}, "value"),
             Input({"type": "input-dropdown-method", "index": MATCH}, "value"),
+            Input({"type": "input-dropdown-scale", "index": MATCH}, "value"),
+            Input({"type": "input-color-picker", "index": MATCH}, "value"),
+            Input({"type": "input-number-marks", "index": MATCH}, "value"),
             State({"type": "workflow-selection-label", "index": MATCH}, "value"),
             State({"type": "datacollection-selection-label", "index": MATCH}, "value"),
             State({"type": "input-dropdown-method", "index": MATCH}, "id"),
@@ -186,6 +205,9 @@ def register_callbacks_interactive_component(app):
         input_value,
         column_value,
         aggregation_value,
+        scale_value,
+        color_value,
+        marks_number,
         workflow_id,
         data_collection_id,
         id,
@@ -201,6 +223,9 @@ def register_callbacks_interactive_component(app):
         logger.info(f"  input_value: {input_value}")
         logger.info(f"  column_value: {column_value}")
         logger.info(f"  aggregation_value: {aggregation_value}")
+        logger.info(f"  scale_value: {scale_value}")
+        logger.info(f"  color_value: {color_value}")
+        logger.info(f"  marks_number: {marks_number}")
         logger.info(f"  workflow_id: {workflow_id}")
         logger.info(f"  data_collection_id: {data_collection_id}")
         logger.info(f"  parent_index: {parent_index}")
@@ -494,6 +519,9 @@ def register_callbacks_interactive_component(app):
             "stepper": True,
             "parent_index": parent_index,
             "build_frame": False,  # Don't build frame - return just the content for the input-body container
+            "scale": scale_value,
+            "color": color_value,
+            "marks_number": marks_number,
         }
 
         if value:
@@ -547,20 +575,91 @@ def design_interactive(id, df):
                                     },
                                     value=None,
                                 ),
+                                dmc.Select(
+                                    label="Scale type (for numerical sliders)",
+                                    description="Choose between linear or logarithmic scale for slider components",
+                                    id={
+                                        "type": "input-dropdown-scale",
+                                        "index": id["index"],
+                                    },
+                                    data=[
+                                        {"label": "Linear", "value": "linear"},
+                                        {"label": "Logarithmic (Log10)", "value": "log10"},
+                                    ],
+                                    value="linear",
+                                    clearable=False,
+                                    style={"display": "none"},  # Initially hidden
+                                ),
+                                dmc.Stack(
+                                    [
+                                        dmc.Text("Color customization", size="sm", fw="bold"),
+                                        dmc.ColorInput(
+                                            label="Pick any color from the page",
+                                            w=250,
+                                            id={
+                                                "type": "input-color-picker",
+                                                "index": id["index"],
+                                            },
+                                            value=colors["black"],
+                                            format="hex",
+                                            # leftSection=DashIconify(icon="cil:paint"),
+                                            swatches=[
+                                                colors["purple"],  # Depictio brand colors first
+                                                colors["blue"],
+                                                colors["teal"],
+                                                colors["green"],
+                                                colors["yellow"],
+                                                colors["orange"],
+                                                colors["pink"],
+                                                colors["red"],
+                                                colors["violet"],
+                                                colors["black"],
+                                                # "#25262b",  # Additional neutral colors
+                                                # "#868e96",
+                                                # "#fa5252",
+                                                # "#e64980",
+                                                # "#be4bdb",
+                                                # "#7950f2",
+                                                # "#4c6ef5",
+                                                # "#228be6",
+                                                # "#15aabf",
+                                                # "#12b886",
+                                                # "#40c057",
+                                                # "#82c91e",
+                                                # "#fab005",
+                                                # "#fd7e14",
+                                            ],
+                                        ),
+                                    ],
+                                    gap="xs",
+                                ),
+                                dmc.NumberInput(
+                                    label="Number of marks (for sliders)",
+                                    description="Choose how many marks to display on the slider",
+                                    id={
+                                        "type": "input-number-marks",
+                                        "index": id["index"],
+                                    },
+                                    value=5,
+                                    min=3,
+                                    max=10,
+                                    step=1,
+                                    style={"display": "none"},  # Initially hidden
+                                ),
                                 html.Div(
                                     id={
                                         "type": "interactive-description",
                                         "index": id["index"],
                                     },
                                 ),
-                                html.Div(
-                                    "Debug: No column selected",
-                                    id={
-                                        "type": "debug-interactive-log",
-                                        "index": id["index"],
-                                    },
-                                    style={"fontSize": "10px", "color": "red"},
-                                ),
+                                # html.Div(
+                                #     "Debug: No column selected",
+                                #     id={
+                                #         "type": "debug-interactive-log",
+                                #         "index": id["index"],
+                                #     },
+                                #     style={"fontSize": "10px", "color": "red"},
+                                # ),
                             ],
                             gap="sm",
                         ),

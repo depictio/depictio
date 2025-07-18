@@ -339,6 +339,9 @@ def build_interactive(**kwargs):
     TOKEN = kwargs.get("access_token")
     stepper = kwargs.get("stepper", False)
     parent_index = kwargs.get("parent_index", None)
+    scale = kwargs.get("scale", "linear")  # Default to linear scale
+    color = kwargs.get("color", "#000000")  # Default to black color
+    marks_number = kwargs.get("marks_number", 5)  # Default to 5 marks
 
     logger.info(f"Interactive - kwargs: {kwargs}")
     logger.info(
@@ -468,6 +471,14 @@ def build_interactive(**kwargs):
                     f"{interactive_component_type} component {index}: Preserved value '{value}'"
                 )
 
+        # Apply custom color to DMC components if specified
+        if color and interactive_component_type in ["Select", "MultiSelect", "SegmentedControl"]:
+            component_kwargs["styles"] = {
+                "input": {"borderColor": color},
+                "dropdown": {"borderColor": color},
+                "label": {"color": color},
+            }
+
         # WARNING: This is a temporary solution to avoid modifying dashboard data - the -tmp suffix is added to the id and removed once clicked on the btn-done D
         interactive_component = func_name(**component_kwargs)
 
@@ -499,6 +510,11 @@ def build_interactive(**kwargs):
         logger.debug(f"Value: {value}")
         logger.debug(f"Value type: {type(value)}")
         kwargs.update({"value": value})
+
+        # Apply custom color to TextInput if specified
+        if color:
+            kwargs["styles"] = {"input": {"borderColor": color}, "label": {"color": color}}
+
         interactive_component = func_name(
             placeholder="Your selected value",
             id={"type": value_div_type, "index": str(index)},
@@ -647,37 +663,302 @@ def build_interactive(**kwargs):
 
     # If the aggregation value is Slider or RangeSlider
     elif interactive_component_type in ["Slider", "RangeSlider"]:
-        if not cols_json or column_name not in cols_json or "specs" not in cols_json[column_name]:
-            logger.warning(f"Missing column specs for {column_name}, using default values")
-            min_value, max_value = 0, 100
+        logger.info(f"Column name: {column_name}")
+        logger.info(f"Scale type: {scale}")
+
+        # Convert Polars DataFrame to Pandas for processing
+        df_pandas = df.to_pandas()
+        logger.info(f"df['{column_name}']: {df_pandas[column_name]}")
+
+        # Drop NaN, None, and invalid values
+        df_pandas = df_pandas[~df_pandas[column_name].isin([None, "None", "nan", "NaN"])]
+        df_pandas[column_name] = df_pandas[column_name].replace([np.inf, -np.inf], np.nan)
+        df_pandas[column_name] = df_pandas[column_name].astype(float)
+
+        # Round the values to 2 decimal places when possible (not for inf, -inf)
+        df_pandas[column_name] = df_pandas[column_name].apply(
+            lambda x: round(x, 2) if x not in [float("inf"), float("-inf")] else x
+        )
+        df_pandas = df_pandas.dropna(subset=[column_name])
+        logger.info(f"Cleaned df['{column_name}']: {df_pandas[column_name]}")
+
+        # Always default to linear scale, only use log10 if explicitly selected
+        use_log_scale = False
+        if scale is not None and scale == "log10":
+            use_log_scale = True
+            logger.info("User explicitly selected log10 scale")
         else:
-            min_value, max_value = (
-                cols_json[column_name]["specs"]["min"],
-                cols_json[column_name]["specs"]["max"],
-            )
-        kwargs = {
-            "min": min_value,
-            "max": max_value,
+            # Always default to linear scale (including when scale is None, "linear", or any other value)
+            logger.info(f"Using linear scale (scale parameter: {scale})")
+
+        slider_series = df_pandas[column_name]
+
+        # Apply log transformation if using log scale
+        if use_log_scale:
+            logger.info("Applying log transformation")
+            transformed_series, shift = apply_log_transformation(df_pandas[column_name])
+            # Replace the original column with transformed data
+            df_pandas[f"{column_name}_log10"] = transformed_series
+            slider_series = df_pandas[f"{column_name}_log10"]
+        else:
+            logger.info("Using linear scale")
+
+        # Get valid min and max
+        series_name = f"{column_name}_log10" if use_log_scale else column_name
+        min_value, max_value = get_valid_min_max(df_pandas, series_name, cols_json)
+        logger.info(f"Min value: {min_value}, Max value: {max_value}")
+
+        # Ensure min_value and max_value are valid numbers (DMC sliders can't handle null)
+        if min_value is None or math.isnan(min_value) or math.isinf(min_value):
+            min_value = 0.0
+            logger.warning("Invalid min_value detected, setting to 0.0")
+
+        if max_value is None or math.isnan(max_value) or math.isinf(max_value):
+            max_value = 100.0
+            logger.warning("Invalid max_value detected, setting to 100.0")
+
+        # Ensure min < max
+        if min_value >= max_value:
+            max_value = min_value + 1.0
+            logger.warning(f"min_value >= max_value, adjusted max_value to {max_value}")
+
+        # Prepare kwargs for DCC slider
+        kwargs_component = {
+            "min": float(min_value),
+            "max": float(max_value),
             "id": {"type": value_div_type, "index": str(index)},
             "persistence_type": "local",
         }
-        if interactive_component_type == "RangeSlider":
-            if not value:
-                value = [min_value, max_value]
-            kwargs.update({"value": value})
-        elif interactive_component_type == "Slider":
-            if not value:
-                value = min_value
-        kwargs.update({"value": value})
-        # If the number of unique values is less than 30, use the unique values as marks
-        if interactive_component_type == "Slider":
-            marks = (
-                {str(elem): str(elem) for elem in df[column_name].unique()}
-                if df[column_name].n_unique() < 30
-                else {}
+
+        logger.info(f"DCC Slider: Using range {min_value}-{max_value}")
+
+        # Generate marks based on scale type
+        if use_log_scale:
+            # Use logarithmic marks
+            marks = generate_log_marks(
+                min_value, max_value, df_pandas[column_name].min(), df_pandas[column_name].max()
             )
-            kwargs.update({"marks": marks, "step": None, "included": False})
-        interactive_component = func_name(**kwargs)
+        else:
+            # Use linear marks with controlled number of marks
+            logger.info(f"Generating linear marks with {marks_number} marks")
+
+            # Ensure marks_number is at least 3 (min, max, and at least one in between)
+            marks_number = max(3, min(marks_number or 5, 10))
+
+            if slider_series.nunique() <= marks_number and slider_series.nunique() > 0:
+                # If we have few unique values, use them all
+                logger.info(f"Using all unique values ({slider_series.nunique()} values)")
+                unique_values = slider_series.unique()
+                # Filter out None and non-numeric values
+                unique_values = [
+                    elem
+                    for elem in unique_values
+                    if isinstance(elem, (int, float)) and not math.isinf(elem)
+                ]
+                # Sort values
+                unique_values = sorted(unique_values)
+                marks = {
+                    int(elem)
+                    if math.isclose(elem, int(elem), abs_tol=1e-9)
+                    else elem: format_mark_label(elem)
+                    for elem in unique_values
+                    if format_mark_label(elem) is not None
+                }
+            else:
+                # Generate evenly spaced marks using quantiles or linear interpolation
+                logger.info(f"Generating {marks_number} evenly spaced marks")
+
+                if slider_series.nunique() == 0 or len(slider_series) == 0:
+                    # If DataFrame is empty, create evenly spaced marks between min and max
+                    logger.warning(
+                        "DataFrame is empty, creating evenly spaced marks between min/max"
+                    )
+                    mark_values = []
+                    for i in range(marks_number):
+                        if marks_number == 1:
+                            mark_val = (min_value + max_value) / 2
+                        else:
+                            mark_val = min_value + (max_value - min_value) * i / (marks_number - 1)
+                        mark_values.append(mark_val)
+
+                    marks = {
+                        int(elem)
+                        if math.isclose(elem, int(elem), abs_tol=1e-9)
+                        else elem: format_mark_label(elem)
+                        for elem in mark_values
+                        if format_mark_label(elem) is not None
+                    }
+                else:
+                    # Create quantile positions (excluding 0 and 1 which are min/max)
+                    if marks_number <= 2:
+                        quantile_positions = []
+                    else:
+                        quantile_positions = [
+                            i / (marks_number - 1) for i in range(1, marks_number - 1)
+                        ]
+
+                    logger.info(f"Quantile positions: {quantile_positions}")
+
+                    # Compute quantiles
+                    quantiles = (
+                        slider_series.quantile(quantile_positions) if quantile_positions else []
+                    )
+                    logger.info(
+                        f"Quantiles: {list(quantiles) if hasattr(quantiles, '__iter__') else quantiles}"
+                    )
+
+                    # Combine min, quantiles, and max
+                    mark_elements = [min_value] + list(quantiles) + [max_value]
+                    # Remove duplicates and sort
+                    mark_elements = sorted(
+                        list(
+                            set(
+                                [
+                                    elem
+                                    for elem in mark_elements
+                                    if isinstance(elem, (int, float)) and not math.isinf(elem)
+                                ]
+                            )
+                        )
+                    )
+
+                    marks = {
+                        int(elem)
+                        if math.isclose(elem, int(elem), abs_tol=1e-9)
+                        else elem: format_mark_label(elem)
+                        for elem in mark_elements
+                        if format_mark_label(elem) is not None
+                    }
+
+            logger.info(f"Final marks: {marks}")
+
+        # Set component values for DCC sliders
+        if interactive_component_type == "RangeSlider":
+            # For DCC RangeSlider, use simple value handling
+            try:
+                # Check if we have a valid value first
+                if (
+                    value is None
+                    or value == "null"
+                    or value == "None"
+                    or not isinstance(value, list)
+                    or len(value) != 2
+                    or any(v is None or v == "null" or v == "None" for v in value)
+                ):
+                    # Use range defaults
+                    cleaned_value = [min_value, max_value]
+                    logger.info(
+                        f"DCC RangeSlider: Using default value [{min_value}, {max_value}] (original: {value})"
+                    )
+                else:
+                    # Clean and validate values
+                    cleaned_value = []
+                    for i, v in enumerate(value):
+                        try:
+                            if v is None or v == "None":
+                                clean_val = min_value if i == 0 else max_value
+                            else:
+                                # Convert to float and clamp to valid range
+                                decimal_val = float(v)
+                                if not (math.isnan(decimal_val) or math.isinf(decimal_val)):
+                                    clean_val = max(min_value, min(max_value, decimal_val))
+                                else:
+                                    clean_val = min_value if i == 0 else max_value
+                            cleaned_value.append(clean_val)
+                        except (ValueError, TypeError):
+                            fallback_val = min_value if i == 0 else max_value
+                            cleaned_value.append(fallback_val)
+
+                    # Ensure order
+                    if cleaned_value[0] > cleaned_value[1]:
+                        cleaned_value = [cleaned_value[1], cleaned_value[0]]
+
+                # For DCC RangeSlider, use value property
+                kwargs_component["value"] = cleaned_value
+                logger.info(f"DCC RangeSlider: Set value: {cleaned_value}")
+
+            except Exception as e:
+                logger.error(f"DCC RangeSlider: Exception: {e}")
+        elif interactive_component_type == "Slider":
+            # For DCC Slider, ensure value is a single valid number
+            try:
+                if (
+                    value is None
+                    or value == "null"
+                    or value == "None"
+                    or (isinstance(value, float) and math.isnan(value))
+                ):
+                    # For null values, use middle of range as default
+                    cleaned_value = (min_value + max_value) / 2
+                    logger.info(
+                        f"DCC Slider: Using middle of range as default: {cleaned_value} (original: {value})"
+                    )
+                else:
+                    cleaned_value = float(value)
+                    # Ensure value is in range
+                    cleaned_value = max(min_value, min(max_value, cleaned_value))
+                    logger.info(f"DCC Slider: Cleaned value from {value} to {cleaned_value}")
+
+                # For DCC Slider, use value property
+                kwargs_component["value"] = cleaned_value
+            except (ValueError, TypeError) as e:
+                logger.info(f"DCC Slider: Conversion failed ({e})")
+
+        # DCC sliders don't support direct color styling like DMC
+        # Color customization would need to be handled via CSS
+
+        # For DCC sliders, marks use dict format (not list of dicts like DMC)
+        if marks:
+            # DCC sliders use dict format for marks: {value: label}
+            dcc_marks = {}
+            for k, v in marks.items():
+                try:
+                    # Use decimal mark value directly
+                    decimal_mark = float(k)
+                    if not (math.isnan(decimal_mark) or math.isinf(decimal_mark)):
+                        # Ensure mark value is within decimal range
+                        if min_value <= decimal_mark <= max_value:
+                            dcc_marks[decimal_mark] = str(v)
+                except (ValueError, TypeError):
+                    logger.warning(f"Skipping invalid mark: {k} -> {v}")
+
+            # If no valid marks were created, add min and max marks as fallback
+            if not dcc_marks:
+                dcc_marks = {
+                    min_value: format_mark_label(min_value),
+                    max_value: format_mark_label(max_value),
+                }
+                logger.warning("No valid marks found, using decimal min/max as fallback")
+
+            kwargs_component["marks"] = dcc_marks
+            logger.info(f"DCC marks created: {len(dcc_marks)} marks (decimal values)")
+
+        logger.info("DCC Slider: Final kwargs before component creation:")
+        logger.info(
+            f"  min: {kwargs_component.get('min')} (type: {type(kwargs_component.get('min'))})"
+        )
+        logger.info(
+            f"  max: {kwargs_component.get('max')} (type: {type(kwargs_component.get('max'))})"
+        )
+        logger.info(
+            f"  value: {kwargs_component.get('value')} (type: {type(kwargs_component.get('value'))})"
+        )
+        logger.info(f"  marks: {len(kwargs_component.get('marks', {}))} marks")
+
+        interactive_component = func_name(**kwargs_component)
+
+        # Store scale information for later use
+        store_data["scale"] = "log10" if use_log_scale else "linear"
+        if use_log_scale:
+            # Convert displayed values back to original scale for storage
+            if interactive_component_type == "RangeSlider":
+                real_value = [10**val for val in value] if isinstance(value, list) else value
+            else:
+                real_value = 10**value if value is not None else value
+            store_data["original_value"] = real_value
+            logger.info(f"Log scale - stored original value: {real_value}")
+        else:
+            store_data["original_value"] = value
 
     # If the aggregation value is Checkbox or Switch (boolean data types)
     elif interactive_component_type in ["Checkbox", "Switch"]:
@@ -693,6 +974,11 @@ def build_interactive(**kwargs):
         elif not isinstance(value, bool):
             value = bool(value)
         kwargs.update({"checked": value})
+
+        # Apply custom color to boolean components if specified
+        if color:
+            kwargs["color"] = color
+
         interactive_component = func_name(
             id={"type": value_div_type, "index": str(index)},
             **kwargs,
@@ -719,12 +1005,32 @@ def build_interactive(**kwargs):
     else:
         card_title = f"{title}"
 
-    # if skewed:
-    #     card_title += " (Log10 Scale)"
+    # Add scale information to title for sliders
+    if (
+        interactive_component_type in ["Slider", "RangeSlider"]
+        and store_data.get("scale") == "log10"
+    ):
+        card_title += " (Log10 Scale)"
 
-    logger.info(f"Interactive - value: {value}")
+    logger.info(f"Interactive - original value: {value}")
+    # Log the actual value used in the component
+    if interactive_component_type in ["Slider", "RangeSlider"]:
+        # The component value was already logged in the slider section
+        logger.info(
+            f"Interactive - component type: {interactive_component_type} (component value logged above)"
+        )
+    else:
+        logger.info(f"Interactive - component value: {value}")
 
-    card_title_h5 = html.H5(card_title, style={"marginBottom": "0.5rem"})
+    # Apply custom color if specified
+    title_style = {"marginBottom": "0.5rem"}
+    if color:
+        title_style["color"] = color
+        # Store color for component styling
+        store_data["custom_color"] = color
+        logger.info(f"Applied custom color: {color}")
+
+    card_title_h5 = html.H5(card_title, style=title_style)
 
     store_component = dcc.Store(
         id={"type": "stored-metadata-component", "index": str(store_index)},

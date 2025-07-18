@@ -182,6 +182,7 @@ def build_card(**kwargs):
     refresh = kwargs.get("refresh", False)
     stepper = kwargs.get("stepper", False)
     filter_applied = kwargs.get("filter_applied", False)
+    color = kwargs.get("color", None)  # Custom color from user
 
     if stepper:
         index = f"{index}-tmp"
@@ -386,13 +387,20 @@ def build_card(**kwargs):
             comparison_icon = "mdi:information-outline"
 
     # Create card content using modern DMC components
+    title_color = color if color else "gray"
+    value_color = (
+        color
+        if color and v not in ["N/A", "Error"]
+        else ("dark" if v not in ["N/A", "Error"] else "red")
+    )
+
     card_content = [
-        dmc.Text(card_title, size="sm", c="gray", fw="normal"),
+        dmc.Text(card_title, size="sm", c=title_color, fw="normal"),
         dmc.Text(
             str(v),
             size="xl",
             fw="bold",
-            c="dark" if v not in ["N/A", "Error"] else "red",
+            c=value_color,
             id={
                 "type": "card-value",
                 "index": str(index),
