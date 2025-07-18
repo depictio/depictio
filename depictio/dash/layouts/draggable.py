@@ -1404,11 +1404,11 @@ def register_callbacks_draggable(app):
         logger.info(f"Grid edit mode toggled: {edit_mode_enabled}")
 
         if edit_mode_enabled:
-            # Enable dragging by using the default class
-            return True, True, "layout"
+            # Enable dragging by showing remove buttons and resize handles
+            return True, True, "draggable-grid-container"
         else:
-            # Disable dragging by adding a class that prevents dragging
-            return False, False, "layout layout-no-drag"
+            # Disable dragging by hiding remove buttons, resize handles, and drag handles via CSS
+            return False, False, "draggable-grid-container drag-handles-hidden"
 
 
 def design_draggable(
@@ -1528,6 +1528,7 @@ def design_draggable(
         cols={"lg": 12, "md": 10, "sm": 6, "xs": 4, "xxs": 2},
         showRemoveButton=True,  # Will be controlled by edit mode
         showResizeHandles=True,  # Will be controlled by edit mode
+        className="draggable-grid-container",  # CSS class for styling
         style={
             "display": display_style,
             "flex-grow": 1,

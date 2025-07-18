@@ -134,111 +134,12 @@
 }
 
 /* =============================================================================
-   DRAG DISABLE FUNCTIONALITY
-   Disable dragging when edit mode is off
+   DRAG DISABLE FUNCTIONALITY - REMOVED
+   Now using properties-only approach like the working version2 script
    ============================================================================= */
 
-/* Disable dragging when layout-no-drag class is applied */
-.layout-no-drag {
-    /* Disable all pointer events on the entire container */
-    pointer-events: none !important;
-}
-
-/* Re-enable pointer events for the content but not the grid system */
-.layout-no-drag .react-grid-item > * {
-    pointer-events: auto !important;
-}
-
-/* Disable dragging on grid items specifically */
-.layout-no-drag .react-grid-item {
-    cursor: default !important;
-    /* Disable all drag-related mouse events */
-    -webkit-user-drag: none !important;
-    -webkit-user-select: none !important;
-    -moz-user-select: none !important;
-    -ms-user-select: none !important;
-    user-select: none !important;
-    /* Prevent any drag events */
-    pointer-events: none !important;
-}
-
-/* Completely disable drag handle when dragging is disabled */
-.layout-no-drag .react-grid-dragHandle {
+/* Hide drag handles when edit mode is disabled */
+.drag-handles-hidden .react-grid-dragHandle {
     display: none !important;
     visibility: hidden !important;
-    pointer-events: none !important;
-}
-
-/* Hide resize handles when dragging is disabled */
-.layout-no-drag .react-grid-item .react-resizable-handle {
-    display: none !important;
-    visibility: hidden !important;
-    pointer-events: none !important;
-    opacity: 0 !important;
-}
-
-/* Disable React DnD dragging by targeting the drag layer */
-.layout-no-drag .react-grid-item .react-draggable {
-    pointer-events: none !important;
-}
-
-/* Disable React DnD by targeting drag handles more specifically */
-.layout-no-drag .react-grid-item [draggable="true"] {
-    pointer-events: none !important;
-}
-
-/* Disable all mouse events that could trigger drag */
-.layout-no-drag .react-grid-item {
-    -webkit-touch-callout: none !important;
-    -webkit-user-select: none !important;
-    -khtml-user-select: none !important;
-    -moz-user-select: none !important;
-    -ms-user-select: none !important;
-    user-select: none !important;
-}
-
-/* Disable hover effects when dragging is disabled */
-.layout-no-drag .react-grid-item:hover {
-    border: 1px solid transparent !important;
-    box-shadow: none !important;
-    transform: none !important;
-}
-
-/* Disable drag/resize visual feedback */
-.layout-no-drag .react-grid-item.react-grid-item-dragging,
-.layout-no-drag .react-grid-item.react-grid-item-resizing {
-    border: none !important;
-    box-shadow: none !important;
-    z-index: auto !important;
-}
-
-/* Disable the drag handle hover effect specifically */
-.layout-no-drag .react-grid-item:has(.react-grid-dragHandle:hover) {
-    border: none !important;
-    box-shadow: none !important;
-}
-
-/* Disable dashboard component hover effects when in no-drag mode */
-.layout-no-drag .react-grid-item.dashboard-component-hover:hover {
-    border-color: transparent !important;
-    box-shadow: none !important;
-    transform: none !important;
-}
-
-/* Re-enable text selection and interaction for content */
-.layout-no-drag .react-grid-item button,
-.layout-no-drag .react-grid-item input,
-.layout-no-drag .react-grid-item select,
-.layout-no-drag .react-grid-item textarea,
-.layout-no-drag .react-grid-item a,
-.layout-no-drag .react-grid-item [role="button"],
-.layout-no-drag .react-grid-item [tabindex],
-.layout-no-drag .react-grid-item .mantine-Button-root,
-.layout-no-drag .react-grid-item .mantine-ActionIcon-root {
-    cursor: pointer !important;
-    pointer-events: auto !important;
-    -webkit-user-select: auto !important;
-    -moz-user-select: auto !important;
-    -ms-user-select: auto !important;
-    user-select: auto !important;
 }

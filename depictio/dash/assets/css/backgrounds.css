@@ -4,7 +4,7 @@
    ============================================================================= */
 
 /* Import the new modular CSS structure */
-@import url('./css/main.css');
+@import url('./main.css');
 
 /* Note: This file is maintained for backward compatibility */
 /* The CSS has been restructured into modular files in the ./css/ directory */
