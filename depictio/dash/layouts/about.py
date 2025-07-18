@@ -241,7 +241,7 @@ layout = dmc.Container(
                                             # Logo Image
                                             html.Img(
                                                 src=dash.get_asset_url(
-                                                    "EN_fundedbyEU_VERTICAL_RGB_POS.png"
+                                                    "images/logos/EN_fundedbyEU_VERTICAL_RGB_POS.png"
                                                 ),
                                                 style={
                                                     "height": "100px",
@@ -309,7 +309,9 @@ layout = dmc.Container(
                                         children=[
                                             # Logo Image
                                             html.Img(
-                                                src=dash.get_asset_url("AriseLogo300dpi.png"),
+                                                src=dash.get_asset_url(
+                                                    "images/logos/AriseLogo300dpi.png"
+                                                ),
                                                 style={
                                                     "height": "100px",
                                                     "objectFit": "contain",
@@ -377,7 +379,7 @@ layout = dmc.Container(
                                             # Logo Image
                                             html.Img(
                                                 src=dash.get_asset_url(
-                                                    "EMBL_logo_colour_DIGITAL.png"
+                                                    "images/logos/EMBL_logo_colour_DIGITAL.png"
                                                 ),
                                                 style={
                                                     "height": "100px",
@@ -608,8 +610,8 @@ layout = dmc.Container(
                                             style={
                                                 "borderRadius": "8px",
                                                 "overflow": "hidden",
-                                                "marginTop": "20px",
-                                                "marginBottom": "20px",
+                                                "marginTop": "15px",
+                                                "marginBottom": "10px",
                                                 "boxShadow": "0 2px 8px rgba(0, 0, 0, 0.1)",
                                             },
                                         ),
