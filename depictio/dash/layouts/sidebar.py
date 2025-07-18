@@ -2,7 +2,8 @@ import dash
 import dash.dependencies as dd
 import dash_mantine_components as dmc
 import httpx
-from dash import ALL, Input, Output, State, ctx, dcc, html
+from dash import ALL, Input, Output, State, dcc, html
+from dash.exceptions import PreventUpdate
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL, settings
@@ -58,10 +59,14 @@ def register_sidebar_callbacks(app):
     # Combined callback to handle sidebar icon based on both initialization and clicks
     @app.callback(
         Output("sidebar-icon", "icon"),
-        [Input("sidebar-collapsed", "data"), Input("sidebar-button", "n_clicks")],
+        [Input("sidebar-collapsed", "data"), Input("url", "pathname")],
         prevent_initial_call=False,  # Allow initial call to set correct icon
     )
-    def update_sidebar_icon(is_collapsed, n_clicks):
+    def update_sidebar_icon(is_collapsed, pathname):
+        # Don't update if on auth page (sidebar doesn't exist)
+        if pathname == "/auth":
+            return dash.no_update
+
         # Set icon based on current collapsed state
         # When collapsed -> show right arrow (points to expand)
         # When expanded -> show left arrow (points to collapse)
@@ -89,38 +94,69 @@ def register_sidebar_callbacks(app):
 
         return base_style
 
-    # Callback to toggle AppShell navbar collapsed state using store
+    # Callback to handle URL changes and navbar visibility
     @app.callback(
         Output("app-shell", "navbar"),
-        Output("sidebar-collapsed", "data"),
-        Input("sidebar-button", "n_clicks"),
         Input("url", "pathname"),
         State("sidebar-collapsed", "data"),
         prevent_initial_call=True,
     )
-    def toggle_appshell_navbar(n_clicks, pathname, is_collapsed):
+    def handle_navbar_url_changes(pathname, is_collapsed):
         # Check if we're on the auth page - if so, hide the navbar completely
         if pathname == "/auth":
-            return None, is_collapsed
+            return None
 
-        # Check what triggered the callback
-        trigger = ctx.triggered_id
+        # For other pages, show the navbar with current collapsed state
+        navbar_config = {
+            "width": 220,
+            "breakpoint": "sm",
+            "collapsed": {
+                "mobile": True,
+                "desktop": is_collapsed if is_collapsed is not None else False,
+            },
+        }
 
-        if trigger == "sidebar-button":
-            # Toggle the collapsed state
-            new_collapsed_state = not is_collapsed
-        else:
-            # URL change, maintain current collapsed state
-            new_collapsed_state = is_collapsed
+        return navbar_config
+
+    # Callback to handle sidebar button clicks (conditional to avoid auth page error)
+    @app.callback(
+        Output("sidebar-collapsed", "data", allow_duplicate=True),
+        Input("sidebar-button", "n_clicks"),
+        State("sidebar-collapsed", "data"),
+        State("url", "pathname"),
+        prevent_initial_call=True,
+    )
+    def handle_sidebar_button_click(n_clicks, is_collapsed, pathname):
+        # Don't handle clicks on auth page (button doesn't exist there)
+        if pathname == "/auth":
+            raise PreventUpdate
+
+        # Toggle the collapsed state
+        return not is_collapsed
+
+    # Update navbar when sidebar collapsed state changes
+    @app.callback(
+        Output("app-shell", "navbar", allow_duplicate=True),
+        Input("sidebar-collapsed", "data"),
+        State("url", "pathname"),
+        prevent_initial_call=True,
+    )
+    def update_navbar_from_collapsed_state(is_collapsed, pathname):
+        # Don't update on auth page
+        if pathname == "/auth":
+            return dash.no_update
 
         # Return new navbar configuration
         navbar_config = {
             "width": 220,
             "breakpoint": "sm",
-            "collapsed": {"mobile": True, "desktop": new_collapsed_state},
+            "collapsed": {
+                "mobile": True,
+                "desktop": is_collapsed if is_collapsed is not None else False,
+            },
         }
 
-        return navbar_config, new_collapsed_state
+        return navbar_config
 
     # Callback to update sidebar-link active state
     @app.callback(
