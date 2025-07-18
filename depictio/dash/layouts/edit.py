@@ -177,6 +177,7 @@ def enable_box_edit_mode(
     content_div = html.Div(
         box_components_list,
         id=f"content-{box_uuid}",
+        className="dashboard-component-hover",  # Add hover effects
         style={
             "overflow": "visible",  # Allow content to be visible and interactive
             "width": "100%",  # Ensure it takes full width of the parent
@@ -184,10 +185,11 @@ def enable_box_edit_mode(
             "boxSizing": "border-box",  # Include padding in the element's total width and height
             "padding": "10px",  # Add some padding
             "border": "1px solid var(--app-border-color, #ddd)",  # Theme-aware border
-            "borderRadius": "5px",  # Add rounded corners
+            "borderRadius": "8px",  # Add rounded corners
             "background": "var(--app-surface-color, #ffffff)",  # Theme-aware background
             "position": "relative",  # Enable positioning for overlay
             "minHeight": "100px",  # Ensure minimum height for content
+            "transition": "all 0.3s ease",  # Smooth transitions
         },
     )
 
@@ -195,7 +197,7 @@ def enable_box_edit_mode(
     draggable_wrapper = dgl.DraggableWrapper(
         id=box_uuid,  # Use UUID as ID for layout tracking
         children=[content_div],
-        handleText="Move Component",  # Handle text for dragging
+        handleText="Drag",  # Handle text for dragging
     )
 
     return draggable_wrapper

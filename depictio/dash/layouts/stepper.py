@@ -350,7 +350,7 @@ def create_stepper_output_edit(n, parent_id, active, component_data, TOKEN):
         title=html.Div(
             [
                 html.Img(
-                    src=dash.get_asset_url("favicon.ico"),
+                    src=dash.get_asset_url("images/icons/favicon.ico"),
                     style={
                         "height": "34px",
                         "width": "34px",
@@ -611,7 +611,7 @@ def create_stepper_output(n, active):
                 title=html.Div(
                     [
                         html.Img(
-                            src=dash.get_asset_url("favicon.ico"),
+                            src=dash.get_asset_url("images/icons/favicon.ico"),
                             style={
                                 "height": "34px",
                                 "width": "34px",

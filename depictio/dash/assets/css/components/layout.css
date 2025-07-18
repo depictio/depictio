@@ -1,0 +1,37 @@
+/* =============================================================================
+   LAYOUT COMPONENTS
+   Layout and navigation components styling
+   ============================================================================= */
+
+/* Dashboard offcanvas background */
+#offcanvas-parameters,
+.dashboard-offcanvas,
+.offcanvas {
+    background-color: var(--app-surface-color, var(--depictio-surface-light)) !important;
+    color: var(--app-text-color, var(--depictio-text-light)) !important;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+#offcanvas-parameters .offcanvas-header,
+.dashboard-offcanvas .offcanvas-header,
+.offcanvas .offcanvas-header {
+    background-color: var(--app-surface-color, var(--depictio-surface-light)) !important;
+    color: var(--app-text-color, var(--depictio-text-light)) !important;
+    border-bottom: 1px solid var(--app-border-color, #dee2e6) !important;
+    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+#offcanvas-parameters .offcanvas-body,
+.dashboard-offcanvas .offcanvas-body,
+.offcanvas .offcanvas-body {
+    background-color: var(--app-surface-color, var(--depictio-surface-light)) !important;
+    color: var(--app-text-color, var(--depictio-text-light)) !important;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Project management headers background */
+#permissions-manager-project-header {
+    background-color: var(--app-surface-color, var(--depictio-surface-light)) !important;
+    color: var(--app-text-color, var(--depictio-text-light)) !important;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}

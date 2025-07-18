@@ -2,7 +2,7 @@ import dash
 import dash.dependencies as dd
 import dash_mantine_components as dmc
 import httpx
-from dash import ALL, Input, Output, State, dcc, html
+from dash import ALL, Input, Output, State, ctx, dcc, html
 from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL, settings
@@ -94,12 +94,24 @@ def register_sidebar_callbacks(app):
         Output("app-shell", "navbar"),
         Output("sidebar-collapsed", "data"),
         Input("sidebar-button", "n_clicks"),
+        Input("url", "pathname"),
         State("sidebar-collapsed", "data"),
         prevent_initial_call=True,
     )
-    def toggle_appshell_navbar(n_clicks, is_collapsed):
-        # Toggle the collapsed state
-        new_collapsed_state = not is_collapsed
+    def toggle_appshell_navbar(n_clicks, pathname, is_collapsed):
+        # Check if we're on the auth page - if so, hide the navbar completely
+        if pathname == "/auth":
+            return None, is_collapsed
+
+        # Check what triggered the callback
+        trigger = ctx.triggered_id
+
+        if trigger == "sidebar-button":
+            # Toggle the collapsed state
+            new_collapsed_state = not is_collapsed
+        else:
+            # URL change, maintain current collapsed state
+            new_collapsed_state = is_collapsed
 
         # Return new navbar configuration
         navbar_config = {
@@ -249,7 +261,9 @@ def render_sidebar(email):
     # name = email.split("@")[0]
 
     depictio_logo = dcc.Link(
-        html.Img(id="navbar-logo", src=dash.get_asset_url("logo_black.svg"), height=45),
+        html.Img(
+            id="navbar-logo", src=dash.get_asset_url("images/logos/logo_black.svg"), height=45
+        ),
         href="/",
         style={"alignItems": "center", "justifyContent": "center", "display": "flex"},
     )
@@ -361,7 +375,11 @@ def render_sidebar_content(email):
     # name = email.split("@")[0]
 
     depictio_logo = dcc.Link(
-        html.Img(id="navbar-logo-content", src=dash.get_asset_url("logo_black.svg"), height=45),
+        html.Img(
+            id="navbar-logo-content",
+            src=dash.get_asset_url("images/logos/logo_black.svg"),
+            height=45,
+        ),
         href="/",
         style={"alignItems": "center", "justifyContent": "center", "display": "flex"},
     )

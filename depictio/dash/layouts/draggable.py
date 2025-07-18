@@ -452,7 +452,7 @@ def register_callbacks_draggable(app):
         # height_store,
     ):
         if not local_data:
-            return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
         if not state_stored_draggable_layouts:
             state_stored_draggable_layouts = {}
@@ -1389,9 +1389,35 @@ def register_callbacks_draggable(app):
         # logger.info(f"Output data: {output_data}")
         return output_data
 
+    # Add callback to control grid edit mode like in the prototype
+    @app.callback(
+        [
+            Output("draggable", "showRemoveButton", allow_duplicate=True),
+            Output("draggable", "showResizeHandles", allow_duplicate=True),
+            Output("draggable", "className", allow_duplicate=True),
+        ],
+        Input("edit-dashboard-mode-button", "checked"),
+        prevent_initial_call=True,
+    )
+    def update_grid_edit_mode(edit_mode_enabled):
+        """Update draggable grid edit mode based on edit dashboard button state"""
+        logger.info(f"Grid edit mode toggled: {edit_mode_enabled}")
+
+        if edit_mode_enabled:
+            # Enable dragging by using the default class
+            return True, True, "layout"
+        else:
+            # Disable dragging by adding a class that prevents dragging
+            return False, False, "layout layout-no-drag"
+
 
 def design_draggable(
-    init_layout: dict, init_children: list[dict], dashboard_id: str, local_data: dict
+    init_layout: dict,
+    init_children: list[dict],
+    dashboard_id: str,
+    local_data: dict,
+    theme: str = "light",
+    edit_dashboard_mode_button: bool = False,
 ):
     # logger.info("design_draggable - Initializing draggable layout")
     # logger.info(f"design_draggable - Dashboard ID: {dashboard_id}")
@@ -1500,8 +1526,8 @@ def design_draggable(
         itemLayout=current_layout,
         rowHeight=120,  # Larger row height for better component display
         cols={"lg": 12, "md": 10, "sm": 6, "xs": 4, "xxs": 2},
-        showRemoveButton=False,  # Will be controlled by edit mode
-        showResizeHandles=False,  # Will be controlled by edit mode
+        showRemoveButton=True,  # Will be controlled by edit mode
+        showResizeHandles=True,  # Will be controlled by edit mode
         style={
             "display": display_style,
             "flex-grow": 1,

@@ -283,7 +283,9 @@ def register_theme_callbacks(app):
     )
     def update_navbar_logo(theme_data):
         theme = theme_data or "light"
-        logo_src = dash.get_asset_url("logo_white.svg" if theme == "dark" else "logo_black.svg")
+        logo_src = dash.get_asset_url(
+            "images/logos/logo_white.svg" if theme == "dark" else "images/logos/logo_black.svg"
+        )
         return logo_src
 
     # Update auth modal logos and theme styling with client-side callback
@@ -291,7 +293,7 @@ def register_theme_callbacks(app):
         """
         function(theme_data) {
             const theme = theme_data || 'light';
-            const logoSrc = theme === 'dark' ? '/assets/logo_white.svg' : '/assets/logo_black.svg';
+            const logoSrc = theme === 'dark' ? '/assets/images/logos/logo_white.svg' : '/assets/images/logos/logo_black.svg';
 
             console.log('🎨 Updating auth modal theme:', theme);
 
@@ -885,7 +887,10 @@ def register_theme_callbacks(app):
             return {
                 'color': textColor,
                 'data-theme': theme,  // Add a data attribute that changes
-                'display': 'none'  // Keep it hidden
+                'fontWeight': 'bold',
+                'fontSize': '24px',
+                'textAlign': 'center',
+                'flex': '1'  // Take remaining space
             };
         }
         """,

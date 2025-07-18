@@ -469,7 +469,7 @@ layout = dmc.Container(
                                         # Logo Image
                                         html.Img(
                                             src=dash.get_asset_url(
-                                                "scilifelab_logo.png"  # You'll need to add this to your assets
+                                                "images/logos/scilifelab_logo.png"  # You'll need to add this to your assets
                                             ),
                                             style={
                                                 "height": "60px",

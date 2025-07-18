@@ -1,0 +1,38 @@
+/* =============================================================================
+   ACCESSIBILITY FEATURES
+   Accessibility considerations and reduced motion support
+   ============================================================================= */
+
+/* Reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+    .floating-orb {
+        animation: none !important;
+    }
+
+    .gradient-overlay {
+        animation: none !important;
+    }
+
+    .dashboard-component-hover {
+        transition: none !important;
+    }
+
+    .triangle-particle {
+        animation: none !important;
+    }
+
+    /* Disable all particle animations */
+    .triangle-anim-1,
+    .triangle-anim-2,
+    .triangle-anim-3,
+    .triangle-anim-4,
+    .triangle-anim-5,
+    .triangle-anim-6 {
+        animation: none !important;
+    }
+
+    /* Disable background drift */
+    #triangle-particles {
+        animation: none !important;
+    }
+}

@@ -1,0 +1,227 @@
+/* =============================================================================
+   ANIMATIONS AND KEYFRAMES
+   All animation definitions for particles, transitions, and effects
+   ============================================================================= */
+
+/* Triangle particle animations for auth background */
+@keyframes triangleParticle0 {
+    0% { transform: translate(0, 0) rotate(0deg); }
+    25% { transform: translate(20px, -30px) rotate(90deg); }
+    50% { transform: translate(-10px, -60px) rotate(180deg); }
+    75% { transform: translate(-30px, -30px) rotate(270deg); }
+    100% { transform: translate(0, 0) rotate(360deg); }
+}
+
+@keyframes triangleParticle1 {
+    0% { transform: translate(0, 0) rotate(0deg); }
+    25% { transform: translate(-25px, 15px) rotate(-90deg); }
+    50% { transform: translate(10px, 40px) rotate(-180deg); }
+    75% { transform: translate(35px, 10px) rotate(-270deg); }
+    100% { transform: translate(0, 0) rotate(-360deg); }
+}
+
+@keyframes triangleParticle2 {
+    0% { transform: translate(0, 0) rotate(0deg); }
+    25% { transform: translate(15px, 25px) rotate(45deg); }
+    50% { transform: translate(-20px, 50px) rotate(90deg); }
+    75% { transform: translate(-35px, 25px) rotate(135deg); }
+    100% { transform: translate(0, 0) rotate(180deg); }
+}
+
+@keyframes triangleParticle3 {
+    0% { transform: translate(0, 0) rotate(0deg); }
+    25% { transform: translate(30px, -15px) rotate(-45deg); }
+    50% { transform: translate(60px, 10px) rotate(-90deg); }
+    75% { transform: translate(30px, 35px) rotate(-135deg); }
+    100% { transform: translate(0, 0) rotate(-180deg); }
+}
+
+@keyframes triangleParticle4 {
+    0% { transform: translate(0, 0) rotate(0deg); }
+    25% { transform: translate(-15px, -25px) rotate(120deg); }
+    50% { transform: translate(5px, -50px) rotate(240deg); }
+    75% { transform: translate(25px, -25px) rotate(360deg); }
+    100% { transform: translate(0, 0) rotate(480deg); }
+}
+
+@keyframes triangleParticle5 {
+    0% { transform: translate(0, 0) rotate(0deg); }
+    25% { transform: translate(-10px, 20px) rotate(-60deg); }
+    50% { transform: translate(-30px, -10px) rotate(-120deg); }
+    75% { transform: translate(-10px, -40px) rotate(-180deg); }
+    100% { transform: translate(0, 0) rotate(-240deg); }
+}
+
+@keyframes backgroundDrift {
+    0%, 100% {
+        transform: translate3d(0, 0, 0) rotate(0deg);
+    }
+    25% {
+        transform: translate3d(8px, -6px, 0) rotate(0.5deg);
+    }
+    50% {
+        transform: translate3d(-6px, 8px, 0) rotate(-0.5deg);
+    }
+    75% {
+        transform: translate3d(-8px, -3px, 0) rotate(0.25deg);
+    }
+}
+
+@keyframes triangleFloat {
+    0%, 100% {
+        transform: translate3d(0, 0, 0) rotate(var(--initial-rotation, 0deg));
+        opacity: 0.25;
+    }
+    25% {
+        transform: translate3d(12px, -8px, 0) rotate(calc(var(--initial-rotation, 0deg) + 45deg));
+        opacity: 0.4;
+    }
+    50% {
+        transform: translate3d(15px, 5px, 0) rotate(calc(var(--initial-rotation, 0deg) + 90deg));
+        opacity: 0.35;
+    }
+    75% {
+        transform: translate3d(8px, 12px, 0) rotate(calc(var(--initial-rotation, 0deg) + 135deg));
+        opacity: 0.3;
+    }
+}
+
+@keyframes triangleDrift {
+    0%, 100% {
+        transform: translate3d(0, 0, 0) rotate(var(--initial-rotation, 0deg)) scale(1);
+        opacity: 0.3;
+    }
+    33% {
+        transform: translate3d(18px, -12px, 0) rotate(calc(var(--initial-rotation, 0deg) + 60deg)) scale(1.05);
+        opacity: 0.4;
+    }
+    66% {
+        transform: translate3d(-15px, 10px, 0) rotate(calc(var(--initial-rotation, 0deg) + 120deg)) scale(0.95);
+        opacity: 0.35;
+    }
+}
+
+@keyframes trianglePulse {
+    0%, 100% {
+        opacity: 0.25;
+        transform: scale3d(1, 1, 1) rotate(var(--initial-rotation, 0deg)) translate3d(0, 0, 0);
+    }
+    50% {
+        opacity: 0.45;
+        transform: scale3d(1.1, 1.1, 1) rotate(calc(var(--initial-rotation, 0deg) + 90deg)) translate3d(8px, -6px, 0);
+    }
+}
+
+@keyframes triangleRotate {
+    0% {
+        transform: rotate(var(--initial-rotation, 0deg)) translate3d(0, 0, 0);
+        opacity: 0.25;
+    }
+    25% {
+        transform: rotate(calc(var(--initial-rotation, 0deg) + 90deg)) translate3d(10px, -8px, 0);
+        opacity: 0.35;
+    }
+    50% {
+        transform: rotate(calc(var(--initial-rotation, 0deg) + 180deg)) translate3d(0, 10px, 0);
+        opacity: 0.3;
+    }
+    75% {
+        transform: rotate(calc(var(--initial-rotation, 0deg) + 270deg)) translate3d(-10px, 0, 0);
+        opacity: 0.35;
+    }
+    100% {
+        transform: rotate(calc(var(--initial-rotation, 0deg) + 360deg)) translate3d(0, 0, 0);
+        opacity: 0.25;
+    }
+}
+
+@keyframes triangleOrbit {
+    0%, 100% {
+        transform: translate3d(0, 0, 0) rotate(var(--initial-rotation, 0deg));
+        opacity: 0.3;
+    }
+    25% {
+        transform: translate3d(20px, -15px, 0) rotate(calc(var(--initial-rotation, 0deg) + 22.5deg));
+        opacity: 0.4;
+    }
+    50% {
+        transform: translate3d(22px, 18px, 0) rotate(calc(var(--initial-rotation, 0deg) + 90deg));
+        opacity: 0.35;
+    }
+    75% {
+        transform: translate3d(-18px, 15px, 0) rotate(calc(var(--initial-rotation, 0deg) + 157.5deg));
+        opacity: 0.4;
+    }
+}
+
+@keyframes triangleWave {
+    0%, 100% {
+        transform: translate3d(0, 0, 0) rotate(var(--initial-rotation, 0deg)) scale(1);
+        opacity: 0.25;
+    }
+    20% {
+        transform: translate3d(8px, -12px, 0) rotate(calc(var(--initial-rotation, 0deg) + 36deg)) scale(1.02);
+        opacity: 0.35;
+    }
+    40% {
+        transform: translate3d(15px, 6px, 0) rotate(calc(var(--initial-rotation, 0deg) + 72deg)) scale(0.98);
+        opacity: 0.4;
+    }
+    60% {
+        transform: translate3d(-10px, 14px, 0) rotate(calc(var(--initial-rotation, 0deg) + 108deg)) scale(1.05);
+        opacity: 0.35;
+    }
+    80% {
+        transform: translate3d(-15px, -8px, 0) rotate(calc(var(--initial-rotation, 0deg) + 144deg)) scale(0.95);
+        opacity: 0.3;
+    }
+}
+
+/* Dashboard-specific triangle animations */
+@keyframes dashboardTriangleAnim0 {
+    0% { transform: translate(0, 0) rotate(0deg); }
+    25% { transform: translate(20px, -30px) rotate(90deg); }
+    50% { transform: translate(-10px, -60px) rotate(180deg); }
+    75% { transform: translate(-30px, -30px) rotate(270deg); }
+    100% { transform: translate(0, 0) rotate(360deg); }
+}
+
+@keyframes dashboardTriangleAnim1 {
+    0% { transform: translate(0, 0) rotate(0deg); }
+    25% { transform: translate(-25px, 15px) rotate(-90deg); }
+    50% { transform: translate(10px, 40px) rotate(-180deg); }
+    75% { transform: translate(35px, 10px) rotate(-270deg); }
+    100% { transform: translate(0, 0) rotate(-360deg); }
+}
+
+@keyframes dashboardTriangleAnim2 {
+    0% { transform: translate(0, 0) rotate(0deg); }
+    25% { transform: translate(15px, 25px) rotate(45deg); }
+    50% { transform: translate(-20px, 50px) rotate(90deg); }
+    75% { transform: translate(-35px, 25px) rotate(135deg); }
+    100% { transform: translate(0, 0) rotate(180deg); }
+}
+
+@keyframes dashboardTriangleAnim3 {
+    0% { transform: translate(0, 0) rotate(0deg); }
+    25% { transform: translate(30px, -15px) rotate(-45deg); }
+    50% { transform: translate(60px, 10px) rotate(-90deg); }
+    75% { transform: translate(30px, 35px) rotate(-135deg); }
+    100% { transform: translate(0, 0) rotate(-180deg); }
+}
+
+@keyframes dashboardTriangleAnim4 {
+    0% { transform: translate(0, 0) rotate(0deg); }
+    25% { transform: translate(-15px, -25px) rotate(120deg); }
+    50% { transform: translate(5px, -50px) rotate(240deg); }
+    75% { transform: translate(25px, -25px) rotate(360deg); }
+    100% { transform: translate(0, 0) rotate(480deg); }
+}
+
+@keyframes dashboardTriangleAnim5 {
+    0% { transform: translate(0, 0) rotate(0deg); }
+    25% { transform: translate(-10px, 20px) rotate(-60deg); }
+    50% { transform: translate(-30px, -10px) rotate(-120deg); }
+    75% { transform: translate(-10px, -40px) rotate(-180deg); }
+    100% { transform: translate(0, 0) rotate(-240deg); }
+}

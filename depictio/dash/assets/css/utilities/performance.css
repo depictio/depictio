@@ -1,0 +1,56 @@
+/* =============================================================================
+   PERFORMANCE OPTIMIZATIONS
+   GPU acceleration and performance level adaptations
+   ============================================================================= */
+
+/* Performance level optimizations */
+.performance-low .triangle-particle {
+    animation-duration: 25s !important;
+    opacity: 0.15 !important;
+}
+
+.performance-medium .triangle-particle {
+    animation-duration: 18s !important;
+    opacity: 0.25 !important;
+}
+
+.performance-high .triangle-particle {
+    animation-duration: 14s !important;
+    opacity: 0.35 !important;
+}
+
+/* Performance monitoring styles */
+.low-performance .floating-orb {
+    animation-duration: 90s;
+    opacity: 0.08 !important;
+}
+
+.low-performance .gradient-overlay {
+    animation: none;
+    opacity: 0.3;
+}
+
+/* Responsive adjustments for performance */
+@media (max-width: 768px) {
+    .floating-orb {
+        animation-duration: 50s;
+        opacity: 0.1 !important;
+    }
+
+    .gradient-overlay {
+        animation-duration: 80s;
+    }
+}
+
+@media (max-width: 480px) {
+    .floating-orb {
+        animation-duration: 70s;
+        opacity: 0.05 !important;
+        transform: scale(0.8);
+    }
+
+    .gradient-overlay {
+        animation-duration: 100s;
+        opacity: 0.5;
+    }
+}

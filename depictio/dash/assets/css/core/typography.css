@@ -1,0 +1,22 @@
+/* =============================================================================
+   TYPOGRAPHY AND FONTS
+   Font definitions and text styling
+   ============================================================================= */
+
+/* Font face definitions */
+@font-face {
+    font-family: 'Virgil';
+    src: url('../../fonts/Virgil.ttf') format('truetype');
+}
+
+/* Font overrides for specific components */
+.mantine-Switch-label {
+    font-family: 'Virgil' !important;
+    font-size: '20px' !important;
+}
+
+/* Theme-aware titles */
+[data-mantine="Title"] {
+    transition: color 0.2s ease;
+    color: var(--app-text-color, var(--mantine-color-black)) !important;
+}

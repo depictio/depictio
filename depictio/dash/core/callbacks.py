@@ -41,6 +41,28 @@ def register_main_callback(app):
         # Process authentication and return appropriate content
         return process_authentication(pathname, local_data, theme_store)
 
+    @app.callback(
+        Output("app-shell", "header"),
+        Input("url", "pathname"),
+        prevent_initial_call=True,
+    )
+    def toggle_appshell_header_visibility(pathname):
+        """
+        Control AppShell header visibility based on current route.
+
+        Args:
+            pathname (str): Current URL pathname
+
+        Returns:
+            dict or None: header_config - None value hides the component
+        """
+        if pathname == "/auth":
+            # Hide header on auth page
+            return None
+        else:
+            # Show header on all other pages
+            return {"height": 87}
+
 
 def register_all_callbacks(app):
     """

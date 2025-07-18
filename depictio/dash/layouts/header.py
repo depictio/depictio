@@ -593,7 +593,7 @@ def design_header(data, local_store):
             # Depictio favicon - visible when sidebar is collapsed
             html.Img(
                 id="header-favicon",
-                src=dash.get_asset_url("favicon.ico"),
+                src=dash.get_asset_url("images/icons/favicon.ico"),
                 style={
                     "height": "24px",
                     "width": "24px",

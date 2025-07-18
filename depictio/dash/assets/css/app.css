@@ -1,0 +1,7 @@
+/* =============================================================================
+   MAIN APPLICATION CSS
+   Imports all modular CSS files for the Depictio application
+   ============================================================================= */
+
+/* Import the main modular CSS structure */
+@import url('./css/main.css');

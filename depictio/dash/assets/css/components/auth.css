@@ -1,0 +1,173 @@
+/* =============================================================================
+   AUTH PAGE COMPONENTS
+   All styles related to authentication pages and modals
+   ============================================================================= */
+
+/* Auth modal content background - theme aware */
+.auth-modal-content {
+    position: relative;
+    z-index: 10000;
+    backdrop-filter: blur(10px);
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    color: var(--app-text-color, var(--depictio-text-light));
+    transition: background 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* Dark theme modal content */
+@media (prefers-color-scheme: dark) {
+    .auth-modal-content {
+        background: rgba(37, 38, 43, 0.95);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+}
+
+/* Manual theme overrides for modal content */
+body.theme-manual-light .auth-modal-content {
+    background: rgba(255, 255, 255, 0.95) !important;
+    color: var(--depictio-text-light) !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1) !important;
+}
+
+body.theme-manual-dark .auth-modal-content {
+    background: rgba(37, 38, 43, 0.95) !important;
+    color: var(--depictio-text-dark) !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Auth background positioning - GPU optimized */
+#auth-background {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    z-index: 9998 !important;
+    overflow: hidden;
+    /* Enable hardware acceleration */
+    transform: translateZ(0);
+    will-change: transform;
+}
+
+/* Auth page layout - when AppShell is hidden */
+#page-content:has(#auth-background) {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    z-index: 9997 !important;
+}
+
+/* Ensure auth page content takes full viewport */
+.auth-page-content {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    z-index: 9997 !important;
+}
+
+/* Hide header/sidebar on auth pages */
+body.auth-page #header-content,
+body.auth-page #sidebar,
+body.auth-page .mantine-AppShell-navbar,
+body.auth-page .mantine-AppShell-header {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+}
+
+/* Triangle particles container - GPU optimized with background movement */
+#triangle-particles {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    /* Enable hardware acceleration */
+    transform: translateZ(0);
+    will-change: transform;
+    /* Add subtle background drift */
+    animation: backgroundDrift 60s infinite ease-in-out;
+}
+
+/* Base triangle particle styles */
+.triangle-particle {
+    position: absolute;
+    /* Enable hardware acceleration for smooth animations */
+    transform: translateZ(0);
+    will-change: transform, opacity;
+    /* Smooth transitions */
+    transition: none;
+    /* Base opacity */
+    opacity: 0.3;
+    background-size: contain;
+    background-repeat: no-repeat;
+    animation-timing-function: ease-in-out;
+    animation-iteration-count: infinite;
+    animation-fill-mode: both;
+}
+
+/* Small triangles - 12x12px */
+.triangle-small {
+    width: 12px;
+    height: 12px;
+}
+
+/* Medium triangles - 18x18px */
+.triangle-medium {
+    width: 18px;
+    height: 18px;
+}
+
+/* Large triangles - 24x24px */
+.triangle-large {
+    width: 24px;
+    height: 24px;
+}
+
+/* Extra large triangles - 32x32px */
+.triangle-xlarge {
+    width: 32px;
+    height: 32px;
+    opacity: 0.25; /* Slightly more transparent for larger triangles */
+}
+
+/* Apply animations to different triangle types with smoother timing */
+.triangle-anim-1 {
+    animation: triangleFloat 8s infinite linear;
+}
+
+.triangle-anim-2 {
+    animation: triangleDrift 9s infinite linear;
+}
+
+.triangle-anim-3 {
+    animation: trianglePulse 7s infinite linear;
+}
+
+.triangle-anim-4 {
+    animation: triangleRotate 10s infinite linear;
+}
+
+.triangle-anim-5 {
+    animation: triangleOrbit 8.5s infinite linear;
+}
+
+.triangle-anim-6 {
+    animation: triangleWave 9.5s infinite linear;
+}
+
+/* Triangle particles container - used by auth page */
+.triangle-particles-container {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    transform: translateZ(0);
+    will-change: transform;
+}

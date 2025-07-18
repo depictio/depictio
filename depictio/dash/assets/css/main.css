@@ -1,0 +1,25 @@
+/* =============================================================================
+   MAIN CSS IMPORT FILE
+   Central import file for all modular CSS files
+   ============================================================================= */
+
+/* Core styles */
+@import url('./core/typography.css');
+
+/* Theme system */
+@import url('./theme/theme-variables.css');
+@import url('./theme/auto-theme.css');
+
+/* Animations */
+@import url('./animations/animations.css');
+
+/* Components */
+@import url('./components/auth.css');
+@import url('./components/draggable-grid.css');
+@import url('./components/layout.css');
+@import url('./components/clipboard.css');
+
+/* Utilities */
+@import url('./utilities/fouc-prevention.css');
+@import url('./utilities/performance.css');
+@import url('./utilities/accessibility.css');

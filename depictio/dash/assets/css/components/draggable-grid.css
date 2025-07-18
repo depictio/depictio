@@ -1,0 +1,244 @@
+/* =============================================================================
+   DRAGGABLE GRID COMPONENTS
+   All styles related to the draggable grid layout system
+   ============================================================================= */
+
+/* Draggable components background */
+.react-grid-item,
+.react-grid-item .card,
+.react-grid-item [data-mantine="Card"],
+#draggable .react-grid-item,
+#draggable .react-grid-item > *,
+#draggable .react-grid-item [class*="Card"] {
+    background-color: var(--app-surface-color, var(--depictio-surface-light)) !important;
+    color: var(--app-text-color, var(--depictio-text-light)) !important;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Bootstrap card components in draggable items */
+.react-grid-item .card-body,
+.react-grid-item .card-header,
+#draggable .card,
+#draggable .card-body,
+#draggable .card-header {
+    background-color: var(--app-surface-color, var(--depictio-surface-light)) !important;
+    color: var(--app-text-color, var(--depictio-text-light)) !important;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Style resize handles to be invisible like in prototype */
+.react-grid-item > .react-resizable-handle {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    opacity: 0 !important;
+}
+
+.react-grid-item:hover > .react-resizable-handle {
+    opacity: 0.3 !important;
+}
+
+/* Add stroke when dragging or resizing */
+.react-grid-item.react-grid-item-dragging,
+.react-grid-item.react-grid-item-resizing {
+    border: 2px solid var(--app-primary-color, #6366f1) !important;
+    box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.2) !important;
+    z-index: 1000 !important;
+}
+
+/* Add stroke when hovering over drag handle */
+.react-grid-item:has(.react-grid-dragHandle:hover) {
+    border: 1px solid var(--app-primary-color, #6366f1) !important;
+    box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.1) !important;
+}
+
+/* Add stroke when hovering over resize handles */
+.react-grid-item:hover {
+    border: 1px solid var(--app-border-color, #dee2e6) !important;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+/* Hide remove button (×) */
+.react-grid-item .remove,
+.react-grid-item span.remove {
+    display: none !important;
+    visibility: hidden !important;
+}
+
+/* Style drag handle for theme compatibility */
+.react-grid-dragHandle {
+    background: var(--app-surface-color, #f8f9fa) !important;
+    color: var(--app-text-color, #333) !important;
+    border: 1px solid var(--app-border-color, #dee2e6) !important;
+    border-radius: 4px !important;
+    font-size: 12px !important;
+    font-weight: 500 !important;
+    transition: all 0.2s ease !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 4px !important;
+}
+
+.react-grid-dragHandle:hover {
+    background: var(--app-border-color, #e9ecef) !important;
+    border-color: var(--app-text-color, #333) !important;
+}
+
+/* Add hand icon before the text */
+.react-grid-dragHandle::before {
+    content: "✋" !important;
+    font-size: 14px !important;
+    margin-right: 2px !important;
+}
+
+/* Draggable component background enhancement */
+.react-grid-item.dashboard-component-hover {
+    background: var(--app-surface-color);
+    border: 1px solid var(--app-border-color);
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+.react-grid-item.dashboard-component-hover:hover {
+    border-color: var(--app-primary-color, #6366f1);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
+}
+
+/* Component interaction effects */
+.dashboard-component-hover {
+    position: relative;
+    transition: transform 0.2s ease;
+}
+
+.dashboard-component-hover:hover {
+    transform: translateY(-2px);
+}
+
+.dashboard-component-hover::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, transparent, rgba(99, 102, 241, 0.05), transparent);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    z-index: 1;
+    pointer-events: none;
+}
+
+.dashboard-component-hover:hover::before {
+    opacity: 1;
+}
+
+/* =============================================================================
+   DRAG DISABLE FUNCTIONALITY
+   Disable dragging when edit mode is off
+   ============================================================================= */
+
+/* Disable dragging when layout-no-drag class is applied */
+.layout-no-drag {
+    /* Disable all pointer events on the entire container */
+    pointer-events: none !important;
+}
+
+/* Re-enable pointer events for the content but not the grid system */
+.layout-no-drag .react-grid-item > * {
+    pointer-events: auto !important;
+}
+
+/* Disable dragging on grid items specifically */
+.layout-no-drag .react-grid-item {
+    cursor: default !important;
+    /* Disable all drag-related mouse events */
+    -webkit-user-drag: none !important;
+    -webkit-user-select: none !important;
+    -moz-user-select: none !important;
+    -ms-user-select: none !important;
+    user-select: none !important;
+    /* Prevent any drag events */
+    pointer-events: none !important;
+}
+
+/* Completely disable drag handle when dragging is disabled */
+.layout-no-drag .react-grid-dragHandle {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+
+/* Hide resize handles when dragging is disabled */
+.layout-no-drag .react-grid-item .react-resizable-handle {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+    opacity: 0 !important;
+}
+
+/* Disable React DnD dragging by targeting the drag layer */
+.layout-no-drag .react-grid-item .react-draggable {
+    pointer-events: none !important;
+}
+
+/* Disable React DnD by targeting drag handles more specifically */
+.layout-no-drag .react-grid-item [draggable="true"] {
+    pointer-events: none !important;
+}
+
+/* Disable all mouse events that could trigger drag */
+.layout-no-drag .react-grid-item {
+    -webkit-touch-callout: none !important;
+    -webkit-user-select: none !important;
+    -khtml-user-select: none !important;
+    -moz-user-select: none !important;
+    -ms-user-select: none !important;
+    user-select: none !important;
+}
+
+/* Disable hover effects when dragging is disabled */
+.layout-no-drag .react-grid-item:hover {
+    border: 1px solid transparent !important;
+    box-shadow: none !important;
+    transform: none !important;
+}
+
+/* Disable drag/resize visual feedback */
+.layout-no-drag .react-grid-item.react-grid-item-dragging,
+.layout-no-drag .react-grid-item.react-grid-item-resizing {
+    border: none !important;
+    box-shadow: none !important;
+    z-index: auto !important;
+}
+
+/* Disable the drag handle hover effect specifically */
+.layout-no-drag .react-grid-item:has(.react-grid-dragHandle:hover) {
+    border: none !important;
+    box-shadow: none !important;
+}
+
+/* Disable dashboard component hover effects when in no-drag mode */
+.layout-no-drag .react-grid-item.dashboard-component-hover:hover {
+    border-color: transparent !important;
+    box-shadow: none !important;
+    transform: none !important;
+}
+
+/* Re-enable text selection and interaction for content */
+.layout-no-drag .react-grid-item button,
+.layout-no-drag .react-grid-item input,
+.layout-no-drag .react-grid-item select,
+.layout-no-drag .react-grid-item textarea,
+.layout-no-drag .react-grid-item a,
+.layout-no-drag .react-grid-item [role="button"],
+.layout-no-drag .react-grid-item [tabindex],
+.layout-no-drag .react-grid-item .mantine-Button-root,
+.layout-no-drag .react-grid-item .mantine-ActionIcon-root {
+    cursor: pointer !important;
+    pointer-events: auto !important;
+    -webkit-user-select: auto !important;
+    -moz-user-select: auto !important;
+    -ms-user-select: auto !important;
+    user-select: auto !important;
+}
