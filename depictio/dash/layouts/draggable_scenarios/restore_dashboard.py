@@ -6,6 +6,9 @@ from depictio.dash.api_calls import api_call_fetch_user_from_token, api_call_get
 from depictio.dash.layouts.draggable_scenarios.interactive_component_update import (
     update_interactive_component,
 )
+from depictio.dash.layouts.draggable_scenarios.skeleton_components import (
+    create_skeleton_component,
+)
 from depictio.dash.layouts.edit import enable_box_edit_mode
 from depictio.dash.modules.card_component.utils import build_card
 from depictio.dash.modules.figure_component.utils import build_figure
@@ -116,6 +119,72 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, them
     return children
 
 
+def render_dashboard_with_skeletons(
+    stored_metadata, edit_components_button, dashboard_id, theme, TOKEN
+):
+    """Render dashboard with skeleton placeholders for progressive loading."""
+    logger.info(f"Rendering dashboard with skeletons for ID: {dashboard_id}")
+    from depictio.dash.layouts.draggable import clean_stored_metadata
+
+    stored_metadata = clean_stored_metadata(stored_metadata)
+    children = []
+
+    for child_metadata in stored_metadata:
+        component_type = child_metadata.get("component_type", "card")
+        component_uuid = child_metadata.get("index", "unknown")
+
+        logger.info(f"Creating skeleton for {component_type} component {component_uuid}")
+
+        # Create skeleton component
+        skeleton_component = create_skeleton_component(
+            component_type, component_uuid, child_metadata
+        )
+
+        # Wrap with DraggableWrapper using enable_box_edit_mode structure
+        from dash import html
+
+        # Apply enable_box_edit_mode - wrap skeleton with a content div that can be updated
+        skeleton_with_content_id = html.Div(
+            [skeleton_component], id={"type": "component-content", "uuid": component_uuid}
+        )
+
+        # Create a wrapper div with the expected ID structure for enable_box_edit_mode
+        # The enable_box_edit_mode function expects a component with id={"index": component_uuid}
+        wrapper_div = html.Div([skeleton_with_content_id], id={"index": component_uuid})
+
+        # Create a proper Dash component for enable_box_edit_mode
+        # The enable_box_edit_mode function expects a component's to_plotly_json() output
+        wrapped_component = enable_box_edit_mode(
+            wrapper_div.to_plotly_json(),
+            switch_state=edit_components_button,
+            dashboard_id=dashboard_id,
+            component_data=child_metadata,
+            TOKEN=TOKEN,
+        )
+
+        children.append(wrapped_component)
+
+    logger.info(f"Created {len(children)} skeleton components")
+    return children
+
+
+def get_loading_delay_for_component(component_type, index_in_list):
+    """Get the loading delay for a component based on its type and position."""
+    base_delays = {
+        "card": 0.5,  # Fastest - simple components
+        "interactive": 1.0,  # Medium - interactive components
+        "figure": 1.5,  # Slower - complex visualizations
+        "table": 2.0,  # Slowest - data-heavy components
+        "jbrowse": 2.5,  # Slowest - genome browser
+    }
+
+    base_delay = base_delays.get(component_type, 1.0)
+    # Add small incremental delay based on position to stagger loading
+    positional_delay = index_in_list * 0.2
+
+    return base_delay + positional_delay
+
+
 def load_depictio_data(dashboard_id, local_data, theme="light"):
     """Load the dashboard data from the API and render it.
     Args:
@@ -214,6 +283,8 @@ def load_depictio_data(dashboard_id, local_data, theme="light"):
                 if not owner and not viewer:
                     edit_components_button_checked = False
 
+            # Use regular dashboard rendering - progressive loading will be handled at UI level
+            logger.info("Rendering dashboard components")
             children = render_dashboard(
                 dashboard_data.stored_metadata,
                 edit_components_button_checked,

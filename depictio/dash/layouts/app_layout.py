@@ -397,10 +397,30 @@ def create_dashboard_layout(
     local_data = local_data or {}
     core = design_draggable(init_layout, init_children, dashboard_id, local_data)
 
+    # Add progressive loading components if we have metadata
+    progressive_loading_components = []
+    if (
+        depictio_dash_data
+        and isinstance(depictio_dash_data, dict)
+        and "stored_metadata" in depictio_dash_data
+    ):
+        from depictio.dash.layouts.draggable_scenarios.progressive_loading import (
+            create_loading_progress_display,
+        )
+
+        stored_metadata = depictio_dash_data["stored_metadata"]
+        if stored_metadata:
+            logger.info(f"Adding simple progressive loading for {len(stored_metadata)} components")
+
+            # Create simple loading progress display
+            progressive_loading_components.append(create_loading_progress_display(dashboard_id))
+
     return dmc.Container(
         [
             # Include backend components (Store components)
             backend_components if backend_components else html.Div(),
+            # Progressive loading components
+            html.Div(progressive_loading_components),
             html.Div(
                 [
                     # Draggable layout
