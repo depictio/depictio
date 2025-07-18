@@ -38,22 +38,43 @@ def _get_theme_template(theme: str) -> str:
 def build_figure_frame(index, children=None):
     if not children:
         return dbc.Card(
-            dbc.CardBody(
-                id={
-                    "type": "figure-body",
-                    "index": index,
-                },
-                style={
-                    "padding": "5px",  # Reduce padding inside the card body
-                    "display": "flex",
-                    "flexDirection": "column",
-                    "justifyContent": "center",
-                    "height": "100%",  # Make sure it fills the parent container
-                    "minHeight": "400px",  # Ensure minimum height for visibility
-                    "backgroundColor": "transparent",  # Fix white background
-                },
-            ),
+            [
+                dbc.CardBody(
+                    id={
+                        "type": "figure-body",
+                        "index": index,
+                    },
+                    style={
+                        "padding": "5px",  # Reduce padding inside the card body
+                        "display": "flex",
+                        "flexDirection": "column",
+                        "justifyContent": "center",
+                        "height": "100%",  # Make sure it fills the parent container
+                        "minHeight": "400px",  # Ensure minimum height for visibility
+                        "backgroundColor": "transparent",  # Fix white background
+                    },
+                ),
+                html.Div(
+                    id={
+                        "type": "figure-loading",
+                        "index": index,
+                    },
+                    style={
+                        "position": "absolute",
+                        "top": "0",
+                        "left": "0",
+                        "width": "100%",
+                        "height": "100%",
+                        "display": "none",  # Hidden by default
+                        "alignItems": "center",
+                        "justifyContent": "center",
+                        "backgroundColor": "var(--app-surface-color, #ffffff)",
+                        "zIndex": "1000",
+                    },
+                ),
+            ],
             style={
+                "position": "relative",
                 "width": "100%",
                 "height": "100%",  # Ensure the card fills the container's height
                 "padding": "0",  # Remove default padding
@@ -71,23 +92,44 @@ def build_figure_frame(index, children=None):
         )
     else:
         return dbc.Card(
-            dbc.CardBody(
-                children=children,
-                id={
-                    "type": "figure-body",
-                    "index": index,
-                },
-                style={
-                    "padding": "5px",  # Reduce padding inside the card body
-                    "display": "flex",
-                    "flexDirection": "column",
-                    "justifyContent": "center",
-                    "height": "100%",  # Make sure it fills the parent container
-                    "minHeight": "400px",  # Ensure minimum height for visibility
-                    "backgroundColor": "transparent",  # Fix white background
-                },
-            ),
+            [
+                dbc.CardBody(
+                    children=children,
+                    id={
+                        "type": "figure-body",
+                        "index": index,
+                    },
+                    style={
+                        "padding": "5px",  # Reduce padding inside the card body
+                        "display": "flex",
+                        "flexDirection": "column",
+                        "justifyContent": "center",
+                        "height": "100%",  # Make sure it fills the parent container
+                        "minHeight": "400px",  # Ensure minimum height for visibility
+                        "backgroundColor": "transparent",  # Fix white background
+                    },
+                ),
+                html.Div(
+                    id={
+                        "type": "figure-loading",
+                        "index": index,
+                    },
+                    style={
+                        "position": "absolute",
+                        "top": "0",
+                        "left": "0",
+                        "width": "100%",
+                        "height": "100%",
+                        "display": "none",  # Hidden by default
+                        "alignItems": "center",
+                        "justifyContent": "center",
+                        "backgroundColor": "var(--app-surface-color, #ffffff)",
+                        "zIndex": "1000",
+                    },
+                ),
+            ],
             style={
+                "position": "relative",
                 "overflowX": "hidden",
                 "width": "100%",
                 "height": "100%",  # Ensure the card fills the container's height

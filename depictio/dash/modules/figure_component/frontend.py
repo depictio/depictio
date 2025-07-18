@@ -465,8 +465,51 @@ def register_callbacks_figure_component(app):
 
     # Removed old fragile parameter extraction callback - replaced with robust version above
 
+    # Callback to show loading state when inputs change
     @app.callback(
-        Output({"type": "figure-body", "index": MATCH}, "children"),
+        [
+            Output({"type": "figure-loading", "index": MATCH}, "children"),
+            Output({"type": "figure-loading", "index": MATCH}, "style"),
+        ],
+        [
+            Input({"type": "dict_kwargs", "index": MATCH}, "data"),
+            Input({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
+        ],
+        prevent_initial_call=True,
+    )
+    def show_loading_state(dict_kwargs, visu_type_label):
+        """Show loading spinner when figure inputs change."""
+        loading_content = dmc.Stack(
+            [
+                dmc.Loader(type="dots", color="gray", size="lg"),
+                dmc.Text("Generating figure...", size="sm", c="gray"),
+            ],
+            align="center",
+            gap="md",
+        )
+
+        # Show the loading overlay
+        loading_style = {
+            "position": "absolute",
+            "top": "0",
+            "left": "0",
+            "width": "100%",
+            "height": "100%",
+            "display": "flex",  # Show the loading overlay
+            "alignItems": "center",
+            "justifyContent": "center",
+            "backgroundColor": "var(--app-surface-color, #ffffff)",
+            "zIndex": "1000",
+        }
+
+        return loading_content, loading_style
+
+    @app.callback(
+        [
+            Output({"type": "figure-body", "index": MATCH}, "children"),
+            Output({"type": "figure-loading", "index": MATCH}, "children", allow_duplicate=True),
+            Output({"type": "figure-loading", "index": MATCH}, "style", allow_duplicate=True),
+        ],
         [
             Input({"type": "dict_kwargs", "index": MATCH}, "data"),
             Input({"type": "segmented-control-visu-graph", "index": MATCH}, "value"),
@@ -626,17 +669,23 @@ def register_callbacks_figure_component(app):
 
             figure_result = build_figure(**figure_kwargs)
             logger.info(f"build_figure RETURNED: {type(figure_result)}")
-            return figure_result
+
+            # Return figure content and hide loading
+            hidden_loading_style = {"display": "none"}
+            return figure_result, html.Div(), hidden_loading_style
 
         except Exception as e:
             logger.error(f"Failed to build figure: {e}")
-            return html.Div(
+            error_content = html.Div(
                 [
                     dmc.Alert(
                         f"Error building figure: {str(e)}", title="Figure Build Error", color="red"
                     )
                 ]
             )
+            # Return error content and hide loading
+            hidden_loading_style = {"display": "none"}
+            return error_content, html.Div(), hidden_loading_style
 
     # Callback to initialize figure with default visualization when component is first created
     @app.callback(
