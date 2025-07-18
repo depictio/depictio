@@ -176,17 +176,18 @@ def enable_box_edit_mode(
     # Create the content div with edit buttons (if in edit mode)
     content_div = html.Div(
         box_components_list,
+        id=f"content-{box_uuid}",
         style={
-            "overflowY": "hidden",  # Hide overflow to prevent scrollbar
+            "overflow": "visible",  # Allow content to be visible and interactive
             "width": "100%",  # Ensure it takes full width of the parent
             "height": "100%",  # Ensure it takes full height of the parent
-            "display": "flex",  # Use flexbox for better layout control
-            "flexDirection": "column",  # Arrange children vertically
             "boxSizing": "border-box",  # Include padding in the element's total width and height
             "padding": "10px",  # Add some padding
-            "border": "1px solid #ddd",  # Add a subtle border
+            "border": "1px solid var(--app-border-color, #ddd)",  # Theme-aware border
             "borderRadius": "5px",  # Add rounded corners
-            "background": "#ffffff",  # White background
+            "background": "var(--app-surface-color, #ffffff)",  # Theme-aware background
+            "position": "relative",  # Enable positioning for overlay
+            "minHeight": "100px",  # Ensure minimum height for content
         },
     )
 

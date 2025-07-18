@@ -16,7 +16,7 @@ def register_callbacks_save(app):
     @app.callback(
         Output("dummy-output", "children"),
         Input("save-button-dashboard", "n_clicks"),
-        Input("draggable", "layouts"),
+        Input("draggable", "currentLayout"),
         State(
             {
                 "type": "stored-metadata-component",
@@ -249,6 +249,13 @@ def register_callbacks_save(app):
         if "draggable" in triggered_id:
             unique_metadata = dashboard_data.get("stored_metadata", unique_metadata)
             # logger.info(f"Unique metadata after using draggable layout metadata: {unique_metadata}")
+
+        # Convert layout data format from list to dict if needed (dash-dynamic-grid-layout compatibility)
+        if isinstance(stored_layout_data, list):
+            # Convert list format to dict format with 'lg' breakpoint
+            stored_layout_data = {"lg": stored_layout_data}
+        elif stored_layout_data is None:
+            stored_layout_data = {"lg": []}
 
         updated_dashboard_data = {
             "stored_metadata": unique_metadata,
