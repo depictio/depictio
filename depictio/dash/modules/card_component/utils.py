@@ -1,7 +1,9 @@
 import dash_bootstrap_components as dbc
+import dash_mantine_components as dmc
 import numpy as np
 import pandas as pd
 from dash import dcc, html
+from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.logging_init import logger
 
@@ -179,6 +181,7 @@ def build_card(**kwargs):
     build_frame = kwargs.get("build_frame", False)
     refresh = kwargs.get("refresh", False)
     stepper = kwargs.get("stepper", False)
+    filter_applied = kwargs.get("filter_applied", False)
 
     if stepper:
         index = f"{index}-tmp"
@@ -186,6 +189,10 @@ def build_card(**kwargs):
         index = index
 
     # logger.debug(f"Card kwargs: {kwargs}")
+
+    # Variables to track filtered vs unfiltered values for comparison
+    reference_value = None
+    is_filtered_data = False
 
     # CRITICAL FIX: Card components MUST always recalculate values when data is provided
     # even if refresh=False, because they need to compute aggregations on filtered data
@@ -218,25 +225,92 @@ def build_card(**kwargs):
                         data_collection_id=ObjectId(dc_id),
                         TOKEN=kwargs.get("access_token"),
                     )
+                    # When we load the full data from database (no pre-existing df), this is NOT filtered
+                    is_filtered_data = False
+                    logger.debug(
+                        f"Card component {index}: Loaded full dataset from database (shape: {data.shape})"
+                    )
             else:
                 # If refresh=False and data is empty, this means filters resulted in no data
                 # Keep the empty DataFrame and compute appropriate "no data" value
+                is_filtered_data = True  # Empty due to filtering
                 logger.info(
                     f"Card component {index}: Using empty DataFrame from filters (shape: {data.shape}) - filters exclude all data"
                 )
         else:
             logger.debug(
-                f"Card component {index}: Recalculating value with filtered DataFrame (shape: {data.shape})"
+                f"Card component {index}: Recalculating value with provided DataFrame (shape: {data.shape})"
             )
+
+        # Determine if current data is filtered (only if we have non-empty data and haven't already determined this)
+        if (
+            not data.is_empty()
+            and kwargs.get("df") is not None
+            and wf_id
+            and dc_id
+            and kwargs.get("access_token")
+        ):
+            # A DataFrame was explicitly provided - need to check if it's different from full dataset
+            try:
+                from bson import ObjectId
+
+                from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+                full_data = load_deltatable_lite(
+                    workflow_id=ObjectId(wf_id),
+                    data_collection_id=ObjectId(dc_id),
+                    TOKEN=kwargs.get("access_token"),
+                )
+
+                # Compare provided data with full dataset
+                data_differs = (
+                    data.shape[0] != full_data.shape[0]
+                    or data.shape[1] != full_data.shape[1]
+                    or set(data.columns) != set(full_data.columns)
+                )
+
+                is_filtered_data = filter_applied or data_differs
+
+                # Only compute reference value if data is actually filtered
+                if is_filtered_data:
+                    reference_value = compute_value(full_data, column_name, aggregation)
+                    logger.debug(
+                        f"Card component {index}: Detected filtered data (current: {data.shape}, full: {full_data.shape})"
+                    )
+                    logger.debug(
+                        f"Card component {index}: Computed reference value: {reference_value}"
+                    )
+                else:
+                    logger.debug(
+                        f"Card component {index}: Provided data matches full dataset, no filtering detected"
+                    )
+
+            except Exception as e:
+                logger.warning(f"Failed to load full dataset for comparison: {e}")
+                # Fallback: assume filtered if filter flag is set
+                is_filtered_data = filter_applied
+        elif not data.is_empty() and filter_applied:
+            # filter_applied flag is set but no df provided - treat as filtered
+            is_filtered_data = True
 
         # Always recalculate value when we have data (filtered or unfiltered)
         v = compute_value(data, column_name, aggregation)
         logger.debug(f"Card component {index}: Computed new value: {v}")
 
     try:
-        v = round(float(v), 4)
-    except ValueError:
-        pass
+        if v is not None:
+            v = round(float(v), 4)
+        else:
+            v = "N/A"  # Default value when None - indicates no data
+    except (ValueError, TypeError):
+        v = "Error"  # Default value for invalid conversions
+
+    # Format reference value for comparison
+    if reference_value is not None:
+        try:
+            reference_value = round(float(reference_value), 4)
+        except (ValueError, TypeError):
+            reference_value = None
 
     # Metadata management - Create a store component to store the metadata of the card
     # For stepper mode, use the temporary index to avoid conflicts with existing components
@@ -268,25 +342,107 @@ def build_card(**kwargs):
         },
     )
 
-    # Create the card body - default title is the aggregation value on the selected column
-    if not title:
-        card_title = html.H5(f"{aggregation} on {column_name}")
+    # Create improved card using DMC 2.0+ components
+    # Handle potential None aggregation value
+    if aggregation and hasattr(aggregation, "title"):
+        agg_display = aggregation.title()
     else:
-        card_title = html.H5(f"{title}")
+        agg_display = str(aggregation).title() if aggregation else "Unknown"
 
-    # Create the card body
-    new_card_body = html.Div(
-        [
-            card_title,
-            html.P(
-                f"{v}",
-                id={
-                    "type": "card-value",
-                    "index": str(index),
-                },
-            ),
-            store_component,
-        ],
+    card_title = title if title else f"{agg_display} of {column_name}"
+
+    # Create comparison text if reference value is available
+    comparison_text = None
+    comparison_icon = None
+    comparison_color = "gray"
+
+    if reference_value is not None and is_filtered_data and v != "N/A" and v != "Error":
+        try:
+            current_val = float(v)
+            ref_val = float(reference_value)
+
+            # Calculate percentage change
+            if ref_val != 0:
+                change_pct = ((current_val - ref_val) / ref_val) * 100
+                if change_pct > 0:
+                    comparison_text = f"↗️ +{change_pct:.1f}% vs unfiltered ({ref_val})"
+                    comparison_color = "green"
+                    comparison_icon = "mdi:trending-up"
+                elif change_pct < 0:
+                    comparison_text = f"↘️ {change_pct:.1f}% vs unfiltered ({ref_val})"
+                    comparison_color = "red"
+                    comparison_icon = "mdi:trending-down"
+                else:
+                    comparison_text = f"→ Same as unfiltered ({ref_val})"
+                    comparison_color = "gray"
+                    comparison_icon = "mdi:trending-neutral"
+            else:
+                comparison_text = f"Reference: {ref_val}"
+                comparison_color = "gray"
+                comparison_icon = "mdi:information-outline"
+        except (ValueError, TypeError):
+            comparison_text = f"Reference: {reference_value}"
+            comparison_color = "gray"
+            comparison_icon = "mdi:information-outline"
+
+    # Create card content using modern DMC components
+    card_content = [
+        dmc.Text(card_title, size="sm", c="gray", fw="normal"),
+        dmc.Text(
+            str(v),
+            size="xl",
+            fw="bold",
+            c="dark" if v not in ["N/A", "Error"] else "red",
+            id={
+                "type": "card-value",
+                "index": str(index),
+            },
+        ),
+    ]
+
+    # Add comparison text if available
+    if comparison_text:
+        card_content.append(
+            dmc.Group(
+                [
+                    DashIconify(icon=comparison_icon, width=14, color=comparison_color)
+                    if comparison_icon
+                    else None,
+                    dmc.Text(comparison_text, size="xs", c=comparison_color, fw="normal"),
+                ],
+                gap="xs",
+                align="center",
+            )
+        )
+
+    # Add filter badge if data is filtered
+    if is_filtered_data:
+        card_content.append(
+            dmc.Badge(
+                "Filtered Data",
+                size="xs",
+                color="orange",
+                variant="light",
+                leftSection=DashIconify(icon="mdi:filter", width=12),
+                style={"marginTop": "8px"},
+            )
+        )
+
+    card_content.append(store_component)
+
+    # Create the modern card body using DMC Card component
+    new_card_body = dmc.Card(
+        children=card_content,
+        withBorder=True,
+        shadow="sm",
+        radius="md",
+        p="md",
+        style={
+            "height": "100%",
+            "minHeight": "120px",
+            "backgroundColor": "var(--app-surface-color, #ffffff)",
+            "borderColor": "var(--app-border-color, #ddd)",
+        },
         id={
             "type": "card",
             "index": str(index),
@@ -369,11 +525,6 @@ agg_functions = {
                 "pandas": "count",
                 "numpy": "count_nonzero",
                 "description": "Counts the number of non-NA cells",
-            },
-            "unique": {
-                "pandas": "nunique",
-                "numpy": None,
-                "description": "Number of distinct elements",
             },
             "sum": {
                 "pandas": "sum",
