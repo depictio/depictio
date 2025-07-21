@@ -9,17 +9,21 @@
     z-index: 10000;
     backdrop-filter: blur(10px);
     background: rgba(255, 255, 255, 0.95);
-    border-radius: 16px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    border-top: none !important;
     color: var(--app-text-color, var(--depictio-text-light));
-    transition: background 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
+    transition: background 0.3s ease, color 0.3s ease;
+}
+
+/* Remove modal footer border in auth modals */
+.auth-modal-content .mantine-Stack-root:last-child,
+.auth-modal-content .mantine-Modal-content .mantine-Stack-root:last-child {
+    border-top: none !important;
 }
 
 /* Dark theme modal content */
 @media (prefers-color-scheme: dark) {
     .auth-modal-content {
         background: rgba(37, 38, 43, 0.95);
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
     }
 }
 
@@ -27,13 +31,11 @@
 body.theme-manual-light .auth-modal-content {
     background: rgba(255, 255, 255, 0.95) !important;
     color: var(--depictio-text-light) !important;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1) !important;
 }
 
 body.theme-manual-dark .auth-modal-content {
     background: rgba(37, 38, 43, 0.95) !important;
     color: var(--depictio-text-dark) !important;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3) !important;
 }
 
 /* Auth background positioning - GPU optimized */

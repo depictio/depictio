@@ -560,13 +560,13 @@ layout = html.Div(
                     dmc.Paper(
                         id="modal-content",
                         className="auth-modal-content",
-                        shadow="xl",
-                        radius="lg",
-                        p="xl",
+                        # shadow="xl",
+                        # radius="lg",
+                        # p="xl",
                         style={
                             "position": "relative",
                             "zIndex": "10001",
-                            "backdropFilter": "blur(10px)",
+                            # "backdropFilter": "blur(10px)",
                         },
                     )
                 ],
@@ -579,11 +579,12 @@ layout = html.Div(
             closeOnClickOutside=True,
             size="lg",
             overlayProps={
-                "opacity": 0,  # Make overlay transparent so we can see our custom background
+                "opacity": 0.02,  # Make overlay transparent so we can see our custom background
                 "blur": 0,
             },
             # Ensure modal content is visible above background
             zIndex=10000,
+            radius="xl",
         ),
         # html.Div(id="landing-page-content"),
         # Hidden buttons for switching forms to ensure they exist in the layout
