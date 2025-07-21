@@ -19,6 +19,7 @@
 @import url('./components/layout.css');
 @import url('./components/clipboard.css');
 @import url('./components/sliders.css');
+@import url('./components/projects.css');
 
 /* Utilities */
 @import url('./utilities/fouc-prevention.css');

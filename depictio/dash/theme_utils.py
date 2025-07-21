@@ -381,11 +381,9 @@ def register_theme_callbacks(app):
                 if (theme === 'dark') {
                     authModal.style.background = 'rgba(37, 38, 43, 0.95)';
                     authModal.style.color = '#C1C2C5';
-                    authModal.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.3)';
                 } else {
                     authModal.style.background = 'rgba(255, 255, 255, 0.95)';
                     authModal.style.color = '#000000';
-                    authModal.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.1)';
                 }
 
                 // Update all text elements inside auth modal
@@ -765,8 +763,8 @@ def register_theme_callbacks(app):
                         text-align: center !important;
                     }
 
-                    /* Modal footer theme styling */
-                    .mantine-Modal-content .mantine-Stack-root:last-child {
+                    /* Modal footer theme styling - exclude auth modals */
+                    .mantine-Modal-content .mantine-Stack-root:last-child:not(.auth-modal-content .mantine-Stack-root:last-child) {
                         background-color: var(--app-surface-color, #f9f9f9) !important;
                         border-top: 1px solid var(--app-border-color, #e0e0e0) !important;
                     }
@@ -839,14 +837,10 @@ def register_theme_callbacks(app):
                     const modalBg = theme === 'dark'
                         ? 'rgba(37, 38, 43, 0.95)'
                         : 'rgba(255, 255, 255, 0.95)';
-                    const modalShadow = theme === 'dark'
-                        ? '0 8px 32px rgba(0, 0, 0, 0.3)'
-                        : '0 8px 32px rgba(0, 0, 0, 0.1)';
 
                     safeApplyStyles(authModalContent, {
                         'background': modalBg,
-                        'color': textColor,
-                        'box-shadow': modalShadow
+                        'color': textColor
                     });
                     console.log('✅ Updated auth modal styling');
                 }
