@@ -8,7 +8,7 @@ class DashboardData(MongoModel):
     dashboard_id: PyObjectId
     version: int = 1
     tmp_children_data: list | None = []
-    stored_layout_data: dict = {}
+    stored_layout_data: list = []
     stored_children_data: list = []
     stored_metadata: list = []
     stored_edit_dashboard_mode_button: list = []
