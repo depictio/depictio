@@ -862,57 +862,22 @@ def build_interactive(**kwargs):
             max_value = min_value + 1.0
             logger.warning(f"min_value >= max_value, adjusted max_value to {max_value}")
 
-        # Prepare kwargs for DCC slider - following Dash "Non-Linear Slider" patterns
-        tooltip_config = {
-            "placement": "bottom",
-            "always_visible": False,
-            "style": {"color": "var(--app-text-color, #000000)", "fontSize": "12px"},
-        }
-
-        # Enhanced tooltip for log scale sliders following Dash documentation
-        # Note: Don't use template as it interferes with marks display
-        # The tooltip will show the actual slider value by default
-
+        # Prepare kwargs for DMC slider components - simplified like working prototype
         kwargs_component = {
             "min": float(min_value),
             "max": float(max_value),
             "id": {"type": value_div_type, "index": str(index)},
+            # Keep it simple - no step, precision, or label parameters initially
+            "step": 0.01,  # Default step for DMC sliders
+            "minRange": 0.01,  # Default min range for DMC RangeSlider
             "persistence_type": "local",
-            "updatemode": "drag",  # Enable real-time updates while dragging (from Dash docs)
-            "tooltip": tooltip_config,
         }
 
-        logger.info(f"DCC Slider: Using range {min_value}-{max_value}")
+        logger.info(f"DMC Slider: Using range {min_value}-{max_value}")
 
-        # Generate marks based on scale type and marks_number parameter
-        if marks_number and marks_number > 0:
-            # User specified number of marks - generate custom marks
-            if use_log_scale:
-                # Use new equally spaced function for log scale
-                marks = generate_equally_spaced_marks(
-                    min_value, max_value, marks_count=marks_number, use_log_scale=True
-                )
-            else:
-                # Use new equally spaced function for linear scale
-                marks = generate_equally_spaced_marks(
-                    min_value, max_value, marks_count=marks_number, use_log_scale=False
-                )
-            logger.info(f"Generated {marks_number} custom marks")
-        else:
-            # No custom marks specified - use automatic generation for linear, fallback for log
-            if use_log_scale:
-                # For log scale, fall back to the original log marks function
-                marks = generate_log_marks(
-                    min_value, max_value, df_pandas[column_name].min(), df_pandas[column_name].max()
-                )
-            else:
-                # For linear scale, let DCC RangeSlider use automatic mark generation
-                marks = None
-                logger.info("Using DCC RangeSlider automatic mark generation for linear scale")
-
-        # Set component values for DCC sliders
+        # Set component values for DMC sliders
         if interactive_component_type == "RangeSlider":
-            # For DCC RangeSlider, use simple value handling
+            # For DMC RangeSlider, use simple value handling
             try:
                 # Check if we have a valid value first
                 if (
@@ -926,7 +891,7 @@ def build_interactive(**kwargs):
                     # Use range defaults
                     cleaned_value = [min_value, max_value]
                     logger.info(
-                        f"DCC RangeSlider: Using default value [{min_value}, {max_value}] (original: {value})"
+                        f"DMC RangeSlider: Using default value [{min_value}, {max_value}] (original: {value})"
                     )
                 else:
                     # Clean and validate values
@@ -951,14 +916,14 @@ def build_interactive(**kwargs):
                     if cleaned_value[0] > cleaned_value[1]:
                         cleaned_value = [cleaned_value[1], cleaned_value[0]]
 
-                # For DCC RangeSlider, use value property
+                # For DMC RangeSlider, use value property
                 kwargs_component["value"] = cleaned_value
-                logger.info(f"DCC RangeSlider: Set value: {cleaned_value}")
+                logger.info(f"DMC RangeSlider: Set value: {cleaned_value}")
 
             except Exception as e:
-                logger.error(f"DCC RangeSlider: Exception: {e}")
+                logger.error(f"DMC RangeSlider: Exception: {e}")
         elif interactive_component_type == "Slider":
-            # For DCC Slider, ensure value is a single valid number
+            # For DMC Slider, ensure value is a single valid number
             try:
                 if (
                     value is None
@@ -969,66 +934,69 @@ def build_interactive(**kwargs):
                     # For null values, use middle of range as default
                     cleaned_value = (min_value + max_value) / 2
                     logger.info(
-                        f"DCC Slider: Using middle of range as default: {cleaned_value} (original: {value})"
+                        f"DMC Slider: Using middle of range as default: {cleaned_value} (original: {value})"
                     )
                 else:
                     cleaned_value = float(value)
                     # Ensure value is in range
                     cleaned_value = max(min_value, min(max_value, cleaned_value))
-                    logger.info(f"DCC Slider: Cleaned value from {value} to {cleaned_value}")
+                    logger.info(f"DMC Slider: Cleaned value from {value} to {cleaned_value}")
 
-                # For DCC Slider, use value property
+                # For DMC Slider, use value property
                 kwargs_component["value"] = cleaned_value
             except (ValueError, TypeError) as e:
-                logger.info(f"DCC Slider: Conversion failed ({e})")
+                logger.info(f"DMC Slider: Conversion failed ({e})")
 
-        # DCC sliders don't support direct color styling like DMC
-        # Color customization would need to be handled via CSS
+        # Apply custom color styling for DMC sliders
+        if color:
+            kwargs_component["color"] = color
+            logger.info(f"DMC Slider: Applied custom color: {color}")
 
-        # For DCC sliders, marks use dict format (not list of dicts like DMC)
-        if marks:
-            # Process custom marks (e.g., for log scale)
-            dcc_marks = {}
-            logger.info(f"Processing marks: {marks}")
-            for k, v in marks.items():
-                try:
-                    # Use decimal mark value directly
-                    decimal_mark = float(k)
-                    logger.debug(
-                        f"Processing mark: key={k}, value={v}, decimal_mark={decimal_mark}"
-                    )
-                    if not (math.isnan(decimal_mark) or math.isinf(decimal_mark)):
-                        # Ensure mark value is within decimal range (use a small tolerance for floating point comparison)
-                        tolerance = 1e-10
-                        if (min_value - tolerance) <= decimal_mark <= (max_value + tolerance):
-                            dcc_marks[decimal_mark] = str(v)
-                            logger.debug(f"Added mark: {decimal_mark} -> {v}")
+        # Generate marks based on scale type and marks_number parameter
+        if marks_number and marks_number > 0:
+            logger.info(f"Generating {marks_number} marks for DMC slider")
+            # User specified number of marks - generate custom marks
+            if use_log_scale:
+                # For log scale, use the specialized log marks function for better power-of-10 marks
+                marks_dict = generate_log_marks(
+                    min_value, max_value, df_pandas[column_name].min(), df_pandas[column_name].max()
+                )
+                logger.info("Using specialized log marks function for better power-of-10 display")
+            else:
+                # Use equally spaced function for linear scale
+                marks_dict = generate_equally_spaced_marks(
+                    min_value, max_value, marks_count=marks_number, use_log_scale=False
+                )
+
+            # Convert DCC-style dict to DMC-style list of dicts
+            if marks_dict:
+                dmc_marks = []
+                for value, label in marks_dict.items():
+                    try:
+                        mark_value = float(value)
+                        # Ensure mark value is within range with small tolerance for floating point precision
+                        tolerance = 1e-9
+                        if (min_value - tolerance) <= mark_value <= (max_value + tolerance):
+                            dmc_marks.append({"value": mark_value, "label": str(label)})
+                            logger.debug(f"Added DMC mark: {mark_value} -> {label}")
                         else:
                             logger.debug(
-                                f"Mark {decimal_mark} is outside range [{min_value}, {max_value}]"
+                                f"Mark {mark_value} outside range [{min_value}, {max_value}]"
                             )
-                except (ValueError, TypeError) as e:
-                    logger.warning(f"Skipping invalid mark: {k} -> {v}, error: {e}")
+                    except (ValueError, TypeError) as e:
+                        logger.warning(f"Skipping invalid mark: {value} -> {label}, error: {e}")
 
-            # If no valid marks were created, add min and max marks as fallback
-            if not dcc_marks:
-                dcc_marks = {
-                    min_value: format_mark_label(min_value),
-                    max_value: format_mark_label(max_value),
-                }
-                logger.warning("No valid marks found, using decimal min/max as fallback")
-
-            # Ensure marks are sorted by position for proper display
-            sorted_dcc_marks = {k: dcc_marks[k] for k in sorted(dcc_marks.keys())}
-            kwargs_component["marks"] = sorted_dcc_marks
-            logger.info(f"DCC marks created: {len(sorted_dcc_marks)} custom marks")
-            logger.info(f"Final DCC marks (sorted): {sorted_dcc_marks}")
+                if dmc_marks:
+                    kwargs_component["marks"] = dmc_marks
+                    logger.info(f"DMC marks created: {len(dmc_marks)} custom marks")
+                else:
+                    logger.warning("No valid DMC marks created")
+            else:
+                logger.warning("No marks generated from mark generation function")
         else:
-            # Let DCC RangeSlider generate automatic marks (linear scale)
-            # Don't set marks parameter - DCC will create them automatically
-            logger.info("Using DCC automatic mark generation (no marks parameter)")
+            logger.info("No custom marks requested (marks_number=0 or None)")
 
-        logger.info("DCC Slider: Final kwargs before component creation:")
+        logger.info("DMC Slider: Final kwargs before component creation:")
         logger.info(
             f"  min: {kwargs_component.get('min')} (type: {type(kwargs_component.get('min'))})"
         )
@@ -1038,7 +1006,9 @@ def build_interactive(**kwargs):
         logger.info(
             f"  value: {kwargs_component.get('value')} (type: {type(kwargs_component.get('value'))})"
         )
-        logger.info(f"  marks: {len(kwargs_component.get('marks', {}))} marks")
+        logger.info(f"  marks: {len(kwargs_component.get('marks', []))} marks")
+        if kwargs_component.get("marks"):
+            logger.info(f"  marks detail: {kwargs_component.get('marks')}")
 
         interactive_component = func_name(**kwargs_component)
 
@@ -1133,43 +1103,9 @@ def build_interactive(**kwargs):
         storage_type="memory",
     )
 
-    # Create wrapper with custom styling for sliders
-    wrapper_style = {}
-    wrapper_class = ""
-
-    if interactive_component_type in ["Slider", "RangeSlider"] and color:
-        # Generate unique CSS class name based on color
-        color_hash = hash(color) % 10000
-        wrapper_class = f"slider-custom-{color_hash}"
-
-        # Convert hex color to RGB for rgba() CSS function
-        def hex_to_rgb(hex_color):
-            """Convert hex color to RGB values"""
-            hex_color = hex_color.lstrip("#")
-            return tuple(int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
-
-        try:
-            rgb_values = hex_to_rgb(color)
-            rgb_string = f"{rgb_values[0]}, {rgb_values[1]}, {rgb_values[2]}"
-        except (ValueError, TypeError) as e:
-            # Fallback to default blue if color parsing fails
-            rgb_string = "25, 118, 210"
-            logger.warning(f"Failed to parse color {color}, using default blue: {e}")
-
-        # Add inline CSS variables for custom color styling
-        wrapper_style = {
-            "--custom-slider-color": color,
-            "--custom-slider-color-rgb": rgb_string,
-        }
-
-        logger.info(
-            f"Applied custom slider styling: class={wrapper_class}, color={color}, rgb={rgb_string}"
-        )
-
+    # Create wrapper - no special styling needed for DMC sliders (color is built-in)
     new_interactive_component = html.Div(
         [card_title_h5, interactive_component, store_component],
-        className=wrapper_class,
-        style=wrapper_style,
     )
 
     if not build_frame:
@@ -1187,11 +1123,11 @@ agg_functions = {
         "title": "Integer",
         "input_methods": {
             "Slider": {
-                "component": dcc.Slider,
+                "component": dmc.Slider,
                 "description": "Single value slider: will return data equal to the selected value",
             },
             "RangeSlider": {
-                "component": dcc.RangeSlider,
+                "component": dmc.RangeSlider,
                 "description": "Two values slider: will return data between the two selected values",
             },
         },
@@ -1200,11 +1136,11 @@ agg_functions = {
         "title": "Floating Point",
         "input_methods": {
             "Slider": {
-                "component": dcc.Slider,
+                "component": dmc.Slider,
                 "description": "Single value slider: will return data equal to the selected value",
             },
             "RangeSlider": {
-                "component": dcc.RangeSlider,
+                "component": dmc.RangeSlider,
                 "description": "Two values slider: will return data between the two selected values",
             },
         },
