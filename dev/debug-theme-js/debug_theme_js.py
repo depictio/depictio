@@ -23,11 +23,13 @@ app = dash.Dash(__name__)
 # dmc.add_figure_templates()
 
 # Create sample data for the graph
-sample_data = pd.DataFrame({
-    'x': ['Dashboards', 'Projects', 'About', 'Settings', 'Analytics'],
-    'y': [15, 25, 10, 30, 20],
-    'color': ['orange', 'teal', 'gray', 'blue', 'green']
-})
+sample_data = pd.DataFrame(
+    {
+        "x": ["Dashboards", "Projects", "About", "Settings", "Analytics"],
+        "y": [15, 25, 10, 30, 20],
+        "color": ["orange", "teal", "gray", "blue", "green"],
+    }
+)
 
 # Simple layout with NavLinks and theme switch
 app.layout = dmc.MantineProvider(
@@ -45,7 +47,6 @@ app.layout = dmc.MantineProvider(
                     id="sidebar",
                     children=[
                         html.H3("Debug Theme Test", style={"padding": "20px"}),
-                        
                         # Test NavLinks with icons - one active, others inactive
                         dmc.NavLink(
                             id="navlink-dashboards",
@@ -57,7 +58,7 @@ app.layout = dmc.MantineProvider(
                             active=True,  # This should keep its orange color
                         ),
                         dmc.NavLink(
-                            id="navlink-projects", 
+                            id="navlink-projects",
                             label="Projects (inactive)",
                             leftSection=DashIconify(icon="mdi:jira", height=25),
                             href="/projects",
@@ -67,29 +68,36 @@ app.layout = dmc.MantineProvider(
                         ),
                         dmc.NavLink(
                             id="navlink-about",
-                            label="About (inactive)", 
+                            label="About (inactive)",
                             leftSection=DashIconify(icon="mingcute:question-line", height=25),
                             href="/about",
                             style={"padding": "20px"},
                             color="gray",
                             active=False,  # This should use theme colors (black/white)
                         ),
-                        
                         # Theme switch with FIXED icons
                         html.Hr(),
-                        dmc.Center([
-                            dmc.Switch(
-                                id="theme-switch",
-                                checked=False,
-                                size="lg",
-                                onLabel=DashIconify(icon="tabler:sun", width=20, color="yellow"),  # Dark mode = sun
-                                offLabel=DashIconify(icon="tabler:moon", width=20, color="blue"),  # Light mode = moon
-                            )
-                        ]),
-                        html.P("Expected: Light=🌙 Dark=☀️", style={"padding": "10px", "fontSize": "12px"}),
-                    ]
+                        dmc.Center(
+                            [
+                                dmc.Switch(
+                                    id="theme-switch",
+                                    checked=False,
+                                    size="lg",
+                                    onLabel=DashIconify(
+                                        icon="tabler:sun", width=20, color="yellow"
+                                    ),  # Dark mode = sun
+                                    offLabel=DashIconify(
+                                        icon="tabler:moon", width=20, color="blue"
+                                    ),  # Light mode = moon
+                                )
+                            ]
+                        ),
+                        html.P(
+                            "Expected: Light=🌙 Dark=☀️",
+                            style={"padding": "10px", "fontSize": "12px"},
+                        ),
+                    ],
                 ),
-                
                 # Main content
                 dmc.AppShellMain(
                     id="page-content",
@@ -99,16 +107,29 @@ app.layout = dmc.MantineProvider(
                             style={"padding": "20px"},
                             children=[
                                 html.H1("Theme Debug Test"),
-                                html.Div(id="current-page", children="Welcome! Click NavLinks to navigate."),
+                                html.Div(
+                                    id="current-page",
+                                    children="Welcome! Click NavLinks to navigate.",
+                                ),
                                 html.Hr(),
                                 html.H3("Expected Behavior:"),
-                                html.Ul([
-                                    html.Li("🟠 ACTIVE NavLink icon should keep orange color"),
-                                    html.Li("⚫⚪ INACTIVE NavLink icons should be black (light) / white (dark)"),
-                                    html.Li("🌙☀️ Theme toggle: Light mode = moon, Dark mode = sun"),
-                                    html.Li("📊 Plotly figure should use mantine_light/mantine_dark templates"),
-                                    html.Li("🎨 Full page theme should change (backgrounds, text, everything)"),
-                                ]),
+                                html.Ul(
+                                    [
+                                        html.Li("🟠 ACTIVE NavLink icon should keep orange color"),
+                                        html.Li(
+                                            "⚫⚪ INACTIVE NavLink icons should be black (light) / white (dark)"
+                                        ),
+                                        html.Li(
+                                            "🌙☀️ Theme toggle: Light mode = moon, Dark mode = sun"
+                                        ),
+                                        html.Li(
+                                            "📊 Plotly figure should use mantine_light/mantine_dark templates"
+                                        ),
+                                        html.Li(
+                                            "🎨 Full page theme should change (backgrounds, text, everything)"
+                                        ),
+                                    ]
+                                ),
                                 html.Hr(),
                                 html.Div(id="theme-indicator"),
                                 html.Hr(),
@@ -153,8 +174,12 @@ app.layout = dmc.MantineProvider(
                                                     inheritPadding=True,
                                                     py="xs",
                                                 ),
-                                                html.P("Try dragging and resizing the cards above!"),
-                                                html.P("This tests theme integration with draggable components."),
+                                                html.P(
+                                                    "Try dragging and resizing the cards above!"
+                                                ),
+                                                html.P(
+                                                    "This tests theme integration with draggable components."
+                                                ),
                                             ],
                                             withBorder=True,
                                             shadow="sm",
@@ -173,22 +198,23 @@ app.layout = dmc.MantineProvider(
                                 html.Hr(),
                                 html.H3("Debug Console:"),
                                 html.P("Check browser console for detailed logs"),
-                                html.P("🔍 Focus: Test if theme issues occur within draggable components"),
-                            ]
+                                html.P(
+                                    "🔍 Focus: Test if theme issues occur within draggable components"
+                                ),
+                            ],
                         )
-                    ]
+                    ],
                 ),
-            ]
+            ],
         ),
-        
         # Theme store
         dcc.Store(id="theme-store", data="light"),
-        
         # Draggable layout stores
         dcc.Store(id="stored-draggable-layouts", storage_type="session", data={}),
         dcc.Store(id="stored-draggable-children", storage_type="session", data={}),
-    ]
+    ],
 )
+
 
 # Theme switch callback
 @app.callback(
@@ -201,7 +227,8 @@ def update_theme_store(checked):
     print(f"Theme switch: {theme}")
     return theme
 
-# Theme indicator callback  
+
+# Theme indicator callback
 @app.callback(
     Output("theme-indicator", "children"),
     Input("theme-store", "data"),
@@ -219,9 +246,10 @@ def update_theme_indicator(theme):
             "border": f"2px solid {color}",
             "borderRadius": "5px",
             "textAlign": "center",
-            "fontWeight": "bold"
-        }
+            "fontWeight": "bold",
+        },
     )
+
 
 # Update Mantine Provider theme
 @app.callback(
@@ -230,6 +258,7 @@ def update_theme_indicator(theme):
 )
 def update_mantine_theme(theme):
     return {"colorScheme": theme}
+
 
 # NavLink click callbacks to update content and active states
 @app.callback(
@@ -250,32 +279,33 @@ def update_page_content(*_):
     ctx = dash.callback_context
     if not ctx.triggered:
         return dash.no_update
-    
+
     button_id = ctx.triggered[0]["prop_id"].split(".")[0]
-    
+
     if button_id == "navlink-dashboards":
         return (
             "📊 DASHBOARDS PAGE - This NavLink should have ORANGE icon!",
-            True,   # dashboards active
+            True,  # dashboards active
             False,  # projects inactive
-            False   # about inactive
+            False,  # about inactive
         )
     elif button_id == "navlink-projects":
         return (
             "📁 PROJECTS PAGE - This NavLink should have TEAL icon!",
             False,  # dashboards inactive
-            True,   # projects active
-            False   # about inactive
+            True,  # projects active
+            False,  # about inactive
         )
     elif button_id == "navlink-about":
         return (
             "❓ ABOUT PAGE - This NavLink should have GRAY icon!",
             False,  # dashboards inactive
             False,  # projects inactive
-            True    # about active
+            True,  # about active
         )
-    
+
     return dash.no_update
+
 
 # Update page styles for theme change
 @app.callback(
@@ -287,27 +317,14 @@ def update_page_content(*_):
 )
 def update_page_styles(theme):
     if theme == "dark":
-        page_style = {
-            "backgroundColor": "#1a1b1e",
-            "color": "#ffffff",
-            "minHeight": "100vh"
-        }
-        sidebar_style = {
-            "backgroundColor": "#25262b",
-            "color": "#ffffff"
-        }
+        page_style = {"backgroundColor": "#1a1b1e", "color": "#ffffff", "minHeight": "100vh"}
+        sidebar_style = {"backgroundColor": "#25262b", "color": "#ffffff"}
     else:
-        page_style = {
-            "backgroundColor": "#ffffff", 
-            "color": "#000000",
-            "minHeight": "100vh"
-        }
-        sidebar_style = {
-            "backgroundColor": "#ffffff",
-            "color": "#000000"
-        }
-    
+        page_style = {"backgroundColor": "#ffffff", "color": "#000000", "minHeight": "100vh"}
+        sidebar_style = {"backgroundColor": "#ffffff", "color": "#000000"}
+
     return page_style, sidebar_style
+
 
 # Update Plotly figure with Mantine template
 @app.callback(
@@ -318,32 +335,33 @@ def update_plotly_figure(theme):
     # Use Mantine templates based on theme
     template = "plotly_dark" if theme == "dark" else "plotly_white"
     # template = "mantine_dark" if theme == "dark" else "mantine_light"
-    
+
     # Create a bar chart with the sample data
     fig = px.bar(
         sample_data,
-        x='x',
-        y='y',
-        color='color',
+        x="x",
+        y="y",
+        color="color",
         title=f"📊 Sample Chart (Template: {template})",
         template=template,
         color_discrete_map={
-            'orange': '#fd7e14',
-            'teal': '#20c997', 
-            'gray': '#868e96',
-            'blue': '#339af0',
-            'green': '#51cf66'
-        }
+            "orange": "#fd7e14",
+            "teal": "#20c997",
+            "gray": "#868e96",
+            "blue": "#339af0",
+            "green": "#51cf66",
+        },
     )
-    
+
     # Customize the layout
     fig.update_layout(
         showlegend=False,
         height=400,
         title_font_size=16,
     )
-    
+
     return fig
+
 
 # Draggable layout callback to save layouts
 @app.callback(
@@ -354,6 +372,7 @@ def update_plotly_figure(theme):
 def save_draggable_layouts(layouts):
     """Save draggable layouts to store"""
     return layouts or {}
+
 
 # Additional clientside callback for draggable theme integration
 app.clientside_callback(

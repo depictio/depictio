@@ -8,58 +8,61 @@ import dash
 from dash import html, Input, Output, State, clientside_callback
 import dash_draggable
 
+
 def generate_unique_index():
     return str(uuid.uuid4())
 
+
 def create_debug_app():
     app = dash.Dash(__name__)
-    
+
     uuid1 = generate_unique_index()
     uuid2 = generate_unique_index()
-    
+
     box_id1 = f"box-{uuid1}"
     box_id2 = f"box-{uuid2}"
-    
+
     print(f"=== Dash {dash.__version__} JavaScript Debug ===")
     print(f"Expected IDs: {box_id1}, {box_id2}")
-    
+
     layout = {
         "lg": [
             {"i": box_id1, "x": 0, "y": 0, "w": 6, "h": 4},
-            {"i": box_id2, "x": 6, "y": 0, "w": 6, "h": 4}
+            {"i": box_id2, "x": 6, "y": 0, "w": 6, "h": 4},
         ]
     }
-    
+
     children = [
         html.Div(
             id=box_id1,
             children=[html.H3("Component 1"), html.P(f"ID: {box_id1}")],
-            style={"border": "2px solid red", "padding": "10px"}
+            style={"border": "2px solid red", "padding": "10px"},
         ),
         html.Div(
             id=box_id2,
             children=[html.H3("Component 2"), html.P(f"ID: {box_id2}")],
-            style={"border": "2px solid blue", "padding": "10px"}
-        )
+            style={"border": "2px solid blue", "padding": "10px"},
+        ),
     ]
-    
-    app.layout = html.Div([
-        html.H1(f"JavaScript Debug - Dash {dash.__version__}"),
-        html.Div(id="debug-output"),
-        html.Button("Debug Components", id="debug-button"),
-        html.Hr(),
-        
-        dash_draggable.ResponsiveGridLayout(
-            id="debug-grid",
-            children=children,
-            layouts=layout,
-            isDraggable=True,
-            isResizable=True,
-            save=False,
-            clearSavedLayout=False
-        )
-    ])
-    
+
+    app.layout = html.Div(
+        [
+            html.H1(f"JavaScript Debug - Dash {dash.__version__}"),
+            html.Div(id="debug-output"),
+            html.Button("Debug Components", id="debug-button"),
+            html.Hr(),
+            dash_draggable.ResponsiveGridLayout(
+                id="debug-grid",
+                children=children,
+                layouts=layout,
+                isDraggable=True,
+                isResizable=True,
+                save=False,
+                clearSavedLayout=False,
+            ),
+        ]
+    )
+
     # Detailed clientside callback to investigate
     app.clientside_callback(
         f"""
@@ -133,15 +136,16 @@ def create_debug_app():
         Output("debug-output", "children"),
         Input("debug-button", "n_clicks"),
         State("debug-grid", "layouts"),
-        State("debug-grid", "children")
+        State("debug-grid", "children"),
     )
-    
+
     return app
+
 
 if __name__ == "__main__":
     app = create_debug_app()
     print("Starting JavaScript debug app...")
-    if hasattr(app, 'run_server'):
+    if hasattr(app, "run_server"):
         app.run_server(debug=True, port=8056)
     else:
         app.run(debug=True, port=8056)

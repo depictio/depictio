@@ -1,7 +1,7 @@
 """
 Plotly Code Prototype Package
 
-A secure Python/Plotly code execution environment that leverages 
+A secure Python/Plotly code execution environment that leverages
 the figure component builder logic from depictio/dash.
 
 This package provides:
@@ -19,9 +19,4 @@ __description__ = "Secure Plotly code execution prototype"
 from .secure_code_executor import SecureCodeExecutor, SecureCodeValidator
 from .plotly_prototype_app import create_app, main
 
-__all__ = [
-    "SecureCodeExecutor",
-    "SecureCodeValidator", 
-    "create_app",
-    "main"
-]
+__all__ = ["SecureCodeExecutor", "SecureCodeValidator", "create_app", "main"]

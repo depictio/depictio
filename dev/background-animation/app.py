@@ -9,6 +9,7 @@ from dash import dcc, html
 # Initialize Dash app
 app = dash.Dash(__name__)
 
+
 def create_triangle_background():
     """
     Create GPU-optimized triangle particle background for Depictio
@@ -154,10 +155,9 @@ def create_triangle_background():
         ],
     )
 
+
 # Simple layout with just the background
-app.layout = dmc.MantineProvider([
-    create_triangle_background()
-])
+app.layout = dmc.MantineProvider([create_triangle_background()])
 
 if __name__ == "__main__":
     app.run(debug=True, port=8051)

@@ -20,11 +20,11 @@ sys.path.insert(0, "/Users/tweber/Gits/workspaces/depictio-workspace/depictio")
 # Import the enable_box_edit_mode function
 try:
     from depictio.dash.layouts.edit import enable_box_edit_mode
+
     print("✅ Successfully imported enable_box_edit_mode from depictio")
 except ImportError as e:
     print(f"❌ Failed to import enable_box_edit_mode: {e}")
     sys.exit(1)
-
 
 
 def generate_unique_index():
@@ -44,6 +44,7 @@ def create_depictio_integration_app():
 
     # Sample data for the scatter plot
     import plotly.express as px
+
     df = px.data.iris()
 
     # Create mock box components for enable_box_edit_mode
@@ -61,86 +62,79 @@ def create_depictio_integration_app():
                     ),
                     style={"height": "100%"},
                 )
-            ]
+            ],
         }
     }
-    
+
     mock_box2 = {
         "props": {
             "id": {"index": uuid2},
             "children": [
-                html.Div([
-                    html.H4("Select Component"),
-                    dmc.Select(
-                        label="Choose an option",
-                        placeholder="Select something...",
-                        value="option1",
-                        data=[
-                            {"label": "Option 1", "value": "option1"},
-                            {"label": "Option 2", "value": "option2"},
-                            {"label": "Option 3", "value": "option3"},
-                        ],
-                        style={"width": "100%"},
-                    ),
-                    html.P(
-                        f"UUID: {uuid2[:8]}...",
-                        style={"marginTop": "20px", "fontSize": "12px", "color": "#666"},
-                    ),
-                ])
-            ]
+                html.Div(
+                    [
+                        html.H4("Select Component"),
+                        dmc.Select(
+                            label="Choose an option",
+                            placeholder="Select something...",
+                            value="option1",
+                            data=[
+                                {"label": "Option 1", "value": "option1"},
+                                {"label": "Option 2", "value": "option2"},
+                                {"label": "Option 3", "value": "option3"},
+                            ],
+                            style={"width": "100%"},
+                        ),
+                        html.P(
+                            f"UUID: {uuid2[:8]}...",
+                            style={"marginTop": "20px", "fontSize": "12px", "color": "#666"},
+                        ),
+                    ]
+                )
+            ],
         }
     }
-    
+
     mock_box3 = {
         "props": {
             "id": {"index": uuid3},
             "children": [
-                html.Div([
-                    html.H4("Metrics Card"),
-                    dmc.Card(
-                        [
-                            dmc.Text("Total Users", size="sm", c="dimmed"),
-                            dmc.Text("1,234", size="xl", fw=700, c="blue"),
-                            dmc.Text("↗️ +12% from last month", size="sm", c="green"),
-                        ],
-                        withBorder=True,
-                        shadow="sm",
-                        radius="md",
-                        style={"padding": "20px"},
-                    ),
-                    html.P(
-                        f"UUID: {uuid3[:8]}...",
-                        style={"marginTop": "20px", "fontSize": "12px", "color": "#666"},
-                    ),
-                ])
-            ]
+                html.Div(
+                    [
+                        html.H4("Metrics Card"),
+                        dmc.Card(
+                            [
+                                dmc.Text("Total Users", size="sm", c="dimmed"),
+                                dmc.Text("1,234", size="xl", fw=700, c="blue"),
+                                dmc.Text("↗️ +12% from last month", size="sm", c="green"),
+                            ],
+                            withBorder=True,
+                            shadow="sm",
+                            radius="md",
+                            style={"padding": "20px"},
+                        ),
+                        html.P(
+                            f"UUID: {uuid3[:8]}...",
+                            style={"marginTop": "20px", "fontSize": "12px", "color": "#666"},
+                        ),
+                    ]
+                )
+            ],
         }
     }
 
     # Component data for enable_box_edit_mode
-    component_data1 = {
-        "component_type": "figure",
-        "visu_type": "scatter",
-        "parent_index": uuid1
-    }
-    
-    component_data2 = {
-        "component_type": "table",
-        "parent_index": uuid2
-    }
-    
-    component_data3 = {
-        "component_type": "interactive",
-        "parent_index": uuid3
-    }
+    component_data1 = {"component_type": "figure", "visu_type": "scatter", "parent_index": uuid1}
 
+    component_data2 = {"component_type": "table", "parent_index": uuid2}
+
+    component_data3 = {"component_type": "interactive", "parent_index": uuid3}
 
     # For now, let's create components with enable_box_edit_mode buttons but extract the inner content properly
     # The issue is that DashboardItem from dash-draggable doesn't work well with dash-dynamic-grid-layout
-    
+
     # Let's create the components with edit buttons manually, similar to enable_box_edit_mode
     from dash_iconify import DashIconify
-    
+
     def create_edit_buttons(component_uuid, component_type="figure"):
         """Create edit buttons similar to enable_box_edit_mode"""
         remove_button = dmc.ActionIcon(
@@ -149,21 +143,21 @@ def create_depictio_integration_app():
             variant="filled",
             children=DashIconify(icon="mdi:trash-can-outline", width=16, color="white"),
         )
-        
+
         edit_button = dmc.ActionIcon(
             id={"type": "edit-box-button", "index": component_uuid},
             color="blue",
             variant="filled",
             children=DashIconify(icon="mdi:pen", width=16, color="white"),
         )
-        
+
         duplicate_button = dmc.ActionIcon(
             id={"type": "duplicate-box-button", "index": component_uuid},
             color="gray",
             variant="filled",
             children=DashIconify(icon="mdi:content-copy", width=16, color="white"),
         )
-        
+
         if component_type == "figure":
             reset_button = dmc.ActionIcon(
                 id={"type": "reset-selection-graph-button", "index": component_uuid},
@@ -171,27 +165,41 @@ def create_depictio_integration_app():
                 variant="filled",
                 children=DashIconify(icon="bx:reset", width=16, color="white"),
             )
-            return dmc.Group([remove_button, edit_button, duplicate_button, reset_button], 
-                           grow=False, gap="xs", style={"marginBottom": "10px"})
+            return dmc.Group(
+                [remove_button, edit_button, duplicate_button, reset_button],
+                grow=False,
+                gap="xs",
+                style={"marginBottom": "10px"},
+            )
         else:
-            return dmc.Group([remove_button, edit_button, duplicate_button], 
-                           grow=False, gap="xs", style={"marginBottom": "10px"})
+            return dmc.Group(
+                [remove_button, edit_button, duplicate_button],
+                grow=False,
+                gap="xs",
+                style={"marginBottom": "10px"},
+            )
 
     # Create components with edit buttons
-    scatter_with_edit = html.Div([
-        create_edit_buttons(uuid1, "figure"),
-        mock_box1["props"]["children"][0]  # Get the graph component
-    ])
-    
-    select_with_edit = html.Div([
-        create_edit_buttons(uuid2, "table"),
-        mock_box2["props"]["children"][0]  # Get the select component
-    ])
-    
-    metrics_with_edit = html.Div([
-        create_edit_buttons(uuid3, "interactive"),
-        mock_box3["props"]["children"][0]  # Get the metrics component
-    ])
+    scatter_with_edit = html.Div(
+        [
+            create_edit_buttons(uuid1, "figure"),
+            mock_box1["props"]["children"][0],  # Get the graph component
+        ]
+    )
+
+    select_with_edit = html.Div(
+        [
+            create_edit_buttons(uuid2, "table"),
+            mock_box2["props"]["children"][0],  # Get the select component
+        ]
+    )
+
+    metrics_with_edit = html.Div(
+        [
+            create_edit_buttons(uuid3, "interactive"),
+            mock_box3["props"]["children"][0],  # Get the metrics component
+        ]
+    )
 
     # Create DraggableWrapper components with edit buttons
     draggable_components = [
@@ -258,15 +266,18 @@ def create_depictio_integration_app():
     app.layout = dmc.MantineProvider(
         [
             html.H1("🎯 Dash Dynamic Grid Layout with Depictio Integration"),
-            html.Div([
-                html.H3("Integration with depictio's enable_box_edit_mode"),
-                html.P("✅ Uses depictio's enable_box_edit_mode function"),
-                html.P("✅ Components have edit/duplicate/delete buttons"),
-                html.P("✅ Scatter plot, select dropdown, and metrics card"),
-                html.P("✅ Native drag and drop with dash-dynamic-grid-layout"),
-                html.P("✅ Responsive breakpoints"),
-                html.P("✅ UUID preservation"),
-            ], style={"background": "#f9f9f9", "padding": "15px", "margin": "10px 0"}),
+            html.Div(
+                [
+                    html.H3("Integration with depictio's enable_box_edit_mode"),
+                    html.P("✅ Uses depictio's enable_box_edit_mode function"),
+                    html.P("✅ Components have edit/duplicate/delete buttons"),
+                    html.P("✅ Scatter plot, select dropdown, and metrics card"),
+                    html.P("✅ Native drag and drop with dash-dynamic-grid-layout"),
+                    html.P("✅ Responsive breakpoints"),
+                    html.P("✅ UUID preservation"),
+                ],
+                style={"background": "#f9f9f9", "padding": "15px", "margin": "10px 0"},
+            ),
             # Edit mode toggle
             html.Div(
                 [
@@ -318,9 +329,27 @@ def create_depictio_integration_app():
                 showRemoveButton=True,  # Start with edit mode enabled
                 showResizeHandles=True,
                 itemLayout=[
-                    {"i": f"scatter-{uuid1}", "x": 0, "y": 0, "w": 6, "h": 4},  # Figure component - larger
-                    {"i": f"select-{uuid2}", "x": 6, "y": 0, "w": 6, "h": 4},  # Table component - larger
-                    {"i": f"metrics-{uuid3}", "x": 0, "y": 4, "w": 5, "h": 3},  # Interactive component - smaller
+                    {
+                        "i": f"scatter-{uuid1}",
+                        "x": 0,
+                        "y": 0,
+                        "w": 6,
+                        "h": 4,
+                    },  # Figure component - larger
+                    {
+                        "i": f"select-{uuid2}",
+                        "x": 6,
+                        "y": 0,
+                        "w": 6,
+                        "h": 4,
+                    },  # Table component - larger
+                    {
+                        "i": f"metrics-{uuid3}",
+                        "x": 0,
+                        "y": 4,
+                        "w": 5,
+                        "h": 3,
+                    },  # Interactive component - smaller
                 ],
             ),
         ]

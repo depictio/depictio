@@ -8,71 +8,80 @@ import dash
 from dash import html, Input, Output, clientside_callback
 import dash_draggable
 
+
 def generate_unique_index():
     return str(uuid.uuid4())
 
+
 def create_dashboard_item_test():
     app = dash.Dash(__name__)
-    
+
     uuid1 = generate_unique_index()
     uuid2 = generate_unique_index()
-    
+
     box_id1 = f"box-{uuid1}"
     box_id2 = f"box-{uuid2}"
-    
+
     print(f"=== Testing DashboardItem (Fixed) with Dash {dash.__version__} ===")
     print(f"Expected IDs: {box_id1}, {box_id2}")
-    
+
     # Use DashboardItem components with only the 'i' prop (no id prop)
     children = [
         dash_draggable.DashboardItem(
             i=box_id1,  # ← Only use 'i' prop, no 'id' prop
-            x=0, y=0, w=6, h=4,
+            x=0,
+            y=0,
+            w=6,
+            h=4,
             children=[
                 html.Div(
                     id=box_id1,  # ← Put id on the inner div
                     children=[
                         html.H3("Component 1"),
                         html.P(f"ID: {box_id1}"),
-                        html.P("✅ Using DashboardItem with only 'i' prop")
+                        html.P("✅ Using DashboardItem with only 'i' prop"),
                     ],
-                    style={"border": "2px solid green", "padding": "10px"}
+                    style={"border": "2px solid green", "padding": "10px"},
                 )
-            ]
+            ],
         ),
         dash_draggable.DashboardItem(
             i=box_id2,  # ← Only use 'i' prop, no 'id' prop
-            x=6, y=0, w=6, h=4,
+            x=6,
+            y=0,
+            w=6,
+            h=4,
             children=[
                 html.Div(
                     id=box_id2,  # ← Put id on the inner div
                     children=[
                         html.H3("Component 2"),
                         html.P(f"ID: {box_id2}"),
-                        html.P("✅ Using DashboardItem with only 'i' prop")
+                        html.P("✅ Using DashboardItem with only 'i' prop"),
                     ],
-                    style={"border": "2px solid blue", "padding": "10px"}
+                    style={"border": "2px solid blue", "padding": "10px"},
                 )
-            ]
-        )
+            ],
+        ),
     ]
-    
-    app.layout = html.Div([
-        html.H1(f"🎯 DashboardItem Test (Fixed) - Dash {dash.__version__}"),
-        html.Div(id="dashboard-item-output"),
-        html.Button("Test DashboardItem", id="test-dashboard-item"),
-        html.Hr(),
-        
-        dash_draggable.ResponsiveGridLayout(
-            id="dashboard-item-grid",
-            children=children,
-            isDraggable=True,
-            isResizable=True,
-            save=False,
-            clearSavedLayout=False
-        )
-    ])
-    
+
+    app.layout = html.Div(
+        [
+            html.H1(f"🎯 DashboardItem Test (Fixed) - Dash {dash.__version__}"),
+            html.Div(id="dashboard-item-output"),
+            html.Button("Test DashboardItem", id="test-dashboard-item"),
+            html.Hr(),
+            dash_draggable.ResponsiveGridLayout(
+                id="dashboard-item-grid",
+                children=children,
+                isDraggable=True,
+                isResizable=True,
+                save=False,
+                clearSavedLayout=False,
+            ),
+        ]
+    )
+
     app.clientside_callback(
         f"""
         function(n_clicks, layouts) {{
@@ -112,10 +121,11 @@ def create_dashboard_item_test():
         """,
         Output("dashboard-item-output", "children"),
         Input("test-dashboard-item", "n_clicks"),
-        Input("dashboard-item-grid", "layouts")
+        Input("dashboard-item-grid", "layouts"),
     )
-    
+
     return app
+
 
 if __name__ == "__main__":
     app = create_dashboard_item_test()

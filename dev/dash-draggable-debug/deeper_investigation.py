@@ -8,28 +8,30 @@ import dash
 from dash import html, Input, Output, clientside_callback
 import dash_draggable
 
+
 def generate_unique_index():
     return str(uuid.uuid4())
 
+
 def create_deep_debug_app():
     app = dash.Dash(__name__)
-    
+
     uuid1 = generate_unique_index()
     uuid2 = generate_unique_index()
-    
+
     box_id1 = f"box-{uuid1}"
     box_id2 = f"box-{uuid2}"
-    
+
     print(f"=== Deep Debug with Dash {dash.__version__} ===")
     print(f"Expected IDs: {box_id1}, {box_id2}")
-    
+
     layout = {
         "lg": [
             {"i": box_id1, "x": 0, "y": 0, "w": 6, "h": 4},
-            {"i": box_id2, "x": 6, "y": 0, "w": 6, "h": 4}
+            {"i": box_id2, "x": 6, "y": 0, "w": 6, "h": 4},
         ]
     }
-    
+
     # Test multiple approaches
     children = [
         html.Div(
@@ -37,34 +39,35 @@ def create_deep_debug_app():
             key=box_id1,
             children=[html.H3("Component 1"), html.P(f"ID: {box_id1}")],
             style={"border": "2px solid red", "padding": "10px"},
-            **{"data-grid": {"i": box_id1, "x": 0, "y": 0, "w": 6, "h": 4}}  # Try data-grid
+            **{"data-grid": {"i": box_id1, "x": 0, "y": 0, "w": 6, "h": 4}},  # Try data-grid
         ),
         html.Div(
             id=box_id2,
             key=box_id2,
             children=[html.H3("Component 2"), html.P(f"ID: {box_id2}")],
             style={"border": "2px solid blue", "padding": "10px"},
-            **{"data-grid": {"i": box_id2, "x": 6, "y": 0, "w": 6, "h": 4}}  # Try data-grid
-        )
+            **{"data-grid": {"i": box_id2, "x": 6, "y": 0, "w": 6, "h": 4}},  # Try data-grid
+        ),
     ]
-    
-    app.layout = html.Div([
-        html.H1(f"🔍 Deep Debug - Dash {dash.__version__}"),
-        html.Div(id="deep-debug-output"),
-        html.Button("Deep Debug", id="deep-debug-button"),
-        html.Hr(),
-        
-        dash_draggable.ResponsiveGridLayout(
-            id="deep-debug-grid",
-            children=children,
-            layouts=layout,
-            isDraggable=True,
-            isResizable=True,
-            save=False,
-            clearSavedLayout=False
-        )
-    ])
-    
+
+    app.layout = html.Div(
+        [
+            html.H1(f"🔍 Deep Debug - Dash {dash.__version__}"),
+            html.Div(id="deep-debug-output"),
+            html.Button("Deep Debug", id="deep-debug-button"),
+            html.Hr(),
+            dash_draggable.ResponsiveGridLayout(
+                id="deep-debug-grid",
+                children=children,
+                layouts=layout,
+                isDraggable=True,
+                isResizable=True,
+                save=False,
+                clearSavedLayout=False,
+            ),
+        ]
+    )
+
     # Comprehensive debugging
     app.clientside_callback(
         f"""
@@ -134,10 +137,11 @@ def create_deep_debug_app():
         Output("deep-debug-output", "children"),
         Input("deep-debug-button", "n_clicks"),
         Input("deep-debug-grid", "layouts"),
-        Input("deep-debug-grid", "children")
+        Input("deep-debug-grid", "children"),
     )
-    
+
     return app
+
 
 if __name__ == "__main__":
     app = create_deep_debug_app()

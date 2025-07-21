@@ -8,21 +8,23 @@ import dash
 from dash import html, Input, Output, clientside_callback
 import dash_draggable
 
+
 def generate_unique_index():
     return str(uuid.uuid4())
 
+
 def create_data_grid_test():
     app = dash.Dash(__name__)
-    
+
     uuid1 = generate_unique_index()
     uuid2 = generate_unique_index()
-    
+
     box_id1 = f"box-{uuid1}"
     box_id2 = f"box-{uuid2}"
-    
+
     print(f"=== Testing data-grid attribute with Dash {dash.__version__} ===")
     print(f"Expected IDs: {box_id1}, {box_id2}")
-    
+
     # Use data-grid attribute approach
     children = [
         html.Div(
@@ -30,39 +32,40 @@ def create_data_grid_test():
             children=[
                 html.H3("Component 1"),
                 html.P(f"ID: {box_id1}"),
-                html.P("✅ Using data-grid attribute")
+                html.P("✅ Using data-grid attribute"),
             ],
             style={"border": "2px solid green", "padding": "10px"},
-            **{"data-grid": {"i": box_id1, "x": 0, "y": 0, "w": 6, "h": 4}}
+            **{"data-grid": {"i": box_id1, "x": 0, "y": 0, "w": 6, "h": 4}},
         ),
         html.Div(
             id=box_id2,
             children=[
                 html.H3("Component 2"),
                 html.P(f"ID: {box_id2}"),
-                html.P("✅ Using data-grid attribute")
+                html.P("✅ Using data-grid attribute"),
             ],
             style={"border": "2px solid blue", "padding": "10px"},
-            **{"data-grid": {"i": box_id2, "x": 6, "y": 0, "w": 6, "h": 4}}
-        )
+            **{"data-grid": {"i": box_id2, "x": 6, "y": 0, "w": 6, "h": 4}},
+        ),
     ]
-    
-    app.layout = html.Div([
-        html.H1(f"🎯 Data-Grid Test - Dash {dash.__version__}"),
-        html.Div(id="data-grid-output"),
-        html.Button("Test Data-Grid", id="test-data-grid"),
-        html.Hr(),
-        
-        dash_draggable.ResponsiveGridLayout(
-            id="data-grid-grid",
-            children=children,
-            isDraggable=True,
-            isResizable=True,
-            save=False,
-            clearSavedLayout=False
-        )
-    ])
-    
+
+    app.layout = html.Div(
+        [
+            html.H1(f"🎯 Data-Grid Test - Dash {dash.__version__}"),
+            html.Div(id="data-grid-output"),
+            html.Button("Test Data-Grid", id="test-data-grid"),
+            html.Hr(),
+            dash_draggable.ResponsiveGridLayout(
+                id="data-grid-grid",
+                children=children,
+                isDraggable=True,
+                isResizable=True,
+                save=False,
+                clearSavedLayout=False,
+            ),
+        ]
+    )
+
     app.clientside_callback(
         f"""
         function(n_clicks, layouts) {{
@@ -102,10 +105,11 @@ def create_data_grid_test():
         """,
         Output("data-grid-output", "children"),
         Input("test-data-grid", "n_clicks"),
-        Input("data-grid-grid", "layouts")
+        Input("data-grid-grid", "layouts"),
     )
-    
+
     return app
+
 
 if __name__ == "__main__":
     app = create_data_grid_test()
