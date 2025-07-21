@@ -1,6 +1,7 @@
-from fastapi import FastAPI
-from celery import Celery
 import os
+
+from celery import Celery
+from fastapi import FastAPI
 
 app = FastAPI()
 

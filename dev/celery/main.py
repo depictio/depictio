@@ -1,9 +1,10 @@
+import json
 import os
 import uuid
-from fastapi import FastAPI
+
 from celery import Celery
+from fastapi import FastAPI
 from pydantic import BaseModel
-import json
 
 app = FastAPI()
 

@@ -4,9 +4,10 @@ Test hybrid approach: DashboardItem for UI + manual layout management for persis
 """
 
 import uuid
+
 import dash
-from dash import html, Input, Output, State
 import dash_draggable
+from dash import Input, Output, State, html
 
 
 def generate_unique_index():

@@ -4,15 +4,14 @@ Advanced prototype using dash-dynamic-grid-layout with depictio integration
 This version demonstrates integration with depictio's edit mode functionality
 """
 
-import os
+import json
 import sys
 import uuid
 
 import dash
 import dash_dynamic_grid_layout as dgl
 import dash_mantine_components as dmc
-import json
-from dash import Input, Output, State, dcc, html
+from dash import Input, Output, dcc, html
 
 # Add the depictio package to the path
 sys.path.insert(0, "/Users/tweber/Gits/workspaces/depictio-workspace/depictio")
@@ -39,7 +38,7 @@ def create_depictio_integration_app():
     uuid2 = generate_unique_index()
     uuid3 = generate_unique_index()
 
-    print(f"=== Dash Dynamic Grid Layout with Depictio Integration ===")
+    print("=== Dash Dynamic Grid Layout with Depictio Integration ===")
     print(f"Component UUIDs: {uuid1}, {uuid2}, {uuid3}")
 
     # Sample data for the scatter plot

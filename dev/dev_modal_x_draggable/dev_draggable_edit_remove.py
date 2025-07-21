@@ -1,16 +1,11 @@
+import uuid
+
 import dash
-import dash
-from dash import dcc
-from dash import html
-from dash.dependencies import Input, Output, State, MATCH, ALL
 import dash_bootstrap_components as dbc
 import dash_draggable
-import json
-import os, sys
-import numpy as np
-import pandas as pd
 import plotly.express as px
-import uuid
+from dash import dcc, html
+from dash.dependencies import Input, Output, State
 
 
 def load_initial_data():
@@ -295,7 +290,6 @@ def add_plot(
     # get the context of the callback
     ctx = dash.callback_context
 
-    from pprint import pprint
 
     # pprint(existing_children)
     # if the callback is not triggered, return the existing children

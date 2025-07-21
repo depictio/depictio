@@ -4,14 +4,13 @@ Secure code executor for Plotly code execution with comprehensive security check
 
 import ast
 import re
-import sys
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import date, datetime, timedelta
+from typing import Any, Dict, Tuple
 
+import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-import numpy as np
-from datetime import datetime, date, timedelta
 
 
 class SecurityError(Exception):

@@ -3,20 +3,20 @@
 Test the depictio implementation of the hybrid approach
 """
 
-import uuid
-import dash
-from dash import html, Input, Output, State, dcc
-import dash_draggable
 import sys
-import os
+import uuid
+
+import dash
+import dash_draggable
+from dash import Input, Output, dcc, html
 
 # Add the depictio package to the path
 sys.path.insert(0, "/Users/tweber/Gits/workspaces/depictio-workspace/depictio")
 
 # Test the enable_box_edit_mode function with DashboardItem
 try:
-    from depictio.dash.layouts.edit import enable_box_edit_mode
     from depictio.dash.layouts.draggable import map_numerical_ids_to_uuids
+    from depictio.dash.layouts.edit import enable_box_edit_mode
 
     print("✅ Successfully imported depictio modules")
 except ImportError as e:
@@ -59,7 +59,7 @@ def create_test_app():
     }
 
     # Test the enable_box_edit_mode function
-    print(f"=== Testing enable_box_edit_mode with DashboardItem ===")
+    print("=== Testing enable_box_edit_mode with DashboardItem ===")
     print(f"UUIDs: {uuid1}, {uuid2}")
 
     try:

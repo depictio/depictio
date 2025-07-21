@@ -3,11 +3,12 @@
 Test to verify if Dash v3 overrides custom IDs with numerical indices
 """
 
-import uuid
-import dash
-from dash import html, Input, Output, State, callback
-import dash_draggable
 import json
+import uuid
+
+import dash
+import dash_draggable
+from dash import Input, Output, html
 
 
 def generate_unique_index():
@@ -50,7 +51,7 @@ def create_test_app():
         html.Div(
             id=custom_id1,
             children=[
-                html.H3(f"Component 1"),
+                html.H3("Component 1"),
                 html.P(f"Expected ID: {custom_id1}"),
                 html.P(id=f"actual-id-{custom_id1}", children="Loading actual ID..."),
             ],
@@ -59,7 +60,7 @@ def create_test_app():
         html.Div(
             id=custom_id2,
             children=[
-                html.H3(f"Component 2"),
+                html.H3("Component 2"),
                 html.P(f"Expected ID: {custom_id2}"),
                 html.P(id=f"actual-id-{custom_id2}", children="Loading actual ID..."),
             ],
@@ -68,7 +69,7 @@ def create_test_app():
         html.Div(
             id=custom_id3,
             children=[
-                html.H3(f"Component 3"),
+                html.H3("Component 3"),
                 html.P(f"Expected ID: {custom_id3}"),
                 html.P(id=f"actual-id-{custom_id3}", children="Loading actual ID..."),
             ],

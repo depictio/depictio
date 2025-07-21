@@ -2,9 +2,7 @@
 Test script for security features of the Plotly code prototype
 """
 
-import sys
 import pandas as pd
-from typing import List, Tuple
 
 # Import from same directory
 from secure_code_executor import SecureCodeExecutor, SecureCodeValidator
@@ -150,7 +148,7 @@ def test_allowed_operations():
         success, result, error = executor.execute_code(code)
 
         if success:
-            print(f"✅ SUCCESS - Figure created")
+            print("✅ SUCCESS - Figure created")
         else:
             print(f"❌ FAILED - {error}")
 
@@ -187,7 +185,7 @@ def main():
         # Test environment info
         test_environment_info()
 
-        print(f"\n🎉 All tests completed!")
+        print("\n🎉 All tests completed!")
         print(f"Overall security validation: {'PASS' if failed == 0 else 'NEEDS REVIEW'}")
 
     except Exception as e:

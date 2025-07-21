@@ -1,16 +1,12 @@
+import json
+import os
+
 import dash
-import dash
-from dash import dcc
-from dash import html
-from dash.dependencies import Input, Output, State
 import dash_bootstrap_components as dbc
 import dash_draggable
-import json
-import os, sys
-import numpy as np
-import pandas as pd
 import plotly.express as px
-import uuid
+from dash import dcc, html
+from dash.dependencies import Input, Output, State
 
 
 def load_layout():

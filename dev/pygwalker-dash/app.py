@@ -1,7 +1,7 @@
-from dash import Dash, html
 import dash_dangerously_set_inner_html
 import pandas as pd
 import pygwalker as pyg
+from dash import Dash, html
 
 app = Dash(__name__)
 df = pd.read_csv(

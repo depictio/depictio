@@ -6,20 +6,20 @@ Leverages the figure component builder logic from depictio/dash
 import ast
 import re
 import sys
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import dash
 import dash_mantine_components as dmc
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from dash import Input, Output, State, callback, dcc, html
+from dash import Input, Output, State, callback, dcc
 
 # Import depictio utilities (optional)
 sys.path.append("/Users/tweber/Gits/workspaces/depictio-workspace/depictio")
 try:
-    from depictio.dash.modules.figure_component.utils import render_figure
     from depictio.dash.modules.figure_component.definitions import get_available_visualizations
+    from depictio.dash.modules.figure_component.utils import render_figure
 
     DEPICTIO_AVAILABLE = True
 except ImportError:

@@ -1,7 +1,7 @@
 import dash
-from dash import dcc, html, Input, Output, State
-import plotly.express as px
 import pandas as pd
+import plotly.express as px
+from dash import Input, Output, State, dcc, html
 
 app = dash.Dash(__name__)
 

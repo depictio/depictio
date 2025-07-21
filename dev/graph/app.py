@@ -1,13 +1,12 @@
+import random
+
 import dash
+import dash_bootstrap_components as dbc
 import dash_cytoscape as cyto
 import dash_html_components as html
-import dash_core_components as dcc
 import dash_table
-from dash.dependencies import Input, Output, State
-import dash_bootstrap_components as dbc
-import pandas as pd
 import numpy as np
-import random
+from dash.dependencies import Input, Output, State
 
 # Load extra layouts
 cyto.load_extra_layouts()

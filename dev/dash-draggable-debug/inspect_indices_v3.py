@@ -4,10 +4,10 @@ Inspect how indices are handled internally - Fixed for Dash v3
 """
 
 import uuid
+
 import dash
-from dash import html, Input, Output, clientside_callback, ClientsideFunction
 import dash_draggable
-import json
+from dash import Input, Output, html
 
 
 def generate_unique_index():
@@ -43,7 +43,7 @@ def create_inspection_app():
             children=[
                 html.H3("Component 1"),
                 html.P(f"My ID should be: {box_id1}"),
-                html.P(id=f"actual-id-1", children="Checking..."),
+                html.P(id="actual-id-1", children="Checking..."),
             ],
             style={"border": "2px solid red", "padding": "10px"},
         ),
@@ -52,7 +52,7 @@ def create_inspection_app():
             children=[
                 html.H3("Component 2"),
                 html.P(f"My ID should be: {box_id2}"),
-                html.P(id=f"actual-id-2", children="Checking..."),
+                html.P(id="actual-id-2", children="Checking..."),
             ],
             style={"border": "2px solid blue", "padding": "10px"},
         ),

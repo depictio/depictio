@@ -5,7 +5,7 @@ Test if HTML div wrapper is causing the RangeSlider interaction issue
 
 import dash
 import dash_mantine_components as dmc
-from dash import Input, Output, callback, html, dcc
+from dash import Input, Output, callback, dcc, html
 
 app = dash.Dash(__name__)
 

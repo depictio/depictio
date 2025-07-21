@@ -4,9 +4,10 @@ Debug the JavaScript behavior with detailed clientside callbacks
 """
 
 import uuid
+
 import dash
-from dash import html, Input, Output, State, clientside_callback
 import dash_draggable
+from dash import Input, Output, State, html
 
 
 def generate_unique_index():

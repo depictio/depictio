@@ -3,11 +3,12 @@
 Test callback behavior with UUID IDs in dash-draggable
 """
 
-import uuid
-import dash
-from dash import html, Input, Output, State, callback
-import dash_draggable
 import json
+import uuid
+
+import dash
+import dash_draggable
+from dash import Input, Output, html
 
 
 def generate_unique_index():
@@ -38,7 +39,7 @@ def create_test_app():
         html.Div(
             id=f"box-{uuid1}",
             children=[
-                html.H3(f"Component 1"),
+                html.H3("Component 1"),
                 html.P(f"UUID: {uuid1}"),
                 html.Button("Click me", id=f"btn-{uuid1}"),
                 html.Div(id=f"output-{uuid1}"),
@@ -48,7 +49,7 @@ def create_test_app():
         html.Div(
             id=f"box-{uuid2}",
             children=[
-                html.H3(f"Component 2"),
+                html.H3("Component 2"),
                 html.P(f"UUID: {uuid2}"),
                 html.Button("Click me", id=f"btn-{uuid2}"),
                 html.Div(id=f"output-{uuid2}"),

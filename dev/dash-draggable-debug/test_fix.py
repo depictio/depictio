@@ -7,7 +7,7 @@ import uuid
 
 import dash
 import dash_draggable
-from dash import Input, Output, clientside_callback, html
+from dash import Input, Output, html
 
 
 def generate_unique_index():

@@ -1,17 +1,14 @@
-import dash
-from dash.dependencies import Input, Output, State
-from dash import html, dcc
-import dash_bootstrap_components as dbc
-import plotly.express as px
-import pandas as pd
-import dash_draggable
-from dash import dash_table
-import time
-import os, json
-import json
 import ast
-import pandas
+import json
+import os
 
+import dash
+import dash_bootstrap_components as dbc
+import dash_draggable
+import pandas as pd
+import plotly.express as px
+from dash import dcc, html
+from dash.dependencies import Input, Output, State
 
 external_stylesheets = [
     dbc.themes.BOOTSTRAP,
@@ -173,7 +170,7 @@ def create_initial_figure(selected_year, plot_type):
     filtered_df = df[df.year == selected_year]
     # filtered_df = df
     print(plot_type)
-    if AVAILABLE_PLOT_TYPES[plot_type]["type"] is "Card":
+    if AVAILABLE_PLOT_TYPES[plot_type]["type"] == "Card":
         value = process_data_for_card(
             filtered_df,
             AVAILABLE_PLOT_TYPES[plot_type]["kwargs"]["column"],
@@ -184,7 +181,7 @@ def create_initial_figure(selected_year, plot_type):
             value,
             AVAILABLE_PLOT_TYPES[plot_type]["kwargs"]["legend"],
         )
-    elif AVAILABLE_PLOT_TYPES[plot_type]["type"] is not "Card":
+    elif AVAILABLE_PLOT_TYPES[plot_type]["type"] != "Card":
         fig = AVAILABLE_PLOT_TYPES[plot_type]["function"](
             filtered_df, **AVAILABLE_PLOT_TYPES[plot_type]["kwargs"]
         )

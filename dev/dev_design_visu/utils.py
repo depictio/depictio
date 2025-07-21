@@ -1,11 +1,8 @@
 # utils.py
-import pandas as pd
 import inspect
 import json
 import os
-import plotly.express as px
 import re
-from pprint import pprint
 
 
 def load_data():

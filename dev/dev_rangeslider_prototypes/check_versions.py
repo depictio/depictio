@@ -5,6 +5,7 @@ Check versions of key packages
 
 import sys
 
+
 def check_version(package_name):
     try:
         package = __import__(package_name)

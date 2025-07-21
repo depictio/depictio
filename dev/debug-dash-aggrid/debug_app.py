@@ -187,7 +187,7 @@ def update_grid_state(admin_clicks, owner_clicks, viewer_clicks, empty_clicks, s
     """
     Update the grid based on button clicks to test different permission states.
     """
-    print(f"\n🔄 Callback triggered!")
+    print("\n🔄 Callback triggered!")
     print(f"   admin_clicks: {admin_clicks}")
     print(f"   owner_clicks: {owner_clicks}")
     print(f"   viewer_clicks: {viewer_clicks}")
@@ -264,7 +264,7 @@ def update_grid_state(admin_clicks, owner_clicks, viewer_clicks, empty_clicks, s
 
     print(f"   → Returning data with {len(test_data)} rows")
     print(f"   → Column definitions: {[col['field'] for col in column_defs]}")
-    print(f"✅ Callback complete\n")
+    print("✅ Callback complete\n")
 
     return test_data, column_defs, grid_options, debug_info, raw_data, store_update
 
@@ -279,7 +279,7 @@ def handle_cell_value_changed(cell_changed, store_data):
     """
     Handle cell value changes - this callback mimics the problematic one in the main app.
     """
-    print(f"\n📝 Cell value changed!")
+    print("\n📝 Cell value changed!")
     print(f"   cell_changed: {cell_changed}")
     print(f"   store_data: {store_data}")
 

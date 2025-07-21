@@ -1,24 +1,22 @@
-import secrets
+import logging
+from datetime import datetime, timedelta
+from typing import Any, List, Optional
+
+import jwt
+import uvicorn
+from beanie import Document, PydanticObjectId, init_beanie
+from bson import ObjectId
+from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.concurrency import asynccontextmanager
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
-import uvicorn
-from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from motor.motor_asyncio import AsyncIOMotorClient
-from beanie import Document, init_beanie, PydanticObjectId
-from pydantic import BaseModel, Field, EmailStr, field_serializer
-from datetime import datetime, timedelta
-from typing import Any, Optional, List, Annotated
-import jwt
 from passlib.context import CryptContext
-from bson import ObjectId
-import logging
-from rich.logging import RichHandler
+from pydantic import BaseModel, EmailStr, Field, field_serializer
 
 # Create a custom JSON response class for proper ObjectId serialization
-from pydantic_core import core_schema
-from pydantic.json_schema import JsonSchemaValue
+from rich.logging import RichHandler
 
 # Configure logger to use RichHandler
 logging.basicConfig(level="INFO", format="%(message)s", datefmt="[%X]", handlers=[RichHandler()])

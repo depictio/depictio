@@ -1,8 +1,7 @@
 import dash
-from dash import html, dcc, Input, Output, State, ALL
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
-from dash_mantine_components import Button, Card, Group
+from dash import ALL, Input, Output, State, dcc, html
 from dash_iconify import DashIconify
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
@@ -247,7 +246,7 @@ def create_accordion_content(content):
 organisation = html.Div(
     [
         dmc.Avatar(
-            src=f"https://ui-avatars.com/api/?format=svg&name=Organisation&background=FFC0CB&color=white&rounded=true&bold=true&format=svg&size=16",
+            src="https://ui-avatars.com/api/?format=svg&name=Organisation&background=FFC0CB&color=white&rounded=true&bold=true&format=svg&size=16",
             size="md",
             radius="xl",
         ),

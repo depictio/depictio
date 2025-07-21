@@ -1,12 +1,11 @@
 import os
 
-from flask import Flask
-from flask_login import login_user, LoginManager, UserMixin, logout_user, current_user
-
 import dash
-from dash.dependencies import Input, Output, State
 import dash_core_components as dcc
 import dash_html_components as html
+from dash.dependencies import Input, Output, State
+from flask import Flask
+from flask_login import LoginManager, UserMixin, current_user, login_user, logout_user
 
 # CREDIT: This code is copied from Dash official documentation:
 # https://dash.plotly.com/urls

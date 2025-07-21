@@ -10,7 +10,6 @@ import dash_mantine_components as dmc
 import pandas as pd
 import plotly
 import plotly.express as px
-import plotly.graph_objects as go
 from dash import Input, Output, dcc, html
 from dash_iconify import DashIconify
 

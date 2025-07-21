@@ -3,8 +3,8 @@ Simple test to debug the background animation
 """
 
 import dash
-from dash import dcc, html
 import dash_mantine_components as dmc
+from dash import html
 
 # Initialize Dash app
 app = dash.Dash(__name__)

@@ -4,15 +4,12 @@ Enterprise Flask/Dash Security Assessment Scanner
 Comprehensive security assessment for Flask/Dash applications
 """
 
-import concurrent.futures
 import json
 import re
-import socket
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, List, Optional
-from urllib.parse import urlparse
+from typing import Dict, List
 
 import requests
 
@@ -205,7 +202,7 @@ class FlaskSecurityScanner:
             except Exception:
                 continue
 
-        print(f"✅ No debug mode indicators found")
+        print("✅ No debug mode indicators found")
 
     def _check_debug_endpoints(self, assessment: ServerAssessment):
         """Check for accessible debug endpoints"""
@@ -243,7 +240,7 @@ class FlaskSecurityScanner:
             )
             print(f"🚨 Accessible debug endpoints: {', '.join(accessible_endpoints)}")
         else:
-            print(f"✅ No accessible debug endpoints")
+            print("✅ No accessible debug endpoints")
 
     def _check_dash_configuration(self, assessment: ServerAssessment):
         """Analyze Dash-specific configuration"""
@@ -301,7 +298,7 @@ class FlaskSecurityScanner:
                             )
                         )
 
-                    print(f"📊 Dash application detected")
+                    print("📊 Dash application detected")
 
                 except json.JSONDecodeError:
                     assessment.add_finding(
@@ -313,7 +310,7 @@ class FlaskSecurityScanner:
                         )
                     )
 
-        except Exception as e:
+        except Exception:
             pass  # Not a Dash app or other error
 
     def _check_error_handling(self, assessment: ServerAssessment):
@@ -336,7 +333,7 @@ class FlaskSecurityScanner:
                                 category="Error Handling",
                                 title="Detailed Error Information Exposed",
                                 description="Server returns detailed error information on 500 errors",
-                                evidence=[f"HTTP 500 with detailed error info"],
+                                evidence=["HTTP 500 with detailed error info"],
                                 recommendation="Implement proper error handling and logging",
                             )
                         )
@@ -377,7 +374,7 @@ class FlaskSecurityScanner:
                 )
                 print(f"⚠️  Missing {len(missing_headers)} security headers")
             else:
-                print(f"✅ Security headers present")
+                print("✅ Security headers present")
 
         except Exception:
             pass
@@ -457,12 +454,12 @@ class FlaskSecurityScanner:
 
     def print_assessment_report(self, assessment: ServerAssessment):
         """Print detailed assessment report"""
-        print(f"\n" + "=" * 80)
+        print("\n" + "=" * 80)
         print(f"SECURITY ASSESSMENT REPORT: {assessment.url}")
-        print(f"=" * 80)
+        print("=" * 80)
 
         # Basic information
-        print(f"\n📋 BASIC INFORMATION")
+        print("\n📋 BASIC INFORMATION")
         print(f"├── Server Type: {assessment.server_type}")
         print(f"├── Reachable: {'✅ Yes' if assessment.is_reachable else '❌ No'}")
         print(f"├── Response Time: {assessment.response_time:.2f}s")
@@ -513,7 +510,7 @@ class FlaskSecurityScanner:
         """Scan multiple servers and return assessments"""
         assessments = []
 
-        print(f"🔍 FLASK/DASH SECURITY ASSESSMENT")
+        print("🔍 FLASK/DASH SECURITY ASSESSMENT")
         print(f"Scanning {len(urls)} servers...")
 
         for url in urls:
@@ -528,9 +525,9 @@ class FlaskSecurityScanner:
 
     def _print_summary_report(self, assessments: List[ServerAssessment]):
         """Print summary report for all assessments"""
-        print(f"\n" + "=" * 80)
-        print(f"SUMMARY REPORT")
-        print(f"=" * 80)
+        print("\n" + "=" * 80)
+        print("SUMMARY REPORT")
+        print("=" * 80)
 
         total_critical = sum(
             len([f for f in a.findings if f.severity == "CRITICAL"]) for a in assessments
@@ -540,13 +537,13 @@ class FlaskSecurityScanner:
             len([f for f in a.findings if f.severity == "MEDIUM"]) for a in assessments
         )
 
-        print(f"\n📊 FINDINGS SUMMARY")
+        print("\n📊 FINDINGS SUMMARY")
         print(f"├── 🚨 Critical: {total_critical}")
         print(f"├── ⚠️  High: {total_high}")
         print(f"├── 🟡 Medium: {total_medium}")
         print(f"└── 📋 Total Servers: {len(assessments)}")
 
-        print(f"\n🎯 RISK ASSESSMENT")
+        print("\n🎯 RISK ASSESSMENT")
         for assessment in assessments:
             if assessment.risk_score >= 200:
                 risk_icon = "🔴"
@@ -560,7 +557,7 @@ class FlaskSecurityScanner:
             print(f"{risk_icon} {assessment.url} (Score: {assessment.risk_score})")
 
         # Recommendations
-        print(f"\n💡 TOP RECOMMENDATIONS")
+        print("\n💡 TOP RECOMMENDATIONS")
         critical_findings = [f for a in assessments for f in a.findings if f.severity == "CRITICAL"]
         recommendations = set()
         for finding in critical_findings[:3]:  # Top 3 critical

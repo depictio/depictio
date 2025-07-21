@@ -4,8 +4,6 @@ Version 3: Progressive Loading System with Skeleton Components
 This version demonstrates independent loading for each component with different timing
 """
 
-import json
-import os
 import sys
 import time
 import uuid
@@ -350,7 +348,7 @@ def create_depictio_progressive_loading_app():
     uuid2 = generate_unique_index()
     uuid3 = generate_unique_index()
 
-    print(f"=== Progressive Loading Dashboard ===")
+    print("=== Progressive Loading Dashboard ===")
     print(f"Component UUIDs: {uuid1}, {uuid2}, {uuid3}")
 
     # Create initial skeleton components

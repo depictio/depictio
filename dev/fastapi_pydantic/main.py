@@ -1,8 +1,8 @@
-from typing import List, Optional, Any, Annotated
-from fastapi import FastAPI, HTTPException, Path
-from pydantic import BaseModel, Field, ConfigDict, field_serializer, BeforeValidator
+from typing import Annotated, Any, List, Optional
+
 from bson import ObjectId
-import pymongo
+from fastapi import FastAPI, HTTPException, Path
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 from pymongo import MongoClient
 
 

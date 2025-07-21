@@ -4,9 +4,10 @@ Test using data-grid attribute approach
 """
 
 import uuid
+
 import dash
-from dash import html, Input, Output, clientside_callback
 import dash_draggable
+from dash import Input, Output, html
 
 
 def generate_unique_index():

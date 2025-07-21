@@ -1,10 +1,11 @@
-import re
-from dash import html, Dash, dcc, Input, Output, State
-import dash_mantine_components as dmc
-import dash
 import json
 import os
+import re
+
 import bcrypt
+import dash
+import dash_mantine_components as dmc
+from dash import Dash, Input, Output, State, dcc, html
 
 
 # Dummy login function

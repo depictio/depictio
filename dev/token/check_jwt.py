@@ -1,4 +1,4 @@
-from jose import jwt, JWTError
+from jose import JWTError, jwt
 
 # Read your generated public key
 with open("dev/token/public_key.pem", "rb") as f:

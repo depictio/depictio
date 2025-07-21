@@ -4,9 +4,10 @@ Test DashboardItemResponsive with session storage
 """
 
 import uuid
+
 import dash
-from dash import html, Input, Output, State, dcc
 import dash_draggable
+from dash import Input, Output, State, dcc, html
 
 
 def generate_unique_index():

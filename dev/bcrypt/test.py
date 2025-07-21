@@ -1,6 +1,7 @@
+import logging
+
 import bcrypt
 import pymongo
-import logging
 
 # Setup logger
 logger = logging.getLogger(__name__)

@@ -7,13 +7,10 @@ and sample data files. It demonstrates how to set up a project with a single
 workflow and a single data collection.
 """
 
-import os
-import json
 import argparse
-import random
 import csv
-from pathlib import Path
-import shutil
+import os
+import random
 
 
 def create_directory_structure(base_dir):
@@ -71,7 +68,7 @@ def create_sample_data(run_dir):
 
 def create_config_file(base_dir, user_home_dir=None):
     """Create the Depictio project configuration file."""
-    print(f"Creating project configuration file...")
+    print("Creating project configuration file...")
 
     # Use the user's home directory if provided, otherwise use a placeholder
     if user_home_dir:
@@ -147,7 +144,7 @@ workflows:
 
 def create_readme(base_dir, config_path):
     """Create a README file with instructions."""
-    print(f"Creating README file...")
+    print("Creating README file...")
 
     readme_content = f"""# Depictio Example Project
 

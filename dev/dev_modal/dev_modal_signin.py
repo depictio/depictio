@@ -1,20 +1,21 @@
-from datetime import datetime
 import json
-import dash_bootstrap_components as dbc
-import re
-import dash
-from dash import html, dcc, ctx, MATCH, Input, Output, State, ALL
-import dash_mantine_components as dmc
-from dash_iconify import DashIconify
 import logging
+import re
+from datetime import datetime
+
+import dash
+import dash_bootstrap_components as dbc
+import dash_mantine_components as dmc
+from dash import ALL, MATCH, Input, Output, State, ctx, dcc, html
+from dash_iconify import DashIconify
 
 # set time format for logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
 import pymongo
-from depictio.api.v1.configs.config import settings, MONGODB_URL
 
+from depictio.api.v1.configs.config import settings
 
 client = pymongo.MongoClient("mongodb://localhost:27018/")
 db = client[settings.mongodb.db_name]
@@ -208,7 +209,7 @@ def create_dashboards_view(dashboards):
                         style={"flex": "1"},
                     ),
                     dmc.Button(
-                        f"View",
+                        "View",
                         id={"type": "view-dashboard-button", "index": dashboard["dashboard_id"]},
                         variant="outline",
                         color="dark",
@@ -363,7 +364,7 @@ def update_dashboards(
                 if dashboard["dashboard_id"] != index_confirm_delete
             ]
 
-    logging.info(f"TEST")
+    logging.info("TEST")
     logging.info(f"dashboards: {dashboards}")
 
     dashboards = convert_objectid_to_str(dashboards)

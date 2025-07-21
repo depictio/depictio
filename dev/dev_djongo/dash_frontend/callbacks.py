@@ -1,12 +1,11 @@
-from dash import Input, Output, State, callback_context
-import json
-import dash
-from dash.exceptions import PreventUpdate
 
-from auth_modals import auth_modals
-from header import create_header
-from layouts import home_layout, dashboard_layout, unauthorized_layout, error_layout
 import api_calls
+import dash
+from auth_modals import auth_modals
+from dash import Input, Output, State, callback_context
+from dash.exceptions import PreventUpdate
+from header import create_header
+from layouts import dashboard_layout, error_layout, home_layout, unauthorized_layout
 
 
 def register_callbacks(app):

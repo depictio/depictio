@@ -4,13 +4,14 @@ Simple prototype using dash-dynamic-grid-layout with basic components
 This version demonstrates a scatter plot, select dropdown, and metrics card
 """
 
+import json
 import uuid
+
 import dash
-from dash import html, Input, Output, State, dcc
 import dash_dynamic_grid_layout as dgl
 import dash_mantine_components as dmc
 import plotly.express as px
-import json
+from dash import Input, Output, dcc, html
 
 
 def generate_unique_index():
@@ -25,7 +26,7 @@ def create_simple_app():
     uuid2 = generate_unique_index()
     uuid3 = generate_unique_index()
 
-    print(f"=== Simple Dash Dynamic Grid Layout Demo ===")
+    print("=== Simple Dash Dynamic Grid Layout Demo ===")
     print(f"Component UUIDs: {uuid1}, {uuid2}, {uuid3}")
 
     # Sample data for the scatter plot

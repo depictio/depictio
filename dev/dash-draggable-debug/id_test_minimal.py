@@ -3,12 +3,12 @@
 Minimal test to identify ID serialization differences between Dash v2 and v3
 """
 
-import uuid
-import sys
-import dash
-from dash import html, Input, Output, callback
-import dash_draggable
 import json
+import uuid
+
+import dash
+import dash_draggable
+from dash import html
 
 
 def generate_unique_index():
@@ -38,7 +38,7 @@ def run_test(dash_version):
         ]
     }
 
-    print(f"Layout structure:")
+    print("Layout structure:")
     print(json.dumps(layout, indent=2))
 
     # Test children structure
@@ -65,7 +65,7 @@ def run_test(dash_version):
             isResizable=True,
             save=False,
         )
-        print(f"✓ ResponsiveGridLayout created successfully")
+        print("✓ ResponsiveGridLayout created successfully")
         print(f"  Grid ID: {grid.id}")
         print(f"  Grid children count: {len(grid.children) if grid.children else 0}")
         print(f"  Grid layouts: {grid.layouts}")
@@ -73,7 +73,7 @@ def run_test(dash_version):
         # Test if component can be serialized
         try:
             serialized = grid.to_plotly_json()
-            print(f"✓ Component serialization successful")
+            print("✓ Component serialization successful")
             print(f"  Serialized props keys: {list(serialized.get('props', {}).keys())}")
         except Exception as e:
             print(f"✗ Component serialization failed: {e}")

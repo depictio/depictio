@@ -16,7 +16,7 @@ __author__ = "Depictio Team"
 __description__ = "Secure Plotly code execution prototype"
 
 # Main exports
-from .secure_code_executor import SecureCodeExecutor, SecureCodeValidator
 from .plotly_prototype_app import create_app, main
+from .secure_code_executor import SecureCodeExecutor, SecureCodeValidator
 
 __all__ = ["SecureCodeExecutor", "SecureCodeValidator", "create_app", "main"]

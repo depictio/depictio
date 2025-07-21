@@ -1,8 +1,8 @@
-from dash import html, dcc
-import dash_bootstrap_components as dbc
-from dash.dependencies import Input, Output, State, MATCH
-import uuid
-import dash, json
+import json
+
+import dash
+from dash import html
+from dash.dependencies import Input, Output, State
 
 app = dash.Dash(__name__)
 

@@ -3,11 +3,12 @@
 Browser storage demo to visualize layouts in session storage
 """
 
-import uuid
-import dash
-from dash import html, Input, Output, State, dcc
-import dash_draggable
 import json
+import uuid
+
+import dash
+import dash_draggable
+from dash import Input, Output, dcc, html
 
 
 def generate_unique_index():

@@ -4,9 +4,10 @@ Test using DashboardItem component with explicit 'i' prop
 """
 
 import uuid
+
 import dash
-from dash import html, Input, Output, clientside_callback
 import dash_draggable
+from dash import Input, Output, html
 
 
 def generate_unique_index():

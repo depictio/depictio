@@ -3,12 +3,12 @@
 Debug component serialization differences between Dash versions
 """
 
-import uuid
-import dash
-from dash import html
-import dash_draggable
-import json
 import pprint
+import uuid
+
+import dash
+import dash_draggable
+from dash import html
 
 
 def generate_unique_index():
@@ -48,7 +48,7 @@ def debug_component_creation():
         ]
     }
 
-    print(f"Layout before ResponsiveGridLayout:")
+    print("Layout before ResponsiveGridLayout:")
     pprint.pprint(layout)
 
     # Create ResponsiveGridLayout
@@ -68,13 +68,13 @@ def debug_component_creation():
     for i, child in enumerate(grid.children):
         print(f"Child {i} after grid creation: id={child.id if hasattr(child, 'id') else 'NO ID'}")
 
-    print(f"Grid layouts after creation:")
+    print("Grid layouts after creation:")
     pprint.pprint(grid.layouts)
 
     # Check if we can access the to_plotly_json method
     try:
         serialized = grid.to_plotly_json()
-        print(f"Serialization successful")
+        print("Serialization successful")
 
         # Look at the props
         props = serialized.get("props", {})
@@ -94,7 +94,7 @@ def debug_component_creation():
 
         # Check layouts in serialized form
         serialized_layouts = props.get("layouts", {})
-        print(f"Serialized layouts:")
+        print("Serialized layouts:")
         for breakpoint, items in serialized_layouts.items():
             print(f"  {breakpoint}:")
             for j, item in enumerate(items):

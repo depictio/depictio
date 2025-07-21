@@ -22,8 +22,10 @@ app.layout = dmc.MantineProvider(
                 dmc.RangeSlider(
                     id="range1",
                     min=0,
-                    max=100,
-                    value=[25, 75],
+                    max=1,
+                    value=[0.25, 0.75],
+                    step=0.01,
+                    minRange=0.01,
                 ),
                 html.Div(id="output1"),
             ], p="md", mb="md"),

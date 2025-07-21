@@ -4,9 +4,10 @@ Test that exactly replicates what build_interactive creates
 """
 
 import uuid
+
 import dash
 import dash_mantine_components as dmc
-from dash import Input, Output, callback, html, dcc
+from dash import Input, Output, callback, dcc, html
 
 app = dash.Dash(__name__)
 

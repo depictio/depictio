@@ -5,14 +5,14 @@ Test script for version4_basic_rangeslider.py prototype
 This script verifies that the prototype can be imported and basic functionality works.
 """
 
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 def test_prototype_imports():
     """Test that all required imports work"""
     try:
-        from version4_basic_rangeslider import app, sample_data, mock_cols_json
         print("✓ All imports successful")
         return True
     except Exception as e:
@@ -22,7 +22,7 @@ def test_prototype_imports():
 def test_sample_data():
     """Test that sample data is properly structured"""
     try:
-        from version4_basic_rangeslider import sample_data, mock_cols_json
+        from version4_basic_rangeslider import mock_cols_json, sample_data
         
         # Check data structure
         assert sample_data.shape[0] > 0, "Sample data should not be empty"
@@ -44,9 +44,11 @@ def test_sample_data():
 def test_component_creation():
     """Test that RangeSlider component can be created"""
     try:
-        from depictio.dash.modules.interactive_component.utils import build_interactive
         import uuid
+
         import polars as pl
+
+        from depictio.dash.modules.interactive_component.utils import build_interactive
         
         # Create test data
         test_data = pl.DataFrame({

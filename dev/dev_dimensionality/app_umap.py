@@ -1,9 +1,9 @@
 import dash
-from dash import html, dcc, Input, Output
-import plotly.express as px
 import pandas as pd
-from sklearn.datasets import load_iris
+import plotly.express as px
 import umap
+from dash import Input, Output, dcc, html
+from sklearn.datasets import load_iris
 
 # Load Iris dataset
 iris = load_iris()

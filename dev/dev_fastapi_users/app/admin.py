@@ -1,14 +1,11 @@
 # app/admin.py
-from fastapi import APIRouter, Request, Depends, Form, HTTPException, status
+from pathlib import Path
+from typing import List
+
+from app.db import Group, User
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from fastapi.security import OAuth2PasswordRequestForm
-from typing import List, Optional
-import os
-from pathlib import Path
-
-from app.db import User, Group
-from app.users import auth_backend, fastapi_users, current_active_user
 
 # Set up templates directory - create it if it doesn't exist
 templates_dir = Path(__file__).parent.parent / "templates"
@@ -196,9 +193,9 @@ async def create_user(request: Request, user: User = Depends(get_admin_user)):
                 group_ids = [group_value]
 
         # Import necessary components
+        from app.db import get_user_db
         from app.schemas import UserCreate
         from app.users import get_user_manager
-        from app.db import get_user_db
 
         # Get the actual user_db and user_manager instances
         user_db = await anext(get_user_db())

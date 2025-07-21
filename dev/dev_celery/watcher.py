@@ -1,5 +1,5 @@
-import time
 import os
+import time
 
 while True:
     for file in os.listdir("."):

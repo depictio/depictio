@@ -1,9 +1,9 @@
-from flask import Flask, redirect, url_for, render_template, request, session
-from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user
+import os
+
 import dash
 from dash import dcc, html
-from dash.dependencies import Input, Output
-import os, sys
+from flask import Flask, redirect, render_template, request, session
+from flask_login import LoginManager, UserMixin, login_required, login_user, logout_user
 
 # Set up server and login manager
 server = Flask(__name__)

@@ -4,7 +4,7 @@ Background Animation Prototype - Using exact code from users_management.py
 
 import dash
 import dash_mantine_components as dmc
-from dash import dcc, html
+from dash import html
 
 # Initialize Dash app
 app = dash.Dash(__name__)

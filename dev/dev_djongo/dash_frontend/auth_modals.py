@@ -1,5 +1,5 @@
 import dash_bootstrap_components as dbc
-from dash import html, dcc
+from dash import html
 
 
 def create_login_modal():

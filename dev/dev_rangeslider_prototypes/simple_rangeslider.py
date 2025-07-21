@@ -5,6 +5,7 @@ Uses build_interactive function with minimal setup and single callback
 """
 
 import uuid
+
 import dash
 import dash_mantine_components as dmc
 import polars as pl

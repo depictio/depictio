@@ -3,12 +3,13 @@
 Test to examine component serialization and ID handling differences
 """
 
-import uuid
-import dash
-from dash import html
-import dash_draggable
 import json
 import pprint
+import uuid
+
+import dash
+import dash_draggable
+from dash import html
 
 
 def generate_unique_index():

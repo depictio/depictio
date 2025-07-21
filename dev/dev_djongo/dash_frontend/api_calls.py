@@ -1,5 +1,5 @@
+
 import requests
-import json
 
 # Django auth service base URL
 AUTH_API_BASE_URL = "http://localhost:8000/api/auth"

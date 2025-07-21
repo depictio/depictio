@@ -7,7 +7,7 @@ import uuid
 
 import dash
 import dash_draggable
-from dash import Input, Output, State, callback, dcc, html
+from dash import Input, Output, html
 
 
 # Generate UUID-based IDs like in depictio
@@ -41,7 +41,7 @@ initial_children = [
         id=f"box-{uuid1}",
         key=f"box-{uuid1}",
         children=[
-            html.H3(f"Component 1"),
+            html.H3("Component 1"),
             html.P(f"UUID: {uuid1}"),
             html.P("This should be draggable with UUID ID"),
         ],
@@ -51,7 +51,7 @@ initial_children = [
         id=f"box-{uuid2}",
         key=f"box-{uuid2}",
         children=[
-            html.H3(f"Component 2"),
+            html.H3("Component 2"),
             html.P(f"UUID: {uuid2}"),
             html.P("This should also be draggable with UUID ID"),
         ],

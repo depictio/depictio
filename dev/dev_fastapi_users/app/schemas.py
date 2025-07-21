@@ -1,9 +1,10 @@
 # app/schemas.py
+from datetime import datetime
+from typing import List, Optional
+
 from beanie import PydanticObjectId
 from fastapi_users import schemas
-from typing import List, Optional
 from pydantic import BaseModel
-from datetime import datetime
 
 
 class UserRead(schemas.BaseUser[PydanticObjectId]):

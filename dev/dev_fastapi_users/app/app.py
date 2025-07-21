@@ -1,17 +1,15 @@
 # app/app.py
 from contextlib import asynccontextmanager
+from pathlib import Path
 
+from app.admin import admin_router
+from app.db import Group, User, db
+from app.schemas import GroupCreate, GroupRead, GroupUpdate, UserCreate, UserRead, UserUpdate
+from app.users import auth_backend, current_active_user, fastapi_users, google_oauth_client
 from beanie import init_beanie
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-from pathlib import Path
-
-from app.db import User, Group, db
-from app.schemas import UserCreate, UserRead, UserUpdate, GroupCreate, GroupRead, GroupUpdate
-from app.users import auth_backend, current_active_user, fastapi_users, google_oauth_client, SECRET
-from app.admin import admin_router
 
 
 @asynccontextmanager

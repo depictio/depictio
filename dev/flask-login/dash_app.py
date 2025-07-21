@@ -1,13 +1,12 @@
-import pandas as pd
+import os
+import warnings
+
 import dash
+import pandas as pd
 from dash import dcc, html
 from dash.dependencies import Input, Output, State
-from werkzeug.security import generate_password_hash, check_password_hash
-import warnings
-from flask_login import login_user, logout_user, current_user, LoginManager
-from flask import Flask
-import os, sys
-from flask import session
+from flask import Flask, session
+from flask_login import LoginManager, login_user
 
 
 class User:
@@ -139,7 +138,6 @@ users = (
 )
 
 print(users)
-from flask import g, request
 
 
 @login_manager.user_loader

@@ -1,10 +1,10 @@
-from dash import html, dcc, Input, Output, State, ALL, MATCH, ctx, callback
+import dash
+import dash_ag_grid as dag
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
-import dash
-from dash_iconify import DashIconify
-import dash_ag_grid as dag
 import pandas as pd
+from dash import Input, Output, State, ctx, html
+from dash_iconify import DashIconify
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 

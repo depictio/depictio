@@ -1,7 +1,7 @@
-from dash import html, dcc, Dash
-import dash_draggable
-import dash.dependencies as dd
 import dash
+import dash.dependencies as dd
+import dash_draggable
+from dash import Dash, dcc, html
 
 app = Dash(__name__)
 

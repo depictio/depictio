@@ -1,5 +1,4 @@
 import asyncio
-import os
 from datetime import datetime
 from pathlib import Path
 
@@ -44,7 +43,7 @@ async def screenshot_dashboard():
 
     try:
         async with async_playwright() as p:
-            print(f"🚀 Launching browser...")
+            print("🚀 Launching browser...")
 
             # Launch browser with explicit args for better compatibility
             browser = await p.chromium.launch(

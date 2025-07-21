@@ -1,6 +1,6 @@
 import dash
-from dash import html, Input, Output, State, callback, ctx
 import dash_mantine_components as dmc
+from dash import Input, Output, State, callback
 from dash_iconify import DashIconify
 
 # Create the Dash app

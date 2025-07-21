@@ -1,8 +1,6 @@
+
 import dash_mantine_components as dmc
-import dash_ag_grid as dag
-from dash import Dash, html, Input, Output, State, callback
-import json
-import dash
+from dash import Dash, html
 
 app = Dash()
 

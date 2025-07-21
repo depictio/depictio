@@ -4,10 +4,8 @@ No Marks Test
 Test if the marks are causing the interaction issue
 """
 
-import uuid
 import dash
 import dash_mantine_components as dmc
-import polars as pl
 from dash import Input, Output, callback, html
 
 app = dash.Dash(__name__)

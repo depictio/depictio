@@ -1,18 +1,16 @@
+import random
+
 import dash
+import dash_bootstrap_components as dbc
 import dash_cytoscape as cyto
+import dash_leaflet as dl
+import dash_leaflet.express as dlx
+import pandas as pd
 
 # import dash_html_components as html
 # import dash_core_components as dcc
-from dash import dcc, html
-from dash import dash_table
+from dash import dash_table, html
 from dash.dependencies import Input, Output, State
-import dash_bootstrap_components as dbc
-import pandas as pd
-import numpy as np
-import random
-import dash_leaflet as dl
-import dash_leaflet.express as dlx
-from dash_extensions.javascript import arrow_function
 from utils import Graph, generate_metadata
 
 # Load extra layouts

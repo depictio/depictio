@@ -5,6 +5,7 @@ Compare a working direct DMC RangeSlider with a generated one using identical pr
 """
 
 import uuid
+
 import dash
 import dash_mantine_components as dmc
 import polars as pl

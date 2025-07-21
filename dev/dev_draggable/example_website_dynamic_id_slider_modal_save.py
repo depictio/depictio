@@ -1,16 +1,14 @@
-import dash
-from dash.dependencies import Input, Output, State
-from dash import html, dcc
-import dash_bootstrap_components as dbc
-import plotly.express as px
-import pandas as pd
-import dash_draggable
-from dash import dash_table
-import time
-import os, json
-import json
 import ast
+import json
+import os
 
+import dash
+import dash_bootstrap_components as dbc
+import dash_draggable
+import pandas as pd
+import plotly.express as px
+from dash import dcc, html
+from dash.dependencies import Input, Output, State
 
 external_stylesheets = [
     dbc.themes.BOOTSTRAP,

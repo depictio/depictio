@@ -1,5 +1,5 @@
 import dash_ag_grid as dag
-from dash import Dash, html, dcc
+from dash import Dash, dcc, html
 
 app = Dash(__name__)
 

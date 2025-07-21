@@ -1,9 +1,10 @@
+import inspect
+
 import dash
 import dash_core_components as dcc
 import dash_html_components as html
-from dash.dependencies import Input, Output
 import plotly.express as px
-import inspect
+from dash.dependencies import Input, Output
 
 # Define the available visualizations
 plotly_vizu_list = [px.scatter, px.line, px.bar, px.histogram, px.box]

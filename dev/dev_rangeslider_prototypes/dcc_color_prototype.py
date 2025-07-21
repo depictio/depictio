@@ -5,7 +5,7 @@ Test how to modify DCC Slider/RangeSlider colors through CSS
 """
 
 import dash
-from dash import dcc, html, Input, Output, callback
+from dash import Input, Output, callback, dcc, html
 
 app = dash.Dash(__name__)
 

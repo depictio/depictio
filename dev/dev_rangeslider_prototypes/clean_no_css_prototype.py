@@ -5,7 +5,7 @@ Test if marks show up without any custom styling
 """
 
 import dash
-from dash import dcc, html, Input, Output, callback
+from dash import Input, Output, callback, dcc, html
 
 app = dash.Dash(__name__)
 
