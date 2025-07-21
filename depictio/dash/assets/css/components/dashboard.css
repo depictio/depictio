@@ -11,25 +11,6 @@
     transition: border-color 0.2s ease !important;
 }
 
-/* Show resize handles on hover only */
-.react-grid-item:hover .react-resizable-handle {
-    opacity: 0.6 !important;
-    background-color: transparent !important;
-    border: none !important;
-}
-
-/* Corner handles (more visible) */
-.react-grid-item:hover .react-resizable-handle-se,
-.react-grid-item:hover .react-resizable-handle-sw,
-.react-grid-item:hover .react-resizable-handle-ne,
-.react-grid-item:hover .react-resizable-handle-nw {
-    opacity: 0.8 !important;
-    width: 12px !important;
-    height: 12px !important;
-    border-radius: 2px !important;
-    background-color: transparent !important;
-    border: none !important;
-}
 
 /* Remove redundant borders from inner content wrapper */
 .react-grid-item .dashboard-component-hover,
