@@ -53,7 +53,7 @@ def register_admin_notifications_callbacks(app):
                 if data.get("has_default_password", False):
                     # Show notification if admin has default password only for admin users
 
-                    check_user_url = f"{settings.fastapi.url}/depictio/api/v1/users/me"
+                    check_user_url = f"{settings.fastapi.url}/depictio/api/v1/auth/me"
                     user_response = requests.get(check_user_url, headers=headers, timeout=5)
                     if user_response.status_code == 200:
                         user_data = user_response.json()
