@@ -46,15 +46,17 @@
     min-height: fit-content !important;
 }
 
-/* Fix page-content container for projects page */
-#page-content {
+/* Fix page-content container ONLY for projects page */
+body[data-pathname="/projects"] #page-content,
+#page-content:has(#projects-list) {
     height: auto !important;
     max-height: none !important;
     overflow-y: auto !important;
 }
 
-/* Ensure containers on projects page can expand */
-.mantine-Container-root {
+/* Ensure containers ONLY on projects page can expand */
+body[data-pathname="/projects"] .mantine-Container-root,
+#page-content:has(#projects-list) .mantine-Container-root {
     height: auto !important;
     max-height: none !important;
     min-height: fit-content !important;
