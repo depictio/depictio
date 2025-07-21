@@ -579,7 +579,7 @@ layout = html.Div(
             closeOnClickOutside=True,
             size="lg",
             overlayProps={
-                "opacity": 0.02,  # Make overlay transparent so we can see our custom background
+                "opacity": 0.03,  # Make overlay transparent so we can see our custom background
                 "blur": 0,
             },
             # Ensure modal content is visible above background
