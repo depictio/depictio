@@ -1,0 +1,94 @@
+/* =============================================================================
+   DASHBOARD COMPONENTS
+   Layout and styling fixes for dashboard draggable components
+   ============================================================================= */
+
+/* Add constant border to outermost draggable container */
+.react-grid-item {
+    border: 2px solid var(--app-border-color, #ddd) !important;
+    border-radius: 8px !important;
+    background-color: var(--app-surface-color, #ffffff) !important;
+    transition: border-color 0.2s ease !important;
+}
+
+/* Show resize handles on hover only */
+.react-grid-item:hover .react-resizable-handle {
+    opacity: 0.6 !important;
+    background-color: transparent !important;
+    border: none !important;
+}
+
+/* Corner handles (more visible) */
+.react-grid-item:hover .react-resizable-handle-se,
+.react-grid-item:hover .react-resizable-handle-sw,
+.react-grid-item:hover .react-resizable-handle-ne,
+.react-grid-item:hover .react-resizable-handle-nw {
+    opacity: 0.8 !important;
+    width: 12px !important;
+    height: 12px !important;
+    border-radius: 2px !important;
+    background-color: transparent !important;
+    border: none !important;
+}
+
+/* Remove redundant borders from inner content wrapper */
+.react-grid-item .dashboard-component-hover,
+.react-grid-item [id*="content-box-"] {
+    border: none !important;
+    box-shadow: none !important;
+    padding: 5px !important;
+}
+
+/* Remove borders from nested card components */
+.react-grid-item .card {
+    border: none !important;
+    box-shadow: none !important;
+    background-color: transparent !important;
+}
+
+/* Remove borders from Mantine Card within the component */
+.react-grid-item .mantine-Card-root {
+    border: none !important;
+    box-shadow: none !important;
+    background-color: transparent !important;
+}
+
+/* Clean up card-body styling */
+.react-grid-item .card-body {
+    padding: 0px !important;
+    border: none !important;
+    background-color: transparent !important;
+}
+
+/* Ensure content takes full space without additional padding/margins */
+.react-grid-item .mantine-Stack-root {
+    height: 100% !important;
+}
+
+/* Style the action buttons container */
+.react-grid-item .mantine-Group-root {
+    margin-left: 8px !important;
+    margin-bottom: 8px !important;
+}
+
+/* Ensure the main content area uses available space efficiently */
+.react-grid-item .mantine-Card-root {
+    height: calc(100% - 40px) !important; /* Account for action buttons */
+    margin: 0 !important;
+    padding: 12px !important;
+}
+
+/* Active/selected state for grid items - Theme compliant grey/black colors */
+.react-grid-item.react-grid-item-dragging {
+    border-color: var(--app-text-color, #666) !important;
+    border-width: 3px !important;
+    box-shadow: 0 4px 16px rgba(102, 102, 102, 0.3) !important;
+    background-color: var(--app-surface-color, #ffffff) !important;
+}
+
+.react-grid-item.react-grid-item-resizing {
+    border-color: var(--app-text-color, #666) !important;
+    border-width: 3px !important;
+    box-shadow: 0 4px 16px rgba(102, 102, 102, 0.3) !important;
+    background-color: var(--app-surface-color, #ffffff) !important;
+}

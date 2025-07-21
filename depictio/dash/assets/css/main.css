@@ -20,6 +20,7 @@
 @import url('./components/clipboard.css');
 @import url('./components/sliders.css');
 @import url('./components/projects.css');
+@import url('./components/dashboard.css');
 
 /* Utilities */
 @import url('./utilities/fouc-prevention.css');
