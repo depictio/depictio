@@ -1,0 +1,67 @@
+/* =============================================================================
+   SLIDER COMPONENTS CSS
+   Custom styling for DCC Slider and RangeSlider components with color customization
+   ============================================================================= */
+
+/* Custom slider color styling using CSS variables */
+/* This allows dynamic color application from JavaScript */
+
+[class*="slider-custom"] .rc-slider-track {
+    background-color: var(--custom-slider-color) !important;
+}
+
+[class*="slider-custom"] .rc-slider-handle {
+    border-color: var(--custom-slider-color) !important;
+}
+
+[class*="slider-custom"] .rc-slider-handle:hover {
+    border-color: var(--custom-slider-color) !important;
+    opacity: 0.8;
+}
+
+[class*="slider-custom"] .rc-slider-handle:focus {
+    border-color: var(--custom-slider-color) !important;
+    box-shadow: 0 0 0 5px rgba(var(--custom-slider-color-rgb), 0.2) !important;
+}
+
+/* Slider dots (step indicators) - was missing from original */
+[class*="slider-custom"] .rc-slider-dot {
+    border-color: var(--custom-slider-color) !important;
+}
+
+[class*="slider-custom"] .rc-slider-dot-active {
+    border-color: var(--custom-slider-color) !important;
+    background-color: var(--custom-slider-color) !important;
+}
+
+/* Only add essential spacing for marks - no positioning overrides */
+[class*="slider-custom"] .rc-slider {
+    padding-bottom: 25px !important;
+}
+
+/* Default slider colors for when no custom color is applied */
+.rc-slider-track {
+    background-color: #1976d2;
+}
+
+.rc-slider-handle {
+    border-color: #1976d2;
+}
+
+.rc-slider-handle:hover {
+    border-color: #1565c0;
+}
+
+.rc-slider-handle:focus {
+    border-color: #1565c0;
+    box-shadow: 0 0 0 5px rgba(25, 118, 210, 0.2);
+}
+
+.rc-slider-dot {
+    border-color: #1976d2;
+}
+
+.rc-slider-dot-active {
+    border-color: #1976d2;
+    background-color: #1976d2;
+}

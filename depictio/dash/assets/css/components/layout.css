@@ -3,13 +3,45 @@
    Layout and navigation components styling
    ============================================================================= */
 
-/* Dashboard offcanvas background */
+/* Dashboard offcanvas background and animations */
 #offcanvas-parameters,
 .dashboard-offcanvas,
 .offcanvas {
     background-color: var(--app-surface-color, var(--depictio-surface-light)) !important;
     color: var(--app-text-color, var(--depictio-text-light)) !important;
-    transition: background-color 0.2s ease, color 0.2s ease;
+    transition: transform 0.3s ease-in-out, background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Ensure offcanvas slide animations are enabled - override theme initialization */
+.offcanvas.offcanvas-end,
+#offcanvas-parameters.offcanvas-end,
+.dashboard-offcanvas.offcanvas-end {
+    transition: transform 0.3s ease-in-out !important;
+}
+
+.offcanvas.offcanvas-start,
+#offcanvas-parameters.offcanvas-start,
+.dashboard-offcanvas.offcanvas-start {
+    transition: transform 0.3s ease-in-out !important;
+}
+
+.offcanvas.offcanvas-top,
+#offcanvas-parameters.offcanvas-top,
+.dashboard-offcanvas.offcanvas-top {
+    transition: transform 0.3s ease-in-out !important;
+}
+
+.offcanvas.offcanvas-bottom,
+#offcanvas-parameters.offcanvas-bottom,
+.dashboard-offcanvas.offcanvas-bottom {
+    transition: transform 0.3s ease-in-out !important;
+}
+
+/* Force offcanvas animations even during theme initialization */
+.theme-initializing .offcanvas,
+.theme-initializing #offcanvas-parameters,
+.theme-initializing .dashboard-offcanvas {
+    transition: transform 0.3s ease-in-out !important;
 }
 
 #offcanvas-parameters .offcanvas-header,
