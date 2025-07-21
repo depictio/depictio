@@ -9,7 +9,6 @@ import dash_mantine_components as dmc
 from dash import Input, Output, dcc, get_app, html
 
 from depictio.api.v1.configs.logging_init import logger
-from depictio.dash.colors import colors
 
 
 def _load_svg_content():
@@ -102,7 +101,11 @@ def create_loading_progress_display(dashboard_id: str):
                         "Loading dashboard components...",
                         size="md",
                         c="gray",
-                        style={"textAlign": "center", "fontWeight": 500},
+                        style={
+                            "textAlign": "center",
+                            "fontWeight": 500,
+                            "color": "var(--app-text-color, gray)",
+                        },
                     ),
                     # Animated Depictio logo
                     html.Div(
@@ -138,13 +141,13 @@ def create_loading_progress_display(dashboard_id: str):
             "left": "50%",
             "transform": "translate(-50%, -50%)",
             "zIndex": 1000,
-            "backgroundColor": "rgba(255, 255, 255, 0.98)",
+            "backgroundColor": "var(--app-surface-color, rgba(255, 255, 255, 0.98))",
             "padding": "40px 50px",
             "borderRadius": "12px",
             "boxShadow": "0 8px 25px rgba(0,0,0,0.15)",
             "minWidth": "500px",
             "display": "block",
-            "border": f"1px solid {colors['purple']}",
+            "border": "1px solid var(--app-border-color, #ddd)",
         },
     )
 
@@ -176,7 +179,11 @@ def create_fade_out_progress_display(dashboard_id: str):
                         "Loading dashboard components...",
                         size="md",
                         c="gray",
-                        style={"textAlign": "center", "fontWeight": 500},
+                        style={
+                            "textAlign": "center",
+                            "fontWeight": 500,
+                            "color": "var(--app-text-color, gray)",
+                        },
                     ),
                     # Animated Depictio logo
                     html.Div(
@@ -212,13 +219,13 @@ def create_fade_out_progress_display(dashboard_id: str):
             "left": "50%",
             "transform": "translate(-50%, -50%)",
             "zIndex": 1000,
-            "backgroundColor": "rgba(255, 255, 255, 0.98)",
+            "backgroundColor": "var(--app-surface-color, rgba(255, 255, 255, 0.98))",
             "padding": "40px 50px",
             "borderRadius": "12px",
             "boxShadow": "0 8px 25px rgba(0,0,0,0.15)",
             "minWidth": "500px",
             "display": "block",
-            "border": f"1px solid {colors['purple']}",
+            "border": "1px solid var(--app-border-color, #ddd)",
         },
     )
 
@@ -369,162 +376,34 @@ def register_progressive_loading_callbacks(app):
         prevent_initial_call=True,
     )
 
-    # Simple clientside callback for loading animation effects
+    # Simple callback to hide the loading progress overlay after dashboard loads
     app.clientside_callback(
         """
         function(pathname) {
-            console.log('🔄 Progressive loading triggered for path:', pathname);
-
             // Only run on dashboard pages
             if (!pathname || !pathname.startsWith('/dashboard/')) {
                 return window.dash_clientside.no_update;
             }
 
-            // Wait for DOM to be ready
+            // Wait for components to start loading, then hide the progress overlay
             setTimeout(() => {
-                console.log('🔍 Looking for dashboard components...');
+                console.log('🔍 Looking for loading progress containers to hide...');
 
-                // Find all draggable components
-                const draggableComponents = document.querySelectorAll('[id^="box-"]');
-                console.log('Found', draggableComponents.length, 'draggable components');
+                const progressContainers = document.querySelectorAll('[id*="loading-progress-container"]');
+                console.log('Found', progressContainers.length, 'progress containers');
 
-                // Add progressive loading animation to each component
-                draggableComponents.forEach((component, index) => {
-                    const delay = (index + 1) * 300; // Stagger by 300ms
+                progressContainers.forEach(container => {
+                    // Remove fade-in class and add fade-out class to trigger animation
+                    container.classList.remove('loading-progress-fade-in');
+                    container.classList.add('loading-progress-fade-out');
 
-                    // Initially hide the component content and show skeleton
-                    component.style.opacity = '0';
-                    component.style.transform = 'translateY(20px)';
-                    component.style.transition = 'opacity 0.6s ease-in-out, transform 0.6s ease-in-out';
-
-                    // Add loading overlay inside the component
-                    const contentDiv = component.querySelector('[id^="content-"]');
-                    if (contentDiv) {
-                        // Create loading overlay with working spinner
-                        const loadingOverlay = document.createElement('div');
-                        loadingOverlay.id = `loading-overlay-${index}`;
-                        loadingOverlay.style.cssText = `
-                            position: absolute;
-                            top: 0;
-                            left: 0;
-                            right: 0;
-                            bottom: 0;
-                            background: rgba(255, 255, 255, 0.9);
-                            display: flex;
-                            align-items: center;
-                            justify-content: center;
-                            z-index: 1000;
-                            border-radius: 5px;
-                        `;
-
-                        // Create spinner and text
-                        const spinnerContainer = document.createElement('div');
-                        spinnerContainer.style.cssText = 'text-align: center;';
-
-                        const spinner = document.createElement('div');
-                        // Use different colors for each component to create rainbow effect
-                        const depictioColors = ['#9966CC', '#7A5DC7', '#6495ED', '#45B8AC', '#8BC34A', '#F9CB40', '#F68B33'];
-                        const spinnerColor = depictioColors[index % depictioColors.length];
-                        spinner.style.cssText = `
-                            width: 32px;
-                            height: 32px;
-                            border: 3px solid #f3f3f3;
-                            border-top: 3px solid ${spinnerColor};
-                            border-radius: 50%;
-                            animation: spin 1s linear infinite;
-                            margin: 0 auto 10px auto;
-                        `;
-
-                        const text = document.createElement('div');
-                        text.textContent = 'Loading component...';
-                        text.style.cssText = 'color: #666; font-size: 14px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;';
-
-                        // Add CSS animations if not already added
-                        if (!document.querySelector('#loading-animations-css')) {
-                            const style = document.createElement('style');
-                            style.id = 'loading-animations-css';
-                            style.textContent = `
-                                @keyframes spin {
-                                    0% { transform: rotate(0deg); }
-                                    100% { transform: rotate(360deg); }
-                                }
-                                @keyframes logoSpin {
-                                    0% { transform: rotate(0deg); }
-                                    100% { transform: rotate(360deg); }
-                                }
-                                @keyframes triangleRotate {
-                                    0% { transform: rotate(0deg); opacity: 0.6; }
-                                    50% { opacity: 1; }
-                                    100% { transform: rotate(360deg); opacity: 0.6; }
-                                }
-                                @keyframes shimmer {
-                                    0% { transform: translateX(-100%); }
-                                    100% { transform: translateX(100%); }
-                                }
-                                @keyframes trianglePulse {
-                                    0%, 100% { transform: scale(1); opacity: 0.7; }
-                                    50% { transform: scale(1.5); opacity: 1; }
-                                }
-                            `;
-                            document.head.appendChild(style);
-                        }
-
-                        spinnerContainer.appendChild(spinner);
-                        spinnerContainer.appendChild(text);
-                        loadingOverlay.appendChild(spinnerContainer);
-
-                        // Make content div relative for overlay positioning
-                        contentDiv.style.position = 'relative';
-                        contentDiv.appendChild(loadingOverlay);
-
-                        // Show the component with loading overlay
-                        component.style.opacity = '1';
-                        component.style.transform = 'translateY(0)';
-
-                        // After delay, remove loading overlay
-                        setTimeout(() => {
-                            console.log(`Removing loading overlay for component ${index}...`);
-
-                            // Fade out loading overlay
-                            loadingOverlay.style.transition = 'opacity 0.3s ease-in-out';
-                            loadingOverlay.style.opacity = '0';
-
-                            setTimeout(() => {
-                                // Remove loading overlay completely
-                                if (loadingOverlay.parentNode) {
-                                    loadingOverlay.parentNode.removeChild(loadingOverlay);
-                                }
-                                console.log(`Component ${index} fully loaded`);
-
-                                // If this is the last component, hide the progress bar
-                                if (index === draggableComponents.length - 1) {
-                                    console.log('🎉 All components loaded, hiding progress bar');
-
-                                    const progressContainers = document.querySelectorAll('[id*="loading-progress-container"]');
-                                    progressContainers.forEach(container => {
-                                        // Remove fade-in class and add fade-out class to trigger animation
-                                        container.classList.remove('loading-progress-fade-in');
-                                        container.classList.add('loading-progress-fade-out');
-
-                                        // After animation completes, hide the element
-                                        setTimeout(() => {
-                                            container.style.display = 'none';
-                                        }, 300); // Match the CSS animation duration
-                                    });
-                                }
-                            }, 300);
-
-                        }, delay);
-                    } else {
-                        // Fallback: just show the component normally
-                        setTimeout(() => {
-                            component.style.opacity = '1';
-                            component.style.transform = 'translateY(0)';
-                        }, delay);
-                    }
+                    // After animation completes, hide the element
+                    setTimeout(() => {
+                        container.style.display = 'none';
+                        console.log('✅ Progress container hidden');
+                    }, 300); // Match the CSS animation duration
                 });
-
-            }, 100); // Small delay to ensure DOM is ready
+            }, 2000); // Wait 2 seconds for dashboard to start loading
 
             return window.dash_clientside.no_update;
         }
@@ -534,4 +413,4 @@ def register_progressive_loading_callbacks(app):
         prevent_initial_call=True,
     )
 
-    logger.info("Simple progressive loading callbacks registered successfully")
+    logger.info("Progressive loading callbacks registered successfully")

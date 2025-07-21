@@ -6,6 +6,8 @@ This module provides skeleton placeholders that match the structure of actual co
 import dash_mantine_components as dmc
 from dash import html
 
+from depictio.dash.colors import colors
+
 
 def create_skeleton_edit_buttons(component_type="figure", component_uuid=None):
     """Create skeleton edit buttons that match the actual edit button structure."""
@@ -46,27 +48,25 @@ def create_skeleton_figure(component_uuid, component_metadata=None):
                                 style={"border": "1px solid #e0e0e0"},
                             ),
                             # Loading indicator
-                            html.Div(
-                                [
-                                    dmc.Loader(size="md", color="blue"),
-                                    dmc.Text(
-                                        f"Loading {visu_type} visualization...",
-                                        size="sm",
-                                        c="gray",
-                                        style={"marginLeft": "10px"},
-                                    ),
-                                ],
+                            dmc.Paper(
+                                dmc.Group(
+                                    [
+                                        dmc.Loader(size="md", color="grape"),
+                                        dmc.Text(
+                                            f"Loading {visu_type} visualization...", size="sm"
+                                        ),
+                                    ],
+                                    gap="sm",
+                                ),
+                                withBorder=True,
+                                radius="md",
+                                p="md",
                                 style={
                                     "position": "absolute",
                                     "top": "50%",
                                     "left": "50%",
                                     "transform": "translate(-50%, -50%)",
-                                    "display": "flex",
-                                    "alignItems": "center",
-                                    "backgroundColor": "rgba(255, 255, 255, 0.9)",
-                                    "padding": "10px",
-                                    "borderRadius": "5px",
-                                    "boxShadow": "0 2px 8px rgba(0,0,0,0.1)",
+                                    "zIndex": 1000,
                                 },
                             ),
                         ],
@@ -170,27 +170,23 @@ def create_skeleton_table(component_uuid, component_metadata=None):
                         style={"marginTop": "10px", "justifyContent": "center"},
                     ),
                     # Loading indicator
-                    html.Div(
-                        [
-                            dmc.Loader(size="md", color="orange"),
-                            dmc.Text(
-                                "Loading table data...",
-                                size="sm",
-                                c="gray",
-                                style={"marginLeft": "10px"},
-                            ),
-                        ],
+                    dmc.Paper(
+                        dmc.Group(
+                            [
+                                dmc.Loader(size="md", color="green"),
+                                dmc.Text("Loading table data...", size="sm"),
+                            ],
+                            gap="sm",
+                        ),
+                        withBorder=True,
+                        radius="md",
+                        p="md",
                         style={
                             "position": "absolute",
                             "top": "50%",
                             "left": "50%",
                             "transform": "translate(-50%, -50%)",
-                            "display": "flex",
-                            "alignItems": "center",
-                            "backgroundColor": "rgba(255, 255, 255, 0.9)",
-                            "padding": "10px",
-                            "borderRadius": "5px",
-                            "boxShadow": "0 2px 8px rgba(0,0,0,0.1)",
+                            "zIndex": 1000,
                         },
                     ),
                 ],
@@ -282,27 +278,23 @@ def create_skeleton_interactive(component_uuid, component_metadata=None):
                         gap="md",
                     ),
                     # Loading indicator
-                    html.Div(
-                        [
-                            dmc.Loader(size="md", color="violet"),
-                            dmc.Text(
-                                "Loading interactive component...",
-                                size="sm",
-                                c="gray",
-                                style={"marginLeft": "10px"},
-                            ),
-                        ],
+                    dmc.Paper(
+                        dmc.Group(
+                            [
+                                dmc.Loader(size="xl", color="indigo"),
+                                dmc.Text("Loading interactive component...", size="sm"),
+                            ],
+                            gap="sm",
+                        ),
+                        withBorder=True,
+                        radius="md",
+                        p="md",
                         style={
                             "position": "absolute",
                             "top": "50%",
                             "left": "50%",
                             "transform": "translate(-50%, -50%)",
-                            "display": "flex",
-                            "alignItems": "center",
-                            "backgroundColor": "rgba(255, 255, 255, 0.9)",
-                            "padding": "10px",
-                            "borderRadius": "5px",
-                            "boxShadow": "0 2px 8px rgba(0,0,0,0.1)",
+                            "zIndex": 1000,
                         },
                     ),
                 ],
@@ -385,22 +377,15 @@ def create_skeleton_card(component_uuid, component_metadata=None):
                                 style={"marginTop": "15px"},
                             ),
                             # Loading indicator
-                            html.Div(
-                                [
-                                    dmc.Loader(size="sm", color="green"),
-                                    dmc.Text(
-                                        "Loading card...",
-                                        size="sm",
-                                        c="gray",
-                                        style={"marginLeft": "10px"},
-                                    ),
-                                ],
-                                style={
-                                    "display": "flex",
-                                    "alignItems": "center",
-                                    "justifyContent": "center",
-                                    "marginTop": "10px",
-                                },
+                            dmc.Center(
+                                dmc.Group(
+                                    [
+                                        dmc.Loader(size="sm", color=colors["violet"]),
+                                        dmc.Text("Loading card...", size="sm"),
+                                    ],
+                                    gap="sm",
+                                ),
+                                mt="md",
                             ),
                         ],
                         gap="md",
@@ -463,27 +448,23 @@ def create_skeleton_jbrowse(component_uuid, component_metadata=None):
                                 style={"border": "1px solid #e0e0e0"},
                             ),
                             # Loading indicator
-                            html.Div(
-                                [
-                                    dmc.Loader(size="md", color="teal"),
-                                    dmc.Text(
-                                        "Loading genome browser...",
-                                        size="sm",
-                                        c="gray",
-                                        style={"marginLeft": "10px"},
-                                    ),
-                                ],
+                            dmc.Paper(
+                                dmc.Group(
+                                    [
+                                        dmc.Loader(size="md", color="yellow"),
+                                        dmc.Text("Loading genome browser...", size="sm"),
+                                    ],
+                                    gap="sm",
+                                ),
+                                withBorder=True,
+                                radius="md",
+                                p="md",
                                 style={
                                     "position": "absolute",
                                     "top": "50%",
                                     "left": "50%",
                                     "transform": "translate(-50%, -50%)",
-                                    "display": "flex",
-                                    "alignItems": "center",
-                                    "backgroundColor": "rgba(255, 255, 255, 0.9)",
-                                    "padding": "10px",
-                                    "borderRadius": "5px",
-                                    "boxShadow": "0 2px 8px rgba(0,0,0,0.1)",
+                                    "zIndex": 1000,
                                 },
                             ),
                         ],
@@ -538,17 +519,15 @@ def create_skeleton_component(component_type, component_uuid, component_metadata
                     ],
                     gap="md",
                 ),
-                html.Div(
-                    [
-                        dmc.Loader(size="md", color="blue"),
-                        dmc.Text(f"Loading {component_type}...", size="sm", c="gray"),
-                    ],
-                    style={
-                        "display": "flex",
-                        "alignItems": "center",
-                        "justifyContent": "center",
-                        "marginTop": "10px",
-                    },
+                dmc.Center(
+                    dmc.Group(
+                        [
+                            dmc.Loader(size="md", color="gray"),
+                            dmc.Text(f"Loading {component_type}...", size="sm"),
+                        ],
+                        gap="sm",
+                    ),
+                    mt="md",
                 ),
             ],
             style={
