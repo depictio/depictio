@@ -250,12 +250,26 @@ def register_callbacks_save(app):
             unique_metadata = dashboard_data.get("stored_metadata", unique_metadata)
             # logger.info(f"Unique metadata after using draggable layout metadata: {unique_metadata}")
 
-        # Convert layout data format from list to dict if needed (dash-dynamic-grid-layout compatibility)
-        if isinstance(stored_layout_data, list):
-            # Convert list format to dict format with 'lg' breakpoint
-            stored_layout_data = {"lg": stored_layout_data}
-        elif stored_layout_data is None:
-            stored_layout_data = {"lg": []}
+        # Debug logging for layout data
+        logger.info(f"🔍 SAVE DEBUG - stored_layout_data received: {stored_layout_data}")
+        logger.info(f"🔍 SAVE DEBUG - type: {type(stored_layout_data)}")
+        logger.info(f"🔍 SAVE DEBUG - triggered_id: {triggered_id}")
+
+        # Ensure layout data is in list format - no backward compatibility
+        if stored_layout_data is None:
+            stored_layout_data = []
+            logger.info("⚠️ SAVE DEBUG - stored_layout_data was None, set to empty list")
+
+        # If layout data is empty but we have existing dashboard data, preserve the existing layout
+        if not stored_layout_data and dashboard_data and dashboard_data.get("stored_layout_data"):
+            existing_layout = dashboard_data.get("stored_layout_data")
+            if isinstance(existing_layout, list):
+                stored_layout_data = existing_layout
+                logger.info(f"🔄 SAVE DEBUG - preserved existing layout: {stored_layout_data}")
+            else:
+                logger.warning(
+                    f"⚠️ SAVE DEBUG - existing layout is not a list: {type(existing_layout)}"
+                )
 
         updated_dashboard_data = {
             "stored_metadata": unique_metadata,

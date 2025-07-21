@@ -590,18 +590,6 @@ def design_header(data, local_store):
                 storage_type="memory",
                 data=False,
             ),
-            # Depictio favicon - visible when sidebar is collapsed
-            html.Img(
-                id="header-favicon",
-                src=dash.get_asset_url("images/icons/favicon.ico"),
-                style={
-                    "height": "24px",
-                    "width": "24px",
-                    "marginLeft": "8px",
-                    "marginRight": "5px",
-                    "display": "none",  # Initially hidden, shown when sidebar is collapsed
-                },
-            ),
             dmc.ActionIcon(
                 DashIconify(
                     id="sidebar-icon",
@@ -623,20 +611,50 @@ def design_header(data, local_store):
         [
             # Left section - sidebar button and badges
             dmc.Group(
-                [button_menu, card_section],
+                [
+                    button_menu,
+                    card_section,
+                ],
                 gap="xs",
                 style={"minWidth": "fit-content", "flexShrink": 0},  # Prevent shrinking
             ),
-            # Center section - title (with flex grow to take available space)
-            dmc.Title(
-                f"{data['title']}",
-                order=1,
-                id="dashboard-title",
+            # Center section - title with logo positioned to stick to its left
+            html.Div(
+                [
+                    dmc.Group(
+                        [
+                            # Depictio favicon - positioned immediately to the left of title
+                            html.Img(
+                                id="header-favicon",
+                                src=dash.get_asset_url("images/icons/favicon.ico"),
+                                style={
+                                    "height": "24px",
+                                    "width": "24px",
+                                    "display": "none",  # Initially hidden, shown when sidebar is collapsed
+                                },
+                            ),
+                            dmc.Title(
+                                f"{data['title']}",
+                                order=1,
+                                id="dashboard-title",
+                                style={
+                                    "fontWeight": "bold",
+                                    "fontSize": "24px",
+                                    "margin": "0",
+                                },
+                            ),
+                        ],
+                        gap="md",
+                        align="center",
+                        style={"display": "inline-flex", "alignItems": "center"},
+                    )
+                ],
                 style={
-                    "fontWeight": "bold",
-                    "fontSize": "24px",
-                    "textAlign": "center",
-                    "flex": "1",  # Take remaining space
+                    "flex": "1",
+                    "display": "flex",
+                    "justifyContent": "center",
+                    "alignItems": "center",
+                    "minWidth": 0,
                 },
             ),
             # Right section - action buttons

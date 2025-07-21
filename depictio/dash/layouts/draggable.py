@@ -31,35 +31,102 @@ from depictio.dash.utils import (
 )
 
 # Mapping of component types to their respective dimensions (width and height)
+# Adjusted for 96-column grid with rowHeight=10 - default 14x14 for all components
 component_dimensions = {
-    "card": {"w": 2, "h": 5},
-    "interactive": {"w": 5, "h": 5},
-    "figure": {"w": 6, "h": 14},
-    "table": {"w": 6, "h": 14},
+    "card": {"w": 14, "h": 14},
+    "interactive": {"w": 14, "h": 14},
+    "figure": {"w": 14, "h": 14},
+    "table": {"w": 14, "h": 14},
 }
-required_breakpoints = ["lg"]
-# required_breakpoints = ["xl", "lg", "sm", "md", "xs", "xxs"]
+# No longer using breakpoints - working with direct list format
 
 
 def calculate_new_layout_position(child_type, existing_layouts, child_id, n):
     """Calculate position for new layout item based on existing ones and type."""
     # Get the default dimensions from the type
-    logger.info(f"Calculating new layout position for {child_type} with {n} existing components")
-    dimensions = component_dimensions.get(child_type, {"w": 6, "h": 5})  # Default if type not found
-    logger.info(f"Dimensions: {dimensions}")
+    logger.info(
+        f"🔄 CALCULATE_NEW_LAYOUT_POSITION CALLED: {child_type} with {n} existing components"
+    )
+    dimensions = component_dimensions.get(
+        child_type, {"w": 14, "h": 14}
+    )  # Default 14x14 for 96-column grid
+    logger.info(f"📐 Selected dimensions: {dimensions} for {child_type}")
+    logger.info(f"📋 Existing layouts: {existing_layouts}")
 
-    # Simple positioning logic: place items in rows based on their index
-    columns_per_row = 12  # Assuming a 12-column layout grid
-    row = n // (
-        columns_per_row // dimensions["w"]
-    )  # Integer division to find row based on how many fit per row
-    col_position = (n % (columns_per_row // dimensions["w"])) * dimensions[
-        "w"
-    ]  # Modulo for column position
+    columns_per_row = 96
+    components_per_row = columns_per_row // dimensions["w"]
+    if components_per_row == 0:
+        components_per_row = 1
+
+    # Find the next available position by checking actual existing layouts
+    if existing_layouts:
+        # Find the maximum bottom position (y + height) of all existing components
+        max_bottom = 0
+        for layout in existing_layouts:
+            if isinstance(layout, dict) and "y" in layout and "h" in layout:
+                bottom = layout["y"] + layout["h"]
+                max_bottom = max(max_bottom, bottom)
+
+        logger.info(f"📏 Maximum bottom position of existing components: {max_bottom}")
+
+        # Try different y positions starting from 0 to find the first available spot
+        y_position = 0
+        found_position = False
+
+        # Check every possible y position, but limit attempts for performance
+        max_attempts = min(max_bottom + dimensions["h"] + 10, 200)  # Cap at reasonable limit
+
+        while y_position <= max_attempts and not found_position:
+            # Check if we can fit the new component at this y position
+
+            # For each possible x position in this row
+            for x_position in range(0, columns_per_row - dimensions["w"] + 1):
+                # Check if this position (x, y, w, h) overlaps with any existing component
+                position_available = True
+                new_x_range = set(range(x_position, x_position + dimensions["w"]))
+                new_y_range = set(range(y_position, y_position + dimensions["h"]))
+
+                for layout in existing_layouts:
+                    if isinstance(layout, dict):
+                        existing_x = layout.get("x", 0)
+                        existing_y = layout.get("y", 0)
+                        existing_w = layout.get("w", 14)
+                        existing_h = layout.get("h", 14)
+
+                        existing_x_range = set(range(existing_x, existing_x + existing_w))
+                        existing_y_range = set(range(existing_y, existing_y + existing_h))
+
+                        # Check for overlap
+                        if new_x_range.intersection(existing_x_range) and new_y_range.intersection(
+                            existing_y_range
+                        ):
+                            position_available = False
+                            break
+
+                if position_available:
+                    col_position = x_position
+                    found_position = True
+                    logger.info(f"✅ Found available position: x={col_position}, y={y_position}")
+                    break
+
+            if not found_position:
+                y_position += 1  # Try next row
+
+        # If we still haven't found a position, place below everything
+        if not found_position:
+            col_position = 0
+            y_position = max_bottom
+            logger.info(f"⬇️ Fallback: placing below all components at y={y_position}")
+    else:
+        # No existing components, place at origin
+        col_position = 0
+        y_position = 0
+
+    logger.info(f"📍 Calculated position: x={col_position}, y={y_position}")
 
     return {
         "x": col_position,
-        "y": row * dimensions["h"],  # Stacking rows based on height of each component
+        "y": y_position,
         "w": dimensions["w"],
         "h": dimensions["h"],
         "i": child_id,
@@ -483,49 +550,28 @@ def register_callbacks_draggable(app):
         # Extract dashboard_id from the pathname
         dashboard_id = pathname.split("/")[-1]
 
-        # Helper function to convert between formats
-        def convert_layout_to_dict(layout):
-            """Convert list format to dict format for internal processing"""
-            if isinstance(layout, list):
-                return {"lg": layout}
-            elif layout is None:
-                return {"lg": []}
-            else:
-                return layout
-
-        def convert_layout_to_list(layout):
-            """Convert dict format to list format for currentLayout output"""
-            if isinstance(layout, dict):
-                return layout.get("lg", [])
-            elif isinstance(layout, list):
-                return layout
-            else:
-                return []
-
-        # Convert draggable_layouts from list to dict format if needed
-        # dash-dynamic-grid-layout returns a list, but the rest of the code expects a dict
-        draggable_layouts = convert_layout_to_dict(draggable_layouts)
+        # Ensure draggable_layouts is in list format
+        if isinstance(draggable_layouts, dict):
+            # Extract list from legacy dict format for backward compatibility
+            draggable_layouts = draggable_layouts.get("lg", [])
+        elif draggable_layouts is None:
+            draggable_layouts = []
 
         # Initialize layouts from stored layouts if available
         if dashboard_id in state_stored_draggable_layouts:
-            # Check if draggable_layouts is empty or doesn't have the required breakpoints with content
-            # Handle both dict format (old dash-draggable) and list format (new dash-dynamic-grid-layout)
-            if isinstance(draggable_layouts, dict):
-                # Old format: {"lg": [...], "md": [...], ...}
-                is_empty = not draggable_layouts or not any(
-                    draggable_layouts.get(bp, []) for bp in required_breakpoints
-                )
-            elif isinstance(draggable_layouts, list):
-                # New format: [{"i": "item1", "x": 0, "y": 0, "w": 4, "h": 4}, ...]
-                is_empty = not draggable_layouts or len(draggable_layouts) == 0
-            else:
-                is_empty = True
+            # Check if draggable_layouts is empty (list format only)
+            is_empty = not draggable_layouts or len(draggable_layouts) == 0
 
             if is_empty:
                 logger.info(
                     f"Initializing layouts from stored layouts for dashboard {dashboard_id}"
                 )
-                draggable_layouts = state_stored_draggable_layouts[dashboard_id]
+                stored_layouts = state_stored_draggable_layouts[dashboard_id]
+                # Ensure stored layouts are also in list format
+                if isinstance(stored_layouts, dict):
+                    draggable_layouts = stored_layouts.get("lg", [])
+                else:
+                    draggable_layouts = stored_layouts
                 # logger.info(f"Updated draggable layouts: {draggable_layouts}")
 
         if isinstance(ctx.triggered_id, dict):
@@ -620,24 +666,17 @@ def register_callbacks_draggable(app):
                     child_type, draggable_layouts, child_id, len(draggable_children)
                 )
 
-                # logger.info(f"Required breakpoints: {required_breakpoints}")
-                # logger.info(f"Draggable layouts: {draggable_layouts}")
-                for key in required_breakpoints:
-                    # logger.info(f"Key: {key}")
-                    if key not in draggable_layouts:
-                        # logger.info(f"Key not in draggable layouts: {key}")
-                        draggable_layouts[key] = []
-                    draggable_layouts[key].append(new_layout_item)
-                    # logger.info(f"New layout item: {new_layout_item}")
+                # Add new layout item to the list (no more breakpoint logic)
+                draggable_layouts.append(new_layout_item)
+                # logger.info(f"New layout item: {new_layout_item}")
                 # logger.info(f"New draggable layouts: {draggable_layouts}")
                 state_stored_draggable_layouts[dashboard_id] = draggable_layouts
                 # logger.info(f"State stored draggable layouts: {state_stored_draggable_layouts}")
 
                 # logger.info(f"New draggable children: {draggable_children}")
-                # Convert dict format back to list for currentLayout output
                 return (
                     draggable_children,
-                    convert_layout_to_list(draggable_layouts),
+                    draggable_layouts,
                     dash.no_update,
                     state_stored_draggable_layouts,
                     dash.no_update,
@@ -653,11 +692,9 @@ def register_callbacks_draggable(app):
                 # logger.info(f"State stored draggable layouts: {state_stored_draggable_layouts}")
 
                 if "draggable.currentLayout" in ctx_triggered_props_id:
-                    # dash-dynamic-grid-layout returns a single layout array
-                    # but we need to convert it to the expected format for storage
-                    new_layouts = {"lg": input_draggable_layouts}  # Convert to breakpoint format
+                    # dash-dynamic-grid-layout returns a single layout array - store it directly
                     state_stored_draggable_children[dashboard_id] = draggable_children
-                    state_stored_draggable_layouts[dashboard_id] = new_layouts
+                    state_stored_draggable_layouts[dashboard_id] = input_draggable_layouts
 
                     return (
                         draggable_children,
@@ -926,10 +963,9 @@ def register_callbacks_draggable(app):
                         # Ensure we're using the stored layouts
                         current_layouts = state_stored_draggable_layouts[dashboard_id]
 
-                        # Make sure the layouts have the required breakpoints
-                        for key in required_breakpoints:
-                            if key not in current_layouts:
-                                current_layouts[key] = []
+                        # Ensure layouts are in list format
+                        if isinstance(current_layouts, dict):
+                            current_layouts = current_layouts.get("lg", [])
 
                         return (
                             children,
@@ -1055,14 +1091,13 @@ def register_callbacks_draggable(app):
 
                     # Update the layout to use the parent_index (keep the component at the same position)
                     # The edited component should replace the original component in the same layout position
-                    for bp in required_breakpoints:
-                        # logger.info(f"BP: {bp}")
-                        for layout in draggable_layouts[bp]:
-                            # logger.info(f"Layout: {layout}")
-                            if layout["i"] == f"box-{parent_index}":
-                                # Keep the layout ID as parent_index (don't change to new index)
-                                # This ensures the component stays in the same position
-                                break
+                    # Now working with list format directly
+                    for layout in draggable_layouts:
+                        # logger.info(f"Layout: {layout}")
+                        if layout["i"] == f"box-{parent_index}":
+                            # Keep the layout ID as parent_index (don't change to new index)
+                            # This ensures the component stays in the same position
+                            break
 
                     state_stored_draggable_layouts[dashboard_id] = draggable_layouts
 
@@ -1160,10 +1195,9 @@ def register_callbacks_draggable(app):
                     n,
                 )
 
-                for key in required_breakpoints:
-                    # logger.info(f"Key: {key}")
-                    draggable_layouts[key].append(new_layout)
-                    # logger.info(f"New layout: {new_layout}")
+                # Add new layout item to the list (no more breakpoint logic)
+                draggable_layouts.append(new_layout)
+                # logger.info(f"New layout: {new_layout}")
 
                 logger.info(
                     f"Duplicated component with new id 'box-{new_index}' and assigned layout {new_layout}"
@@ -1495,26 +1529,26 @@ def design_draggable(
     # logger.info(f"Init layout: {init_layout}")
 
     # Ensure init_layout has the required breakpoints
+    # Ensure init_layout is in list format
     if init_layout:
-        for key in required_breakpoints:
-            if key not in init_layout:
-                init_layout[key] = []
-        # logger.info(f"Initialized layout with required breakpoints: {init_layout}")
+        if isinstance(init_layout, dict):
+            # Extract list from legacy dict format
+            current_layout = init_layout.get("lg", [])
+        else:
+            current_layout = init_layout
+    else:
+        current_layout = []
 
     # Create the draggable layout using dash-dynamic-grid-layout
     # Since enable_box_edit_mode now returns DraggableWrapper components,
     # we can use them directly without additional wrapping
     draggable_items = init_children  # These are already DraggableWrapper components
 
-    # Get the current layout for the main breakpoint (lg)
-    current_layout = init_layout.get("lg", [])
-
-    # Convert the responsive layout format to dash-dynamic-grid-layout format
     # dash-dynamic-grid-layout expects: [{"i": "id", "x": 0, "y": 0, "w": 4, "h": 4}, ...]
-    # dash-draggable format: {"lg": [{"i": "id", "x": 0, "y": 0, "w": 4, "h": 4}], "md": [...]}
+    # We now work directly with this format
 
-    logger.info("Converting layout from dash-draggable to dash-dynamic-grid-layout format")
-    logger.info(f"Current layout (lg): {current_layout}")
+    logger.info("Using list format for dash-dynamic-grid-layout")
+    logger.info(f"Current layout: {current_layout}")
 
     # Ensure we have a valid layout array
     if not current_layout:
@@ -1524,11 +1558,12 @@ def design_draggable(
         id="draggable",
         items=draggable_items,
         itemLayout=current_layout,
-        rowHeight=120,  # Larger row height for better component display
-        cols={"lg": 12, "md": 10, "sm": 6, "xs": 4, "xxs": 2},
+        rowHeight=10,  # Larger row height for better component display
+        cols={"lg": 96, "md": 10, "sm": 6, "xs": 4, "xxs": 2},
         showRemoveButton=True,  # Will be controlled by edit mode
         showResizeHandles=True,  # Will be controlled by edit mode
         className="draggable-grid-container",  # CSS class for styling
+        allowOverlap=False,
         style={
             "display": display_style,
             "flex-grow": 1,

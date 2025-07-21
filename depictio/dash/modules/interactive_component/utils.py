@@ -100,14 +100,21 @@ def format_mark_label(value):
         if not isinstance(value, int | float):
             raise TypeError(f"Value {value} is not a number.")
 
-        # Check if the value is effectively an integer
-        if math.isclose(value, int(value), abs_tol=1e-9):
-            label = f"{int(value)}"
+        # Always use consistent float formatting for sliders
         # handle scientific notation if the value is too large
-        elif value > 1e5:
+        if value > 1e5:
             label = f"{value:.2e}"
         else:
-            label = f"{value:.2f}"
+            # Use float formatting with up to 2 decimal places, but show at least 1 decimal
+            if value == int(value):
+                # For integer values, show one decimal place for consistency
+                label = f"{value:.1f}"
+            else:
+                # For decimal values, show up to 2 decimal places, removing trailing zeros
+                label = f"{value:.2f}".rstrip("0").rstrip(".")
+                # Ensure at least one decimal place if it's not a whole number
+                if "." not in label and value != int(value):
+                    label = f"{value:.1f}"
         logger.debug(f"Formatted label: {label}")
         return label
     except Exception as e:
@@ -115,13 +122,107 @@ def format_mark_label(value):
         return None
 
 
+def generate_equally_spaced_marks(min_val, max_val, marks_count=5, use_log_scale=False):
+    """
+    Generate equally spaced marks for sliders.
+    Always includes min and max values.
+
+    Args:
+        min_val (float): Minimum value
+        max_val (float): Maximum value
+        marks_count (int): Number of marks to generate (minimum 3)
+        use_log_scale (bool): Whether to use logarithmic spacing
+
+    Returns:
+        dict: Dictionary of mark positions and their labels
+    """
+    try:
+        # Ensure minimum of 3 marks (min, middle, max)
+        marks_count = max(3, marks_count)
+
+        marks = {}
+
+        if use_log_scale:
+            # For log scale, create marks at equal intervals in log space
+            log_min = min_val  # Already log-transformed
+            log_max = max_val  # Already log-transformed
+
+            if marks_count == 1:
+                # Special case: only one mark, use the middle
+                original_value = 10**log_min
+                marks[log_min] = format_mark_label(original_value)
+            elif marks_count == 2:
+                # Special case: exactly min and max
+                original_min = 10**log_min
+                original_max = 10**log_max
+                marks[log_min] = format_mark_label(original_min)
+                marks[log_max] = format_mark_label(original_max)
+            else:
+                # General case: equal intervals with exact min/max
+                original_min = 10**log_min
+                original_max = 10**log_max
+                marks[log_min] = format_mark_label(original_min)  # Ensure exact min
+                marks[log_max] = format_mark_label(original_max)  # Ensure exact max
+
+                # Add intermediate marks if needed
+                if marks_count > 2:
+                    log_step = (log_max - log_min) / (marks_count - 1)
+                    for i in range(1, marks_count - 1):  # Skip first and last (already added)
+                        log_pos = log_min + (i * log_step)
+                        # Round to avoid floating point precision issues
+                        log_pos = round(log_pos, 6)
+                        # Convert back to original scale for display
+                        original_value = 10**log_pos
+                        marks[log_pos] = format_mark_label(original_value)
+
+        else:
+            # For linear scale, create marks at equal intervals
+            if marks_count == 1:
+                # Special case: only one mark, use the middle
+                marks[min_val] = format_mark_label(min_val)
+            elif marks_count == 2:
+                # Special case: exactly min and max
+                marks[min_val] = format_mark_label(min_val)
+                marks[max_val] = format_mark_label(max_val)
+            else:
+                # General case: equal intervals
+                step = (max_val - min_val) / (marks_count - 1)
+                for i in range(marks_count):
+                    original_pos = min_val + (i * step)
+                    pos = round(original_pos, 6)
+
+                    # Add tiny offset to avoid DCC RangeSlider boundary issues
+                    # This affects marks at exact boundaries (min, max) and integer values
+                    if i == 0:  # Min mark
+                        pos = pos + 1e-10
+                    elif abs(pos - round(pos)) < 1e-9:  # Integer or very close to integer
+                        pos = pos + 1e-10
+
+                    marks[pos] = format_mark_label(original_pos)  # Use original value for label
+
+        logger.info(
+            f"Generated {len(marks)} equally spaced marks ({'log' if use_log_scale else 'linear'})"
+        )
+        logger.info(f"Equally spaced marks: {marks}")
+        return marks
+
+    except Exception as e:
+        logger.error(f"Failed to generate equally spaced marks: {e}")
+        # Fallback to min/max marks
+        return {min_val: format_mark_label(min_val), max_val: format_mark_label(max_val)}
+
+
 def generate_log_marks(min_val, max_val, data_min, data_max, tolerance=0.5):
     """
     Generates a dictionary of marks for a log-scaled slider at each order of magnitude.
+    Enhanced implementation following Dash "Non-Linear Slider" concepts.
 
     Args:
         min_val (float): The minimum value of the slider in log-transformed space.
         max_val (float): The maximum value of the slider in log-transformed space.
+        data_min (float): The minimum value in the original data space.
+        data_max (float): The maximum value in the original data space.
+        tolerance (float): Tolerance for avoiding marks too close to min/max.
 
     Returns:
         dict: A dictionary where keys are positions on the slider and values are formatted labels.
@@ -130,15 +231,26 @@ def generate_log_marks(min_val, max_val, data_min, data_max, tolerance=0.5):
         logger.debug(f"Generating log marks with min_val={min_val}, max_val={max_val}")
         logger.debug(f"Data min: {data_min}, Data max: {data_max}")
 
-        # Calculate the exponent range
+        # Calculate the exponent range with improved logic
         min_exp = math.floor(min_val)
         max_exp = math.ceil(max_val)
         logger.debug(f"Exponent range: {min_exp} to {max_exp}")
 
+        # Check if this is a small range that needs special handling
+        range_span = max_exp - min_exp
+        is_small_range = range_span <= 1
+        logger.debug(f"Range span: {range_span}, is_small_range: {is_small_range}")
+
         marks = {}
 
-        # Add the min value mark
-        marks[np.log10(data_min)] = format_mark_label(data_min)
+        # Always add the min and max value marks first
+        min_log_pos = np.log10(data_min)
+        max_log_pos = np.log10(data_max)
+
+        marks[min_log_pos] = format_mark_label(data_min)
+        marks[max_log_pos] = format_mark_label(data_max)
+        logger.debug(f"Added required min mark: {min_log_pos} -> {data_min}")
+        logger.debug(f"Added required max mark: {max_log_pos} -> {data_max}")
 
         for exp in range(min_exp, max_exp + 1):
             logger.debug(f"Processing exponent: {exp}")
@@ -151,38 +263,69 @@ def generate_log_marks(min_val, max_val, data_min, data_max, tolerance=0.5):
             pos = math.log10(original_value)
             logger.debug(f"Position on slider: {pos}")
 
-            # Check if this mark is too close to data_min or data_max
-            too_close_min = data_min >= original_value * (1 - tolerance)
-            logger.debug(f"Too close to data_min: {too_close_min}")
-            logger.debug(f"Data min: {data_min}")
-            logger.debug(f"Original value * (1 - tolerance): {original_value * (1 - tolerance)}")
-            too_close_max = data_max <= original_value * (1 + tolerance)
-            logger.debug(f"Too close to data_max: {too_close_max}")
-            logger.debug(f"Data max: {data_max}")
-            logger.debug(f"Original value * (1 + tolerance): {original_value * (1 + tolerance)}")
+            # Skip if outside data range
+            if original_value < data_min or original_value > data_max:
+                logger.debug(f"Skipping {original_value} as it's outside data range")
+                continue
 
-            if too_close_min or too_close_max:
-                if too_close_max:
-                    logger.info(
-                        f"Mark at {original_value} is too close to data_max ({data_max}). Skipping."
-                    )
-                if too_close_min:
-                    logger.info(
-                        f"Mark at {original_value} is too close to data_min ({data_min}). Skipping."
-                    )
-                continue  # Skip the first mark if too close to data_min
+            # Check if this mark is too close to boundaries
+            too_close_min = abs(original_value - data_min) / data_min < tolerance
+            too_close_max = abs(original_value - data_max) / data_max < tolerance
+
+            logger.debug(f"Too close to data_min: {too_close_min}")
+            logger.debug(f"Too close to data_max: {too_close_max}")
+
+            # Skip if too close to boundaries (unless it's exactly the boundary or small range)
+            if not is_small_range and (
+                (too_close_min and original_value != data_min)
+                or (too_close_max and original_value != data_max)
+            ):
+                logger.debug(f"Skipping {original_value} as it's too close to data boundaries")
+                continue
 
             # Ensure that pos is within the slider's range
             if min_val <= pos <= max_val:
                 label = format_mark_label(original_value)
                 if label:
-                    marks[int(pos)] = label
-                    logger.info(f"Added mark: pos={pos}, label={label}")
+                    # Use float position instead of int for better precision
+                    marks[pos] = label
+                    logger.info(f"Added logarithmic mark: pos={pos}, label={label}")
                 else:
                     logger.warning(f"Label for value {original_value} is None. Skipping.")
 
-        # Add the max value mark
-        marks[np.log10(data_max)] = format_mark_label(data_max)
+        # Add intermediate marks for better granularity if we have few marks
+        if len(marks) < 4:  # Need at least 4 marks for good coverage
+            logger.debug("Adding intermediate marks for better granularity")
+            # Add marks at 2x and 5x intervals within each order of magnitude
+            for exp in range(min_exp, max_exp + 1):
+                for multiplier in [2, 5]:
+                    intermediate_value = multiplier * (10**exp)
+                    if data_min <= intermediate_value <= data_max:
+                        pos = math.log10(intermediate_value)
+                        if min_val <= pos <= max_val and pos not in marks:
+                            label = format_mark_label(intermediate_value)
+                            if label:
+                                marks[pos] = label
+                                logger.info(
+                                    f"Added intermediate logarithmic mark: pos={pos}, label={label}"
+                                )
+
+        # If still too few marks for small ranges, add more intermediate points
+        if len(marks) < 3 and is_small_range:
+            logger.debug("Adding extra marks for very small log range")
+            # Add more granular marks for small ranges
+            for exp in range(min_exp, max_exp + 1):
+                for multiplier in [1.5, 3, 7]:  # Additional multipliers
+                    intermediate_value = multiplier * (10**exp)
+                    if data_min <= intermediate_value <= data_max:
+                        pos = math.log10(intermediate_value)
+                        if min_val <= pos <= max_val and pos not in marks:
+                            label = format_mark_label(intermediate_value)
+                            if label:
+                                marks[pos] = label
+                                logger.info(
+                                    f"Added extra logarithmic mark for small range: pos={pos}, label={label}"
+                                )
 
         logger.info(f"Final generated log marks: {marks}")
         return marks
@@ -691,15 +834,12 @@ def build_interactive(**kwargs):
             # Always default to linear scale (including when scale is None, "linear", or any other value)
             logger.info(f"Using linear scale (scale parameter: {scale})")
 
-        slider_series = df_pandas[column_name]
-
         # Apply log transformation if using log scale
         if use_log_scale:
             logger.info("Applying log transformation")
-            transformed_series, shift = apply_log_transformation(df_pandas[column_name])
+            transformed_series, _ = apply_log_transformation(df_pandas[column_name])
             # Replace the original column with transformed data
             df_pandas[f"{column_name}_log10"] = transformed_series
-            slider_series = df_pandas[f"{column_name}_log10"]
         else:
             logger.info("Using linear scale")
 
@@ -722,115 +862,53 @@ def build_interactive(**kwargs):
             max_value = min_value + 1.0
             logger.warning(f"min_value >= max_value, adjusted max_value to {max_value}")
 
-        # Prepare kwargs for DCC slider
+        # Prepare kwargs for DCC slider - following Dash "Non-Linear Slider" patterns
+        tooltip_config = {
+            "placement": "bottom",
+            "always_visible": False,
+            "style": {"color": "var(--app-text-color, #000000)", "fontSize": "12px"},
+        }
+
+        # Enhanced tooltip for log scale sliders following Dash documentation
+        # Note: Don't use template as it interferes with marks display
+        # The tooltip will show the actual slider value by default
+
         kwargs_component = {
             "min": float(min_value),
             "max": float(max_value),
             "id": {"type": value_div_type, "index": str(index)},
             "persistence_type": "local",
+            "updatemode": "drag",  # Enable real-time updates while dragging (from Dash docs)
+            "tooltip": tooltip_config,
         }
 
         logger.info(f"DCC Slider: Using range {min_value}-{max_value}")
 
-        # Generate marks based on scale type
-        if use_log_scale:
-            # Use logarithmic marks
-            marks = generate_log_marks(
-                min_value, max_value, df_pandas[column_name].min(), df_pandas[column_name].max()
-            )
-        else:
-            # Use linear marks with controlled number of marks
-            logger.info(f"Generating linear marks with {marks_number} marks")
-
-            # Ensure marks_number is at least 3 (min, max, and at least one in between)
-            marks_number = max(3, min(marks_number or 5, 10))
-
-            if slider_series.nunique() <= marks_number and slider_series.nunique() > 0:
-                # If we have few unique values, use them all
-                logger.info(f"Using all unique values ({slider_series.nunique()} values)")
-                unique_values = slider_series.unique()
-                # Filter out None and non-numeric values
-                unique_values = [
-                    elem
-                    for elem in unique_values
-                    if isinstance(elem, (int, float)) and not math.isinf(elem)
-                ]
-                # Sort values
-                unique_values = sorted(unique_values)
-                marks = {
-                    int(elem)
-                    if math.isclose(elem, int(elem), abs_tol=1e-9)
-                    else elem: format_mark_label(elem)
-                    for elem in unique_values
-                    if format_mark_label(elem) is not None
-                }
+        # Generate marks based on scale type and marks_number parameter
+        if marks_number and marks_number > 0:
+            # User specified number of marks - generate custom marks
+            if use_log_scale:
+                # Use new equally spaced function for log scale
+                marks = generate_equally_spaced_marks(
+                    min_value, max_value, marks_count=marks_number, use_log_scale=True
+                )
             else:
-                # Generate evenly spaced marks using quantiles or linear interpolation
-                logger.info(f"Generating {marks_number} evenly spaced marks")
-
-                if slider_series.nunique() == 0 or len(slider_series) == 0:
-                    # If DataFrame is empty, create evenly spaced marks between min and max
-                    logger.warning(
-                        "DataFrame is empty, creating evenly spaced marks between min/max"
-                    )
-                    mark_values = []
-                    for i in range(marks_number):
-                        if marks_number == 1:
-                            mark_val = (min_value + max_value) / 2
-                        else:
-                            mark_val = min_value + (max_value - min_value) * i / (marks_number - 1)
-                        mark_values.append(mark_val)
-
-                    marks = {
-                        int(elem)
-                        if math.isclose(elem, int(elem), abs_tol=1e-9)
-                        else elem: format_mark_label(elem)
-                        for elem in mark_values
-                        if format_mark_label(elem) is not None
-                    }
-                else:
-                    # Create quantile positions (excluding 0 and 1 which are min/max)
-                    if marks_number <= 2:
-                        quantile_positions = []
-                    else:
-                        quantile_positions = [
-                            i / (marks_number - 1) for i in range(1, marks_number - 1)
-                        ]
-
-                    logger.info(f"Quantile positions: {quantile_positions}")
-
-                    # Compute quantiles
-                    quantiles = (
-                        slider_series.quantile(quantile_positions) if quantile_positions else []
-                    )
-                    logger.info(
-                        f"Quantiles: {list(quantiles) if hasattr(quantiles, '__iter__') else quantiles}"
-                    )
-
-                    # Combine min, quantiles, and max
-                    mark_elements = [min_value] + list(quantiles) + [max_value]
-                    # Remove duplicates and sort
-                    mark_elements = sorted(
-                        list(
-                            set(
-                                [
-                                    elem
-                                    for elem in mark_elements
-                                    if isinstance(elem, (int, float)) and not math.isinf(elem)
-                                ]
-                            )
-                        )
-                    )
-
-                    marks = {
-                        int(elem)
-                        if math.isclose(elem, int(elem), abs_tol=1e-9)
-                        else elem: format_mark_label(elem)
-                        for elem in mark_elements
-                        if format_mark_label(elem) is not None
-                    }
-
-            logger.info(f"Final marks: {marks}")
+                # Use new equally spaced function for linear scale
+                marks = generate_equally_spaced_marks(
+                    min_value, max_value, marks_count=marks_number, use_log_scale=False
+                )
+            logger.info(f"Generated {marks_number} custom marks")
+        else:
+            # No custom marks specified - use automatic generation for linear, fallback for log
+            if use_log_scale:
+                # For log scale, fall back to the original log marks function
+                marks = generate_log_marks(
+                    min_value, max_value, df_pandas[column_name].min(), df_pandas[column_name].max()
+                )
+            else:
+                # For linear scale, let DCC RangeSlider use automatic mark generation
+                marks = None
+                logger.info("Using DCC RangeSlider automatic mark generation for linear scale")
 
         # Set component values for DCC sliders
         if interactive_component_type == "RangeSlider":
@@ -909,18 +987,28 @@ def build_interactive(**kwargs):
 
         # For DCC sliders, marks use dict format (not list of dicts like DMC)
         if marks:
-            # DCC sliders use dict format for marks: {value: label}
+            # Process custom marks (e.g., for log scale)
             dcc_marks = {}
+            logger.info(f"Processing marks: {marks}")
             for k, v in marks.items():
                 try:
                     # Use decimal mark value directly
                     decimal_mark = float(k)
+                    logger.debug(
+                        f"Processing mark: key={k}, value={v}, decimal_mark={decimal_mark}"
+                    )
                     if not (math.isnan(decimal_mark) or math.isinf(decimal_mark)):
-                        # Ensure mark value is within decimal range
-                        if min_value <= decimal_mark <= max_value:
+                        # Ensure mark value is within decimal range (use a small tolerance for floating point comparison)
+                        tolerance = 1e-10
+                        if (min_value - tolerance) <= decimal_mark <= (max_value + tolerance):
                             dcc_marks[decimal_mark] = str(v)
-                except (ValueError, TypeError):
-                    logger.warning(f"Skipping invalid mark: {k} -> {v}")
+                            logger.debug(f"Added mark: {decimal_mark} -> {v}")
+                        else:
+                            logger.debug(
+                                f"Mark {decimal_mark} is outside range [{min_value}, {max_value}]"
+                            )
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Skipping invalid mark: {k} -> {v}, error: {e}")
 
             # If no valid marks were created, add min and max marks as fallback
             if not dcc_marks:
@@ -930,8 +1018,15 @@ def build_interactive(**kwargs):
                 }
                 logger.warning("No valid marks found, using decimal min/max as fallback")
 
-            kwargs_component["marks"] = dcc_marks
-            logger.info(f"DCC marks created: {len(dcc_marks)} marks (decimal values)")
+            # Ensure marks are sorted by position for proper display
+            sorted_dcc_marks = {k: dcc_marks[k] for k in sorted(dcc_marks.keys())}
+            kwargs_component["marks"] = sorted_dcc_marks
+            logger.info(f"DCC marks created: {len(sorted_dcc_marks)} custom marks")
+            logger.info(f"Final DCC marks (sorted): {sorted_dcc_marks}")
+        else:
+            # Let DCC RangeSlider generate automatic marks (linear scale)
+            # Don't set marks parameter - DCC will create them automatically
+            logger.info("Using DCC automatic mark generation (no marks parameter)")
 
         logger.info("DCC Slider: Final kwargs before component creation:")
         logger.info(
@@ -1038,7 +1133,44 @@ def build_interactive(**kwargs):
         storage_type="memory",
     )
 
-    new_interactive_component = html.Div([card_title_h5, interactive_component, store_component])
+    # Create wrapper with custom styling for sliders
+    wrapper_style = {}
+    wrapper_class = ""
+
+    if interactive_component_type in ["Slider", "RangeSlider"] and color:
+        # Generate unique CSS class name based on color
+        color_hash = hash(color) % 10000
+        wrapper_class = f"slider-custom-{color_hash}"
+
+        # Convert hex color to RGB for rgba() CSS function
+        def hex_to_rgb(hex_color):
+            """Convert hex color to RGB values"""
+            hex_color = hex_color.lstrip("#")
+            return tuple(int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
+
+        try:
+            rgb_values = hex_to_rgb(color)
+            rgb_string = f"{rgb_values[0]}, {rgb_values[1]}, {rgb_values[2]}"
+        except (ValueError, TypeError) as e:
+            # Fallback to default blue if color parsing fails
+            rgb_string = "25, 118, 210"
+            logger.warning(f"Failed to parse color {color}, using default blue: {e}")
+
+        # Add inline CSS variables for custom color styling
+        wrapper_style = {
+            "--custom-slider-color": color,
+            "--custom-slider-color-rgb": rgb_string,
+        }
+
+        logger.info(
+            f"Applied custom slider styling: class={wrapper_class}, color={color}, rgb={rgb_string}"
+        )
+
+    new_interactive_component = html.Div(
+        [card_title_h5, interactive_component, store_component],
+        className=wrapper_class,
+        style=wrapper_style,
+    )
 
     if not build_frame:
         return new_interactive_component

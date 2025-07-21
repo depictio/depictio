@@ -283,7 +283,13 @@ def render_figure(
     for k, v in dict_kwargs.items():
         if v is not None:
             # Keep the parameter if it's not empty, or if it's in the allowed empty string list
-            if v != "" and v != [] or (k in keep_empty_string_params and v == ""):
+            # Also keep boolean parameters (including False values)
+            if (
+                v != ""
+                and v != []
+                or (k in keep_empty_string_params and v == "")
+                or isinstance(v, bool)
+            ):
                 cleaned_kwargs[k] = v
 
     # Check if required parameters are missing for the visualization type
