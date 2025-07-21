@@ -2,6 +2,7 @@
 Simple progressive loading for Depictio dashboards - just like the prototype.
 """
 
+import base64
 import os
 
 import dash_mantine_components as dmc
@@ -66,9 +67,35 @@ def create_inline_svg_logo():
 
 
 def create_loading_progress_display(dashboard_id: str):
-    """Create a loading display with animated Depictio logo."""
+    """Create a loading display with animated Depictio logo and fade transitions."""
+    # CSS for fade animations
+    fade_css = """
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+        to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    }
+
+    @keyframes fadeOut {
+        from { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        to { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+    }
+
+    .loading-progress-fade-in {
+        animation: fadeIn 0.3s ease-out forwards;
+    }
+
+    .loading-progress-fade-out {
+        animation: fadeOut 0.3s ease-in forwards;
+    }
+    """
+
     return html.Div(
         [
+            # CSS for fade animations using html.Link with data URI
+            html.Link(
+                rel="stylesheet",
+                href="data:text/css;base64," + base64.b64encode(fade_css.encode()).decode(),
+            ),
             dmc.Stack(
                 [
                     dmc.Text(
@@ -101,9 +128,84 @@ def create_loading_progress_display(dashboard_id: str):
                     ),
                 ],
                 gap="md",
-            )
+            ),
         ],
         id={"type": "loading-progress-container", "dashboard": dashboard_id},
+        className="loading-progress-fade-in",  # Start with fade-in animation
+        style={
+            "position": "fixed",
+            "top": "50%",
+            "left": "50%",
+            "transform": "translate(-50%, -50%)",
+            "zIndex": 1000,
+            "backgroundColor": "rgba(255, 255, 255, 0.98)",
+            "padding": "40px 50px",
+            "borderRadius": "12px",
+            "boxShadow": "0 8px 25px rgba(0,0,0,0.15)",
+            "minWidth": "500px",
+            "display": "block",
+            "border": f"1px solid {colors['purple']}",
+        },
+    )
+
+
+def create_fade_out_progress_display(dashboard_id: str):
+    """Create a fade-out version of the loading progress display."""
+    # CSS for fade animations
+    fade_css = """
+    @keyframes fadeOut {
+        from { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        to { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+    }
+
+    .loading-progress-fade-out {
+        animation: fadeOut 0.3s ease-in forwards;
+    }
+    """
+
+    return html.Div(
+        [
+            # CSS for fade animations using html.Link with data URI
+            html.Link(
+                rel="stylesheet",
+                href="data:text/css;base64," + base64.b64encode(fade_css.encode()).decode(),
+            ),
+            dmc.Stack(
+                [
+                    dmc.Text(
+                        "Loading dashboard components...",
+                        size="md",
+                        c="gray",
+                        style={"textAlign": "center", "fontWeight": 500},
+                    ),
+                    # Animated Depictio logo
+                    html.Div(
+                        [
+                            html.Div(
+                                [
+                                    # Animated Depictio logo with pulsing effect
+                                    dmc.Center(create_inline_svg_logo()),
+                                ],
+                                style={
+                                    "display": "flex",
+                                    "alignItems": "center",
+                                    "justifyContent": "center",
+                                    "width": "100%",
+                                    "height": "120px",
+                                },
+                            ),
+                        ],
+                        style={
+                            "position": "relative",
+                            "width": "100%",
+                        },
+                    ),
+                ],
+                gap="md",
+            ),
+        ],
+        id={"type": "loading-progress-container", "dashboard": dashboard_id},
+        className="loading-progress-fade-out",  # Fade-out animation
         style={
             "position": "fixed",
             "top": "50%",
@@ -400,11 +502,14 @@ def register_progressive_loading_callbacks(app):
 
                                     const progressContainers = document.querySelectorAll('[id*="loading-progress-container"]');
                                     progressContainers.forEach(container => {
-                                        container.style.transition = 'opacity 0.5s ease-in-out';
-                                        container.style.opacity = '0';
+                                        // Remove fade-in class and add fade-out class to trigger animation
+                                        container.classList.remove('loading-progress-fade-in');
+                                        container.classList.add('loading-progress-fade-out');
+
+                                        // After animation completes, hide the element
                                         setTimeout(() => {
                                             container.style.display = 'none';
-                                        }, 500);
+                                        }, 300); // Match the CSS animation duration
                                     });
                                 }
                             }, 300);
