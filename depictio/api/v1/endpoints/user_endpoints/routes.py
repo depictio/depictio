@@ -771,6 +771,25 @@ def delete_user(user_id: str, current_user=Depends(get_current_user)):
         return {"success": False}
 
 
+@auth_endpoint_router.get("/check_admin_default_password", include_in_schema=True)
+async def check_admin_default_password(current_user=Depends(get_current_user)):
+    """
+    Check if the admin user still has the default password 'changeme'.
+    Only accessible by authenticated users.
+    Returns: {"has_default_password": bool}
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Current user not found.")
+
+    try:
+        # Check if admin@example.com exists and has default password
+        has_default = await _check_password("admin@example.com", "changeme")
+        return {"has_default_password": has_default}
+    except Exception as e:
+        logger.error(f"Error checking admin default password: {e}")
+        return {"has_default_password": False}
+
+
 @auth_endpoint_router.post("/turn_sysadmin/{user_id}/{is_admin}", include_in_schema=True)
 def turn_sysadmin(user_id: str, is_admin: bool, current_user=Depends(get_current_user)):
     if not current_user:

@@ -157,6 +157,7 @@ def register_feature_callbacks(app):
         app (dash.Dash): The Dash application instance
     """
     from depictio.dash.layouts.admin_management import register_admin_callbacks
+    from depictio.dash.layouts.admin_notifications import register_admin_notifications_callbacks
     from depictio.dash.layouts.dashboards_management import register_callbacks_dashboards_management
     from depictio.dash.layouts.profile import register_profile_callbacks
     from depictio.dash.layouts.projects import (
@@ -178,3 +179,4 @@ def register_feature_callbacks(app):
     register_projects_callbacks(app)
     register_admin_callbacks(app)
     register_projectwise_user_management_callbacks(app)
+    register_admin_notifications_callbacks(app)

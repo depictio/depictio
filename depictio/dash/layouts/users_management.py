@@ -584,7 +584,6 @@ layout = html.Div(
             },
             # Ensure modal content is visible above background
             zIndex=10000,
-            radius="xl",
         ),
         # html.Div(id="landing-page-content"),
         # Hidden buttons for switching forms to ensure they exist in the layout

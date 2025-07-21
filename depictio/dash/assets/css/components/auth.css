@@ -9,9 +9,20 @@
     z-index: 10000;
     backdrop-filter: blur(10px);
     background: rgba(255, 255, 255, 0.95);
-    border-top: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
     color: var(--app-text-color, var(--depictio-text-light));
     transition: background 0.3s ease, color 0.3s ease;
+}
+
+/* Remove all borders from auth modal container */
+#auth-modal .mantine-Modal-content,
+#auth-modal .mantine-Modal-body,
+#auth-modal .mantine-Modal-inner {
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
 }
 
 /* Remove modal footer border in auth modals */

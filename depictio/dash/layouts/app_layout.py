@@ -499,6 +499,8 @@ def create_app_layout():
                 overlayProps={"overlayOpacity": 0.1},
                 children=[],
             ),
+            dmc.NotificationContainer(id="notification-container"),
+            html.Div(id="admin-password-warning-trigger", style={"display": "none"}),
             dmc.AppShell(
                 id="app-shell",  # Add ID for callback targeting
                 navbar={
