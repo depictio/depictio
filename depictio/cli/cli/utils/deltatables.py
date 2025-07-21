@@ -416,7 +416,7 @@ def client_aggregate_data(
     extended = True if rich_tables else False
 
     if rich_tables:
-        aggregated_df.rich(  # type: ignore[unresolved-attribute]
+        aggregated_df.rich_print(  # type: ignore[unresolved-attribute]
             title="Aggregated DataFrame - {data_collection.data_collection_tag}",
             max_rows=10,
             max_cols=10,
