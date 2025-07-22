@@ -202,7 +202,7 @@ def enable_box_edit_mode(
             "width": "100%",  # Ensure it takes full width of the parent
             "height": "100%",  # Ensure it takes full height of the parent
             "boxSizing": "border-box",  # Include padding in the element's total width and height
-            "padding": "40px 10px 10px 10px",  # Extra top padding for overlay controls
+            "padding": "5px 5px 5px 5px",  # Minimal padding to maximize component space
             "border": "1px solid var(--app-border-color, #ddd)",  # Theme-aware border
             "borderRadius": "8px",  # Add rounded corners
             "background": "var(--app-surface-color, #ffffff)",  # Theme-aware background
@@ -229,7 +229,7 @@ def enable_box_edit_mode(
                     buttons,
                     style={
                         "position": "absolute",
-                        "top": "8px",  # Overlay on content
+                        "top": "4px",  # Minimal overlay positioning
                         "right": "8px",  # Match drag handle positioning
                         "zIndex": 1000,  # Very high z-index
                         # pointerEvents and display removed - CSS handles hover behavior

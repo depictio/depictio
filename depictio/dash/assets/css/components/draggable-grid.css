@@ -81,10 +81,14 @@
     visibility: hidden !important;
 }
 
-/* Hide the default drag handle, but keep functionality for ActionIcon with this class */
+/* Hide the default drag handle completely, but keep functionality for ActionIcon with this class */
 .react-grid-dragHandle:not(.mantine-ActionIcon-root) {
     display: none !important;
     visibility: hidden !important;
+    height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    min-height: 0 !important;
 }
 
 /* Make ActionIcon drag handles functional and styled - only visible on component hover */
@@ -171,6 +175,35 @@
 .drag-handles-hidden .react-grid-dragHandle {
     display: none !important;
     visibility: hidden !important;
+}
+
+/* Normalize wrapper div padding between edit and non-edit modes - minimize white space */
+.react-grid-item > div {
+    padding: 2px !important;
+    max-height: 100% !important;
+    max-width: 100% !important;
+    height: 100% !important;
+    box-sizing: border-box !important;
+}
+
+/* Hide the old remove button completely */
+.react-grid-item .remove {
+    display: none !important;
+    visibility: hidden !important;
+}
+
+/* Minimize padding between card-component and card elements */
+.react-grid-item [id*="card-component"] {
+    padding: 0px !important;
+    margin: 0px !important;
+}
+
+.react-grid-item [id*="card-body"] {
+    padding: 2px !important;
+}
+
+.react-grid-item [id*="card"] .mantine-Card-root {
+    padding: var(--mantine-spacing-xs) !important;
 }
 
 /* Hide ActionIconGroup and individual ActionIcons by default - only visible on component hover */

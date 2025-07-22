@@ -1401,10 +1401,10 @@ def register_callbacks_draggable(app):
         logger.info(f"Grid edit mode toggled: {edit_mode_enabled}")
 
         if edit_mode_enabled:
-            # Enable dragging by showing remove buttons and resize handles
-            return True, True, "draggable-grid-container"
+            # Keep layout consistent - CSS handles button visibility, not DashGridLayout properties
+            return False, False, "draggable-grid-container"
         else:
-            # Disable dragging by hiding remove buttons, resize handles, and drag handles via CSS
+            # Keep layout consistent - CSS handles button visibility, not DashGridLayout properties
             return False, False, "draggable-grid-container drag-handles-hidden"
 
 
@@ -1523,8 +1523,8 @@ def design_draggable(
         itemLayout=current_layout,
         rowHeight=10,  # Larger row height for better component display
         cols={"lg": 96, "md": 10, "sm": 6, "xs": 4, "xxs": 2},
-        showRemoveButton=True,  # Will be controlled by edit mode
-        showResizeHandles=True,  # Will be controlled by edit mode
+        showRemoveButton=False,  # Keep consistent - CSS handles visibility
+        showResizeHandles=False,  # Keep consistent - CSS handles visibility
         className="draggable-grid-container",  # CSS class for styling
         allowOverlap=False,
         style={
