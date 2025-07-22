@@ -53,11 +53,11 @@ app.layout = dmc.MantineProvider([
         State("local-store", "data"),
         State("layout-store", "data"),
         State("component-store", "data"),
-        State("dashboard-container", "children")  # ← POTENTIAL DOM REFERENCE!
+        # State("dashboard-container", "children")  # ← CIRCULAR REFERENCE SOURCE - REMOVED!
     ],
     prevent_initial_call=True
 )
-def add_text_component_to_dashboard(n_clicks, local_data, layout_data, component_data, existing_children):
+def add_text_component_to_dashboard(n_clicks, local_data, layout_data, component_data):
     if not n_clicks:
         raise PreventUpdate
     
@@ -109,6 +109,8 @@ def add_text_component_to_dashboard(n_clicks, local_data, layout_data, component
         }
         
         # Update component store - CRITICAL: avoid storing DOM references
+        # KEY INSIGHT: The circular reference occurs when existing components (with React Fiber references) 
+        # are passed through State parameters in callbacks. Solution: rebuild from data, not DOM.
         new_component_data = component_data.copy() if component_data else {}
         new_component_data[component_id] = {
             "type": "text",
@@ -117,13 +119,45 @@ def add_text_component_to_dashboard(n_clicks, local_data, layout_data, component
             # DON'T STORE: "container": existing_children  # ← CIRCULAR REFERENCE
         }
         
-        # Combine existing and new components
-        if isinstance(existing_children, list):
-            new_children = existing_children + [text_component]
-        elif existing_children and existing_children != "Click button to add text component":
-            new_children = [existing_children, text_component]
-        else:
-            new_children = [text_component]
+        # Build ALL components from scratch using the component store data
+        # This avoids circular references by not reusing existing DOM elements
+        all_components = []
+        for comp_id, comp_data in new_component_data.items():
+            if comp_data["type"] == "text":
+                # Recreate each component fresh (no circular references)
+                comp_metadata_store = dcc.Store(
+                    id={"type": "stored-metadata-component", "index": comp_id},
+                    data={
+                        "index": comp_id,
+                        "component_type": "text", 
+                        "title": comp_data["title"],
+                    }
+                )
+                
+                comp_editor = dmc.RichTextEditor(
+                    id={"type": "text-editor", "index": comp_id},
+                    html=f"<p>{comp_data['title']} content</p>",
+                    style={
+                        "minHeight": "200px",
+                        "border": "1px solid #ddd", 
+                        "marginBottom": "10px"
+                    }
+                )
+                
+                comp_wrapper = html.Div([
+                    html.H5(comp_data["title"]),
+                    comp_editor,
+                    comp_metadata_store,
+                ], style={
+                    "border": "1px solid #ccc",
+                    "padding": "10px", 
+                    "marginBottom": "10px",
+                    "backgroundColor": "#f9f9f9"
+                })
+                
+                all_components.append(comp_wrapper)
+        
+        new_children = all_components
         
         return new_children, new_layout_data, new_component_data
         
