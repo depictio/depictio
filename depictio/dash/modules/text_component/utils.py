@@ -1,8 +1,62 @@
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 from dash import dcc, html
+from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.logging_init import logger
+
+
+def create_inline_editable_text(component_id, initial_text="# Section Title", initial_order=1):
+    """Create an inline editable text component for dashboard section delimiters."""
+
+    return html.Div(
+        [
+            # The editable text display
+            dmc.Title(
+                initial_text.lstrip("#").strip() if initial_text.startswith("#") else initial_text,
+                order=initial_order,
+                id={"type": "editable-title", "index": component_id},
+                style={
+                    "cursor": "text",
+                    "padding": "4px 8px",
+                    "borderRadius": "4px",
+                    "transition": "background-color 0.2s",
+                    "margin": "8px 0",
+                    "minHeight": "24px",
+                    "border": "1px dashed transparent",
+                },
+                c="dark",
+            ),
+            # Hidden input for editing
+            dmc.TextInput(
+                id={"type": "edit-input", "index": component_id},
+                value=initial_text,
+                style={"display": "none"},
+            ),
+            # Hidden edit button (needed for callback infrastructure)
+            dmc.ActionIcon(
+                DashIconify(icon="material-symbols:edit", width=12),
+                size="xs",
+                variant="light",
+                color="blue",
+                id={"type": "edit-btn", "index": component_id},
+                style={"display": "none"},  # Keep hidden since we use double-click
+            ),
+            # Store for component state
+            dcc.Store(
+                id={"type": "text-store", "index": component_id},
+                data={"text": initial_text, "order": initial_order, "editing": False},
+            ),
+        ],
+        style={
+            "border": "1px solid transparent",
+            "borderRadius": "8px",
+            "padding": "8px",
+            "marginBottom": "8px",
+            "position": "relative",
+        },
+        id={"type": "text-container", "index": component_id},
+    )
 
 
 def build_text_frame(index, children=None, show_border=False):
@@ -94,38 +148,35 @@ def build_text_frame(index, children=None, show_border=False):
 
 def build_text(**kwargs):
     """
-    Build the text component with Rich Text Editor.
+    Build the text component with inline editable text.
 
     Args:
         **kwargs: Component configuration parameters including:
             - index: Component index
             - title: Text component title
-            - content: HTML content for the rich text editor
+            - content: Initial text content
             - build_frame: Whether to wrap in frame container
             - stepper: Whether in stepper mode
             - parent_index: Parent component index for editing
-            - show_toolbar: Whether to display the rich text formatting toolbar
+            - show_toolbar: Whether to display formatting controls (legacy, kept for compatibility)
             - show_title: Whether to display the component title
 
     Returns:
-        Component tree for text editor
+        Component tree for inline editable text
     """
-    logger.info("Building text component")
+    logger.info("Building inline editable text component")
 
     # Extract parameters
     index = kwargs.get("index")
     title = kwargs.get("title", "Text Component")
-    content = kwargs.get("content", "")
+    content = kwargs.get("content", "# Section Title")
     build_frame = kwargs.get("build_frame", False)
     stepper = kwargs.get("stepper", False)
     parent_index = kwargs.get("parent_index", None)
-    show_toolbar = kwargs.get("show_toolbar", True)
+    show_toolbar = kwargs.get("show_toolbar", True)  # Legacy parameter
     show_title = kwargs.get("show_title", True)
     wf_id = kwargs.get("wf_id", None)
     dc_id = kwargs.get("dc_id", None)
-
-    # For stepper mode, use the temporary index to avoid conflicts with existing components
-    # For normal mode, use the original index (remove -tmp suffix if present)
 
     logger.info(f"Building text component with index: {index}, stepper: {stepper}")
 
@@ -142,6 +193,7 @@ def build_text(**kwargs):
             str(index).replace("-tmp", "") if index else "unknown"
         )  # Remove -tmp if present
         data_index = store_index
+
     logger.info(f"Using store index: {store_index}, data index: {data_index}")
 
     # Create metadata store component with proper index handling
@@ -154,7 +206,7 @@ def build_text(**kwargs):
             "index": data_index,  # Store the clean index without -tmp
             "component_type": "text",
             "title": str(title) if title else None,
-            "content": str(content) if content else "<p>Start typing your content here...</p>",
+            "content": str(content) if content else "# Section Title",
             "parent_index": str(parent_index) if parent_index else None,
             "show_toolbar": bool(show_toolbar),
             "show_title": bool(show_title),
@@ -162,83 +214,35 @@ def build_text(**kwargs):
             "dc_id": dc_id,
         },
     )
-    logger.info(f"Store component : {store_component}")
+    logger.info(f"Store component: {store_component}")
 
-    logger.info(f"Has richtexteditor: {hasattr(dmc, 'RichTextEditor')}")
+    # Convert content to initial text and determine header order
+    clean_content = str(content) if content else "# Section Title"
 
-    # # Use the provided content or a simple default
-    # if not content:
-    #     content = "<p>Start typing your content here...</p>"
+    # Parse initial header level
+    initial_order = 1  # Default to H1
+    if clean_content.startswith("#####"):
+        initial_order = 5
+    elif clean_content.startswith("####"):
+        initial_order = 4
+    elif clean_content.startswith("###"):
+        initial_order = 3
+    elif clean_content.startswith("##"):
+        initial_order = 2
+    elif clean_content.startswith("#"):
+        initial_order = 1
+    else:
+        initial_order = 6  # Regular text
 
-    # Create RichTextEditor with enhanced configuration to minimize circular reference issues
-    logger.info("Building RichTextEditor with optimized configuration to prevent circular JSON")
-
-    # Ensure we have valid HTML content as a clean string
-    clean_content = str(content) if content else "<p>Start typing your content here...</p>"
-
-    # Create the RichTextEditor with absolutely minimal configuration to reduce React Fiber complexity
-    text_editor = dmc.RichTextEditor(
-        id={
-            "type": "text-editor",
-            "index": store_index,  # Use the proper store_index
-        },
-        html=clean_content,  # Use clean string content
-        style={
-            "minHeight": "300px",
-            "width": "100%",
-        },
-        # Use minimal toolbar to reduce component complexity
-        toolbar={
-            "controlsGroups": [
-                ["Bold", "Italic", "Underline"],
-                ["H1", "H2", "H3"],
-                ["BulletList", "OrderedList"],
-                ["Code", "CodeBlock"],
-                ["Link", "Blockquote"],
-            ]
-        }
-        if show_toolbar
-        else None,
-        # Minimal additional properties
-        withTypographyStyles=True,
-        withCodeHighlightStyles=True,
+    # Create the inline editable text component
+    inline_editable_text = create_inline_editable_text(
+        component_id=store_index, initial_text=clean_content, initial_order=initial_order
     )
 
-    # No toolbar info needed since we're using default RichTextEditor
-    toolbar_info = None
-
-    # Create a data store to isolate RichTextEditor content and prevent direct serialization
-    editor_content_store = dcc.Store(
-        id={
-            "type": "text-editor-content",
-            "index": store_index,
-        },
-        data=clean_content,
-        storage_type="memory",
-    )
-
-    # Create an isolation wrapper to prevent RichTextEditor from being serialized in certain contexts
-    text_editor_wrapper = html.Div(
-        [
-            text_editor,
-            editor_content_store,  # Add the content store to buffer data
-        ],
-        id={
-            "type": "text-editor-wrapper",
-            "index": store_index,
-        },
-        # Add some styling to ensure proper rendering
-        style={
-            "width": "100%",
-            "minHeight": "300px",
-        },
-        # Prevent this wrapper from being included in certain serialization paths
-        **{"data-component-type": "text-editor-isolated"},
-    )
-
-    # Create the main content
+    # Create the main content container
     text_content = html.Div(
         [
+            # Optional title for the entire component
             html.H5(
                 title,
                 style={
@@ -249,8 +253,9 @@ def build_text(**kwargs):
             )
             if title and show_title
             else None,
-            toolbar_info,  # Add the toolbar info message
-            text_editor_wrapper,  # Use the wrapper instead of direct editor
+            # The inline editable text component
+            inline_editable_text,
+            # Metadata store
             store_component,
         ]
     )
@@ -263,21 +268,9 @@ def build_text(**kwargs):
             index=store_index, children=text_content, show_border=stepper
         )
 
-        # For stepper mode with loading
-        if not stepper:
-            # Use skeleton system for consistent loading experience
-            from depictio.dash.layouts.draggable_scenarios.progressive_loading import (
-                create_skeleton_component,
-            )
-
-            return html.Div(
-                dcc.Loading(
-                    children=text_component,
-                    custom_spinner=create_skeleton_component("text"),
-                    delay_show=100,  # Small delay to prevent flashing
-                    delay_hide=800,  # Shorter delay for better UX
-                ),
-                id={"index": store_index},  # Use the proper store_index with -tmp
-            )
-        else:
-            return text_component
+        # Always return the component directly for text components
+        # Text components should work immediately without loading delays
+        return html.Div(
+            text_component,
+            id={"index": store_index},  # Preserve the expected id structure
+        )

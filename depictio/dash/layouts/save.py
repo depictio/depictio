@@ -29,6 +29,7 @@ def register_callbacks_save(app):
         Input("edit-components-mode-button", "checked"),
         State("stored-add-button", "data"),
         State({"type": "interactive-component-value", "index": ALL}, "value"),
+        Input({"type": "text-store", "index": ALL}, "data"),
         State("url", "pathname"),
         State("local-store", "data"),
         Input(
@@ -68,6 +69,7 @@ def register_callbacks_save(app):
         edit_components_mode_button_checked,
         add_button,
         interactive_component_values,
+        text_store_data,
         pathname,
         local_store,
         n_clicks_done,
@@ -77,6 +79,7 @@ def register_callbacks_save(app):
         n_clicks_remove_all,
     ):
         logger.info("Saving dashboard data...")
+        logger.info(f"Stored metadata: {stored_metadata}")
         # Early return if user is not logged in
         if not local_store:
             logger.warning("User not logged in.")
@@ -108,7 +111,7 @@ def register_callbacks_save(app):
         from dash import ctx
 
         triggered_id = ctx.triggered[0]["prop_id"].split(".")[0]
-        logger.debug(f"Triggered ID: {triggered_id}")
+        logger.info(f"Triggered ID: {triggered_id}")
 
         # Define save-triggering conditions
         save_triggers = [
@@ -120,6 +123,7 @@ def register_callbacks_save(app):
             "remove-all-components-button",
             "edit-components-mode-button",
             "draggable",
+            "text-store",
         ]
 
         # Check if save should be triggered

@@ -1,7 +1,8 @@
 # Import necessary libraries
+import dash
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
-from dash import MATCH, Input, Output, State, dcc, html
+from dash import MATCH, Input, Output, State, callback_context, dcc, html
 from dash_iconify import DashIconify
 
 # Depictio imports
@@ -15,160 +16,342 @@ from depictio.dash.utils import UNSELECTED_STYLE
 
 
 def register_callbacks_text_component(app):
+    # Inline editable text callbacks
+
+    # Toggle edit mode when double-clicking on title (triggered via clientside callback)
+    @app.callback(
+        [
+            Output({"type": "editable-title", "index": MATCH}, "style"),
+            Output({"type": "edit-input", "index": MATCH}, "style"),
+            Output({"type": "text-store", "index": MATCH}, "data"),
+        ],
+        [
+            Input({"type": "edit-input", "index": MATCH}, "n_submit"),
+            Input({"type": "edit-input", "index": MATCH}, "n_blur"),
+        ],
+        [
+            State({"type": "edit-input", "index": MATCH}, "value"),
+            State({"type": "text-store", "index": MATCH}, "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def toggle_edit_mode(input_submit, input_blur, input_value, store_data):
+        """Toggle between display and edit modes."""
+        ctx = callback_context
+        if not ctx.triggered:
+            return dash.no_update, dash.no_update, dash.no_update
+
+        trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
+        logger.info(f"Toggle edit mode triggered by: {trigger_id}")
+
+        # Initialize store_data if None
+        if not store_data:
+            store_data = {"text": "# Section Title", "order": 1, "editing": False}
+
+        # Base styles
+        title_style = {
+            "cursor": "text",
+            "padding": "4px 8px",
+            "borderRadius": "4px",
+            "transition": "background-color 0.2s",
+            "margin": "8px 0",
+            "minHeight": "24px",
+            "border": "1px dashed transparent",
+        }
+        input_style = {"display": "none"}
+
+        if "edit-input" in trigger_id and (
+            "n_submit" in ctx.triggered[0]["prop_id"] or "n_blur" in ctx.triggered[0]["prop_id"]
+        ):
+            # Stop editing and save
+            logger.info(f"Stopping edit mode, saving: {input_value}")
+            title_style["display"] = "block"
+            input_style["display"] = "none"
+            store_data["editing"] = False
+            store_data["text"] = input_value
+
+        return title_style, input_style, store_data
+
+    # Callback to start editing when double-clicked (triggered by clientside)
+    @app.callback(
+        [
+            Output({"type": "editable-title", "index": MATCH}, "style", allow_duplicate=True),
+            Output({"type": "edit-input", "index": MATCH}, "style", allow_duplicate=True),
+            Output({"type": "text-store", "index": MATCH}, "data", allow_duplicate=True),
+        ],
+        [
+            Input({"type": "editable-title", "index": MATCH}, "n_clicks"),
+            Input({"type": "edit-btn", "index": MATCH}, "n_clicks"),
+        ],
+        State({"type": "text-store", "index": MATCH}, "data"),
+        prevent_initial_call=True,
+    )
+    def start_edit_mode(title_clicks, edit_btn_clicks, store_data):
+        """Start edit mode when title is clicked (triggered by double-click via clientside)."""
+        if not title_clicks and not edit_btn_clicks:
+            return dash.no_update, dash.no_update, dash.no_update
+
+        # Initialize store_data if None
+        if not store_data:
+            store_data = {"text": "# Section Title", "order": 1, "editing": False}
+
+        logger.info("Starting edit mode via double-click")
+
+        # Start editing
+        title_style = {
+            "cursor": "text",
+            "padding": "4px 8px",
+            "borderRadius": "4px",
+            "transition": "background-color 0.2s",
+            "margin": "8px 0",
+            "minHeight": "24px",
+            "border": "1px dashed transparent",
+            "display": "none",
+        }
+        input_style = {"display": "block", "width": "100%"}
+        store_data["editing"] = True
+
+        return title_style, input_style, store_data
+
+    # Auto-focus text input when it becomes visible
+    app.clientside_callback(
+        """
+        function(input_style, store_data) {
+            // Check if input just became visible
+            if (input_style && input_style.display === 'block') {
+                // Focus the input after a short delay
+                setTimeout(function() {
+                    const inputs = document.querySelectorAll('[id*="edit-input"]');
+                    inputs.forEach(input => {
+                        if (input.style.display === 'block') {
+                            input.focus();
+                            input.select(); // Select all text for easy editing
+                        }
+                    });
+                }, 100);
+            }
+            return window.dash_clientside.no_update;
+        }
+        """,
+        Output({"type": "edit-input", "index": MATCH}, "data-focus"),
+        [
+            Input({"type": "edit-input", "index": MATCH}, "style"),
+            Input({"type": "text-store", "index": MATCH}, "data"),
+        ],
+        prevent_initial_call=True,
+    )
+
+    # Update title content and order from input
+    @app.callback(
+        [
+            Output({"type": "editable-title", "index": MATCH}, "children"),
+            Output({"type": "editable-title", "index": MATCH}, "order"),
+        ],
+        Input({"type": "text-store", "index": MATCH}, "data"),
+        prevent_initial_call=True,
+    )
+    def update_title_content(store_data):
+        """Update title content and order when data changes."""
+        if not store_data:
+            return "Click to edit", 3
+
+        text = store_data.get("text", "Click to edit")
+
+        # Parse header level from text
+        if text.startswith("#####"):
+            return text[5:].strip(), 5
+        elif text.startswith("####"):
+            return text[4:].strip(), 4
+        elif text.startswith("###"):
+            return text[3:].strip(), 3
+        elif text.startswith("##"):
+            return text[2:].strip(), 2
+        elif text.startswith("#"):
+            return text[1:].strip(), 1
+        else:
+            return text, 6  # Use order 6 for regular text (smaller than h5)
+
+    # Client-side hover effects and double-click functionality for inline editable text
+    app.clientside_callback(
+        """
+        function() {
+            console.log('Text interaction clientside callback triggered');
+
+            function addTextInteractions() {
+                // Find all text containers and add interactions
+                const textContainers = document.querySelectorAll('[id*="text-container"]');
+
+                textContainers.forEach(container => {
+                    if (container.hasAttribute('data-interactions-processed')) return;
+                    container.setAttribute('data-interactions-processed', 'true');
+
+                    // Hover effects
+                    container.addEventListener('mouseenter', function() {
+                        this.style.border = '1px dashed #ddd';
+                        this.style.backgroundColor = 'var(--app-surface-color, #f9f9f9)';
+                        this.style.cursor = 'pointer';
+                    });
+
+                    container.addEventListener('mouseleave', function() {
+                        this.style.border = '1px solid transparent';
+                        this.style.backgroundColor = 'transparent';
+                        this.style.cursor = 'default';
+                    });
+
+                    // Find the editable title and edit button within this container
+                    const editableTitle = container.querySelector('[id*="editable-title"]');
+                    const editBtn = container.querySelector('[id*="edit-btn"]');
+
+                    if (editableTitle && editBtn) {
+                        editableTitle.style.cursor = 'text';
+                        editableTitle.title = 'Double-click to edit';
+
+                        // Double-click handler
+                        editableTitle.addEventListener('dblclick', function(e) {
+                            console.log('Double-click detected, triggering edit button');
+                            e.preventDefault();
+                            e.stopPropagation();
+
+                            // Trigger the hidden edit button instead of title click
+                            editBtn.click();
+                        });
+                    }
+                });
+            }
+
+            // Run immediately and periodically
+            addTextInteractions();
+            setInterval(addTextInteractions, 1000);
+
+            return window.dash_clientside.no_update;
+        }
+        """,
+        Output("page-content", "style"),
+        Input("page-content", "children"),
+        prevent_initial_call=False,
+    )
+
     # Callback to update text component based on configuration changes
     @app.callback(
         Output({"type": "component-container", "index": MATCH}, "children"),
         [
             Input({"type": "btn-apply-text-settings", "index": MATCH}, "n_clicks"),
-            # State({"type": "input-text-title", "index": MATCH}, "value"),
-            # State({"type": "switch-text-show-title", "index": MATCH}, "checked"),
-            # State({"type": "switch-text-show-toolbar", "index": MATCH}, "checked"),
-            # State({"type": "btn-apply-text-settings", "index": MATCH}, "id"),
-            # Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
-            # Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
-            # State("local-store", "data"),
+            State({"type": "btn-apply-text-settings", "index": MATCH}, "id"),
+            Input({"type": "workflow-selection-label", "index": MATCH}, "value"),
+            Input({"type": "datacollection-selection-label", "index": MATCH}, "value"),
+            State("local-store", "data"),
             State("url", "pathname"),
         ],
         prevent_initial_call=True,
     )
-    def update_text_component(
-        n_clicks,
-        # title, show_title, show_toolbar, id, wf_id, dc_id, data,
-        pathname,
-    ):
+    def update_text_component(n_clicks, id, wf_id, dc_id, data, pathname):
         """
         Callback to update text component based on configuration settings
         """
-        # if not data or not n_clicks or n_clicks == 0:
-        #     return build_text_frame(index=id["index"])
+        if not data or not n_clicks or n_clicks == 0:
+            return build_text_frame(index=id["index"])
 
-        # logger.info(f"wf_id: {wf_id}")
-        # logger.info(f"dc_id: {dc_id}")
+        logger.info(f"wf_id: {wf_id}")
+        logger.info(f"dc_id: {dc_id}")
 
-        # try:
-        #     # Build the text component with configuration options
-        #     text_kwargs = {
-        #         "index": id["index"],
-        #         "title": title if show_title else None,
-        #         "content": "<p>Start typing your content here...</p>",
-        #         "stepper": True,
-        #         "build_frame": True,  # Use frame for editing with loading
-        #         "show_toolbar": show_toolbar,
-        #         "show_title": show_title,
-        #         "wf_id": wf_id,
-        #         "dc_id": dc_id,
-        #     }
-        #     new_text = build_text(**text_kwargs)
-        #     return new_text
-        # except Exception as e:
-        #     logger.error(f"Error creating text component: {e}")
-        #     # Fallback to simple textarea if RichTextEditor fails
-        #     return html.Div(
-        #         [
-        #             html.H5("Text Component (Fallback Mode)" if show_title else None),
-        #             dcc.Textarea(
-        #                 id={"type": "text-editor-fallback", "index": id["index"]},
-        #                 placeholder="Enter your text content here...",
-        #                 style={"width": "100%", "minHeight": "200px"},
-        #                 value="<p>Start typing your content here...</p>",
-        #             ),
-        #         ]
-        #     )
-
-        # Get the component index from the callback context
-        component_id = n_clicks if hasattr(n_clicks, "__dict__") else {"index": "text-component"}
-
-        # Build text component with proper configuration
-        return build_text(
-            index=component_id.get("index", "text-component")
-            if isinstance(component_id, dict)
-            else "text-component",
-            title="Text Component",
-            content="<p>Start typing your content here...</p>",
-            build_frame=True,
-            stepper=True,
-            show_toolbar=True,
-            show_title=True,
-        )
+        try:
+            # Build the text component with configuration options
+            text_kwargs = {
+                "index": id["index"],
+                "title": None,  # No title needed for inline editable text components
+                "content": "# Section Title",  # Changed to markdown format
+                "stepper": True,
+                "build_frame": True,  # Use frame for editing with loading
+                "show_toolbar": True,  # Legacy parameter, not used
+                "show_title": False,  # No title needed for inline editable text components
+                "wf_id": wf_id,
+                "dc_id": dc_id,
+            }
+            new_text = build_text(**text_kwargs)
+            return new_text
+        except Exception as e:
+            logger.error(f"Error creating text component: {e}")
+            # Fallback to simple textarea if inline editable text fails
+            return html.Div(
+                [
+                    html.H5("Text Component (Fallback Mode)"),
+                    dcc.Textarea(
+                        id={"type": "text-editor-fallback", "index": id["index"]},
+                        placeholder="Enter your text content here (use # for headers)...",
+                        style={"width": "100%", "minHeight": "200px"},
+                        value="# Section Title",
+                    ),
+                ]
+            )
 
 
 def design_text(id):
-    # Configuration panel on the left
-    left_column = dmc.GridCol(
-        dmc.Stack(
-            [
-                html.H5("Text Component Settings", style={"textAlign": "center"}),
-                dmc.Card(
-                    dmc.CardSection(
-                        dmc.Stack(
-                            [
-                                dmc.TextInput(
-                                    label="Component Title",
-                                    placeholder="Enter title (optional)",
-                                    id={"type": "input-text-title", "index": id["index"]},
-                                    value="Text Component",
-                                ),
-                                dmc.Switch(
-                                    label="Show Title",
-                                    description="Display the component title above the text editor",
-                                    id={"type": "switch-text-show-title", "index": id["index"]},
-                                    checked=True,
-                                    size="md",
-                                ),
-                                dmc.Switch(
-                                    label="Show Toolbar",
-                                    description="Display the rich text formatting toolbar",
-                                    id={"type": "switch-text-show-toolbar", "index": id["index"]},
-                                    checked=True,
-                                    size="md",
-                                ),
-                                dmc.Button(
-                                    "Apply Settings",
-                                    id={"type": "btn-apply-text-settings", "index": id["index"]},
-                                    n_clicks=0,
-                                    color="orange",
-                                    variant="filled",
-                                    leftSection=DashIconify(icon="mdi:check", color="white"),
-                                ),
-                            ],
-                            gap="md",
-                        ),
-                        style={"padding": "1rem"},
+    # Simplified design for text components - they're meant to be inline editable
+    return dmc.Stack(
+        [
+            dmc.Alert(
+                [
+                    dmc.Text(
+                        "Text components are designed to be simple section delimiters.", fw="bold"
                     ),
-                    withBorder=True,
-                    shadow="sm",
-                    style={"maxHeight": "400px", "overflowY": "auto"},
-                ),
-            ]
-        ),
-        span="auto",
-        style={"minWidth": "300px"},
+                    dmc.Text(
+                        "Double-click on any text in your dashboard to edit it directly.", size="sm"
+                    ),
+                    dmc.Text(
+                        "Use # for H1, ## for H2, ### for H3, #### for H4, ##### for H5",
+                        size="sm",
+                        c="gray",
+                    ),
+                    dmc.Text(
+                        "Type your header format directly (e.g., ## My Section)",
+                        size="sm",
+                        c="gray",
+                    ),
+                ],
+                title="How to use Text Components",
+                icon=DashIconify(icon="material-symbols:info"),
+                color="blue",
+                style={"marginBottom": "20px"},
+            ),
+            dmc.Card(
+                [
+                    dmc.Button(
+                        "Add Text Component",
+                        id={"type": "btn-apply-text-settings", "index": id["index"]},
+                        n_clicks=0,
+                        color="orange",
+                        variant="filled",
+                        leftSection=DashIconify(icon="mdi:text-box-edit", color="white"),
+                        fullWidth=True,
+                        size="lg",
+                    ),
+                ],
+                withBorder=True,
+                shadow="sm",
+                p="lg",
+            ),
+            # Simple preview
+            html.Div(
+                [
+                    dmc.Text("Preview:", fw="bold", style={"marginBottom": "10px"}),
+                    html.Div(
+                        build_text_frame(index=id["index"]),
+                        id={
+                            "type": "component-container",
+                            "index": id["index"],
+                        },
+                        style={
+                            "border": "1px dashed var(--app-border-color, #ddd)",
+                            "borderRadius": "4px",
+                            "minHeight": "150px",
+                            "padding": "10px",
+                        },
+                    ),
+                ],
+                style={"marginTop": "20px"},
+            ),
+        ]
     )
-
-    # Preview area on the right
-    right_column = dmc.GridCol(
-        dmc.Stack(
-            [
-                html.H5("Preview", style={"textAlign": "center"}),
-                html.Div(
-                    build_text_frame(index=id["index"]),
-                    id={
-                        "type": "component-container",
-                        "index": id["index"],
-                    },
-                    style={
-                        "border": "1px dashed var(--app-border-color, #ddd)",
-                        "borderRadius": "4px",
-                        "minHeight": "300px",
-                        "padding": "10px",
-                    },
-                ),
-            ]
-        ),
-        span="auto",
-    )
-
-    return dmc.Grid([left_column, right_column], gutter="lg")
 
 
 def create_stepper_text_button(n, disabled=None):
