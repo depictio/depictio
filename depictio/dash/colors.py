@@ -12,6 +12,7 @@ colors = {
     "pink": "#E6779F",
     "red": "#E53935",  # Added complementary red
     "black": "#000000",
+    "grey": "#B0BEC5",
 }
 
 # Color combinations for various chart types
@@ -31,7 +32,6 @@ color_sequences = {
         colors["purple"],
         colors["blue"],
         colors["teal"],
-        colors["green"],
         colors["yellow"],
         colors["orange"],
     ],

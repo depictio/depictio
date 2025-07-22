@@ -6,6 +6,7 @@ from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
+from depictio.dash.component_metadata import get_component_metadata_by_display_name
 
 
 def register_callbacks_stepper_part_one(app):
@@ -47,17 +48,7 @@ def register_callbacks_stepper_part_one(app):
         #     # component_selected = "None"
         #     component_selected = input_last_component
 
-        component_metadata_dict = {
-            "Card": {"color": "violet", "icon": "formkit:number"},
-            "Figure": {"color": "grape", "icon": "mdi:graph-box"},
-            "Interactive": {"color": "indigo", "icon": "bx:slider-alt"},
-            "Table": {"color": "green", "icon": "octicon:table-24"},
-            "JBrowse2": {
-                "color": "yellow",
-                "icon": "material-symbols:table-rows-narrow-rounded",
-            },
-            "None": {"color": "gray", "icon": "ph:circle"},
-        }
+        # Component metadata is now handled by centralized functions
 
         # Determine the index of the most recently modified (clicked) button
         # latest_index = store_btn_ts.index(max(store_btn_ts))
@@ -395,17 +386,19 @@ def register_callbacks_stepper_part_one(app):
         else:
             layout = html.Div("No data to display")
 
+        # Get metadata for the selected component
+        component_metadata = get_component_metadata_by_display_name(component_selected)
+
         return layout, dmc.Badge(
             component_selected,
             size="xl",
             radius="xl",
             style={"fontFamily": "Virgil"},
-            color=component_metadata_dict[component_selected]["color"],
+            color=component_metadata["color"],
             leftSection=DashIconify(
-                icon=component_metadata_dict[component_selected]["icon"],
+                icon=component_metadata["icon"],
                 width=15,
                 color="white",
-                # color=component_metadata_dict[component_selected]["color"],
             ),
         )
 

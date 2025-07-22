@@ -8,6 +8,11 @@ from dash_iconify import DashIconify
 from depictio.api.v1.configs.config import API_BASE_URL
 
 # Depictio imports
+from depictio.api.v1.configs.logging_init import logger
+from depictio.dash.component_metadata import (
+    get_dmc_button_color,
+    is_enabled,
+)
 from depictio.dash.modules.table_component.utils import build_table, build_table_frame
 from depictio.dash.utils import UNSELECTED_STYLE, get_columns_from_data_collection
 
@@ -161,6 +166,7 @@ def register_callbacks_table_component(app):
             "cols_json": cols_json,
             "access_token": TOKEN,
             "stepper": True,
+            "build_frame": True,  # Use frame for editing with loading
         }
         new_table = build_table(**table_kwargs)
         return new_table
@@ -230,10 +236,21 @@ def design_table(id):
     #         )
 
 
-def create_stepper_table_button(n, disabled=False):
+def create_stepper_table_button(n, disabled=None):
     """
     Create the stepper table button
+
+    Args:
+        n (_type_): _description_
+        disabled (bool, optional): Override enabled state. If None, uses metadata.
     """
+
+    # Use metadata enabled field if disabled not explicitly provided
+    if disabled is None:
+        disabled = not is_enabled("table")
+
+    color = get_dmc_button_color("table")
+    logger.info(f"Table button color: {color}")
 
     # Create the table button
     button = dbc.Col(
@@ -247,7 +264,7 @@ def create_stepper_table_button(n, disabled=False):
             n_clicks=0,
             style=UNSELECTED_STYLE,
             size="xl",
-            color="green",
+            color=get_dmc_button_color("table"),
             leftSection=DashIconify(icon="octicon:table-24", color="white"),
             disabled=disabled,
         )

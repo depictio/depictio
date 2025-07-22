@@ -71,7 +71,7 @@ def register_callbacks_stepper(app):
         all_wf_dc = project["workflows"]
 
         mapping_component_data_collection = {
-            "table": ["Figure", "Card", "Interactive", "Table"],
+            "table": ["Figure", "Card", "Interactive", "Table", "Text"],
             "jbrowse2": ["JBrowse2"],
         }
 
@@ -148,7 +148,7 @@ def register_callbacks_stepper(app):
         selected_wf_data = selected_wf_list[0]
 
         mapping_component_data_collection = {
-            "table": ["Figure", "Card", "Interactive", "Table"],
+            "table": ["Figure", "Card", "Interactive", "Table", "Text"],
             "jbrowse2": ["JBrowse2"],
         }
 

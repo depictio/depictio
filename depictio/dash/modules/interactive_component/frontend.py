@@ -9,6 +9,7 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.colors import colors
 
 # Depictio imports
+from depictio.dash.component_metadata import get_dmc_button_color, is_enabled
 from depictio.dash.modules.interactive_component.utils import (
     agg_functions,
     build_interactive,
@@ -600,7 +601,7 @@ def design_interactive(id, df):
                                                 "type": "input-color-picker",
                                                 "index": id["index"],
                                             },
-                                            value=colors["black"],
+                                            value="var(--app-text-color, #000000)",
                                             format="hex",
                                             # leftSection=DashIconify(icon="cil:paint"),
                                             swatches=[
@@ -758,11 +759,19 @@ def design_interactive(id, df):
     return interactive_row
 
 
-def create_stepper_interactive_button(n, disabled=False):
+def create_stepper_interactive_button(n, disabled=None):
     """
     Create the stepper interactive button
+
+    Args:
+        n (_type_): _description_
+        disabled (bool, optional): Override enabled state. If None, uses metadata.
     """
     import dash_bootstrap_components as dbc
+
+    # Use metadata enabled field if disabled not explicitly provided
+    if disabled is None:
+        disabled = not is_enabled("interactive")
 
     button = dbc.Col(
         dmc.Button(
@@ -775,7 +784,7 @@ def create_stepper_interactive_button(n, disabled=False):
             n_clicks=0,
             style=UNSELECTED_STYLE,
             size="xl",
-            color="indigo",
+            color=get_dmc_button_color("interactive"),
             leftSection=DashIconify(icon="bx:slider-alt", color="white"),
             disabled=disabled,
         )

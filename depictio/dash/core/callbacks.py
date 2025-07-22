@@ -140,6 +140,7 @@ def register_component_callbacks(app):
         register_callbacks_jbrowse_component,
     )
     from depictio.dash.modules.table_component.frontend import register_callbacks_table_component
+    from depictio.dash.modules.text_component.frontend import register_callbacks_text_component
 
     # Register component callbacks
     register_callbacks_card_component(app)
@@ -147,6 +148,7 @@ def register_component_callbacks(app):
     register_callbacks_figure_component(app)
     register_callbacks_jbrowse_component(app)
     register_callbacks_table_component(app)
+    register_callbacks_text_component(app)
 
 
 def register_feature_callbacks(app):

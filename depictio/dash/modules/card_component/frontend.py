@@ -7,6 +7,7 @@ from dash_iconify import DashIconify
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.colors import colors
+from depictio.dash.component_metadata import get_dmc_button_color, is_enabled
 from depictio.dash.modules.card_component.utils import agg_functions, build_card, build_card_frame
 
 # Depictio imports
@@ -421,7 +422,7 @@ def design_card(id, df):
                                                 "type": "card-color-picker",
                                                 "index": id["index"],
                                             },
-                                            value=colors["black"],
+                                            value="var(--app-text-color, #000000)",
                                             format="hex",
                                             # leftSection=DashIconify(icon="cil:paint"),
                                             swatches=[
@@ -551,12 +552,20 @@ def design_card(id, df):
     return card_row
 
 
-def create_stepper_card_button(n, disabled=False):
+def create_stepper_card_button(n, disabled=None):
     """
     Create the stepper card button
+
+    Args:
+        n (_type_): _description_
+        disabled (bool, optional): Override enabled state. If None, uses metadata.
     """
 
     import dash_bootstrap_components as dbc
+
+    # Use metadata enabled field if disabled not explicitly provided
+    if disabled is None:
+        disabled = not is_enabled("card")
 
     # Create the card button
     button = dbc.Col(
@@ -570,7 +579,7 @@ def create_stepper_card_button(n, disabled=False):
             n_clicks=0,
             style=UNSELECTED_STYLE,
             size="xl",
-            color="violet",
+            color=get_dmc_button_color("card"),
             leftSection=DashIconify(icon="formkit:number", color="white"),
             disabled=disabled,
         )

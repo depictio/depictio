@@ -64,7 +64,7 @@ def register_admin_notifications_callbacks(app):
                                 dict(
                                     id="admin-password-warning",
                                     title="Admin Security Warning",
-                                    message="Your admin account still has the default password. Please change it for security reasons.",
+                                    message="The default Depictio admin account still has the default password. Please change it for security reasons.",
                                     color="red",
                                     icon=DashIconify(icon="mdi:alert-circle", width=24),
                                     # autoClose=5000,

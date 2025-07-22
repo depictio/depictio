@@ -33,7 +33,7 @@ def build_table_frame(index, children=None):
                 "boxShadow": "none",  # Optional: Remove shadow for a cleaner look
                 # "border": "1px solid #ddd",  # Optional: Add a light border
                 # "borderRadius": "4px",  # Optional: Slightly round the corners
-                "border": "0px",  # Optional: Remove border
+                "border": "1px solid var(--app-border-color, #ddd)",  # Always show border for draggable delimitation  # Optional: Remove border
             },
             id={
                 "type": "table-component",
@@ -64,7 +64,7 @@ def build_table_frame(index, children=None):
                 "boxShadow": "none",  # Optional: Remove shadow for a cleaner look
                 # "border": "1px solid #ddd",  # Optional: Add a light border
                 # "borderRadius": "4px",  # Optional: Slightly round the corners
-                "border": "0px",  # Optional: Remove border
+                "border": "1px solid var(--app-border-color, #ddd)",  # Always show border for draggable delimitation  # Optional: Remove border
             },
             id={
                 "type": "table-component",
@@ -85,7 +85,7 @@ def build_table(**kwargs):
 
     df = kwargs.get("df", pl.DataFrame())
     TOKEN = kwargs.get("access_token")
-    # stepper = kwargs.get("stepper", False)
+    stepper = kwargs.get("stepper", False)
 
     df = kwargs.get("df", pl.DataFrame())
 
@@ -240,4 +240,26 @@ def build_table(**kwargs):
     if not build_frame:
         return new_card_body
     else:
-        return build_table_frame(index=index, children=new_card_body)
+        # Build the table component with frame
+        table_component = build_table_frame(index=index, children=new_card_body)
+
+        if not stepper:
+            # For stepper mode with loading
+            # Use skeleton system for consistent loading experience
+            from depictio.dash.layouts.draggable_scenarios.progressive_loading import (
+                create_skeleton_component,
+            )
+
+            return html.Div(
+                dcc.Loading(
+                    children=table_component,
+                    custom_spinner=create_skeleton_component("table"),
+                    delay_show=100,  # Small delay to prevent flashing
+                    delay_hide=2000,  # 2s delay for debugging visibility
+                ),
+                id={"index": index},  # Preserve the expected id structure
+            )
+
+        else:
+            # For stepper mode without loading
+            return table_component

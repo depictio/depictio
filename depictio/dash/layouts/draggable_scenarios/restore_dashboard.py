@@ -3,28 +3,19 @@ import collections
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.dash.api_calls import api_call_fetch_user_from_token, api_call_get_dashboard
+from depictio.dash.component_metadata import get_build_functions
 from depictio.dash.layouts.draggable_scenarios.interactive_component_update import (
     update_interactive_component,
 )
-from depictio.dash.layouts.draggable_scenarios.skeleton_components import (
+from depictio.dash.layouts.draggable_scenarios.progressive_loading import (
     create_skeleton_component,
 )
 from depictio.dash.layouts.edit import enable_box_edit_mode
-from depictio.dash.modules.card_component.utils import build_card
-from depictio.dash.modules.figure_component.utils import build_figure
-from depictio.dash.modules.interactive_component.utils import build_interactive
-from depictio.dash.modules.jbrowse_component.utils import build_jbrowse
-from depictio.dash.modules.table_component.utils import build_table
 from depictio.models.models.dashboards import DashboardData
 from depictio.models.utils import convert_model_to_dict
 
-build_functions = {
-    "card": build_card,
-    "figure": build_figure,
-    "interactive": build_interactive,
-    "table": build_table,
-    "jbrowse": build_jbrowse,
-}
+# Get build functions from centralized metadata
+build_functions = get_build_functions()
 
 
 def return_interactive_components_dict(dashboard_data):
@@ -90,20 +81,78 @@ def render_dashboard(stored_metadata, edit_components_button, dashboard_id, them
         # Build the child using the appropriate function and kwargs
         child = build_function(**child_metadata)
         # logger.debug(f"child : ")
-        children.append(child)
+        # Store child with its component type for later processing
+        children.append((child, component_type))
     # logger.info(f"Children: {children}")
 
     interactive_components_dict = return_interactive_components_dict(stored_metadata)
 
-    children = [
-        enable_box_edit_mode(
-            child.to_plotly_json(),
-            switch_state=edit_components_button,
-            dashboard_id=dashboard_id,
-            TOKEN=TOKEN,
-        )
-        for child in children
-    ]
+    # Process children with special handling for text components to avoid circular JSON
+    processed_children = []
+    for child, component_type in children:
+        try:
+            if component_type == "text":
+                # For text components, try to_plotly_json() first, but catch circular reference errors
+                logger.info(
+                    "Attempting to_plotly_json() for text component with circular reference protection"
+                )
+                try:
+                    child_json = child.to_plotly_json()
+                except (ValueError, TypeError) as e:
+                    if "circular" in str(e).lower() or "json" in str(e).lower():
+                        logger.warning(
+                            f"Circular reference detected in text component, using fallback approach: {e}"
+                        )
+                        # Create a minimal JSON structure for the text component
+                        # Extract the essential information without the problematic RichTextEditor
+                        child_json = {
+                            "type": "Div",
+                            "props": {
+                                "id": {
+                                    "index": child.id.get("index")
+                                    if hasattr(child, "id") and child.id
+                                    else "unknown"
+                                },
+                                "children": "Text Component (Circular Reference Avoided)",
+                            },
+                        }
+                    else:
+                        raise  # Re-raise if it's not a circular reference issue
+
+                processed_child = enable_box_edit_mode(
+                    child_json,
+                    switch_state=edit_components_button,
+                    dashboard_id=dashboard_id,
+                    TOKEN=TOKEN,
+                )
+            else:
+                # For other components, use the standard to_plotly_json() approach
+                processed_child = enable_box_edit_mode(
+                    child.to_plotly_json(),
+                    switch_state=edit_components_button,
+                    dashboard_id=dashboard_id,
+                    TOKEN=TOKEN,
+                )
+            processed_children.append(processed_child)
+        except Exception as e:
+            logger.error(f"Error processing {component_type} component: {e}")
+            # Add a fallback component to prevent the entire dashboard from failing
+            fallback_child = {
+                "type": "Div",
+                "props": {
+                    "id": {"index": f"error-{component_type}"},
+                    "children": f"Error loading {component_type} component",
+                },
+            }
+            processed_child = enable_box_edit_mode(
+                fallback_child,
+                switch_state=edit_components_button,
+                dashboard_id=dashboard_id,
+                TOKEN=TOKEN,
+            )
+            processed_children.append(processed_child)
+
+    children = processed_children
     # logger.info(f"Children: {children}")
 
     children = update_interactive_component(
@@ -136,9 +185,7 @@ def render_dashboard_with_skeletons(
         logger.info(f"Creating skeleton for {component_type} component {component_uuid}")
 
         # Create skeleton component
-        skeleton_component = create_skeleton_component(
-            component_type, component_uuid, child_metadata
-        )
+        skeleton_component = create_skeleton_component(component_type)
 
         # Wrap with DraggableWrapper using enable_box_edit_mode structure
         from dash import html

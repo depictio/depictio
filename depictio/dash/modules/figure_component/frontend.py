@@ -11,6 +11,7 @@ from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
+from depictio.dash.component_metadata import get_dmc_button_color, is_enabled
 from depictio.dash.modules.figure_component.code_executor import SecureCodeExecutor
 from depictio.dash.modules.figure_component.code_mode import (
     convert_ui_params_to_code,
@@ -482,7 +483,12 @@ def register_callbacks_figure_component(app):
         loading_content = dmc.Stack(
             [
                 dmc.Loader(type="dots", color="gray", size="lg"),
-                dmc.Text("Generating figure...", size="sm", c="gray"),
+                dmc.Text(
+                    "Generating figure...",
+                    size="sm",
+                    c="gray",
+                    style={"color": "var(--app-text-color, gray)"},
+                ),
             ],
             align="center",
             gap="md",
@@ -654,6 +660,8 @@ def register_callbacks_figure_component(app):
                 "dc_config": dc_config,
                 "access_token": TOKEN,
                 "theme": theme,
+                "build_frame": True,
+                "stepper": True,
             }
 
             if parent_index:
@@ -665,6 +673,8 @@ def register_callbacks_figure_component(app):
             logger.info(f"  wf_id: {figure_kwargs['wf_id']}")
             logger.info(f"  dc_id: {figure_kwargs['dc_id']}")
             logger.info(f"  theme: {figure_kwargs['theme']}")
+            logger.info(f"  build_frame: {figure_kwargs['build_frame']}")
+            logger.info(f"  stepper: {figure_kwargs['stepper']}")
             logger.info(f"  parent_index: {figure_kwargs.get('parent_index', 'None')}")
 
             figure_result = build_figure(**figure_kwargs)
@@ -1025,6 +1035,8 @@ def register_callbacks_figure_component(app):
                 "dc_config": dc_config,
                 "access_token": TOKEN,
                 "theme": theme,
+                "build_frame": True,
+                "stepper": True,
             }
 
             # Add parent_index if available
@@ -1769,16 +1781,20 @@ def design_figure(id, component_data=None):
     return figure_row
 
 
-def create_stepper_figure_button(n, disabled=False):
+def create_stepper_figure_button(n, disabled=None):
     """
     Create the stepper figure button
 
     Args:
         n (_type_): _description_
+        disabled (bool, optional): Override enabled state. If None, uses metadata.
 
     Returns:
         _type_: _description_
     """
+    # Use metadata enabled field if disabled not explicitly provided
+    if disabled is None:
+        disabled = not is_enabled("figure")
 
     button = dbc.Col(
         dmc.Button(
@@ -1791,7 +1807,7 @@ def create_stepper_figure_button(n, disabled=False):
             n_clicks=0,
             style=UNSELECTED_STYLE,
             size="xl",
-            color="grape",
+            color=get_dmc_button_color("figure"),
             leftSection=DashIconify(icon="mdi:graph-box", color="white"),
             disabled=disabled,
         )

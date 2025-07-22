@@ -59,7 +59,10 @@ def build_jbrowse_frame(index, children=None):
                     "index": index,
                 }
             ),
-            style={"width": "100%"},
+            style={
+                "width": "100%",
+                "border": "1px solid var(--app-border-color, #ddd)",  # Always show border for draggable delimitation
+            },
             id={
                 "type": "jbrowse-component",
                 "index": index,
@@ -74,7 +77,10 @@ def build_jbrowse_frame(index, children=None):
                     "index": index,
                 },
             ),
-            style={"width": "100%"},
+            style={
+                "width": "100%",
+                "border": "1px solid var(--app-border-color, #ddd)",  # Always show border for draggable delimitation
+            },
             id={
                 "type": "jbrowse-component",
                 "index": index,
@@ -90,6 +96,7 @@ def build_jbrowse(**kwargs):
     stored_metadata_jbrowse = kwargs.get("stored_metadata_jbrowse", {})
     index = kwargs.get("index")
     build_frame = kwargs.get("build_frame", False)
+    stepper = kwargs.get("stepper", False)
     access_token = kwargs.get("access_token")
     dashboard_id = kwargs.get("dashboard_id")
 
@@ -217,7 +224,27 @@ def build_jbrowse(**kwargs):
     if not build_frame:
         return jbrowse_body
     else:
-        return build_jbrowse_frame(index=index, children=jbrowse_body)
+        # Build the jbrowse component with frame
+        jbrowse_component = build_jbrowse_frame(index=index, children=jbrowse_body)
+
+        # For stepper mode with loading
+        if not stepper:
+            # Use skeleton system for consistent loading experience
+            from depictio.dash.layouts.draggable_scenarios.progressive_loading import (
+                create_skeleton_component,
+            )
+
+            return html.Div(
+                dcc.Loading(
+                    children=jbrowse_component,
+                    custom_spinner=create_skeleton_component("jbrowse"),
+                    delay_show=100,  # Small delay to prevent flashing
+                    delay_hide=2000,  # 2s delay for debugging visibility
+                ),
+                id={"index": index},  # Preserve the expected id structure
+            )
+        else:
+            return jbrowse_component
 
 
 # print(sub_child["props"]["id"]["type"])

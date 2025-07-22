@@ -121,9 +121,7 @@ def build_card_frame(index, children=None, show_border=False):
                 "padding": "0",
                 "margin": "0",
                 "boxShadow": "none",
-                "border": "1px solid var(--app-border-color, #ddd)"
-                if show_border
-                else "0px solid var(--app-border-color, #ddd)",
+                "border": "1px solid var(--app-border-color, #ddd)",  # Always show border for draggable delimitation
                 "borderRadius": "4px",
                 "backgroundColor": "var(--app-surface-color, #ffffff)",
             },
@@ -154,9 +152,7 @@ def build_card_frame(index, children=None, show_border=False):
                 "padding": "0",  # Remove default padding
                 "margin": "0",  # Remove default margin
                 "boxShadow": "none",  # Optional: Remove shadow for a cleaner look
-                "border": "1px solid var(--app-border-color, #ddd)"
-                if show_border
-                else "0px solid var(--app-border-color, #ddd)",  # Conditional border
+                "border": "1px solid var(--app-border-color, #ddd)",  # Always show border for draggable delimitation  # Conditional border
                 "borderRadius": "4px",
                 "backgroundColor": "var(--app-surface-color, #ffffff)",
             },
@@ -169,6 +165,8 @@ def build_card_frame(index, children=None, show_border=False):
 
 def build_card(**kwargs):
     # def build_card(index, title, wf_id, dc_id, dc_config, column_name, column_type, aggregation, v, build_frame=False):
+    from dash import html
+
     index = kwargs.get("index")
     title = kwargs.get("title", "Default Title")  # Example of default parameter
     wf_id = kwargs.get("wf_id")
@@ -459,8 +457,34 @@ def build_card(**kwargs):
     if not build_frame:
         return new_card_body
     else:
-        # Show border only when in stepper mode (editing)
-        return build_card_frame(index=index, children=new_card_body, show_border=stepper)
+        if not stepper:
+            # Show border only when in stepper mode (editing)
+            from depictio.dash.layouts.draggable_scenarios.progressive_loading import (
+                create_skeleton_component,
+            )
+
+            # Build the card component
+            card_component = build_card_frame(
+                index=index, children=new_card_body, show_border=stepper
+            )
+
+            # Wrap with loading, but preserve the original component structure by putting Loading inside
+            # Create a container that maintains the expected id structure for enable_box_edit_mode
+            return html.Div(
+                dcc.Loading(
+                    children=card_component,
+                    custom_spinner=create_skeleton_component("card"),
+                    delay_show=100,  # Small delay to prevent flashing
+                    delay_hide=2000,  # 2s delay for debugging visibility
+                ),
+                id={"index": index},  # Preserve the expected id structure
+            )
+        else:
+            # Build the card component for stepper mode
+            card_component = build_card_frame(
+                index=index, children=new_card_body, show_border=stepper
+            )
+            return card_component
 
 
 # List of all the possible aggregation methods for each data type

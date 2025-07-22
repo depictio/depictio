@@ -1,5 +1,6 @@
 """
 Simple progressive loading for Depictio dashboards - just like the prototype.
+Includes skeleton components for progressive loading.
 """
 
 import base64
@@ -9,6 +10,74 @@ import dash_mantine_components as dmc
 from dash import Input, Output, dcc, get_app, html
 
 from depictio.api.v1.configs.logging_init import logger
+from depictio.dash.component_metadata import (
+    get_component_display_name,
+    get_component_metadata,
+)
+
+# =============================================================================
+# SKELETON COMPONENTS FOR PROGRESSIVE LOADING
+# =============================================================================
+
+
+def create_skeleton_component(component_type: str) -> html.Div:
+    """
+    Create a skeleton component of the specified type.
+
+    Args:
+        component_type (str): The type of component
+        component_uuid (str, optional): The UUID of the component (unused but kept for compatibility)
+        component_metadata (dict, optional): Component metadata (unused but kept for compatibility)
+
+    Returns:
+        dmc.Center: A skeleton loader component
+    """
+    logger.info(f"Creating skeleton for component type: {component_type}")
+    component_metadata = get_component_metadata(component_type)
+    logger.info(f"Component metadata: {component_metadata}")
+
+    return html.Div(
+        dmc.Center(
+            dmc.Stack(
+                [
+                    dmc.Loader(
+                        type="dots",
+                        color=component_metadata.get(
+                            "color", "gray"
+                        ),  # Default to gray if not found
+                        size="lg",
+                    ),
+                    dmc.Text(
+                        f"Loading {get_component_display_name(component_type)}...",  # Use display name
+                        size="sm",
+                    ),
+                ],
+                align="center",
+                gap="sm",
+            ),
+        ),
+        style={
+            "position": "fixed",  # Use fixed positioning instead of absolute
+            "top": "0px",
+            "left": "0px",
+            "right": "0px",
+            "bottom": "0px",
+            "width": "100%",
+            "height": "100%",
+            "backgroundColor": "var(--app-surface-color, rgba(255, 255, 255, 0.95))",  # Semi-transparent to debug
+            "backdropFilter": "blur(2px)",  # Add blur effect to hide content behind
+            "zIndex": "9999",  # Very high z-index to ensure it's above everything
+            "display": "flex",
+            "alignItems": "center",
+            "justifyContent": "center",
+            "overflow": "hidden",  # Prevent any content from overflowing
+        },
+    )
+
+
+# =============================================================================
+# PROGRESSIVE LOADING DISPLAY COMPONENTS
+# =============================================================================
 
 
 def _load_svg_content():

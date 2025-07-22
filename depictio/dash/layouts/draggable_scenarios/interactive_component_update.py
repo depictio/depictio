@@ -9,15 +9,11 @@ from depictio.api.v1.deltatables_utils import (
     join_deltatables_dev,
     return_joins_dict,
 )
+from depictio.dash.component_metadata import get_build_functions
 from depictio.dash.layouts.edit import enable_box_edit_mode
-from depictio.dash.modules.card_component.utils import build_card
-from depictio.dash.modules.figure_component.utils import build_figure
-from depictio.dash.modules.interactive_component.utils import build_interactive
 from depictio.dash.modules.jbrowse_component.utils import (
-    build_jbrowse,
     build_jbrowse_df_mapping_dict,
 )
-from depictio.dash.modules.table_component.utils import build_table
 
 
 def apply_dropdowns(df, n_dict):
@@ -142,13 +138,8 @@ def group_interactive_components(interactive_components_dict):
     return grouped
 
 
-helpers_mapping = {
-    "card": build_card,
-    "figure": build_figure,
-    "interactive": build_interactive,
-    "table": build_table,
-    "jbrowse": build_jbrowse,
-}
+# Get helpers mapping from centralized metadata
+helpers_mapping = get_build_functions()
 
 
 def render_raw_children(
@@ -235,15 +226,63 @@ def render_raw_children(
         child = helpers_mapping[comp_type](**component)
     except KeyError as e:
         logger.error(f"No helper found for component type '{comp_type}': {e}")
+        # Return empty results if no helper is found
+        return [], []
+    except Exception as e:
+        logger.error(f"Error building component of type '{comp_type}': {e}")
+        # Return empty results if there's an error during build
+        return [], []
 
-    # Enable edit mode on the component
-    child = enable_box_edit_mode(
-        child.to_plotly_json(),
-        switch_state=switch_state,
-        dashboard_id=dashboard_id,
-        component_data=component,
-        TOKEN=TOKEN,
-    )
+    # Enable edit mode on the component with circular reference protection for text components
+    try:
+        if comp_type == "text":
+            # For text components, try to_plotly_json() with circular reference protection
+            logger.info("Processing text component with circular reference protection")
+            try:
+                child_json = child.to_plotly_json()
+            except (ValueError, TypeError) as e:
+                if "circular" in str(e).lower() or "json" in str(e).lower():
+                    logger.warning(
+                        f"Circular reference detected in text component during interactive update, using fallback: {e}"
+                    )
+                    # Create a minimal JSON structure to avoid circular references
+                    child_json = {
+                        "type": "Div",
+                        "props": {
+                            "id": {"index": component.get("index", "unknown")},
+                            "children": "Text Component (Circular Reference Protected)",
+                        },
+                    }
+                else:
+                    raise  # Re-raise if it's not a circular reference issue
+        else:
+            # For other components, use standard approach
+            child_json = child.to_plotly_json()
+
+        child = enable_box_edit_mode(
+            child_json,
+            switch_state=switch_state,
+            dashboard_id=dashboard_id,
+            component_data=component,
+            TOKEN=TOKEN,
+        )
+    except Exception as e:
+        logger.error(f"Error processing {comp_type} component in interactive update: {e}")
+        # Fallback to prevent dashboard failure
+        fallback_child = {
+            "type": "Div",
+            "props": {
+                "id": {"index": component.get("index", "unknown")},
+                "children": f"Error loading {comp_type} component",
+            },
+        }
+        child = enable_box_edit_mode(
+            fallback_child,
+            switch_state=switch_state,
+            dashboard_id=dashboard_id,
+            component_data=component,
+            TOKEN=TOKEN,
+        )
 
     # Append the processed child
     children.append(child)
@@ -274,6 +313,7 @@ def update_interactive_component(
                 metadata, switch_state, dashboard_id, TOKEN, theme=theme
             )
             children.append(child)
+            logger.info(f"Metadata processed: {metadata}")
         return children
 
     workflow_ids = list(
@@ -418,12 +458,59 @@ def update_interactive_component(
             child = helpers_mapping[component["component_type"]](**component)
             # if component["component_type"] == "card":
             #     logger.debug(f"Card CHILD - {child}")
-            child = enable_box_edit_mode(
-                child.to_plotly_json(),
-                switch_state=switch_state,
-                dashboard_id=dashboard_id,
-                TOKEN=TOKEN,
-            )
+
+            # Apply circular reference protection for text components
+            try:
+                if component["component_type"] == "text":
+                    # For text components, try to_plotly_json() with circular reference protection
+                    logger.info(
+                        "Processing text component with circular reference protection (line 460 path)"
+                    )
+                    try:
+                        child_json = child.to_plotly_json()
+                    except (ValueError, TypeError) as e:
+                        if "circular" in str(e).lower() or "json" in str(e).lower():
+                            logger.warning(
+                                f"Circular reference detected in text component (line 460 path), using fallback: {e}"
+                            )
+                            # Create a minimal JSON structure to avoid circular references
+                            child_json = {
+                                "type": "Div",
+                                "props": {
+                                    "id": {"index": component.get("index", "unknown")},
+                                    "children": "Text Component (Circular Reference Protected - Line 460)",
+                                },
+                            }
+                        else:
+                            raise  # Re-raise if it's not a circular reference issue
+                else:
+                    # For other components, use standard approach
+                    child_json = child.to_plotly_json()
+
+                child = enable_box_edit_mode(
+                    child_json,
+                    switch_state=switch_state,
+                    dashboard_id=dashboard_id,
+                    TOKEN=TOKEN,
+                )
+            except Exception as e:
+                logger.error(
+                    f"Error processing {component['component_type']} component (line 460 path): {e}"
+                )
+                # Fallback to prevent dashboard failure
+                fallback_child = {
+                    "type": "Div",
+                    "props": {
+                        "id": {"index": component.get("index", "unknown")},
+                        "children": f"Error loading {component['component_type']} component",
+                    },
+                }
+                child = enable_box_edit_mode(
+                    fallback_child,
+                    switch_state=switch_state,
+                    dashboard_id=dashboard_id,
+                    TOKEN=TOKEN,
+                )
             children.append(child)
 
         elif component["component_type"] == "jbrowse":

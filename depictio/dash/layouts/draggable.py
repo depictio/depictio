@@ -9,6 +9,9 @@ from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
+
+# Import centralized component dimensions from metadata
+from depictio.dash.component_metadata import get_component_dimensions_dict
 from depictio.dash.layouts.draggable_scenarios.add_component import add_new_component
 from depictio.dash.layouts.draggable_scenarios.graphs_interactivity import (
     refresh_children_based_on_click_data,
@@ -30,14 +33,9 @@ from depictio.dash.utils import (
     return_wf_tag_from_id,
 )
 
-# Mapping of component types to their respective dimensions (width and height)
+# Get component dimensions from centralized metadata
 # Adjusted for 96-column grid with rowHeight=10 - default 14x14 for all components
-component_dimensions = {
-    "card": {"w": 14, "h": 14},
-    "interactive": {"w": 14, "h": 14},
-    "figure": {"w": 14, "h": 14},
-    "table": {"w": 14, "h": 14},
-}
+component_dimensions = get_component_dimensions_dict()
 # No longer using breakpoints - working with direct list format
 
 

@@ -82,7 +82,7 @@ def build_figure_frame(index, children=None):
                 "boxShadow": "none",  # Optional: Remove shadow for a cleaner look
                 # "border": "1px solid #ddd",  # Optional: Add a light border
                 # "borderRadius": "4px",  # Optional: Slightly round the corners
-                "border": "0px",  # Optional: Remove border
+                "border": "1px solid var(--app-border-color, #ddd)",  # Always show border for draggable delimitation  # Optional: Remove border
                 "backgroundColor": "var(--app-surface-color, #ffffff)",
             },
             id={
@@ -138,7 +138,7 @@ def build_figure_frame(index, children=None):
                 "boxShadow": "none",  # Optional: Remove shadow for a cleaner look
                 # "border": "1px solid #ddd",  # Optional: Add a light border
                 # "borderRadius": "4px",  # Optional: Slightly round the corners
-                "border": "0px",  # Optional: Remove border
+                "border": "1px solid var(--app-border-color, #ddd)",  # Always show border for draggable delimitation  # Optional: Remove border
                 "backgroundColor": "var(--app-surface-color, #ffffff)",
             },
             id={
@@ -503,6 +503,7 @@ def build_figure(**kwargs) -> html.Div:
     dc_id = kwargs.get("dc_id")
     dc_config = kwargs.get("dc_config")
     build_frame = kwargs.get("build_frame", False)
+    stepper = kwargs.get("stepper", False)
     parent_index = kwargs.get("parent_index", None)
     df = kwargs.get("df", pl.DataFrame())
     TOKEN = kwargs.get("access_token")
@@ -615,7 +616,31 @@ def build_figure(**kwargs) -> html.Div:
         },
     )
 
-    return build_figure_frame(index, children=figure_div) if build_frame else figure_div
+    if not build_frame:
+        return figure_div
+    else:
+        # For figure components, we don't create a new frame here because one already exists
+        # from the design phase. Instead, we return the content that will populate the existing frame.
+        # This prevents duplicate figure-body component IDs.
+
+        # For stepper mode with loading
+        if not stepper:
+            # Use skeleton system for consistent loading experience
+            from depictio.dash.layouts.draggable_scenarios.progressive_loading import (
+                create_skeleton_component,
+            )
+
+            return html.Div(
+                dcc.Loading(
+                    children=figure_div,  # Return content directly, not wrapped in new frame
+                    custom_spinner=create_skeleton_component("figure"),
+                    delay_show=100,  # Small delay to prevent flashing
+                    delay_hide=2000,  # 2s delay for debugging visibility
+                ),
+                id={"index": index},  # Preserve the expected id structure
+            )
+        else:
+            return figure_div  # Return content directly for stepper mode
 
 
 def _create_info_badges(

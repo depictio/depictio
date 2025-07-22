@@ -13,6 +13,11 @@ from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
 
 def build_interactive_frame(index, children=None, show_border=False):
+    """
+    Build interactive component frame with border always visible for draggable delimitation.
+
+    Note: Border is now always shown regardless of show_border parameter for better UX.
+    """
     if not children:
         return dbc.Card(
             dbc.CardBody(
@@ -45,7 +50,7 @@ def build_interactive_frame(index, children=None, show_border=False):
                 "padding": "0",
                 "margin": "0",
                 "boxShadow": "none",
-                "border": "1px solid #ddd" if show_border else "0px solid #ddd",
+                "border": "1px solid var(--app-border-color, #ddd)",
                 "borderRadius": "4px",
             },
             id={
@@ -75,7 +80,7 @@ def build_interactive_frame(index, children=None, show_border=False):
                 "padding": "0",
                 "overflow": "visible",  # Allow dropdown to overflow
                 "position": "relative",  # Ensure positioning context
-                "border": "1px solid #ddd" if show_border else "0px solid #ddd",
+                "border": "1px solid var(--app-border-color, #ddd)",
                 "borderRadius": "4px",
             },
             id={
@@ -953,48 +958,48 @@ def build_interactive(**kwargs):
             logger.info(f"DMC Slider: Applied custom color: {color}")
 
         # Generate marks based on scale type and marks_number parameter
-        if marks_number and marks_number > 0:
-            logger.info(f"Generating {marks_number} marks for DMC slider")
-            # User specified number of marks - generate custom marks
-            if use_log_scale:
-                # For log scale, use the specialized log marks function for better power-of-10 marks
-                marks_dict = generate_log_marks(
-                    min_value, max_value, df_pandas[column_name].min(), df_pandas[column_name].max()
-                )
-                logger.info("Using specialized log marks function for better power-of-10 display")
-            else:
-                # Use equally spaced function for linear scale
-                marks_dict = generate_equally_spaced_marks(
-                    min_value, max_value, marks_count=marks_number, use_log_scale=False
-                )
+        # For DMC sliders, always generate default marks if none specified
+        effective_marks_number = marks_number if marks_number and marks_number > 0 else 5
 
-            # Convert DCC-style dict to DMC-style list of dicts
-            if marks_dict:
-                dmc_marks = []
-                for value, label in marks_dict.items():
-                    try:
-                        mark_value = float(value)
-                        # Ensure mark value is within range with small tolerance for floating point precision
-                        tolerance = 1e-9
-                        if (min_value - tolerance) <= mark_value <= (max_value + tolerance):
-                            dmc_marks.append({"value": mark_value, "label": str(label)})
-                            logger.debug(f"Added DMC mark: {mark_value} -> {label}")
-                        else:
-                            logger.debug(
-                                f"Mark {mark_value} outside range [{min_value}, {max_value}]"
-                            )
-                    except (ValueError, TypeError) as e:
-                        logger.warning(f"Skipping invalid mark: {value} -> {label}, error: {e}")
-
-                if dmc_marks:
-                    kwargs_component["marks"] = dmc_marks
-                    logger.info(f"DMC marks created: {len(dmc_marks)} custom marks")
-                else:
-                    logger.warning("No valid DMC marks created")
-            else:
-                logger.warning("No marks generated from mark generation function")
+        logger.info(
+            f"Generating {effective_marks_number} marks for DMC slider (requested: {marks_number})"
+        )
+        # Generate marks based on scale type
+        if use_log_scale:
+            # For log scale, use the specialized log marks function for better power-of-10 marks
+            marks_dict = generate_log_marks(
+                min_value, max_value, df_pandas[column_name].min(), df_pandas[column_name].max()
+            )
+            logger.info("Using specialized log marks function for better power-of-10 display")
         else:
-            logger.info("No custom marks requested (marks_number=0 or None)")
+            # Use equally spaced function for linear scale
+            marks_dict = generate_equally_spaced_marks(
+                min_value, max_value, marks_count=effective_marks_number, use_log_scale=False
+            )
+
+        # Convert DCC-style dict to DMC-style list of dicts
+        if marks_dict:
+            dmc_marks = []
+            for value, label in marks_dict.items():
+                try:
+                    mark_value = float(value)
+                    # Ensure mark value is within range with small tolerance for floating point precision
+                    tolerance = 1e-9
+                    if (min_value - tolerance) <= mark_value <= (max_value + tolerance):
+                        dmc_marks.append({"value": mark_value, "label": str(label)})
+                        logger.debug(f"Added DMC mark: {mark_value} -> {label}")
+                    else:
+                        logger.debug(f"Mark {mark_value} outside range [{min_value}, {max_value}]")
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Skipping invalid mark: {value} -> {label}, error: {e}")
+
+            if dmc_marks:
+                kwargs_component["marks"] = dmc_marks
+                logger.info(f"DMC marks created: {len(dmc_marks)} marks")
+            else:
+                logger.warning("No valid DMC marks created")
+        else:
+            logger.warning("No marks generated from mark generation function")
 
         logger.info("DMC Slider: Final kwargs before component creation:")
         logger.info(
@@ -1111,7 +1116,35 @@ def build_interactive(**kwargs):
     if not build_frame:
         return new_interactive_component
     else:
-        return build_interactive_frame(index=index, children=new_interactive_component)
+        # Build the interactive component with frame
+        interactive_component = build_interactive_frame(
+            index=index, children=new_interactive_component
+        )
+
+        # For stepper mode with loading
+        if not stepper:
+            # Use skeleton system for consistent loading experience
+            from depictio.dash.layouts.draggable_scenarios.progressive_loading import (
+                create_skeleton_component,
+            )
+
+            return html.Div(
+                dcc.Loading(
+                    children=interactive_component,
+                    # custom_spinner=dmc.Loader(color="red", size="sm"),
+                    custom_spinner=create_skeleton_component("interactive"),
+                    delay_show=100,  # Small delay to prevent flashing
+                    delay_hide=2000,  # 2s delay for debugging visibility
+                ),
+                id={"index": index},  # Preserve the expected id structure
+                style={
+                    "position": "relative",  # Create positioning context for absolute skeleton
+                    "width": "100%",
+                    "height": "100%",
+                },
+            )
+        else:
+            return interactive_component
 
 
 # List of all the possible aggregation methods for each data type and their corresponding input methods
