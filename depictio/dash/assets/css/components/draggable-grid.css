@@ -26,16 +26,25 @@
     transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-/* Style resize handles to be invisible like in prototype */
-.react-grid-item > .react-resizable-handle {
+/* Resize handle visibility control for vertical growing behavior */
+.react-resizable-handle {
     background: transparent !important;
     border: none !important;
     box-shadow: none !important;
     opacity: 0 !important;
+    transition: opacity 0.2s ease !important;
+    z-index: 1000 !important; /* Ensure handles are always on top */
 }
 
-.react-grid-item:hover > .react-resizable-handle {
+.react-grid-item:hover .react-resizable-handle {
     opacity: 0.7 !important;
+    background: rgba(108, 117, 125, 0.1) !important; /* Subtle gray background on hover */
+}
+
+/* Hide resize handles when edit mode is disabled */
+.drag-handles-hidden .react-resizable-handle {
+    display: none !important;
+    visibility: hidden !important;
 }
 
 /* Dark mode - make handle arrow icons white/light grey */
@@ -142,6 +151,11 @@
 .dashboard-component-hover {
     position: relative;
     transition: transform 0.2s ease;
+    /* Enable vertical growing behavior */
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
+    min-height: 150px !important;
 }
 
 .dashboard-component-hover:hover {
@@ -166,6 +180,486 @@
     opacity: 1;
 }
 
+/* CARD AND FIGURE COMPONENTS: Allow vertical growing */
+.dashboard-component-hover > * {
+    flex: 1 !important;
+}
+
+/* Ensure Bootstrap cards inherit flexbox behavior */
+.dashboard-component-hover .card,
+.dashboard-component-hover [data-mantine="Card"],
+.dashboard-component-hover .mantine-Card-root {
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
+    flex: 1 !important;
+}
+
+/* Ensure card bodies also use flexbox and grow */
+.dashboard-component-hover .card-body,
+.dashboard-component-hover .mantine-Card-section {
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
+    flex: 1 !important;
+}
+
+/* Ensure content inside card bodies grows to fill space */
+.dashboard-component-hover .card-body > div,
+.dashboard-component-hover .mantine-Card-section > div {
+    flex: 1 !important;
+    height: 100% !important;
+}
+
+/* Ensure graphs grow vertically */
+.dashboard-component-hover .plotly-graph-div {
+    flex: 1 !important;
+    min-height: 200px !important;
+    height: 100% !important;
+}
+
+/* Ensure tables adapt to vertical space */
+.dashboard-component-hover .dash-table-container {
+    flex: 1 !important;
+    height: 100% !important;
+    overflow-y: auto !important;
+}
+
+/* Text components vertical growing */
+.dashboard-component-hover [id*="text-component"] {
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+.dashboard-component-hover [id*="text-body"] {
+    flex: 1 !important;
+    height: 100% !important;
+}
+
+/* Ensure figure components use full space */
+.dashboard-component-hover .js-plotly-plot {
+    flex: 1 !important;
+    min-height: 200px !important;
+}
+
+/* JBrowse components vertical growing */
+.dashboard-component-hover [id*="jbrowse"] {
+    height: 100% !important;
+}
+
+/* =============================================================================
+   RESPONSIVE CLASSES FOR VERTICAL GROWING - MISSING FROM MAIN APPLICATION
+   These classes are essential for proper vertical growing behavior
+   ============================================================================= */
+
+/* Responsive wrapper styles */
+.responsive-wrapper {
+    position: relative !important;
+    width: 100% !important;
+    height: 100% !important;
+}
+
+/* Responsive content that grows vertically */
+.responsive-content {
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
+    min-height: 150px !important;
+}
+
+/* Responsive graph styling */
+.responsive-graph {
+    flex: 1 !important;
+    min-height: 200px !important;
+    height: 100% !important;
+}
+
+/* Metrics stack styling */
+.metrics-stack {
+    flex: 1 !important;
+    overflow-y: auto !important;
+    padding-right: 5px !important;
+}
+
+/* Responsive table styling */
+.responsive-table th,
+.responsive-table td {
+    padding: 8px 12px !important;
+    border-bottom: 1px solid #dee2e6 !important;
+    text-align: left !important;
+}
+
+.responsive-table th {
+    background-color: #f8f9fa !important;
+    font-weight: 600 !important;
+}
+
+.responsive-table tbody tr:hover {
+    background-color: #f5f5f5 !important;
+}
+
+/* =============================================================================
+   CARD COMPONENTS HEIGHT INHERITANCE FIX
+   Ensure card components take full height of their containers
+   ============================================================================= */
+
+/* Fix component divs with JSON-like IDs to take full height */
+.responsive-content > div > div[id*="index"] {
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+/* Fix all intermediate wrapper divs that contain components */
+.responsive-content div[id*="{"] {
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+/* CRITICAL: Target the exact JSON-like ID structure for card components */
+.responsive-content div[id*="\"index\""][id*="\"type\""][id*="\"card-component\""] {
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 !important;
+    min-height: 0 !important;
+    background-color: rgba(255, 0, 255, 0.1) !important; /* Magenta background for debugging */
+}
+
+/* NUCLEAR: Target ALL divs that are children of responsive-content */
+.responsive-content > div {
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+    background-color: rgba(0, 255, 255, 0.05) !important; /* Cyan background for debugging */
+}
+
+/* MAXIMUM SPECIFICITY: Target div elements that have JSON-style attributes */
+div[id*="{\"index\""] {
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 !important;
+    min-height: 0 !important;
+    box-sizing: border-box !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background-color: rgba(255, 165, 0, 0.1) !important; /* Orange background for debugging */
+}
+
+/* OVERRIDE: Remove orange background for figure-related elements */
+div[id*="{\"index\""][id*="figure"],
+div[id*="figure"] {
+    background-color: rgba(50, 205, 50, 0.2) !important; /* Light Green to override orange */
+}
+
+/* BOOTSTRAP CARD TARGETING: Target Bootstrap cards within figure components */
+.responsive-content .card[id*="figure-component"],
+.responsive-content div.card[id*="figure-component"] {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: column !important;
+    background-color: rgba(30, 144, 255, 0.4) !important; /* Dodger Blue for Bootstrap cards */
+    z-index: 3 !important; /* Even higher priority */
+}
+
+/* ULTIMATE FIGURE RULE: Override ALL other backgrounds with maximum specificity */
+.responsive-content *[id*="figure"],
+.responsive-content div[id*="figure"],
+.responsive-content *[id*="graph"],
+.responsive-content div[id*="graph"],
+.responsive-content div[id*="{\"index\""],
+.responsive-content div[id*="{"][id*="\"index\""],
+.responsive-content .card[id*="figure"],
+.responsive-content *[class*="plotly"] {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: column !important;
+    background-color: rgba(255, 215, 0, 0.5) !important; /* GOLD - single override color */
+    z-index: 999 !important; /* Maximum possible priority */
+}
+
+
+/* INTERACTIVE COMPONENT WRAPPER: Override flex rules for interactive components */
+.interactive-component-wrapper {
+    flex: none !important;
+    flex-grow: 0 !important;
+    flex-shrink: 0 !important;
+    height: auto !important;
+    max-height: none !important;
+    align-self: flex-start !important;
+    display: block !important; /* Use block layout to prevent flex stretching */
+}
+
+/* NUCLEAR APPROACH: Remove ALL spacing and enforce absolute positioning for card elements */
+.responsive-content div[id*="{\"index\""][id*="card-component"] {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+    background-color: rgba(128, 0, 128, 0.2) !important; /* Purple background to identify */
+}
+
+/* Ensure the parent of the absolutely positioned element is relative */
+.responsive-content {
+    position: relative !important;
+}
+
+/* MINIMIZE ALL MARGINS AND PADDING in the component hierarchy */
+.responsive-content div,
+.responsive-content .card,
+.responsive-content .card-body,
+.responsive-content .mantine-Card-root {
+    margin: 0 !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    padding-left: 2px !important;
+    padding-right: 2px !important;
+}
+
+/* Specific override for Bootstrap card elements */
+.responsive-content .card {
+    border: none !important;
+    box-shadow: none !important;
+}
+
+/* Specific override for Mantine card elements */
+.responsive-content .mantine-Card-root {
+    padding: 4px !important; /* Minimal padding for readability */
+}
+
+/* ULTIMATE SPECIFICITY: Single rule for card components with maximum priority */
+.responsive-content div[id*="{"][id*="\"index\""][id*="\"type\""][id*="\"card-component\""] {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: column !important;
+    background-color: rgba(255, 20, 147, 0.3) !important; /* Deep Pink - highest priority */
+    z-index: 1 !important;
+}
+
+/* ULTIMATE SPECIFICITY: Multiple rules for figure components with maximum priority */
+.responsive-content div[id*="{"][id*="\"index\""][id*="\"type\""][id*="\"figure-component\""],
+.responsive-content div[id*="\"figure-component\""],
+.responsive-content *[id*="\"figure-component\""] {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: column !important;
+    background-color: rgba(0, 191, 255, 0.3) !important; /* Deep Sky Blue - highest priority for figures */
+    z-index: 2 !important; /* Higher than generic rules */
+}
+
+/* FIGURE BODY: Target figure body elements */
+.responsive-content div[id*="{"][id*="\"figure-body\""] {
+    height: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 2px !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 !important;
+    background-color: rgba(173, 216, 230, 0.2) !important; /* Light Blue for figure body */
+}
+
+/* PLOTLY GRAPH: Target the actual graph elements */
+.responsive-content div[id*="{"][id*="\"graph\""],
+.responsive-content .plotly-graph-div,
+.responsive-content .js-plotly-plot {
+    height: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+    flex: 1 !important;
+    min-height: 200px !important; /* Ensure minimum graph height */
+    background-color: rgba(135, 206, 250, 0.2) !important; /* Light Sky Blue for graphs */
+}
+
+/* More specific targeting for nested component wrappers */
+.responsive-content > div > div > div {
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 !important;
+}
+
+/* Target the specific div structure before card components */
+.responsive-content div[style*="position: relative"] {
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 !important;
+}
+
+/* Fix card components specifically */
+.responsive-content .card,
+.responsive-content div[id*="card-component"] {
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 !important;
+}
+
+/* Ensure all divs leading to card components inherit height */
+.responsive-content * {
+    box-sizing: border-box !important;
+}
+
+/* Remove overly aggressive rules that hide content */
+
+/* =============================================================================
+   ULTIMATE FIX: Target the exact intermediate divs that break flex chain
+   ============================================================================= */
+
+/* Target ALL divs between responsive-content and card-component (nuclear approach) */
+.responsive-wrapper .responsive-content div {
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 !important;
+}
+
+/* Specifically target the JSON-ID wrapper div that contains the card */
+.responsive-wrapper div[id*="{"][id*="index"]:not([id*="card"]) {
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 !important;
+}
+
+/* Target empty divs that are children of JSON-ID divs */
+.responsive-wrapper div[id*="{"] > div {
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 !important;
+}
+
+/* Nuclear approach: ALL divs in responsive wrapper get flex unless they have content */
+.responsive-wrapper div:not(.mantine-Card-root):not(.mantine-Text-root):not([class*="ActionIcon"]) {
+    flex: 1 !important;
+}
+
+/* =============================================================================
+   CRITICAL: Force card component specifically to take full height
+   ============================================================================= */
+
+/* Target the exact card component that's not expanding - NUCLEAR APPROACH */
+.responsive-wrapper div[id*="card-component"].card,
+.responsive-wrapper .card[id*="card-component"],
+div[id*="card-component"].card {
+    height: 100% !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    flex: 1 1 0% !important;
+    flex-grow: 1 !important;
+    flex-shrink: 1 !important;
+    flex-basis: 0% !important;
+    align-self: stretch !important;
+    /* Override any Bootstrap card defaults */
+    position: relative !important;
+    overflow: visible !important;
+}
+
+/* Force Bootstrap card to behave properly in flex context */
+.responsive-wrapper .card {
+    height: 100% !important;
+    min-height: 0 !important;
+    flex: 1 !important;
+    align-self: stretch !important;
+}
+
+/* Ensure card body also expands */
+.responsive-wrapper .card-body {
+    height: 100% !important;
+    min-height: 0 !important;
+    flex: 1 !important;
+}
+
+/* Fix card body to take full height */
+.responsive-content .card-body,
+.responsive-content div[id*="card-body"] {
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 !important;
+    justify-content: flex-start !important;  /* Override Bootstrap's center alignment */
+    min-height: 0 !important;  /* Allow shrinking */
+}
+
+/* Fix Mantine cards - keep original properties */
+.responsive-content .mantine-Card-root {
+    flex: 1 !important;
+}
+
+/* =============================================================================
+   CRITICAL FIX: Override dashboard.css rule that breaks vertical growing
+   ============================================================================= */
+
+/* Override the problematic calc(100% - 40px) rule in dashboard.css - MAXIMUM SPECIFICITY */
+div.responsive-wrapper div.react-grid-item div.mantine-Card-root,
+div.responsive-wrapper .react-grid-item .mantine-Card-root,
+.responsive-wrapper .mantine-Card-root,
+.react-grid-item .mantine-Card-root {
+    height: 100% !important;  /* Override calc(100% - 40px) */
+    max-height: none !important;
+    min-height: 0 !important;
+    flex: 1 1 0% !important;
+    flex-grow: 1 !important;
+    flex-shrink: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
 /* =============================================================================
    DRAG DISABLE FUNCTIONALITY - REMOVED
    Now using properties-only approach like the working version2 script
@@ -184,6 +678,78 @@
     max-width: 100% !important;
     height: 100% !important;
     box-sizing: border-box !important;
+    /* Critical: Ensure grid layout wrapper also uses flexbox */
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+/* Ensure DraggableWrapper content takes full height */
+.react-grid-item div[id^="box-"] {
+    position: absolute !important;
+    inset: 0 !important; /* Fill entire parent container */
+    display: flex !important;
+    flex-direction: column !important;
+    box-sizing: border-box !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background-color: rgba(0, 255, 0, 0.05) !important; /* Subtle green tint for debugging */
+}
+
+/* Ensure react-grid-item itself is a proper flex container */
+.react-grid-item.react-draggable.cssTransforms.react-resizable {
+    position: relative !important;
+    display: flex !important;
+    flex-direction: column !important;
+    box-sizing: border-box !important;
+    overflow: visible !important; /* Allow resize handles to extend outside */
+    background-color: rgba(255, 0, 0, 0.05) !important; /* Subtle red tint for debugging */
+}
+
+/* CRITICAL: Target the unnamed DIV that DashGridLayout creates automatically (Child 0) */
+.react-grid-item.react-draggable.cssTransforms.react-resizable > div:first-child {
+    position: absolute !important;
+    inset: 0 !important; /* Modern shorthand for top/right/bottom/left: 0 */
+    width: 100% !important;
+    height: 100% !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: column !important;
+    background-color: rgba(255, 165, 0, 0.1) !important; /* Subtle orange background for debugging */
+}
+
+/* Force responsive-wrapper to use flex display instead of block */
+.responsive-wrapper {
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 !important;
+}
+
+/* Force responsive-content to grow */
+.responsive-content {
+    flex: 1 !important;
+    flex-grow: 1 !important;
+}
+
+/* Fix all intermediate wrapper divs in responsive-content */
+.responsive-content > div {
+    height: 100% !important;
+    flex: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+/* Nuclear approach: Target all divs inside responsive-content */
+.responsive-content div {
+    min-height: 0 !important;
+    flex: 1 !important;
+}
+
+/* Fix intermediate wrapper divs created by grid layout */
+.react-grid-item > div > div {
+    flex: 1 !important;
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
 }
 
 /* Hide the old remove button completely */

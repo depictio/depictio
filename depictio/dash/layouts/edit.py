@@ -119,7 +119,7 @@ def enable_box_edit_mode(
             id={"type": "reset-selection-graph-button", "index": f"{btn_index}"},
             color="orange",
             variant="filled",
-            size="lg",
+            size="sm",
             children=DashIconify(icon="bx:reset", width=16, color="white"),
         )
 
@@ -192,25 +192,79 @@ def enable_box_edit_mode(
 
     logger.info(f"Creating DraggableWrapper with UUID: {box_uuid}")
 
-    # Create the content div with edit buttons (if in edit mode)
-    content_div = html.Div(
-        box_components_list,
-        id=f"content-{box_uuid}",
-        className="dashboard-component-hover",  # Add hover effects
-        style={
-            "overflow": "visible",  # Allow content to be visible and interactive
-            "width": "100%",  # Ensure it takes full width of the parent
-            "height": "100%",  # Ensure it takes full height of the parent
-            "boxSizing": "border-box",  # Include padding in the element's total width and height
-            "padding": "5px 5px 5px 5px",  # Minimal padding to maximize component space
-            "border": "1px solid var(--app-border-color, #ddd)",  # Theme-aware border
-            "borderRadius": "8px",  # Add rounded corners
-            "background": "var(--app-surface-color, #ffffff)",  # Theme-aware background
-            "position": "relative",  # Enable positioning for absolutely positioned buttons
-            "minHeight": "100px",  # Ensure minimum height for content
-            "transition": "all 0.3s ease",  # Smooth transitions
-        },
-    )
+    if switch_state:
+        # Create content div with embedded buttons (matching prototype pattern)
+        # NUCLEAR: Remove intermediate wrapper div that breaks flex chain
+        content_children = []
+
+        # Add component content directly without wrapper div
+        if isinstance(box_components_list, list):
+            content_children.extend(box_components_list)
+        else:
+            content_children.append(box_components_list)
+
+        # Add buttons positioned absolutely
+        content_children.append(
+            html.Div(
+                buttons,
+                style={
+                    "position": "absolute",
+                    "top": "4px",
+                    "right": "8px",
+                    "zIndex": 1000,
+                    "alignItems": "center",
+                    "height": "auto",
+                    "background": "transparent",
+                    "borderRadius": "6px",
+                    "padding": "4px",
+                },
+            )
+        )
+
+        content_div = html.Div(
+            content_children,
+            id=f"content-{box_uuid}",
+            className="dashboard-component-hover responsive-content",
+            style={
+                "overflow": "visible",
+                "width": "100%",
+                "height": "100%",
+                "boxSizing": "border-box",
+                "padding": "5px",
+                "border": "1px solid var(--app-border-color, #ddd)",
+                "borderRadius": "8px",
+                "background": "var(--app-surface-color, #ffffff)",
+                "position": "relative",
+                "minHeight": "100px",
+                "transition": "all 0.3s ease",
+                # Critical flexbox properties for vertical growing
+                "display": "flex",
+                "flexDirection": "column",
+            },
+        )
+    else:
+        # Non-edit mode: simple content div without buttons
+        content_div = html.Div(
+            box_components_list,
+            id=f"content-{box_uuid}",
+            className="dashboard-component-hover responsive-content",
+            style={
+                "overflow": "visible",
+                "width": "100%",
+                "height": "100%",
+                "boxSizing": "border-box",
+                "padding": "5px",
+                "border": "1px solid var(--app-border-color, #ddd)",
+                "borderRadius": "8px",
+                "background": "var(--app-surface-color, #ffffff)",
+                "position": "relative",
+                "minHeight": "100px",
+                "transition": "all 0.3s ease",
+                # Critical flexbox properties for vertical growing
+                "display": "flex",
+                "flexDirection": "column",
+            },
+        )
 
     # Create DraggableWrapper with the UUID as ID (like in the prototype)
     draggable_wrapper = dgl.DraggableWrapper(
@@ -219,33 +273,13 @@ def enable_box_edit_mode(
         handleText="Drag",  # Handle text for dragging
     )
 
-    if switch_state:
-        # Create a wrapper container with buttons positioned over the drag handle area
-        return html.Div(
-            [
-                draggable_wrapper,
-                # Buttons positioned absolutely to align with drag handle
-                html.Div(
-                    buttons,
-                    style={
-                        "position": "absolute",
-                        "top": "4px",  # Minimal overlay positioning
-                        "right": "8px",  # Match drag handle positioning
-                        "zIndex": 1000,  # Very high z-index
-                        # pointerEvents and display removed - CSS handles hover behavior
-                        "alignItems": "center",
-                        "height": "auto",  # Auto height for better fit
-                        "background": "transparent",  # Remove visible background
-                        "borderRadius": "6px",  # Rounded corners
-                        "padding": "4px",  # Comfortable padding
-                    },
-                ),
-            ],
-            style={
-                "position": "relative",  # Enable absolute positioning for buttons
-                "width": "100%",
-                "height": "100%",
-            },
-        )
-    else:
-        return draggable_wrapper
+    # Return with responsive-wrapper class to match working prototype pattern
+    return html.Div(
+        draggable_wrapper,
+        className="responsive-wrapper",  # Critical: This class makes it work!
+        style={
+            "position": "relative",
+            "width": "100%",
+            "height": "100%",
+        },
+    )

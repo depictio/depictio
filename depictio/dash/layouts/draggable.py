@@ -1522,9 +1522,9 @@ def design_draggable(
         items=draggable_items,
         itemLayout=current_layout,
         rowHeight=10,  # Larger row height for better component display
-        cols={"lg": 96, "md": 10, "sm": 6, "xs": 4, "xxs": 2},
+        cols={"lg": 12, "md": 10, "sm": 6, "xs": 4, "xxs": 2},
         showRemoveButton=False,  # Keep consistent - CSS handles visibility
-        showResizeHandles=False,  # Keep consistent - CSS handles visibility
+        showResizeHandles=True,  # Enable resize functionality for vertical growing behavior
         className="draggable-grid-container",  # CSS class for styling
         allowOverlap=False,
         style={
