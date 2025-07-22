@@ -1,4 +1,3 @@
-import dash_bootstrap_components as dbc
 import dash_dynamic_grid_layout as dgl
 import dash_mantine_components as dmc
 from dash import html
@@ -50,47 +49,34 @@ def enable_box_edit_mode(
     else:
         component_type = component_data.get("component_type", None)
 
-    edit_button = dbc.Button(
-        "Edit",
-        id={
-            "type": "edit-box-button",
-            "index": f"{btn_index}",
-        },
-        color="secondary",
-        style={"margin-left": "12px"},
-        # size="lg",
-    )
     from dash_iconify import DashIconify
 
-    remove_button = dmc.ActionIcon(
-        # remove_button = dmc.Button(
-        # "Remove",
-        id={"type": "remove-box-button", "index": f"{btn_index}"},
-        color="red",
-        variant="filled",
-        children=DashIconify(icon="mdi:trash-can-outline", width=16, color="white"),
-        # leftIcon=DashIconify(icon="mdi:trash-can-outline", width=16, color="white"),
-    )
+    def create_remove_button():
+        return dmc.ActionIcon(
+            id={"type": "remove-box-button", "index": f"{btn_index}"},
+            color="red",
+            variant="filled",
+            size="sm",
+            children=DashIconify(icon="mdi:trash-can-outline", width=16, color="white"),
+        )
 
-    edit_button = dmc.ActionIcon(
-        # edit_button = dmc.Button(
-        # "Edit",
-        id={"type": "edit-box-button", "index": f"{btn_index}"},
-        color="blue",
-        variant="filled",
-        children=DashIconify(icon="mdi:pen", width=16, color="white"),
-        # leftIcon=DashIconify(icon="mdi:pen", width=16, color="white"),
-    )
+    def create_edit_button():
+        return dmc.ActionIcon(
+            id={"type": "edit-box-button", "index": f"{btn_index}"},
+            color="blue",
+            variant="filled",
+            size="sm",
+            children=DashIconify(icon="mdi:pen", width=16, color="white"),
+        )
 
-    duplicate_button = dmc.ActionIcon(
-        # duplicate_button = dmc.Button(
-        # "Duplicate",
-        id={"type": "duplicate-box-button", "index": f"{btn_index}"},
-        color="gray",
-        variant="filled",
-        children=DashIconify(icon="mdi:content-copy", width=16, color="white"),
-        # leftIcon=DashIconify(icon="mdi:content-copy", width=16, color="white"),
-    )
+    def create_duplicate_button():
+        return dmc.ActionIcon(
+            id={"type": "duplicate-box-button", "index": f"{btn_index}"},
+            color="gray",
+            variant="filled",
+            size="sm",
+            children=DashIconify(icon="mdi:content-copy", width=16, color="white"),
+        )
 
     # category_button = dmc.Select(
     #     # label="Category",
@@ -106,23 +92,26 @@ def enable_box_edit_mode(
     #     # leftSection=DashIconify(icon="mdi:trash-can-outline", width=16, color="white"),
     # )
 
-    reset_selection_button = dmc.ActionIcon(
-        id={"type": "reset-selection-graph-button", "index": f"{btn_index}"},
-        color="orange",
-        variant="filled",
-        children=DashIconify(icon="bx:reset", width=16, color="white"),
-    )
+    def create_reset_button():
+        return dmc.ActionIcon(
+            id={"type": "reset-selection-graph-button", "index": f"{btn_index}"},
+            color="orange",
+            variant="filled",
+            size="lg",
+            children=DashIconify(icon="bx:reset", width=16, color="white"),
+        )
 
     if switch_state:
-        # buttons = dmc.Group([remove_button, category_button], grow=False, gap="xl", style={"margin-left": "12px"})
-        # if component_type:
-        #     if component_type != "table":
-        buttons = dmc.Group(
-            [remove_button, edit_button, duplicate_button],
-            grow=False,
-            gap="xs",
-            style={"margin-left": "12px"},
+        # Default buttons for most components
+        buttons = dmc.ActionIconGroup(
+            [
+                create_remove_button(),
+                create_edit_button(),
+                create_duplicate_button(),
+            ],
+            orientation="horizontal",
         )
+
         # logger.info(f"ENABLE BOX EDIT MODE - component_type: {component_type}")
 
         if component_type:
@@ -132,35 +121,39 @@ def enable_box_edit_mode(
                 and visu_type is not None
                 and visu_type.lower() == "scatter"
             ):
-                buttons = dmc.Group(
+                # Add reset button for scatter plots
+                buttons = dmc.ActionIconGroup(
                     [
-                        remove_button,
-                        edit_button,
-                        duplicate_button,
-                        reset_selection_button,
+                        create_remove_button(),
+                        create_edit_button(),
+                        create_duplicate_button(),
+                        create_reset_button(),
                     ],
-                    grow=False,
-                    gap="xs",
-                    style={"margin-left": "12px"},
+                    orientation="horizontal",
                 )
 
             elif component_type in ["table", "jbrowse"]:
-                buttons = dmc.Group(
-                    [remove_button, duplicate_button],
-                    grow=False,
-                    gap="xs",
-                    style={"margin-left": "12px"},
+                # Limited buttons for table and jbrowse components
+                buttons = dmc.ActionIconGroup(
+                    [
+                        create_remove_button(),
+                        create_duplicate_button(),
+                    ],
+                    orientation="horizontal",
                 )
         else:
-            buttons = dmc.Group(
-                [remove_button, duplicate_button],
-                grow=False,
-                gap="xs",
-                style={"margin-left": "12px"},
+            # Fallback for unknown component types
+            buttons = dmc.ActionIconGroup(
+                [
+                    create_remove_button(),
+                    create_duplicate_button(),
+                ],
+                orientation="horizontal",
             )
         # if fresh:
         #     buttons = dmc.Group([remove_button], grow=False, gap="xl", style={"margin-left": "12px"})
-        box_components_list = dmc.Stack([buttons, box], gap="md")
+        # Remove buttons from content - will be added separately to DraggableWrapper
+        box_components_list = box
 
     else:
         box_components_list = [box]
@@ -183,11 +176,12 @@ def enable_box_edit_mode(
             "width": "100%",  # Ensure it takes full width of the parent
             "height": "100%",  # Ensure it takes full height of the parent
             "boxSizing": "border-box",  # Include padding in the element's total width and height
-            "padding": "10px",  # Add some padding
+            "padding": "10px 10px 10px 10px",  # Adjust top padding for absolute buttons
+            "paddingTop": "10px",  # Normal padding since buttons are outside
             "border": "1px solid var(--app-border-color, #ddd)",  # Theme-aware border
             "borderRadius": "8px",  # Add rounded corners
             "background": "var(--app-surface-color, #ffffff)",  # Theme-aware background
-            "position": "relative",  # Enable positioning for overlay
+            "position": "relative",  # Enable positioning for absolutely positioned buttons
             "minHeight": "100px",  # Ensure minimum height for content
             "transition": "all 0.3s ease",  # Smooth transitions
         },
@@ -200,4 +194,34 @@ def enable_box_edit_mode(
         handleText="Drag",  # Handle text for dragging
     )
 
-    return draggable_wrapper
+    if switch_state:
+        # Create a wrapper container with buttons positioned over the drag handle area
+        return html.Div(
+            [
+                draggable_wrapper,
+                # Buttons positioned absolutely to align with drag handle
+                html.Div(
+                    buttons,
+                    style={
+                        "position": "absolute",
+                        "top": "2px",  # Slight offset into drag handle area
+                        "right": "10px",
+                        "zIndex": 1000,  # Very high z-index
+                        "pointerEvents": "auto",
+                        "display": "flex",
+                        "alignItems": "center",
+                        "height": "28px",  # Match drag handle height
+                        "background": "rgba(255, 255, 255, 0.9)",  # Slight background for visibility
+                        "borderRadius": "4px",
+                        "padding": "2px",
+                    },
+                ),
+            ],
+            style={
+                "position": "relative",  # Enable absolute positioning for buttons
+                "width": "100%",
+                "height": "100%",
+            },
+        )
+    else:
+        return draggable_wrapper
