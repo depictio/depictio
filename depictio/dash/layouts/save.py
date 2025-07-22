@@ -30,6 +30,7 @@ def register_callbacks_save(app):
         State("stored-add-button", "data"),
         State({"type": "interactive-component-value", "index": ALL}, "value"),
         Input({"type": "text-store", "index": ALL}, "data"),
+        Input("notes-editor-store", "data"),
         State("url", "pathname"),
         State("local-store", "data"),
         Input(
@@ -70,6 +71,7 @@ def register_callbacks_save(app):
         add_button,
         interactive_component_values,
         text_store_data,
+        notes_data,
         pathname,
         local_store,
         n_clicks_done,
@@ -124,6 +126,7 @@ def register_callbacks_save(app):
             "edit-components-mode-button",
             "draggable",
             "text-store",
+            "notes-editor-store",
         ]
 
         # Check if save should be triggered
@@ -285,6 +288,7 @@ def register_callbacks_save(app):
                 "add_components_button": add_button,
                 "edit_dashboard_mode_button": edit_dashboard_mode_button_checked,
             },
+            "notes_content": notes_data if notes_data else "",
             "last_saved_ts": str(datetime.now()),
         }
         # logger.info(f"Updated dashboard data: {updated_dashboard_data}")

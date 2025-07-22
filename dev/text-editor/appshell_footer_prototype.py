@@ -1,8 +1,11 @@
 """
-AppShell with collapsible footer containing RichTextEditor
+AppShell with CSS hover-revealed footer containing RichTextEditor
 
-This prototype demonstrates a permanent RichTextEditor in a collapsible footer
-that can be used throughout the Depictio application without circular reference issues.
+This prototype demonstrates a permanent RichTextEditor in a footer that:
+- Reveals on hover over the bottom of the page (CSS-based)
+- Shows as a single line initially
+- Clicking "Notes & Documentation" toggles back to collapsed state
+- No toggle button needed in header (clean UI)
 """
 
 import dash
@@ -15,65 +18,37 @@ app = Dash(__name__, suppress_callback_exceptions=True)
 logo = "https://github.com/user-attachments/assets/c1ff143b-4365-4fd1-880f-3e97aab5c302"
 
 
-# Create the RichTextEditor for the footer
+# Create the RichTextEditor for the footer with hover reveal mechanism
 def create_footer_editor():
     return html.Div(
         [
-            # Editor controls
-            dmc.Group(
+            # Simple header
+            html.Div(
                 [
-                    dmc.Button(
-                        "Notes & Documentation",
-                        leftSection=DashIconify(icon="material-symbols:edit-note", width=16),
-                        variant="subtle",
-                        size="sm",
-                        id="footer-editor-toggle",
-                    ),
-                    dmc.Group(
-                        [
-                            dmc.Button(
-                                "Save",
-                                leftSection=DashIconify(icon="material-symbols:save", width=14),
-                                size="xs",
-                                color="green",
-                                variant="light",
-                                id="footer-save-btn",
-                            ),
-                            dmc.Button(
-                                "Clear",
-                                leftSection=DashIconify(
-                                    icon="material-symbols:clear-all", width=14
-                                ),
-                                size="xs",
-                                color="red",
-                                variant="light",
-                                id="footer-clear-btn",
-                            ),
-                            dmc.Button(
-                                "Export",
-                                leftSection=DashIconify(icon="material-symbols:download", width=14),
-                                size="xs",
-                                color="blue",
-                                variant="light",
-                                id="footer-export-btn",
-                            ),
-                        ],
-                        gap="xs",
-                    ),
+                    dmc.Text("Notes & Documentation", fw=500, c="dark", ta="center")
                 ],
-                justify="space-between",
-                align="center",
-                style={"marginBottom": "10px"},
+                id="footer-header-line",
+                style={
+                    "padding": "8px 16px",
+                    "borderTop": "1px solid var(--app-border-color, #e9ecef)",
+                    "backgroundColor": "var(--app-surface-color, #f8f9fa)",
+                    "minHeight": "32px",
+                    "display": "flex",
+                    "alignItems": "center",
+                    "justifyContent": "center",
+                }
             ),
+            
             # Storage for editor content
             dcc.Store(id="footer-editor-store", data=""),
-            # RichTextEditor
+            
+            # Editor content area
             html.Div(
                 [
                     dmc.RichTextEditor(
                         id="footer-rich-text-editor",
                         html="<p>Start writing your notes, documentation, or analysis here...</p>",
-                        style={"minHeight": "200px", "maxHeight": "400px", "overflowY": "auto"},
+                        style={"minHeight": "200px", "maxHeight": "350px", "overflowY": "auto"},
                         toolbar={
                             "sticky": True,
                             "controlsGroups": [
@@ -103,9 +78,14 @@ def create_footer_editor():
                     ),
                 ],
                 id="footer-editor-container",
-                style={"display": "block"},
+                style={
+                    "padding": "10px 16px",
+                    "backgroundColor": "var(--app-surface-color, #f8f9fa)",
+                    "borderTop": "1px solid var(--app-border-color, #e9ecef)"
+                },
             ),
-        ]
+        ],
+        id="footer-wrapper"
     )
 
 
@@ -114,27 +94,28 @@ layout = dmc.AppShell(
         dmc.AppShellHeader(
             dmc.Group(
                 [
-                    dmc.Burger(
-                        id="burger",
-                        size="sm",
-                        hiddenFrom="sm",
-                        opened=False,
-                    ),
-                    dmc.Image(src=logo, h=40, flex=0),
-                    dmc.Title("Depictio with Collapsible Notes", c="blue"),
-                    # Add footer toggle button in header
                     dmc.Group(
                         [
-                            dmc.Button(
-                                "Toggle Notes",
-                                leftSection=DashIconify(icon="material-symbols:notes", width=16),
-                                variant="light",
+                            dmc.Burger(
+                                id="burger",
                                 size="sm",
-                                id="header-footer-toggle",
+                                hiddenFrom="sm",
+                                opened=False,
                             ),
-                        ],
-                        gap="sm",
+                            dmc.Image(src=logo, h=40, flex=0),
+                            dmc.Title("Depictio with Notes Footer", c="blue"),
+                        ]
                     ),
+                    dmc.Button(
+                        [
+                            DashIconify(icon="material-symbols:edit-note", width=16),
+                            dmc.Text("Toggle Notes", ml="xs")
+                        ],
+                        variant="subtle",
+                        size="sm",
+                        id="toggle-notes-button",
+                        color="blue"
+                    )
                 ],
                 h="100%",
                 px="md",
@@ -233,9 +214,9 @@ layout = dmc.AppShell(
                         ),
                         dmc.Space(h="xl"),
                         dmc.Alert(
-                            "The collapsible footer below contains a RichTextEditor for notes and documentation. "
-                            "Toggle it using the button in the header or by clicking the footer bar.",
-                            title="Notes Feature",
+                            "The footer below contains a RichTextEditor for notes and documentation. "
+                            "Hover over the footer to preview content, or click 'Notes & Documentation' to pin the expanded state.",
+                            title="Hover-Revealed Notes Feature",
                             icon=DashIconify(icon="material-symbols:info"),
                             color="blue",
                         ),
@@ -243,7 +224,7 @@ layout = dmc.AppShell(
                         html.Div(
                             [
                                 dmc.Text(f"Sample content line {i}", style={"marginBottom": "10px"})
-                                for i in range(20)
+                                for i in range(10)
                             ]
                         ),
                     ],
@@ -252,20 +233,25 @@ layout = dmc.AppShell(
                 )  # Add padding for footer
             ]
         ),
-        # Collapsible Footer with RichTextEditor
+        # Footer with CSS hover reveal mechanism
         dmc.AppShellFooter(
             id="footer-content",
             children=create_footer_editor(),
-            p="md",
+            p=0,  # Remove padding to have full control
             style={
-                "borderTop": "2px solid var(--app-border-color, #e9ecef)",
-                "backgroundColor": "var(--app-surface-color, #f8f9fa)",
+                "padding": "0",
                 "transition": "height 0.3s ease-in-out",
+                "overflow": "visible",
+                "position": "fixed",
+                "bottom": "0",
+                "left": "0",  # Will be updated dynamically by JavaScript
+                "right": "0",
+                "zIndex": "10001",  # Above hover zone to ensure buttons are clickable
             },
         ),
     ],
     header={"height": 60},
-    footer={"height": 300, "collapsed": False},  # Start expanded to show the feature
+    footer={"height": 0, "collapsed": True},  # Start completely hidden
     navbar={
         "width": 300,
         "breakpoint": "sm",
@@ -275,7 +261,105 @@ layout = dmc.AppShell(
     id="appshell",
 )
 
-app.layout = dmc.MantineProvider(layout)
+app.layout = dmc.MantineProvider([
+    layout
+])
+
+
+# Simple CSS injection for footer styling
+@callback(
+    Output("appshell", "style"),
+    Input("appshell", "id"),
+    prevent_initial_call=False,
+)
+def inject_footer_css(_):
+    """Inject basic CSS styles for footer."""
+    return {}
+
+
+# Add CSS via clientside callback  
+app.clientside_callback(
+    """
+    function(appshell_id) {
+        // Inject simple CSS styles for footer
+        if (!document.getElementById('footer-styles')) {
+            var style = document.createElement('style');
+            style.id = 'footer-styles';
+            style.innerHTML = `
+                /* Footer starts hidden */
+                #footer-content {
+                    height: 0px;
+                    overflow: hidden;
+                    transition: height 0.3s ease-in-out;
+                }
+
+                /* Expanded state when toggled */
+                #footer-content.footer-visible {
+                    height: 300px !important;
+                    overflow: visible;
+                }
+            `;
+            document.head.appendChild(style);
+        }
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output("appshell", "data-css-injected"),
+    Input("appshell", "id"),
+    prevent_initial_call=False,
+)
+
+
+# Dynamic footer positioning based on sidebar state
+app.clientside_callback(
+    """
+    function() {
+        console.log('Setting up dynamic footer positioning');
+        
+        setTimeout(function() {
+            const footer = document.querySelector('#footer-content');
+            const navbar = document.querySelector('#navbar');
+            
+            function updateFooterPosition() {
+                let leftOffset = 0;
+                if (navbar) {
+                    const navbarStyles = window.getComputedStyle(navbar);
+                    const isNavbarVisible = navbarStyles.display !== 'none' && 
+                                          navbarStyles.visibility !== 'hidden' &&
+                                          navbarStyles.width !== '0px';
+                    
+                    if (isNavbarVisible) {
+                        leftOffset = parseInt(navbarStyles.width) || 300;
+                    }
+                }
+                
+                if (footer) {
+                    footer.style.left = leftOffset + 'px';
+                }
+            }
+            
+            updateFooterPosition();
+            window.addEventListener('resize', updateFooterPosition);
+            
+            if (navbar) {
+                const observer = new MutationObserver(function() {
+                    setTimeout(updateFooterPosition, 100);
+                });
+                
+                observer.observe(navbar, {
+                    attributes: true,
+                    attributeFilter: ['style', 'class']
+                });
+            }
+        }, 100);
+        
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output("footer-content", "data-positioning-initialized"),
+    Input("appshell", "id"),
+    prevent_initial_call=False,
+)
 
 
 # Toggle navbar (mobile)
@@ -289,96 +373,63 @@ def toggle_navbar(opened, navbar):
     return navbar
 
 
-# Toggle footer from header button
+# Simple toggle notes footer
 @callback(
-    Output("appshell", "footer"),
-    Input("header-footer-toggle", "n_clicks"),
-    Input("footer-editor-toggle", "n_clicks"),
-    State("appshell", "footer"),
+    Output("footer-content", "className"),
+    Input("toggle-notes-button", "n_clicks"),
+    State("footer-content", "className"),
     prevent_initial_call=True,
 )
-def toggle_footer(header_clicks, footer_clicks, current_footer):
-    """Toggle footer visibility from header button or footer button."""
-    if header_clicks or footer_clicks:
-        # Toggle collapsed state
-        current_footer["collapsed"] = not current_footer.get("collapsed", False)
-
-        # Adjust height based on collapsed state
-        if current_footer["collapsed"]:
-            current_footer["height"] = 50  # Collapsed height - just show toggle bar
+def toggle_notes_footer(n_clicks, current_class):
+    """Toggle footer visibility when toggle button is clicked."""
+    if n_clicks:
+        if current_class and "footer-visible" in current_class:
+            return ""  # Hide footer
         else:
-            current_footer["height"] = 300  # Expanded height
-
-    return current_footer
+            return "footer-visible"  # Show footer
+    return current_class or ""
 
 
 # Handle editor content storage
 @callback(
     Output("footer-editor-store", "data"),
     Input("footer-rich-text-editor", "html"),
-    Input("footer-save-btn", "n_clicks"),
     prevent_initial_call=True,
 )
-def store_editor_content(editor_html, save_clicks):
-    """Store editor content when it changes or save button is clicked."""
-    ctx = dash.callback_context
-    if not ctx.triggered:
-        return dash.no_update
-
-    trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
-
-    if trigger_id == "footer-save-btn" and save_clicks:
-        # Could implement actual saving logic here
-        print(f"Saving editor content: {editor_html[:100] if editor_html else ''}...")
-        return editor_html
-    elif trigger_id == "footer-rich-text-editor":
-        return editor_html
-
-    return dash.no_update
+def store_editor_content(editor_html):
+    """Store editor content when it changes."""
+    return editor_html
 
 
-# Clear editor content
+# Update toggle button text based on footer state
 @callback(
-    Output("footer-rich-text-editor", "html"),
-    Input("footer-clear-btn", "n_clicks"),
+    Output("toggle-notes-button", "children"),
+    Input("footer-content", "className"),
     prevent_initial_call=True,
 )
-def clear_editor(clear_clicks):
-    """Clear the editor content."""
-    if clear_clicks:
-        return "<p>Start writing your notes, documentation, or analysis here...</p>"
-    return dash.no_update
-
-
-# Show/hide editor based on footer collapse state
-@callback(
-    Output("footer-editor-container", "style"),
-    Output("footer-editor-toggle", "children"),
-    Input("appshell", "footer"),
-    prevent_initial_call=True,
-)
-def toggle_editor_visibility(footer_config):
-    """Show/hide the editor container based on footer collapsed state."""
-    is_collapsed = footer_config.get("collapsed", False)
-
-    if is_collapsed:
-        return (
-            {"display": "none"},
-            [DashIconify(icon="material-symbols:expand-less", width=16), " Show Notes"],
-        )
+def update_toggle_button_text(footer_class):
+    """Update button text based on footer visibility."""
+    is_visible = footer_class and "footer-visible" in footer_class
+    
+    if is_visible:
+        return [
+            DashIconify(icon="material-symbols:expand-less", width=16),
+            dmc.Text("Hide Notes", ml="xs")
+        ]
     else:
-        return (
-            {"display": "block"},
-            [DashIconify(icon="material-symbols:expand-more", width=16), " Hide Notes"],
-        )
+        return [
+            DashIconify(icon="material-symbols:edit-note", width=16),
+            dmc.Text("Toggle Notes", ml="xs")
+        ]
 
 
 if __name__ == "__main__":
-    print("Running AppShell with collapsible footer RichTextEditor prototype...")
+    print("Running AppShell with toggle-based footer RichTextEditor prototype...")
     print("Features:")
-    print("- Collapsible footer with RichTextEditor")
-    print("- Toggle from header button or footer button")
-    print("- Content storage and management")
-    print("- No circular reference issues (editor is permanent, not dynamically created)")
+    print("- Footer hidden by default, toggled via top-right button")
+    print("- Dynamic positioning to respect sidebar state")
+    print("- Clean toggle mechanism without complex hover interactions")
+    print("- Rich text editor with full toolbar functionality")
+    print("- No circular reference issues (editor is permanent)")
     print("Running on http://127.0.0.1:8059/")
     app.run(debug=True, port=8059)

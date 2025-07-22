@@ -13,6 +13,7 @@ from depictio.dash.layouts.draggable import design_draggable
 from depictio.dash.layouts.draggable_scenarios.restore_dashboard import load_depictio_data
 from depictio.dash.layouts.header import design_header
 from depictio.dash.layouts.layouts_toolbox import create_add_with_input_modal
+from depictio.dash.layouts.notes_footer import create_notes_footer
 from depictio.dash.layouts.palette import create_color_palette_page
 from depictio.dash.layouts.profile import layout as profile_layout
 from depictio.dash.layouts.projectwise_user_management import (
@@ -427,6 +428,8 @@ def create_dashboard_layout(
                     core,
                 ],
             ),
+            # Notes footer - positioned as overlay
+            create_notes_footer(dashboard_data=depictio_dash_data),
             # html.Div(id="test-input"),
             html.Div(id="test-output", style={"display": "none"}),
             # html.Div(id="test-output-visible"),
@@ -440,6 +443,7 @@ def create_dashboard_layout(
             "flexDirection": "column",
             "width": "100%",
             "height": "100%",
+            "position": "relative",  # Allow positioned children
         },
     )
 

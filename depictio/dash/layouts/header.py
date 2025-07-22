@@ -540,6 +540,16 @@ def design_header(data, local_store):
         class_name="dashboard-offcanvas",  # Add class for theme targeting
     )
 
+    notes_button = dmc.ActionIcon(
+        DashIconify(icon="material-symbols:edit-note", width=35, color="gray"),
+        id="toggle-notes-button",
+        size="xl",
+        radius="xl",
+        variant="subtle",
+        style=button_style,
+        n_clicks=0,
+    )
+
     open_offcanvas_parameters_button = dmc.ActionIcon(
         DashIconify(icon="ic:baseline-settings", width=35, color="gray"),
         id="open-offcanvas-parameters-button",
@@ -662,6 +672,7 @@ def design_header(data, local_store):
                 [
                     add_new_component_button,
                     save_button,
+                    notes_button,
                     open_offcanvas_parameters_button,
                 ],
                 gap="xs",

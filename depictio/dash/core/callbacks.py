@@ -103,6 +103,7 @@ def register_layout_callbacks(app):
     """
     from depictio.dash.layouts.draggable import register_callbacks_draggable
     from depictio.dash.layouts.header import register_callbacks_header
+    from depictio.dash.layouts.notes_footer import register_callbacks_notes_footer
     from depictio.dash.layouts.save import register_callbacks_save
     from depictio.dash.layouts.sidebar import register_sidebar_callbacks
     from depictio.dash.layouts.stepper import register_callbacks_stepper
@@ -120,6 +121,7 @@ def register_layout_callbacks(app):
     register_callbacks_header(app)
     register_callbacks_draggable(app)
     register_sidebar_callbacks(app)
+    register_callbacks_notes_footer(app)
     register_callbacks_save(app)
     register_theme_callbacks(app)
 
