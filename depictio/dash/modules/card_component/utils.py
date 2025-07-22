@@ -113,6 +113,7 @@ def build_card_frame(index, children=None, show_border=False):
                     "minHeight": "150px",  # Ensure minimum height
                     "height": "100%",
                     "minWidth": "150px",  # Ensure minimum width
+                    "flex": "1",  # Allow growth to fill container
                 },
             ),
             style={
@@ -121,9 +122,13 @@ def build_card_frame(index, children=None, show_border=False):
                 "padding": "0",
                 "margin": "0",
                 "boxShadow": "none",
-                "border": "1px solid var(--app-border-color, #ddd)",  # Always show border for draggable delimitation
+                "border": "none",  # Remove conflicting border - parent handles styling
                 "borderRadius": "4px",
-                "backgroundColor": "var(--app-surface-color, #ffffff)",
+                "backgroundColor": "transparent",  # Let parent handle theme colors
+                # Critical flexbox properties for vertical growing
+                "display": "flex",
+                "flexDirection": "column",
+                "flex": "1",
             },
             id={
                 "type": "card-component",
@@ -142,8 +147,9 @@ def build_card_frame(index, children=None, show_border=False):
                     "padding": "5px",  # Reduce padding inside the card body
                     "display": "flex",
                     "flexDirection": "column",
-                    "justifyContent": "center",
                     "height": "100%",  # Make sure it fills the parent container
+                    "flex": "1",  # Allow growth to fill container
+                    "minHeight": "0",  # Critical: Allow shrinking below content size
                 },
             ),
             style={
@@ -151,10 +157,14 @@ def build_card_frame(index, children=None, show_border=False):
                 "height": "100%",  # Ensure the card fills the container's height
                 "padding": "0",  # Remove default padding
                 "margin": "0",  # Remove default margin
-                "boxShadow": "none",  # Optional: Remove shadow for a cleaner look
-                "border": "1px solid var(--app-border-color, #ddd)",  # Always show border for draggable delimitation  # Conditional border
+                "boxShadow": "none",  # Remove shadow for a cleaner look
+                "border": "none",  # Remove conflicting border - parent handles styling
                 "borderRadius": "4px",
-                "backgroundColor": "var(--app-surface-color, #ffffff)",
+                "backgroundColor": "transparent",  # Let parent handle theme colors
+                # Critical flexbox properties for vertical growing
+                "display": "flex",
+                "flexDirection": "column",
+                "flex": "1",
             },
             id={
                 "type": "card-component",
@@ -165,7 +175,6 @@ def build_card_frame(index, children=None, show_border=False):
 
 def build_card(**kwargs):
     # def build_card(index, title, wf_id, dc_id, dc_config, column_name, column_type, aggregation, v, build_frame=False):
-    from dash import html
 
     index = kwargs.get("index")
     title = kwargs.get("title", "Default Title")  # Example of default parameter
@@ -468,16 +477,14 @@ def build_card(**kwargs):
                 index=index, children=new_card_body, show_border=stepper
             )
 
-            # Wrap with loading, but preserve the original component structure by putting Loading inside
-            # Create a container that maintains the expected id structure for enable_box_edit_mode
-            return html.Div(
-                dcc.Loading(
-                    children=card_component,
-                    custom_spinner=create_skeleton_component("card"),
-                    delay_show=100,  # Small delay to prevent flashing
-                    delay_hide=2000,  # 2s delay for debugging visibility
-                ),
-                id={"index": index},  # Preserve the expected id structure
+            # NUCLEAR: Remove intermediate wrapper div that breaks flex chain
+            # Return card_component directly with loading wrapper only
+            return dcc.Loading(
+                children=card_component,
+                custom_spinner=create_skeleton_component("card"),
+                delay_show=100,  # Small delay to prevent flashing
+                delay_hide=2000,  # 2s delay for debugging visibility
+                id={"index": index},  # Move the id to the loading component
             )
         else:
             # Build the card component for stepper mode

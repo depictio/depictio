@@ -48,9 +48,9 @@ def build_figure_frame(index, children=None):
                         "padding": "5px",  # Reduce padding inside the card body
                         "display": "flex",
                         "flexDirection": "column",
-                        "justifyContent": "center",
+                        "flex": "1",  # Allow growth to fill container
                         "height": "100%",  # Make sure it fills the parent container
-                        "minHeight": "400px",  # Ensure minimum height for visibility
+                        "minHeight": "150px",  # Reduce from 400px for better flexibility
                         "backgroundColor": "transparent",  # Fix white background
                     },
                 ),
@@ -79,11 +79,13 @@ def build_figure_frame(index, children=None):
                 "height": "100%",  # Ensure the card fills the container's height
                 "padding": "0",  # Remove default padding
                 "margin": "0",  # Remove default margin
-                "boxShadow": "none",  # Optional: Remove shadow for a cleaner look
-                # "border": "1px solid #ddd",  # Optional: Add a light border
-                # "borderRadius": "4px",  # Optional: Slightly round the corners
-                "border": "1px solid var(--app-border-color, #ddd)",  # Always show border for draggable delimitation  # Optional: Remove border
-                "backgroundColor": "var(--app-surface-color, #ffffff)",
+                "boxShadow": "none",  # Remove shadow for a cleaner look
+                "border": "none",  # Remove conflicting border - parent handles styling
+                "backgroundColor": "transparent",  # Let parent handle theme colors
+                # Critical flexbox properties for vertical growing
+                "display": "flex",
+                "flexDirection": "column",
+                "flex": "1",
             },
             id={
                 "type": "figure-component",
@@ -103,9 +105,9 @@ def build_figure_frame(index, children=None):
                         "padding": "5px",  # Reduce padding inside the card body
                         "display": "flex",
                         "flexDirection": "column",
-                        "justifyContent": "center",
+                        "flex": "1",  # Allow growth to fill container
                         "height": "100%",  # Make sure it fills the parent container
-                        "minHeight": "400px",  # Ensure minimum height for visibility
+                        "minHeight": "150px",  # Reduce from 400px for better flexibility
                         "backgroundColor": "transparent",  # Fix white background
                     },
                 ),
@@ -135,11 +137,13 @@ def build_figure_frame(index, children=None):
                 "height": "100%",  # Ensure the card fills the container's height
                 "padding": "0",  # Remove default padding
                 "margin": "0",  # Remove default margin
-                "boxShadow": "none",  # Optional: Remove shadow for a cleaner look
-                # "border": "1px solid #ddd",  # Optional: Add a light border
-                # "borderRadius": "4px",  # Optional: Slightly round the corners
-                "border": "1px solid var(--app-border-color, #ddd)",  # Always show border for draggable delimitation  # Optional: Remove border
-                "backgroundColor": "var(--app-surface-color, #ffffff)",
+                "boxShadow": "none",  # Remove shadow for a cleaner look
+                "border": "none",  # Remove conflicting border - parent handles styling
+                "backgroundColor": "transparent",  # Let parent handle theme colors
+                # Critical flexbox properties for vertical growing
+                "display": "flex",
+                "flexDirection": "column",
+                "flex": "1",
             },
             id={
                 "type": "figure-component",
@@ -596,11 +600,12 @@ def build_figure(**kwargs) -> html.Div:
                     "responsive": True,
                     "displayModeBar": True,
                 },
+                className="responsive-graph",  # Add responsive graph class for vertical growing
                 style={
                     "width": "100%",
-                    "height": "100%",
+                    "flex": "1",  # Critical for vertical growing
                     "backgroundColor": "transparent",  # Fix white background issue
-                    "minHeight": "400px",  # Ensure minimum height for visibility
+                    "minHeight": "200px",  # Reduce from 400px for better flexibility
                 },
             ),
             dcc.Store(
@@ -611,7 +616,10 @@ def build_figure(**kwargs) -> html.Div:
         style={
             "width": "100%",
             "height": "100%",
-            "minHeight": "400px",  # Ensure container has minimum height
+            "flex": "1",  # Critical for vertical growing
+            "display": "flex",
+            "flexDirection": "column",
+            "minHeight": "200px",  # Reduce from 400px for better flexibility
             "backgroundColor": "transparent",
         },
     )

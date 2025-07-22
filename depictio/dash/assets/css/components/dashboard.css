@@ -54,9 +54,13 @@
 
 /* Ensure the main content area uses available space efficiently */
 .react-grid-item .mantine-Card-root {
-    height: calc(100% - 40px) !important; /* Account for action buttons */
+    height: 100% !important; /* FIXED: Remove calc(100% - 40px) that breaks vertical growing */
     margin: 0 !important;
     padding: 12px !important;
+    /* Add flex properties for proper vertical growing */
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 !important;
 }
 
 /* Active/selected state for grid items - Theme compliant grey/black colors */
