@@ -23,6 +23,7 @@ def register_callbacks_header(app):
         # Output("reset-all-filters-button", "disabled"),
         Output("dashboard-version", "disabled"),
         Output("share-button", "disabled"),
+        Output("toggle-notes-button", "disabled"),
         Output("draggable", "showRemoveButton"),
         Output("draggable", "showResizeHandles"),
         Input("unified-edit-mode-button", "checked"),
@@ -36,7 +37,7 @@ def register_callbacks_header(app):
         # logger.info(switch_state)
         # logger.info("API_BASE_URL: " + str(API_BASE_URL))
 
-        len_output = 8
+        len_output = 9
 
         current_user = api_call_fetch_user_from_token(local_store["access_token"])
 

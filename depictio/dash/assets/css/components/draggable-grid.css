@@ -242,6 +242,21 @@
     visibility: hidden !important;
 }
 
+/* Disable text editing when edit mode is off */
+.drag-handles-hidden [id*="editable-title"] {
+    pointer-events: none !important;
+    cursor: default !important;
+}
+
+.drag-handles-hidden [id*="text-container"] {
+    cursor: default !important;
+}
+
+.drag-handles-hidden [id*="text-container"]:hover {
+    border: 1px solid transparent !important;
+    background-color: transparent !important;
+}
+
 /* Make drag handle cursor change to grabbing on hover */
 .react-grid-item:hover .mantine-ActionIcon-root[id*="drag-handle"]:hover,
 .react-grid-item:hover .mantine-ActionIcon-root.react-grid-dragHandle:hover {
