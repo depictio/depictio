@@ -266,8 +266,7 @@ def load_depictio_data(dashboard_id, local_data, theme="light"):
     if dashboard_data:
         if not hasattr(dashboard_data, "buttons_data"):
             dashboard_data.buttons_data = {
-                "edit_components_button": True,
-                "edit_dashboard_mode_button": True,
+                "unified_edit_mode": True,  # Replace separate buttons with unified mode
                 "add_button": {"count": 0},
             }
 
@@ -309,9 +308,11 @@ def load_depictio_data(dashboard_id, local_data, theme="light"):
                 # edit_dashboard_mode_button_checked = dashboard_data.buttons_data[
                 #     "edit_dashboard_mode_button"
                 # ]
-                edit_components_button_checked = dashboard_data.buttons_data[
-                    "edit_components_button"
-                ]
+                # Try unified edit mode first, fallback to old key for backward compatibility
+                edit_components_button_checked = dashboard_data.buttons_data.get(
+                    "unified_edit_mode",
+                    dashboard_data.buttons_data.get("edit_components_button", False),
+                )
 
             # Disable edit_components_button for anonymous users and temporary users on public dashboards in unauthenticated mode
             if settings.auth.unauthenticated_mode:

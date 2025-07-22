@@ -62,16 +62,16 @@
     z-index: 1000 !important;
 }
 
-/* Add stroke when hovering over drag handle */
+/* Subtle dashed border on component hover - similar to text component */
+.react-grid-item:hover {
+    border: 1px dashed var(--app-border-color, #dee2e6) !important;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+/* Solid border when drag handle is being hovered/used */
 .react-grid-item:has(.react-grid-dragHandle:hover) {
     border: 1px solid var(--app-text-color, #666) !important;
     box-shadow: 0 0 0 1px rgba(102, 102, 102, 0.1) !important;
-}
-
-/* Add stroke when hovering over resize handles */
-.react-grid-item:hover {
-    border: 1px solid var(--app-border-color, #dee2e6) !important;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
 }
 
 /* Hide remove button (×) */
@@ -81,33 +81,29 @@
     visibility: hidden !important;
 }
 
-/* Style drag handle for theme compatibility */
-.react-grid-dragHandle {
-    background: var(--app-surface-color, #f8f9fa) !important;
-    color: var(--app-text-color, #333) !important;
-    border: 1px solid var(--app-border-color, #dee2e6) !important;
-    border-radius: 4px !important;
-    font-size: 12px !important;
-    font-weight: 500 !important;
-    transition: all 0.2s ease !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: flex-start !important;  /* Move to left */
-    padding-left: 8px !important;  /* Add left padding */
-    gap: 4px !important;
+/* Hide the default drag handle, but keep functionality for ActionIcon with this class */
+.react-grid-dragHandle:not(.mantine-ActionIcon-root) {
+    display: none !important;
+    visibility: hidden !important;
 }
 
-.react-grid-dragHandle:hover {
-    background: var(--app-border-color, #e9ecef) !important;
-    border-color: var(--app-text-color, #333) !important;
+/* Make ActionIcon drag handles functional and styled - only visible on component hover */
+.mantine-ActionIcon-root.react-grid-dragHandle {
+    cursor: grab !important;
+    opacity: 0 !important;  /* Hidden by default */
+    transition: opacity 0.2s ease !important;
 }
 
-/* Add hand icon before the text */
-.react-grid-dragHandle::before {
-    content: "✋" !important;
-    font-size: 14px !important;
-    margin-right: 2px !important;
+.mantine-ActionIcon-root.react-grid-dragHandle:hover {
+    cursor: grabbing !important;
 }
+
+/* Show drag handle only when parent component is hovered */
+.react-grid-item:hover .mantine-ActionIcon-root.react-grid-dragHandle {
+    opacity: 1 !important;
+}
+
+/* Drag handle styles removed - using ActionIcon instead */
 
 /* Draggable component background enhancement */
 .react-grid-item.dashboard-component-hover {
@@ -157,6 +153,34 @@
 
 /* Hide drag handles when edit mode is disabled */
 .drag-handles-hidden .react-grid-dragHandle {
+    display: none !important;
+    visibility: hidden !important;
+}
+
+/* Hide action buttons and ActionIconGroup by default - show only on component hover when edit mode is enabled */
+.mantine-ActionIconGroup-root {
+    opacity: 0 !important;
+    transition: opacity 0.2s ease !important;
+}
+
+/* Show ActionIconGroup (with all buttons including drag handle) on component hover when edit mode is enabled */
+.react-grid-item:hover .mantine-ActionIconGroup-root {
+    opacity: 1 !important;
+}
+
+/* Make drag handle cursor change to grabbing on hover */
+.react-grid-item:hover .mantine-ActionIcon-root[id*="drag-handle"]:hover,
+.react-grid-item:hover .mantine-ActionIcon-root.react-grid-dragHandle:hover {
+    cursor: grabbing !important;
+}
+
+/* Hide action buttons and drag handle completely when edit mode is disabled */
+.drag-handles-hidden .mantine-ActionIconGroup-root,
+.drag-handles-hidden .mantine-ActionIcon-root[id*="drag-handle"],
+.drag-handles-hidden .mantine-ActionIcon-root[id*="remove-box-button"],
+.drag-handles-hidden .mantine-ActionIcon-root[id*="edit-box-button"],
+.drag-handles-hidden .mantine-ActionIcon-root[id*="duplicate-box-button"],
+.drag-handles-hidden .mantine-ActionIcon-root[id*="reset-selection-graph-button"] {
     display: none !important;
     visibility: hidden !important;
 }

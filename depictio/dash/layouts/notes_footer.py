@@ -234,7 +234,7 @@ def create_notes_footer(dashboard_data=None):
                 id="notes-editor-container",
                 style={
                     "padding": "10px 16px",
-                    "backgroundColor": "var(--app-bg-secondary, rgba(0, 0, 0, 0.01))",
+                    # "backgroundColor": "var(--app-bg-secondary, rgba(0, 0, 0, 0.01))",
                 },
             ),
         ],

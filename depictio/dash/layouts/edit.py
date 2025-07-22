@@ -34,7 +34,16 @@ def enable_box_edit_mode(
 ):
     # logger.info(box)
     # logger.info(box["props"])
-    btn_index = box["props"]["id"]["index"]
+
+    # Handle cases where component doesn't have an id in props
+    try:
+        btn_index = box["props"]["id"]["index"]
+    except (KeyError, TypeError):
+        # Fallback: generate a unique index if component doesn't have one
+        import uuid
+
+        btn_index = str(uuid.uuid4())
+        logger.warning(f"Component missing id in props, generated fallback: {btn_index}")
 
     logger.debug(f"ENABLE BOX EDIT MODE - index: {btn_index}")
 
@@ -50,6 +59,19 @@ def enable_box_edit_mode(
         component_type = component_data.get("component_type", None)
 
     from dash_iconify import DashIconify
+
+    def create_drag_handle():
+        return dmc.ActionIcon(
+            id={"type": "drag-handle", "index": f"{btn_index}"},
+            color="gray",
+            variant="subtle",
+            size="sm",
+            children=DashIconify(
+                icon="mdi:dots-grid", width=14, color="#888"
+            ),  # More subtle grid icon
+            className="react-grid-dragHandle",  # This tells DashGridLayout it's a drag handle
+            style={"cursor": "grab"},
+        )
 
     def create_remove_button():
         return dmc.ActionIcon(
@@ -105,6 +127,7 @@ def enable_box_edit_mode(
         # Default buttons for most components
         buttons = dmc.ActionIconGroup(
             [
+                create_drag_handle(),
                 create_remove_button(),
                 create_edit_button(),
                 create_duplicate_button(),
@@ -124,6 +147,7 @@ def enable_box_edit_mode(
                 # Add reset button for scatter plots
                 buttons = dmc.ActionIconGroup(
                     [
+                        create_drag_handle(),
                         create_remove_button(),
                         create_edit_button(),
                         create_duplicate_button(),
@@ -136,6 +160,7 @@ def enable_box_edit_mode(
                 # Limited buttons for table and jbrowse components
                 buttons = dmc.ActionIconGroup(
                     [
+                        create_drag_handle(),
                         create_remove_button(),
                         create_duplicate_button(),
                     ],
@@ -145,6 +170,7 @@ def enable_box_edit_mode(
             # Fallback for unknown component types
             buttons = dmc.ActionIconGroup(
                 [
+                    create_drag_handle(),
                     create_remove_button(),
                     create_duplicate_button(),
                 ],
@@ -176,8 +202,7 @@ def enable_box_edit_mode(
             "width": "100%",  # Ensure it takes full width of the parent
             "height": "100%",  # Ensure it takes full height of the parent
             "boxSizing": "border-box",  # Include padding in the element's total width and height
-            "padding": "10px 10px 10px 10px",  # Adjust top padding for absolute buttons
-            "paddingTop": "10px",  # Normal padding since buttons are outside
+            "padding": "40px 10px 10px 10px",  # Extra top padding for overlay controls
             "border": "1px solid var(--app-border-color, #ddd)",  # Theme-aware border
             "borderRadius": "8px",  # Add rounded corners
             "background": "var(--app-surface-color, #ffffff)",  # Theme-aware background
@@ -204,16 +229,16 @@ def enable_box_edit_mode(
                     buttons,
                     style={
                         "position": "absolute",
-                        "top": "2px",  # Slight offset into drag handle area
-                        "right": "10px",
+                        "top": "8px",  # Overlay on content
+                        "right": "8px",  # Match drag handle positioning
                         "zIndex": 1000,  # Very high z-index
                         "pointerEvents": "auto",
                         "display": "flex",
                         "alignItems": "center",
-                        "height": "28px",  # Match drag handle height
-                        "background": "rgba(255, 255, 255, 0.9)",  # Slight background for visibility
-                        "borderRadius": "4px",
-                        "padding": "2px",
+                        "height": "auto",  # Auto height for better fit
+                        "background": "transparent",  # Remove visible background
+                        "borderRadius": "6px",  # Rounded corners
+                        "padding": "4px",  # Comfortable padding
                     },
                 ),
             ],

@@ -25,7 +25,7 @@ def register_callbacks_header(app):
         Output("share-button", "disabled"),
         Output("draggable", "showRemoveButton"),
         Output("draggable", "showResizeHandles"),
-        Input("edit-dashboard-mode-button", "checked"),
+        Input("unified-edit-mode-button", "checked"),
         State("local-store", "data"),
         State("url", "pathname"),
         # prevent_initial_call=True,
@@ -205,12 +205,17 @@ def design_header(data, local_store):
     # If not owner (including public dashboard viewers), disable editing controls
     if not owner and viewer:
         disabled = True
-        edit_dashboard_mode_button_checked = False
-        edit_components_button_checked = False
+        unified_edit_mode_checked = False
     else:
         disabled = False
-        edit_dashboard_mode_button_checked = data["buttons_data"]["edit_dashboard_mode_button"]
-        edit_components_button_checked = data["buttons_data"]["edit_components_button"]
+        # Try unified edit mode first, fallback to old keys for backward compatibility
+        unified_edit_mode_checked = data["buttons_data"].get(
+            "unified_edit_mode",
+            data["buttons_data"].get(
+                "edit_dashboard_mode_button",
+                data["buttons_data"].get("edit_components_button", False),
+            ),
+        )
 
     # logger.info(f"owner: {owner}, viewer: {viewer}")
     # logger.info(f"edit_dashboard_mode_button_checked: {edit_dashboard_mode_button_checked}")
@@ -443,26 +448,12 @@ def design_header(data, local_store):
             dmc.Group(
                 [
                     dmc.Switch(
-                        id="edit-dashboard-mode-button",
-                        checked=edit_dashboard_mode_button_checked,
+                        id="unified-edit-mode-button",
+                        checked=unified_edit_mode_checked,
                         disabled=disabled,
                         color="gray",
                     ),
-                    dmc.Text("Edit dashboard layout", style={"fontFamily": "default"}),
-                ],
-                align="center",
-                gap="sm",
-                style={"padding": "10px", "margin": "10px 0"},
-            ),
-            dmc.Group(
-                [
-                    dmc.Switch(
-                        id="edit-components-mode-button",
-                        checked=edit_components_button_checked,
-                        disabled=disabled,
-                        color="gray",
-                    ),
-                    dmc.Text("Display components options", style={"fontFamily": "default"}),
+                    dmc.Text("Edit Mode", style={"fontFamily": "default"}),
                 ],
                 align="center",
                 gap="sm",

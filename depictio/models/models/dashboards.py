@@ -13,9 +13,8 @@ class DashboardData(MongoModel):
     stored_metadata: list = []
     stored_edit_dashboard_mode_button: list = []
     buttons_data: dict = {
-        "edit_components_button": True,
+        "unified_edit_mode": True,  # Unified edit mode replaces separate edit buttons
         "add_components_button": {"count": 0},
-        "edit_dashboard_mode_button": True,
     }
     stored_add_button: dict = {"count": 0}
     title: str

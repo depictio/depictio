@@ -25,8 +25,7 @@ def register_callbacks_save(app):
             "data",
         ),
         State("stored-edit-dashboard-mode-button", "data"),
-        Input("edit-dashboard-mode-button", "checked"),
-        Input("edit-components-mode-button", "checked"),
+        Input("unified-edit-mode-button", "checked"),
         State("stored-add-button", "data"),
         State({"type": "interactive-component-value", "index": ALL}, "value"),
         Input({"type": "text-store", "index": ALL}, "data"),
@@ -66,8 +65,7 @@ def register_callbacks_save(app):
         stored_layout_data,
         stored_metadata,
         edit_dashboard_mode_button,
-        edit_dashboard_mode_button_checked,
-        edit_components_mode_button_checked,
+        unified_edit_mode_button_checked,
         add_button,
         interactive_component_values,
         text_store_data,
@@ -132,7 +130,7 @@ def register_callbacks_save(app):
         # Check if save should be triggered
         if (
             not any(trigger in triggered_id for trigger in save_triggers)
-            or not edit_dashboard_mode_button_checked
+            or not unified_edit_mode_button_checked
         ):
             return dash.no_update
 
@@ -284,9 +282,8 @@ def register_callbacks_save(app):
             "stored_edit_dashboard_mode_button": edit_dashboard_mode_button,
             "stored_add_button": add_button,
             "buttons_data": {
-                "edit_components_button": edit_components_mode_button_checked,
+                "unified_edit_mode": unified_edit_mode_button_checked,
                 "add_components_button": add_button,
-                "edit_dashboard_mode_button": edit_dashboard_mode_button_checked,
             },
             "notes_content": notes_data if notes_data else "",
             "last_saved_ts": str(datetime.now()),

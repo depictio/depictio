@@ -468,10 +468,8 @@ def register_callbacks_draggable(app):
         Input("reset-all-filters-button", "n_clicks"),
         Input("remove-all-components-button", "n_clicks"),
         State("toggle-interactivity-button", "checked"),
-        State("edit-dashboard-mode-button", "checked"),
-        Input("edit-dashboard-mode-button", "checked"),
-        State("edit-components-mode-button", "checked"),
-        Input("edit-components-mode-button", "checked"),
+        State("unified-edit-mode-button", "checked"),
+        Input("unified-edit-mode-button", "checked"),
         State("url", "pathname"),
         State("local-store", "data"),
         State("theme-store", "data"),
@@ -506,10 +504,8 @@ def register_callbacks_draggable(app):
         reset_all_filters_button,
         remove_all_components_button,
         toggle_interactivity_button,
-        edit_dashboard_mode_button,
-        input_edit_dashboard_mode_button,
-        edit_components_mode_button,
-        input_edit_components_mode_button,
+        unified_edit_mode_button,
+        input_unified_edit_mode_button,
         pathname,
         local_data,
         theme_store,  # Now an Input parameter - triggers callback when theme changes
@@ -650,7 +646,7 @@ def register_callbacks_draggable(app):
 
                 children, indexes = render_raw_children(
                     tmp_stored_metadata[0],
-                    switch_state=edit_components_mode_button,
+                    switch_state=unified_edit_mode_button,
                     dashboard_id=dashboard_id,
                     TOKEN=TOKEN,
                     theme=theme,
@@ -744,7 +740,7 @@ def register_callbacks_draggable(app):
                             stored_metadata=stored_metadata,
                             interactive_components_dict=interactive_components_dict,
                             draggable_children=draggable_children,
-                            edit_components_mode_button=edit_components_mode_button,
+                            edit_components_mode_button=unified_edit_mode_button,
                             TOKEN=TOKEN,
                             dashboard_id=dashboard_id,
                         )
@@ -775,7 +771,7 @@ def register_callbacks_draggable(app):
                             stored_metadata=stored_metadata,
                             interactive_components_dict=interactive_components_dict,
                             draggable_children=draggable_children,
-                            edit_components_mode_button=edit_components_mode_button,
+                            edit_components_mode_button=unified_edit_mode_button,
                             TOKEN=TOKEN,
                             dashboard_id=dashboard_id,
                         )
@@ -821,7 +817,7 @@ def register_callbacks_draggable(app):
                             stored_metadata,
                             interactive_components_dict,
                             draggable_children,
-                            switch_state=edit_components_mode_button,
+                            switch_state=unified_edit_mode_button,
                             TOKEN=TOKEN,
                             dashboard_id=dashboard_id,
                             theme=theme,
@@ -884,7 +880,7 @@ def register_callbacks_draggable(app):
                     stored_metadata,
                     interactive_components_dict,
                     draggable_children,
-                    switch_state=edit_components_mode_button,
+                    switch_state=unified_edit_mode_button,
                     TOKEN=TOKEN,
                     dashboard_id=dashboard_id,
                     theme=theme,
@@ -909,37 +905,6 @@ def register_callbacks_draggable(app):
                     )
                 # return new_children, dash.no_update, state_stored_draggable_children, dash.no_update
 
-            elif "edit-components-mode-button" in triggered_input:
-                logger.info(f"Edit components mode button triggered: {edit_components_mode_button}")
-                new_children = list()
-                # logger.info("Current draggable children: {}".format(draggable_children))
-                logger.info(f"Len Current draggable children: {len(draggable_children)}")
-                for child, child_metadata in zip(draggable_children, stored_metadata):
-                    # logger.info(f"Child: {child}")
-                    # logger.info("Child props: {}".format(child["props"]))
-                    # logger.info("Child props children: {}".format(child["props"]["children"]))
-                    if type(child["props"]["children"]) is dict:
-                        child = enable_box_edit_mode(
-                            child["props"]["children"]["props"]["children"][-1],
-                            edit_components_mode_button,
-                            component_data=child_metadata,
-                        )
-                    elif type(child["props"]["children"]) is list:
-                        child = enable_box_edit_mode(
-                            child["props"]["children"][-1],
-                            edit_components_mode_button,
-                            component_data=child_metadata,
-                        )
-                    new_children.append(child)
-                    state_stored_draggable_children[dashboard_id] = new_children
-
-                return (
-                    new_children,
-                    dash.no_update,
-                    dash.no_update,
-                    dash.no_update,
-                    dash.no_update,
-                )
                 # return new_children, dash.no_update, state_stored_draggable_children, dash.no_update
 
             elif triggered_input == "stored-draggable-layouts":
@@ -951,7 +916,7 @@ def register_callbacks_draggable(app):
                     if dashboard_id in state_stored_draggable_layouts:
                         children = render_dashboard(
                             stored_metadata,
-                            edit_components_mode_button,
+                            unified_edit_mode_button,
                             dashboard_id,
                             theme,
                             TOKEN,
@@ -1072,7 +1037,7 @@ def register_callbacks_draggable(app):
                         logger.info(f"Metadata: {metadata}")
                         edited_child = enable_box_edit_mode(
                             child,
-                            edit_components_mode_button,
+                            unified_edit_mode_button,
                             dashboard_id=dashboard_id,
                             fresh=False,
                             component_data=parent_metadata,
@@ -1231,7 +1196,7 @@ def register_callbacks_draggable(app):
 
                     new_child, index = render_raw_children(
                         metadata,
-                        edit_components_mode_button,
+                        unified_edit_mode_button,
                         dashboard_id,
                         TOKEN=TOKEN,
                         theme=theme,
@@ -1247,23 +1212,23 @@ def register_callbacks_draggable(app):
                     dash.no_update,
                     dash.no_update,
                 )
-            elif triggered_input == "edit-dashboard-mode-button":
-                logger.info(f"Edit dashboard mode button clicked: {edit_dashboard_mode_button}")
-                # new_children = list()
-                # for child, child_metadata in zip(draggable_children, stored_metadata):
-                #     if type(child["props"]["children"]) is dict:
-                #         child = enable_box_edit_mode(child["props"]["children"]["props"]["children"][-1], edit_dashboard_mode_button, component_data=child_metadata)
-                #     elif type(child["props"]["children"]) is list:
-                #         child = enable_box_edit_mode(child["props"]["children"][-1], edit_dashboard_mode_button, component_data=child_metadata)
-                #     new_children.append(child)
-                #     state_stored_draggable_children[dashboard_id] = new_children
+            elif triggered_input == "unified-edit-mode-button":
+                logger.info(f"Unified edit mode button clicked: {unified_edit_mode_button}")
+                logger.info(f"Current draggable children count: {len(draggable_children)}")
+
+                # For edit mode toggle, we should NOT recreate components
+                # The showRemoveButton and showResizeHandles are handled by update_grid_edit_mode callback
+                # The action buttons visibility should be controlled via CSS classes, not by recreating components
+
+                # Just preserve the existing children and layouts - let CSS handle the button visibility
+                logger.info("Preserving existing components for edit mode toggle")
 
                 return (
-                    dash.no_update,
-                    dash.no_update,
-                    dash.no_update,
-                    dash.no_update,
-                    dash.no_update,
+                    draggable_children,  # Keep existing children unchanged
+                    draggable_layouts,  # Keep existing layouts unchanged
+                    dash.no_update,  # Don't update stored children
+                    dash.no_update,  # Don't update stored layouts
+                    dash.no_update,  # Don't update edit parent index
                 )
                 # return new_children, dash.no_update, state_stored_draggable_children, dash.no_update
 
@@ -1428,7 +1393,7 @@ def register_callbacks_draggable(app):
             Output("draggable", "showResizeHandles", allow_duplicate=True),
             Output("draggable", "className", allow_duplicate=True),
         ],
-        Input("edit-dashboard-mode-button", "checked"),
+        Input("unified-edit-mode-button", "checked"),
         prevent_initial_call=True,
     )
     def update_grid_edit_mode(edit_mode_enabled):
