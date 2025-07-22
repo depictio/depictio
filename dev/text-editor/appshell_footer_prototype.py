@@ -24,9 +24,7 @@ def create_footer_editor():
         [
             # Simple header
             html.Div(
-                [
-                    dmc.Text("Notes & Documentation", fw=500, c="dark", ta="center")
-                ],
+                [dmc.Text("Notes & Documentation", fw=500, c="dark", ta="center")],
                 id="footer-header-line",
                 style={
                     "padding": "8px 16px",
@@ -36,12 +34,10 @@ def create_footer_editor():
                     "display": "flex",
                     "alignItems": "center",
                     "justifyContent": "center",
-                }
+                },
             ),
-            
             # Storage for editor content
             dcc.Store(id="footer-editor-store", data=""),
-            
             # Editor content area
             html.Div(
                 [
@@ -81,11 +77,11 @@ def create_footer_editor():
                 style={
                     "padding": "10px 16px",
                     "backgroundColor": "var(--app-surface-color, #f8f9fa)",
-                    "borderTop": "1px solid var(--app-border-color, #e9ecef)"
+                    "borderTop": "1px solid var(--app-border-color, #e9ecef)",
                 },
             ),
         ],
-        id="footer-wrapper"
+        id="footer-wrapper",
     )
 
 
@@ -109,13 +105,13 @@ layout = dmc.AppShell(
                     dmc.Button(
                         [
                             DashIconify(icon="material-symbols:edit-note", width=16),
-                            dmc.Text("Toggle Notes", ml="xs")
+                            dmc.Text("Toggle Notes", ml="xs"),
                         ],
                         variant="subtle",
                         size="sm",
                         id="toggle-notes-button",
-                        color="blue"
-                    )
+                        color="blue",
+                    ),
                 ],
                 h="100%",
                 px="md",
@@ -261,9 +257,7 @@ layout = dmc.AppShell(
     id="appshell",
 )
 
-app.layout = dmc.MantineProvider([
-    layout
-])
+app.layout = dmc.MantineProvider([layout])
 
 
 # Simple CSS injection for footer styling
@@ -277,7 +271,7 @@ def inject_footer_css(_):
     return {}
 
 
-# Add CSS via clientside callback  
+# Add CSS via clientside callback
 app.clientside_callback(
     """
     function(appshell_id) {
@@ -410,16 +404,16 @@ def store_editor_content(editor_html):
 def update_toggle_button_text(footer_class):
     """Update button text based on footer visibility."""
     is_visible = footer_class and "footer-visible" in footer_class
-    
+
     if is_visible:
         return [
             DashIconify(icon="material-symbols:expand-less", width=16),
-            dmc.Text("Hide Notes", ml="xs")
+            dmc.Text("Hide Notes", ml="xs"),
         ]
     else:
         return [
             DashIconify(icon="material-symbols:edit-note", width=16),
-            dmc.Text("Toggle Notes", ml="xs")
+            dmc.Text("Toggle Notes", ml="xs"),
         ]
 
 
