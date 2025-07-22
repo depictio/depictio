@@ -232,8 +232,7 @@ def enable_box_edit_mode(
                         "top": "8px",  # Overlay on content
                         "right": "8px",  # Match drag handle positioning
                         "zIndex": 1000,  # Very high z-index
-                        "pointerEvents": "auto",
-                        "display": "flex",
+                        # pointerEvents and display removed - CSS handles hover behavior
                         "alignItems": "center",
                         "height": "auto",  # Auto height for better fit
                         "background": "transparent",  # Remove visible background

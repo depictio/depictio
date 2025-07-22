@@ -103,6 +103,22 @@
     opacity: 1 !important;
 }
 
+/* Remove any conflicting pseudo-elements from ActionIcon drag handles */
+.mantine-ActionIcon-root.react-grid-dragHandle::before,
+.mantine-ActionIcon-root.react-grid-dragHandle::after,
+.mantine-ActionIcon-root[id*="drag-handle"]::before,
+.mantine-ActionIcon-root[id*="drag-handle"]::after {
+    content: none !important;
+    display: none !important;
+}
+
+/* Ensure ActionIcon children (DashIconify) are properly displayed */
+.mantine-ActionIcon-root.react-grid-dragHandle > * {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
 /* Drag handle styles removed - using ActionIcon instead */
 
 /* Draggable component background enhancement */
@@ -157,15 +173,40 @@
     visibility: hidden !important;
 }
 
-/* Hide action buttons and ActionIconGroup by default - show only on component hover when edit mode is enabled */
-.mantine-ActionIconGroup-root {
+/* Hide ActionIconGroup and individual ActionIcons by default - only visible on component hover */
+.react-grid-item .mantine-ActionIconGroup-root {
     opacity: 0 !important;
     transition: opacity 0.2s ease !important;
+    pointer-events: none !important;
 }
 
-/* Show ActionIconGroup (with all buttons including drag handle) on component hover when edit mode is enabled */
+.react-grid-item .mantine-ActionIcon-root[id*="remove-box-button"],
+.react-grid-item .mantine-ActionIcon-root[id*="edit-box-button"],
+.react-grid-item .mantine-ActionIcon-root[id*="duplicate-box-button"],
+.react-grid-item .mantine-ActionIcon-root[id*="reset-selection-graph-button"] {
+    opacity: 0 !important;
+    transition: opacity 0.2s ease !important;
+    pointer-events: none !important;
+}
+
+/* Show ActionIconGroup and individual ActionIcons only when parent component is hovered */
 .react-grid-item:hover .mantine-ActionIconGroup-root {
     opacity: 1 !important;
+    pointer-events: auto !important;
+}
+
+.react-grid-item:hover .mantine-ActionIcon-root[id*="remove-box-button"],
+.react-grid-item:hover .mantine-ActionIcon-root[id*="edit-box-button"],
+.react-grid-item:hover .mantine-ActionIcon-root[id*="duplicate-box-button"],
+.react-grid-item:hover .mantine-ActionIcon-root[id*="reset-selection-graph-button"] {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+}
+
+/* Hide ActionIconGroup completely when edit mode is disabled (matching drag handle pattern) */
+.drag-handles-hidden .mantine-ActionIconGroup-root {
+    display: none !important;
+    visibility: hidden !important;
 }
 
 /* Make drag handle cursor change to grabbing on hover */
