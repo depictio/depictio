@@ -24,6 +24,7 @@ app.layout = dmc.MantineProvider(
     ]
 )
 
+
 @callback(
     Output("output", "children"),
     Input("ultra-minimal-range", "value"),
@@ -31,6 +32,7 @@ app.layout = dmc.MantineProvider(
 def update_range(value):
     print(f"ULTRA MINIMAL: {value}")
     return f"Value: {value}"
+
 
 if __name__ == "__main__":
     print("Ultra minimal test - NO themes, NO providers, NO styling")

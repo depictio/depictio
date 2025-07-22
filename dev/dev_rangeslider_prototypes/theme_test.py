@@ -13,7 +13,6 @@ app = dash.Dash(__name__)
 app.layout = dmc.MantineProvider(
     children=[
         html.H1("Theme Test - All Inside MantineProvider"),
-        
         # Test 1: Basic RangeSlider
         html.H2("Basic RangeSlider"),
         dmc.RangeSlider(
@@ -24,9 +23,7 @@ app.layout = dmc.MantineProvider(
             step=1,
         ),
         html.Div(id="basic-output"),
-        
         html.Hr(),
-        
         # Test 2: RangeSlider with theme
         html.H2("RangeSlider with Theme"),
         dmc.RangeSlider(
@@ -38,9 +35,7 @@ app.layout = dmc.MantineProvider(
             color="blue",
         ),
         html.Div(id="themed-output"),
-        
         html.Hr(),
-        
         # Test 3: RangeSlider with marks
         html.H2("RangeSlider with Marks"),
         dmc.RangeSlider(
@@ -59,6 +54,7 @@ app.layout = dmc.MantineProvider(
     ]
 )
 
+
 @callback(
     Output("basic-output", "children"),
     Input("basic-range", "value"),
@@ -66,6 +62,7 @@ app.layout = dmc.MantineProvider(
 def update_basic(value):
     print(f"BASIC: {value}")
     return f"Basic: {value}"
+
 
 @callback(
     Output("themed-output", "children"),
@@ -75,6 +72,7 @@ def update_themed(value):
     print(f"THEMED: {value}")
     return f"Themed: {value}"
 
+
 @callback(
     Output("marks-output", "children"),
     Input("marks-range", "value"),
@@ -82,6 +80,7 @@ def update_themed(value):
 def update_marks(value):
     print(f"MARKS: {value}")
     return f"Marks: {value}"
+
 
 if __name__ == "__main__":
     print("Testing different MantineProvider configurations...")

@@ -367,22 +367,24 @@ def update_component(column_name, scale_type, color_value, marks_number, test_va
     # Build the component
     try:
         component = build_interactive(**kwargs)
-        
+
         # Enhanced debug: try to inspect the generated component
         print(f"DEBUG: Generated component type: {type(component)}")
-        if hasattr(component, 'children'):
-            print(f"DEBUG: Component has children: {len(component.children) if component.children else 0}")
+        if hasattr(component, "children"):
+            print(
+                f"DEBUG: Component has children: {len(component.children) if component.children else 0}"
+            )
             for i, child in enumerate(component.children or []):
                 print(f"DEBUG: Child {i}: {type(child)}")
-                if hasattr(child, 'id'):
+                if hasattr(child, "id"):
                     print(f"DEBUG: Child {i} ID: {child.id}")
-                if hasattr(child, 'min') and hasattr(child, 'max'):
+                if hasattr(child, "min") and hasattr(child, "max"):
                     print(f"DEBUG: Child {i} range: min={child.min}, max={child.max}")
-                    if hasattr(child, 'value'):
+                    if hasattr(child, "value"):
                         print(f"DEBUG: Child {i} value: {child.value}")
-                    if hasattr(child, 'step'):
+                    if hasattr(child, "step"):
                         print(f"DEBUG: Child {i} step: {child.step}")
-                    if hasattr(child, 'marks'):
+                    if hasattr(child, "marks"):
                         print(f"DEBUG: Child {i} marks: {len(child.marks) if child.marks else 0}")
 
         # Debug information
@@ -439,6 +441,7 @@ def update_direct_rangeslider(value):
     print(f"DEBUG: Direct RangeSlider callback triggered with value: {value}")
     return f"Direct RangeSlider Value: {value} (Type: {type(value)})"
 
+
 # Simple Slider callback - removed prevent_initial_call
 @callback(
     Output("simple-slider-output", "children"),
@@ -458,13 +461,13 @@ def update_simple_slider(value):
 )
 def update_value_display(slider_values, component_data):
     print(f"DEBUG: update_value_display called with slider_values: {slider_values}")
-    
+
     if not slider_values:
         return dash.no_update
-    
+
     # Handle the case where we have multiple components
     current_value = slider_values[0] if slider_values else None
-    
+
     if current_value is None:
         return dash.no_update
 

@@ -18,16 +18,14 @@ from depictio.dash.modules.interactive_component.utils import build_interactive
 app = dash.Dash(__name__)
 
 # Simple test data
-test_data = pl.DataFrame({
-    "values": [1.0, 2.3, 4.5, 3.2, 5.8, 6.1, 4.9, 3.7, 2.1, 5.4]
-})
+test_data = pl.DataFrame({"values": [1.0, 2.3, 4.5, 3.2, 5.8, 6.1, 4.9, 3.7, 2.1, 5.4]})
 
 # Mock column specs
 cols_json = {
     "values": {
         "type": "float64",
         "description": "Test values",
-        "specs": {"min": 1.0, "max": 6.9, "count": 10, "nunique": 10}
+        "specs": {"min": 1.0, "max": 6.9, "count": 10, "nunique": 10},
     }
 }
 
@@ -38,12 +36,12 @@ component_id = str(uuid.uuid4())
 app.layout = dmc.MantineProvider(
     children=[
         html.H1("Simple RangeSlider Test - Fixed Structure"),
-        
         html.H2("Generated RangeSlider"),
         html.Div(id="rangeslider-container"),
         html.Div(id="rangeslider-output"),
     ]
 )
+
 
 # Generate the RangeSlider on app start
 @callback(
@@ -52,7 +50,7 @@ app.layout = dmc.MantineProvider(
 )
 def create_rangeslider(_):
     print("Creating RangeSlider component...")
-    
+
     # Build the component using build_interactive
     component = build_interactive(
         index=component_id,
@@ -73,9 +71,10 @@ def create_rangeslider(_):
         marks_number=5,
         value=[2.0, 5.0],  # Initial value
     )
-    
+
     print(f"Generated component: {type(component)}")
     return component
+
 
 # Single callback to handle RangeSlider changes - simplified like working version
 @callback(
@@ -85,6 +84,7 @@ def create_rangeslider(_):
 def update_rangeslider(value):
     print(f"RangeSlider callback triggered with value: {value}")
     return f"RangeSlider Value: {value} (Type: {type(value)})"
+
 
 if __name__ == "__main__":
     print("Starting simple RangeSlider test...")
