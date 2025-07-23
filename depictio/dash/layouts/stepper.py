@@ -217,7 +217,20 @@ def register_callbacks_stepper(app):
         # Check if any btn-option was clicked
         btn_clicks = [btn for btn in btn_option_clicks if btn > 0]
         if btn_clicks:
-            next_step = 1  # Move from button selection to data selection
+            # Check if Text component was selected
+            if isinstance(triggered_id, dict) and triggered_id.get("type") == "btn-option":
+                component_selected = triggered_id.get("value")
+                logger.info(f"Component selected: {component_selected}")
+                if component_selected == "Text":
+                    # Text components don't need data selection, skip to design step
+                    next_step = 2  # Move directly to component design step
+                    logger.info(f"Text component selected, advancing to step {next_step}")
+                    return next_step, False  # Return immediately to avoid further processing
+                else:
+                    # Other components need data selection
+                    next_step = 1  # Move from button selection to data selection
+            else:
+                next_step = 1  # Default: move to data selection
 
         if triggered_input == "btn-option":
             if not btn_clicks:

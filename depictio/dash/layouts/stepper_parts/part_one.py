@@ -11,6 +11,34 @@ from depictio.dash.component_metadata import get_component_metadata_by_display_n
 
 def register_callbacks_stepper_part_one(app):
     @app.callback(
+        Output({"type": "component-selected", "index": MATCH}, "children", allow_duplicate=True),
+        Input({"type": "btn-option", "index": MATCH, "value": ALL}, "n_clicks"),
+        State({"type": "last-button", "index": MATCH}, "data"),
+        prevent_initial_call=True,
+    )
+    def update_component_selected_display(n_clicks, component_selected):
+        """Update component-selected display for components that don't need data selection like Text."""
+        if ctx.triggered_id and isinstance(ctx.triggered_id, dict):
+            if ctx.triggered_id["type"] == "btn-option":
+                selected_component = ctx.triggered_id["value"]
+                if selected_component == "Text":
+                    # For Text components, show selection immediately since no data selection is needed
+                    component_metadata = get_component_metadata_by_display_name(selected_component)
+                    return dmc.Badge(
+                        selected_component,
+                        size="xl",
+                        radius="xl",
+                        style={"fontFamily": "Virgil"},
+                        color=component_metadata["color"],
+                        leftSection=DashIconify(
+                            icon=component_metadata["icon"],
+                            width=15,
+                            color="white",
+                        ),
+                    )
+        return dash.no_update
+
+    @app.callback(
         Output({"type": "dropdown-output", "index": MATCH}, "children"),
         Output({"type": "component-selected", "index": MATCH}, "children"),
         # Output({"type": "component-selected", "index": MATCH}, "color"),
