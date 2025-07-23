@@ -125,6 +125,8 @@ def enable_box_edit_mode(
 
     if switch_state:
         # Default buttons for most components
+        orientation = "horizontal"
+
         buttons = dmc.ActionIconGroup(
             [
                 create_drag_handle(),
@@ -132,12 +134,15 @@ def enable_box_edit_mode(
                 create_edit_button(),
                 create_duplicate_button(),
             ],
-            orientation="horizontal",
+            orientation=orientation,
         )
 
         # logger.info(f"ENABLE BOX EDIT MODE - component_type: {component_type}")
 
         if component_type:
+            if component_type == "figure":
+                orientation = "vertical"
+
             visu_type = component_data.get("visu_type", None)
             if (
                 component_type == "figure"
@@ -153,7 +158,7 @@ def enable_box_edit_mode(
                         create_duplicate_button(),
                         create_reset_button(),
                     ],
-                    orientation="horizontal",
+                    orientation=orientation,
                 )
 
             elif component_type in ["table", "jbrowse"]:
@@ -164,7 +169,7 @@ def enable_box_edit_mode(
                         create_remove_button(),
                         create_duplicate_button(),
                     ],
-                    orientation="horizontal",
+                    orientation=orientation,
                 )
         else:
             # Fallback for unknown component types
@@ -174,7 +179,7 @@ def enable_box_edit_mode(
                     create_remove_button(),
                     create_duplicate_button(),
                 ],
-                orientation="horizontal",
+                orientation=orientation,
             )
         # if fresh:
         #     buttons = dmc.Group([remove_button], grow=False, gap="xl", style={"margin-left": "12px"})

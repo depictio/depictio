@@ -33,7 +33,7 @@
     box-shadow: none !important;
     opacity: 0 !important;
     transition: opacity 0.2s ease !important;
-    z-index: 500 !important; /* Lower z-index so ActionIconGroup can be on top */
+    z-index: 1000 !important; /* Ensure handles are always on top */
 }
 
 .react-grid-item:hover .react-resizable-handle {
@@ -105,27 +105,15 @@
     cursor: grab !important;
     opacity: 0 !important;  /* Hidden by default */
     transition: opacity 0.2s ease !important;
-    pointer-events: auto !important; /* Ensure pointer events work during drag */
 }
 
 .mantine-ActionIcon-root.react-grid-dragHandle:hover {
     cursor: grabbing !important;
 }
 
-.mantine-ActionIcon-root.react-grid-dragHandle:active {
-    cursor: grabbing !important;
-    opacity: 1 !important; /* Stay visible during drag */
-}
-
 /* Show drag handle only when parent component is hovered */
 .react-grid-item:hover .mantine-ActionIcon-root.react-grid-dragHandle {
     opacity: 1 !important;
-}
-
-/* Keep drag handle visible during drag operation */
-.react-grid-item.react-grid-item-dragging .mantine-ActionIcon-root.react-grid-dragHandle {
-    opacity: 1 !important;
-    cursor: grabbing !important;
 }
 
 /* Remove any conflicting pseudo-elements from ActionIcon drag handles */
@@ -207,8 +195,7 @@
     flex: 1 !important;
 }
 
-/* DISABLED: Ensure card bodies also use flexbox and grow */
-/*
+/* Ensure card bodies also use flexbox and grow */
 .dashboard-component-hover .card-body,
 .dashboard-component-hover .mantine-Card-section {
     display: flex !important;
@@ -216,7 +203,6 @@
     height: 100% !important;
     flex: 1 !important;
 }
-*/
 
 /* Ensure content inside card bodies grows to fill space */
 .dashboard-component-hover .card-body > div,
@@ -332,17 +318,15 @@
     flex-direction: column !important;
 }
 
-/* DISABLED: CRITICAL: Target the exact JSON-like ID structure for card components - EXCLUDE interactive */
-/*
+/* CRITICAL: Target the exact JSON-like ID structure for card components - EXCLUDE interactive */
 .responsive-content div[id*="\"index\""][id*="\"type\""][id*="\"card-component\""]:not([id*="interactive-component"]) {
     height: 100% !important;
     display: flex !important;
     flex-direction: column !important;
     flex: 1 !important;
     min-height: 0 !important;
-    background-color: rgba(255, 0, 255, 0.1) !important;
+    background-color: rgba(255, 0, 255, 0.1) !important; /* Magenta background for debugging */
 }
-*/
 
 /* NUCLEAR: Target ALL divs that are children of responsive-content */
 .responsive-content > div {
@@ -370,16 +354,13 @@ div[id*="{\"index\""] {
     background-color: rgba(255, 165, 0, 0.1) !important; /* Orange background for debugging */
 }
 
-/* DISABLED: OVERRIDE: Remove orange background for figure-related elements */
-/*
+/* OVERRIDE: Remove orange background for figure-related elements */
 div[id*="{\"index\""][id*="figure"],
 div[id*="figure"] {
-    background-color: rgba(50, 205, 50, 0.2) !important;
+    background-color: rgba(50, 205, 50, 0.2) !important; /* Light Green to override orange */
 }
-*/
 
-/* DISABLED AGAIN: BOOTSTRAP CARD TARGETING: Target Bootstrap cards within figure components */
-/*
+/* BOOTSTRAP CARD TARGETING: Target Bootstrap cards within figure components */
 .responsive-content .card[id*="figure-component"],
 .responsive-content div.card[id*="figure-component"] {
     position: absolute !important;
@@ -394,17 +375,17 @@ div[id*="figure"] {
     box-sizing: border-box !important;
     display: flex !important;
     flex-direction: column !important;
-    background-color: rgba(30, 144, 255, 0.4) !important;
-    z-index: 3 !important;
+    background-color: rgba(30, 144, 255, 0.4) !important; /* Dodger Blue for Bootstrap cards */
+    z-index: 3 !important; /* Even higher priority */
 }
-*/
 
-/* DISABLED AGAIN: SELECTIVE FIGURE RULE: Target only figure-specific elements */
-/*
-.responsive-content *[id*="figure-component"],
-.responsive-content div[id*="figure-component"],
-.responsive-content *[id*="graph"]:not([id*="interactive"]),
-.responsive-content div[id*="graph"]:not([id*="interactive"]),
+/* ULTIMATE FIGURE RULE: Override ALL other backgrounds with maximum specificity */
+.responsive-content *[id*="figure"],
+.responsive-content div[id*="figure"],
+.responsive-content *[id*="graph"],
+.responsive-content div[id*="graph"],
+.responsive-content div[id*="{\"index\""],
+.responsive-content div[id*="{"][id*="\"index\""],
 .responsive-content .card[id*="figure"],
 .responsive-content *[class*="plotly"] {
     position: absolute !important;
@@ -419,14 +400,12 @@ div[id*="figure"] {
     box-sizing: border-box !important;
     display: flex !important;
     flex-direction: column !important;
-    background-color: rgba(255, 215, 0, 0.5) !important;
-    z-index: 999 !important;
+    background-color: rgba(255, 215, 0, 0.5) !important; /* GOLD - single override color */
+    z-index: 999 !important; /* Maximum possible priority */
 }
-*/
 
 
-/* DISABLED: INTERACTIVE COMPONENT WRAPPER: Override flex rules for interactive components */
-/*
+/* INTERACTIVE COMPONENT WRAPPER: Override flex rules for interactive components */
 .interactive-component-wrapper {
     flex: none !important;
     flex-grow: 0 !important;
@@ -434,12 +413,10 @@ div[id*="figure"] {
     height: auto !important;
     max-height: none !important;
     align-self: flex-start !important;
-    display: block !important;
+    display: block !important; /* Use block layout to prevent flex stretching */
 }
-*/
 
-/* DISABLED: NUCLEAR APPROACH: Remove ALL spacing and enforce absolute positioning for card elements */
-/*
+/* NUCLEAR APPROACH: Remove ALL spacing and enforce absolute positioning for card elements */
 .responsive-content div[id*="{\"index\""][id*="card-component"]:not([id*="interactive-component"]) {
     position: absolute !important;
     top: 0 !important;
@@ -451,9 +428,8 @@ div[id*="figure"] {
     margin: 0 !important;
     padding: 0 !important;
     box-sizing: border-box !important;
-    background-color: rgba(128, 0, 128, 0.2) !important;
+    background-color: rgba(128, 0, 128, 0.2) !important; /* Purple background to identify */
 }
-*/
 
 /* Ensure the parent of the absolutely positioned element is relative */
 .responsive-content {
@@ -483,8 +459,7 @@ div[id*="figure"] {
     padding: 4px !important; /* Minimal padding for readability */
 }
 
-/* DISABLED: ULTIMATE SPECIFICITY: Single rule for card components with maximum priority - EXCLUDE interactive */
-/*
+/* ULTIMATE SPECIFICITY: Single rule for card components with maximum priority - EXCLUDE interactive */
 .responsive-content div[id*="{"][id*="\"index\""][id*="\"type\""][id*="\"card-component\""]:not([id*="interactive-component"]) {
     position: absolute !important;
     top: 0 !important;
@@ -498,10 +473,9 @@ div[id*="figure"] {
     box-sizing: border-box !important;
     display: flex !important;
     flex-direction: column !important;
-    background-color: rgba(255, 20, 147, 0.3) !important;
+    background-color: rgba(255, 20, 147, 0.3) !important; /* Deep Pink - highest priority */
     z-index: 1 !important;
 }
-*/
 
 /* ULTIMATE SPECIFICITY: Multiple rules for figure components with maximum priority */
 .responsive-content div[id*="{"][id*="\"index\""][id*="\"type\""][id*="\"figure-component\""],
@@ -566,8 +540,7 @@ div[id*="figure"] {
     flex: 1 !important;
 }
 
-/* DISABLED: Fix card components specifically - EXCLUDE interactive */
-/*
+/* Fix card components specifically - EXCLUDE interactive */
 .responsive-content .card:not([id*="interactive-component"]),
 .responsive-content div[id*="card-component"]:not([id*="interactive-component"]) {
     height: 100% !important;
@@ -575,7 +548,6 @@ div[id*="figure"] {
     flex-direction: column !important;
     flex: 1 !important;
 }
-*/
 
 /* Ensure all divs leading to card components inherit height */
 .responsive-content * {
@@ -588,49 +560,40 @@ div[id*="figure"] {
    ULTIMATE FIX: Target the exact intermediate divs that break flex chain
    ============================================================================= */
 
-/* DISABLED: Target ALL divs between responsive-content and card-component (nuclear approach) */
-/*
+/* Target ALL divs between responsive-content and card-component (nuclear approach) */
 .responsive-wrapper .responsive-content div {
     height: 100% !important;
     display: flex !important;
     flex-direction: column !important;
     flex: 1 !important;
 }
-*/
 
-/* DISABLED: Specifically target the JSON-ID wrapper div that contains the card */
-/*
+/* Specifically target the JSON-ID wrapper div that contains the card */
 .responsive-wrapper div[id*="{"][id*="index"]:not([id*="card"]) {
     height: 100% !important;
     display: flex !important;
     flex-direction: column !important;
     flex: 1 !important;
 }
-*/
 
-/* DISABLED: Target empty divs that are children of JSON-ID divs */
-/*
+/* Target empty divs that are children of JSON-ID divs */
 .responsive-wrapper div[id*="{"] > div {
     height: 100% !important;
     display: flex !important;
     flex-direction: column !important;
     flex: 1 !important;
 }
-*/
 
-/* DISABLED: Nuclear approach: ALL divs in responsive wrapper get flex unless they have content */
-/*
+/* Nuclear approach: ALL divs in responsive wrapper get flex unless they have content */
 .responsive-wrapper div:not(.mantine-Card-root):not(.mantine-Text-root):not([class*="ActionIcon"]) {
     flex: 1 !important;
 }
-*/
 
 /* =============================================================================
    CRITICAL: Force card component specifically to take full height
    ============================================================================= */
 
-/* DISABLED: Target the exact card component that's not expanding - NUCLEAR APPROACH - EXCLUDE interactive */
-/*
+/* Target the exact card component that's not expanding - NUCLEAR APPROACH - EXCLUDE interactive */
 .responsive-wrapper div[id*="card-component"].card:not([id*="interactive-component"]),
 .responsive-wrapper .card[id*="card-component"]:not([id*="interactive-component"]),
 div[id*="card-component"].card:not([id*="interactive-component"]) {
@@ -642,10 +605,10 @@ div[id*="card-component"].card:not([id*="interactive-component"]) {
     flex-shrink: 1 !important;
     flex-basis: 0% !important;
     align-self: stretch !important;
+    /* Override any Bootstrap card defaults */
     position: relative !important;
     overflow: visible !important;
 }
-*/
 
 /* Force Bootstrap card to behave properly in flex context */
 .responsive-wrapper .card {
@@ -655,27 +618,23 @@ div[id*="card-component"].card:not([id*="interactive-component"]) {
     align-self: stretch !important;
 }
 
-/* DISABLED: Ensure card body also expands */
-/*
+/* Ensure card body also expands */
 .responsive-wrapper .card-body {
     height: 100% !important;
     min-height: 0 !important;
     flex: 1 !important;
 }
-*/
 
-/* DISABLED: Fix card body to take full height */
-/*
+/* Fix card body to take full height */
 .responsive-content .card-body,
 .responsive-content div[id*="card-body"] {
     height: 100% !important;
     display: flex !important;
     flex-direction: column !important;
     flex: 1 !important;
-    justify-content: flex-start !important;
-    min-height: 0 !important;
+    justify-content: flex-start !important;  /* Override Bootstrap's center alignment */
+    min-height: 0 !important;  /* Allow shrinking */
 }
-*/
 
 /* Fix Mantine cards - keep original properties */
 .responsive-content .mantine-Card-root {
@@ -736,31 +695,27 @@ div.responsive-wrapper .react-grid-item .mantine-Card-root,
     background-color: rgba(0, 255, 0, 0.05) !important; /* Subtle green tint for debugging */
 }
 
-/* DISABLED: Ensure react-grid-item itself is a proper flex container */
-/*
+/* Ensure react-grid-item itself is a proper flex container */
 .react-grid-item.react-draggable.cssTransforms.react-resizable {
     position: relative !important;
     display: flex !important;
     flex-direction: column !important;
     box-sizing: border-box !important;
-    overflow: visible !important;
-    background-color: rgba(255, 0, 0, 0.05) !important;
+    overflow: visible !important; /* Allow resize handles to extend outside */
+    background-color: rgba(255, 0, 0, 0.05) !important; /* Subtle red tint for debugging */
 }
-*/
 
-/* DISABLED: Target the unnamed DIV that DashGridLayout creates automatically (Child 0) */
-/*
+/* CRITICAL: Target the unnamed DIV that DashGridLayout creates automatically (Child 0) */
 .react-grid-item.react-draggable.cssTransforms.react-resizable > div:first-child {
     position: absolute !important;
-    inset: 0 !important;
+    inset: 0 !important; /* Modern shorthand for top/right/bottom/left: 0 */
     width: 100% !important;
     height: 100% !important;
     box-sizing: border-box !important;
     display: flex !important;
     flex-direction: column !important;
-    background-color: rgba(255, 165, 0, 0.1) !important;
+    background-color: rgba(255, 165, 0, 0.1) !important; /* Subtle orange background for debugging */
 }
-*/
 
 /* Force responsive-wrapper to use flex display instead of block */
 .responsive-wrapper {
@@ -775,23 +730,19 @@ div.responsive-wrapper .react-grid-item .mantine-Card-root,
     flex-grow: 1 !important;
 }
 
-/* DISABLED AGAIN: Fix intermediate wrapper divs - ONLY for figure components */
-/*
-.responsive-content > div:has([id*="figure-component"]) {
+/* Fix all intermediate wrapper divs in responsive-content */
+.responsive-content > div {
     height: 100% !important;
     flex: 1 !important;
     display: flex !important;
     flex-direction: column !important;
 }
-*/
 
-/* DISABLED AGAIN: Nuclear approach - ONLY for figure components */
-/*
-.responsive-content:has([id*="figure-component"]) div[id*="figure"] {
+/* Nuclear approach: Target all divs inside responsive-content */
+.responsive-content div {
     min-height: 0 !important;
     flex: 1 !important;
 }
-*/
 
 /* Fix intermediate wrapper divs created by grid layout */
 .react-grid-item > div > div {
@@ -807,13 +758,11 @@ div.responsive-wrapper .react-grid-item .mantine-Card-root,
     visibility: hidden !important;
 }
 
-/* DISABLED: Minimize padding between card-component and card elements - EXCLUDE interactive */
-/*
+/* Minimize padding between card-component and card elements - EXCLUDE interactive */
 .react-grid-item [id*="card-component"]:not([id*="interactive-component"]) {
     padding: 0px !important;
     margin: 0px !important;
 }
-*/
 
 .react-grid-item [id*="card-body"] {
     padding: 2px !important;
@@ -828,7 +777,6 @@ div.responsive-wrapper .react-grid-item .mantine-Card-root,
     opacity: 0 !important;
     transition: opacity 0.2s ease !important;
     pointer-events: none !important;
-    z-index: 1001 !important; /* Ensure ActionIconGroup is above resize handle */
 }
 
 .react-grid-item .mantine-ActionIcon-root[id*="remove-box-button"],
@@ -844,7 +792,6 @@ div.responsive-wrapper .react-grid-item .mantine-Card-root,
 .react-grid-item:hover .mantine-ActionIconGroup-root {
     opacity: 1 !important;
     pointer-events: auto !important;
-    z-index: 1001 !important; /* Ensure ActionIconGroup is above resize handle */
 }
 
 .react-grid-item:hover .mantine-ActionIcon-root[id*="remove-box-button"],

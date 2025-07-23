@@ -1108,9 +1108,22 @@ def build_interactive(**kwargs):
         storage_type="memory",
     )
 
-    # Create wrapper - no special styling needed for DMC sliders (color is built-in)
+    # Create wrapper with constrained sizing to prevent slider stretching
     new_interactive_component = html.Div(
         [card_title_h5, interactive_component, store_component],
+        # className="interactive-component-wrapper",  # Add class for CSS targeting
+        style={
+            "width": "100%",
+            "height": "auto !important",  # Use natural height
+            "maxWidth": "500px !important",  # Constrain width to reasonable size
+            "padding": "10px",
+            "boxSizing": "border-box",
+            # Prevent vertical stretching with !important
+            "flex": "none !important",
+            "flexGrow": "0 !important",
+            "flexShrink": "0 !important",
+            "alignSelf": "flex-start !important",
+        },
     )
 
     if not build_frame:
