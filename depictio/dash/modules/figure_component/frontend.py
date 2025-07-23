@@ -1600,10 +1600,11 @@ def design_figure(id, component_data=None):
                     },
                     style={
                         "width": "60%",
-                        "height": "60vh",
+                        "height": "100%",  # FIXED: Allow full height instead of fixed 60vh
                         "display": "inline-block",
                         "verticalAlign": "top",
                         "marginRight": "2%",
+                        "minHeight": "400px",  # Provide reasonable minimum
                     },
                 ),
                 # Right side - Mode-specific controls
@@ -1726,7 +1727,8 @@ def design_figure(id, component_data=None):
                                     id={"type": "code-mode-interface", "index": id["index"]},
                                     style={
                                         "width": "100%",
-                                        "height": "60vh",
+                                        "height": "100%",  # FIXED: Allow full height instead of fixed 60vh
+                                        "minHeight": "400px",  # Provide reasonable minimum
                                     },
                                 ),
                             ],
@@ -1738,7 +1740,8 @@ def design_figure(id, component_data=None):
                         "width": "38%",
                         "display": "inline-block",
                         "verticalAlign": "top",
-                        "height": "60vh",
+                        "height": "100%",  # FIXED: Allow full height instead of fixed 60vh
+                        "minHeight": "400px",  # Provide reasonable minimum
                     },
                 ),
             ],

@@ -1,21 +1,28 @@
 /* =============================================================================
-   DRAGGABLE GRID COMPONENTS
-   All styles related to the draggable grid layout system
+   DRAGGABLE GRID COMPONENTS - DEPICTIO CUSTOM STYLES
+   All styles related to the dash-dynamic-grid-layout system
+
+   PERFORMANCE NOTE: This file contains CSS rules that may impact drag performance.
+   Key areas of concern:
+   - CSS transitions during drag operations
+   - Z-index layering complexity
+   - Hover state transitions
+
+   Grid Configuration (applied in draggable.py):
+   - cols: {"lg": 12, "md": 10, "sm": 6, "xs": 4, "xxs": 2}
+   - rowHeight: 50px
+   - compactType: undefined (disabled for performance)
    ============================================================================= */
 
-/* Draggable components background */
-.react-grid-item,
-.react-grid-item .card,
-.react-grid-item [data-mantine="Card"],
-#draggable .react-grid-item,
-#draggable .react-grid-item > *,
-#draggable .react-grid-item [class*="Card"] {
-    background-color: var(--app-surface-color, var(--depictio-surface-light)) !important;
-    color: var(--app-text-color, var(--depictio-text-light)) !important;
-    transition: background-color 0.2s ease, color 0.2s ease;
-}
+/* =============================================================================
+   1. THEME INTEGRATION & VISUAL CONSISTENCY
+   ============================================================================= */
 
-/* Bootstrap card components in draggable items */
+/* Bootstrap card theming within draggable grid items
+   Purpose: Ensures Bootstrap cards match app theme (light/dark mode)
+   Components: card, card-body, card-header elements
+   Variables: Uses CSS custom properties for dynamic theming
+   Performance Impact: 0.2s transitions may cause drag delays */
 .react-grid-item .card-body,
 .react-grid-item .card-header,
 #draggable .card,
@@ -23,37 +30,49 @@
 #draggable .card-header {
     background-color: var(--app-surface-color, var(--depictio-surface-light)) !important;
     color: var(--app-text-color, var(--depictio-text-light)) !important;
-    transition: background-color 0.2s ease, color 0.2s ease;
+    transition: background-color 0.2s ease, color 0.2s ease; /* POTENTIAL PERFORMANCE ISSUE */
 }
 
-/* Resize handle visibility control for vertical growing behavior */
+/* =============================================================================
+   2. RESIZE HANDLES STYLING & BEHAVIOR
+   ============================================================================= */
+
+/* Base resize handle styling
+   Purpose: Clean, minimal resize handles that appear on hover
+   Behavior: Hidden by default, visible on component hover
+   Z-index: 500 (below ActionIconGroup at 1001) */
 .react-resizable-handle {
     background: transparent !important;
     border: none !important;
     box-shadow: none !important;
     opacity: 0 !important;
-    transition: opacity 0.2s ease !important;
-    z-index: 500 !important; /* Lower z-index so ActionIconGroup can be on top */
+    transition: opacity 0.2s ease !important; /* POTENTIAL PERFORMANCE ISSUE */
+    z-index: 500 !important;
 }
 
+/* Show resize handles on component hover
+   Purpose: Provides visual feedback for resizable components */
 .react-grid-item:hover .react-resizable-handle {
     opacity: 0.7 !important;
-    background: rgba(108, 117, 125, 0.1) !important; /* Subtle gray background on hover */
 }
 
-/* Hide resize handles when edit mode is disabled */
+/* Hide resize handles when edit mode is disabled
+   Purpose: Clean read-only view without editing controls
+   Trigger: Applied via .drag-handles-hidden class */
 .drag-handles-hidden .react-resizable-handle {
     display: none !important;
     visibility: hidden !important;
 }
 
-/* Dark mode - make handle arrow icons white/light grey */
+/* Dark mode resize handle adjustments
+   Purpose: Invert handle colors for dark theme visibility */
 [data-mantine-color-scheme="dark"] .react-grid-item:hover > .react-resizable-handle::before,
 [data-mantine-color-scheme="dark"] .react-grid-item:hover > .react-resizable-handle::after {
     filter: invert(1) !important;
 }
 
-/* Hide container completely in dark mode */
+/* Complete handle hiding in dark mode
+   Purpose: Remove all handle backgrounds/borders in dark theme */
 [data-mantine-color-scheme="dark"] .react-grid-item:hover > .react-resizable-handle {
     background: none !important;
     background-color: transparent !important;
@@ -62,791 +81,6 @@
     box-shadow: none !important;
     outline: none !important;
 }
-
-/* Add stroke when dragging or resizing */
-.react-grid-item.react-grid-item-dragging,
-.react-grid-item.react-grid-item-resizing {
-    border: 2px solid var(--app-text-color, #666) !important;
-    box-shadow: 0 0 0 1px rgba(102, 102, 102, 0.2) !important;
-    z-index: 1000 !important;
-}
-
-/* Subtle dashed border on component hover - similar to text component */
-.react-grid-item:hover {
-    border: 1px dashed var(--app-border-color, #dee2e6) !important;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
-}
-
-/* Solid border when drag handle is being hovered/used */
-.react-grid-item:has(.react-grid-dragHandle:hover) {
-    border: 1px solid var(--app-text-color, #666) !important;
-    box-shadow: 0 0 0 1px rgba(102, 102, 102, 0.1) !important;
-}
-
-/* Hide remove button (×) */
-.react-grid-item .remove,
-.react-grid-item span.remove {
-    display: none !important;
-    visibility: hidden !important;
-}
-
-/* Hide the default drag handle completely, but keep functionality for ActionIcon with this class */
-.react-grid-dragHandle:not(.mantine-ActionIcon-root) {
-    display: none !important;
-    visibility: hidden !important;
-    height: 0 !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    min-height: 0 !important;
-}
-
-/* Make ActionIcon drag handles functional and styled - only visible on component hover */
-.mantine-ActionIcon-root.react-grid-dragHandle {
-    cursor: grab !important;
-    opacity: 0 !important;  /* Hidden by default */
-    transition: opacity 0.2s ease !important;
-    pointer-events: auto !important; /* Ensure pointer events work during drag */
-}
-
-.mantine-ActionIcon-root.react-grid-dragHandle:hover {
-    cursor: grabbing !important;
-}
-
-.mantine-ActionIcon-root.react-grid-dragHandle:active {
-    cursor: grabbing !important;
-    opacity: 1 !important; /* Stay visible during drag */
-}
-
-/* Show drag handle only when parent component is hovered */
-.react-grid-item:hover .mantine-ActionIcon-root.react-grid-dragHandle {
-    opacity: 1 !important;
-}
-
-/* Keep drag handle visible during drag operation */
-.react-grid-item.react-grid-item-dragging .mantine-ActionIcon-root.react-grid-dragHandle {
-    opacity: 1 !important;
-    cursor: grabbing !important;
-}
-
-/* Remove any conflicting pseudo-elements from ActionIcon drag handles */
-.mantine-ActionIcon-root.react-grid-dragHandle::before,
-.mantine-ActionIcon-root.react-grid-dragHandle::after,
-.mantine-ActionIcon-root[id*="drag-handle"]::before,
-.mantine-ActionIcon-root[id*="drag-handle"]::after {
-    content: none !important;
-    display: none !important;
-}
-
-/* Ensure ActionIcon children (DashIconify) are properly displayed */
-.mantine-ActionIcon-root.react-grid-dragHandle > * {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-}
-
-/* Drag handle styles removed - using ActionIcon instead */
-
-/* Draggable component background enhancement */
-.react-grid-item.dashboard-component-hover {
-    background: var(--app-surface-color);
-    border: 1px solid var(--app-border-color);
-    border-radius: 8px;
-    transition: all 0.3s ease;
-}
-
-.react-grid-item.dashboard-component-hover:hover {
-    border-color: var(--app-text-color, #666);
-    box-shadow: 0 4px 12px rgba(102, 102, 102, 0.15);
-}
-
-/* Component interaction effects */
-.dashboard-component-hover {
-    position: relative;
-    transition: transform 0.2s ease;
-    /* Enable vertical growing behavior */
-    display: flex !important;
-    flex-direction: column !important;
-    height: 100% !important;
-    min-height: 150px !important;
-}
-
-.dashboard-component-hover:hover {
-    transform: translateY(-2px);
-}
-
-.dashboard-component-hover::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: linear-gradient(135deg, transparent, rgba(99, 102, 241, 0.05), transparent);
-    opacity: 0;
-    transition: opacity 0.3s ease;
-    z-index: 1;
-    pointer-events: none;
-}
-
-.dashboard-component-hover:hover::before {
-    opacity: 1;
-}
-
-/* CARD AND FIGURE COMPONENTS: Allow vertical growing */
-.dashboard-component-hover > * {
-    flex: 1 !important;
-}
-
-/* Ensure Bootstrap cards inherit flexbox behavior */
-.dashboard-component-hover .card,
-.dashboard-component-hover [data-mantine="Card"],
-.dashboard-component-hover .mantine-Card-root {
-    display: flex !important;
-    flex-direction: column !important;
-    height: 100% !important;
-    flex: 1 !important;
-}
-
-/* DISABLED: Ensure card bodies also use flexbox and grow */
-/*
-.dashboard-component-hover .card-body,
-.dashboard-component-hover .mantine-Card-section {
-    display: flex !important;
-    flex-direction: column !important;
-    height: 100% !important;
-    flex: 1 !important;
-}
-*/
-
-/* Ensure content inside card bodies grows to fill space */
-.dashboard-component-hover .card-body > div,
-.dashboard-component-hover .mantine-Card-section > div {
-    flex: 1 !important;
-    height: 100% !important;
-}
-
-/* Ensure graphs grow vertically */
-.dashboard-component-hover .plotly-graph-div {
-    flex: 1 !important;
-    min-height: 200px !important;
-    height: 100% !important;
-}
-
-/* Ensure tables adapt to vertical space */
-.dashboard-component-hover .dash-table-container {
-    flex: 1 !important;
-    height: 100% !important;
-    overflow-y: auto !important;
-}
-
-/* Text components vertical growing */
-.dashboard-component-hover [id*="text-component"] {
-    height: 100% !important;
-    display: flex !important;
-    flex-direction: column !important;
-}
-
-.dashboard-component-hover [id*="text-body"] {
-    flex: 1 !important;
-    height: 100% !important;
-}
-
-/* Ensure figure components use full space */
-.dashboard-component-hover .js-plotly-plot {
-    flex: 1 !important;
-    min-height: 200px !important;
-}
-
-/* JBrowse components vertical growing */
-.dashboard-component-hover [id*="jbrowse"] {
-    height: 100% !important;
-}
-
-/* =============================================================================
-   RESPONSIVE CLASSES FOR VERTICAL GROWING - MISSING FROM MAIN APPLICATION
-   These classes are essential for proper vertical growing behavior
-   ============================================================================= */
-
-/* Responsive wrapper styles */
-.responsive-wrapper {
-    position: relative !important;
-    width: 100% !important;
-    height: 100% !important;
-}
-
-/* Responsive content that grows vertically */
-.responsive-content {
-    display: flex !important;
-    flex-direction: column !important;
-    height: 100% !important;
-    min-height: 150px !important;
-}
-
-/* Responsive graph styling */
-.responsive-graph {
-    flex: 1 !important;
-    min-height: 200px !important;
-    height: 100% !important;
-}
-
-/* Metrics stack styling */
-.metrics-stack {
-    flex: 1 !important;
-    overflow-y: auto !important;
-    padding-right: 5px !important;
-}
-
-/* Responsive table styling */
-.responsive-table th,
-.responsive-table td {
-    padding: 8px 12px !important;
-    border-bottom: 1px solid #dee2e6 !important;
-    text-align: left !important;
-}
-
-.responsive-table th {
-    background-color: #f8f9fa !important;
-    font-weight: 600 !important;
-}
-
-.responsive-table tbody tr:hover {
-    background-color: #f5f5f5 !important;
-}
-
-/* =============================================================================
-   CARD COMPONENTS HEIGHT INHERITANCE FIX
-   Ensure card components take full height of their containers
-   ============================================================================= */
-
-/* Fix component divs with JSON-like IDs to take full height */
-.responsive-content > div > div[id*="index"] {
-    height: 100% !important;
-    display: flex !important;
-    flex-direction: column !important;
-}
-
-/* Fix all intermediate wrapper divs that contain components */
-.responsive-content div[id*="{"] {
-    height: 100% !important;
-    display: flex !important;
-    flex-direction: column !important;
-}
-
-/* DISABLED: CRITICAL: Target the exact JSON-like ID structure for card components - EXCLUDE interactive */
-/*
-.responsive-content div[id*="\"index\""][id*="\"type\""][id*="\"card-component\""]:not([id*="interactive-component"]) {
-    height: 100% !important;
-    display: flex !important;
-    flex-direction: column !important;
-    flex: 1 !important;
-    min-height: 0 !important;
-    background-color: rgba(255, 0, 255, 0.1) !important;
-}
-*/
-
-/* NUCLEAR: Target ALL divs that are children of responsive-content */
-.responsive-content > div {
-    height: 100% !important;
-    display: flex !important;
-    flex-direction: column !important;
-    flex: 1 !important;
-    min-height: 0 !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    box-sizing: border-box !important;
-    background-color: rgba(0, 255, 255, 0.05) !important; /* Cyan background for debugging */
-}
-
-/* MAXIMUM SPECIFICITY: Target div elements that have JSON-style attributes */
-div[id*="{\"index\""] {
-    height: 100% !important;
-    display: flex !important;
-    flex-direction: column !important;
-    flex: 1 !important;
-    min-height: 0 !important;
-    box-sizing: border-box !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    background-color: rgba(255, 165, 0, 0.1) !important; /* Orange background for debugging */
-}
-
-/* DISABLED: OVERRIDE: Remove orange background for figure-related elements */
-/*
-div[id*="{\"index\""][id*="figure"],
-div[id*="figure"] {
-    background-color: rgba(50, 205, 50, 0.2) !important;
-}
-*/
-
-/* DISABLED AGAIN: BOOTSTRAP CARD TARGETING: Target Bootstrap cards within figure components */
-/*
-.responsive-content .card[id*="figure-component"],
-.responsive-content div.card[id*="figure-component"] {
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    box-sizing: border-box !important;
-    display: flex !important;
-    flex-direction: column !important;
-    background-color: rgba(30, 144, 255, 0.4) !important;
-    z-index: 3 !important;
-}
-*/
-
-/* DISABLED AGAIN: SELECTIVE FIGURE RULE: Target only figure-specific elements */
-/*
-.responsive-content *[id*="figure-component"],
-.responsive-content div[id*="figure-component"],
-.responsive-content *[id*="graph"]:not([id*="interactive"]),
-.responsive-content div[id*="graph"]:not([id*="interactive"]),
-.responsive-content .card[id*="figure"],
-.responsive-content *[class*="plotly"] {
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    box-sizing: border-box !important;
-    display: flex !important;
-    flex-direction: column !important;
-    background-color: rgba(255, 215, 0, 0.5) !important;
-    z-index: 999 !important;
-}
-*/
-
-
-/* DISABLED: INTERACTIVE COMPONENT WRAPPER: Override flex rules for interactive components */
-/*
-.interactive-component-wrapper {
-    flex: none !important;
-    flex-grow: 0 !important;
-    flex-shrink: 0 !important;
-    height: auto !important;
-    max-height: none !important;
-    align-self: flex-start !important;
-    display: block !important;
-}
-*/
-
-/* DISABLED: NUCLEAR APPROACH: Remove ALL spacing and enforce absolute positioning for card elements */
-/*
-.responsive-content div[id*="{\"index\""][id*="card-component"]:not([id*="interactive-component"]) {
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    box-sizing: border-box !important;
-    background-color: rgba(128, 0, 128, 0.2) !important;
-}
-*/
-
-/* Ensure the parent of the absolutely positioned element is relative */
-.responsive-content {
-    position: relative !important;
-}
-
-/* MINIMIZE ALL MARGINS AND PADDING in the component hierarchy */
-.responsive-content div,
-.responsive-content .card,
-.responsive-content .card-body,
-.responsive-content .mantine-Card-root {
-    margin: 0 !important;
-    padding-top: 0 !important;
-    padding-bottom: 0 !important;
-    padding-left: 2px !important;
-    padding-right: 2px !important;
-}
-
-/* Specific override for Bootstrap card elements */
-.responsive-content .card {
-    border: none !important;
-    box-shadow: none !important;
-}
-
-/* Specific override for Mantine card elements */
-.responsive-content .mantine-Card-root {
-    padding: 4px !important; /* Minimal padding for readability */
-}
-
-/* DISABLED: ULTIMATE SPECIFICITY: Single rule for card components with maximum priority - EXCLUDE interactive */
-/*
-.responsive-content div[id*="{"][id*="\"index\""][id*="\"type\""][id*="\"card-component\""]:not([id*="interactive-component"]) {
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    box-sizing: border-box !important;
-    display: flex !important;
-    flex-direction: column !important;
-    background-color: rgba(255, 20, 147, 0.3) !important;
-    z-index: 1 !important;
-}
-*/
-
-/* ULTIMATE SPECIFICITY: Multiple rules for figure components with maximum priority */
-.responsive-content div[id*="{"][id*="\"index\""][id*="\"type\""][id*="\"figure-component\""],
-.responsive-content div[id*="\"figure-component\""],
-.responsive-content *[id*="\"figure-component\""] {
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    box-sizing: border-box !important;
-    display: flex !important;
-    flex-direction: column !important;
-    background-color: rgba(0, 191, 255, 0.3) !important; /* Deep Sky Blue - highest priority for figures */
-    z-index: 2 !important; /* Higher than generic rules */
-}
-
-/* FIGURE BODY: Target figure body elements */
-.responsive-content div[id*="{"][id*="\"figure-body\""] {
-    height: 100% !important;
-    width: 100% !important;
-    margin: 0 !important;
-    padding: 2px !important;
-    box-sizing: border-box !important;
-    display: flex !important;
-    flex-direction: column !important;
-    flex: 1 !important;
-    background-color: rgba(173, 216, 230, 0.2) !important; /* Light Blue for figure body */
-}
-
-/* PLOTLY GRAPH: Target the actual graph elements */
-.responsive-content div[id*="{"][id*="\"graph\""],
-.responsive-content .plotly-graph-div,
-.responsive-content .js-plotly-plot {
-    height: 100% !important;
-    width: 100% !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    box-sizing: border-box !important;
-    flex: 1 !important;
-    min-height: 200px !important; /* Ensure minimum graph height */
-    background-color: rgba(135, 206, 250, 0.2) !important; /* Light Sky Blue for graphs */
-}
-
-/* More specific targeting for nested component wrappers */
-.responsive-content > div > div > div {
-    height: 100% !important;
-    display: flex !important;
-    flex-direction: column !important;
-    flex: 1 !important;
-}
-
-/* Target the specific div structure before card components */
-.responsive-content div[style*="position: relative"] {
-    height: 100% !important;
-    display: flex !important;
-    flex-direction: column !important;
-    flex: 1 !important;
-}
-
-/* DISABLED: Fix card components specifically - EXCLUDE interactive */
-/*
-.responsive-content .card:not([id*="interactive-component"]),
-.responsive-content div[id*="card-component"]:not([id*="interactive-component"]) {
-    height: 100% !important;
-    display: flex !important;
-    flex-direction: column !important;
-    flex: 1 !important;
-}
-*/
-
-/* Ensure all divs leading to card components inherit height */
-.responsive-content * {
-    box-sizing: border-box !important;
-}
-
-/* Remove overly aggressive rules that hide content */
-
-/* =============================================================================
-   ULTIMATE FIX: Target the exact intermediate divs that break flex chain
-   ============================================================================= */
-
-/* DISABLED: Target ALL divs between responsive-content and card-component (nuclear approach) */
-/*
-.responsive-wrapper .responsive-content div {
-    height: 100% !important;
-    display: flex !important;
-    flex-direction: column !important;
-    flex: 1 !important;
-}
-*/
-
-/* DISABLED: Specifically target the JSON-ID wrapper div that contains the card */
-/*
-.responsive-wrapper div[id*="{"][id*="index"]:not([id*="card"]) {
-    height: 100% !important;
-    display: flex !important;
-    flex-direction: column !important;
-    flex: 1 !important;
-}
-*/
-
-/* DISABLED: Target empty divs that are children of JSON-ID divs */
-/*
-.responsive-wrapper div[id*="{"] > div {
-    height: 100% !important;
-    display: flex !important;
-    flex-direction: column !important;
-    flex: 1 !important;
-}
-*/
-
-/* DISABLED: Nuclear approach: ALL divs in responsive wrapper get flex unless they have content */
-/*
-.responsive-wrapper div:not(.mantine-Card-root):not(.mantine-Text-root):not([class*="ActionIcon"]) {
-    flex: 1 !important;
-}
-*/
-
-/* =============================================================================
-   CRITICAL: Force card component specifically to take full height
-   ============================================================================= */
-
-/* DISABLED: Target the exact card component that's not expanding - NUCLEAR APPROACH - EXCLUDE interactive */
-/*
-.responsive-wrapper div[id*="card-component"].card:not([id*="interactive-component"]),
-.responsive-wrapper .card[id*="card-component"]:not([id*="interactive-component"]),
-div[id*="card-component"].card:not([id*="interactive-component"]) {
-    height: 100% !important;
-    min-height: 0 !important;
-    max-height: none !important;
-    flex: 1 1 0% !important;
-    flex-grow: 1 !important;
-    flex-shrink: 1 !important;
-    flex-basis: 0% !important;
-    align-self: stretch !important;
-    position: relative !important;
-    overflow: visible !important;
-}
-*/
-
-/* Force Bootstrap card to behave properly in flex context */
-.responsive-wrapper .card {
-    height: 100% !important;
-    min-height: 0 !important;
-    flex: 1 !important;
-    align-self: stretch !important;
-}
-
-/* DISABLED: Ensure card body also expands */
-/*
-.responsive-wrapper .card-body {
-    height: 100% !important;
-    min-height: 0 !important;
-    flex: 1 !important;
-}
-*/
-
-/* DISABLED: Fix card body to take full height */
-/*
-.responsive-content .card-body,
-.responsive-content div[id*="card-body"] {
-    height: 100% !important;
-    display: flex !important;
-    flex-direction: column !important;
-    flex: 1 !important;
-    justify-content: flex-start !important;
-    min-height: 0 !important;
-}
-*/
-
-/* Fix Mantine cards - keep original properties */
-.responsive-content .mantine-Card-root {
-    flex: 1 !important;
-}
-
-/* =============================================================================
-   CRITICAL FIX: Override dashboard.css rule that breaks vertical growing
-   ============================================================================= */
-
-/* Override the problematic calc(100% - 40px) rule in dashboard.css - MAXIMUM SPECIFICITY */
-div.responsive-wrapper div.react-grid-item div.mantine-Card-root,
-div.responsive-wrapper .react-grid-item .mantine-Card-root,
-.responsive-wrapper .mantine-Card-root,
-.react-grid-item .mantine-Card-root {
-    height: 100% !important;  /* Override calc(100% - 40px) */
-    max-height: none !important;
-    min-height: 0 !important;
-    flex: 1 1 0% !important;
-    flex-grow: 1 !important;
-    flex-shrink: 1 !important;
-    display: flex !important;
-    flex-direction: column !important;
-}
-
-/* =============================================================================
-   DRAG DISABLE FUNCTIONALITY - REMOVED
-   Now using properties-only approach like the working version2 script
-   ============================================================================= */
-
-/* Hide drag handles when edit mode is disabled */
-.drag-handles-hidden .react-grid-dragHandle {
-    display: none !important;
-    visibility: hidden !important;
-}
-
-/* Normalize wrapper div padding between edit and non-edit modes - minimize white space */
-.react-grid-item > div {
-    padding: 2px !important;
-    max-height: 100% !important;
-    max-width: 100% !important;
-    height: 100% !important;
-    box-sizing: border-box !important;
-    /* Critical: Ensure grid layout wrapper also uses flexbox */
-    display: flex !important;
-    flex-direction: column !important;
-}
-
-/* Ensure DraggableWrapper content takes full height */
-.react-grid-item div[id^="box-"] {
-    position: absolute !important;
-    inset: 0 !important; /* Fill entire parent container */
-    display: flex !important;
-    flex-direction: column !important;
-    box-sizing: border-box !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    background-color: rgba(0, 255, 0, 0.05) !important; /* Subtle green tint for debugging */
-}
-
-/* DISABLED: Ensure react-grid-item itself is a proper flex container */
-/*
-.react-grid-item.react-draggable.cssTransforms.react-resizable {
-    position: relative !important;
-    display: flex !important;
-    flex-direction: column !important;
-    box-sizing: border-box !important;
-    overflow: visible !important;
-    background-color: rgba(255, 0, 0, 0.05) !important;
-}
-*/
-
-/* DISABLED: Target the unnamed DIV that DashGridLayout creates automatically (Child 0) */
-/*
-.react-grid-item.react-draggable.cssTransforms.react-resizable > div:first-child {
-    position: absolute !important;
-    inset: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
-    box-sizing: border-box !important;
-    display: flex !important;
-    flex-direction: column !important;
-    background-color: rgba(255, 165, 0, 0.1) !important;
-}
-*/
-
-/* Force responsive-wrapper to use flex display instead of block */
-.responsive-wrapper {
-    display: flex !important;
-    flex-direction: column !important;
-    flex: 1 !important;
-}
-
-/* Force responsive-content to grow */
-.responsive-content {
-    flex: 1 !important;
-    flex-grow: 1 !important;
-}
-
-/* DISABLED AGAIN: Fix intermediate wrapper divs - ONLY for figure components */
-/*
-.responsive-content > div:has([id*="figure-component"]) {
-    height: 100% !important;
-    flex: 1 !important;
-    display: flex !important;
-    flex-direction: column !important;
-}
-*/
-
-/* DISABLED AGAIN: Nuclear approach - ONLY for figure components */
-/*
-.responsive-content:has([id*="figure-component"]) div[id*="figure"] {
-    min-height: 0 !important;
-    flex: 1 !important;
-}
-*/
-
-/* Fix intermediate wrapper divs created by grid layout */
-.react-grid-item > div > div {
-    flex: 1 !important;
-    height: 100% !important;
-    display: flex !important;
-    flex-direction: column !important;
-}
-
-/* Hide the old remove button completely */
-.react-grid-item .remove {
-    display: none !important;
-    visibility: hidden !important;
-}
-
-/* DISABLED: Minimize padding between card-component and card elements - EXCLUDE interactive */
-/*
-.react-grid-item [id*="card-component"]:not([id*="interactive-component"]) {
-    padding: 0px !important;
-    margin: 0px !important;
-}
-*/
-
-.react-grid-item [id*="card-body"] {
-    padding: 2px !important;
-}
-
-.react-grid-item [id*="card"] .mantine-Card-root {
-    padding: var(--mantine-spacing-xs) !important;
-}
-
-/* Hide ActionIconGroup and individual ActionIcons by default - only visible on component hover */
-.react-grid-item .mantine-ActionIconGroup-root {
-    opacity: 0 !important;
-    transition: opacity 0.2s ease !important;
-    pointer-events: none !important;
-    z-index: 1001 !important; /* Ensure ActionIconGroup is above resize handle */
-}
-
-.react-grid-item .mantine-ActionIcon-root[id*="remove-box-button"],
-.react-grid-item .mantine-ActionIcon-root[id*="edit-box-button"],
-.react-grid-item .mantine-ActionIcon-root[id*="duplicate-box-button"],
-.react-grid-item .mantine-ActionIcon-root[id*="reset-selection-graph-button"] {
-    opacity: 0 !important;
-    transition: opacity 0.2s ease !important;
-    pointer-events: none !important;
-}
-
-/* Show ActionIconGroup and individual ActionIcons only when parent component is hovered */
-.react-grid-item:hover .mantine-ActionIconGroup-root {
-    opacity: 1 !important;
-    pointer-events: auto !important;
-    z-index: 1001 !important; /* Ensure ActionIconGroup is above resize handle */
-}
-
 .react-grid-item:hover .mantine-ActionIcon-root[id*="remove-box-button"],
 .react-grid-item:hover .mantine-ActionIcon-root[id*="edit-box-button"],
 .react-grid-item:hover .mantine-ActionIcon-root[id*="duplicate-box-button"],
@@ -876,13 +110,7 @@ div.responsive-wrapper .react-grid-item .mantine-Card-root,
     background-color: transparent !important;
 }
 
-/* Make drag handle cursor change to grabbing on hover */
-.react-grid-item:hover .mantine-ActionIcon-root[id*="drag-handle"]:hover,
-.react-grid-item:hover .mantine-ActionIcon-root.react-grid-dragHandle:hover {
-    cursor: grabbing !important;
-}
-
-/* Hide action buttons and drag handle completely when edit mode is disabled */
+/* Hide all action buttons and drag handles completely when edit mode is disabled */
 .drag-handles-hidden .mantine-ActionIconGroup-root,
 .drag-handles-hidden .mantine-ActionIcon-root[id*="drag-handle"],
 .drag-handles-hidden .mantine-ActionIcon-root[id*="remove-box-button"],
@@ -892,3 +120,203 @@ div.responsive-wrapper .react-grid-item .mantine-Card-root,
     display: none !important;
     visibility: hidden !important;
 }
+
+/* =============================================================================
+
+/* Hide drag handles when edit mode is disabled */
+.drag-handles-hidden .react-grid-dragHandle {
+    display: none !important;
+    visibility: hidden !important;
+}
+
+/* Normalize wrapper div padding between edit and non-edit modes - minimize white space */
+.react-grid-item > div {
+    padding: 2px !important;
+    max-height: 100% !important;
+    max-width: 100% !important;
+    height: 100% !important;
+    box-sizing: border-box !important;
+    /* Critical: Ensure grid layout wrapper also uses flexbox */
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+
+/* =============================================================================
+   3. ELEMENT HIDING & CLEANUP
+   ============================================================================= */
+
+/* Hide default remove button (×)
+   Purpose: Remove default grid layout remove buttons
+   Reason: Using custom ActionIcon buttons instead */
+.react-grid-item .remove,
+.react-grid-item span.remove {
+    display: none !important;
+    visibility: hidden !important;
+}
+
+/* Hide default drag handles except Mantine ActionIcons
+   Purpose: Remove default handles while preserving ActionIcon functionality
+   Logic: Hide all .react-grid-dragHandle EXCEPT .mantine-ActionIcon-root */
+.react-grid-dragHandle:not(.mantine-ActionIcon-root) {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    min-height: 0 !important;
+}
+
+/* =============================================================================
+   4. CUSTOM DRAG HANDLES (Mantine ActionIcon Integration)
+   ============================================================================= */
+
+/* Base ActionIcon drag handle styling
+   Purpose: Custom drag handles using Mantine ActionIcon components
+   Behavior: Hidden by default, shown on component hover
+   Cursor: grab/grabbing states for UX feedback */
+.mantine-ActionIcon-root.react-grid-dragHandle {
+    cursor: grab !important;
+    opacity: 0 !important;
+    transition: opacity 0.2s ease !important; /* POTENTIAL PERFORMANCE ISSUE */
+    pointer-events: auto !important;
+}
+
+/* Drag handle hover state */
+.mantine-ActionIcon-root.react-grid-dragHandle:hover {
+    cursor: grabbing !important;
+}
+
+/* Drag handle active state (during drag)
+   Purpose: Maintain visibility and cursor during active drag */
+.mantine-ActionIcon-root.react-grid-dragHandle:active {
+    cursor: grabbing !important;
+    opacity: 1 !important;
+}
+
+/* Show drag handle on component hover */
+.react-grid-item:hover .mantine-ActionIcon-root.react-grid-dragHandle {
+    opacity: 1 !important;
+}
+
+/* Maintain drag handle visibility during drag operation
+   Purpose: Keep handle visible and properly layered during drag
+   Z-index: 10000 (highest priority during drag) */
+.react-grid-item.react-grid-item-dragging .mantine-ActionIcon-root.react-grid-dragHandle {
+    opacity: 1 !important;
+    cursor: grabbing !important;
+    z-index: 10000 !important;
+}
+
+/* Ensure ActionIcon children (DashIconify icons) display correctly */
+.mantine-ActionIcon-root.react-grid-dragHandle > * {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+/* =============================================================================
+   5. ACTION BUTTON GROUPS (Edit Controls)
+   ============================================================================= */
+
+/* Base ActionIconGroup styling
+   Purpose: Container for edit buttons (remove, edit, duplicate, reset)
+   Behavior: Hidden by default, shown on component hover
+   Z-index: 1001 (above resize handles at 500) */
+.react-grid-item .mantine-ActionIconGroup-root {
+    opacity: 0 !important;
+    transition: opacity 0.2s ease !important; /* POTENTIAL PERFORMANCE ISSUE */
+    pointer-events: none !important;
+    z-index: 1001 !important;
+}
+
+/* Individual action button base styling
+   Purpose: Hide specific action buttons by default
+   Targets: remove, edit, duplicate, reset buttons */
+.react-grid-item .mantine-ActionIcon-root[id*="remove-box-button"],
+.react-grid-item .mantine-ActionIcon-root[id*="edit-box-button"],
+.react-grid-item .mantine-ActionIcon-root[id*="duplicate-box-button"],
+.react-grid-item .mantine-ActionIcon-root[id*="reset-selection-graph-button"] {
+    opacity: 0 !important;
+    transition: opacity 0.2s ease !important; /* POTENTIAL PERFORMANCE ISSUE */
+    pointer-events: none !important;
+}
+
+/* Show ActionIconGroup on component hover */
+.react-grid-item:hover .mantine-ActionIconGroup-root {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    z-index: 1001 !important;
+}
+
+/* Show individual action buttons on component hover */
+.react-grid-item:hover .mantine-ActionIcon-root[id*="remove-box-button"],
+.react-grid-item:hover .mantine-ActionIcon-root[id*="edit-box-button"],
+.react-grid-item:hover .mantine-ActionIcon-root[id*="duplicate-box-button"],
+.react-grid-item:hover .mantine-ActionIcon-root[id*="reset-selection-graph-button"] {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+}
+
+/* =============================================================================
+   6. DRAG PERFORMANCE OPTIMIZATIONS
+   ============================================================================= */
+
+/* Disable drag handle transitions during active drag operations
+   Purpose: Prevent CSS transitions from interfering with drag performance
+   Trigger: Applied when any grid item has .react-grid-item-dragging class
+   Browser Support: Uses :has() selector (modern browsers only) */
+.react-grid-layout:has(.react-grid-item-dragging) .mantine-ActionIcon-root.react-grid-dragHandle {
+    transition: none !important;
+}
+
+/* =============================================================================
+   7. GRID PLACEHOLDER (Drop Preview)
+   ============================================================================= */
+
+/* Grid placeholder styling for drop preview
+   Purpose: Visual feedback showing where component will be placed
+   Appearance: Light red background with dashed border
+   Behavior: Appears during drag operations */
+.react-grid-layout .react-grid-placeholder {
+    transition-duration: 0s !important;
+    animation-duration: 0s !important;
+    transition-property: none !important;
+    background: rgba(0, 0, 0, 0.2) !important;
+    border: 2px dashed #737373 !important;
+    border-radius: 4px !important;
+    opacity: 1 !important;
+    z-index: 2 !important;
+}
+
+
+/* =============================================================================
+   PERFORMANCE NOTES & DEBUGGING
+   ============================================================================= */
+
+/*
+   IDENTIFIED PERFORMANCE ISSUES:
+
+   1. Multiple 0.2s transitions on hover/drag operations:
+      - Lines: Bootstrap cards, resize handles, drag handles, action buttons
+      - Impact: Can cause drag freezing when multiple elements transition
+      - Solution: Consider disabling during drag or reducing duration
+
+   2. Complex Z-index layering:
+      - Resize handles: 500
+      - Placeholder: 2
+      - ActionIconGroup: 1001
+      - Drag handle (active): 10000
+      - Impact: Browser compositing overhead
+
+   3. :has() selector usage:
+      - Modern browsers only
+      - May not work in older browsers
+      - Fallback needed for transition disabling
+
+   OPTIMIZATION OPPORTUNITIES:
+   - Disable all transitions during drag operations
+   - Simplify Z-index hierarchy
+   - Use CSS containment for drag performance
+   - Consider will-change property for dragged elements
+*/

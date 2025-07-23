@@ -7,7 +7,6 @@
 .react-grid-item {
     border: 2px solid var(--app-border-color, #ddd) !important;
     border-radius: 8px !important;
-    background-color: var(--app-surface-color, #ffffff) !important;
     transition: border-color 0.2s ease !important;
 }
 

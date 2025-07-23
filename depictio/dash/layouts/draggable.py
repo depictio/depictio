@@ -1521,7 +1521,7 @@ def design_draggable(
         id="draggable",
         items=draggable_items,
         itemLayout=current_layout,
-        rowHeight=10,  # Larger row height for better component display
+        rowHeight=50,  # Larger row height for better component display
         cols={"lg": 12, "md": 10, "sm": 6, "xs": 4, "xxs": 2},
         showRemoveButton=False,  # Keep consistent - CSS handles visibility
         showResizeHandles=True,  # Enable resize functionality for vertical growing behavior

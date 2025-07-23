@@ -1,0 +1,12 @@
+/* =============================================================================
+   FIGURE COMPONENT VERTICAL GROWING - MINIMAL FIX
+   ============================================================================= */
+
+/* Fix the figure div wrapper to grow */
+.react-grid-item:has(.js-plotly-plot) div:has(.js-plotly-plot) {
+    width: 100% !important;
+    height: 100% !important;
+    flex: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+}

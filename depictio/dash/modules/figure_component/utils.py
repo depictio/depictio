@@ -373,13 +373,12 @@ def render_figure(
                 pandas_df = df.to_pandas()
                 figure = plot_function(pandas_df, **cleaned_kwargs)
 
-        # Apply responsive sizing
-        if _config.responsive_sizing:
-            figure.update_layout(
-                autosize=True,
-                margin=dict(l=40, r=40, t=40, b=40),
-                height=None,  # Let container control height
-            )
+        # Apply responsive sizing - FORCE for vertical growing
+        figure.update_layout(
+            autosize=True,
+            margin=dict(l=40, r=40, t=40, b=40),
+            height=None,  # Let container control height
+        )
 
         # Highlight selected point if provided
         if selected_point and "x" in cleaned_kwargs and "y" in cleaned_kwargs:
@@ -601,27 +600,28 @@ def build_figure(**kwargs) -> html.Div:
                     "displayModeBar": True,
                 },
                 className="responsive-graph",  # Add responsive graph class for vertical growing
-                style={
-                    "width": "100%",
-                    "flex": "1",  # Critical for vertical growing
-                    "backgroundColor": "transparent",  # Fix white background issue
-                    "minHeight": "200px",  # Reduce from 400px for better flexibility
-                },
+                # style={
+                #     "width": "100%",
+                #     "height": "100%",  # FIXED: Use full height for vertical growing
+                #     "flex": "1",  # Critical for vertical growing
+                #     "backgroundColor": "transparent",  # Fix white background issue
+                #     # "minHeight": "200px",  # Minimum height for usability
+                # },
             ),
             dcc.Store(
                 data=store_component_data,
                 id={"type": "stored-metadata-component", "index": index},
             ),
         ],
-        style={
-            "width": "100%",
-            "height": "100%",
-            "flex": "1",  # Critical for vertical growing
-            "display": "flex",
-            "flexDirection": "column",
-            "minHeight": "200px",  # Reduce from 400px for better flexibility
-            "backgroundColor": "transparent",
-        },
+        # style={
+        #     "width": "100%",
+        #     "height": "100%",
+        #     "flex": "1",  # Critical for vertical growing
+        #     "display": "flex",
+        #     "flexDirection": "column",
+        #     # "minHeight": "200px",  # Reduce from 400px for better flexibility
+        #     "backgroundColor": "transparent",
+        # },
     )
 
     if not build_frame:

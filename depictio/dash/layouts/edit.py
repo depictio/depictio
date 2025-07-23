@@ -63,14 +63,14 @@ def enable_box_edit_mode(
     def create_drag_handle():
         return dmc.ActionIcon(
             id={"type": "drag-handle", "index": f"{btn_index}"},
-            color="gray",
-            variant="subtle",
+            # Use style override instead of color parameter to avoid type errors
+            variant="filled",
             size="sm",
             children=DashIconify(
-                icon="mdi:dots-grid", width=14, color="#888"
+                icon="mdi:dots-grid", width=14, color="black"
             ),  # More subtle grid icon
             className="react-grid-dragHandle",  # This tells DashGridLayout it's a drag handle
-            style={"cursor": "grab"},
+            style={"cursor": "grab", "backgroundColor": "#f2f2f2"},
         )
 
     def create_remove_button():
@@ -286,5 +286,8 @@ def enable_box_edit_mode(
             "position": "relative",
             "width": "100%",
             "height": "100%",
+            "display": "flex",
+            "flexDirection": "column",
+            "flex": "1",  # Critical: Allow vertical growing
         },
     )
