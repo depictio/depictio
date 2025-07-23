@@ -28,7 +28,7 @@ def register_callbacks_notes_footer(app):
                     body #notes-footer-content, html #notes-footer-content {
                         height: 0px;
                         overflow: hidden;
-                        transition: height 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important, left 0.3s ease-in-out !important, opacity 0.3s ease-in-out !important;
+                        transition: height 0.3s ease, opacity 0.3s ease !important;
                         opacity: 0 !important;
                         position: fixed;
                         bottom: 0;
@@ -57,7 +57,7 @@ def register_callbacks_notes_footer(app):
                         height: 300px !important;
                         opacity: 1 !important;
                         overflow: visible !important;
-                        transition: height 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important, opacity 0.3s ease-in-out !important;
+                        transition: height 0.3s ease, opacity 0.3s ease !important;
                     }
 
                     /* Override any conflicting transitions - High specificity */
@@ -157,7 +157,9 @@ def register_callbacks_notes_footer(app):
 def create_notes_footer(dashboard_data=None):
     """Create the notes footer component with RichTextEditor."""
     # Load existing notes content if available
-    initial_notes_content = "<p>Start writing your notes, documentation, or analysis here...</p>"
+    initial_notes_content = (
+        "<p>Start writing your notes, documentation, or analysis here...\n\n\n</p>"
+    )
     if dashboard_data and dashboard_data.get("notes_content"):
         initial_notes_content = dashboard_data["notes_content"]
 
