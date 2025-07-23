@@ -5,6 +5,7 @@ import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import httpx
 from dash import Input, Output, State, dcc, html
+from dash_iconify import DashIconify
 
 from depictio.api.v1.configs.config import API_BASE_URL, settings
 from depictio.api.v1.configs.logging_init import logger
@@ -133,6 +134,22 @@ def register_callbacks_header(app):
         if n_clicks:
             return not is_open
         return is_open
+
+    @app.callback(
+        [
+            Output("edit-status-badge", "children"),
+            Output("edit-status-badge", "color"),
+            Output("edit-status-badge", "leftSection"),
+        ],
+        Input("unified-edit-mode-button", "checked"),
+        prevent_initial_call=False,
+    )
+    def update_edit_status_badge(edit_mode_checked):
+        """Update the edit status badge based on edit mode state."""
+        if edit_mode_checked:
+            return ("Edit ON", "blue", DashIconify(icon="mdi:pencil", width=8, color="white"))
+        else:
+            return ("Edit OFF", "gray", DashIconify(icon="mdi:pencil-off", width=8, color="white"))
 
     # @app.callback(
     #     Output("stored_metadata", "data"),
@@ -623,32 +640,62 @@ def design_header(data, local_store):
             # Center section - title with logo positioned to stick to its left
             html.Div(
                 [
-                    dmc.Group(
+                    html.Div(
                         [
-                            # Depictio favicon - positioned immediately to the left of title
-                            html.Img(
-                                id="header-favicon",
-                                src=dash.get_asset_url("images/icons/favicon.ico"),
-                                style={
-                                    "height": "24px",
-                                    "width": "24px",
-                                    "display": "none",  # Initially hidden, shown when sidebar is collapsed
-                                },
-                            ),
-                            dmc.Title(
-                                f"{data['title']}",
-                                order=1,
-                                id="dashboard-title",
-                                style={
-                                    "fontWeight": "bold",
-                                    "fontSize": "24px",
-                                    "margin": "0",
-                                },
+                            dmc.Group(
+                                [
+                                    # Depictio favicon - positioned immediately to the left of title
+                                    html.Img(
+                                        id="header-favicon",
+                                        src=dash.get_asset_url("images/icons/favicon.ico"),
+                                        style={
+                                            "height": "24px",
+                                            "width": "24px",
+                                            "display": "none",  # Initially hidden, shown when sidebar is collapsed
+                                        },
+                                    ),
+                                    html.Div(
+                                        [
+                                            dmc.Title(
+                                                f"{data['title']}",
+                                                order=1,
+                                                id="dashboard-title",
+                                                style={
+                                                    "fontWeight": "bold",
+                                                    "fontSize": "24px",
+                                                    "margin": "0",
+                                                },
+                                            ),
+                                            # Edit status badge - directly below title
+                                            dmc.Badge(
+                                                "Edit OFF",
+                                                id="edit-status-badge",
+                                                size="xs",
+                                                color="gray",
+                                                leftSection=DashIconify(
+                                                    icon="mdi:pencil-off", width=8, color="white"
+                                                ),
+                                                style={
+                                                    "marginTop": "1px",
+                                                    "fontSize": "8px",
+                                                    "height": "14px",
+                                                    "padding": "2px 6px",
+                                                },
+                                            ),
+                                        ],
+                                        style={
+                                            "display": "flex",
+                                            "flexDirection": "column",
+                                            "alignItems": "center",
+                                        },
+                                    ),
+                                ],
+                                gap="md",
+                                align="center",
+                                style={"display": "inline-flex", "alignItems": "center"},
                             ),
                         ],
-                        gap="md",
-                        align="center",
-                        style={"display": "inline-flex", "alignItems": "center"},
+                        style={"textAlign": "center"},
                     )
                 ],
                 style={

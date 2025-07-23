@@ -67,3 +67,28 @@
     color: var(--app-text-color, var(--depictio-text-light)) !important;
     transition: background-color 0.2s ease, color 0.2s ease;
 }
+
+/* =============================================================================
+   HEADER ACTION ICONS HOVER STATES
+   ============================================================================= */
+
+/* Override Mantine ActionIcon default hover backgrounds for header icons */
+#add-button.mantine-ActionIcon-root:hover,
+#save-button-dashboard.mantine-ActionIcon-root:hover,
+#toggle-notes-button.mantine-ActionIcon-root:hover,
+#open-offcanvas-parameters-button.mantine-ActionIcon-root:hover,
+#share-button.mantine-ActionIcon-root:hover,
+#sidebar-button.mantine-ActionIcon-root:hover {
+    background-color: var(--app-surface-color, var(--depictio-surface-light)) !important;
+    border: 1px solid var(--app-border-color, #dee2e6) !important;
+}
+
+/* Ensure the icons themselves remain gray on hover */
+#add-button.mantine-ActionIcon-root:hover svg,
+#save-button-dashboard.mantine-ActionIcon-root:hover svg,
+#toggle-notes-button.mantine-ActionIcon-root:hover svg,
+#open-offcanvas-parameters-button.mantine-ActionIcon-root:hover svg,
+#share-button.mantine-ActionIcon-root:hover svg,
+#sidebar-button.mantine-ActionIcon-root:hover svg {
+    color: gray !important;
+}
