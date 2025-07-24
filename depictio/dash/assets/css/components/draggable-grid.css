@@ -120,7 +120,7 @@
     visibility: hidden !important;
 }
 
-/* Exception: Keep reset button visible in non-edit mode for scatter plots */
+/* Exception: Keep reset button visible in non-edit mode for scatter plots and interactive components */
 .drag-handles-hidden .mantine-ActionIcon-root[id*="reset-selection-graph-button"] {
     display: flex !important;
     visibility: visible !important;
@@ -134,7 +134,7 @@
     opacity: 1 !important;
 }
 
-/* Reset button container in non-edit mode - transparent by default (ONLY for scatter plots) */
+/* Reset button container in non-edit mode - transparent by default (for scatter plots and interactive components) */
 .drag-handles-hidden .reset-button-container-non-edit {
     background: transparent !important;
     border: none !important;
@@ -142,7 +142,7 @@
     transition: all 0.2s ease !important;
 }
 
-/* Show container styling only on hover (ONLY for scatter plots) */
+/* Show container styling only on hover (for scatter plots and interactive components) */
 .drag-handles-hidden .react-grid-item:hover .reset-button-container-non-edit {
     background: rgba(255, 255, 255, 0.9) !important;
     border: 1px solid var(--app-border-color, #ddd) !important;
@@ -150,7 +150,7 @@
     backdrop-filter: blur(2px) !important;
 }
 
-/* Dark mode adjustment for reset button container on hover (ONLY for scatter plots) */
+/* Dark mode adjustment for reset button container on hover (for scatter plots and interactive components) */
 [data-mantine-color-scheme="dark"] .drag-handles-hidden .react-grid-item:hover .reset-button-container-non-edit {
     background: rgba(45, 45, 45, 0.9) !important;
     border-color: var(--app-border-color, #555) !important;

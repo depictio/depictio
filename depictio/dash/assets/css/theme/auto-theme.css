@@ -127,13 +127,13 @@ body.theme-manual-dark {
     color: white !important;
 }
 
-/* Auto theme detection for reset button container on hover - light mode (ONLY for scatter plots) */
+/* Auto theme detection for reset button container on hover - light mode (for scatter plots and interactive components) */
 .drag-handles-hidden .react-grid-item:hover .reset-button-container-non-edit {
     background: var(--app-surface-color, rgba(255, 255, 255, 0.9)) !important;
     border-color: var(--app-border-color, #ddd) !important;
 }
 
-/* Auto theme detection for reset button container on hover - dark mode (ONLY for scatter plots) */
+/* Auto theme detection for reset button container on hover - dark mode (for scatter plots and interactive components) */
 @media (prefers-color-scheme: dark) {
     .drag-handles-hidden .react-grid-item:hover .reset-button-container-non-edit {
         background: var(--app-surface-color, rgba(45, 45, 45, 0.9)) !important;

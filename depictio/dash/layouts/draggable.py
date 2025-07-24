@@ -941,6 +941,61 @@ def register_callbacks_draggable(app):
                         dash.no_update,
                     )
 
+            # Handle scenarios where the user resets a component using the reset button
+            elif "reset-selection-graph-button" in triggered_input:
+                logger.info("Reset selection button triggered")
+
+                # Find the component being reset
+                reset_component_metadata = None
+                ctx_triggered = ctx.triggered[0]
+                ctx_triggered_prop_id = ctx_triggered["prop_id"]
+                ctx_triggered_prop_id_index = eval(ctx_triggered_prop_id.split(".")[0])["index"]
+
+                for metadata in stored_metadata:
+                    if metadata["index"] == ctx_triggered_prop_id_index:
+                        metadata["filter_applied"] = False
+                        reset_component_metadata = metadata
+                        break
+
+                # Handle specific reset logic based on component type
+                if reset_component_metadata:
+                    component_type = reset_component_metadata.get("component_type")
+                    logger.info(
+                        f"Resetting {component_type} component: {ctx_triggered_prop_id_index}"
+                    )
+
+                    # For interactive components, clear their values in the interactive_components_dict
+                    if component_type == "interactive":
+                        if ctx_triggered_prop_id_index in interactive_components_dict:
+                            # Clear the value for this interactive component
+                            interactive_components_dict[ctx_triggered_prop_id_index]["value"] = None
+                            logger.info(
+                                f"Cleared value for interactive component: {ctx_triggered_prop_id_index}"
+                            )
+
+                    # For scatter plots, the filter_applied = False is sufficient
+                    elif component_type == "figure":
+                        visu_type = reset_component_metadata.get("visu_type", "")
+                        if visu_type.lower() == "scatter":
+                            logger.info(f"Reset scatter plot: {ctx_triggered_prop_id_index}")
+
+                new_children = update_interactive_component(
+                    stored_metadata,
+                    interactive_components_dict,
+                    draggable_children,
+                    switch_state=unified_edit_mode_button,
+                    TOKEN=TOKEN,
+                    dashboard_id=dashboard_id,
+                    theme=theme,
+                )
+                return (
+                    new_children,
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                    dash.no_update,
+                )
+
             # Handle scenarios where the user clicks/select on a graph
             elif "graph" in triggered_input:
                 logger.info("Graph callback triggered")
@@ -964,7 +1019,7 @@ def register_callbacks_draggable(app):
                     )
 
                 # Restrict the callback to only scatter plots
-                if graph_metadata["visu_type"].lower() == "scatter":
+                if graph_metadata.get("visu_type", "").lower() == "scatter":
                     # Handle scenarios where the user clicks on a specific point on the graph
                     if "clickData" in ctx_triggered_prop_id:
                         logger.info("Click data triggered")
@@ -1039,31 +1094,6 @@ def register_callbacks_draggable(app):
                             dash.no_update,
                         )
 
-                    # Handle scenarios where the user resets the selection on the graph using a button
-                    elif "reset-selection-graph-button" in triggered_input:
-                        logger.info("Reset selection graph button triggered")
-                        for metadata in stored_metadata:
-                            if metadata["index"] == ctx_triggered_prop_id_index:
-                                metadata["filter_applied"] = False
-                        # logger.info(f"Stored metadata: {stored_metadata}")
-                        # logger.info(f"Interactive components dict: {interactive_components_dict}")
-
-                        new_children = update_interactive_component(
-                            stored_metadata,
-                            interactive_components_dict,
-                            draggable_children,
-                            switch_state=unified_edit_mode_button,
-                            TOKEN=TOKEN,
-                            dashboard_id=dashboard_id,
-                            theme=theme,
-                        )
-                        return (
-                            new_children,
-                            dash.no_update,
-                            dash.no_update,
-                            dash.no_update,
-                            dash.no_update,
-                        )
                     else:
                         return (
                             dash.no_update,

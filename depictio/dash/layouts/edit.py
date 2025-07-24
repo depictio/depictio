@@ -35,6 +35,16 @@ def _create_component_buttons(
                 "reset",
             ],  # Special case for scatter plots
         },
+        "interactive": {
+            "orientation": "horizontal",
+            "buttons": [
+                "drag",
+                "remove",
+                "edit",
+                "duplicate",
+                "reset",
+            ],  # Interactive components get reset button
+        },
         "table": {"orientation": "horizontal", "buttons": ["drag", "remove", "duplicate"]},
         "jbrowse": {"orientation": "horizontal", "buttons": ["drag", "remove", "duplicate"]},
         "default": {
@@ -322,14 +332,19 @@ def enable_box_edit_mode(
             # Single component or JSON
             content_children.append(box_components_list)
 
-        # Check if this is a scatter plot figure that should have a reset button
+        # Check if this component should have a reset button in non-edit mode
         show_reset_in_non_edit = False
-        if component_type == "figure" and component_data:
-            visu_type = component_data.get("visu_type", None)
-            if visu_type and visu_type.lower() == "scatter":
+        if component_data:
+            # Show reset for scatter plot figures
+            if component_type == "figure":
+                visu_type = component_data.get("visu_type", None)
+                if visu_type and visu_type.lower() == "scatter":
+                    show_reset_in_non_edit = True
+            # Show reset for all interactive components
+            elif component_type == "interactive":
                 show_reset_in_non_edit = True
 
-        # Add reset button for scatter plots even in non-edit mode
+        # Add reset button for scatter plots and interactive components even in non-edit mode
         if show_reset_in_non_edit:
             reset_button = dmc.ActionIconGroup([create_reset_button()], orientation="horizontal")
             content_children.append(
