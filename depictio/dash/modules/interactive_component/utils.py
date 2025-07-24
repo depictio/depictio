@@ -553,7 +553,24 @@ def build_interactive(**kwargs):
     )
 
     # Load the delta table & get the specs
-    if df is None:
+    # CRITICAL: Always load unfiltered data for interactive component options
+    # Even if we have a pre-loaded filtered df, we need unfiltered data for options
+    if interactive_component_type in ["Select", "MultiSelect", "SegmentedControl"]:
+        logger.info(
+            f"Interactive component {index}: Loading unfiltered data for options (type: {interactive_component_type})"
+        )
+        if not wf_id or not dc_id:
+            logger.warning(f"Missing workflow_id ({wf_id}) or data_collection_id ({dc_id})")
+            df_for_options = pl.DataFrame()
+        else:
+            # Always load unfiltered data for categorical component options
+            df_for_options = load_deltatable_lite(
+                ObjectId(wf_id), ObjectId(dc_id), TOKEN=TOKEN, load_for_options=True
+            )
+
+        # Use the unfiltered data for generating options
+        df = df_for_options
+    elif df is None:
         logger.info(
             f"Interactive component {index}: Loading delta table for {wf_id}:{dc_id} (no pre-loaded df)"
         )

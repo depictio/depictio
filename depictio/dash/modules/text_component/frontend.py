@@ -248,6 +248,11 @@ def register_callbacks_text_component(app):
         """
         Callback to update text component based on configuration settings
         """
+        # Handle case where component is in edit mode with temporary ID
+        if id and str(id["index"]).endswith("-tmp"):
+            logger.debug(f"Ignoring callback for temporary component ID: {id['index']}")
+            raise dash.exceptions.PreventUpdate
+
         if not data or not n_clicks or n_clicks == 0:
             return build_text_frame(index=id["index"])
 
