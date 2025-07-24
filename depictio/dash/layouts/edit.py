@@ -305,7 +305,7 @@ def enable_box_edit_mode(
             },
         )
     else:
-        # Non-edit mode: simple content div without buttons
+        # Non-edit mode: simple content div without buttons (except reset for scatter plots)
         # Handle both native components and JSON
         content_children = []
         if (
@@ -321,6 +321,33 @@ def enable_box_edit_mode(
         else:
             # Single component or JSON
             content_children.append(box_components_list)
+
+        # Check if this is a scatter plot figure that should have a reset button
+        show_reset_in_non_edit = False
+        if component_type == "figure" and component_data:
+            visu_type = component_data.get("visu_type", None)
+            if visu_type and visu_type.lower() == "scatter":
+                show_reset_in_non_edit = True
+
+        # Add reset button for scatter plots even in non-edit mode
+        if show_reset_in_non_edit:
+            reset_button = dmc.ActionIconGroup([create_reset_button()], orientation="horizontal")
+            content_children.append(
+                html.Div(
+                    reset_button,
+                    className="reset-button-container-non-edit",  # Add specific class for CSS targeting
+                    style={
+                        "position": "absolute",
+                        "top": "4px",
+                        "right": "8px",
+                        "zIndex": 1000,
+                        "alignItems": "center",
+                        "height": "auto",
+                        "borderRadius": "6px",
+                        "padding": "4px",
+                    },
+                )
+            )
 
         content_div = html.Div(
             content_children,

@@ -115,10 +115,46 @@
 .drag-handles-hidden .mantine-ActionIcon-root[id*="drag-handle"],
 .drag-handles-hidden .mantine-ActionIcon-root[id*="remove-box-button"],
 .drag-handles-hidden .mantine-ActionIcon-root[id*="edit-box-button"],
-.drag-handles-hidden .mantine-ActionIcon-root[id*="duplicate-box-button"],
-.drag-handles-hidden .mantine-ActionIcon-root[id*="reset-selection-graph-button"] {
+.drag-handles-hidden .mantine-ActionIcon-root[id*="duplicate-box-button"] {
     display: none !important;
     visibility: hidden !important;
+}
+
+/* Exception: Keep reset button visible in non-edit mode for scatter plots */
+.drag-handles-hidden .mantine-ActionIcon-root[id*="reset-selection-graph-button"] {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 0 !important;
+    pointer-events: auto !important;
+    transition: opacity 0.2s ease !important;
+}
+
+/* Show reset button on component hover (consistent with edit mode behavior) */
+.drag-handles-hidden .react-grid-item:hover .mantine-ActionIcon-root[id*="reset-selection-graph-button"] {
+    opacity: 1 !important;
+}
+
+/* Reset button container in non-edit mode - transparent by default (ONLY for scatter plots) */
+.drag-handles-hidden .reset-button-container-non-edit {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    transition: all 0.2s ease !important;
+}
+
+/* Show container styling only on hover (ONLY for scatter plots) */
+.drag-handles-hidden .react-grid-item:hover .reset-button-container-non-edit {
+    background: rgba(255, 255, 255, 0.9) !important;
+    border: 1px solid var(--app-border-color, #ddd) !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+    backdrop-filter: blur(2px) !important;
+}
+
+/* Dark mode adjustment for reset button container on hover (ONLY for scatter plots) */
+[data-mantine-color-scheme="dark"] .drag-handles-hidden .react-grid-item:hover .reset-button-container-non-edit {
+    background: rgba(45, 45, 45, 0.9) !important;
+    border-color: var(--app-border-color, #555) !important;
+    box-shadow: 0 2px 4px rgba(255, 255, 255, 0.1) !important;
 }
 
 /* =============================================================================

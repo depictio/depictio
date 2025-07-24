@@ -120,3 +120,24 @@ body.theme-manual-dark {
 .theme-status-indicator.dark::after {
     content: "🌙 Dark";
 }
+
+/* Reset button theming for non-edit mode - maintains orange color */
+.drag-handles-hidden .mantine-ActionIcon-root[id*="reset-selection-graph-button"] {
+    background-color: var(--mantine-color-orange-filled, #fd7e14) !important;
+    color: white !important;
+}
+
+/* Auto theme detection for reset button container on hover - light mode (ONLY for scatter plots) */
+.drag-handles-hidden .react-grid-item:hover .reset-button-container-non-edit {
+    background: var(--app-surface-color, rgba(255, 255, 255, 0.9)) !important;
+    border-color: var(--app-border-color, #ddd) !important;
+}
+
+/* Auto theme detection for reset button container on hover - dark mode (ONLY for scatter plots) */
+@media (prefers-color-scheme: dark) {
+    .drag-handles-hidden .react-grid-item:hover .reset-button-container-non-edit {
+        background: var(--app-surface-color, rgba(45, 45, 45, 0.9)) !important;
+        border-color: var(--app-border-color, #555) !important;
+        box-shadow: 0 2px 4px rgba(255, 255, 255, 0.1) !important;
+    }
+}
