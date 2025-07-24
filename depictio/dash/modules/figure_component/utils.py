@@ -272,6 +272,19 @@ def render_figure(
         logger.warning(f"Unknown visualization type: {visu_type}, falling back to scatter")
         visu_type = "scatter"
 
+    # Smart UMAP computation deferral based on context and data size
+    if is_clustering and df is not None and not df.is_empty():
+        # Determine context from various signals
+        context = "unknown"
+        if selected_point is None:
+            context = "dashboard_restore"  # Likely dashboard loading
+        elif selected_point:
+            context = "interactive"  # User-initiated action
+
+        # Use context-aware decision making
+        if _should_defer_umap_computation(df, context):
+            return _create_umap_placeholder(df, dict_kwargs, theme)
+
     # Add theme-appropriate template using Mantine-compatible themes
     if "template" not in dict_kwargs:
         dict_kwargs["template"] = _get_theme_template(theme)
@@ -281,9 +294,10 @@ def render_figure(
     logger.info(f"Theme: {theme}")
     logger.info(f"Template: {dict_kwargs.get('template')}")
     logger.info(f"Data shape: {df.shape if df is not None else 'None'}")
+    logger.info(f"Selected point: {selected_point is not None}")
     logger.info(f"Parameters: {list(dict_kwargs.keys())}")
-    logger.info(f"Full dict_kwargs: {dict_kwargs}")
-    logger.info(f"Available columns in df: {df.columns if df is not None else 'None'}")
+    # logger.info(f"Full dict_kwargs: {dict_kwargs}")  # Reduced logging
+    # logger.info(f"Available columns in df: {df.columns if df is not None else 'None'}")  # Reduced logging
 
     # Handle empty or invalid data
     if df is None or df.is_empty():
@@ -410,6 +424,70 @@ def render_figure(
             template=dict_kwargs.get("template", _get_theme_template(theme)),
             title=f"Error: {str(e)}",
         )
+
+
+def _create_umap_placeholder(df: pl.DataFrame, dict_kwargs: Dict[str, Any], theme: str) -> Any:
+    """Create a placeholder figure for UMAP that will be computed on user interaction."""
+    template = dict_kwargs.get("template", _get_theme_template(theme))
+
+    # Create a simple scatter plot with a message
+    placeholder_fig = px.scatter(
+        template=template,
+        title=f"UMAP Visualization ({df.height:,} data points)",
+    )
+
+    # Add annotation to indicate computation is deferred
+    placeholder_fig.add_annotation(
+        text="🚀 UMAP computation deferred for faster dashboard loading<br>🔄 Interact with this chart to compute the projection",
+        xref="paper",
+        yref="paper",
+        x=0.5,
+        y=0.5,
+        showarrow=False,
+        font=dict(size=14),
+        bgcolor="rgba(255,255,255,0.9)",
+        bordercolor="#ddd",
+        borderwidth=1,
+        borderradius=8,
+    )
+
+    # Add invisible scatter points to enable click interactions
+    # This allows the graph to respond to clicks and trigger re-computation
+    placeholder_fig.add_scatter(
+        x=[0],
+        y=[0],
+        mode="markers",
+        marker=dict(opacity=0, size=1),
+        showlegend=False,
+        hoverinfo="skip",
+    )
+
+    return placeholder_fig
+
+
+def _should_defer_umap_computation(df: pl.DataFrame, context: str = "unknown") -> bool:
+    """Determine if UMAP computation should be deferred based on data size and context."""
+    if df is None or df.is_empty():
+        return False
+
+    data_size = df.height
+
+    # Different thresholds based on context
+    thresholds = {
+        "dashboard_restore": 1000,  # Very conservative for restore
+        "interactive": 5000,  # More lenient for user-initiated actions
+        "unknown": 2000,  # Middle ground
+    }
+
+    threshold = thresholds.get(context, thresholds["unknown"])
+    should_defer = data_size > threshold
+
+    if should_defer:
+        logger.info(
+            f"📄 UMAP computation deferred: {data_size} rows > {threshold} threshold (context: {context})"
+        )
+
+    return should_defer
 
 
 def _highlight_selected_point(figure, df, dict_kwargs, selected_point):

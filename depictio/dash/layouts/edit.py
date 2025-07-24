@@ -7,6 +7,76 @@ from depictio.dash.layouts.stepper import create_stepper_output_edit
 from depictio.dash.utils import get_component_data
 
 
+def _create_component_buttons(
+    component_type,
+    component_data,
+    btn_index,
+    create_drag_handle,
+    create_remove_button,
+    create_edit_button,
+    create_duplicate_button,
+    create_reset_button,
+):
+    """Create action buttons based on component type and configuration.
+
+    Returns:
+        dmc.ActionIconGroup: Configured button group for the component
+    """
+    # Define button configurations for different component types
+    button_configs = {
+        "figure": {
+            "orientation": "vertical",
+            "buttons": ["drag", "remove", "edit", "duplicate"],
+            "scatter_buttons": [
+                "drag",
+                "remove",
+                "edit",
+                "duplicate",
+                "reset",
+            ],  # Special case for scatter plots
+        },
+        "table": {"orientation": "horizontal", "buttons": ["drag", "remove", "duplicate"]},
+        "jbrowse": {"orientation": "horizontal", "buttons": ["drag", "remove", "duplicate"]},
+        "default": {
+            "orientation": "horizontal",
+            "buttons": ["drag", "remove", "edit", "duplicate"],
+        },
+    }
+
+    # Get configuration for this component type
+    config = button_configs.get(component_type, button_configs["default"])
+
+    # Special handling for scatter plot figures
+    if component_type == "figure":
+        visu_type = component_data.get("visu_type", None) if component_data else None
+        if visu_type and visu_type.lower() == "scatter":
+            button_list = config["scatter_buttons"]
+        else:
+            button_list = config["buttons"]
+    else:
+        button_list = config["buttons"]
+
+    # Map button names to functions
+    button_functions = {
+        "drag": create_drag_handle,
+        "remove": create_remove_button,
+        "edit": create_edit_button,
+        "duplicate": create_duplicate_button,
+        "reset": create_reset_button,
+    }
+
+    # Create the actual button components
+    button_components = [button_functions[btn]() for btn in button_list]
+
+    # Log configuration for debugging
+    if component_type:
+        logger.debug(
+            f"Creating {config['orientation']} buttons for {component_type}: {button_list}"
+        )
+
+    return dmc.ActionIconGroup(button_components, orientation=config["orientation"])
+
+
 def edit_component(index, parent_id, active=0, component_data=None, TOKEN=None):
     logger.info("=== EDIT COMPONENT ===")
     logger.info("Function parameters:")
@@ -137,63 +207,17 @@ def enable_box_edit_mode(
         )
 
     if switch_state:
-        # Default buttons for most components
-        orientation = "horizontal"
-
-        buttons = dmc.ActionIconGroup(
-            [
-                create_drag_handle(),
-                create_remove_button(),
-                create_edit_button(),
-                create_duplicate_button(),
-            ],
-            orientation=orientation,
+        # Create buttons based on component type and configuration
+        buttons = _create_component_buttons(
+            component_type,
+            component_data,
+            btn_index,
+            create_drag_handle,
+            create_remove_button,
+            create_edit_button,
+            create_duplicate_button,
+            create_reset_button,
         )
-
-        # logger.info(f"ENABLE BOX EDIT MODE - component_type: {component_type}")
-
-        if component_type:
-            if component_type == "figure":
-                orientation = "vertical"
-
-            visu_type = component_data.get("visu_type", None)
-            if (
-                component_type == "figure"
-                and visu_type is not None
-                and visu_type.lower() == "scatter"
-            ):
-                # Add reset button for scatter plots
-                buttons = dmc.ActionIconGroup(
-                    [
-                        create_drag_handle(),
-                        create_remove_button(),
-                        create_edit_button(),
-                        create_duplicate_button(),
-                        create_reset_button(),
-                    ],
-                    orientation=orientation,
-                )
-
-            elif component_type in ["table", "jbrowse"]:
-                # Limited buttons for table and jbrowse components
-                buttons = dmc.ActionIconGroup(
-                    [
-                        create_drag_handle(),
-                        create_remove_button(),
-                        create_duplicate_button(),
-                    ],
-                    orientation=orientation,
-                )
-        else:
-            # Fallback for unknown component types
-            buttons = dmc.ActionIconGroup(
-                [
-                    create_drag_handle(),
-                    create_remove_button(),
-                    create_duplicate_button(),
-                ],
-                orientation=orientation,
-            )
         # if fresh:
         #     buttons = dmc.Group([remove_button], grow=False, gap="xl", style={"margin-left": "12px"})
         # Handle native Dash component - wrap in list for consistent processing
